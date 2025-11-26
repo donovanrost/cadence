@@ -1,0 +1,75 @@
+<.header>
+  Missions
+  <:actions>
+    <.link patch={~p"/missions/new"}>
+      <.button>New Mission</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table
+  id="missions"
+  rows={@streams.missions}
+  row_click={fn {_id, mission} -> JS.navigate(~p"/missions/#{mission}") end}
+>
+  <:col :let={{_id, mission}} label="Name"><%= mission.name %></:col>
+  <:col :let={{_id, mission}} label="Slug"><%= mission.slug %></:col>
+  <:col :let={{_id, mission}} label="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      mission.status == "active" && "bg-green-50 text-green-700 ring-green-600/20",
+      mission.status == "inactive" && "bg-gray-50 text-gray-600 ring-gray-500/10",
+      mission.status == "suspended" && "bg-red-50 text-red-700 ring-red-600/10"
+    ]}>
+      <%= mission.status %>
+    </span>
+  </:col>
+  <:col :let={{_id, mission}} label="Phase"><%= mission.phase %></:col>
+  <:action :let={{_id, mission}}>
+    <div class="sr-only">
+      <.link navigate={~p"/missions/#{mission}"}>Show</.link>
+    </div>
+    <.link patch={~p"/missions/#{mission}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={{_id, mission}}>
+    <.button
+      :if={mission.status == "active"}
+      phx-click={JS.push("start_mission", value: %{id: mission.id})}
+      class="text-sm"
+    >
+      Start
+    </.button>
+    <.button
+      phx-click={JS.push("stop_mission", value: %{id: mission.id})}
+      class="text-sm"
+    >
+      Stop
+    </.button>
+  </:action>
+  <:action :let={{id, mission}}>
+    <.link
+      phx-click={JS.push("delete", value: %{id: mission.id}) |> hide("##{id}")}
+      data-confirm="Are you sure?"
+    >
+      Delete
+    </.link>
+  </:action>
+</.table>
+
+<.modal
+  :if={@live_action in [:new, :edit]}
+  id="mission-modal"
+  show
+  on_cancel={JS.patch(~p"/missions")}
+>
+  <.live_component
+    module={CadenceWeb.MissionLive.FormComponent}
+    id={@mission.id || :new}
+    title={@page_title}
+    action={@live_action}
+    mission={@mission}
+    patch={~p"/missions"}
+    current_user={@current_scope.user}
+    current_scope={@current_scope}
+  />
+</.modal>

@@ -1,0 +1,62 @@
+<.header>
+  <%= @organization.name %>
+  <:subtitle>Organization details and missions</:subtitle>
+  <:actions>
+    <.link navigate={~p"/admin/organizations/#{@organization}/members"}>
+      <.button>Manage Members</.button>
+    </.link>
+    <.link patch={~p"/admin/organizations/#{@organization}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit organization</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Slug"><%= @organization.slug %></:item>
+  <:item title="Status"><%= @organization.status %></:item>
+  <:item title="Subscription Tier"><%= @organization.subscription_tier %></:item>
+  <:item title="Max Missions">
+    <%= @stats.mission_count %> / <%= @stats.mission_quota %>
+  </:item>
+  <:item title="Max Users">
+    <%= @stats.user_count %> / <%= @stats.user_quota %>
+  </:item>
+  <:item title="Storage Quota"><%= @organization.storage_quota_gb %> GB</:item>
+</.list>
+
+<.header class="mt-8">
+  Missions
+  <:actions>
+    <.link navigate={~p"/missions/new?organization_id=#{@organization.id}"}>
+      <.button>New Mission</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="missions" rows={@missions}>
+  <:col :let={mission} label="Name"><%= mission.name %></:col>
+  <:col :let={mission} label="Slug"><%= mission.slug %></:col>
+  <:col :let={mission} label="Status"><%= mission.status %></:col>
+  <:col :let={mission} label="Phase"><%= mission.phase %></:col>
+  <:action :let={mission}>
+    <.link navigate={~p"/missions/#{mission}"}>Show</.link>
+  </:action>
+</.table>
+
+<.back navigate={~p"/admin/organizations"}>Back to organizations</.back>
+
+<.modal
+  :if={@live_action == :edit}
+  id="organization-modal"
+  show
+  on_cancel={JS.patch(~p"/admin/organizations/#{@organization}")}
+>
+  <.live_component
+    module={CadenceWeb.OrganizationLive.FormComponent}
+    id={@organization.id}
+    title={@page_title}
+    action={@live_action}
+    organization={@organization}
+    patch={~p"/admin/organizations/#{@organization}"}
+  />
+</.modal>

@@ -1,0 +1,688 @@
+defmodule Cadence.Telemetry.Profiler do
+  @moduledoc """
+  Helper module for profiling and observing the telemetry pipeline performance.
+
+  Use this module to gather metrics while running the simulator at high rates
+  to identify bottlenecks.
+
+  ## Quick Start
+
+      # Get a snapshot of all metrics for a mission
+      Cadence.Telemetry.Profiler.snapshot(mission_id)
+
+      # Watch metrics over time (prints every second for 10 seconds)
+      Cadence.Telemetry.Profiler.watch(mission_id, duration: 10_000, interval: 1_000)
+
+      # Check for backed-up processes
+      Cadence.Telemetry.Profiler.check_queues(mission_id)
+
+      # Debug - dump all raw data
+      Cadence.Telemetry.Profiler.debug(mission_id)
+  """
+
+  alias Cadence.Telemetry.{CurrentValueTable, Pipeline, Stats}
+  alias Cadence.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
+
+  @doc """
+  Debug function - dumps all raw data to help diagnose profiler issues.
+  """
+  def debug(mission_id) do
+    IO.puts("\n=== DEBUG: Profiler Diagnostics ===\n")
+
+    # 1. Check Registry entries
+    IO.puts("1. All Registry entries for this mission:")
+    all_keys = Registry.select(Cadence.MissionRegistry, [{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
+
+    matching = Enum.filter(all_keys, fn
+      {{^mission_id, _}, _, _} -> true
+      {{:broadway_pipeline, ^mission_id, _}, _, _} -> true
+      _ -> false
+    end)
+
+    IO.puts("   Found #{length(matching)} matching entries:")
+    Enum.each(matching, fn {key, pid, value} ->
+      IO.puts("   - #{inspect(key)} => #{inspect(pid)} (value: #{inspect(value)})")
+    end)
+
+    # 2. Direct Pipeline lookup
+    IO.puts("\n2. Direct Pipeline lookup:")
+    pipeline_key = {mission_id, :telemetry_pipeline}
+    case Registry.lookup(Cadence.MissionRegistry, pipeline_key) do
+      [{pid, value}] ->
+        IO.puts("   Found: #{inspect(pid)}, value: #{inspect(value)}")
+        IO.puts("   Process alive? #{Process.alive?(pid)}")
+
+        # Try to get stats directly
+        IO.puts("   Attempting GenServer.call(:stats)...")
+        try do
+          result = GenServer.call(pid, :stats, 5000)
+          IO.puts("   Result: #{inspect(result)}")
+        rescue
+          e -> IO.puts("   Error: #{Exception.message(e)}")
+        catch
+          kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
+        end
+
+      [] ->
+        IO.puts("   NOT FOUND with key #{inspect(pipeline_key)}")
+    end
+
+    # 3. CVT lookup
+    IO.puts("\n3. Direct CVT lookup:")
+    cvt_key = {mission_id, :cvt}
+    case Registry.lookup(Cadence.MissionRegistry, cvt_key) do
+      [{pid, value}] ->
+        IO.puts("   Found: #{inspect(pid)}, value: #{inspect(value)}")
+        IO.puts("   Process alive? #{Process.alive?(pid)}")
+
+        # Try stats function
+        IO.puts("   Attempting CurrentValueTable.stats()...")
+        try do
+          result = CurrentValueTable.stats(mission_id)
+          IO.puts("   Result: #{inspect(result)}")
+        rescue
+          e -> IO.puts("   Error: #{Exception.message(e)}")
+        catch
+          kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
+        end
+
+      [] ->
+        IO.puts("   NOT FOUND")
+    end
+
+    # 4. Broadway lookup
+    IO.puts("\n4. Broadway lookup:")
+    broadway_key = {:broadway_pipeline, mission_id, :main}
+    case Registry.lookup(Cadence.MissionRegistry, broadway_key) do
+      [{pid, _}] ->
+        IO.puts("   Found: #{inspect(pid)}")
+        IO.puts("   Process alive? #{Process.alive?(pid)}")
+      [] ->
+        IO.puts("   NOT FOUND with key #{inspect(broadway_key)}")
+    end
+
+    # 5. ETS tables
+    IO.puts("\n5. ETS tables:")
+    cvt_table = String.to_atom("cvt_mission_#{mission_id}")
+    case :ets.info(cvt_table) do
+      :undefined ->
+        IO.puts("   CVT table #{cvt_table} does not exist")
+      info ->
+        IO.puts("   CVT table #{cvt_table}:")
+        IO.puts("   - size: #{info[:size]}")
+        IO.puts("   - memory: #{info[:memory]} words")
+    end
+
+    # 6. Stats (new ETS-based counters)
+    IO.puts("\n6. Stats (ETS counters):")
+    try do
+      stats = Stats.get(mission_id)
+      IO.puts("   packets_received: #{stats.packets_received}")
+      IO.puts("   packets_processed: #{stats.packets_processed}")
+      IO.puts("   packets_failed: #{stats.packets_failed}")
+      IO.puts("   items_processed: #{stats.items_processed}")
+      IO.puts("   stage_errors: #{stats.stage_errors}")
+      IO.puts("   packets_dropped: #{stats.packets_dropped}")
+      IO.puts("   duration: #{Float.round(stats.duration_sec, 1)}s")
+      IO.puts("   rate: #{stats.packets_per_sec} packets/sec")
+    rescue
+      e -> IO.puts("   Error: #{Exception.message(e)}")
+    catch
+      kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
+    end
+
+    # 7. Pipeline V2 lookup
+    IO.puts("\n7. Pipeline V2 lookup:")
+    router_key = {:pipeline_v2, mission_id, :router}
+    case Registry.lookup(Cadence.MissionRegistry, router_key) do
+      [{pid, _}] ->
+        IO.puts("   Router found: #{inspect(pid)}")
+        IO.puts("   Process alive? #{Process.alive?(pid)}")
+
+        # Get queue depth
+        try do
+          depth = PartitionRouter.queue_depth(pid)
+          IO.puts("   Router queue depth: #{depth}")
+        rescue
+          e -> IO.puts("   Queue depth error: #{Exception.message(e)}")
+        end
+
+        # Count partitions
+        partition_count = count_partitions(mission_id)
+        IO.puts("   Partition count: #{partition_count}")
+
+        # Show stage PIDs for partition 0
+        if partition_count > 0 do
+          IO.puts("   Partition 0 stages:")
+          for stage <- [:identify, :decom, :convert, :derive] do
+            stage_name = PartitionSupervisor.stage_name(mission_id, 0, stage)
+            case GenServer.whereis(stage_name) do
+              nil -> IO.puts("     #{stage}: NOT FOUND")
+              pid -> IO.puts("     #{stage}: #{inspect(pid)}")
+            end
+          end
+        end
+
+      [] ->
+        IO.puts("   NOT FOUND with key #{inspect(router_key)}")
+    end
+
+    IO.puts("\n=== END DEBUG ===\n")
+    :ok
+  end
+
+  @doc """
+  Returns a snapshot of all observable metrics for a mission.
+  """
+  def snapshot(mission_id) do
+    %{
+      timestamp: DateTime.utc_now(),
+      stats: safe_call(fn -> Stats.get(mission_id) end),
+      percentiles: safe_call(fn -> Stats.get_all_percentiles(mission_id) end),
+      stage_errors: safe_call(fn -> Stats.get_stage_errors(mission_id) end),
+      cvt: safe_call(fn -> CurrentValueTable.stats(mission_id) end),
+      pipeline: safe_call(fn -> Pipeline.stats(mission_id) end),
+      broadway: broadway_stats(mission_id),
+      pipeline_v2: pipeline_v2_stats(mission_id),
+      process_queues: check_queues(mission_id)
+    }
+  end
+
+  @doc """
+  Watches metrics over time, printing snapshots at regular intervals.
+
+  Options:
+    - `:duration` - Total time to watch in ms (default: 10_000)
+    - `:interval` - Time between snapshots in ms (default: 1_000)
+  """
+  def watch(mission_id, opts \\ []) do
+    duration = Keyword.get(opts, :duration, 10_000)
+    interval = Keyword.get(opts, :interval, 1_000)
+    iterations = div(duration, interval)
+
+    IO.puts("\n=== Starting #{iterations} samples over #{duration}ms ===\n")
+
+    initial = snapshot(mission_id)
+    print_snapshot(initial, nil)
+
+    Enum.reduce(1..iterations, initial, fn i, prev ->
+      Process.sleep(interval)
+      current = snapshot(mission_id)
+      print_snapshot(current, prev)
+
+      if i == iterations do
+        print_summary(initial, current, duration)
+      end
+
+      current
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Checks message queue depths for all telemetry-related processes.
+
+  Returns a list of processes with queue depth > 0, sorted by queue size.
+  """
+  def check_queues(mission_id) do
+    # Find all processes registered for this mission
+    mission_processes = find_mission_processes(mission_id)
+
+    # Get queue info for each
+    mission_processes
+    |> Enum.map(fn {name, pid} ->
+      case Process.info(pid, [:message_queue_len, :reductions, :memory, :current_function]) do
+        nil ->
+          nil
+
+        info ->
+          %{
+            name: name,
+            pid: pid,
+            queue_len: info[:message_queue_len],
+            reductions: info[:reductions],
+            memory_kb: div(info[:memory], 1024),
+            current_function: info[:current_function]
+          }
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort_by(& &1.queue_len, :desc)
+  end
+
+  @doc """
+  Returns stats about Broadway pipeline processes.
+  """
+  def broadway_stats(mission_id) do
+    # Find Broadway processes via Registry
+    broadway_key = {:broadway_pipeline, mission_id, :main}
+
+    case Registry.lookup(Cadence.MissionRegistry, broadway_key) do
+      [{pid, _}] ->
+        # Get producer queue depth
+        producer_queue_depth = get_producer_queue_depth(mission_id)
+
+        %{
+          main_pid: pid,
+          main_queue: get_queue_len(pid),
+          producer_queue_depth: producer_queue_depth,
+          producers: find_broadway_children(pid, "Producer"),
+          processors: find_broadway_children(pid, "Processor"),
+          batchers: find_broadway_children(pid, "Batcher")
+        }
+
+      [] ->
+        %{error: :not_found}
+    end
+  end
+
+  @doc """
+  Returns stats about PipelineV2 GenStage processes.
+  """
+  def pipeline_v2_stats(mission_id) do
+    router_key = {:via, Registry, {Cadence.MissionRegistry, {:pipeline_v2, mission_id, :router}}}
+
+    case GenServer.whereis(router_key) do
+      nil ->
+        %{error: :not_found}
+
+      router_pid ->
+        # Get router queue depth
+        router_queue = safe_call(fn -> PartitionRouter.queue_depth(router_pid) end)
+
+        # Find partition count by looking for registered stages
+        partition_count = count_partitions(mission_id)
+
+        # Get stats for each partition's stages
+        partition_stats =
+          if partition_count > 0 do
+            for partition <- 0..(partition_count - 1), into: %{} do
+              stages = get_partition_stage_stats(mission_id, partition)
+              {partition, stages}
+            end
+          else
+            %{}
+          end
+
+        %{
+          router_pid: router_pid,
+          router_queue: router_queue,
+          partition_count: partition_count,
+          partitions: partition_stats,
+          # V2-specific counters from Stats
+          stage_errors: safe_call(fn -> get_v2_counter(mission_id, :stage_errors) end),
+          packets_dropped: safe_call(fn -> get_v2_counter(mission_id, :packets_dropped) end)
+        }
+    end
+  end
+
+  defp count_partitions(mission_id) do
+    # Count how many partition 0 stages exist (indicates partition count)
+    # Look for identify stages across partitions
+    Registry.select(Cadence.MissionRegistry, [
+      {
+        {{:pipeline_v2, :"$1", {:stage, :"$2", :identify}}, :_, :_},
+        [{:==, :"$1", mission_id}],
+        [:"$2"]
+      }
+    ])
+    |> length()
+  end
+
+  defp get_partition_stage_stats(mission_id, partition) do
+    stages = [:identify, :decom, :convert, :derive]
+
+    for stage <- stages, into: %{} do
+      stage_name = PartitionSupervisor.stage_name(mission_id, partition, stage)
+
+      stats =
+        case GenServer.whereis(stage_name) do
+          nil ->
+            %{error: :not_found}
+
+          pid ->
+            case Process.info(pid, [:message_queue_len, :reductions, :memory]) do
+              nil ->
+                %{error: :dead}
+
+              info ->
+                %{
+                  pid: pid,
+                  queue_len: info[:message_queue_len],
+                  reductions: info[:reductions],
+                  memory_kb: div(info[:memory], 1024)
+                }
+            end
+        end
+
+      {stage, stats}
+    end
+  end
+
+  defp get_v2_counter(mission_id, counter) do
+    stats = Stats.get(mission_id)
+    Map.get(stats, counter, 0)
+  end
+
+  defp get_producer_queue_depth(mission_id) do
+    # Find the Producer_0 process
+    producer_key = {:broadway_pipeline, mission_id, "Producer_0"}
+
+    case Registry.lookup(Cadence.MissionRegistry, producer_key) do
+      [{pid, _}] ->
+        try do
+          Cadence.Telemetry.BroadwayPubSub.queue_depth(pid)
+        catch
+          _, _ -> nil
+        end
+
+      [] ->
+        nil
+    end
+  end
+
+  @doc """
+  Calculates throughput between two snapshots.
+  """
+  def throughput(snapshot1, snapshot2) do
+    time_diff_ms =
+      DateTime.diff(snapshot2.timestamp, snapshot1.timestamp, :millisecond)
+
+    case {snapshot1.pipeline, snapshot2.pipeline} do
+      {%{packets_processed: p1}, %{packets_processed: p2}} ->
+        packets_diff = p2 - p1
+        packets_per_sec = packets_diff / (time_diff_ms / 1000)
+
+        %{
+          packets_processed: packets_diff,
+          duration_ms: time_diff_ms,
+          packets_per_second: Float.round(packets_per_sec, 1)
+        }
+
+      _ ->
+        %{error: :pipeline_stats_unavailable}
+    end
+  end
+
+  # Private helpers
+
+  defp safe_call(fun) do
+    try do
+      fun.()
+    rescue
+      e -> %{error: Exception.message(e)}
+    catch
+      :exit, reason -> %{error: inspect(reason)}
+    end
+  end
+
+  defp find_mission_processes(mission_id) do
+    # Query Registry for all processes with this mission_id
+    # Pattern 1: {mission_id, type} keys
+    basic_procs =
+      Registry.select(Cadence.MissionRegistry, [
+        {
+          {{:"$1", :"$2"}, :"$3", :_},
+          [{:==, :"$1", mission_id}],
+          [{{:"$2", :"$3"}}]
+        }
+      ])
+      |> Enum.map(fn {type, pid} -> {"#{type}", pid} end)
+
+    # Pattern 2: {:broadway_pipeline, mission_id, suffix} keys
+    broadway_procs =
+      Registry.select(Cadence.MissionRegistry, [
+        {
+          {{:broadway_pipeline, :"$1", :"$2"}, :"$3", :_},
+          [{:==, :"$1", mission_id}],
+          [{{:"$2", :"$3"}}]
+        }
+      ])
+      |> Enum.map(fn {suffix, pid} -> {"broadway:#{suffix}", pid} end)
+
+    # Pattern 3: {:pipeline_v2, mission_id, key} keys
+    v2_procs =
+      Registry.select(Cadence.MissionRegistry, [
+        {
+          {{:pipeline_v2, :"$1", :"$2"}, :"$3", :_},
+          [{:==, :"$1", mission_id}],
+          [{{:"$2", :"$3"}}]
+        }
+      ])
+      |> Enum.map(fn
+        {:router, pid} -> {"v2:router", pid}
+        {:batcher, pid} -> {"v2:batcher", pid}
+        {:supervisor, pid} -> {"v2:supervisor", pid}
+        {{:stage, partition, stage}, pid} -> {"v2:p#{partition}:#{stage}", pid}
+        {{:partition_sup, partition}, pid} -> {"v2:p#{partition}:sup", pid}
+        {other, pid} -> {"v2:#{inspect(other)}", pid}
+      end)
+
+    basic_procs ++ broadway_procs ++ v2_procs
+  end
+
+  defp find_broadway_children(broadway_pid, name_pattern) do
+    # Broadway creates child processes with predictable naming
+    # Try to find them via process links or Supervisor.which_children
+    case Process.info(broadway_pid, :links) do
+      {:links, links} ->
+        links
+        |> Enum.filter(&is_pid/1)
+        |> Enum.map(fn pid ->
+          case Process.info(pid, [:registered_name, :message_queue_len]) do
+            nil ->
+              nil
+
+            info ->
+              name = info[:registered_name] || inspect(pid)
+
+              if String.contains?(to_string(name), name_pattern) do
+                %{pid: pid, name: name, queue_len: info[:message_queue_len]}
+              else
+                nil
+              end
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      _ ->
+        []
+    end
+  end
+
+  defp get_queue_len(pid) do
+    case Process.info(pid, :message_queue_len) do
+      {:message_queue_len, len} -> len
+      _ -> nil
+    end
+  end
+
+  defp print_snapshot(snapshot, prev) do
+    IO.puts("--- #{snapshot.timestamp} ---")
+
+    # CVT stats
+    case snapshot.cvt do
+      %{total_entries: entries, memory_bytes: bytes} ->
+        IO.puts("CVT: #{entries} entries, #{div(bytes, 1024)} KB")
+
+      other ->
+        IO.puts("CVT: #{inspect(other)}")
+    end
+
+    # Stats (from ETS counters - works with Broadway)
+    case snapshot.stats do
+      %{packets_received: recv, packets_processed: proc, packets_failed: failed, items_processed: items} ->
+        delta =
+          case prev do
+            %{stats: %{packets_processed: prev_proc}} ->
+              " (+#{proc - prev_proc})"
+
+            _ ->
+              ""
+          end
+
+        pending = recv - proc - failed
+        IO.puts("Packets: #{proc} processed#{delta}, #{recv} received, #{pending} pending, #{failed} failed")
+        IO.puts("Items: #{items} processed")
+
+        # Show producer queue depth if available
+        case snapshot.broadway do
+          %{producer_queue_depth: depth} when is_integer(depth) and depth > 0 ->
+            IO.puts("Producer queue: #{depth} waiting")
+          _ ->
+            :ok
+        end
+
+        # Show timing breakdown if available (with percentiles)
+        case snapshot.stats do
+          %{timing: timing} when is_map(timing) and map_size(timing) > 0 ->
+            percentiles = Map.get(snapshot, :percentiles)
+            print_timing(timing, percentiles)
+          _ ->
+            :ok
+        end
+
+        # Show stage errors if any
+        case Map.get(snapshot, :stage_errors) do
+          errors when is_map(errors) ->
+            print_stage_errors(errors)
+          _ ->
+            :ok
+        end
+
+      other ->
+        IO.puts("Stats: #{inspect(other)}")
+    end
+
+    # Queue warnings
+    backed_up =
+      snapshot.process_queues
+      |> Enum.filter(fn q -> q.queue_len > 10 end)
+
+    if length(backed_up) > 0 do
+      IO.puts("⚠️  Backed up processes:")
+
+      Enum.each(backed_up, fn q ->
+        IO.puts("   #{q.name}: #{q.queue_len} messages")
+      end)
+    end
+
+    IO.puts("")
+  end
+
+  defp print_timing(timing), do: print_timing(timing, nil)
+
+  defp print_timing(timing, percentiles) do
+    # Only print if we have data
+    stages_with_data = Enum.filter(timing, fn {_stage, data} -> data.count > 0 end)
+
+    if length(stages_with_data) > 0 do
+      if percentiles && is_map(percentiles) do
+        IO.puts("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
+      else
+        IO.puts("Timing (μs):  avg / min / max")
+      end
+
+      # V1 Broadway stages + V2 GenStage stages
+      all_stages = [
+        # V1 Broadway stages
+        :identify, :decommutate, :convert, :derive,
+        # V2 GenStage stages (decom is shorter name for decommutation)
+        :decom,
+        # Shared stages
+        :cvt_batch, :ets_write, :pubsub_broadcast, :total_process,
+        # End-to-end latency
+        :end_to_end
+      ]
+
+      Enum.each(all_stages, fn stage ->
+        case Map.get(timing, stage) do
+          %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+            stage_name = stage |> to_string() |> String.pad_trailing(14)
+            basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
+
+            # Add percentiles if available
+            line =
+              if percentiles && is_map(percentiles) do
+                case Map.get(percentiles, stage) do
+                  %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
+                    "  #{stage_name} #{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
+
+                  _ ->
+                    "  #{stage_name} #{basic}"
+                end
+              else
+                "  #{stage_name} #{basic}"
+              end
+
+            IO.puts(line)
+
+          _ ->
+            :ok
+        end
+      end)
+    end
+  end
+
+  defp print_stage_errors(stage_errors) when is_map(stage_errors) do
+    total = Enum.reduce(stage_errors, 0, fn {_stage, count}, acc -> acc + count end)
+
+    if total > 0 do
+      IO.puts("\nStage Errors:")
+
+      Enum.each([:identify, :decom, :convert, :derive], fn stage ->
+        count = Map.get(stage_errors, stage, 0)
+        stage_name = stage |> to_string() |> String.pad_trailing(10)
+        IO.puts("  #{stage_name} #{count}")
+      end)
+
+      IO.puts("  Total:     #{total}")
+    end
+  end
+
+  defp print_stage_errors(_), do: :ok
+
+  defp format_us(us) when is_number(us) do
+    cond do
+      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
+      true -> "#{round(us)}μs"
+    end
+    |> String.pad_leading(8)
+  end
+
+  defp format_us(_), do: String.pad_leading("-", 8)
+
+  defp print_summary(initial, final, duration_ms) do
+    IO.puts("=== Summary ===")
+
+    case {initial.stats, final.stats} do
+      {%{packets_processed: p1, items_processed: i1, packets_received: r1, packets_failed: f1},
+       %{packets_processed: p2, items_processed: i2, packets_received: r2, packets_failed: f2}} ->
+        packets = p2 - p1
+        items = i2 - i1
+        received = r2 - r1
+        failed = f2 - f1
+        duration_sec = duration_ms / 1000
+        pps = Float.round(packets / duration_sec, 1)
+        ips = Float.round(items / duration_sec, 1)
+        recv_ps = Float.round(received / duration_sec, 1)
+
+        IO.puts("Received:  #{received} packets (#{recv_ps}/sec)")
+        IO.puts("Processed: #{packets} packets (#{pps}/sec)")
+        IO.puts("Items:     #{items} (#{ips}/sec)")
+
+        if failed > 0 do
+          IO.puts("Failed:    #{failed} packets")
+        end
+
+        # Check for backpressure
+        if received > packets + 10 do
+          IO.puts("\n⚠️  Backpressure detected: #{received - packets} packets pending")
+        end
+
+      _ ->
+        IO.puts("Could not calculate throughput (stats unavailable)")
+    end
+  end
+end

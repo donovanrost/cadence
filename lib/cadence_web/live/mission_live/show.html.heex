@@ -1,0 +1,344 @@
+<.header>
+  <%= @mission.name %>
+  <:subtitle>Mission control and monitoring</:subtitle>
+  <:actions>
+    <.button :if={@mission.status == "active"} phx-click="start_mission">
+      Start Mission
+    </.button>
+    <.button phx-click="stop_mission">Stop Mission</.button>
+    <.link patch={~p"/missions/#{@mission}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit mission</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Slug"><%= @mission.slug %></:item>
+  <:item title="Description"><%= @mission.description %></:item>
+  <:item title="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      @mission.status == "active" && "bg-green-50 text-green-700 ring-green-600/20",
+      @mission.status == "inactive" && "bg-gray-50 text-gray-600 ring-gray-500/10",
+      @mission.status == "suspended" && "bg-red-50 text-red-700 ring-red-600/10"
+    ]}>
+      <%= @mission.status %>
+    </span>
+  </:item>
+  <:item title="Phase"><%= @mission.phase %></:item>
+  <:item title="Start Date">
+    <%= if @mission.start_date, do: Calendar.strftime(@mission.start_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+  </:item>
+  <:item title="End Date">
+    <%= if @mission.end_date, do: Calendar.strftime(@mission.end_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+  </:item>
+</.list>
+
+<.header class="mt-8">
+  Targets
+  <:actions>
+    <.link patch={~p"/missions/#{@mission}/targets/new"}>
+      <.button>New Target</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="targets" rows={@targets}>
+  <:col :let={target} label="Name"><%= target.name %></:col>
+  <:col :let={target} label="Identifier"><%= target.identifier %></:col>
+  <:col :let={target} label="Type"><%= target.type %></:col>
+  <:col :let={target} label="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      target.status == "online" && "bg-green-50 text-green-700 ring-green-600/20",
+      target.status == "offline" && "bg-gray-50 text-gray-600 ring-gray-500/10",
+      target.status == "standby" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+      target.status == "fault" && "bg-red-50 text-red-700 ring-red-600/10"
+    ]}>
+      <%= target.status %>
+    </span>
+  </:col>
+  <:col :let={target} label="Circuit Breaker">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      target.circuit_breaker_status == "closed" && "bg-green-50 text-green-700 ring-green-600/20",
+      target.circuit_breaker_status == "open" && "bg-red-50 text-red-700 ring-red-600/10",
+      target.circuit_breaker_status == "half_open" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
+    ]}>
+      <%= target.circuit_breaker_status %>
+    </span>
+  </:col>
+  <:action :let={target}>
+    <div class="flex gap-2">
+      <.link patch={~p"/missions/#{@mission}/targets/#{target}/edit"}>Edit</.link>
+      <.link
+        phx-click={JS.push("delete_target", value: %{id: target.id})}
+        data-confirm="Are you sure you want to delete this target?"
+      >
+        Delete
+      </.link>
+    </div>
+  </:action>
+</.table>
+
+<.header class="mt-8">
+  Interfaces
+  <:actions>
+    <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
+      <.button>New Interface</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="interfaces" rows={@interfaces}>
+  <:col :let={interface} label="Name"><%= interface.name %></:col>
+  <:col :let={interface} label="Connection Type">
+    <%= String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize() %>
+  </:col>
+  <:col :let={interface} label="Targets">
+    <% targets = Map.get(@interface_targets, interface.id, []) %>
+    <%= if Enum.empty?(targets) do %>
+      <span class="text-gray-400 italic text-sm">No targets</span>
+    <% else %>
+      <div class="flex flex-wrap gap-1">
+        <%= for target <- targets do %>
+          <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+            <%= target.identifier %>
+          </span>
+        <% end %>
+      </div>
+    <% end %>
+  </:col>
+  <:col :let={interface} label="Protocols">
+    <%= case Map.get(@interface_protocol_counts, interface.id, 0) do %>
+      <% 0 -> %>
+        <span class="text-gray-500">No protocols</span>
+      <% 1 -> %>
+        <span class="text-blue-600">1 protocol</span>
+      <% count -> %>
+        <span class="text-blue-600"><%= count %> protocols</span>
+    <% end %>
+  </:col>
+  <:col :let={interface} label="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      interface.status == "connected" && "bg-green-50 text-green-700 ring-green-600/20",
+      interface.status == "disconnected" && "bg-gray-50 text-gray-600 ring-gray-500/10",
+      interface.status == "connecting" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+      interface.status == "error" && "bg-red-50 text-red-700 ring-red-600/10"
+    ]}>
+      <%= interface.status %>
+    </span>
+  </:col>
+  <:col :let={interface} label="Auto Reconnect">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      interface.auto_reconnect && "bg-green-50 text-green-700 ring-green-600/20",
+      !interface.auto_reconnect && "bg-gray-50 text-gray-600 ring-gray-500/10"
+    ]}>
+      <%= if interface.auto_reconnect, do: "Enabled", else: "Disabled" %>
+    </span>
+  </:col>
+  <:action :let={interface}>
+    <div class="flex gap-2">
+      <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>
+        Protocols
+      </.link>
+      <.link patch={~p"/missions/#{@mission}/interfaces/#{interface}/edit"}>Edit</.link>
+      <.link
+        phx-click={JS.push("delete_interface", value: %{id: interface.id})}
+        data-confirm="Are you sure you want to delete this interface?"
+      >
+        Delete
+      </.link>
+    </div>
+  </:action>
+</.table>
+
+<.header class="mt-8">
+  Telemetry Databases
+  <:actions>
+    <.link patch={~p"/missions/#{@mission}/databases/new"}>
+      <.button>Import Database</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="databases" rows={@definition_sets}>
+  <:col :let={ds} label="Version"><%= ds.version %></:col>
+  <:col :let={ds} label="Description"><%= ds.description || "-" %></:col>
+  <:col :let={ds} label="Packets"><%= length(ds.packet_definitions) %></:col>
+  <:col :let={ds} label="Status">
+    <%= cond do %>
+      <% ds.published_at != nil and ds.superseded_at == nil -> %>
+        <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+          Active
+        </span>
+      <% ds.published_at != nil -> %>
+        <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+          Superseded
+        </span>
+      <% true -> %>
+        <span class="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-700 ring-1 ring-inset ring-yellow-600/20">
+          Draft
+        </span>
+    <% end %>
+  </:col>
+  <:col :let={ds} label="Created">
+    <%= Calendar.strftime(ds.inserted_at, "%Y-%m-%d %H:%M") %>
+  </:col>
+  <:action :let={ds}>
+    <.link navigate={~p"/missions/#{@mission}/databases/#{ds}"}>View</.link>
+  </:action>
+</.table>
+
+<%= if Enum.empty?(@definition_sets) do %>
+  <p class="text-sm text-gray-500 italic mt-4">
+    No telemetry databases imported yet. Import a YAML database file to define packet structures.
+  </p>
+<% end %>
+
+<.header class="mt-8">
+  Derived Items
+  <:subtitle>Computed values calculated from telemetry items (persists across database versions)</:subtitle>
+  <:actions>
+    <.link patch={~p"/missions/#{@mission}/derived_items/new"}>
+      <.button>New Derived Item</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="derived-items" rows={@derived_items}>
+  <:col :let={item} label="Name"><%= item.name %></:col>
+  <:col :let={item} label="Expression">
+    <code class="text-xs bg-zinc-100 px-1 py-0.5 rounded"><%= item.expression %></code>
+  </:col>
+  <:col :let={item} label="Units"><%= item.units || "-" %></:col>
+  <:col :let={item} label="Type"><%= item.data_type %></:col>
+  <:col :let={item} label="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      item.enabled && "bg-green-50 text-green-700 ring-green-600/20",
+      !item.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
+    ]}>
+      <%= if item.enabled, do: "Enabled", else: "Disabled" %>
+    </span>
+  </:col>
+  <:action :let={item}>
+    <.link patch={~p"/missions/#{@mission}/derived_items/#{item}/edit"}>Edit</.link>
+  </:action>
+</.table>
+
+<%= if Enum.empty?(@derived_items) do %>
+  <p class="text-sm text-gray-500 italic mt-4">
+    No derived items configured. Create derived items to compute values from telemetry (e.g., averages, ratios).
+  </p>
+<% end %>
+
+<.back navigate={~p"/missions"}>Back to missions</.back>
+
+<.modal
+  :if={@live_action == :edit}
+  id="mission-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.MissionLive.FormComponent}
+    id={@mission.id}
+    title={@page_title}
+    action={@live_action}
+    mission={@mission}
+    patch={~p"/missions/#{@mission}"}
+    current_user={@current_scope.user}
+    current_scope={@current_scope}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action in [:new_target, :edit_target]}
+  id="target-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.TargetLive.FormComponent}
+    id={@target.id || :new}
+    title={@page_title}
+    action={if @live_action == :new_target, do: :new, else: :edit}
+    target={@target}
+    mission={@mission}
+    interfaces={@interfaces}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action in [:new_interface, :edit_interface]}
+  id="interface-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.InterfaceLive.FormComponent}
+    id={@interface.id || :new}
+    title={@page_title}
+    action={if @live_action == :new_interface, do: :new_interface, else: :edit}
+    interface={@interface}
+    mission={@mission}
+    targets={@targets}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action == :new_database}
+  id="database-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.DatabaseLive.FormComponent}
+    id={:new}
+    title={@page_title}
+    mission={@mission}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action == :show_database}
+  id="database-show-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.DatabaseLive.ShowComponent}
+    id={@definition_set.id}
+    definition_set={@definition_set}
+    mission={@mission}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action in [:new_derived_item, :edit_derived_item]}
+  id="derived-item-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.DerivedItemLive.FormComponent}
+    id={@derived_item.id || :new}
+    title={@page_title}
+    action={if @live_action == :new_derived_item, do: :new, else: :edit}
+    derived_item={@derived_item}
+    mission={@mission}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>

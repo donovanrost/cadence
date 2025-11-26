@@ -1,0 +1,184 @@
+/* See the Tailwind configuration guide for advanced usage
+   https://tailwindcss.com/docs/configuration */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/cadence_web";
+
+/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
+   The heroicons installation itself is managed by your mix.exs */
+@plugin "../vendor/heroicons";
+
+/* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
+   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
+   Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* daisyUI theme plugin. You can update this file by fetching the latest version with:
+  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
+  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
+  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+/* Tokyo Night / Vaporwave Dark Theme */
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: "dark";
+  /* Near-black backgrounds with subtle blue tint */
+  --color-base-100: oklch(12% 0.02 265);        /* #16161e - Main background */
+  --color-base-200: oklch(15% 0.02 260);        /* #1f2230 - Cards, surfaces */
+  --color-base-300: oklch(18% 0.02 258);        /* #292d42 - Elevated surfaces */
+  --color-base-content: oklch(85% 0.02 250);    /* #c0caf5 - Text */
+  /* Bright cyan primary - CTAs, links */
+  --color-primary: oklch(80% 0.12 210);         /* #7dcfff */
+  --color-primary-content: oklch(15% 0.02 210);
+  /* Purple secondary */
+  --color-secondary: oklch(72% 0.15 285);       /* #bb9af7 */
+  --color-secondary-content: oklch(15% 0.02 285);
+  /* Hot pink accent - vaporwave energy */
+  --color-accent: oklch(60% 0.25 340);          /* #ff007c */
+  --color-accent-content: oklch(98% 0.01 340);
+  /* Neutral gray-blue */
+  --color-neutral: oklch(30% 0.03 260);         /* #3b4261 */
+  --color-neutral-content: oklch(85% 0.02 250);
+  /* Info: Blue */
+  --color-info: oklch(70% 0.14 250);            /* #7aa2f7 */
+  --color-info-content: oklch(15% 0.02 250);
+  /* Success: Cyan-teal (on-theme alternative to green) */
+  --color-success: oklch(78% 0.10 185);         /* #73daca */
+  --color-success-content: oklch(15% 0.02 185);
+  /* Warning: Warm orange */
+  --color-warning: oklch(72% 0.15 50);          /* #ff9e64 */
+  --color-warning-content: oklch(15% 0.02 50);
+  /* Error: Coral-red */
+  --color-error: oklch(68% 0.20 10);            /* #f7768e */
+  --color-error-content: oklch(15% 0.02 10);
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Vaporwave Pastel Light Theme */
+@plugin "../vendor/daisyui-theme" {
+  name: "light";
+  default: true;
+  prefersdark: false;
+  color-scheme: "light";
+  /* Very light blue-tinted backgrounds */
+  --color-base-100: oklch(98% 0.005 250);       /* #fafbff - Main background */
+  --color-base-200: oklch(96% 0.005 250);       /* #f1f5f9 - Cards, surfaces */
+  --color-base-300: oklch(92% 0.008 250);       /* #e2e8f0 - Elevated surfaces */
+  --color-base-content: oklch(25% 0.015 250);   /* #1e293b - Text */
+  /* Deep cyan primary - readable on light */
+  --color-primary: oklch(55% 0.12 210);         /* #0891b2 */
+  --color-primary-content: oklch(98% 0.005 210);
+  /* Purple secondary */
+  --color-secondary: oklch(50% 0.25 285);       /* #9333ea */
+  --color-secondary-content: oklch(98% 0.005 285);
+  /* Hot pink accent */
+  --color-accent: oklch(62% 0.23 340);          /* #ec4899 */
+  --color-accent-content: oklch(98% 0.005 340);
+  /* Neutral cool gray */
+  --color-neutral: oklch(45% 0.01 250);         /* #64748b */
+  --color-neutral-content: oklch(98% 0 0);
+  /* Info: Sky blue */
+  --color-info: oklch(66% 0.14 230);            /* #0ea5e9 */
+  --color-info-content: oklch(98% 0.005 230);
+  /* Success: Teal */
+  --color-success: oklch(68% 0.11 185);         /* #14b8a6 */
+  --color-success-content: oklch(98% 0.005 185);
+  /* Warning: Orange */
+  --color-warning: oklch(68% 0.18 40);          /* #f97316 */
+  --color-warning-content: oklch(98% 0.005 40);
+  /* Error: Rose */
+  --color-error: oklch(60% 0.22 10);            /* #f43f5e */
+  --color-error-content: oklch(98% 0.005 10);
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1.5px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* Add variants based on LiveView classes */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Use the data attribute for dark mode  */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* Vaporwave custom utilities */
+@layer utilities {
+  /* Neon glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 10px oklch(80% 0.12 210 / 0.5),
+                0 0 20px oklch(80% 0.12 210 / 0.3);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 10px oklch(72% 0.15 285 / 0.5),
+                0 0 20px oklch(72% 0.15 285 / 0.3);
+  }
+
+  .glow-pink {
+    box-shadow: 0 0 10px oklch(60% 0.25 340 / 0.5),
+                0 0 20px oklch(60% 0.25 340 / 0.3);
+  }
+
+  /* Subtle hover glows */
+  .hover-glow-cyan {
+    transition: box-shadow 0.3s ease;
+  }
+
+  .hover-glow-cyan:hover {
+    box-shadow: 0 0 8px oklch(80% 0.12 210 / 0.4),
+                0 0 16px oklch(80% 0.12 210 / 0.2);
+  }
+
+  .hover-glow-purple:hover {
+    box-shadow: 0 0 8px oklch(72% 0.15 285 / 0.4),
+                0 0 16px oklch(72% 0.15 285 / 0.2);
+  }
+
+  /* Vaporwave gradient backgrounds */
+  .gradient-vaporwave {
+    background: linear-gradient(135deg,
+                oklch(60% 0.25 340) 0%,   /* Pink */
+                oklch(72% 0.15 285) 50%,   /* Purple */
+                oklch(80% 0.12 210) 100%); /* Cyan */
+  }
+
+  .gradient-vaporwave-subtle {
+    background: linear-gradient(135deg,
+                oklch(60% 0.25 340 / 0.1) 0%,
+                oklch(72% 0.15 285 / 0.1) 50%,
+                oklch(80% 0.12 210 / 0.1) 100%);
+  }
+
+  /* Smooth transitions */
+  .transition-glow {
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+  }
+
+  /* Sidebar darker background for dark mode */
+  .sidebar-dark-bg {
+    background-color: oklch(10% 0.02 265);
+  }
+}
+
+/* This file is for your main application CSS */
