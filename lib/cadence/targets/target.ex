@@ -24,6 +24,7 @@ defmodule Cadence.Targets.Target do
           status: String.t(),
           config: map(),
           metadata: map(),
+          active_limit_set: String.t(),
           circuit_breaker_status: String.t(),
           circuit_breaker_failures: integer(),
           circuit_breaker_opened_at: DateTime.t() | nil,
@@ -40,6 +41,9 @@ defmodule Cadence.Targets.Target do
     # Configuration
     field :config, :map, default: %{}
     field :metadata, :map, default: %{}
+
+    # Limits configuration
+    field :active_limit_set, :string, default: "NOMINAL"
 
     # Command safety (circuit breaker pattern)
     field :circuit_breaker_status, :string, default: "closed"
@@ -67,7 +71,8 @@ defmodule Cadence.Targets.Target do
       :type,
       :status,
       :config,
-      :metadata
+      :metadata,
+      :active_limit_set
     ])
     |> validate_required([:mission_id, :name, :identifier, :type])
     |> validate_format(:identifier, ~r/^[A-Z0-9_-]+$/,
@@ -84,7 +89,7 @@ defmodule Cadence.Targets.Target do
   """
   def update_changeset(target, attrs) do
     target
-    |> cast(attrs, [:name, :status, :config, :metadata])
+    |> cast(attrs, [:name, :status, :config, :metadata, :active_limit_set])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["offline", "online", "standby", "fault"])
   end

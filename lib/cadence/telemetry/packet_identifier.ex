@@ -283,6 +283,9 @@ defmodule Cadence.Telemetry.PacketIdentifier do
             }
           end)
 
+        # Build O(1) lookup map for ConversionStage (avoids O(n²) Enum.find per item)
+        items_by_name = Map.new(items, fn item -> {to_string(item.name), item} end)
+
         # Build packet definition map
         %{
           id: packet_def.id,
@@ -293,6 +296,7 @@ defmodule Cadence.Telemetry.PacketIdentifier do
           apid: packet_def.apid,
           description: packet_def.description,
           items: items,
+          items_by_name: items_by_name,
           field_specs: field_specs
         }
       end)

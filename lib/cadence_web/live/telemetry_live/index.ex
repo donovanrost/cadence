@@ -119,7 +119,7 @@ defmodule CadenceWeb.TelemetryLive.Index do
                       <%= for {key, value} <- filter_telemetry(@telemetry_data, target.identifier, packet_name) do %>
                         <div class="flex justify-between items-center text-sm">
                           <span class="text-gray-600">{elem(key, 2)}:</span>
-                          <span class="font-mono font-semibold" class={limits_color_class(value.limits_state)}>
+                          <span class={["font-mono font-semibold", limits_color_class(value.limits_state)]}>
                             {format_value(value.value)}
                           </span>
                         </div>
@@ -182,9 +182,22 @@ defmodule CadenceWeb.TelemetryLive.Index do
     inspect(value)
   end
 
+  # Green state - value within all limits
   defp limits_color_class(:green), do: "text-green-600"
-  defp limits_color_class(:yellow), do: "text-yellow-600"
-  defp limits_color_class(:red), do: "text-red-600"
-  defp limits_color_class(:blue), do: "text-blue-600"
+
+  # Yellow states - warning level violation (can be high or low)
+  defp limits_color_class(:yellow), do: "text-yellow-600 bg-yellow-100 px-1 rounded"
+  defp limits_color_class(:yellow_low), do: "text-yellow-700 bg-yellow-100 px-1 rounded"
+  defp limits_color_class(:yellow_high), do: "text-yellow-700 bg-yellow-100 px-1 rounded"
+
+  # Red states - critical level violation (can be high or low)
+  defp limits_color_class(:red), do: "text-red-600 bg-red-100 px-1 rounded font-bold"
+  defp limits_color_class(:red_low), do: "text-red-700 bg-red-100 px-1 rounded font-bold"
+  defp limits_color_class(:red_high), do: "text-red-700 bg-red-100 px-1 rounded font-bold"
+
+  # Blue state - stale data (hasn't been updated within timeout)
+  defp limits_color_class(:blue), do: "text-blue-600 bg-blue-100 px-1 rounded"
+
+  # Unknown state - default styling
   defp limits_color_class(_), do: "text-gray-600"
 end

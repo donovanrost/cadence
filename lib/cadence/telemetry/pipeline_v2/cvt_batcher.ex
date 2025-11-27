@@ -23,8 +23,14 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
   alias Cadence.Telemetry.{CurrentValueTable, Stats}
   alias Cadence.Telemetry.PipelineV2.{PipelineEvent, PartitionSupervisor}
 
-  @default_batch_size 50
+  # Increased batch size for high-throughput (was 50)
+  @default_batch_size 500
   @default_batch_timeout 100
+  # Align with stage_behaviour.ex defaults for consistent backpressure
+  @default_max_demand 500
+  @default_min_demand 250
+  # PubSub broadcast is only used by tests, disabled by default for performance
+  @default_broadcast_enabled false
 
   def start_link(opts) do
     name = Keyword.get(opts, :name)
@@ -37,14 +43,20 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
     partition_count = Keyword.fetch!(opts, :partition_count)
     batch_size = Keyword.get(opts, :batch_size, @default_batch_size)
     batch_timeout = Keyword.get(opts, :batch_timeout, @default_batch_timeout)
+    max_demand = Keyword.get(opts, :max_demand, @default_max_demand)
+    min_demand = Keyword.get(opts, :min_demand, @default_min_demand)
+    broadcast_enabled = Keyword.get(opts, :broadcast_enabled, @default_broadcast_enabled)
 
-    Logger.info("CVTBatcher starting for mission_id=#{mission_id}")
+    Logger.info("CVTBatcher starting for mission_id=#{mission_id}, batch_size=#{batch_size}, broadcast=#{broadcast_enabled}")
 
     state = %{
       mission_id: mission_id,
       partition_count: partition_count,
       batch_size: batch_size,
       batch_timeout: batch_timeout,
+      max_demand: max_demand,
+      min_demand: min_demand,
+      broadcast_enabled: broadcast_enabled,
       batch: [],
       batch_count: 0,
       timer_ref: nil
@@ -81,9 +93,14 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
   end
 
   defp subscribe_to_all_partitions(state) do
-    %{mission_id: mission_id, partition_count: partition_count} = state
+    %{
+      mission_id: mission_id,
+      partition_count: partition_count,
+      max_demand: max_demand,
+      min_demand: min_demand
+    } = state
 
-    Logger.debug("CVTBatcher subscribing to #{partition_count} partitions")
+    Logger.debug("CVTBatcher subscribing to #{partition_count} partitions with demand #{max_demand}/#{min_demand}")
 
     # Subscribe to each partition's DeriveStage
     for partition <- 0..(partition_count - 1) do
@@ -95,7 +112,7 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
           Process.send_after(self(), :subscribe_to_partitions, 100)
 
         _pid ->
-          GenStage.async_subscribe(self(), to: derive_stage, max_demand: 10, min_demand: 5)
+          GenStage.async_subscribe(self(), to: derive_stage, max_demand: max_demand, min_demand: min_demand)
       end
     end
   end
@@ -128,60 +145,142 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
   defp flush_batch(%{batch: []} = state), do: state
 
   defp flush_batch(state) do
-    %{mission_id: mission_id, batch: events} = state
+    %{mission_id: mission_id, batch: events, broadcast_enabled: _broadcast_enabled} = state
 
     Stats.time(mission_id, :cvt_batch, fn ->
-      # Group events by target_id for efficient batch updates
-      events
-      |> Enum.each(fn event ->
-        write_event_to_cvt(mission_id, event)
+      # Aggregate ALL items from ALL events into a single list for one ETS insert
+      # This is much faster than N separate inserts
+      {all_items, total_items} = aggregate_batch_items(events)
 
-        # Record end-to-end latency (packet arrival to CVT write)
-        completion_time = System.monotonic_time(:microsecond)
-        e2e_latency = completion_time - event.received_at
-        Stats.record_timing(mission_id, :end_to_end, e2e_latency)
-      end)
+      # Single ETS insert for entire batch (was: one per event)
+      unless Enum.empty?(all_items) do
+        CurrentValueTable.set_batch(mission_id, all_items, [])
+      end
+
+      # Record end-to-end latency (sample from last event in batch)
+      case List.last(events) do
+        nil -> :ok
+        event ->
+          completion_time = System.monotonic_time(:microsecond)
+          e2e_latency = completion_time - event.received_at
+          Stats.record_timing(mission_id, :end_to_end, e2e_latency)
+      end
+
+      total_items
     end)
+    |> case do
+      total_items when is_integer(total_items) ->
+        Stats.increment(mission_id, :items_processed, total_items)
+      _ -> :ok
+    end
 
     # Update stats
     Stats.increment(mission_id, :packets_processed, length(events))
 
-    total_items =
-      events
-      |> Enum.map(fn e -> length(e.items_with_limits || []) end)
-      |> Enum.sum()
-
-    Stats.increment(mission_id, :items_processed, total_items)
-
     %{state | batch: [], batch_count: 0}
   end
 
+  # Aggregate all items from all events into a single list
+  # Skips stored packets, deduplicates by key (keeps latest value)
+  defp aggregate_batch_items(events) do
+    events
+    |> Enum.reduce({%{}, 0}, fn event, {items_map, count} ->
+      %{
+        packet: packet,
+        packet_def: packet_def,
+        metadata: metadata,
+        items_with_limits: items_with_limits
+      } = event
+
+      # Skip stored (historical) packets
+      is_stored = metadata[:stored] || packet.stored || false
+
+      if is_stored do
+        {items_map, count}
+      else
+        target_id = event.target_id
+        packet_name = packet_def.name
+
+        # Add items to map (later events overwrite earlier for same key = latest value wins)
+        new_items =
+          items_with_limits
+          |> Enum.reduce(items_map, fn {qualified_name, value, limits_state}, acc ->
+            item_name = extract_item_name(qualified_name, packet_name)
+            key = {target_id, packet_name, item_name}
+            Map.put(acc, key, {target_id, packet_name, item_name, value, limits_state})
+          end)
+
+        {new_items, count + length(items_with_limits)}
+      end
+    end)
+    |> then(fn {items_map, count} -> {Map.values(items_map), count} end)
+  end
+
   # Write a single event's items to CVT
-  defp write_event_to_cvt(mission_id, %PipelineEvent{} = event) do
+  defp write_event_to_cvt(mission_id, %PipelineEvent{} = event, broadcast_enabled) do
     %{
+      packet: packet,
       packet_def: packet_def,
       metadata: metadata,
       items_with_limits: items_with_limits
     } = event
 
-    received_time = metadata[:received_at] || DateTime.utc_now()
-    is_stored = metadata[:stored] || false
+    received_time = packet.received_time || metadata[:received_at] || DateTime.utc_now()
+    packet_time = packet.packet_time
+
+    # Check both metadata and packet struct for stored flag
+    is_stored = metadata[:stored] || packet.stored || false
 
     # Skip CVT update for stored (historical) packets
-    unless is_stored do
+    # This preserves the current value table with real-time data
+    # while still allowing stored telemetry to flow through for logging/TSDB
+    if is_stored do
+      Logger.debug(
+        "Skipping CVT update for stored packet: #{packet_def.name} " <>
+          "(packet_time=#{inspect(packet_time)})"
+      )
+    else
       target_id = event.target_id
       packet_name = packet_def.name
 
       # Build batch items list
+      # items_with_limits contains qualified names like "PACKET.item_name"
+      # We need to extract just the item name for the CVT key
       batch_items =
         items_with_limits
-        |> Enum.reject(fn {item_name, _value, _limits_state} -> item_name in [:received_time] end)
-        |> Enum.map(fn {item_name, value, limits_state} ->
-          {target_id, packet_name, to_string(item_name), value, limits_state}
+        |> Enum.map(fn {qualified_name, value, limits_state} ->
+          # Extract item name from qualified name (PACKET.item -> item)
+          item_name = extract_item_name(qualified_name, packet_name)
+          {target_id, packet_name, item_name, value, limits_state}
         end)
 
-      # Single batched ETS insert
-      CurrentValueTable.set_batch(mission_id, batch_items, received_time: received_time)
+      # Single batched ETS insert with both received and packet times
+      CurrentValueTable.set_batch(
+        mission_id,
+        batch_items,
+        received_time: received_time,
+        packet_time: packet_time
+      )
+
+      # Broadcast packet update via PubSub (disabled by default for performance)
+      # Only tests currently subscribe to these broadcasts
+      if broadcast_enabled do
+        CurrentValueTable.broadcast_packet_update(mission_id, target_id, packet_name, batch_items)
+      end
+    end
+  end
+
+  # Extract item name from qualified name
+  # "PACKET.item_name" -> "item_name"
+  # "PACKET.RECEIVED_TIMESECONDS" -> "RECEIVED_TIMESECONDS"
+  defp extract_item_name(qualified_name, packet_name) do
+    prefix = "#{packet_name}."
+
+    if String.starts_with?(qualified_name, prefix) do
+      String.replace_prefix(qualified_name, prefix, "")
+    else
+      # If not qualified (shouldn't happen), use as-is
+      to_string(qualified_name)
     end
   end
 

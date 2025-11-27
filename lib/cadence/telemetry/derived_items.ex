@@ -219,7 +219,6 @@ defmodule Cadence.Telemetry.DerivedItems do
   # Fast path for pure expressions (no stateful functions)
   defp compute_single(%{parsed_ast: parsed_ast, required_vars: required_vars, has_stateful: false}, bindings, _mission_id)
        when not is_nil(parsed_ast) do
-    # Check if all required variables are available (short-circuit, no allocation)
     if all_vars_present?(required_vars, bindings) do
       # Use pure AST evaluator - no stateful context needed
       ExpressionEvaluator.evaluate_ast(parsed_ast, bindings)

@@ -21,6 +21,7 @@ defmodule Mix.Tasks.Cadence.Profile do
     * `--interval`, `-i` - Sampling interval in ms (default: 1000)
     * `--queues` - Only show process queue depths
     * `--snapshot` - Single snapshot instead of continuous watch
+    * `--analyze` - Show timing analysis (warmup, spikes, trimmed avg)
     * `--debug` - Run diagnostics to debug profiler issues
 
   ## Examples
@@ -57,6 +58,7 @@ defmodule Mix.Tasks.Cadence.Profile do
           interval: :integer,
           queues: :boolean,
           snapshot: :boolean,
+          analyze: :boolean,
           debug: :boolean,
           help: :boolean
         ],
@@ -132,6 +134,7 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp determine_mode(opts) do
     cond do
       opts[:debug] -> :debug
+      opts[:analyze] -> :analyze
       opts[:snapshot] -> :snapshot
       opts[:queues] -> :queues
       true -> :watch
@@ -187,6 +190,9 @@ defmodule Mix.Tasks.Cadence.Profile do
       :debug ->
         run_debug(config)
 
+      :analyze ->
+        run_analyze(config)
+
       :snapshot ->
         run_snapshot(config)
 
@@ -209,6 +215,97 @@ defmodule Mix.Tasks.Cadence.Profile do
         :ok
     end
   end
+
+  defp run_analyze(config) do
+    Mix.shell().info("""
+
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║           Timing Analysis: Warmup & Spike Detection           ║
+    ╚═══════════════════════════════════════════════════════════════╝
+
+    Mission: #{config.mission_id}
+    """)
+
+    case rpc_call(config.node, Cadence.Telemetry.Stats, :get_all_timing_analysis, [config.mission_id]) do
+      {:badrpc, reason} ->
+        Mix.raise("RPC failed: #{inspect(reason)}")
+
+      analysis when is_map(analysis) ->
+        # Show analysis for key stages
+        stages_to_show = [:identify, :decom, :convert, :derive, :end_to_end]
+
+        Enum.each(stages_to_show, fn stage ->
+          case Map.get(analysis, stage) do
+            %{sample_count: count} = data when count > 0 ->
+              print_stage_analysis(stage, data)
+
+            _ ->
+              :ok
+          end
+        end)
+
+        Mix.shell().info("""
+        ═══════════════════════════════════════════════════════════════
+                                  Legend
+        ═══════════════════════════════════════════════════════════════
+          avg       - Standard average (affected by outliers)
+          trimmed   - Average excluding top/bottom 5%
+          median    - Middle value (P50)
+          warmup    - First 10 samples (may be slow due to JIT/cache)
+          spikes    - Samples > 3σ from mean (likely GC pauses)
+        """)
+
+      other ->
+        Mix.shell().error("Unexpected result: #{inspect(other)}")
+    end
+  end
+
+  defp print_stage_analysis(stage, data) do
+    stage_name = stage |> to_string() |> String.upcase()
+
+    Mix.shell().info("#{stage_name} (#{data.sample_count} samples)")
+    Mix.shell().info("  Averages:  avg=#{format_us(data.avg_us)}  trimmed=#{format_us(data.trimmed_avg_us)}  median=#{format_us(data.median_us)}")
+
+    # Warmup analysis
+    if length(data.warmup_samples) > 0 do
+      warmup_str = data.warmup_samples |> Enum.map(&format_us_compact/1) |> Enum.join(", ")
+      Mix.shell().info("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
+
+      # Check if first packet is an outlier
+      first = List.first(data.warmup_samples)
+      if first && data.avg_us > 0 && first > data.avg_us * 2 do
+        Mix.shell().info("  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg")
+      end
+
+      # Check if warmup avg is significantly higher
+      if data.trimmed_avg_us > 0 && data.warmup_avg_us > data.trimmed_avg_us * 1.5 do
+        Mix.shell().info("  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state")
+      end
+    end
+
+    # Spike analysis
+    if data.spike_count > 0 do
+      spike_pct = Float.round(data.spike_count / data.sample_count * 100, 2)
+      Mix.shell().info("  Spikes:    #{data.spike_count} samples (#{spike_pct}%) > #{format_us(data.spike_threshold_us)}")
+    end
+
+    # Show how much outliers affect the average
+    if data.trimmed_avg_us > 0 && abs(data.avg_us - data.trimmed_avg_us) > data.trimmed_avg_us * 0.1 do
+      diff_pct = Float.round((data.avg_us - data.trimmed_avg_us) / data.trimmed_avg_us * 100, 1)
+      Mix.shell().info("  📊 Outliers inflate avg by #{diff_pct}% (use trimmed for accurate measurement)")
+    end
+
+    Mix.shell().info("")
+  end
+
+  defp format_us_compact(us) when is_number(us) do
+    cond do
+      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
+      true -> "#{round(us)}μs"
+    end
+  end
+
+  defp format_us_compact(_), do: "-"
 
   defp run_snapshot(config) do
     Mix.shell().info("Taking snapshot for mission #{config.mission_id}...\n")
@@ -450,6 +547,8 @@ defmodule Mix.Tasks.Cadence.Profile do
         :identify, :decommutate, :convert, :derive,
         # V2 GenStage stages (decom is shorter name for decommutation)
         :decom,
+        # Limits evaluation
+        :limits,
         # Shared stages
         :cvt_batch, :ets_write, :pubsub_broadcast, :total_process,
         # End-to-end latency
@@ -599,6 +698,7 @@ defmodule Mix.Tasks.Cadence.Profile do
       --duration, -d <seconds>   Watch duration (default: 10)
       --interval, -i <ms>        Sampling interval in ms (default: 1000)
       --snapshot                 Take a single snapshot instead of watching
+      --analyze                  Show timing analysis (warmup, spikes, trimmed avg)
       --queues                   Only show process queue depths
       --help, -h                 Show this help
 

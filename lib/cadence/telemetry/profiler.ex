@@ -18,10 +18,107 @@ defmodule Cadence.Telemetry.Profiler do
 
       # Debug - dump all raw data
       Cadence.Telemetry.Profiler.debug(mission_id)
+
+      # Profile limits evaluation specifically
+      Cadence.Telemetry.Profiler.limits_stats(mission_id)
+
+      # Analyze timing warmup and spikes
+      Cadence.Telemetry.Profiler.analyze(mission_id)
   """
 
   alias Cadence.Telemetry.{CurrentValueTable, Pipeline, Stats}
   alias Cadence.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
+  alias Cadence.Telemetry.Limits.{StateTracker, Cache}
+
+  @doc """
+  Analyzes timing data to detect warmup effects and GC spikes.
+
+  Shows:
+  - Warmup samples (first 10 packets per stage)
+  - Comparison: avg vs trimmed avg vs median
+  - Spike count (samples > 3σ from mean)
+  - Whether first packet is skewing the average
+
+  Use this to diagnose if timing measurements are affected by:
+  - JIT/cache warmup (first packets slow)
+  - GC pauses (random spikes)
+  - Outliers skewing the average
+  """
+  def analyze(mission_id) do
+    IO.puts("\n=== Timing Analysis: Warmup & Spike Detection ===\n")
+
+    analysis = Stats.get_all_timing_analysis(mission_id)
+
+    # Show analysis for key stages
+    stages_to_show = [:identify, :decom, :convert, :derive, :limits, :end_to_end]
+
+    Enum.each(stages_to_show, fn stage ->
+      case Map.get(analysis, stage) do
+        %{sample_count: count} = data when count > 0 ->
+          print_stage_analysis(stage, data)
+
+        _ ->
+          :ok
+      end
+    end)
+
+    IO.puts("=== Legend ===")
+    IO.puts("  avg       - Standard average (affected by outliers)")
+    IO.puts("  trimmed   - Average excluding top/bottom 5%")
+    IO.puts("  median    - Middle value (P50)")
+    IO.puts("  warmup    - First 10 samples (may be slow due to JIT/cache)")
+    IO.puts("  spikes    - Samples > 3σ from mean (likely GC pauses)")
+    IO.puts("")
+
+    :ok
+  end
+
+  defp print_stage_analysis(stage, data) do
+    stage_name = stage |> to_string() |> String.upcase()
+
+    IO.puts("#{stage_name} (#{data.sample_count} samples)")
+    IO.puts("  Averages:  avg=#{format_us(data.avg_us)}  trimmed=#{format_us(data.trimmed_avg_us)}  median=#{format_us(data.median_us)}")
+
+    # Warmup analysis
+    if length(data.warmup_samples) > 0 do
+      warmup_str = data.warmup_samples |> Enum.map(&format_us_compact/1) |> Enum.join(", ")
+      IO.puts("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
+
+      # Check if first packet is an outlier
+      first = List.first(data.warmup_samples)
+      if first && first > data.avg_us * 2 do
+        IO.puts("  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg")
+      end
+
+      # Check if warmup avg is significantly higher
+      if data.warmup_avg_us > data.trimmed_avg_us * 1.5 do
+        IO.puts("  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state")
+      end
+    end
+
+    # Spike analysis
+    if data.spike_count > 0 do
+      spike_pct = Float.round(data.spike_count / data.sample_count * 100, 2)
+      IO.puts("  Spikes:    #{data.spike_count} samples (#{spike_pct}%) > #{format_us(data.spike_threshold_us)}")
+    end
+
+    # Show how much outliers affect the average
+    if abs(data.avg_us - data.trimmed_avg_us) > data.trimmed_avg_us * 0.1 do
+      diff_pct = Float.round((data.avg_us - data.trimmed_avg_us) / data.trimmed_avg_us * 100, 1)
+      IO.puts("  📊 Outliers inflate avg by #{diff_pct}% (use trimmed for accurate measurement)")
+    end
+
+    IO.puts("")
+  end
+
+  defp format_us_compact(us) when is_number(us) do
+    cond do
+      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
+      true -> "#{round(us)}μs"
+    end
+  end
+
+  defp format_us_compact(_), do: "-"
 
   @doc """
   Debug function - dumps all raw data to help diagnose profiler issues.
@@ -405,6 +502,105 @@ defmodule Cadence.Telemetry.Profiler do
     end
   end
 
+  @doc """
+  Returns detailed statistics about limits evaluation performance.
+
+  Shows:
+  - Timing statistics (avg, min, max, percentiles)
+  - StateTracker stats (tracked items, transitions)
+  - Cache stats (entries, hit rate if tracked)
+  """
+  def limits_stats(mission_id) do
+    IO.puts("\n=== Limits Evaluation Statistics ===\n")
+
+    # 1. Timing stats
+    IO.puts("1. Timing (limits evaluation per packet):")
+    timing = Stats.get_timing(mission_id)
+
+    case Map.get(timing, :limits) do
+      %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+        IO.puts("   Evaluations: #{count}")
+        IO.puts("   Average:     #{format_us(avg)}")
+        IO.puts("   Min:         #{format_us(min)}")
+        IO.puts("   Max:         #{format_us(max)}")
+
+        # Get percentiles
+        percentiles = Stats.get_percentiles(mission_id, :limits)
+        IO.puts("   P50:         #{format_us(percentiles.p50)}")
+        IO.puts("   P95:         #{format_us(percentiles.p95)}")
+        IO.puts("   P99:         #{format_us(percentiles.p99)}")
+
+      _ ->
+        IO.puts("   No limits timing data recorded yet")
+    end
+
+    # 2. StateTracker stats
+    IO.puts("\n2. StateTracker:")
+    tracker_stats = safe_call(fn -> StateTracker.stats(mission_id) end)
+
+    case tracker_stats do
+      %{tracked_items: items, table_memory_bytes: mem, state_counts: state_counts} ->
+        IO.puts("   Tracked items:  #{items}")
+        IO.puts("   Table memory:   #{div(mem, 1024)} KB")
+
+        # Show state breakdown
+        if map_size(state_counts) > 0 do
+          IO.puts("   State breakdown:")
+          Enum.each(state_counts, fn {state, count} ->
+            IO.puts("     #{state}: #{count}")
+          end)
+        end
+
+      %{error: :not_found} ->
+        IO.puts("   StateTracker not running")
+
+      other ->
+        IO.puts("   #{inspect(other)}")
+    end
+
+    # 3. Cache stats
+    IO.puts("\n3. Limits Cache:")
+    cache_stats = safe_call(fn -> Cache.stats() end)
+
+    case cache_stats do
+      %{size: size, memory_bytes: mem} ->
+        IO.puts("   Cached targets: #{size}")
+        IO.puts("   Cache memory:   #{div(mem, 1024)} KB")
+
+      %{error: _} ->
+        IO.puts("   Cache not available")
+
+      other ->
+        IO.puts("   #{inspect(other)}")
+    end
+
+    # 4. Timing analysis (warmup/spikes)
+    IO.puts("\n4. Timing Analysis:")
+    analysis = Stats.get_timing_analysis(mission_id, :limits)
+
+    if analysis.sample_count > 0 do
+      IO.puts("   Samples:       #{analysis.sample_count}")
+      IO.puts("   Avg:           #{format_us(analysis.avg_us)}")
+      IO.puts("   Trimmed avg:   #{format_us(analysis.trimmed_avg_us)}")
+      IO.puts("   Median:        #{format_us(analysis.median_us)}")
+
+      if analysis.spike_count > 0 do
+        spike_pct = Float.round(analysis.spike_count / analysis.sample_count * 100, 2)
+        IO.puts("   Spikes:        #{analysis.spike_count} (#{spike_pct}%)")
+      end
+
+      if length(analysis.warmup_samples) > 0 do
+        warmup_str = analysis.warmup_samples |> Enum.take(5) |> Enum.map(&format_us_compact/1) |> Enum.join(", ")
+        IO.puts("   Warmup:        [#{warmup_str}...]")
+      end
+    else
+      IO.puts("   No timing samples recorded")
+    end
+
+    IO.puts("\n=== End Limits Stats ===\n")
+    :ok
+  end
+
   # Private helpers
 
   defp safe_call(fun) do
@@ -590,6 +786,8 @@ defmodule Cadence.Telemetry.Profiler do
         :identify, :decommutate, :convert, :derive,
         # V2 GenStage stages (decom is shorter name for decommutation)
         :decom,
+        # Limits evaluation
+        :limits,
         # Shared stages
         :cvt_batch, :ets_write, :pubsub_broadcast, :total_process,
         # End-to-end latency

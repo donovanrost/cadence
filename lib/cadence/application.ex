@@ -25,6 +25,9 @@ defmodule Cadence.Application do
       # Processor State - ETS storage for stateful derived item functions
       Cadence.Telemetry.DerivedItems.ProcessorState,
 
+      # Limits Cache - caches limits configurations per mission/target
+      Cadence.Telemetry.Limits.Cache,
+
       # Mission Supervisor - manages all mission supervision trees
       Cadence.Missions.MissionSupervisor,
 

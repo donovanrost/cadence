@@ -5,17 +5,28 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
   Converts raw ADC counts, bit fields, etc. into engineering units
   using polynomial, state table, or other conversion definitions.
 
+  Also injects automatic timestamp items for OpenC3 compatibility.
+
   ## Input
 
   PipelineEvent with:
   - `raw_items` - Map of item_name => raw_value
   - `packet_def` - Packet definition with item conversions
+  - `packet` - Original Packet struct with timestamp information
 
   ## Output
 
   PipelineEvent enriched with:
   - `converted_items` - Map of item_name => converted_value
-  - `qualified_items` - Map of "PACKET.item" => converted_value
+  - `qualified_items` - Map of "PACKET.item" => converted_value (includes timestamps)
+
+  ## Automatic Timestamp Items
+
+  The following items are automatically added to every packet:
+  - `RECEIVED_TIMESECONDS` - Unix timestamp (float) when packet was received
+  - `RECEIVED_TIMEFORMATTED` - ISO8601 string of received time
+  - `PACKET_TIMESECONDS` - Unix timestamp (float) of packet generation time
+  - `PACKET_TIMEFORMATTED` - ISO8601 string of packet time
 
   ## Parallelization
 
@@ -34,16 +45,17 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
 
   @impl true
   def process(event, _state) do
-    %{raw_items: raw_items, packet_def: packet_def} = event
-    packet_items = packet_def.items
+    %{raw_items: raw_items, packet_def: packet_def, packet: packet} = event
+    # Use pre-built O(1) lookup map from PacketIdentifier
+    items_by_name = packet_def.items_by_name
     packet_name = packet_def.name
 
     # Choose parallel or sequential based on item count
     converted_items =
       if map_size(raw_items) > @parallel_threshold do
-        apply_conversions_parallel(raw_items, packet_items)
+        apply_conversions_parallel(raw_items, items_by_name)
       else
-        apply_conversions(raw_items, packet_items)
+        apply_conversions(raw_items, items_by_name)
       end
 
     # Qualify item names with packet name (PACKET.item format)
@@ -51,6 +63,9 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
       converted_items
       |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
       |> Map.new()
+
+    # Add automatic timestamp items
+    qualified_items = inject_timestamp_items(qualified_items, packet_name, packet)
 
     {:ok,
      %{
@@ -61,20 +76,20 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
   end
 
   # Sequential conversion for small packets
-  defp apply_conversions(raw_items, packet_items) do
+  defp apply_conversions(raw_items, items_by_name) do
     raw_items
     |> Enum.map(fn {item_name, raw_value} ->
-      {item_name, convert_item(item_name, raw_value, packet_items)}
+      {item_name, convert_item(item_name, raw_value, items_by_name)}
     end)
     |> Map.new()
   end
 
   # Parallel conversion for large packets
-  defp apply_conversions_parallel(raw_items, packet_items) do
+  defp apply_conversions_parallel(raw_items, items_by_name) do
     raw_items
     |> Task.async_stream(
       fn {item_name, raw_value} ->
-        {item_name, convert_item(item_name, raw_value, packet_items)}
+        {item_name, convert_item(item_name, raw_value, items_by_name)}
       end,
       max_concurrency: System.schedulers_online(),
       ordered: false
@@ -83,9 +98,9 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
     |> Map.new()
   end
 
-  # Convert a single item value
-  defp convert_item(item_name, raw_value, packet_items) do
-    item_def = Enum.find(packet_items, fn item -> to_string(item.name) == item_name end)
+  # Convert a single item value using O(1) map lookup
+  defp convert_item(item_name, raw_value, items_by_name) do
+    item_def = Map.get(items_by_name, item_name)
 
     case item_def do
       %{conversion: conversion} when not is_nil(conversion) ->
@@ -106,4 +121,26 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.ConversionStage do
         raw_value
     end
   end
+
+  # Inject automatic timestamp items (OpenC3 compatibility)
+  defp inject_timestamp_items(qualified_items, packet_name, packet) do
+    received_time = packet.received_time || DateTime.utc_now()
+    packet_time = packet.packet_time || received_time
+
+    timestamp_items = %{
+      "#{packet_name}.RECEIVED_TIMESECONDS" => datetime_to_unix_float(received_time),
+      "#{packet_name}.RECEIVED_TIMEFORMATTED" => DateTime.to_iso8601(received_time),
+      "#{packet_name}.PACKET_TIMESECONDS" => datetime_to_unix_float(packet_time),
+      "#{packet_name}.PACKET_TIMEFORMATTED" => DateTime.to_iso8601(packet_time)
+    }
+
+    Map.merge(qualified_items, timestamp_items)
+  end
+
+  # Convert DateTime to Unix timestamp as float (with microsecond precision)
+  defp datetime_to_unix_float(%DateTime{} = dt) do
+    DateTime.to_unix(dt, :microsecond) / 1_000_000
+  end
+
+  defp datetime_to_unix_float(_), do: 0.0
 end

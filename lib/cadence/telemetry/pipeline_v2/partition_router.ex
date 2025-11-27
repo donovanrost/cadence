@@ -30,7 +30,8 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionRouter do
   alias Cadence.Telemetry.Stats
 
   @default_partition_count 16
-  @max_queue_depth 10_000
+  # Increased default for high-throughput telemetry (was 10,000)
+  @default_max_queue_depth 100_000
 
   def start_link(opts) do
     name = Keyword.get(opts, :name)
@@ -48,9 +49,10 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionRouter do
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     partition_count = Keyword.get(opts, :partition_count, @default_partition_count)
+    max_queue_depth = Keyword.get(opts, :max_queue_depth, @default_max_queue_depth)
 
     Logger.info(
-      "PartitionRouter starting for mission_id=#{mission_id} with #{partition_count} partitions"
+      "PartitionRouter starting for mission_id=#{mission_id} with #{partition_count} partitions, queue_depth=#{max_queue_depth}"
     )
 
     # Initialize stats for this mission
@@ -62,6 +64,7 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionRouter do
     state = %{
       mission_id: mission_id,
       partition_count: partition_count,
+      max_queue_depth: max_queue_depth,
       demand: 0,
       queue: :queue.new(),
       dropped_count: 0
@@ -91,7 +94,7 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionRouter do
     # Check queue depth before adding
     queue_depth = :queue.len(state.queue)
 
-    if queue_depth >= @max_queue_depth do
+    if queue_depth >= state.max_queue_depth do
       # Drop oldest event to make room (bounded queue)
       {{:value, _dropped}, trimmed_queue} = :queue.out(state.queue)
       new_queue = :queue.in(event, trimmed_queue)

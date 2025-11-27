@@ -1,6 +1,6 @@
 defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
   @moduledoc """
-  Pipeline stage that computes derived telemetry items.
+  Pipeline stage that computes derived telemetry items and evaluates limits.
 
   Derived items are calculated from other telemetry values using
   expressions (e.g., TEMP_AVG = (TEMP1 + TEMP2) / 2).
@@ -11,6 +11,7 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
 
   PipelineEvent with:
   - `qualified_items` - Map of "PACKET.item" => converted_value
+  - `target_id` - Target identifier for limit evaluation
 
   ## Output
 
@@ -35,6 +36,13 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
   State is stored in the ProcessorState ETS table, scoped by mission_id
   and item name.
 
+  ## Limits Evaluation
+
+  After computing derived items, this stage evaluates each item against
+  configured limits using the StateTracker. The StateTracker handles:
+  - Persistence counting (N consecutive violations before state change)
+  - State transition events via PubSub
+
   ## Cross-Packet Dependencies
 
   Derived items may reference values from multiple packets. If required
@@ -45,13 +53,15 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
   use Cadence.Telemetry.PipelineV2.Stages.StageBehaviour
 
   alias Cadence.Telemetry.DerivedItems
+  alias Cadence.Telemetry.Limits.StateTracker
+  alias Cadence.Telemetry.Stats
 
   @impl true
   def stage_name, do: :derive
 
   @impl true
   def process(event, state) do
-    %{qualified_items: qualified_items} = event
+    %{qualified_items: qualified_items, target_id: target_id} = event
     mission_id = state.mission_id
 
     # Compute derived items using mission's runtime overlay
@@ -65,12 +75,8 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
           qualified_items
       end
 
-    # Apply limit checking (TODO: implement actual limit checking)
-    # For now, all items get :green status
-    items_with_limits =
-      Enum.map(all_items, fn {name, value} ->
-        {name, value, :green}
-      end)
+    # Apply limit checking using StateTracker
+    items_with_limits = evaluate_limits(mission_id, target_id, all_items)
 
     {:ok,
      %{
@@ -78,5 +84,24 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.DeriveStage do
        | all_items: all_items,
          items_with_limits: items_with_limits
      }}
+  end
+
+  # Evaluate limits for all items using the StateTracker
+  defp evaluate_limits(mission_id, target_id, all_items) do
+    # Convert items to list for batch processing
+    items_list = Enum.to_list(all_items)
+
+    # Use StateTracker batch evaluation if available, otherwise evaluate individually
+    # StateTracker handles persistence counting and emits transition events
+    # Track timing for limits evaluation profiling
+    Stats.time(mission_id, :limits, fn ->
+      StateTracker.evaluate_batch(mission_id, target_id, items_list)
+    end)
+  rescue
+    # Fallback to green if StateTracker is not available (e.g., not started yet)
+    _error ->
+      Enum.map(all_items, fn {name, value} ->
+        {name, value, :green}
+      end)
   end
 end

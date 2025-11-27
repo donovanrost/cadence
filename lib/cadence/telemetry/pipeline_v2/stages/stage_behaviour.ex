@@ -82,8 +82,11 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.StageBehaviour do
       alias Cadence.Telemetry.PipelineV2.PipelineEvent
       alias Cadence.Telemetry.Stats
 
-      @max_demand 10
-      @min_demand 5
+      # Increased defaults for high-throughput telemetry (was 10/5)
+      @default_max_demand 500
+      @default_min_demand 250
+      # Stats sampling: record 1 in N events to reduce ETS overhead
+      @timing_sample_rate 100
 
       @doc false
       def start_link(opts) do
@@ -99,6 +102,10 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.StageBehaviour do
         # If upstream uses PartitionDispatcher, we need to specify our partition
         upstream_partitioned = Keyword.get(opts, :upstream_partitioned, false)
 
+        # Configurable demand settings (can be passed from supervisor)
+        max_demand = Keyword.get(opts, :max_demand, @default_max_demand)
+        min_demand = Keyword.get(opts, :min_demand, @default_min_demand)
+
         base_state = %{
           mission_id: mission_id,
           partition: partition,
@@ -112,7 +119,7 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.StageBehaviour do
         # If upstream is provided, subscribe to it
         subscriptions =
           if upstream do
-            sub_opts = [max_demand: @max_demand, min_demand: @min_demand]
+            sub_opts = [max_demand: max_demand, min_demand: min_demand]
             # Add partition option if upstream uses PartitionDispatcher
             sub_opts = if upstream_partitioned, do: [{:partition, partition} | sub_opts], else: sub_opts
             [{upstream, sub_opts}]
@@ -155,9 +162,12 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.StageBehaviour do
             # Record timing in the event
             timed_event = PipelineEvent.record_timing(updated_event, stage, start_time)
 
-            # Also record in Stats for aggregation
-            duration = System.monotonic_time(:microsecond) - start_time
-            Stats.record_timing(state.mission_id, stage, duration)
+            # Sample stats recording to reduce ETS overhead at high throughput
+            # At 10khz with 1% sampling, still get 100 samples/sec (statistically sufficient)
+            if :rand.uniform(@timing_sample_rate) == 1 do
+              duration = System.monotonic_time(:microsecond) - start_time
+              Stats.record_timing(state.mission_id, stage, duration)
+            end
 
             timed_event
 

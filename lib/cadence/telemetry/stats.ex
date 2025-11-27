@@ -49,18 +49,29 @@ defmodule Cadence.Telemetry.Stats do
     :pubsub_broadcast,
     # V2 GenStage pipeline stages (shorter names)
     :decom,
+    # Limits evaluation timing
+    :limits,
     # End-to-end latency (packet arrival to CVT write)
     :end_to_end
   ]
 
   # Stages we track for percentile sampling
-  @percentile_stages [:identify, :decom, :decommutate, :convert, :derive, :cvt_batch, :end_to_end]
+  # NOTE: Percentile sampling is expensive (reservoir sampling with ETS updates).
+  # Only add stages here if percentile data is critical. Basic timing (avg/min/max)
+  # is still tracked via @timing_stages without this overhead.
+  @percentile_stages [:end_to_end]
 
   # Stages we track for per-stage errors
   @error_stages [:identify, :decom, :convert, :derive]
 
   # Maximum samples to keep for percentile calculation (reservoir sampling)
   @default_sample_limit 10_000
+
+  # Warmup period - first N samples may be slow due to JIT, cache warmup, etc.
+  @warmup_sample_count 10
+
+  # Spike detection threshold (samples > this many standard deviations are "spikes")
+  @spike_threshold_sigma 3.0
 
   @doc """
   Ensures the stats ETS table exists. Safe to call multiple times.
@@ -104,6 +115,12 @@ defmodule Cadence.Telemetry.Stats do
       :ets.insert(@table_name, {key, {%{}, 0, 0}})
     end)
 
+    # Initialize warmup samples storage: list of first N samples
+    Enum.each(@percentile_stages, fn stage ->
+      key = {mission_id, :warmup_samples, stage}
+      :ets.insert(@table_name, {key, []})
+    end)
+
     # Initialize per-stage error counters
     Enum.each(@error_stages, fn stage ->
       key = {mission_id, :stage_error, stage}
@@ -136,6 +153,8 @@ defmodule Cadence.Telemetry.Stats do
   Records a timing measurement for a pipeline stage.
 
   `duration_us` is the duration in microseconds.
+
+  Also records samples for percentile-tracked stages (warmup/spike analysis).
   """
   def record_timing(mission_id, stage, duration_us) when is_integer(duration_us) do
     key = {mission_id, :timing, stage}
@@ -149,6 +168,11 @@ defmodule Cadence.Telemetry.Stats do
 
         [] ->
           :ets.insert(@table_name, {key, {duration_us, 1, duration_us, duration_us}})
+      end
+
+      # Also record sample for percentile/warmup/spike analysis
+      if stage in @percentile_stages do
+        record_timing_sample(mission_id, stage, duration_us)
       end
     rescue
       _ ->
@@ -178,6 +202,8 @@ defmodule Cadence.Telemetry.Stats do
 
   Samples are stored as a map with integer indices for O(1) random access.
   Format: {%{0 => sample, 1 => sample, ...}, sample_count, total_seen_count}
+
+  Also tracks the first N samples separately for warmup analysis.
   """
   def record_timing_sample(mission_id, stage, duration_us) when is_integer(duration_us) do
     key = {mission_id, :timing_samples, stage}
@@ -186,6 +212,9 @@ defmodule Cadence.Telemetry.Stats do
       case :ets.lookup(@table_name, key) do
         [{^key, {samples_map, sample_count, total_count}}] ->
           new_total = total_count + 1
+
+          # Track warmup samples (first N)
+          maybe_record_warmup_sample(mission_id, stage, duration_us, new_total)
 
           {new_samples, new_sample_count} =
             if sample_count < @default_sample_limit do
@@ -207,17 +236,39 @@ defmodule Cadence.Telemetry.Stats do
 
         # Handle legacy format or empty
         [{^key, {[], 0}}] ->
+          maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
           :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
 
         [] ->
+          maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
           :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
       end
     rescue
       _ ->
         init(mission_id)
+        maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
         :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
     end
   end
+
+  # Record warmup samples (first N) for analysis
+  defp maybe_record_warmup_sample(mission_id, stage, duration_us, sample_number)
+       when sample_number <= @warmup_sample_count do
+    key = {mission_id, :warmup_samples, stage}
+
+    case :ets.lookup(@table_name, key) do
+      [{^key, samples}] when is_list(samples) and length(samples) < @warmup_sample_count ->
+        :ets.insert(@table_name, {key, samples ++ [duration_us]})
+
+      [] ->
+        :ets.insert(@table_name, {key, [duration_us]})
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp maybe_record_warmup_sample(_mission_id, _stage, _duration_us, _sample_number), do: :ok
 
   @doc """
   Gets percentile timings for a specific stage.
@@ -275,6 +326,145 @@ defmodule Cadence.Telemetry.Stats do
     index = round((percentile / 100) * (count - 1))
     index = max(0, min(index, count - 1))
     Enum.at(sorted, index, 0)
+  end
+
+  @doc """
+  Gets detailed timing analysis for a stage, including warmup detection.
+
+  Returns a map with:
+  - `avg_us` - Standard average
+  - `median_us` - Median value (P50)
+  - `trimmed_avg_us` - Average excluding top/bottom 5% (robust to outliers)
+  - `steady_state_avg_us` - Average excluding warmup samples
+  - `spike_count` - Count of samples > 3σ from mean (likely GC pauses)
+  - `warmup_samples` - First N samples (to visualize warmup effect)
+  - `warmup_avg_us` - Average of warmup samples
+  - `sample_count` - Total samples
+  """
+  def get_timing_analysis(mission_id, stage) do
+    ensure_table()
+
+    samples_key = {mission_id, :timing_samples, stage}
+    warmup_key = {mission_id, :warmup_samples, stage}
+
+    # Get all samples
+    samples =
+      case :ets.lookup(@table_name, samples_key) do
+        [{^samples_key, {samples_map, _count, _total}}] when is_map(samples_map) ->
+          Map.values(samples_map)
+
+        [{^samples_key, {samples_list, _total}}] when is_list(samples_list) ->
+          samples_list
+
+        _ ->
+          []
+      end
+
+    # Get warmup samples
+    warmup_samples =
+      case :ets.lookup(@table_name, warmup_key) do
+        [{^warmup_key, ws}] when is_list(ws) -> ws
+        _ -> []
+      end
+
+    if length(samples) == 0 do
+      %{
+        avg_us: 0,
+        median_us: 0,
+        trimmed_avg_us: 0,
+        steady_state_avg_us: 0,
+        spike_count: 0,
+        warmup_samples: [],
+        warmup_avg_us: 0,
+        sample_count: 0
+      }
+    else
+      sorted = Enum.sort(samples)
+      count = length(sorted)
+
+      # Standard average
+      avg = Enum.sum(samples) / count
+
+      # Median
+      median = percentile_at(sorted, count, 50)
+
+      # Trimmed mean (exclude top/bottom 5%)
+      trimmed_avg = calculate_trimmed_mean(sorted, count, 0.05)
+
+      # Spike detection (> 3σ from mean)
+      {spike_count, std_dev} = count_spikes(samples, avg)
+
+      # Warmup analysis
+      warmup_avg =
+        if length(warmup_samples) > 0 do
+          Enum.sum(warmup_samples) / length(warmup_samples)
+        else
+          0
+        end
+
+      # Steady state average (excluding warmup period)
+      # We use samples after the warmup count
+      steady_state_avg =
+        if count > @warmup_sample_count do
+          # Since reservoir sampling doesn't preserve order, use trimmed mean as proxy
+          # for steady-state behavior (removes outliers including early warmup spikes)
+          trimmed_avg
+        else
+          avg
+        end
+
+      %{
+        avg_us: Float.round(avg, 1),
+        median_us: median,
+        trimmed_avg_us: Float.round(trimmed_avg, 1),
+        steady_state_avg_us: Float.round(steady_state_avg, 1),
+        spike_count: spike_count,
+        spike_threshold_us: Float.round(avg + @spike_threshold_sigma * std_dev, 1),
+        warmup_samples: warmup_samples,
+        warmup_avg_us: Float.round(warmup_avg, 1),
+        sample_count: count,
+        std_dev_us: Float.round(std_dev, 1)
+      }
+    end
+  end
+
+  @doc """
+  Gets timing analysis for all percentile-tracked stages.
+  """
+  def get_all_timing_analysis(mission_id) do
+    Enum.reduce(@percentile_stages, %{}, fn stage, acc ->
+      Map.put(acc, stage, get_timing_analysis(mission_id, stage))
+    end)
+  end
+
+  # Calculate trimmed mean (exclude top/bottom trim_percent of samples)
+  defp calculate_trimmed_mean(sorted, count, trim_percent) do
+    trim_count = round(count * trim_percent)
+
+    if count - 2 * trim_count > 0 do
+      trimmed = sorted |> Enum.drop(trim_count) |> Enum.take(count - 2 * trim_count)
+      Enum.sum(trimmed) / length(trimmed)
+    else
+      Enum.sum(sorted) / count
+    end
+  end
+
+  # Count samples that are > threshold sigma from mean (likely GC pauses)
+  defp count_spikes(samples, avg) do
+    count = length(samples)
+
+    if count < 2 do
+      {0, 0.0}
+    else
+      # Calculate standard deviation
+      variance = Enum.reduce(samples, 0, fn x, acc -> acc + (x - avg) * (x - avg) end) / count
+      std_dev = :math.sqrt(variance)
+
+      threshold = avg + @spike_threshold_sigma * std_dev
+      spike_count = Enum.count(samples, fn x -> x > threshold end)
+
+      {spike_count, std_dev}
+    end
   end
 
   @doc """
@@ -423,6 +613,17 @@ defmodule Cadence.Telemetry.Stats do
       end
     end)
 
+    # Reset warmup samples
+    Enum.each(@percentile_stages, fn stage ->
+      key = {mission_id, :warmup_samples, stage}
+
+      try do
+        :ets.insert(@table_name, {key, []})
+      rescue
+        _ -> :ok
+      end
+    end)
+
     # Reset per-stage error counters
     Enum.each(@error_stages, fn stage ->
       key = {mission_id, :stage_error, stage}
@@ -469,6 +670,17 @@ defmodule Cadence.Telemetry.Stats do
     # Clean up timing samples
     Enum.each(@percentile_stages, fn stage ->
       key = {mission_id, :timing_samples, stage}
+
+      try do
+        :ets.delete(@table_name, key)
+      rescue
+        _ -> :ok
+      end
+    end)
+
+    # Clean up warmup samples
+    Enum.each(@percentile_stages, fn stage ->
+      key = {mission_id, :warmup_samples, stage}
 
       try do
         :ets.delete(@table_name, key)

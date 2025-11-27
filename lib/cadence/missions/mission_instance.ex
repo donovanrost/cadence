@@ -19,6 +19,8 @@ defmodule Cadence.Missions.MissionInstance do
   alias Cadence.Missions.Mission
   alias Cadence.Telemetry.CurrentValueTable
   alias Cadence.Telemetry.PipelineV2
+  alias Cadence.Telemetry.Limits.StateTracker
+  alias Cadence.Telemetry.Limits.StalenessMonitor
 
   @default_partition_count 16
 
@@ -44,7 +46,13 @@ defmodule Cadence.Missions.MissionInstance do
         {CurrentValueTable, mission_id: mission.id},
 
         # Packet Identifier - ETS-based packet type lookup
-        {Cadence.Telemetry.PacketIdentifier, mission_id: mission.id}
+        {Cadence.Telemetry.PacketIdentifier, mission_id: mission.id},
+
+        # Limits State Tracker - tracks limit states and persistence counting
+        {StateTracker, mission_id: mission.id},
+
+        # Staleness Monitor - detects stale telemetry and transitions to :blue
+        {StalenessMonitor, mission_id: mission.id}
       ] ++
         pipeline_children ++
         [
@@ -55,10 +63,7 @@ defmodule Cadence.Missions.MissionInstance do
           {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission.id}
 
           # Command Queue - manages outgoing commands
-          # {Cadence.Commands.CommandQueue, mission_id: mission.id},
-
-          # Limits Monitor - checks telemetry against limits
-          # {Cadence.Telemetry.LimitsMonitor, mission_id: mission.id}
+          # {Cadence.Commands.CommandQueue, mission_id: mission.id}
         ]
 
     # Strategy: one_for_one means if a child crashes, only restart that child
