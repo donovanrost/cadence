@@ -102,6 +102,9 @@ defmodule CadenceWeb.Router do
 
       # Telemetry display
       live "/missions/:mission_id/telemetry", TelemetryLive.Index, :index
+
+      # Command sender
+      live "/missions/:mission_id/commands", CommandLive.Sender, :index
     end
   end
 

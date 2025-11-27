@@ -21,6 +21,7 @@ defmodule Cadence.Missions.MissionInstance do
   alias Cadence.Telemetry.PipelineV2
   alias Cadence.Telemetry.Limits.StateTracker
   alias Cadence.Telemetry.Limits.StalenessMonitor
+  alias Cadence.Commands.{Dispatcher, Queue}
 
   @default_partition_count 16
 
@@ -60,10 +61,13 @@ defmodule Cadence.Missions.MissionInstance do
           {Cadence.Telemetry.ProtocolChainSupervisor, mission_id: mission.id},
 
           # Interface Supervisor - manages TCP/UDP/Serial connections
-          {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission.id}
+          {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission.id},
 
-          # Command Queue - manages outgoing commands
-          # {Cadence.Commands.CommandQueue, mission_id: mission.id}
+          # Command Dispatcher - handles command dispatch, verification, and logging
+          {Dispatcher, mission_id: mission.id},
+
+          # Command Queue - manages queued commands for ordered execution
+          {Queue, mission_id: mission.id}
         ]
 
     # Strategy: one_for_one means if a child crashes, only restart that child
