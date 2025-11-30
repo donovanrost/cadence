@@ -19,7 +19,7 @@ defmodule Cadence.Telemetry.Packet.PacketItem do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @data_types ["uint", "int", "float", "string", "boolean"]
+  @data_types ["uint", "int", "float", "string", "boolean", "binary"]
   @endianness_values ["big", "little"]
 
   schema "packet_items" do

@@ -97,6 +97,7 @@ defmodule Cadence.Telemetry.PipelineV2.Supervisor do
              partition_count: partition_count,
              batch_size: batch_size,
              batch_timeout: batch_timeout,
+             broadcast_enabled: true,
              name: batcher_name
            ]}
         ]

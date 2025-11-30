@@ -182,3 +182,10 @@
 }
 
 /* This file is for your main application CSS */
+
+/* Library CSS for Ops Console */
+@import "../node_modules/golden-layout/dist/css/goldenlayout-base.css";
+@import "../node_modules/gridstack/dist/gridstack.min.css";
+
+/* Ops Console styles */
+@import "./ops-console.css";

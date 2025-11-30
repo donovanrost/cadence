@@ -28,6 +28,9 @@ defmodule Cadence.Application do
       # Limits Cache - caches limits configurations per mission/target
       Cadence.Telemetry.Limits.Cache,
 
+      # Alarm Rule Cache - caches alarm rules for fast lookup
+      Cadence.Alarms.Engine.RuleCache,
+
       # Mission Supervisor - manages all mission supervision trees
       Cadence.Missions.MissionSupervisor,
 

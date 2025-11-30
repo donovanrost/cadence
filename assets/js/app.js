@@ -26,6 +26,8 @@ import {hooks as colocatedHooks} from "phoenix-colocated/cadence"
 import topbar from "../vendor/topbar"
 
 // Custom hooks
+import { Hooks as OpsHooks } from "./hooks/index"
+
 const Hooks = {
   InsertText: {
     mounted() {
@@ -51,7 +53,8 @@ const Hooks = {
         }
       })
     }
-  }
+  },
+  ...OpsHooks
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

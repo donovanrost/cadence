@@ -152,6 +152,11 @@ defmodule Cadence.Telemetry.BinaryExtractor do
     {:ok, binary}
   end
 
+  defp decode_value(binary, :binary, _endianness) do
+    # Return raw binary (same as :block)
+    {:ok, binary}
+  end
+
   # Decode bit-aligned values (slow path)
   defp decode_value(binary, :uint, :big_endian, actual_bit_size) do
     # For bit-aligned extraction, shift right to remove padding

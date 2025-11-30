@@ -11,6 +11,7 @@ defmodule Cadence.Databases do
   alias Cadence.Repo
   alias Cadence.Missions.Mission
   alias Cadence.Telemetry.Database.DefinitionSet
+  alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.Database.YamlImporter
 
   @doc """
@@ -134,5 +135,75 @@ defmodule Cadence.Databases do
   """
   def change_definition_set(%DefinitionSet{} = definition_set, attrs \\ %{}) do
     DefinitionSet.changeset(definition_set, attrs)
+  end
+
+  @doc """
+  Returns a telemetry catalog for widget configuration.
+
+  The catalog contains all packets and items from the active definition set,
+  plus any enabled derived items for the mission. This is used by the ops
+  console widget configuration UI to provide dynamic telemetry item selection.
+
+  Returns `{:ok, catalog}` where catalog contains:
+  - `packets`: List of packets with their items
+  - `derived_items`: List of enabled derived items
+
+  Returns `{:error, :no_active_definition_set}` if no definition set is published.
+
+  ## Example
+
+      {:ok, catalog} = Databases.get_telemetry_catalog(mission_id)
+      # catalog.packets => [%{name: "HEALTH", items: [%{name: "cpu_temp", ...}]}]
+      # catalog.derived_items => [%{name: "TEMP_AVG", expression: "..."}]
+  """
+  def get_telemetry_catalog(%Mission{id: mission_id}) do
+    get_telemetry_catalog(mission_id)
+  end
+
+  def get_telemetry_catalog(mission_id) when is_binary(mission_id) do
+    case get_active_definition_set(mission_id) do
+      nil ->
+        {:error, :no_active_definition_set}
+
+      definition_set ->
+        # Ensure packet_definitions and packet_items are loaded
+        definition_set = Repo.preload(definition_set, packet_definitions: :packet_items)
+
+        packets =
+          definition_set.packet_definitions
+          |> Enum.map(fn pd ->
+            %{
+              name: pd.name,
+              description: pd.description,
+              items:
+                pd.packet_items
+                |> Enum.map(fn item ->
+                  %{
+                    name: item.name,
+                    description: item.description,
+                    units: item.units,
+                    data_type: item.data_type,
+                    has_limits: item.has_limits
+                  }
+                end)
+                |> Enum.sort_by(& &1.name)
+            }
+          end)
+          |> Enum.sort_by(& &1.name)
+
+        derived_items =
+          DerivedItem.list_enabled(mission_id)
+          |> Enum.map(fn d ->
+            %{
+              name: d.name,
+              description: d.description,
+              units: d.units,
+              data_type: d.data_type,
+              expression: d.expression
+            }
+          end)
+
+        {:ok, %{packets: packets, derived_items: derived_items}}
+    end
   end
 end

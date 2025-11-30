@@ -380,6 +380,23 @@ defmodule CadenceWeb.Layouts do
   end
 
   @doc """
+  Renders a full-screen layout for the Ops Console.
+
+  No sidebar or header - the entire viewport is used by the application.
+  """
+  attr :flash, :map, required: true
+  attr :inner_content, :any, required: true
+
+  def ops_console(assigns) do
+    ~H"""
+    <div class="h-screen w-screen overflow-hidden">
+      {@inner_content}
+    </div>
+    <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
   Provides dark vs light theme toggle based on themes defined in app.css.
 
   See <head> in root.html.heex which applies the theme before page load.

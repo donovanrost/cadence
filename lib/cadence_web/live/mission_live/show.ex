@@ -1,7 +1,8 @@
 defmodule CadenceWeb.MissionLive.Show do
   use CadenceWeb, :live_view
 
-  alias Cadence.{Databases, Interfaces, Missions, Targets}
+  alias Cadence.{Alarms, Databases, Interfaces, Missions, Targets}
+  alias Cadence.Alarms.AlarmRule
   alias Cadence.Telemetry.Database.DerivedItem
 
   @impl true
@@ -27,6 +28,7 @@ defmodule CadenceWeb.MissionLive.Show do
         interface_targets = build_interface_targets(interfaces)
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
         {:noreply,
          socket
@@ -41,7 +43,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)}
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -63,6 +67,7 @@ defmodule CadenceWeb.MissionLive.Show do
         interface_targets = build_interface_targets(interfaces)
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
         {:noreply,
          socket
@@ -77,7 +82,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)}
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -99,6 +106,7 @@ defmodule CadenceWeb.MissionLive.Show do
         interface_targets = build_interface_targets(interfaces)
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
         {:noreply,
          socket
@@ -113,7 +121,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)}
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -138,6 +148,7 @@ defmodule CadenceWeb.MissionLive.Show do
           interface_targets = build_interface_targets(interfaces)
           definition_sets = Databases.list_definition_sets(mission)
           derived_items = DerivedItem.list_all(mission.id)
+          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
           {:noreply,
            socket
@@ -152,7 +163,9 @@ defmodule CadenceWeb.MissionLive.Show do
            |> assign(:definition_sets, definition_sets)
            |> assign(:definition_set, nil)
            |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)}
+           |> assign(:derived_item, nil)
+           |> assign(:alarm_rules, alarm_rules)
+           |> assign(:alarm_rule, nil)}
 
         {:error, _} ->
           {:noreply,
@@ -181,6 +194,8 @@ defmodule CadenceWeb.MissionLive.Show do
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
 
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
         {:noreply,
          socket
          |> assign(:page_title, "New Interface")
@@ -194,7 +209,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)}
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -220,6 +237,8 @@ defmodule CadenceWeb.MissionLive.Show do
           definition_sets = Databases.list_definition_sets(mission)
           derived_items = DerivedItem.list_all(mission.id)
 
+          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
           {:noreply,
            socket
            |> assign(:page_title, "Edit Interface")
@@ -233,7 +252,9 @@ defmodule CadenceWeb.MissionLive.Show do
            |> assign(:definition_sets, definition_sets)
            |> assign(:definition_set, nil)
            |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)}
+           |> assign(:derived_item, nil)
+           |> assign(:alarm_rules, alarm_rules)
+           |> assign(:alarm_rule, nil)}
 
         {:error, _} ->
           {:noreply,
@@ -262,6 +283,8 @@ defmodule CadenceWeb.MissionLive.Show do
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
 
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
         {:noreply,
          socket
          |> assign(:page_title, "Import Database")
@@ -275,7 +298,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)}
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -301,6 +326,8 @@ defmodule CadenceWeb.MissionLive.Show do
           definition_sets = Databases.list_definition_sets(mission)
           derived_items = DerivedItem.list_all(mission.id)
 
+          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
           {:noreply,
            socket
            |> assign(:page_title, "Database v#{definition_set.version}")
@@ -314,7 +341,9 @@ defmodule CadenceWeb.MissionLive.Show do
            |> assign(:definition_sets, definition_sets)
            |> assign(:definition_set, definition_set)
            |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)}
+           |> assign(:derived_item, nil)
+           |> assign(:alarm_rules, alarm_rules)
+           |> assign(:alarm_rule, nil)}
 
         {:error, _} ->
           {:noreply,
@@ -343,6 +372,8 @@ defmodule CadenceWeb.MissionLive.Show do
         definition_sets = Databases.list_definition_sets(mission)
         derived_items = DerivedItem.list_all(mission.id)
 
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
         {:noreply,
          socket
          |> assign(:page_title, "New Derived Item")
@@ -356,7 +387,9 @@ defmodule CadenceWeb.MissionLive.Show do
          |> assign(:definition_sets, definition_sets)
          |> assign(:definition_set, nil)
          |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, %DerivedItem{})}
+         |> assign(:derived_item, %DerivedItem{})
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, nil)}
 
       {:error, _} ->
         {:noreply,
@@ -381,6 +414,7 @@ defmodule CadenceWeb.MissionLive.Show do
           interface_targets = build_interface_targets(interfaces)
           definition_sets = Databases.list_definition_sets(mission)
           derived_items = DerivedItem.list_all(mission.id)
+          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
           {:noreply,
            socket
@@ -395,7 +429,9 @@ defmodule CadenceWeb.MissionLive.Show do
            |> assign(:definition_sets, definition_sets)
            |> assign(:definition_set, nil)
            |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, derived_item)}
+           |> assign(:derived_item, derived_item)
+           |> assign(:alarm_rules, alarm_rules)
+           |> assign(:alarm_rule, nil)}
 
         {:error, _} ->
           {:noreply,
@@ -407,6 +443,92 @@ defmodule CadenceWeb.MissionLive.Show do
       {:noreply,
        socket
        |> put_flash(:error, "Derived item not found in this mission")
+       |> push_patch(to: ~p"/missions/#{id}")}
+    end
+  end
+
+  defp apply_action(socket, :new_alarm_rule, %{"id" => id}) do
+    mission = Missions.get_mission!(id)
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok ->
+        targets = Targets.list_targets(mission)
+        interfaces = Interfaces.list_interfaces(mission)
+        interface_protocol_counts = build_protocol_counts(interfaces)
+        interface_targets = build_interface_targets(interfaces)
+        definition_sets = Databases.list_definition_sets(mission)
+        derived_items = DerivedItem.list_all(mission.id)
+        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
+        {:noreply,
+         socket
+         |> assign(:page_title, "New Alarm Rule")
+         |> assign(:mission, mission)
+         |> assign(:targets, targets)
+         |> assign(:target, nil)
+         |> assign(:interfaces, interfaces)
+         |> assign(:interface, nil)
+         |> assign(:interface_protocol_counts, interface_protocol_counts)
+         |> assign(:interface_targets, interface_targets)
+         |> assign(:definition_sets, definition_sets)
+         |> assign(:definition_set, nil)
+         |> assign(:derived_items, derived_items)
+         |> assign(:derived_item, nil)
+         |> assign(:alarm_rules, alarm_rules)
+         |> assign(:alarm_rule, %AlarmRule{enabled: true, severity: :warning, event_type: "telemetry_limit"})}
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "You don't have permission to create alarm rules in this mission")
+         |> push_patch(to: ~p"/missions/#{id}")}
+    end
+  end
+
+  defp apply_action(socket, :edit_alarm_rule, %{"id" => id, "alarm_rule_id" => alarm_rule_id}) do
+    mission = Missions.get_mission!(id)
+    alarm_rule = Alarms.get_rule!(alarm_rule_id)
+    scope = socket.assigns.current_scope
+
+    if alarm_rule.mission_id == mission.id do
+      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+        :ok ->
+          targets = Targets.list_targets(mission)
+          interfaces = Interfaces.list_interfaces(mission)
+          interface_protocol_counts = build_protocol_counts(interfaces)
+          interface_targets = build_interface_targets(interfaces)
+          definition_sets = Databases.list_definition_sets(mission)
+          derived_items = DerivedItem.list_all(mission.id)
+          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
+          {:noreply,
+           socket
+           |> assign(:page_title, "Edit Alarm Rule")
+           |> assign(:mission, mission)
+           |> assign(:targets, targets)
+           |> assign(:target, nil)
+           |> assign(:interfaces, interfaces)
+           |> assign(:interface, nil)
+           |> assign(:interface_protocol_counts, interface_protocol_counts)
+           |> assign(:interface_targets, interface_targets)
+           |> assign(:definition_sets, definition_sets)
+           |> assign(:definition_set, nil)
+           |> assign(:derived_items, derived_items)
+           |> assign(:derived_item, nil)
+           |> assign(:alarm_rules, alarm_rules)
+           |> assign(:alarm_rule, alarm_rule)}
+
+        {:error, _} ->
+          {:noreply,
+           socket
+           |> put_flash(:error, "You don't have permission to edit alarm rules in this mission")
+           |> push_patch(to: ~p"/missions/#{id}")}
+      end
+    else
+      {:noreply,
+       socket
+       |> put_flash(:error, "Alarm rule not found in this mission")
        |> push_patch(to: ~p"/missions/#{id}")}
     end
   end
@@ -460,6 +582,18 @@ defmodule CadenceWeb.MissionLive.Show do
     # Reload derived items list after delete
     derived_items = DerivedItem.list_all(socket.assigns.mission.id)
     {:noreply, assign(socket, :derived_items, derived_items)}
+  end
+
+  def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:saved, _alarm_rule}}, socket) do
+    # Reload alarm rules list after save
+    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
+    {:noreply, assign(socket, :alarm_rules, alarm_rules)}
+  end
+
+  def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:deleted, _alarm_rule}}, socket) do
+    # Reload alarm rules list after delete
+    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
+    {:noreply, assign(socket, :alarm_rules, alarm_rules)}
   end
 
   @impl true
@@ -571,6 +705,74 @@ defmodule CadenceWeb.MissionLive.Show do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to stop this mission")}
+    end
+  end
+
+  @impl true
+  def handle_event("toggle_alarm_rule", %{"id" => rule_id}, socket) do
+    rule = Alarms.get_rule!(rule_id)
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    if rule.mission_id == mission.id do
+      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+        :ok ->
+          result =
+            if rule.enabled do
+              Alarms.disable_rule(rule, scope.user.id, "Disabled via UI")
+            else
+              Alarms.enable_rule(rule)
+            end
+
+          case result do
+            {:ok, _} ->
+              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+              action = if rule.enabled, do: "disabled", else: "enabled"
+
+              {:noreply,
+               socket
+               |> put_flash(:info, "Alarm rule #{action}")
+               |> assign(:alarm_rules, alarm_rules)}
+
+            {:error, _} ->
+              {:noreply, put_flash(socket, :error, "Failed to update alarm rule")}
+          end
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "You don't have permission to manage alarm rules")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
+    end
+  end
+
+  @impl true
+  def handle_event("delete_alarm_rule", %{"id" => rule_id}, socket) do
+    rule = Alarms.get_rule!(rule_id)
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    if rule.mission_id == mission.id do
+      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+        :ok ->
+          case Alarms.delete_rule(rule) do
+            {:ok, _} ->
+              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
+              {:noreply,
+               socket
+               |> put_flash(:info, "Alarm rule deleted")
+               |> assign(:alarm_rules, alarm_rules)}
+
+            {:error, _} ->
+              {:noreply, put_flash(socket, :error, "Failed to delete alarm rule")}
+          end
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "You don't have permission to delete alarm rules")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
     end
   end
 

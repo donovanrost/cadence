@@ -235,6 +235,93 @@
   </p>
 <% end %>
 
+<.header class="mt-8">
+  Alarm Rules
+  <:subtitle>Define when alarms are generated from telemetry limit violations</:subtitle>
+  <:actions>
+    <.link patch={~p"/missions/#{@mission}/alarm_rules/new"}>
+      <.button>New Rule</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table id="alarm-rules" rows={@alarm_rules}>
+  <:col :let={rule} label="Name"><%= rule.name %></:col>
+  <:col :let={rule} label="Event Type">
+    <%= case rule.event_type do %>
+      <% "telemetry_limit" -> %>
+        <span class="text-blue-600">Telemetry Limit</span>
+      <% other -> %>
+        <%= other %>
+    <% end %>
+  </:col>
+  <:col :let={rule} label="Conditions">
+    <div class="flex flex-wrap gap-1">
+      <%= if rule.conditions["limit_state"] do %>
+        <%= for state <- rule.conditions["limit_state"] do %>
+          <span class={[
+            "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+            state == "red" && "bg-red-50 text-red-700 ring-red-600/20",
+            state == "yellow" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+            state == "blue" && "bg-blue-50 text-blue-700 ring-blue-600/20"
+          ]}>
+            <%= state %>
+          </span>
+        <% end %>
+      <% end %>
+      <%= if rule.conditions["item_name_pattern"] do %>
+        <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+          <%= rule.conditions["item_name_pattern"] %>
+        </span>
+      <% end %>
+      <%= if rule.conditions == %{} do %>
+        <span class="text-gray-400 italic text-xs">All events</span>
+      <% end %>
+    </div>
+  </:col>
+  <:col :let={rule} label="Severity">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      rule.severity == :critical && "bg-red-50 text-red-700 ring-red-600/20",
+      rule.severity == :warning && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+      rule.severity == :info && "bg-blue-50 text-blue-700 ring-blue-600/20"
+    ]}>
+      <%= rule.severity %>
+    </span>
+  </:col>
+  <:col :let={rule} label="Status">
+    <span class={[
+      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+      rule.enabled && "bg-green-50 text-green-700 ring-green-600/20",
+      !rule.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
+    ]}>
+      <%= if rule.enabled, do: "Enabled", else: "Disabled" %>
+    </span>
+  </:col>
+  <:action :let={rule}>
+    <div class="flex gap-2">
+      <.link
+        phx-click={JS.push("toggle_alarm_rule", value: %{id: rule.id})}
+      >
+        <%= if rule.enabled, do: "Disable", else: "Enable" %>
+      </.link>
+      <.link patch={~p"/missions/#{@mission}/alarm_rules/#{rule}/edit"}>Edit</.link>
+      <.link
+        phx-click={JS.push("delete_alarm_rule", value: %{id: rule.id})}
+        data-confirm="Are you sure you want to delete this alarm rule?"
+      >
+        Delete
+      </.link>
+    </div>
+  </:action>
+</.table>
+
+<%= if Enum.empty?(@alarm_rules) do %>
+  <p class="text-sm text-gray-500 italic mt-4">
+    No alarm rules configured. Create rules to generate alarms when telemetry exceeds limits.
+  </p>
+<% end %>
+
 <.back navigate={~p"/missions"}>Back to missions</.back>
 
 <.modal
@@ -338,6 +425,25 @@
     action={if @live_action == :new_derived_item, do: :new, else: :edit}
     derived_item={@derived_item}
     mission={@mission}
+    current_scope={@current_scope}
+    patch={~p"/missions/#{@mission}"}
+  />
+</.modal>
+
+<.modal
+  :if={@live_action in [:new_alarm_rule, :edit_alarm_rule]}
+  id="alarm-rule-modal"
+  show
+  on_cancel={JS.patch(~p"/missions/#{@mission}")}
+>
+  <.live_component
+    module={CadenceWeb.AlarmRuleLive.FormComponent}
+    id={@alarm_rule.id || :new}
+    title={@page_title}
+    action={if @live_action == :new_alarm_rule, do: :new, else: :edit}
+    alarm_rule={@alarm_rule}
+    mission={@mission}
+    targets={@targets}
     current_scope={@current_scope}
     patch={~p"/missions/#{@mission}"}
   />

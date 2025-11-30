@@ -22,6 +22,7 @@ defmodule Cadence.Missions.MissionInstance do
   alias Cadence.Telemetry.Limits.StateTracker
   alias Cadence.Telemetry.Limits.StalenessMonitor
   alias Cadence.Commands.{Dispatcher, Queue}
+  alias Cadence.Alarms.Engine.AlarmManager
 
   @default_partition_count 16
 
@@ -53,7 +54,10 @@ defmodule Cadence.Missions.MissionInstance do
         {StateTracker, mission_id: mission.id},
 
         # Staleness Monitor - detects stale telemetry and transitions to :blue
-        {StalenessMonitor, mission_id: mission.id}
+        {StalenessMonitor, mission_id: mission.id},
+
+        # Alarm Manager - processes limit events and manages alarms
+        {AlarmManager, mission_id: mission.id, organization_id: mission.organization_id}
       ] ++
         pipeline_children ++
         [

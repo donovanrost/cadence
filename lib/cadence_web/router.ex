@@ -91,6 +91,10 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/derived_items/new", MissionLive.Show, :new_derived_item
       live "/missions/:id/derived_items/:derived_item_id/edit", MissionLive.Show, :edit_derived_item
 
+      # Alarm rule routes nested under missions
+      live "/missions/:id/alarm_rules/new", MissionLive.Show, :new_alarm_rule
+      live "/missions/:id/alarm_rules/:alarm_rule_id/edit", MissionLive.Show, :edit_alarm_rule
+
       # Protocol management for interfaces
       live "/missions/:id/interfaces/:interface_id/protocols", ProtocolLive.Index, :index
       live "/missions/:id/interfaces/:interface_id/protocols/new", ProtocolLive.Index, :new
@@ -105,6 +109,9 @@ defmodule CadenceWeb.Router do
 
       # Command sender
       live "/missions/:mission_id/commands", CommandLive.Sender, :index
+
+      # Ops Console (main operator interface)
+      live "/missions/:mission_id/ops", OpsConsoleLive.Index, :index
     end
   end
 

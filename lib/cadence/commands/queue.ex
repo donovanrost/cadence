@@ -49,7 +49,9 @@ defmodule Cadence.Commands.Queue do
   alias Cadence.Commands.{QueueEntry, Dispatcher}
   alias Cadence.Missions
 
-  @process_interval_ms 100
+  # Poll interval for checking queue - 1 second is reasonable for command processing
+  # Can be reduced if sub-second latency is needed for time-critical commands
+  @process_interval_ms 1000
   @retry_delay_ms 1000
   @max_concurrent 1
 

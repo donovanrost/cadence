@@ -373,6 +373,9 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
         conversion_data -> create_conversion(mission, definition_set, item_data["name"], conversion_data)
       end
 
+    # Parse limits configuration if present
+    {has_limits, limits_config} = parse_limits(item_data["limits"])
+
     {:ok, _item} =
       %PacketItem{}
       |> PacketItem.changeset(%{
@@ -384,10 +387,81 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
         data_type: item_data["data_type"],
         endianness: item_data["endianness"] || "big",
         units: item_data["units"],
-        conversion_id: conversion_id
+        conversion_id: conversion_id,
+        has_limits: has_limits,
+        limits_config: limits_config
       })
       |> Repo.insert()
   end
+
+  # Parse limits from YAML format into internal limits_config format
+  # Supports both simple (single set as DEFAULT) and named limit sets
+  #
+  # Simple format:
+  #   limits:
+  #     red_low: -50.0
+  #     yellow_low: -10.0
+  #     yellow_high: 85.0
+  #     red_high: 100.0
+  #
+  # Named sets format:
+  #   limits:
+  #     NOMINAL:
+  #       red_low: -50.0
+  #       yellow_low: -10.0
+  #       yellow_high: 85.0
+  #       red_high: 100.0
+  #     ECLIPSE:
+  #       red_low: -60.0
+  #       yellow_low: -30.0
+  #       yellow_high: 70.0
+  #       red_high: 80.0
+  #
+  # Also supports persistence and stale_timeout_ms at the limits level
+  defp parse_limits(nil), do: {false, %{}}
+
+  defp parse_limits(limits) when is_map(limits) do
+    # Check if this is a simple format (has threshold keys directly) or named sets
+    threshold_keys = ["red_low", "yellow_low", "yellow_high", "red_high"]
+    has_direct_thresholds = Enum.any?(threshold_keys, &Map.has_key?(limits, &1))
+
+    if has_direct_thresholds do
+      # Simple format - wrap in DEFAULT set
+      {persistence, rest} = Map.pop(limits, "persistence")
+      {stale_timeout_ms, thresholds} = Map.pop(rest, "stale_timeout_ms")
+
+      config = %{"DEFAULT" => stringify_keys(thresholds)}
+      config = if persistence, do: Map.put(config, "persistence", persistence), else: config
+      config = if stale_timeout_ms, do: Map.put(config, "stale_timeout_ms", stale_timeout_ms), else: config
+
+      {true, config}
+    else
+      # Named sets format - convert each set
+      {persistence, rest} = Map.pop(limits, "persistence")
+      {stale_timeout_ms, sets} = Map.pop(rest, "stale_timeout_ms")
+
+      config =
+        sets
+        |> Enum.map(fn {set_name, thresholds} -> {set_name, stringify_keys(thresholds)} end)
+        |> Map.new()
+
+      config = if persistence, do: Map.put(config, "persistence", persistence), else: config
+      config = if stale_timeout_ms, do: Map.put(config, "stale_timeout_ms", stale_timeout_ms), else: config
+
+      {map_size(sets) > 0, config}
+    end
+  end
+
+  defp parse_limits(_), do: {false, %{}}
+
+  # Ensure all keys in a map are strings (YAML can parse them as atoms or strings)
+  defp stringify_keys(map) when is_map(map) do
+    map
+    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+    |> Map.new()
+  end
+
+  defp stringify_keys(other), do: other
 
   defp create_conversion(mission, definition_set, item_name, %{"type" => "polynomial", "coefficients" => coefficients}) do
     # Use a short hash of definition_set_id to make conversion name unique across imports
@@ -496,7 +570,7 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
         default_value: to_string_or_nil(param_data["default_value"]),
         min_value: param_data["min_value"],
         max_value: param_data["max_value"],
-        valid_values: param_data["valid_values"] || [],
+        valid_values: (param_data["valid_values"] || []) |> Enum.map(&to_string/1),
         bit_offset: param_data["bit_offset"],
         bit_length: param_data["bit_length"],
         display_order: param_data["display_order"],

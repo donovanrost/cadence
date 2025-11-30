@@ -38,6 +38,10 @@ defmodule Cadence.Targets do
   Gets a target by identifier within a mission.
   """
   def get_target_by_identifier(%Mission{id: mission_id}, identifier) do
+    get_target_by_identifier(mission_id, identifier)
+  end
+
+  def get_target_by_identifier(mission_id, identifier) when is_binary(mission_id) do
     Target
     |> where([t], t.mission_id == ^mission_id and t.identifier == ^identifier)
     |> Repo.one()

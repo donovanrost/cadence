@@ -145,7 +145,7 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
   defp flush_batch(%{batch: []} = state), do: state
 
   defp flush_batch(state) do
-    %{mission_id: mission_id, batch: events, broadcast_enabled: _broadcast_enabled} = state
+    %{mission_id: mission_id, batch: events, broadcast_enabled: broadcast_enabled} = state
 
     Stats.time(mission_id, :cvt_batch, fn ->
       # Aggregate ALL items from ALL events into a single list for one ETS insert
@@ -155,6 +155,11 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
       # Single ETS insert for entire batch (was: one per event)
       unless Enum.empty?(all_items) do
         CurrentValueTable.set_batch(mission_id, all_items, [])
+
+        # Broadcast updates via PubSub for real-time subscribers (WebSocket clients)
+        if broadcast_enabled do
+          broadcast_batch_updates(mission_id, all_items)
+        end
       end
 
       # Record end-to-end latency (sample from last event in batch)
@@ -178,6 +183,24 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
     Stats.increment(mission_id, :packets_processed, length(events))
 
     %{state | batch: [], batch_count: 0}
+  end
+
+  # Broadcast batch updates grouped by packet for efficient PubSub
+  defp broadcast_batch_updates(mission_id, all_items) do
+    # Group items by {target_id, packet_name} for batch broadcasting
+    all_items
+    |> Enum.group_by(fn {target_id, packet_name, _item, _value, _limits} ->
+      {target_id, packet_name}
+    end)
+    |> Enum.each(fn {{target_id, packet_name}, items} ->
+      # Convert to format expected by broadcast_packet_update
+      formatted_items =
+        Enum.map(items, fn {_target, _packet, item_name, value, limits_state} ->
+          {item_name, %{value: value, limits_state: limits_state, received_time: DateTime.utc_now()}}
+        end)
+
+      CurrentValueTable.broadcast_packet_update(mission_id, target_id, packet_name, formatted_items)
+    end)
   end
 
   # Aggregate all items from all events into a single list
