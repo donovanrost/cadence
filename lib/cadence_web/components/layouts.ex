@@ -397,6 +397,194 @@ defmodule CadenceWeb.Layouts do
   end
 
   @doc """
+  Renders a sidebar layout with mission-specific navigation.
+
+  This layout is used for all mission detail pages and includes
+  a secondary navigation for mission sub-sections.
+  """
+  attr :flash, :map, required: true
+  attr :current_scope, :map, required: true
+  attr :current_path, :string, default: ""
+  attr :mission, :map, default: nil
+  attr :inner_content, :any, required: true
+
+  def mission_sidebar(assigns) do
+    ~H"""
+    <div class="drawer lg:drawer-open">
+      <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
+
+      <div class="drawer-content flex flex-col">
+        <!-- Page content -->
+        <div class="flex flex-col h-screen">
+          <!-- Top bar (mobile) -->
+          <div class="lg:hidden flex items-center justify-between p-4 border-b border-base-300">
+            <label for="sidebar-drawer" class="btn btn-ghost drawer-button">
+              <.icon name="hero-bars-3" class="h-6 w-6" />
+            </label>
+            <div class="flex-1 text-center font-semibold text-lg">
+              <%= if @mission, do: @mission.name, else: "CADENCE" %>
+            </div>
+            <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
+          </div>
+
+          <!-- Main content area -->
+          <main class="flex-1 overflow-y-auto bg-base-100">
+            <!-- Desktop: User menu in top-right -->
+            <div class="hidden lg:flex justify-end p-4 border-b border-base-300">
+              <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
+            </div>
+
+            <!-- Page content -->
+            <div class="p-6">
+              {@inner_content}
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="drawer-side">
+        <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+        <div class="min-h-full w-72 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-base-300">
+          <!-- Logo/Brand -->
+          <div class="p-6 border-b border-base-300">
+            <.link navigate={~p"/"} class="flex items-center gap-3">
+              <img src={~p"/images/logo.svg"} width="32" class="glow-cyan" />
+              <span class="text-xl font-bold tracking-wide gradient-vaporwave bg-clip-text text-transparent">
+                CADENCE
+              </span>
+            </.link>
+          </div>
+
+          <!-- Back to missions link -->
+          <div class="px-4 py-3 border-b border-base-300">
+            <.link
+              navigate={~p"/missions"}
+              class="flex items-center gap-2 text-sm text-base-content/60 hover:text-base-content transition-colors"
+            >
+              <.icon name="hero-arrow-left" class="h-4 w-4" />
+              <span>All Missions</span>
+            </.link>
+          </div>
+
+          <!-- Mission Header -->
+          <%= if @mission do %>
+            <div class="px-4 py-4 border-b border-base-300">
+              <div class="flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                  <h2 class="font-semibold text-base truncate">{@mission.name}</h2>
+                  <div class="flex items-center gap-2 mt-1">
+                    <span class={[
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                      @mission.status == "active" && "bg-success/20 text-success",
+                      @mission.status == "inactive" && "bg-base-300 text-base-content/60",
+                      @mission.status == "suspended" && "bg-error/20 text-error"
+                    ]}>
+                      {@mission.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% end %>
+
+          <!-- Mission Navigation -->
+          <nav class="flex-1 overflow-y-auto p-4">
+            <ul class="menu space-y-1">
+              <.mission_navigation mission={@mission} current_path={@current_path} />
+            </ul>
+          </nav>
+
+          <!-- Theme toggle at bottom -->
+          <div class="p-4 border-t border-base-300">
+            <.theme_toggle />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
+  Renders mission-specific navigation items.
+  """
+  attr :mission, :map, required: true
+  attr :current_path, :string, default: ""
+
+  def mission_navigation(assigns) do
+    # Determine which section is active based on path
+    mission_id = if assigns.mission, do: assigns.mission.id, else: nil
+
+    # Build path patterns for matching
+    base_path = if mission_id, do: "/missions/#{mission_id}", else: ""
+
+    assigns =
+      assigns
+      |> assign(:base_path, base_path)
+      |> assign(:is_overview, assigns.current_path == base_path or assigns.current_path == "#{base_path}/show/edit")
+      |> assign(:is_targets, String.contains?(assigns.current_path, "#{base_path}/targets"))
+      |> assign(:is_interfaces, String.contains?(assigns.current_path, "#{base_path}/interfaces"))
+      |> assign(:is_database, String.contains?(assigns.current_path, "#{base_path}/database"))
+      |> assign(:is_catalog, String.contains?(assigns.current_path, "#{base_path}/catalog"))
+      |> assign(:is_alarms, String.contains?(assigns.current_path, "#{base_path}/alarm"))
+      |> assign(:is_commands, String.contains?(assigns.current_path, "#{base_path}/commands"))
+
+    ~H"""
+    <%= if @mission do %>
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}"} active={@is_overview}>
+        <:icon><.icon name="hero-squares-2x2" class="h-5 w-5" /></:icon>
+        Overview
+      </.sidebar_nav_item>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/targets"} active={@is_targets}>
+        <:icon><.icon name="hero-cpu-chip" class="h-5 w-5" /></:icon>
+        Targets
+      </.sidebar_nav_item>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/interfaces"} active={@is_interfaces}>
+        <:icon><.icon name="hero-signal" class="h-5 w-5" /></:icon>
+        Interfaces
+      </.sidebar_nav_item>
+
+      <.sidebar_nav_group
+        label="Database"
+        icon="hero-circle-stack"
+        expanded={@is_database or @is_catalog}
+      >
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/database"} active={@is_database}>
+          Versions
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/catalog"} active={@is_catalog}>
+          Catalog
+        </.sidebar_nav_child>
+      </.sidebar_nav_group>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/alarms"} active={@is_alarms}>
+        <:icon><.icon name="hero-bell-alert" class="h-5 w-5" /></:icon>
+        Alarms
+      </.sidebar_nav_item>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/commands"} active={@is_commands}>
+        <:icon><.icon name="hero-command-line" class="h-5 w-5" /></:icon>
+        Commands
+      </.sidebar_nav_item>
+
+      <li class="my-3 border-t border-base-300"></li>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/ops"} active={false}>
+        <:icon><.icon name="hero-play" class="h-5 w-5" /></:icon>
+        <span class="flex items-center gap-2">
+          Ops Console
+          <span class="badge badge-xs badge-primary">Live</span>
+        </span>
+      </.sidebar_nav_item>
+    <% end %>
+    """
+  end
+
+  @doc """
   Provides dark vs light theme toggle based on themes defined in app.css.
 
   See <head> in root.html.heex which applies the theme before page load.

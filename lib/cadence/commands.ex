@@ -16,11 +16,11 @@ defmodule Cadence.Commands do
 
   ## Example
 
-      # List commands for a mission's active DefinitionSet
-      commands = Commands.list_commands(mission_id)
+      # List commands for a definition set
+      commands = Commands.list_commands_for_definition_set(definition_set_id)
 
       # Get a specific command by name
-      {:ok, cmd} = Commands.get_command_by_name(mission_id, "SAFE_MODE")
+      cmd = Commands.get_command_by_name(definition_set_id, "SAFE_MODE")
 
       # Validate command arguments
       :ok = Commands.validate_parameters(cmd, %{"target_temp" => 25.0})
@@ -30,7 +30,6 @@ defmodule Cadence.Commands do
 
   alias Cadence.Repo
   alias Cadence.Commands.{CommandDefinition, CommandParameter, CommandLog, Dispatcher, Queue, QueueEntry}
-  alias Cadence.Telemetry.Database.DefinitionSet
   alias Cadence.Telemetry.CurrentValueTable
 
   # ============================================================================
@@ -84,89 +83,35 @@ defmodule Cadence.Commands do
   end
 
   @doc """
-  Gets a command definition by name for a mission.
-
-  Looks up the command in the active DefinitionSet for the mission.
+  Gets a command definition by name for a DefinitionSet.
   """
-  def get_command_by_name(mission_id, name) do
-    case DefinitionSet.get_active(mission_id) do
-      nil ->
-        # Fall back to legacy query (no definition_set)
-        from(c in CommandDefinition,
-          where: c.mission_id == ^mission_id,
-          where: c.name == ^name,
-          where: is_nil(c.definition_set_id),
-          preload: :command_parameters,
-          limit: 1
-        )
-        |> Repo.one()
-
-      %DefinitionSet{id: definition_set_id} ->
-        from(c in CommandDefinition,
-          where: c.definition_set_id == ^definition_set_id,
-          where: c.name == ^name,
-          preload: :command_parameters,
-          limit: 1
-        )
-        |> Repo.one()
-    end
+  def get_command_by_name(definition_set_id, name) do
+    from(c in CommandDefinition,
+      where: c.definition_set_id == ^definition_set_id,
+      where: c.name == ^name,
+      preload: :command_parameters,
+      limit: 1
+    )
+    |> Repo.one()
   end
 
   @doc """
-  Gets a command definition by opcode for a mission.
+  Gets a command definition by opcode for a DefinitionSet.
   """
-  def get_command_by_opcode(mission_id, opcode) do
-    case DefinitionSet.get_active(mission_id) do
-      nil ->
-        from(c in CommandDefinition,
-          where: c.mission_id == ^mission_id,
-          where: c.opcode == ^opcode,
-          where: is_nil(c.definition_set_id),
-          preload: :command_parameters,
-          limit: 1
-        )
-        |> Repo.one()
-
-      %DefinitionSet{id: definition_set_id} ->
-        from(c in CommandDefinition,
-          where: c.definition_set_id == ^definition_set_id,
-          where: c.opcode == ^opcode,
-          preload: :command_parameters,
-          limit: 1
-        )
-        |> Repo.one()
-    end
+  def get_command_by_opcode(definition_set_id, opcode) do
+    from(c in CommandDefinition,
+      where: c.definition_set_id == ^definition_set_id,
+      where: c.opcode == ^opcode,
+      preload: :command_parameters,
+      limit: 1
+    )
+    |> Repo.one()
   end
 
   @doc """
-  Lists all commands for a mission's active DefinitionSet.
+  Lists all commands for a DefinitionSet.
   """
-  def list_commands(mission_id) do
-    case DefinitionSet.get_active(mission_id) do
-      nil ->
-        # Fall back to legacy query
-        from(c in CommandDefinition,
-          where: c.mission_id == ^mission_id,
-          where: is_nil(c.definition_set_id),
-          order_by: [asc: c.name],
-          preload: :command_parameters
-        )
-        |> Repo.all()
-
-      %DefinitionSet{id: definition_set_id} ->
-        from(c in CommandDefinition,
-          where: c.definition_set_id == ^definition_set_id,
-          order_by: [asc: c.name],
-          preload: :command_parameters
-        )
-        |> Repo.all()
-    end
-  end
-
-  @doc """
-  Lists all commands for a specific DefinitionSet.
-  """
-  def list_commands_for_definition_set(definition_set_id) do
+  def list_commands(definition_set_id) do
     from(c in CommandDefinition,
       where: c.definition_set_id == ^definition_set_id,
       order_by: [asc: c.name],
@@ -176,36 +121,31 @@ defmodule Cadence.Commands do
   end
 
   @doc """
-  Lists hazardous commands for a mission.
+  Lists all commands for a specific DefinitionSet.
+  Alias for list_commands/1.
   """
-  def list_hazardous_commands(mission_id) do
-    case DefinitionSet.get_active(mission_id) do
-      nil ->
-        from(c in CommandDefinition,
-          where: c.mission_id == ^mission_id,
-          where: c.is_hazardous == true,
-          where: is_nil(c.definition_set_id),
-          order_by: [asc: c.name],
-          preload: :command_parameters
-        )
-        |> Repo.all()
+  def list_commands_for_definition_set(definition_set_id) do
+    list_commands(definition_set_id)
+  end
 
-      %DefinitionSet{id: definition_set_id} ->
-        from(c in CommandDefinition,
-          where: c.definition_set_id == ^definition_set_id,
-          where: c.is_hazardous == true,
-          order_by: [asc: c.name],
-          preload: :command_parameters
-        )
-        |> Repo.all()
-    end
+  @doc """
+  Lists hazardous commands for a DefinitionSet.
+  """
+  def list_hazardous_commands(definition_set_id) do
+    from(c in CommandDefinition,
+      where: c.definition_set_id == ^definition_set_id,
+      where: c.is_hazardous == true,
+      order_by: [asc: c.name],
+      preload: :command_parameters
+    )
+    |> Repo.all()
   end
 
   @doc """
   Lists commands allowed in a specific mission phase.
   """
-  def list_commands_for_phase(mission_id, phase) do
-    list_commands(mission_id)
+  def list_commands_for_phase(definition_set_id, phase) do
+    list_commands(definition_set_id)
     |> Enum.filter(&CommandDefinition.allowed_in_phase?(&1, phase))
   end
 

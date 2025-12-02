@@ -57,6 +57,7 @@ defmodule Cadence.Alarms.Alarm do
   alias Cadence.Targets.Target
   alias Cadence.Accounts.User
   alias Cadence.Alarms.AlarmRule
+  alias Cadence.MissionDatabase.DefinitionSet
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -64,6 +65,7 @@ defmodule Cadence.Alarms.Alarm do
   @status_values [:active, :acknowledged, :shelved, :cleared]
   @severity_values [:info, :warning, :critical]
   @limit_state_values [:yellow, :red, :blue]
+  @source_origin_values [:rule, :mission_db, :manual]
 
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
@@ -99,6 +101,10 @@ defmodule Cadence.Alarms.Alarm do
     # Source identification
     field :source_type, :string
     field :source_id, :string
+
+    # Provenance - where did this alarm originate?
+    field :source_origin, Ecto.Enum, values: @source_origin_values, default: :rule
+    belongs_to :source_definition_set, DefinitionSet
 
     # Telemetry-specific state
     field :limit_state, Ecto.Enum, values: @limit_state_values
@@ -142,6 +148,8 @@ defmodule Cadence.Alarms.Alarm do
       :status,
       :source_type,
       :source_id,
+      :source_origin,
+      :source_definition_set_id,
       :limit_state,
       :current_value,
       :message,
@@ -161,6 +169,7 @@ defmodule Cadence.Alarms.Alarm do
     |> foreign_key_constraint(:mission_id)
     |> foreign_key_constraint(:target_id)
     |> foreign_key_constraint(:alarm_rule_id)
+    |> foreign_key_constraint(:source_definition_set_id)
   end
 
   @doc """
@@ -242,4 +251,9 @@ defmodule Cadence.Alarms.Alarm do
   Returns the list of valid severity values.
   """
   def valid_severities, do: @severity_values
+
+  @doc """
+  Returns the list of valid source origin values.
+  """
+  def valid_source_origins, do: @source_origin_values
 end

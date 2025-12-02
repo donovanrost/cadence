@@ -11,13 +11,14 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, Databases, Missions, Targets, DashboardLayouts}
+  alias Cadence.{Alarms, MissionDatabase, Missions, Targets, DashboardLayouts}
   alias Cadence.DashboardLayouts.DashboardLayout
 
   @impl true
-  def mount(%{"mission_id" => mission_id}, _session, socket) do
-    mission = Missions.get_mission!(mission_id)
+  def mount(_params, _session, socket) do
+    mission = socket.assigns.mission
     targets = Targets.list_targets(mission)
+    mission_id = mission.id
 
     # Get user from scope
     user = socket.assigns.current_scope.user
@@ -46,7 +47,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     # Load telemetry catalog for widget configuration
     telemetry_catalog =
-      case Databases.get_telemetry_catalog(mission_id) do
+      case MissionDatabase.get_telemetry_catalog(mission_id) do
         {:ok, catalog} -> catalog
         {:error, _} -> %{packets: [], derived_items: []}
       end

@@ -61,6 +61,7 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through [:browser, :require_authenticated_user, :require_organization]
 
+    # General authenticated routes (organization sidebar)
     live_session :authenticated,
       layout: {CadenceWeb.Layouts, :sidebar},
       on_mount: [
@@ -72,46 +73,73 @@ defmodule CadenceWeb.Router do
       live "/missions", MissionLive.Index, :index
       live "/missions/new", MissionLive.Index, :new
       live "/missions/:id/edit", MissionLive.Index, :edit
+
+      # Standalone target routes
+      live "/targets", TargetLive.Index, :index
+      live "/targets/:id", TargetLive.Show, :show
+    end
+
+    # Mission-specific routes (mission sidebar with mission context)
+    live_session :mission,
+      layout: {CadenceWeb.Layouts, :mission_sidebar},
+      on_mount: [
+        {CadenceWeb.LiveAuth, :require_authenticated},
+        {CadenceWeb.LiveAuth, :require_organization},
+        {CadenceWeb.LiveAuth, :put_current_path},
+        {CadenceWeb.LiveAuth, :load_mission}
+      ],
+      session: {CadenceWeb.LiveAuth, :on_session_init, []} do
+      # Mission overview
       live "/missions/:id", MissionLive.Show, :show
       live "/missions/:id/show/edit", MissionLive.Show, :edit
 
       # Target routes nested under missions
-      live "/missions/:id/targets/new", MissionLive.Show, :new_target
-      live "/missions/:id/targets/:target_id/edit", MissionLive.Show, :edit_target
+      live "/missions/:id/targets", MissionLive.Targets, :index
+      live "/missions/:id/targets/new", MissionLive.Targets, :new
+      live "/missions/:id/targets/:target_id/edit", MissionLive.Targets, :edit
 
       # Interface routes nested under missions
-      live "/missions/:id/interfaces/new", MissionLive.Show, :new_interface
-      live "/missions/:id/interfaces/:interface_id/edit", MissionLive.Show, :edit_interface
-
-      # Database routes nested under missions
-      live "/missions/:id/databases/new", MissionLive.Show, :new_database
-      live "/missions/:id/databases/:database_id", MissionLive.Show, :show_database
-
-      # Derived item routes nested under missions
-      live "/missions/:id/derived_items/new", MissionLive.Show, :new_derived_item
-      live "/missions/:id/derived_items/:derived_item_id/edit", MissionLive.Show, :edit_derived_item
-
-      # Alarm rule routes nested under missions
-      live "/missions/:id/alarm_rules/new", MissionLive.Show, :new_alarm_rule
-      live "/missions/:id/alarm_rules/:alarm_rule_id/edit", MissionLive.Show, :edit_alarm_rule
+      live "/missions/:id/interfaces", MissionLive.Interfaces, :index
+      live "/missions/:id/interfaces/new", MissionLive.Interfaces, :new
+      live "/missions/:id/interfaces/:interface_id/edit", MissionLive.Interfaces, :edit
 
       # Protocol management for interfaces
       live "/missions/:id/interfaces/:interface_id/protocols", ProtocolLive.Index, :index
       live "/missions/:id/interfaces/:interface_id/protocols/new", ProtocolLive.Index, :new
       live "/missions/:id/interfaces/:interface_id/protocols/:protocol_id/edit", ProtocolLive.Index, :edit
 
-      # Standalone target routes
-      live "/targets", TargetLive.Index, :index
-      live "/targets/:id", TargetLive.Show, :show
+      # Database catalog section (database and version management)
+      live "/missions/:id/database", MissionLive.Database, :index
+      live "/missions/:id/database/new", MissionLive.Database, :new_database
+      live "/missions/:id/database/:database_id", MissionLive.Database, :show_database
+      live "/missions/:id/database/:database_id/edit", MissionLive.Database, :edit_database
+      live "/missions/:id/database/:database_id/import", MissionLive.Database, :import
+      live "/missions/:id/database/:database_id/versions/:version_id", MissionLive.Database, :show_version
 
-      # Telemetry display
-      live "/missions/:mission_id/telemetry", TelemetryLive.Index, :index
+      # Catalog section (search/browse telemetry, commands, derived)
+      live "/missions/:id/catalog", MissionLive.Catalog, :index
+      live "/missions/:id/catalog/derived/new", MissionLive.Catalog, :new_derived
+      live "/missions/:id/catalog/derived/:derived_id/edit", MissionLive.Catalog, :edit_derived
+
+      # Alarm rules section
+      live "/missions/:id/alarms", MissionLive.Alarms, :index
+      live "/missions/:id/alarms/new", MissionLive.Alarms, :new
+      live "/missions/:id/alarms/:alarm_rule_id/edit", MissionLive.Alarms, :edit
 
       # Command sender
-      live "/missions/:mission_id/commands", CommandLive.Sender, :index
+      live "/missions/:id/commands", CommandLive.Sender, :index
+    end
 
-      # Ops Console (main operator interface)
-      live "/missions/:mission_id/ops", OpsConsoleLive.Index, :index
+    # Ops Console - full screen layout (no sidebar)
+    live_session :ops_console,
+      layout: {CadenceWeb.Layouts, :ops_console},
+      on_mount: [
+        {CadenceWeb.LiveAuth, :require_authenticated},
+        {CadenceWeb.LiveAuth, :require_organization},
+        {CadenceWeb.LiveAuth, :load_mission}
+      ],
+      session: {CadenceWeb.LiveAuth, :on_session_init, []} do
+      live "/missions/:id/ops", OpsConsoleLive.Index, :index
     end
   end
 

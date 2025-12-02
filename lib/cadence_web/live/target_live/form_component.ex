@@ -1,7 +1,8 @@
 defmodule CadenceWeb.TargetLive.FormComponent do
   use CadenceWeb, :live_component
 
-  alias Cadence.{Interfaces, Targets}
+  alias Cadence.{Interfaces, Targets, MissionDatabase}
+  alias Cadence.MissionDatabase.DefinitionSet
 
   @impl true
   def render(assigns) do
@@ -55,6 +56,73 @@ defmodule CadenceWeb.TargetLive.FormComponent do
             {"Fault", "fault"}
           ]}
         />
+
+        <hr class="my-6 border-zinc-300" />
+
+        <div>
+          <label class="block text-sm font-semibold leading-6 text-zinc-800 mb-2">
+            Command & Telemetry Database
+          </label>
+          <p class="text-sm text-gray-600 mb-3">
+            Select which database version this target uses for commands and telemetry.
+          </p>
+
+          <div class="space-y-4 border border-zinc-200 rounded-lg p-4">
+            <%= if Enum.empty?(@available_databases) do %>
+              <p class="text-sm text-gray-500 italic">
+                No databases available for this mission. Create a database first to configure targets.
+              </p>
+            <% else %>
+              <div>
+                <label class="block text-xs font-medium text-zinc-600 mb-1">Database</label>
+                <select
+                  name="selected_database_id"
+                  phx-change="select_database"
+                  phx-target={@myself}
+                  class="w-full text-sm rounded-md border-zinc-300 focus:border-zinc-400 focus:ring-zinc-400"
+                >
+                  <option value="">Choose a database...</option>
+                  <%= for db <- @available_databases do %>
+                    <option value={db.id} selected={@selected_database_id == db.id}>
+                      <%= db.name %>
+                    </option>
+                  <% end %>
+                </select>
+              </div>
+
+              <%= if @selected_database_id && length(@available_versions) > 0 do %>
+                <div>
+                  <label class="block text-xs font-medium text-zinc-600 mb-1">Version</label>
+                  <select
+                    name="definition_set_id"
+                    phx-change="select_version"
+                    phx-target={@myself}
+                    class="w-full text-sm rounded-md border-zinc-300 focus:border-zinc-400 focus:ring-zinc-400"
+                  >
+                    <option value="">Choose a version...</option>
+                    <%= for ds <- @available_versions do %>
+                      <option value={ds.id} selected={@selected_definition_set_id == ds.id}>
+                        v<%= ds.version %> <%= version_status_label(ds) %>
+                      </option>
+                    <% end %>
+                  </select>
+                </div>
+              <% end %>
+
+              <%= if @selected_database_id && length(@available_versions) == 0 do %>
+                <p class="text-sm text-gray-500 italic">
+                  No versions available for this database yet.
+                </p>
+              <% end %>
+
+              <%= if is_nil(@selected_definition_set_id) do %>
+                <p class="text-xs text-amber-600">
+                  A database version is required to save the target.
+                </p>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
 
         <hr class="my-6 border-zinc-300" />
 
@@ -143,7 +211,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
   end
 
   @impl true
-  def update(%{target: target} = assigns, socket) do
+  def update(%{target: target, mission: mission} = assigns, socket) do
     changeset = Targets.change_target(target)
 
     # Load available interfaces from assigns or default to empty
@@ -165,11 +233,40 @@ defmodule CadenceWeb.TargetLive.FormComponent do
         %{}
       end
 
+    # Load available databases for the mission
+    available_databases = MissionDatabase.list_databases(mission.id)
+
+    # Determine current database and version selection
+    {selected_database_id, selected_definition_set_id} =
+      if target.definition_set_id do
+        # Target has a specific definition set - find its database
+        ds = Cadence.Repo.get(DefinitionSet, target.definition_set_id)
+        if ds do
+          {ds.database_id, ds.id}
+        else
+          {nil, nil}
+        end
+      else
+        {nil, nil}
+      end
+
+    # Load available versions for the selected database
+    available_versions =
+      if selected_database_id do
+        MissionDatabase.list_definition_sets(selected_database_id)
+      else
+        []
+      end
+
     {:ok,
      socket
      |> assign(assigns)
      |> assign(:available_interfaces, available_interfaces)
      |> assign(:selected_interfaces, selected_interfaces)
+     |> assign(:available_databases, available_databases)
+     |> assign(:selected_database_id, selected_database_id)
+     |> assign(:selected_definition_set_id, selected_definition_set_id)
+     |> assign(:available_versions, available_versions)
      |> assign_form(changeset)}
   end
 
@@ -202,6 +299,32 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     {:noreply, assign(socket, :selected_interfaces, updated_interfaces)}
   end
 
+  def handle_event("select_database", %{"selected_database_id" => ""}, socket) do
+    {:noreply,
+     socket
+     |> assign(:selected_database_id, nil)
+     |> assign(:selected_definition_set_id, nil)
+     |> assign(:available_versions, [])}
+  end
+
+  def handle_event("select_database", %{"selected_database_id" => database_id}, socket) do
+    available_versions = MissionDatabase.list_definition_sets(database_id)
+
+    {:noreply,
+     socket
+     |> assign(:selected_database_id, database_id)
+     |> assign(:selected_definition_set_id, nil)
+     |> assign(:available_versions, available_versions)}
+  end
+
+  def handle_event("select_version", %{"definition_set_id" => ""}, socket) do
+    {:noreply, assign(socket, :selected_definition_set_id, nil)}
+  end
+
+  def handle_event("select_version", %{"definition_set_id" => definition_set_id}, socket) do
+    {:noreply, assign(socket, :selected_definition_set_id, definition_set_id)}
+  end
+
   def handle_event("save", %{"target" => target_params}, socket) do
     save_target(socket, socket.assigns.action, target_params)
   end
@@ -210,6 +333,9 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     # Check authorization
     scope = socket.assigns.current_scope
     mission = socket.assigns.mission
+
+    # Add definition_set_id from selection
+    target_params = Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
@@ -240,6 +366,9 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     # Check authorization
     scope = socket.assigns.current_scope
     mission = socket.assigns.mission
+
+    # Add definition_set_id from selection
+    target_params = Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
@@ -303,4 +432,9 @@ defmodule CadenceWeb.TargetLive.FormComponent do
   end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
+
+  # Returns a status label for a DefinitionSet based on its lifecycle fields
+  defp version_status_label(%DefinitionSet{published_at: nil}), do: "(draft)"
+  defp version_status_label(%DefinitionSet{superseded_at: ts}) when not is_nil(ts), do: "(deprecated)"
+  defp version_status_label(%DefinitionSet{published_at: _}), do: "(published)"
 end

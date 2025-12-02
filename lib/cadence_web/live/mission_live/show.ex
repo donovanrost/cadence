@@ -1,8 +1,10 @@
 defmodule CadenceWeb.MissionLive.Show do
+  @moduledoc """
+  Mission overview page - provides a dashboard view of mission status and quick access to sub-pages.
+  """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, Databases, Interfaces, Missions, Targets}
-  alias Cadence.Alarms.AlarmRule
+  alias Cadence.{Alarms, Interfaces, MissionDatabase, Missions, Targets}
   alias Cadence.Telemetry.Database.DerivedItem
 
   @impl true
@@ -12,40 +14,12 @@ defmodule CadenceWeb.MissionLive.Show do
 
   @impl true
   def handle_params(params, _, socket) do
-    apply_action(socket, socket.assigns.live_action, params)
-  end
+    # Mission is already loaded by the on_mount hook
+    mission = socket.assigns.mission
 
-  defp apply_action(socket, :show, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    # Check if user can view this mission
-    case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
+    case Bodyguard.permit(Cadence.Missions.Policy, :view, socket.assigns.current_scope, mission) do
       :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "Show Mission")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
+        {:noreply, apply_action(socket, socket.assigns.live_action, params)}
 
       {:error, _} ->
         {:noreply,
@@ -55,608 +29,58 @@ defmodule CadenceWeb.MissionLive.Show do
     end
   end
 
-  defp apply_action(socket, :edit, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
+  defp apply_action(socket, :show, _params) do
+    mission = socket.assigns.mission
+
+    # Load summary counts for the overview cards
+    targets = Targets.list_targets(mission)
+    interfaces = Interfaces.list_interfaces(mission)
+    databases = MissionDatabase.list_databases(mission.id)
+    derived_items = DerivedItem.list_all(mission.id)
+    alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+
+    # Calculate summary stats
+    targets_online = Enum.count(targets, &(&1.status == "online"))
+    interfaces_connected = Enum.count(interfaces, &(&1.status == "connected"))
+
+    # Get active definition set from first database with one
+    active_definition_set =
+      databases
+      |> Enum.find_value(fn db ->
+        MissionDatabase.get_latest_definition_set(db.id)
+      end)
+
+    enabled_alarms = Enum.count(alarm_rules, & &1.enabled)
+
+    socket
+    |> assign(:page_title, mission.name)
+    |> assign(:targets, targets)
+    |> assign(:targets_online, targets_online)
+    |> assign(:interfaces, interfaces)
+    |> assign(:interfaces_connected, interfaces_connected)
+    |> assign(:databases, databases)
+    |> assign(:active_definition_set, active_definition_set)
+    |> assign(:derived_items_count, length(derived_items))
+    |> assign(:alarm_rules, alarm_rules)
+    |> assign(:enabled_alarms, enabled_alarms)
+  end
+
+  defp apply_action(socket, :edit, _params) do
+    mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
     case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
       :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
+        # Load the same data as :show plus set up for editing
+        socket = apply_action(socket, :show, %{})
 
-        {:noreply,
-         socket
-         |> assign(:page_title, "Edit Mission")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
+        socket
+        |> assign(:page_title, "Edit #{mission.name}")
 
       {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to edit this mission")
-         |> push_navigate(to: ~p"/missions")}
-    end
-  end
-
-  defp apply_action(socket, :new_target, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-      :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "New Target")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, %Targets.Target{})
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to create targets in this mission")
-         |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :edit_target, %{"id" => id, "target_id" => target_id}) do
-    mission = Missions.get_mission!(id)
-    target = Targets.get_target!(target_id)
-    scope = socket.assigns.current_scope
-
-    # Verify target belongs to this mission
-    if target.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          targets = Targets.list_targets(mission)
-          interfaces = Interfaces.list_interfaces(mission)
-          interface_protocol_counts = build_protocol_counts(interfaces)
-          interface_targets = build_interface_targets(interfaces)
-          definition_sets = Databases.list_definition_sets(mission)
-          derived_items = DerivedItem.list_all(mission.id)
-          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Edit Target")
-           |> assign(:mission, mission)
-           |> assign(:targets, targets)
-           |> assign(:target, target)
-           |> assign(:interfaces, interfaces)
-           |> assign(:interface, nil)
-           |> assign(:interface_protocol_counts, interface_protocol_counts)
-           |> assign(:interface_targets, interface_targets)
-           |> assign(:definition_sets, definition_sets)
-           |> assign(:definition_set, nil)
-           |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)
-           |> assign(:alarm_rules, alarm_rules)
-           |> assign(:alarm_rule, nil)}
-
-        {:error, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "You don't have permission to edit targets in this mission")
-           |> push_patch(to: ~p"/missions/#{id}")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Target not found in this mission")
-       |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :new_interface, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-      :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "New Interface")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, %Interfaces.InterfaceSchema{})
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to create interfaces in this mission")
-         |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :edit_interface, %{"id" => id, "interface_id" => interface_id}) do
-    mission = Missions.get_mission!(id)
-    interface = Interfaces.get_interface!(interface_id)
-    scope = socket.assigns.current_scope
-
-    # Verify interface belongs to this mission
-    if interface.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          targets = Targets.list_targets(mission)
-          interfaces = Interfaces.list_interfaces(mission)
-          interface_protocol_counts = build_protocol_counts(interfaces)
-          interface_targets = build_interface_targets(interfaces)
-          definition_sets = Databases.list_definition_sets(mission)
-          derived_items = DerivedItem.list_all(mission.id)
-
-          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Edit Interface")
-           |> assign(:mission, mission)
-           |> assign(:targets, targets)
-           |> assign(:target, nil)
-           |> assign(:interfaces, interfaces)
-           |> assign(:interface, interface)
-           |> assign(:interface_protocol_counts, interface_protocol_counts)
-           |> assign(:interface_targets, interface_targets)
-           |> assign(:definition_sets, definition_sets)
-           |> assign(:definition_set, nil)
-           |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)
-           |> assign(:alarm_rules, alarm_rules)
-           |> assign(:alarm_rule, nil)}
-
-        {:error, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "You don't have permission to edit interfaces in this mission")
-           |> push_patch(to: ~p"/missions/#{id}")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Interface not found in this mission")
-       |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :new_database, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-      :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "Import Database")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to import databases in this mission")
-         |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :show_database, %{"id" => id, "database_id" => database_id}) do
-    mission = Missions.get_mission!(id)
-    definition_set = Databases.get_definition_set!(database_id)
-    scope = socket.assigns.current_scope
-
-    # Verify definition set belongs to this mission
-    if definition_set.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
-        :ok ->
-          targets = Targets.list_targets(mission)
-          interfaces = Interfaces.list_interfaces(mission)
-          interface_protocol_counts = build_protocol_counts(interfaces)
-          interface_targets = build_interface_targets(interfaces)
-          definition_sets = Databases.list_definition_sets(mission)
-          derived_items = DerivedItem.list_all(mission.id)
-
-          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Database v#{definition_set.version}")
-           |> assign(:mission, mission)
-           |> assign(:targets, targets)
-           |> assign(:target, nil)
-           |> assign(:interfaces, interfaces)
-           |> assign(:interface, nil)
-           |> assign(:interface_protocol_counts, interface_protocol_counts)
-           |> assign(:interface_targets, interface_targets)
-           |> assign(:definition_sets, definition_sets)
-           |> assign(:definition_set, definition_set)
-           |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)
-           |> assign(:alarm_rules, alarm_rules)
-           |> assign(:alarm_rule, nil)}
-
-        {:error, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "You don't have permission to view this mission")
-           |> push_patch(to: ~p"/missions/#{id}")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Database not found in this mission")
-       |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :new_derived_item, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-      :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "New Derived Item")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, %DerivedItem{})
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, nil)}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to create derived items in this mission")
-         |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :edit_derived_item, %{"id" => id, "derived_item_id" => derived_item_id}) do
-    mission = Missions.get_mission!(id)
-    derived_item = DerivedItem.get!(derived_item_id)
-    scope = socket.assigns.current_scope
-
-    # Verify derived item belongs to this mission
-    if derived_item.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          targets = Targets.list_targets(mission)
-          interfaces = Interfaces.list_interfaces(mission)
-          interface_protocol_counts = build_protocol_counts(interfaces)
-          interface_targets = build_interface_targets(interfaces)
-          definition_sets = Databases.list_definition_sets(mission)
-          derived_items = DerivedItem.list_all(mission.id)
-          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Edit Derived Item")
-           |> assign(:mission, mission)
-           |> assign(:targets, targets)
-           |> assign(:target, nil)
-           |> assign(:interfaces, interfaces)
-           |> assign(:interface, nil)
-           |> assign(:interface_protocol_counts, interface_protocol_counts)
-           |> assign(:interface_targets, interface_targets)
-           |> assign(:definition_sets, definition_sets)
-           |> assign(:definition_set, nil)
-           |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, derived_item)
-           |> assign(:alarm_rules, alarm_rules)
-           |> assign(:alarm_rule, nil)}
-
-        {:error, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "You don't have permission to edit derived items in this mission")
-           |> push_patch(to: ~p"/missions/#{id}")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Derived item not found in this mission")
-       |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :new_alarm_rule, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
-    scope = socket.assigns.current_scope
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-      :ok ->
-        targets = Targets.list_targets(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-        interface_protocol_counts = build_protocol_counts(interfaces)
-        interface_targets = build_interface_targets(interfaces)
-        definition_sets = Databases.list_definition_sets(mission)
-        derived_items = DerivedItem.list_all(mission.id)
-        alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-        {:noreply,
-         socket
-         |> assign(:page_title, "New Alarm Rule")
-         |> assign(:mission, mission)
-         |> assign(:targets, targets)
-         |> assign(:target, nil)
-         |> assign(:interfaces, interfaces)
-         |> assign(:interface, nil)
-         |> assign(:interface_protocol_counts, interface_protocol_counts)
-         |> assign(:interface_targets, interface_targets)
-         |> assign(:definition_sets, definition_sets)
-         |> assign(:definition_set, nil)
-         |> assign(:derived_items, derived_items)
-         |> assign(:derived_item, nil)
-         |> assign(:alarm_rules, alarm_rules)
-         |> assign(:alarm_rule, %AlarmRule{enabled: true, severity: :warning, event_type: "telemetry_limit"})}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "You don't have permission to create alarm rules in this mission")
-         |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  defp apply_action(socket, :edit_alarm_rule, %{"id" => id, "alarm_rule_id" => alarm_rule_id}) do
-    mission = Missions.get_mission!(id)
-    alarm_rule = Alarms.get_rule!(alarm_rule_id)
-    scope = socket.assigns.current_scope
-
-    if alarm_rule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          targets = Targets.list_targets(mission)
-          interfaces = Interfaces.list_interfaces(mission)
-          interface_protocol_counts = build_protocol_counts(interfaces)
-          interface_targets = build_interface_targets(interfaces)
-          definition_sets = Databases.list_definition_sets(mission)
-          derived_items = DerivedItem.list_all(mission.id)
-          alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Edit Alarm Rule")
-           |> assign(:mission, mission)
-           |> assign(:targets, targets)
-           |> assign(:target, nil)
-           |> assign(:interfaces, interfaces)
-           |> assign(:interface, nil)
-           |> assign(:interface_protocol_counts, interface_protocol_counts)
-           |> assign(:interface_targets, interface_targets)
-           |> assign(:definition_sets, definition_sets)
-           |> assign(:definition_set, nil)
-           |> assign(:derived_items, derived_items)
-           |> assign(:derived_item, nil)
-           |> assign(:alarm_rules, alarm_rules)
-           |> assign(:alarm_rule, alarm_rule)}
-
-        {:error, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:error, "You don't have permission to edit alarm rules in this mission")
-           |> push_patch(to: ~p"/missions/#{id}")}
-      end
-    else
-      {:noreply,
-       socket
-       |> put_flash(:error, "Alarm rule not found in this mission")
-       |> push_patch(to: ~p"/missions/#{id}")}
-    end
-  end
-
-  @impl true
-  def handle_info({CadenceWeb.TargetLive.FormComponent, {:saved, _target}}, socket) do
-    # Reload targets list after save
-    targets = Targets.list_targets(socket.assigns.mission)
-    {:noreply, assign(socket, :targets, targets)}
-  end
-
-  @impl true
-  def handle_info({CadenceWeb.InterfaceLive.FormComponent, {:saved, _interface}}, socket) do
-    # Reload interfaces list after save
-    interfaces = Interfaces.list_interfaces(socket.assigns.mission)
-    interface_protocol_counts = build_protocol_counts(interfaces)
-    interface_targets = build_interface_targets(interfaces)
-
-    {:noreply,
-     socket
-     |> assign(:interfaces, interfaces)
-     |> assign(:interface_protocol_counts, interface_protocol_counts)
-     |> assign(:interface_targets, interface_targets)}
-  end
-
-  def handle_info({CadenceWeb.DatabaseLive.FormComponent, {:saved, _definition_set}}, socket) do
-    # Reload definition sets list after save
-    definition_sets = Databases.list_definition_sets(socket.assigns.mission)
-    {:noreply, assign(socket, :definition_sets, definition_sets)}
-  end
-
-  def handle_info({CadenceWeb.DatabaseLive.ShowComponent, {:published, _definition_set}}, socket) do
-    # Reload definition sets list after publish
-    definition_sets = Databases.list_definition_sets(socket.assigns.mission)
-    {:noreply, assign(socket, :definition_sets, definition_sets)}
-  end
-
-  def handle_info({CadenceWeb.DatabaseLive.ShowComponent, {:deleted, _definition_set}}, socket) do
-    # Reload definition sets list after delete
-    definition_sets = Databases.list_definition_sets(socket.assigns.mission)
-    {:noreply, assign(socket, :definition_sets, definition_sets)}
-  end
-
-  def handle_info({CadenceWeb.DerivedItemLive.FormComponent, {:saved, _derived_item}}, socket) do
-    # Reload derived items list after save
-    derived_items = DerivedItem.list_all(socket.assigns.mission.id)
-    {:noreply, assign(socket, :derived_items, derived_items)}
-  end
-
-  def handle_info({CadenceWeb.DerivedItemLive.FormComponent, {:deleted, _derived_item}}, socket) do
-    # Reload derived items list after delete
-    derived_items = DerivedItem.list_all(socket.assigns.mission.id)
-    {:noreply, assign(socket, :derived_items, derived_items)}
-  end
-
-  def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:saved, _alarm_rule}}, socket) do
-    # Reload alarm rules list after save
-    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
-    {:noreply, assign(socket, :alarm_rules, alarm_rules)}
-  end
-
-  def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:deleted, _alarm_rule}}, socket) do
-    # Reload alarm rules list after delete
-    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
-    {:noreply, assign(socket, :alarm_rules, alarm_rules)}
-  end
-
-  @impl true
-  def handle_event("delete_target", %{"id" => target_id}, socket) do
-    target = Targets.get_target!(target_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
-
-    # Verify target belongs to this mission
-    if target.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Targets.delete_target(target) do
-            {:ok, _} ->
-              targets = Targets.list_targets(mission)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Target deleted successfully")
-               |> assign(:targets, targets)}
-
-            {:error, _changeset} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete target")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Target not found in this mission")}
-    end
-  end
-
-  @impl true
-  def handle_event("delete_interface", %{"id" => interface_id}, socket) do
-    interface = Interfaces.get_interface!(interface_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
-
-    # Verify interface belongs to this mission
-    if interface.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Interfaces.delete_interface(interface) do
-            {:ok, _} ->
-              interfaces = Interfaces.list_interfaces(mission)
-              interface_protocol_counts = build_protocol_counts(interfaces)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Interface deleted successfully")
-               |> assign(:interfaces, interfaces)
-               |> assign(:interface_protocol_counts, interface_protocol_counts)}
-
-            {:error, _changeset} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete interface")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete interfaces")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Interface not found in this mission")}
+        socket
+        |> put_flash(:error, "You don't have permission to edit this mission")
+        |> push_patch(to: ~p"/missions/#{mission}")
     end
   end
 
@@ -665,15 +89,13 @@ defmodule CadenceWeb.MissionLive.Show do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
-    # Check if user can manage this mission
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
         case Missions.start_mission(mission) do
           {:ok, _pid} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Mission started successfully")
-             |> assign(:mission_running, true)}
+             |> put_flash(:info, "Mission started successfully")}
 
           {:error, reason} ->
             {:noreply, put_flash(socket, :error, "Failed to start mission: #{inspect(reason)}")}
@@ -689,15 +111,13 @@ defmodule CadenceWeb.MissionLive.Show do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
-    # Check if user can manage this mission
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
         case Missions.stop_mission(mission.id) do
           :ok ->
             {:noreply,
              socket
-             |> put_flash(:info, "Mission stopped successfully")
-             |> assign(:mission_running, false)}
+             |> put_flash(:info, "Mission stopped successfully")}
 
           {:error, reason} ->
             {:noreply, put_flash(socket, :error, "Failed to stop mission: #{inspect(reason)}")}
@@ -709,105 +129,227 @@ defmodule CadenceWeb.MissionLive.Show do
   end
 
   @impl true
-  def handle_event("toggle_alarm_rule", %{"id" => rule_id}, socket) do
-    rule = Alarms.get_rule!(rule_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
+  def render(assigns) do
+    ~H"""
+    <!-- Mission Header -->
+    <div class="mb-8">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-base-content"><%= @mission.name %></h1>
+          <p class="mt-1 text-sm text-base-content/60"><%= @mission.description || "No description" %></p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class={[
+            "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
+            @mission.status == "active" && "bg-success/20 text-success",
+            @mission.status == "inactive" && "bg-base-300 text-base-content/60",
+            @mission.status == "suspended" && "bg-error/20 text-error"
+          ]}>
+            <%= @mission.status %>
+          </span>
+          <.button :if={@mission.status == "active"} phx-click="start_mission" class="btn-success btn-sm">
+            <.icon name="hero-play" class="h-4 w-4 mr-1" />
+            Start
+          </.button>
+          <.button phx-click="stop_mission" class="btn-ghost btn-sm">
+            <.icon name="hero-stop" class="h-4 w-4 mr-1" />
+            Stop
+          </.button>
+          <.link patch={~p"/missions/#{@mission}/show/edit"}>
+            <.button class="btn-ghost btn-sm">
+              <.icon name="hero-pencil" class="h-4 w-4 mr-1" />
+              Edit
+            </.button>
+          </.link>
+        </div>
+      </div>
+    </div>
 
-    if rule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          result =
-            if rule.enabled do
-              Alarms.disable_rule(rule, scope.user.id, "Disabled via UI")
-            else
-              Alarms.enable_rule(rule)
-            end
+    <!-- Status Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <!-- Targets Card -->
+      <.link navigate={~p"/missions/#{@mission}/targets"} class="block">
+        <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-base-content/60">Targets</p>
+                <p class="text-2xl font-bold">
+                  <span class="text-success"><%= @targets_online %></span>
+                  <span class="text-base-content/40">/</span>
+                  <span><%= length(@targets) %></span>
+                </p>
+                <p class="text-xs text-base-content/50">online</p>
+              </div>
+              <div class="rounded-full bg-primary/10 p-3">
+                <.icon name="hero-cpu-chip" class="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </.link>
 
-          case result do
-            {:ok, _} ->
-              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-              action = if rule.enabled, do: "disabled", else: "enabled"
+      <!-- Interfaces Card -->
+      <.link navigate={~p"/missions/#{@mission}/interfaces"} class="block">
+        <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-base-content/60">Interfaces</p>
+                <p class="text-2xl font-bold">
+                  <span class="text-success"><%= @interfaces_connected %></span>
+                  <span class="text-base-content/40">/</span>
+                  <span><%= length(@interfaces) %></span>
+                </p>
+                <p class="text-xs text-base-content/50">connected</p>
+              </div>
+              <div class="rounded-full bg-secondary/10 p-3">
+                <.icon name="hero-signal" class="h-6 w-6 text-secondary" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </.link>
 
-              {:noreply,
-               socket
-               |> put_flash(:info, "Alarm rule #{action}")
-               |> assign(:alarm_rules, alarm_rules)}
+      <!-- Database Card -->
+      <.link navigate={~p"/missions/#{@mission}/database"} class="block">
+        <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-base-content/60">Database</p>
+                <%= if @active_definition_set do %>
+                  <p class="text-2xl font-bold">v<%= @active_definition_set.version %></p>
+                  <p class="text-xs text-base-content/50">
+                    <%= length(@databases) %> <%= ngettext("database", "databases", length(@databases)) %>, <%= @derived_items_count %> derived
+                  </p>
+                <% else %>
+                  <p class="text-2xl font-bold text-base-content/40">-</p>
+                  <p class="text-xs text-base-content/50">no active database</p>
+                <% end %>
+              </div>
+              <div class="rounded-full bg-accent/10 p-3">
+                <.icon name="hero-chart-bar" class="h-6 w-6 text-accent" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </.link>
 
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to update alarm rule")}
-          end
+      <!-- Alarms Card -->
+      <.link navigate={~p"/missions/#{@mission}/alarms"} class="block">
+        <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-base-content/60">Alarm Rules</p>
+                <p class="text-2xl font-bold">
+                  <span class="text-success"><%= @enabled_alarms %></span>
+                  <span class="text-base-content/40">/</span>
+                  <span><%= length(@alarm_rules) %></span>
+                </p>
+                <p class="text-xs text-base-content/50">enabled</p>
+              </div>
+              <div class="rounded-full bg-warning/10 p-3">
+                <.icon name="hero-bell-alert" class="h-6 w-6 text-warning" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </.link>
+    </div>
 
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to manage alarm rules")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
-    end
+    <!-- Quick Info Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Mission Details -->
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Mission Details</h2>
+          <div class="divide-y divide-base-300">
+            <div class="py-3 flex justify-between">
+              <span class="text-base-content/60">Slug</span>
+              <span class="font-mono text-sm"><%= @mission.slug %></span>
+            </div>
+            <div class="py-3 flex justify-between">
+              <span class="text-base-content/60">Phase</span>
+              <span><%= @mission.phase || "Not set" %></span>
+            </div>
+            <div class="py-3 flex justify-between">
+              <span class="text-base-content/60">Start Date</span>
+              <span>
+                <%= if @mission.start_date, do: Calendar.strftime(@mission.start_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+              </span>
+            </div>
+            <div class="py-3 flex justify-between">
+              <span class="text-base-content/60">End Date</span>
+              <span>
+                <%= if @mission.end_date, do: Calendar.strftime(@mission.end_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Targets -->
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg">Targets</h2>
+            <.link navigate={~p"/missions/#{@mission}/targets"} class="text-sm text-primary hover:underline">
+              View all
+            </.link>
+          </div>
+          <%= if Enum.empty?(@targets) do %>
+            <p class="text-base-content/50 text-sm py-4">No targets configured</p>
+          <% else %>
+            <div class="space-y-2">
+              <%= for target <- Enum.take(@targets, 5) do %>
+                <div class="flex items-center justify-between py-2">
+                  <div class="flex items-center gap-3">
+                    <span class={[
+                      "w-2 h-2 rounded-full",
+                      target.status == "online" && "bg-success",
+                      target.status == "offline" && "bg-base-content/30",
+                      target.status == "standby" && "bg-warning",
+                      target.status == "fault" && "bg-error"
+                    ]}></span>
+                    <div>
+                      <p class="font-medium text-sm"><%= target.name %></p>
+                      <p class="text-xs text-base-content/50"><%= target.identifier %></p>
+                    </div>
+                  </div>
+                  <span class="text-xs text-base-content/50"><%= target.type %></span>
+                </div>
+              <% end %>
+              <%= if length(@targets) > 5 do %>
+                <p class="text-xs text-base-content/50 pt-2">
+                  + <%= length(@targets) - 5 %> more targets
+                </p>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Mission Modal -->
+    <.modal
+      :if={@live_action == :edit}
+      id="mission-modal"
+      show
+      on_cancel={JS.patch(~p"/missions/#{@mission}")}
+    >
+      <.live_component
+        module={CadenceWeb.MissionLive.FormComponent}
+        id={@mission.id}
+        title="Edit Mission"
+        action={:edit}
+        mission={@mission}
+        patch={~p"/missions/#{@mission}"}
+        current_user={@current_scope.user}
+        current_scope={@current_scope}
+      />
+    </.modal>
+    """
   end
-
-  @impl true
-  def handle_event("delete_alarm_rule", %{"id" => rule_id}, socket) do
-    rule = Alarms.get_rule!(rule_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
-
-    if rule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Alarms.delete_rule(rule) do
-            {:ok, _} ->
-              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Alarm rule deleted")
-               |> assign(:alarm_rules, alarm_rules)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete alarm rule")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete alarm rules")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
-    end
-  end
-
-  # Build a map of interface_id => protocol_count for display
-  defp build_protocol_counts(interfaces) do
-    interfaces
-    |> Enum.map(fn interface ->
-      protocol_count =
-        interface.id
-        |> Interfaces.list_protocols()
-        |> length()
-
-      {interface.id, protocol_count}
-    end)
-    |> Map.new()
-  end
-
-  # Build a map of interface_id => list of associated targets for display
-  defp build_interface_targets(interfaces) do
-    interfaces
-    |> Enum.map(fn interface ->
-      targets = Interfaces.list_targets_for_interface(interface, preload: false)
-      {interface.id, targets}
-    end)
-    |> Map.new()
-  end
-
-  defp page_title(:show), do: "Show Mission"
-  defp page_title(:edit), do: "Edit Mission"
-  defp page_title(:new_target), do: "New Target"
-  defp page_title(:edit_target), do: "Edit Target"
-  defp page_title(:new_interface), do: "New Interface"
-  defp page_title(:edit_interface), do: "Edit Interface"
-  defp page_title(:new_database), do: "Import Database"
-  defp page_title(:show_database), do: "Database Details"
-  defp page_title(:new_derived_item), do: "New Derived Item"
-  defp page_title(:edit_derived_item), do: "Edit Derived Item"
 end

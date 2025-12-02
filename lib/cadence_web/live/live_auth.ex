@@ -123,4 +123,27 @@ defmodule CadenceWeb.LiveAuth do
        {:cont, assign(socket, :current_path, URI.parse(uri).path)}
      end)}
   end
+
+  def on_mount(:load_mission, params, _session, socket) do
+    # Load mission from route params for the mission sidebar layout
+    # Supports both :id and :mission_id param names
+    mission_id = params["id"] || params["mission_id"]
+
+    if mission_id do
+      case Cadence.Missions.get_mission(mission_id) do
+        nil ->
+          socket =
+            socket
+            |> put_flash(:error, "Mission not found.")
+            |> redirect(to: "/missions")
+
+          {:halt, socket}
+
+        mission ->
+          {:cont, assign(socket, :mission, mission)}
+      end
+    else
+      {:cont, assign(socket, :mission, nil)}
+    end
+  end
 end

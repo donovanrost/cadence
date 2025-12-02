@@ -94,7 +94,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
   Returns `{:ok, definition_set}` or `{:error, reason}`.
   """
-  def import_file(mission, file_path, opts \\ []) do
+  def import_file(database, file_path, opts \\ []) do
     with {:ok, content} <- File.read(file_path),
          {:ok, parsed} <- parse_yaml(content),
          {:ok, validated} <- validate_structure(parsed) do
@@ -103,7 +103,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
 
-      import_parsed(mission, validated, %{
+      import_parsed(database, validated, %{
         version: version,
         description: description,
         source_format: :yaml,
@@ -116,7 +116,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   @doc """
   Imports from a YAML string (useful for testing).
   """
-  def import_string(mission, yaml_content, opts \\ []) do
+  def import_string(database, yaml_content, opts \\ []) do
     with {:ok, parsed} <- parse_yaml(yaml_content),
          {:ok, validated} <- validate_structure(parsed) do
 
@@ -124,7 +124,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, yaml_content) |> Base.encode16(case: :lower)
 
-      import_parsed(mission, validated, %{
+      import_parsed(database, validated, %{
         version: version,
         description: description,
         source_format: :yaml,
@@ -287,14 +287,18 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   # Import Logic
   # ============================================================================
 
-  defp import_parsed(mission, parsed, metadata) do
+  defp import_parsed(database, parsed, metadata) do
+    # Preload mission to get organization_id
+    database = Repo.preload(database, :mission)
+    organization_id = database.mission.organization_id
+
     Repo.transaction(fn ->
       # Create the DefinitionSet
       {:ok, definition_set} =
         %DefinitionSet{}
         |> DefinitionSet.changeset(%{
-          organization_id: mission.organization_id,
-          mission_id: mission.id,
+          organization_id: organization_id,
+          database_id: database.id,
           version: metadata.version,
           description: metadata.description,
           source_format: metadata.source_format,
@@ -305,7 +309,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
       # Create a context for tracking created entities
       ctx = %{
-        mission: mission,
+        database: database,
         definition_set: definition_set,
         data_types: %{},
         algorithms: %{},
@@ -358,8 +362,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     {:ok, container} =
       %Container{}
       |> Container.changeset(%{
-        organization_id: ctx.mission.organization_id,
-        mission_id: ctx.mission.id,
+        organization_id: ctx.database.mission.organization_id,
+        mission_id: ctx.database.mission_id,
         definition_set_id: ctx.definition_set.id,
         name: packet_data["name"],
         description: packet_data["description"],
@@ -399,8 +403,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     {:ok, parameter} =
       %Parameter{}
       |> Parameter.changeset(%{
-        organization_id: ctx.mission.organization_id,
-        mission_id: ctx.mission.id,
+        organization_id: ctx.database.mission.organization_id,
+        mission_id: ctx.database.mission_id,
         definition_set_id: ctx.definition_set.id,
         name: "#{container.name}.#{item_data["name"]}",
         description: item_data["description"],
@@ -470,8 +474,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
     # Create the DataType
     attrs = %{
-      organization_id: ctx.mission.organization_id,
-      mission_id: ctx.mission.id,
+      organization_id: ctx.database.mission.organization_id,
+      mission_id: ctx.database.mission_id,
       definition_set_id: ctx.definition_set.id,
       name: type_name,
       description: item_data["description"],
@@ -527,8 +531,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     {:ok, algorithm} =
       %Algorithm{}
       |> Algorithm.changeset(%{
-        organization_id: ctx.mission.organization_id,
-        mission_id: ctx.mission.id,
+        organization_id: ctx.database.mission.organization_id,
+        mission_id: ctx.database.mission_id,
         definition_set_id: ctx.definition_set.id,
         name: algo_name,
         description: "Auto-generated from YAML import",
@@ -551,8 +555,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     {:ok, algorithm} =
       %Algorithm{}
       |> Algorithm.changeset(%{
-        organization_id: ctx.mission.organization_id,
-        mission_id: ctx.mission.id,
+        organization_id: ctx.database.mission.organization_id,
+        mission_id: ctx.database.mission_id,
         definition_set_id: ctx.definition_set.id,
         name: algo_name,
         description: "Auto-generated from YAML import",
@@ -585,8 +589,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
         {:ok, unit} =
           %Unit{}
           |> Unit.changeset(%{
-            organization_id: ctx.mission.organization_id,
-            mission_id: ctx.mission.id,
+            organization_id: ctx.database.mission.organization_id,
+            mission_id: ctx.database.mission_id,
             definition_set_id: ctx.definition_set.id,
             name: units_str,
             symbol: units_str,
@@ -643,8 +647,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     {:ok, meta_command} =
       %MetaCommand{}
       |> MetaCommand.changeset(%{
-        organization_id: ctx.mission.organization_id,
-        mission_id: ctx.mission.id,
+        organization_id: ctx.database.mission.organization_id,
+        mission_id: ctx.database.mission_id,
         definition_set_id: ctx.definition_set.id,
         name: command_data["name"],
         description: command_data["description"],

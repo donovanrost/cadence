@@ -1,7 +1,13 @@
 defmodule CadenceWeb.DatabaseLive.FormComponent do
+  @moduledoc """
+  Form component for importing a new DefinitionSet version into a Database.
+
+  This is a simplified version that always imports into a specific Database.
+  """
   use CadenceWeb, :live_component
 
-  alias Cadence.Databases
+  alias Cadence.MissionDatabase
+  alias Cadence.MissionDatabase.{DefinitionSet, Database, YamlImporter}
 
   @impl true
   def render(assigns) do
@@ -9,7 +15,7 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     <div>
       <.header>
         <%= @title %>
-        <:subtitle>Upload a YAML file to import telemetry database definitions.</:subtitle>
+        <:subtitle>Upload a YAML file to import a new version into <%= @database.name %>.</:subtitle>
       </.header>
 
       <form
@@ -82,41 +88,23 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                     phx-click="cancel-upload"
                     phx-value-ref={entry.ref}
                     phx-target={@myself}
-                    class="text-zinc-400 hover:text-zinc-600"
+                    class="text-sm text-zinc-500 hover:text-zinc-700"
                   >
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
+                    Remove
                   </button>
                 </div>
-
-                <div class="mt-2 w-full bg-zinc-200 rounded-full h-1.5">
-                  <div
-                    class="bg-zinc-900 h-1.5 rounded-full transition-all duration-300"
-                    style={"width: #{entry.progress}%"}
-                  >
-                  </div>
-                </div>
-
+                <progress value={entry.progress} max="100" class="w-full h-1 mt-2">
+                  <%= entry.progress %>%
+                </progress>
                 <%= for err <- upload_errors(@uploads.yaml_file, entry) do %>
-                  <p class="mt-2 text-sm text-red-600"><%= error_to_string(err) %></p>
+                  <p class="text-red-600 text-sm mt-2"><%= error_to_string(err) %></p>
                 <% end %>
               </div>
             <% end %>
-
-            <%= for err <- upload_errors(@uploads.yaml_file) do %>
-              <p class="mt-2 text-sm text-red-600"><%= error_to_string(err) %></p>
-            <% end %>
           </div>
 
-
           <div>
-            <label for="version" class="block text-sm font-semibold leading-6 text-zinc-800">
+            <label class="block text-sm font-semibold leading-6 text-zinc-800" for="version">
               Version Override (optional)
             </label>
             <input
@@ -124,11 +112,11 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
               name="version"
               id="version"
               value={@version_override}
-              placeholder="e.g., 2.0.0 (uses version from YAML if blank)"
-              class="mt-2 block w-full rounded-lg text-zinc-900 focus:ring-0 sm:text-sm sm:leading-6 phx-no-feedback:border-zinc-300 phx-no-feedback:focus:border-zinc-400 border-zinc-300 focus:border-zinc-400"
+              placeholder="Leave blank to use version from YAML"
+              class="mt-2 block w-full rounded-md border-zinc-300 shadow-sm focus:border-zinc-900 focus:ring-zinc-900 sm:text-sm"
             />
-            <p class="mt-2 text-sm text-gray-600">
-              Leave blank to use the version specified in the YAML file.
+            <p class="mt-1 text-sm text-zinc-500">
+              Override the version string if you need to specify a different version.
             </p>
           </div>
 
@@ -140,28 +128,22 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
               checked={@publish_immediately}
               class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
             />
-            <label for="publish" class="text-sm font-medium leading-6 text-zinc-800">
+            <label for="publish" class="text-sm font-medium text-zinc-700">
               Publish immediately after import
             </label>
           </div>
-          <p class="text-sm text-gray-600 -mt-4 ml-6">
-            If checked, this version will become the active telemetry database for the mission.
-          </p>
         </div>
 
-        <div class="mt-6 flex items-center justify-end gap-x-4">
-          <.link
-            patch={@patch}
-            class="text-sm font-semibold leading-6 text-zinc-900 hover:text-zinc-700"
-          >
+        <div class="mt-6 flex items-center justify-end gap-x-6">
+          <.link patch={@patch} class="text-sm font-semibold leading-6 text-zinc-900">
             Cancel
           </.link>
           <.button
             type="submit"
-            disabled={@uploads.yaml_file.entries == []}
             phx-disable-with="Importing..."
+            disabled={Enum.empty?(@uploads.yaml_file.entries)}
           >
-            Import Database
+            Import
           </.button>
         </div>
       </form>
@@ -184,9 +166,7 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
 
   @impl true
   def update(assigns, socket) do
-    {:ok,
-     socket
-     |> assign(assigns)}
+    {:ok, assign(socket, assigns)}
   end
 
   @impl true
@@ -206,6 +186,7 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
 
   def handle_event("save", params, socket) do
     mission = socket.assigns.mission
+    database = socket.assigns.database
     scope = socket.assigns.current_scope
 
     # Consume uploaded file
@@ -221,7 +202,7 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
       [yaml_content | _] ->
         case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
           :ok ->
-            import_database(socket, mission, yaml_content, params)
+            import_database(socket, database, yaml_content, params)
 
           {:error, _} ->
             {:noreply,
@@ -232,17 +213,18 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     end
   end
 
-  defp import_database(socket, mission, yaml_content, params) do
+  defp import_database(socket, database, yaml_content, params) do
     version_override = Map.get(params, "version", "")
     publish = Map.get(params, "publish", "false") == "on"
 
-    opts = if version_override != "", do: [version: version_override], else: []
+    opts = [database_id: database.id]
+    opts = if version_override != "", do: Keyword.put(opts, :version, version_override), else: opts
 
-    case Databases.import_yaml(mission, yaml_content, opts) do
+    case YamlImporter.import_string(database, yaml_content, opts) do
       {:ok, definition_set} ->
         definition_set =
           if publish do
-            case Databases.publish_definition_set(definition_set) do
+            case DefinitionSet.publish(definition_set) do
               {:ok, published} -> published
               {:error, _} -> definition_set
             end
@@ -254,8 +236,8 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
 
         message =
           if publish,
-            do: "Database v#{definition_set.version} imported and published",
-            else: "Database v#{definition_set.version} imported successfully"
+            do: "Version #{definition_set.version} imported and published",
+            else: "Version #{definition_set.version} imported (draft)"
 
         {:noreply,
          socket
@@ -273,14 +255,14 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     end
   end
 
-  defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
-  defp format_bytes(bytes) when bytes < 1_048_576, do: "#{Float.round(bytes / 1024, 1)} KB"
-  defp format_bytes(bytes), do: "#{Float.round(bytes / 1_048_576, 1)} MB"
+  defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
 
-  defp error_to_string(:too_large), do: "File is too large (max 10 MB)"
-  defp error_to_string(:too_many_files), do: "Only one file allowed"
+  defp format_bytes(bytes) when bytes >= 1_000_000, do: "#{Float.round(bytes / 1_000_000, 1)} MB"
+  defp format_bytes(bytes) when bytes >= 1_000, do: "#{Float.round(bytes / 1_000, 1)} KB"
+  defp format_bytes(bytes), do: "#{bytes} B"
+
+  defp error_to_string(:too_large), do: "File is too large"
+  defp error_to_string(:too_many_files), do: "Too many files"
   defp error_to_string(:not_accepted), do: "File type not accepted"
   defp error_to_string(err), do: "Error: #{inspect(err)}"
-
-  defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
 end

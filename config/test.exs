@@ -38,3 +38,7 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Disable the outbox processor in tests - tests should manage their own processing
+config :cadence, Cadence.Outbox.Processor,
+  enabled: false

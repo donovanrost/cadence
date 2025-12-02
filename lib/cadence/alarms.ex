@@ -54,9 +54,15 @@ defmodule Cadence.Alarms do
   """
   @spec create_rule(map()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
   def create_rule(attrs) do
-    %AlarmRule{}
-    |> AlarmRule.changeset(attrs)
-    |> Repo.insert()
+    result =
+      %AlarmRule{}
+      |> AlarmRule.changeset(attrs)
+      |> Repo.insert()
+
+    with {:ok, rule} <- result do
+      broadcast_rule_change(rule, :created)
+      {:ok, rule}
+    end
   end
 
   @doc """
@@ -64,9 +70,15 @@ defmodule Cadence.Alarms do
   """
   @spec update_rule(AlarmRule.t(), map()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
   def update_rule(%AlarmRule{} = rule, attrs) do
-    rule
-    |> AlarmRule.changeset(attrs)
-    |> Repo.update()
+    result =
+      rule
+      |> AlarmRule.changeset(attrs)
+      |> Repo.update()
+
+    with {:ok, updated_rule} <- result do
+      broadcast_rule_change(updated_rule, :updated)
+      {:ok, updated_rule}
+    end
   end
 
   @doc """
@@ -74,9 +86,15 @@ defmodule Cadence.Alarms do
   """
   @spec enable_rule(AlarmRule.t()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
   def enable_rule(%AlarmRule{} = rule) do
-    rule
-    |> AlarmRule.enable_changeset(%{enabled: true})
-    |> Repo.update()
+    result =
+      rule
+      |> AlarmRule.enable_changeset(%{enabled: true})
+      |> Repo.update()
+
+    with {:ok, updated_rule} <- result do
+      broadcast_rule_change(updated_rule, :enabled)
+      {:ok, updated_rule}
+    end
   end
 
   @doc """
@@ -85,14 +103,20 @@ defmodule Cadence.Alarms do
   @spec disable_rule(AlarmRule.t(), String.t() | nil, String.t() | nil) ::
           {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
   def disable_rule(%AlarmRule{} = rule, user_id \\ nil, reason \\ nil) do
-    rule
-    |> AlarmRule.enable_changeset(%{
-      enabled: false,
-      disabled_at: DateTime.utc_now(),
-      disabled_by_id: user_id,
-      disabled_reason: reason
-    })
-    |> Repo.update()
+    result =
+      rule
+      |> AlarmRule.enable_changeset(%{
+        enabled: false,
+        disabled_at: DateTime.utc_now(),
+        disabled_by_id: user_id,
+        disabled_reason: reason
+      })
+      |> Repo.update()
+
+    with {:ok, updated_rule} <- result do
+      broadcast_rule_change(updated_rule, :disabled)
+      {:ok, updated_rule}
+    end
   end
 
   @doc """
@@ -100,7 +124,33 @@ defmodule Cadence.Alarms do
   """
   @spec delete_rule(AlarmRule.t()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
   def delete_rule(%AlarmRule{} = rule) do
-    Repo.delete(rule)
+    result = Repo.delete(rule)
+
+    with {:ok, deleted_rule} <- result do
+      broadcast_rule_change(deleted_rule, :deleted)
+      {:ok, deleted_rule}
+    end
+  end
+
+  # Broadcasts alarm rule changes for cache invalidation and UI updates
+  defp broadcast_rule_change(%AlarmRule{} = rule, event_type) do
+    # Global topic for cache invalidation
+    Phoenix.PubSub.broadcast(
+      Cadence.PubSub,
+      "alarm_rules:changed",
+      {:alarm_rule_changed, event_type, rule}
+    )
+
+    # Mission-specific topic for UI updates
+    if rule.mission_id do
+      Phoenix.PubSub.broadcast(
+        Cadence.PubSub,
+        "mission:#{rule.mission_id}:alarm_rules",
+        {:alarm_rule_changed, event_type, rule}
+      )
+    end
+
+    :ok
   end
 
   @doc """

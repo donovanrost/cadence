@@ -293,8 +293,9 @@ defmodule Cadence.Commands.Dispatcher do
   ## Private Functions
 
   defp do_dispatch(command_name, params, opts, state) do
-    with {:ok, command} <- get_command(state.mission_id, command_name),
-         {:ok, target} <- get_target(state.mission_id, opts),
+    # Get target first - it has the definition_set_id for command lookup
+    with {:ok, target} <- get_target(state.mission_id, opts),
+         {:ok, command} <- get_command(target.definition_set_id, command_name),
          :ok <- check_phase_restriction(command, state.mission),
          :ok <- check_hazardous(command, params, opts, state),
          :ok <- validate_params(command, params),
@@ -328,8 +329,8 @@ defmodule Cadence.Commands.Dispatcher do
     end
   end
 
-  defp get_command(mission_id, command_name) do
-    case Commands.get_command_by_name(mission_id, command_name) do
+  defp get_command(definition_set_id, command_name) do
+    case Commands.get_command_by_name(definition_set_id, command_name) do
       nil -> {:error, :unknown_command}
       command -> {:ok, command}
     end
@@ -463,8 +464,13 @@ defmodule Cadence.Commands.Dispatcher do
   end
 
   defp create_hazardous_confirmation(command_name, params, opts, state) do
+    # Get target for its definition_set_id
+    target_id = Keyword.get(opts, :target) || Keyword.get(opts, :target_id)
+    target = target_id && Targets.get_target!(target_id)
+    definition_set_id = target && target.definition_set_id
+
     # Get command for hazard description
-    case Commands.get_command_by_name(state.mission_id, command_name) do
+    case definition_set_id && Commands.get_command_by_name(definition_set_id, command_name) do
       nil ->
         {:error, :unknown_command}
 
@@ -496,6 +502,29 @@ defmodule Cadence.Commands.Dispatcher do
 
         {:requires_confirmation, confirmation_info, new_state}
     end
+  end
+
+  # Extracts target identifier from opts, looking up the target if needed
+  defp get_target_identifier_from_opts(mission_id, opts) do
+    target_id = Keyword.get(opts, :target) || Keyword.get(opts, :target_id)
+
+    if is_nil(target_id) do
+      nil
+    else
+      case Targets.get_target_by_identifier(mission_id, target_id) do
+        nil ->
+          # Maybe it's a target ID, not identifier - try to get the target
+          case Targets.get_target!(target_id) do
+            nil -> nil
+            target -> target.identifier
+          end
+
+        target ->
+          target.identifier
+      end
+    end
+  rescue
+    Ecto.NoResultsError -> nil
   end
 
   defp start_verification(state, command_log_id, command, target) do

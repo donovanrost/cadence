@@ -35,6 +35,13 @@ defmodule Cadence.Missions do
   def get_mission!(id), do: Repo.get!(Mission, id)
 
   @doc """
+  Gets a single mission.
+
+  Returns `nil` if the Mission does not exist.
+  """
+  def get_mission(id), do: Repo.get(Mission, id)
+
+  @doc """
   Gets a single mission with authorization check.
 
   Returns `{:ok, mission}` if authorized, `{:error, :unauthorized}` otherwise.

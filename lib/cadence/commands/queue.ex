@@ -48,10 +48,12 @@ defmodule Cadence.Commands.Queue do
   alias Cadence.Repo
   alias Cadence.Commands.{QueueEntry, Dispatcher}
   alias Cadence.Missions
+  alias Cadence.Outbox
+  alias Ecto.Multi
 
-  # Poll interval for checking queue - 1 second is reasonable for command processing
-  # Can be reduced if sub-second latency is needed for time-critical commands
-  @process_interval_ms 1000
+  # Fallback poll interval - used as safety net for scheduled commands and missed events
+  # Primary wakeup is via PubSub from outbox events
+  @fallback_poll_interval_ms 10_000
   @retry_delay_ms 1000
   @max_concurrent 1
 
@@ -187,6 +189,9 @@ defmodule Cadence.Commands.Queue do
 
     mission = Missions.get_mission!(mission_id)
 
+    # Subscribe to outbox events for this mission
+    Outbox.subscribe_mission(mission_id)
+
     # Get the highest sequence number from existing entries
     sequence_counter = get_max_sequence(mission_id) || 0
 
@@ -196,7 +201,10 @@ defmodule Cadence.Commands.Queue do
       sequence_counter: sequence_counter
     }
 
-    # Start processing loop
+    # Process any pending entries immediately on startup
+    state = process_queue(state)
+
+    # Start fallback processing loop
     {:ok, schedule_process(state)}
   end
 
@@ -287,6 +295,18 @@ defmodule Cadence.Commands.Queue do
     {:noreply, state}
   end
 
+  # Handle outbox events - wake up immediately when a command is enqueued
+  def handle_info({:outbox_event, %{event_type: "command_enqueued"}}, state) do
+    Logger.debug("CommandQueue received command_enqueued event, processing immediately")
+    new_state = process_queue(state)
+    {:noreply, new_state}
+  end
+
+  def handle_info({:outbox_event, _event}, state) do
+    # Ignore other outbox event types
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -300,8 +320,9 @@ defmodule Cadence.Commands.Queue do
       {:error, :target_required}
     else
       sequence = state.sequence_counter + 1
+      user_id = Keyword.get(opts, :user_id)
 
-      attrs = %{
+      entry_attrs = %{
         organization_id: state.mission.organization_id,
         mission_id: state.mission_id,
         target_id: target_id,
@@ -312,17 +333,43 @@ defmodule Cadence.Commands.Queue do
         scheduled_at: Keyword.get(opts, :scheduled_at),
         expires_at: Keyword.get(opts, :expires_at),
         max_attempts: Keyword.get(opts, :max_attempts, 3),
-        user_id: Keyword.get(opts, :user_id),
+        user_id: user_id,
         dispatch_opts: opts_to_map(opts)
       }
 
-      case %QueueEntry{} |> QueueEntry.changeset(attrs) |> Repo.insert() do
-        {:ok, entry} ->
+      result =
+        Multi.new()
+        |> Multi.insert(:entry, QueueEntry.changeset(%QueueEntry{}, entry_attrs))
+        |> Outbox.append(:outbox, fn %{entry: entry} ->
+          %{
+            organization_id: state.mission.organization_id,
+            mission_id: state.mission_id,
+            event_type: "command_enqueued",
+            aggregate_type: "command_queue_entry",
+            aggregate_id: entry.id,
+            actor_id: user_id,
+            actor_type: if(user_id, do: "user", else: "system"),
+            payload: %{
+              command_name: command_name,
+              target_id: target_id,
+              priority: entry.priority,
+              scheduled_at: entry.scheduled_at
+            }
+          }
+        end)
+        |> Repo.transaction()
+
+      case result do
+        {:ok, %{entry: entry}} ->
           Logger.debug("Enqueued command #{command_name} as entry_id=#{entry.id}")
           {:ok, entry, %{state | sequence_counter: sequence}}
 
-        {:error, changeset} ->
+        {:error, :entry, changeset, _changes} ->
           {:error, {:validation, changeset}}
+
+        {:error, :outbox, changeset, _changes} ->
+          Logger.error("Failed to create outbox event: #{inspect(changeset.errors)}")
+          {:error, {:outbox_failed, changeset}}
       end
     end
   end
@@ -575,7 +622,7 @@ defmodule Cadence.Commands.Queue do
       Process.cancel_timer(state.process_timer)
     end
 
-    timer = Process.send_after(self(), :process_queue, @process_interval_ms)
+    timer = Process.send_after(self(), :process_queue, @fallback_poll_interval_ms)
     %{state | process_timer: timer}
   end
 end

@@ -31,6 +31,9 @@ defmodule Cadence.Application do
       # Alarm Rule Cache - caches alarm rules for fast lookup
       Cadence.Alarms.Engine.RuleCache,
 
+      # Outbox Processor - processes transactional outbox events
+      Cadence.Outbox.Processor,
+
       # Mission Supervisor - manages all mission supervision trees
       Cadence.Missions.MissionSupervisor,
 

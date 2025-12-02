@@ -24,6 +24,7 @@ defmodule Cadence.Targets do
     Target
     |> where([t], t.mission_id == ^mission_id)
     |> order_by([t], t.identifier)
+    |> preload([definition_set: :database])
     |> Repo.all()
   end
 
@@ -77,6 +78,66 @@ defmodule Cadence.Targets do
   """
   def change_target(%Target{} = target, attrs \\ %{}) do
     Target.changeset(target, attrs)
+  end
+
+  ## Definition Set Assignment
+
+  @doc """
+  Assigns a definition set to a target.
+
+  This determines which command/telemetry dictionary the target uses.
+  """
+  def assign_definition_set(%Target{} = target, definition_set_id) do
+    target
+    |> Target.assign_definition_set(definition_set_id)
+    |> Repo.update()
+  end
+
+  @doc """
+  Gets the definition_set_id for a target by mission_id and identifier.
+
+  Returns nil if target not found or has no definition_set assigned.
+  This is used by the telemetry pipeline to look up the correct dictionary.
+  """
+  def get_definition_set_id(mission_id, target_identifier) when is_binary(mission_id) and is_binary(target_identifier) do
+    Target
+    |> where([t], t.mission_id == ^mission_id and t.identifier == ^target_identifier)
+    |> select([t], t.definition_set_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets the definition_set_id for a target by its ID.
+
+  Returns nil if target not found or has no definition_set assigned.
+  """
+  def get_definition_set_id_by_target_id(target_id) when is_binary(target_id) do
+    Target
+    |> where([t], t.id == ^target_id)
+    |> select([t], t.definition_set_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets a target with its definition_set preloaded.
+  """
+  def get_target_with_definition_set!(id) do
+    Target
+    |> Repo.get!(id)
+    |> Repo.preload(:definition_set)
+  end
+
+  @doc """
+  Returns all targets using a specific definition set.
+
+  Useful for determining which targets are affected by a given
+  command/telemetry database version.
+  """
+  def list_targets_by_definition_set(definition_set_id) do
+    Target
+    |> where([t], t.definition_set_id == ^definition_set_id)
+    |> order_by([t], t.identifier)
+    |> Repo.all()
   end
 
   ## Circuit Breaker Management

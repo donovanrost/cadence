@@ -255,8 +255,10 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
         {:error, :missing_apid}
 
       apid ->
-        Logger.debug("Looking up CCSDS packet with APID=#{apid} for mission_id=#{mission_id}")
-        PacketIdentifier.identify_by_apid(mission_id, apid)
+        # Get target_id from packet for target-scoped definition lookup
+        target_id = packet.target_id || "UNKNOWN"
+        Logger.debug("Looking up CCSDS packet with APID=#{apid} for mission_id=#{mission_id}, target_id=#{target_id}")
+        PacketIdentifier.identify_by_apid(mission_id, target_id, apid)
     end
   end
 

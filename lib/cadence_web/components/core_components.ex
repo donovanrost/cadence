@@ -757,6 +757,91 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
+  Renders a collapsible sidebar navigation group with child items.
+
+  The group auto-expands when any child is active.
+
+  ## Examples
+
+      <.sidebar_nav_group label="Database" icon="hero-circle-stack" expanded={@is_database or @is_catalog}>
+        <.sidebar_nav_item navigate={~p"/database"} active={@is_database}>
+          Versions
+        </.sidebar_nav_item>
+        <.sidebar_nav_item navigate={~p"/catalog"} active={@is_catalog}>
+          Catalog
+        </.sidebar_nav_item>
+      </.sidebar_nav_group>
+  """
+  attr :label, :string, required: true
+  attr :icon, :string, required: true
+  attr :expanded, :boolean, default: false
+  attr :id, :string, default: nil
+  slot :inner_block, required: true
+
+  def sidebar_nav_group(assigns) do
+    # Generate a unique ID if not provided
+    assigns = assign_new(assigns, :group_id, fn ->
+      assigns[:id] || "nav-group-#{:erlang.phash2(assigns.label)}"
+    end)
+
+    ~H"""
+    <li>
+      <details open={@expanded} class="group">
+        <summary class={[
+          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer list-none",
+          "text-base-content/70 hover:bg-base-300 hover-glow-purple",
+          @expanded && "text-base-content"
+        ]}>
+          <span class="text-xl">
+            <.icon name={@icon} class="h-5 w-5" />
+          </span>
+          <span class="flex-1">{@label}</span>
+          <.icon
+            name="hero-chevron-right"
+            class="h-4 w-4 transition-transform group-open:rotate-90"
+          />
+        </summary>
+        <ul class="ml-4 mt-1 space-y-1 border-l border-base-300 pl-4">
+          {render_slot(@inner_block)}
+        </ul>
+      </details>
+    </li>
+    """
+  end
+
+  @doc """
+  Renders a child item within a sidebar nav group.
+
+  ## Examples
+
+      <.sidebar_nav_child navigate={~p"/catalog"} active={@is_catalog}>
+        Catalog
+      </.sidebar_nav_child>
+  """
+  attr :navigate, :string, default: nil
+  attr :patch, :string, default: nil
+  attr :active, :boolean, default: false
+  slot :inner_block, required: true
+
+  def sidebar_nav_child(assigns) do
+    ~H"""
+    <li>
+      <.link
+        navigate={@navigate}
+        patch={@patch}
+        class={[
+          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+          @active && "bg-primary/10 text-primary font-medium",
+          !@active && "text-base-content/60 hover:bg-base-300 hover:text-base-content"
+        ]}
+      >
+        {render_slot(@inner_block)}
+      </.link>
+    </li>
+    """
+  end
+
+  @doc """
   Renders a badge.
 
   ## Examples
