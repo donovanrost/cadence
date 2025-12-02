@@ -20,7 +20,8 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
   alias Cadence.{Organizations, Missions}
   alias Cadence.Missions.MissionSupervisor
   alias Cadence.Simulator.PacketSimulator
-  alias Cadence.Telemetry.{CurrentValueTable, Pipeline, Protocol}
+  alias Cadence.Telemetry.{CurrentValueTable, Pipeline}
+  alias Cadence.Telemetry.Protocols.TemplateProtocol
 
   @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
@@ -196,8 +197,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
     test "CCSDS protocol framing works correctly" do
       # Test the protocol layer directly with CCSDS packets
       state =
-        Protocol.new(
-          type: :template,
+        TemplateProtocol.new(
           sync_pattern: @ccsds_sync,
           header_length: 6
         )
@@ -218,7 +218,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       complete_packet = @ccsds_sync <> header <> payload_data
 
       # Process the packet
-      {:ok, [extracted], _new_state} = Protocol.process(complete_packet, state)
+      {:ok, [extracted], _new_state} = TemplateProtocol.read_data(complete_packet, state)
 
       # Should extract the complete packet including sync
       assert extracted == complete_packet
@@ -227,8 +227,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
     test "handles fragmented CCSDS packets over TCP stream" do
       state =
-        Protocol.new(
-          type: :template,
+        TemplateProtocol.new(
           sync_pattern: @ccsds_sync,
           header_length: 6
         )
@@ -247,14 +246,14 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       chunk2 = binary_part(complete_packet, chunk1_size, chunk2_size - chunk1_size)
       chunk3 = binary_part(complete_packet, chunk2_size, total_size - chunk2_size)
 
-      # Process chunks sequentially
-      {:ok, [], state1} = Protocol.process(chunk1, state)
+      # Process chunks sequentially - returns {:stop, state} when buffering
+      {:stop, state1} = TemplateProtocol.read_data(chunk1, state)
       assert byte_size(state1.buffer) > 0
 
-      {:ok, [], state2} = Protocol.process(chunk2, state1)
+      {:stop, state2} = TemplateProtocol.read_data(chunk2, state1)
       # May still be buffering
 
-      {:ok, packets, state3} = Protocol.process(chunk3, state2)
+      {:ok, packets, state3} = TemplateProtocol.read_data(chunk3, state2)
 
       # Should have extracted the complete packet
       assert length(packets) == 1
@@ -265,8 +264,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
     test "validates CCSDS packet structure after deframing" do
       # Ensure extracted packets have correct CCSDS structure
       state =
-        Protocol.new(
-          type: :template,
+        TemplateProtocol.new(
           sync_pattern: @ccsds_sync,
           header_length: 6
         )
@@ -290,7 +288,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
       complete_packet = @ccsds_sync <> header <> payload
 
-      {:ok, [extracted], _state} = Protocol.process(complete_packet, state)
+      {:ok, [extracted], _state} = TemplateProtocol.read_data(complete_packet, state)
 
       # Parse the extracted packet
       <<sync::binary-size(4), pkt_id::16, seq_ctrl::16, data_len::16, rest::binary>> = extracted

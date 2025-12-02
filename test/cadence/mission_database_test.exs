@@ -5,6 +5,7 @@ defmodule Cadence.MissionDatabaseTest do
   import Cadence.MissionsFixtures
   import Cadence.OrganizationsFixtures
 
+  alias Cadence.MissionDatabase.Database
   alias Cadence.MissionDatabase.{
     Algorithm,
     Argument,
@@ -38,32 +39,32 @@ defmodule Cadence.MissionDatabaseTest do
       refute ds.published_at
     end
 
-    test "requires organization_id, mission_id, version, and source_format" do
+    test "requires organization_id, database_id, version, and source_format" do
       changeset = DefinitionSet.changeset(%DefinitionSet{}, %{})
       assert %{
         organization_id: ["can't be blank"],
-        mission_id: ["can't be blank"],
+        database_id: ["can't be blank"],
         version: ["can't be blank"],
         source_format: ["can't be blank"]
       } = errors_on(changeset)
     end
 
-    test "enforces unique version per mission" do
+    test "enforces unique version per database" do
       ds = definition_set_fixture()
 
       assert {:error, changeset} =
         %DefinitionSet{}
         |> DefinitionSet.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          database_id: ds.database_id,
           version: ds.version,
           source_format: :yaml
         })
         |> Repo.insert()
 
-      # Unique constraint error appears on mission_id (composite key)
+      # Unique constraint error appears on database_id (composite key)
       errors = errors_on(changeset)
-      assert Map.has_key?(errors, :version) or Map.has_key?(errors, :mission_id)
+      assert Map.has_key?(errors, :version) or Map.has_key?(errors, :database_id)
     end
 
     test "publishes a definition set" do
@@ -75,37 +76,52 @@ defmodule Cadence.MissionDatabaseTest do
       refute published.superseded_at
     end
 
-    test "supersedes previous version when publishing" do
+    test "allows publishing multiple versions in a database" do
       ds1 = published_definition_set_fixture()
-      ds2 = definition_set_fixture(mission: %{id: ds1.mission_id, organization_id: ds1.organization_id})
+      # Get the database to create another definition set in same database
+      database = Repo.get!(Database, ds1.database_id)
+      ds2 = definition_set_fixture(database: database)
 
       {:ok, published2} = DefinitionSet.publish(ds2)
 
-      # Reload ds1 to see superseded_at
+      # Both versions can be published simultaneously
       ds1_reloaded = Repo.get!(DefinitionSet, ds1.id)
-      assert ds1_reloaded.superseded_at
+      assert ds1_reloaded.published_at
       assert published2.published_at
+      # Neither is superseded yet
+      refute ds1_reloaded.superseded_at
       refute published2.superseded_at
     end
 
-    test "get_active returns the currently active version" do
+    test "deprecate marks a version as superseded" do
+      ds1 = published_definition_set_fixture()
+
+      {:ok, deprecated} = DefinitionSet.deprecate(ds1)
+
+      assert deprecated.superseded_at
+      refute DefinitionSet.active?(deprecated)
+    end
+
+    test "get_latest_published returns the currently active version" do
       ds = published_definition_set_fixture()
-      active = DefinitionSet.get_active(ds.mission_id)
+      active = DefinitionSet.get_latest_published(ds.database_id)
       assert active.id == ds.id
     end
 
-    test "get_active returns nil when no published version" do
+    test "get_latest_published returns nil when no published version" do
       ds = definition_set_fixture()
-      assert is_nil(DefinitionSet.get_active(ds.mission_id))
+      assert is_nil(DefinitionSet.get_latest_published(ds.database_id))
     end
 
     test "active?/1 correctly identifies active vs superseded" do
       ds1 = published_definition_set_fixture()
       assert DefinitionSet.active?(ds1)
 
-      ds2 = definition_set_fixture(mission: %{id: ds1.mission_id, organization_id: ds1.organization_id})
-      {:ok, _} = DefinitionSet.publish(ds2)
+      # Deprecate it
+      {:ok, deprecated} = DefinitionSet.deprecate(ds1)
 
+      refute DefinitionSet.active?(deprecated)
+      # Reloaded from DB should also show as not active
       ds1_reloaded = Repo.get!(DefinitionSet, ds1.id)
       refute DefinitionSet.active?(ds1_reloaded)
     end
@@ -186,7 +202,6 @@ defmodule Cadence.MissionDatabaseTest do
 
       changeset = Algorithm.changeset(%Algorithm{}, %{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
         definition_set_id: ds.id,
         name: "test",
         algorithm_type: :invalid_type
@@ -227,12 +242,13 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports alarm_definition embedded schema" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
 
       {:ok, dt} =
         %DataType{}
         |> DataType.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          mission_id: database.mission_id,
           definition_set_id: ds.id,
           name: "temp_with_alarms",
           base_type: :float,
@@ -329,13 +345,14 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports various stream and framing types" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
 
       for stream_type <- [:telemetry, :command, :bidirectional] do
         {:ok, stream} =
           %Stream{}
           |> Stream.changeset(%{
             organization_id: ds.organization_id,
-            mission_id: ds.mission_id,
+            mission_id: database.mission_id,
             definition_set_id: ds.id,
             name: "stream-#{stream_type}-#{System.unique_integer([:positive])}",
             stream_type: stream_type,
@@ -368,13 +385,14 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports container inheritance via base_container_ref" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
       base = container_fixture(definition_set: ds, name: "BASE_PKT")
 
       {:ok, derived} =
         %Container{}
         |> Container.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          mission_id: database.mission_id,
           definition_set_id: ds.id,
           name: "DERIVED_PKT",
           base_container_ref: base.name
@@ -386,12 +404,13 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports restriction_criteria for packet identification" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
 
       {:ok, container} =
         %Container{}
         |> Container.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          mission_id: database.mission_id,
           definition_set_id: ds.id,
           name: "HEALTH_PKT",
           restriction_criteria: %{
@@ -521,13 +540,14 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports command inheritance via base_command_ref" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
       base = meta_command_fixture(definition_set: ds, name: "BASE_CMD")
 
       {:ok, derived} =
         %MetaCommand{}
         |> MetaCommand.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          mission_id: database.mission_id,
           definition_set_id: ds.id,
           name: "DERIVED_CMD",
           base_command_ref: base.name
@@ -539,12 +559,13 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "supports command interlocks" do
       ds = definition_set_fixture()
+      database = Repo.get!(Database, ds.database_id)
 
       {:ok, cmd} =
         %MetaCommand{}
         |> MetaCommand.changeset(%{
           organization_id: ds.organization_id,
-          mission_id: ds.mission_id,
+          mission_id: database.mission_id,
           definition_set_id: ds.id,
           name: "INTERLOCK_CMD",
           interlock: %{

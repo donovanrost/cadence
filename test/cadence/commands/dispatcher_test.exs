@@ -6,6 +6,7 @@ defmodule Cadence.Commands.DispatcherTest do
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
+  alias Cadence.MissionDatabase.{Database, DefinitionSet}
 
   # Setup creates an org, mission, target, and commands for testing
   setup do
@@ -32,11 +33,33 @@ defmodule Cadence.Commands.DispatcherTest do
       })
       |> Repo.insert!()
 
+    # Create database for the mission
+    database =
+      %Database{}
+      |> Database.changeset(%{
+        mission_id: mission.id,
+        name: "Test Database",
+        slug: "test-database-#{System.unique_integer([:positive])}"
+      })
+      |> Repo.insert!()
+
+    # Create definition set
+    definition_set =
+      %DefinitionSet{}
+      |> DefinitionSet.changeset(%{
+        organization_id: org.id,
+        database_id: database.id,
+        version: "1.0.0",
+        source_format: :yaml
+      })
+      |> Repo.insert!()
+
     # Create target
     target =
       %Target{}
       |> Target.changeset(%{
         mission_id: mission.id,
+        definition_set_id: definition_set.id,
         name: "SC1",
         type: "spacecraft",
         identifier: "SC1_#{System.unique_integer([:positive])}",
@@ -44,12 +67,13 @@ defmodule Cadence.Commands.DispatcherTest do
       })
       |> Repo.insert!()
 
-    # Create a simple command
+    # Create a simple command (linked to definition_set for lookup)
     simple_command =
       %CommandDefinition{}
       |> CommandDefinition.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
+        definition_set_id: definition_set.id,
         name: "SET_MODE",
         opcode: 0x10,
         is_hazardous: false,
@@ -75,6 +99,7 @@ defmodule Cadence.Commands.DispatcherTest do
       |> CommandDefinition.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
+        definition_set_id: definition_set.id,
         name: "SAFE_MODE",
         opcode: 0x20,
         is_hazardous: true,
@@ -89,6 +114,7 @@ defmodule Cadence.Commands.DispatcherTest do
       |> CommandDefinition.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
+        definition_set_id: definition_set.id,
         name: "COMMISSIONING_CMD",
         opcode: 0x30,
         is_hazardous: false,

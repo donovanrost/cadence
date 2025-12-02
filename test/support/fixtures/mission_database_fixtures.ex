@@ -15,6 +15,7 @@ defmodule Cadence.MissionDatabaseFixtures do
     ContainerEntry,
     ContextAlarm,
     ContextCalibrator,
+    Database,
     DataType,
     DefinitionSet,
     DerivedItem,
@@ -29,6 +30,29 @@ defmodule Cadence.MissionDatabaseFixtures do
   import Cadence.MissionsFixtures
 
   # ============================================================================
+  # Database (Container for DefinitionSets)
+  # ============================================================================
+
+  def database_fixture(attrs \\ %{}) do
+    attrs = ensure_map(attrs)
+    {_org, mission} = get_or_create_org_mission(attrs)
+
+    attrs =
+      attrs
+      |> Map.drop([:organization, :mission])
+      |> Enum.into(%{
+        mission_id: mission.id,
+        name: "Test Database #{System.unique_integer([:positive])}",
+        slug: "test-database-#{System.unique_integer([:positive])}",
+        description: "Test database"
+      })
+
+    %Database{}
+    |> Database.changeset(attrs)
+    |> Repo.insert!()
+  end
+
+  # ============================================================================
   # DefinitionSet
   # ============================================================================
 
@@ -36,13 +60,15 @@ defmodule Cadence.MissionDatabaseFixtures do
     attrs = ensure_map(attrs)
     {org, mission} = get_or_create_org_mission(attrs)
 
+    # Get or create a database
+    database = get_or_create_database(attrs, mission)
+
     attrs =
       attrs
-      |> Map.drop([:organization, :mission])
+      |> Map.drop([:organization, :mission, :database])
       |> Enum.into(%{
         organization_id: org.id,
-        mission_id: mission.id,
-        name: "Test Database",
+        database_id: database.id,
         version: "1.0.#{System.unique_integer([:positive])}",
         description: "Test definition set",
         source_format: :yaml,
@@ -68,13 +94,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def unit_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "unit-#{System.unique_integer([:positive])}",
         symbol: "u",
@@ -93,13 +121,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def algorithm_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "calibrator-#{System.unique_integer([:positive])}",
         algorithm_type: :polynomial,
@@ -160,13 +190,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def data_type_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "type-#{System.unique_integer([:positive])}",
         base_type: :integer,
@@ -301,13 +333,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def stream_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "stream-#{System.unique_integer([:positive])}",
         stream_type: :telemetry,
@@ -329,13 +363,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def container_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission, :stream])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "container-#{System.unique_integer([:positive])}",
         description: "Test telemetry container",
@@ -354,6 +390,8 @@ defmodule Cadence.MissionDatabaseFixtures do
   def parameter_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
     data_type = attrs[:data_type]
 
     # If no data_type provided, create one or use a ref
@@ -380,7 +418,7 @@ defmodule Cadence.MissionDatabaseFixtures do
       |> Map.drop([:definition_set, :organization, :mission, :data_type])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         data_type_id: type_id,
         data_type_ref: type_ref,
@@ -426,13 +464,15 @@ defmodule Cadence.MissionDatabaseFixtures do
   def meta_command_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     ds = get_or_create_definition_set(attrs)
+    # Get mission_id through the database association
+    database = Repo.get!(Database, ds.database_id)
 
     attrs =
       attrs
       |> Map.drop([:definition_set, :organization, :mission])
       |> Enum.into(%{
         organization_id: ds.organization_id,
-        mission_id: ds.mission_id,
+        mission_id: database.mission_id,
         definition_set_id: ds.id,
         name: "command-#{System.unique_integer([:positive])}",
         description: "Test command",
@@ -651,6 +691,19 @@ defmodule Cadence.MissionDatabaseFixtures do
 
       other ->
         raise "definition_set must be a DefinitionSet struct, got: #{inspect(other)}"
+    end
+  end
+
+  defp get_or_create_database(attrs, mission) do
+    case attrs[:database] do
+      nil ->
+        database_fixture(mission: mission)
+
+      %Database{} = db ->
+        db
+
+      other ->
+        raise "database must be a Database struct, got: #{inspect(other)}"
     end
   end
 end

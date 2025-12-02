@@ -12,48 +12,27 @@ defmodule Cadence.Telemetry.DecommutationTest do
 
   use ExUnit.Case, async: true
 
-  alias Cadence.Telemetry.Decommutation
+  alias Cadence.Telemetry.{BinaryExtractor, Decommutation}
 
   describe "unsigned integer extraction" do
     test "extracts 8-bit uint at byte boundary" do
       packet = <<0x2A, 0x00, 0x00>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 8,
-        data_type: "uint"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 8, :uint, :big_endian)
       assert value == 42
     end
 
     test "extracts 16-bit uint at byte boundary" do
       packet = <<0x12, 0x34, 0x00>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 16,
-        data_type: "uint"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 16, :uint, :big_endian)
       assert value == 0x1234
     end
 
     test "extracts 32-bit uint at byte boundary" do
       packet = <<0xDE, 0xAD, 0xBE, 0xEF, 0x00>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 32,
-        data_type: "uint"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 32, :uint, :big_endian)
       assert value == 0xDEADBEEF
     end
 
@@ -62,14 +41,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # Extract 12 bits starting at bit 4: 0b101011001111 = 0xACF = 2767
       packet = <<0x1A, 0xCF>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 4,
-        bit_length: 12,
-        data_type: "uint"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 4, 12, :uint, :big_endian)
       assert value == 0x0ACF
     end
 
@@ -78,15 +50,10 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # temp=25 (0x0019), voltage=3600 (0x0E10), current=2748 (0xABC), status=15 (0xF)
       packet = <<0x00, 0x19, 0x0E, 0x10, 0xAB, 0xCF>>
 
-      temp_def = %{name: "temperature", bit_offset: 0, bit_length: 16, data_type: "uint"}
-      voltage_def = %{name: "voltage", bit_offset: 16, bit_length: 16, data_type: "uint"}
-      current_def = %{name: "current", bit_offset: 32, bit_length: 12, data_type: "uint"}
-      status_def = %{name: "status", bit_offset: 44, bit_length: 4, data_type: "uint"}
-
-      {:ok, temp} = Decommutation.extract_field(packet, temp_def)
-      {:ok, voltage} = Decommutation.extract_field(packet, voltage_def)
-      {:ok, current} = Decommutation.extract_field(packet, current_def)
-      {:ok, status} = Decommutation.extract_field(packet, status_def)
+      {:ok, temp} = BinaryExtractor.extract(packet, 0, 16, :uint, :big_endian)
+      {:ok, voltage} = BinaryExtractor.extract(packet, 16, 16, :uint, :big_endian)
+      {:ok, current} = BinaryExtractor.extract(packet, 32, 12, :uint, :big_endian)
+      {:ok, status} = BinaryExtractor.extract(packet, 44, 4, :uint, :big_endian)
 
       assert temp == 25
       assert voltage == 3600
@@ -97,14 +64,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
     test "returns error when packet too small" do
       packet = <<0x01, 0x02>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 16,
-        bit_length: 16,
-        data_type: "uint"
-      }
-
-      {:error, :insufficient_data} = Decommutation.extract_field(packet, item_def)
+      {:error, :insufficient_data} = BinaryExtractor.extract(packet, 16, 16, :uint, :big_endian)
     end
   end
 
@@ -113,14 +73,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # 8-bit: 42 (0x2A)
       packet = <<0x2A>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 8,
-        data_type: "int"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 8, :int, :big_endian)
       assert value == 42
     end
 
@@ -128,14 +81,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # 8-bit: -1 (0xFF)
       packet = <<0xFF>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 8,
-        data_type: "int"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 8, :int, :big_endian)
       assert value == -1
     end
 
@@ -143,14 +89,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # -1000 in 16-bit two's complement: 0xFC18
       packet = <<0xFC, 0x18>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 16,
-        data_type: "int"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 16, :int, :big_endian)
       assert value == -1000
     end
 
@@ -161,14 +100,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # Padded: 0b0000111110011100 = 0x0F9C
       packet = <<0x0F, 0x9C>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 4,
-        bit_length: 12,
-        data_type: "int"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 4, 12, :int, :big_endian)
       assert value == -100
     end
 
@@ -178,15 +110,8 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # Minimum negative value for 8-bit signed: -128 (0x80)
       packet_neg = <<0x80>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 8,
-        data_type: "int"
-      }
-
-      {:ok, pos_value} = Decommutation.extract_field(packet_pos, item_def)
-      {:ok, neg_value} = Decommutation.extract_field(packet_neg, item_def)
+      {:ok, pos_value} = BinaryExtractor.extract(packet_pos, 0, 8, :int, :big_endian)
+      {:ok, neg_value} = BinaryExtractor.extract(packet_neg, 0, 8, :int, :big_endian)
 
       assert pos_value == 127
       assert neg_value == -128
@@ -198,14 +123,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # IEEE 754 single precision: 3.14159
       packet = <<3.14159::float-32>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 32,
-        data_type: "float"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 32, :float, :big_endian)
       assert_in_delta value, 3.14159, 0.00001
     end
 
@@ -213,28 +131,14 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # IEEE 754 double precision: 2.718281828
       packet = <<2.718281828::float-64>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 64,
-        data_type: "float"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 64, :float, :big_endian)
       assert_in_delta value, 2.718281828, 0.000000001
     end
 
     test "extracts negative float" do
       packet = <<-273.15::float-32>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 32,
-        data_type: "float"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 32, :float, :big_endian)
       assert_in_delta value, -273.15, 0.01
     end
 
@@ -242,75 +146,41 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # Packet: [uint16][float32]
       packet = <<0x00, 0x2A>> <> <<25.5::float-32>>
 
-      item_def = %{
-        name: "temperature",
-        bit_offset: 16,
-        bit_length: 32,
-        data_type: "float"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 16, 32, :float, :big_endian)
       assert_in_delta value, 25.5, 0.001
     end
 
     test "returns error for unsupported float size" do
       packet = <<0x01, 0x02, 0x03>>
 
-      item_def = %{
-        name: "test_value",
-        bit_offset: 0,
-        bit_length: 16,
-        data_type: "float"
-      }
-
-      {:error, {:unsupported_float_size, 16}} = Decommutation.extract_field(packet, item_def)
+      {:error, :invalid_float_size} = BinaryExtractor.extract(packet, 0, 16, :float, :big_endian)
     end
   end
 
   describe "boolean extraction" do
-    test "extracts true boolean" do
+    test "extracts true boolean (bit set)" do
       packet = <<0x80>>
       # 0b10000000
 
-      item_def = %{
-        name: "test_flag",
-        bit_offset: 0,
-        bit_length: 1,
-        data_type: "boolean"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
-      assert value == true
+      # Boolean is represented as uint with 1-bit size
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 1, :uint, :big_endian)
+      assert value == 1
     end
 
-    test "extracts false boolean" do
+    test "extracts false boolean (bit not set)" do
       packet = <<0x7F>>
       # 0b01111111
 
-      item_def = %{
-        name: "test_flag",
-        bit_offset: 0,
-        bit_length: 1,
-        data_type: "boolean"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
-      assert value == false
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 1, :uint, :big_endian)
+      assert value == 0
     end
 
     test "extracts boolean at arbitrary bit position" do
       # Packet: 0b00010000 (bit 3 is set)
       packet = <<0x10>>
 
-      item_def = %{
-        name: "test_flag",
-        bit_offset: 3,
-        bit_length: 1,
-        data_type: "boolean"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
-      assert value == true
+      {:ok, value} = BinaryExtractor.extract(packet, 3, 1, :uint, :big_endian)
+      assert value == 1
     end
 
     test "extracts multiple boolean flags" do
@@ -319,15 +189,8 @@ defmodule Cadence.Telemetry.DecommutationTest do
 
       flags =
         for bit_offset <- 0..7 do
-          item_def = %{
-            name: "flag_#{bit_offset}",
-            bit_offset: bit_offset,
-            bit_length: 1,
-            data_type: "boolean"
-          }
-
-          {:ok, value} = Decommutation.extract_field(packet, item_def)
-          value
+          {:ok, value} = BinaryExtractor.extract(packet, bit_offset, 1, :uint, :big_endian)
+          value == 1
         end
 
       # Bits 0, 2, 4, 6 are set (alternating pattern)
@@ -340,28 +203,14 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # 8 bytes: "CADENCE" + null terminator
       packet = <<"CADENCE", 0x00>>
 
-      item_def = %{
-        name: "mission_name",
-        bit_offset: 0,
-        bit_length: 64,
-        data_type: "string"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 64, :string, :big_endian)
       assert value == "CADENCE"
     end
 
     test "extracts string without null terminator" do
       packet = <<"TEST">>
 
-      item_def = %{
-        name: "test_string",
-        bit_offset: 0,
-        bit_length: 32,
-        data_type: "string"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 32, :string, :big_endian)
       assert value == "TEST"
     end
 
@@ -369,14 +218,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # Packet: [uint16][string:4bytes]
       packet = <<0x00, 0x2A, "OKAY">>
 
-      item_def = %{
-        name: "status",
-        bit_offset: 16,
-        bit_length: 32,
-        data_type: "string"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 16, 32, :string, :big_endian)
       assert value == "OKAY"
     end
 
@@ -385,14 +227,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       # in the middle, it still removes them all
       packet = <<"ABC", 0x00, 0x00>>
 
-      item_def = %{
-        name: "test_string",
-        bit_offset: 0,
-        bit_length: 40,
-        data_type: "string"
-      }
-
-      {:ok, value} = Decommutation.extract_field(packet, item_def)
+      {:ok, value} = BinaryExtractor.extract(packet, 0, 40, :string, :big_endian)
       # Null bytes should be removed
       assert value == "ABC"
     end
@@ -406,9 +241,9 @@ defmodule Cadence.Telemetry.DecommutationTest do
         id: 1,
         name: "HEALTH",
         items: [
-          %{name: "cpu_temp", bit_offset: 0, bit_length: 32, data_type: "float"},
-          %{name: "battery_voltage", bit_offset: 32, bit_length: 32, data_type: "float"},
-          %{name: "uptime", bit_offset: 64, bit_length: 32, data_type: "uint"}
+          %{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float},
+          %{name: "battery_voltage", bit_offset: 32, bit_size: 32, data_type: :float},
+          %{name: "uptime", bit_offset: 64, bit_size: 32, data_type: :uint}
         ]
       }
 
@@ -426,8 +261,8 @@ defmodule Cadence.Telemetry.DecommutationTest do
         id: 1,
         name: "HEALTH",
         items: [
-          %{name: "cpu_temp", bit_offset: 0, bit_length: 32, data_type: "float"},
-          %{name: "battery_voltage", bit_offset: 32, bit_length: 32, data_type: "float"}
+          %{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float},
+          %{name: "battery_voltage", bit_offset: 32, bit_size: 32, data_type: :float}
         ]
       }
 
@@ -443,7 +278,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
       packet_def = %{
         id: 1,
         name: "HEALTH",
-        items: [%{name: "cpu_temp", bit_offset: 0, bit_length: 32, data_type: "float"}]
+        items: [%{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float}]
       }
 
       {:error, {:json_parse_error, _reason}} =
@@ -470,19 +305,23 @@ defmodule Cadence.Telemetry.DecommutationTest do
           <<cpu_temp::float-32, voltage::float-32, current::float-32, battery_pct::8,
             uptime::32, memory::16>>
 
+      # Build field_specs for binary extraction (the new required format)
+      field_specs = [
+        %{name: "timestamp", bit_offset: 0, bit_size: 48, data_type: :uint, endianness: :big_endian},
+        %{name: "target_hash", bit_offset: 48, bit_size: 16, data_type: :uint, endianness: :big_endian},
+        %{name: "cpu_temp", bit_offset: 64, bit_size: 32, data_type: :float, endianness: :big_endian},
+        %{name: "battery_voltage", bit_offset: 96, bit_size: 32, data_type: :float, endianness: :big_endian},
+        %{name: "battery_current", bit_offset: 128, bit_size: 32, data_type: :float, endianness: :big_endian},
+        %{name: "battery_percentage", bit_offset: 160, bit_size: 8, data_type: :uint, endianness: :big_endian},
+        %{name: "uptime_seconds", bit_offset: 168, bit_size: 32, data_type: :uint, endianness: :big_endian},
+        %{name: "memory_used_mb", bit_offset: 200, bit_size: 16, data_type: :uint, endianness: :big_endian}
+      ]
+
       packet_def = %{
         id: 100,
         name: "HEALTH",
-        items: [
-          %{name: "timestamp", bit_offset: 0, bit_length: 48, data_type: "uint"},
-          %{name: "target_hash", bit_offset: 48, bit_length: 16, data_type: "uint"},
-          %{name: "cpu_temp", bit_offset: 64, bit_length: 32, data_type: "float"},
-          %{name: "battery_voltage", bit_offset: 96, bit_length: 32, data_type: "float"},
-          %{name: "battery_current", bit_offset: 128, bit_length: 32, data_type: "float"},
-          %{name: "battery_percentage", bit_offset: 160, bit_length: 8, data_type: "uint"},
-          %{name: "uptime_seconds", bit_offset: 168, bit_length: 32, data_type: "uint"},
-          %{name: "memory_used_mb", bit_offset: 200, bit_length: 16, data_type: "uint"}
-        ]
+        items: [],
+        field_specs: field_specs
       }
 
       {:ok, items} = Decommutation.decommutate(packet, packet_def, :binary)
@@ -506,15 +345,18 @@ defmodule Cadence.Telemetry.DecommutationTest do
 
       packet = <<status::8>> <> <<temp::float-32>> <> <<count::16, name::binary>>
 
+      field_specs = [
+        %{name: "status_flags", bit_offset: 0, bit_size: 8, data_type: :uint, endianness: :big_endian},
+        %{name: "temperature", bit_offset: 8, bit_size: 32, data_type: :float, endianness: :big_endian},
+        %{name: "count", bit_offset: 40, bit_size: 16, data_type: :uint, endianness: :big_endian},
+        %{name: "name", bit_offset: 56, bit_size: 32, data_type: :string, endianness: :big_endian}
+      ]
+
       packet_def = %{
         id: 1,
         name: "MIXED",
-        items: [
-          %{name: "status_flags", bit_offset: 0, bit_length: 8, data_type: "uint"},
-          %{name: "temperature", bit_offset: 8, bit_length: 32, data_type: "float"},
-          %{name: "count", bit_offset: 40, bit_length: 16, data_type: "uint"},
-          %{name: "name", bit_offset: 56, bit_length: 32, data_type: "string"}
-        ]
+        items: [],
+        field_specs: field_specs
       }
 
       {:ok, items} = Decommutation.decommutate(packet, packet_def, :binary)
@@ -532,7 +374,7 @@ defmodule Cadence.Telemetry.DecommutationTest do
         id: 1,
         name: "TEST",
         items: [
-          %{name: "field1", bit_offset: 0, bit_length: 8, data_type: "uint"}
+          %{name: "field1", bit_offset: 0, bit_size: 8, data_type: :uint}
         ]
       }
 
@@ -556,12 +398,32 @@ defmodule Cadence.Telemetry.DecommutationTest do
         id: 1,
         name: "TEST",
         items: [
-          %{name: "field1", bit_length: 8, data_type: "uint"}
+          %{name: "field1", bit_size: 8, data_type: :uint}
         ]
       }
 
       {:error, {:invalid_items, _errors}} =
         Decommutation.validate_packet_definition(invalid_def)
+    end
+  end
+
+  describe "extract_fields/2" do
+    test "extracts multiple fields efficiently" do
+      packet = <<0x00, 0x19, 0x0E, 0x10, 0xAB, 0xCF>>
+
+      field_specs = [
+        %{name: "temperature", bit_offset: 0, bit_size: 16, data_type: :uint, endianness: :big_endian},
+        %{name: "voltage", bit_offset: 16, bit_size: 16, data_type: :uint, endianness: :big_endian},
+        %{name: "current", bit_offset: 32, bit_size: 12, data_type: :uint, endianness: :big_endian},
+        %{name: "status", bit_offset: 44, bit_size: 4, data_type: :uint, endianness: :big_endian}
+      ]
+
+      {:ok, items} = BinaryExtractor.extract_fields(packet, field_specs)
+
+      assert items["temperature"] == 25
+      assert items["voltage"] == 3600
+      assert items["current"] == 0xABC
+      assert items["status"] == 15
     end
   end
 end

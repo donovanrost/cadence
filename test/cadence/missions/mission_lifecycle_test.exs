@@ -1,11 +1,17 @@
 defmodule Cadence.Missions.MissionLifecycleTest do
-  use Cadence.DataCase, async: true
+  use Cadence.DataCase, async: false
 
   import Cadence.OrganizationsFixtures
 
   alias Cadence.Missions
   alias Cadence.Missions.MissionSupervisor
   alias Cadence.Telemetry.CurrentValueTable
+
+  # Allow mission supervisor spawned processes to access the database
+  setup do
+    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    :ok
+  end
 
   describe "mission supervision tree" do
     setup do

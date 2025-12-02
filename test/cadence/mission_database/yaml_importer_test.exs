@@ -14,15 +14,15 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
     Argument
   }
 
-  import Cadence.MissionsFixtures
+  import Cadence.MissionDatabaseFixtures
 
   describe "import_string/3" do
     setup do
-      mission = mission_fixture()
-      {:ok, mission: mission}
+      database = database_fixture()
+      {:ok, database: database}
     end
 
-    test "imports a simple telemetry packet", %{mission: mission} do
+    test "imports a simple telemetry packet", %{database: database} do
       yaml = """
       version: "1.0.0"
       description: "Test database"
@@ -41,7 +41,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               description: "CPU temperature"
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       assert definition_set.version == "1.0.0"
       assert definition_set.description == "Test database"
@@ -72,7 +72,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert unit.symbol == "°C"
     end
 
-    test "imports packet with polynomial conversion", %{mission: mission} do
+    test "imports packet with polynomial conversion", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -89,7 +89,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
                 coefficients: [-40.0, 0.01, 0.000001]
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       # Check algorithm was created
       algorithm = Repo.get_by(Algorithm, definition_set_id: definition_set.id, name: "SENSORS_temp_raw_Type_cal")
@@ -101,7 +101,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert data_type.default_calibrator_id == algorithm.id
     end
 
-    test "imports packet with state table conversion", %{mission: mission} do
+    test "imports packet with state table conversion", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -121,14 +121,14 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
                   2: "ACTIVE"
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       algorithm = Repo.get_by(Algorithm, definition_set_id: definition_set.id, name: "STATUS_mode_Type_states")
       assert algorithm.algorithm_type == :state_table
       assert algorithm.state_table == %{"0" => "OFF", "1" => "STANDBY", "2" => "ACTIVE"}
     end
 
-    test "imports packet with limits", %{mission: mission} do
+    test "imports packet with limits", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -147,7 +147,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
                 red_high: 85.0
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       data_type = Repo.get_by(DataType, definition_set_id: definition_set.id, name: "THERMAL_temp_Type")
       assert data_type.default_alarm != nil
@@ -157,7 +157,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert data_type.default_alarm.warning_range.max_inclusive == 85.0
     end
 
-    test "imports a simple command", %{mission: mission} do
+    test "imports a simple command", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -167,7 +167,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
           description: "Reboot the system"
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       command = Repo.get_by(MetaCommand, definition_set_id: definition_set.id, name: "REBOOT")
       assert command.opcode == 1
@@ -175,7 +175,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert command.is_hazardous == false
     end
 
-    test "imports a hazardous command", %{mission: mission} do
+    test "imports a hazardous command", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -188,7 +188,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
           requires_confirmation: true
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       command = Repo.get_by(MetaCommand, definition_set_id: definition_set.id, name: "SAFE_MODE")
       assert command.is_hazardous == true
@@ -196,7 +196,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert command.requires_confirmation == true
     end
 
-    test "imports command with parameters", %{mission: mission} do
+    test "imports command with parameters", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -215,7 +215,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               units: "°C"
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       command = Repo.get_by(MetaCommand, definition_set_id: definition_set.id, name: "SET_TEMP")
       argument = Repo.get_by(Argument, meta_command_id: command.id, name: "target_temp")
@@ -228,7 +228,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert argument.max_value == 85.0
     end
 
-    test "imports command with valid_values", %{mission: mission} do
+    test "imports command with valid_values", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -241,7 +241,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               valid_values: [0, 1, 2, 3]
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       command = Repo.get_by(MetaCommand, definition_set_id: definition_set.id, name: "SET_MODE")
       argument = Repo.get_by(Argument, meta_command_id: command.id, name: "mode")
@@ -249,7 +249,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert argument.valid_values == ["0", "1", "2", "3"]
     end
 
-    test "imports both packets and commands", %{mission: mission} do
+    test "imports both packets and commands", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -267,13 +267,13 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
           opcode: 0x01
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       assert Repo.get_by(Container, definition_set_id: definition_set.id, name: "HEALTH")
       assert Repo.get_by(MetaCommand, definition_set_id: definition_set.id, name: "REBOOT")
     end
 
-    test "handles version override", %{mission: mission} do
+    test "handles version override", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -287,12 +287,12 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               data_type: uint
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml, version: "2.0.0")
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml, version: "2.0.0")
 
       assert definition_set.version == "2.0.0"
     end
 
-    test "computes source hash", %{mission: mission} do
+    test "computes source hash", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -306,7 +306,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               data_type: uint
       """
 
-      {:ok, definition_set} = YamlImporter.import_string(mission, yaml)
+      {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       expected_hash = :crypto.hash(:sha256, yaml) |> Base.encode16(case: :lower)
       assert definition_set.source_hash == expected_hash
@@ -315,19 +315,19 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
 
   describe "validation errors" do
     setup do
-      mission = mission_fixture()
-      {:ok, mission: mission}
+      database = database_fixture()
+      {:ok, database: database}
     end
 
-    test "rejects YAML without packets or commands", %{mission: mission} do
+    test "rejects YAML without packets or commands", %{database: database} do
       yaml = """
       version: "1.0.0"
       """
 
-      assert {:error, {:validation_error, _}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, _}} = YamlImporter.import_string(database, yaml)
     end
 
-    test "rejects packet without name", %{mission: mission} do
+    test "rejects packet without name", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -340,10 +340,10 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               data_type: uint
       """
 
-      assert {:error, {:validation_error, "Packet missing 'name'"}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, "Packet missing 'name'"}} = YamlImporter.import_string(database, yaml)
     end
 
-    test "rejects packet without items", %{mission: mission} do
+    test "rejects packet without items", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -352,11 +352,11 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
           apid: 100
       """
 
-      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(database, yaml)
       assert msg =~ "missing 'items' list"
     end
 
-    test "rejects item missing required fields", %{mission: mission} do
+    test "rejects item missing required fields", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -368,11 +368,11 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               bit_offset: 0
       """
 
-      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(database, yaml)
       assert msg =~ "missing required fields"
     end
 
-    test "rejects hazardous command without description", %{mission: mission} do
+    test "rejects hazardous command without description", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -382,11 +382,11 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
           is_hazardous: true
       """
 
-      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, msg}} = YamlImporter.import_string(database, yaml)
       assert msg =~ "missing 'hazard_description'"
     end
 
-    test "rejects command without name", %{mission: mission} do
+    test "rejects command without name", %{database: database} do
       yaml = """
       version: "1.0.0"
 
@@ -394,22 +394,22 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
         - opcode: 0x01
       """
 
-      assert {:error, {:validation_error, "Command missing 'name'"}} = YamlImporter.import_string(mission, yaml)
+      assert {:error, {:validation_error, "Command missing 'name'"}} = YamlImporter.import_string(database, yaml)
     end
   end
 
   describe "import_file/3" do
     setup do
-      mission = mission_fixture()
-      {:ok, mission: mission}
+      database = database_fixture()
+      {:ok, database: database}
     end
 
-    test "imports from file path", %{mission: mission} do
+    test "imports from file path", %{database: database} do
       # Use the existing spacecraft_telemetry.yaml file
       file_path = Path.join([File.cwd!(), "priv/databases/spacecraft_telemetry.yaml"])
 
       if File.exists?(file_path) do
-        {:ok, definition_set} = YamlImporter.import_file(mission, file_path)
+        {:ok, definition_set} = YamlImporter.import_file(database, file_path)
 
         assert definition_set.version == "1.0.0"
         assert definition_set.source_filename == "spacecraft_telemetry.yaml"
@@ -424,8 +424,8 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       end
     end
 
-    test "returns error for missing file", %{mission: mission} do
-      assert {:error, :enoent} = YamlImporter.import_file(mission, "/nonexistent/path.yaml")
+    test "returns error for missing file", %{database: database} do
+      assert {:error, :enoent} = YamlImporter.import_file(database, "/nonexistent/path.yaml")
     end
   end
 end

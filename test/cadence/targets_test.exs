@@ -2,6 +2,7 @@ defmodule Cadence.TargetsTest do
   use Cadence.DataCase, async: true
 
   import Cadence.OrganizationsFixtures
+  import Cadence.MissionDatabaseFixtures
 
   alias Cadence.{Targets, Missions}
   alias Cadence.Targets.Target
@@ -17,14 +18,18 @@ defmodule Cadence.TargetsTest do
         status: "active"
       })
 
-    %{mission: mission, organization: org}
+    # Create a definition set for the mission (required for targets)
+    definition_set = definition_set_fixture(organization: org, mission: mission)
+
+    %{mission: mission, organization: org, definition_set: definition_set}
   end
 
   describe "targets" do
-    test "list_targets/1 returns all targets for a mission", %{mission: mission} do
+    test "list_targets/1 returns all targets for a mission", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -35,10 +40,11 @@ defmodule Cadence.TargetsTest do
       assert hd(targets).id == target.id
     end
 
-    test "get_target!/1 returns the target with given id", %{mission: mission} do
+    test "get_target!/1 returns the target with given id", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -47,10 +53,11 @@ defmodule Cadence.TargetsTest do
       assert Targets.get_target!(target.id).id == target.id
     end
 
-    test "get_target_by_identifier/2 returns target by identifier", %{mission: mission} do
+    test "get_target_by_identifier/2 returns target by identifier", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -60,9 +67,10 @@ defmodule Cadence.TargetsTest do
       assert found.id == target.id
     end
 
-    test "create_target/1 with valid data creates a target", %{mission: mission} do
+    test "create_target/1 with valid data creates a target", %{mission: mission, definition_set: ds} do
       valid_attrs = %{
         mission_id: mission.id,
+        definition_set_id: ds.id,
         name: "Satellite 1",
         identifier: "SAT-001",
         type: "spacecraft",
@@ -75,9 +83,10 @@ defmodule Cadence.TargetsTest do
       assert target.type == "spacecraft"
     end
 
-    test "create_target/1 enforces unique identifier per mission", %{mission: mission} do
+    test "create_target/1 enforces unique identifier per mission", %{mission: mission, definition_set: ds} do
       attrs = %{
         mission_id: mission.id,
+        definition_set_id: ds.id,
         name: "Satellite 1",
         identifier: "SAT-001",
         type: "spacecraft"
@@ -89,10 +98,11 @@ defmodule Cadence.TargetsTest do
       assert %{mission_id: ["has already been taken"]} = errors_on(changeset)
     end
 
-    test "update_target/2 updates the target", %{mission: mission} do
+    test "update_target/2 updates the target", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -102,10 +112,11 @@ defmodule Cadence.TargetsTest do
       assert target.name == "Updated Name"
     end
 
-    test "delete_target/1 deletes the target", %{mission: mission} do
+    test "delete_target/1 deletes the target", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -117,10 +128,11 @@ defmodule Cadence.TargetsTest do
   end
 
   describe "circuit breaker" do
-    setup %{mission: mission} do
+    setup %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -194,10 +206,11 @@ defmodule Cadence.TargetsTest do
       assert length(groups) == 1
     end
 
-    test "add_target_to_group/2 adds target to group", %{mission: mission} do
+    test "add_target_to_group/2 adds target to group", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "SAT-001",
           identifier: "SAT-001",
           type: "spacecraft"
@@ -215,7 +228,7 @@ defmodule Cadence.TargetsTest do
       assert length(updated_group.targets) == 1
     end
 
-    test "add_target_to_group/2 rejects mismatched missions", %{mission: mission, organization: org} do
+    test "add_target_to_group/2 rejects mismatched missions", %{mission: mission, organization: org, definition_set: ds} do
       {:ok, other_mission} =
         Missions.create_mission(%{
           organization_id: org.id,
@@ -227,6 +240,7 @@ defmodule Cadence.TargetsTest do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
+          definition_set_id: ds.id,
           name: "SAT-001",
           identifier: "SAT-001",
           type: "spacecraft"

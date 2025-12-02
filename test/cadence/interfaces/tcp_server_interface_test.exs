@@ -2,15 +2,22 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Interfaces.TcpServerInterface
+  alias Cadence.Missions.MissionSupervisor
   alias Cadence.TestHelpers
 
   @moduletag :integration
 
   setup do
+    # Allow spawned processes to access database
+    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+
     # Create test organization, mission, and target
     setup_result = TestHelpers.full_test_setup()
     mission = setup_result.mission
     target = hd(setup_result.targets)
+
+    # Start the mission supervision tree (required for protocol chain supervisor)
+    {:ok, _pid} = MissionSupervisor.start_mission(mission)
 
     # Pick a random port to avoid conflicts
     port = Enum.random(10000..60000)
@@ -21,6 +28,10 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       target_ids: [target.identifier],
       max_clients: 10
     }
+
+    on_exit(fn ->
+      MissionSupervisor.stop_mission(mission.id)
+    end)
 
     {:ok, mission: mission, target: target, config: config, port: port}
   end

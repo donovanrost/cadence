@@ -2,23 +2,29 @@ defmodule Cadence.Telemetry.ProtocolTest do
   @moduledoc """
   Unit tests for protocol framing and deframing.
 
-  Tests all four framing modes:
-  1. Length-prefixed
-  2. Terminated
-  3. Fixed-length
-  4. CCSDS template
+  Tests all protocol implementations:
+  1. LengthProtocol - Length-prefixed packets
+  2. TerminatedProtocol - Delimiter-terminated packets
+  3. FixedProtocol - Fixed-length packets
+  4. TemplateProtocol - Sync pattern + template header
   """
 
   use ExUnit.Case, async: true
 
-  alias Cadence.Telemetry.Protocol
+  alias Cadence.Telemetry.Protocols.{
+    LengthProtocol,
+    TerminatedProtocol,
+    FixedProtocol,
+    TemplateProtocol
+  }
 
   # CCSDS sync pattern (standard)
   @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
-  describe "length-prefixed framing" do
+  describe "length-prefixed framing (LengthProtocol)" do
     setup do
-      state = Protocol.new(type: :length_prefixed, length_bytes: 4, length_endian: :big)
+      # Use discard_leading_bytes to strip the 4-byte length header
+      state = LengthProtocol.new(length_bit_size: 32, length_endian: :big, discard_leading_bytes: 4)
       %{state: state}
     end
 
@@ -27,7 +33,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       length = byte_size(payload)
       packet = <<length::32, payload::binary>>
 
-      {:ok, [extracted], new_state} = Protocol.process(packet, state)
+      {:ok, [extracted], new_state} = LengthProtocol.read_data(packet, state)
 
       assert extracted == payload
       assert new_state.buffer == <<>>
@@ -45,7 +51,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       buffer = packet1 <> packet2 <> packet3
 
-      {:ok, packets, new_state} = Protocol.process(buffer, state)
+      {:ok, packets, new_state} = LengthProtocol.read_data(buffer, state)
 
       assert length(packets) == 3
       assert Enum.at(packets, 0) == payload1
@@ -60,7 +66,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # Send length header but only half the payload
       partial = <<length::32, "Incom"::binary>>
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = LengthProtocol.read_data(partial, state)
 
       # Should buffer the partial data
       assert byte_size(new_state.buffer) > 0
@@ -68,7 +74,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       # Now send the rest
       rest = "plete"
-      {:ok, [extracted], final_state} = Protocol.process(rest, new_state)
+      {:ok, [extracted], final_state} = LengthProtocol.read_data(rest, new_state)
 
       assert extracted == payload
       assert final_state.buffer == <<>>
@@ -79,7 +85,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # Send only 2 bytes of 4-byte length header
       partial = <<0x00, 0x01>>
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = LengthProtocol.read_data(partial, state)
 
       assert new_state.buffer == partial
       assert new_state.packets_extracted == 0
@@ -89,22 +95,21 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # But we only want length 5, so let's use a smaller initial length
       # Actually, let's just verify that we buffer correctly when length header is split
       rest = <<0x00, 0x05>> <> "Hello"
-      {:ok, packets, final_state} = Protocol.process(rest, new_state)
+      {:stop, final_state} = LengthProtocol.read_data(rest, new_state)
 
       # The buffer now contains: 0x00, 0x01, 0x00, 0x05, "Hello" = 9 bytes
       # Length is 0x00010005 = 65541 bytes, so we're still buffering
-      assert length(packets) == 0
       assert byte_size(final_state.buffer) > 0
     end
 
     test "handles little-endian length field" do
-      state = Protocol.new(type: :length_prefixed, length_bytes: 4, length_endian: :little)
+      state = LengthProtocol.new(length_bit_size: 32, length_endian: :little, discard_leading_bytes: 4)
 
       payload = "Test"
       length = byte_size(payload)
       packet = <<length::little-32, payload::binary>>
 
-      {:ok, [extracted], _new_state} = Protocol.process(packet, state)
+      {:ok, [extracted], _new_state} = LengthProtocol.read_data(packet, state)
       assert extracted == payload
     end
 
@@ -124,8 +129,10 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # Process chunks sequentially
       {final_packets, final_state} =
         Enum.reduce(chunks, {[], state}, fn chunk, {acc_packets, acc_state} ->
-          {:ok, packets, new_state} = Protocol.process(chunk, acc_state)
-          {acc_packets ++ packets, new_state}
+          case LengthProtocol.read_data(chunk, acc_state) do
+            {:ok, packets, new_state} -> {acc_packets ++ packets, new_state}
+            {:stop, new_state} -> {acc_packets, new_state}
+          end
         end)
 
       assert length(final_packets) == 1
@@ -134,16 +141,16 @@ defmodule Cadence.Telemetry.ProtocolTest do
     end
   end
 
-  describe "terminated framing" do
+  describe "terminated framing (TerminatedProtocol)" do
     setup do
-      state = Protocol.new(type: :terminated, terminator: "\r\n")
+      state = TerminatedProtocol.new(terminator: "\r\n")
       %{state: state}
     end
 
     test "extracts single packet with terminator", %{state: state} do
       packet = "Hello, World!\r\n"
 
-      {:ok, [extracted], new_state} = Protocol.process(packet, state)
+      {:ok, [extracted], new_state} = TerminatedProtocol.read_data(packet, state)
 
       assert extracted == "Hello, World!"
       assert new_state.buffer == <<>>
@@ -153,7 +160,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
     test "extracts multiple terminated packets", %{state: state} do
       buffer = "First\r\nSecond\r\nThird\r\n"
 
-      {:ok, packets, new_state} = Protocol.process(buffer, state)
+      {:ok, packets, new_state} = TerminatedProtocol.read_data(buffer, state)
 
       assert length(packets) == 3
       assert Enum.at(packets, 0) == "First"
@@ -165,38 +172,38 @@ defmodule Cadence.Telemetry.ProtocolTest do
     test "buffers incomplete packet (no terminator yet)", %{state: state} do
       partial = "Incomplete packet witho"
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = TerminatedProtocol.read_data(partial, state)
 
       assert new_state.buffer == partial
       assert new_state.packets_extracted == 0
 
       # Send the rest with terminator
       rest = "ut terminator\r\n"
-      {:ok, [extracted], final_state} = Protocol.process(rest, new_state)
+      {:ok, [extracted], final_state} = TerminatedProtocol.read_data(rest, new_state)
 
       assert extracted == "Incomplete packet without terminator"
       assert final_state.packets_extracted == 1
     end
 
     test "handles custom terminator" do
-      state = Protocol.new(type: :terminated, terminator: <<0x00>>)
+      state = TerminatedProtocol.new(terminator: <<0x00>>)
       packet = "Null terminated" <> <<0x00>>
 
-      {:ok, [extracted], _new_state} = Protocol.process(packet, state)
+      {:ok, [extracted], _new_state} = TerminatedProtocol.read_data(packet, state)
       assert extracted == "Null terminated"
     end
   end
 
-  describe "fixed-length framing" do
+  describe "fixed-length framing (FixedProtocol)" do
     setup do
-      state = Protocol.new(type: :fixed, packet_length: 10)
+      state = FixedProtocol.new(packet_size: 10)
       %{state: state}
     end
 
     test "extracts single fixed-length packet", %{state: state} do
       packet = "0123456789"
 
-      {:ok, [extracted], new_state} = Protocol.process(packet, state)
+      {:ok, [extracted], new_state} = FixedProtocol.read_data(packet, state)
 
       assert extracted == packet
       assert new_state.buffer == <<>>
@@ -206,7 +213,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
     test "extracts multiple fixed-length packets", %{state: state} do
       buffer = "AAAABBBBBBCCCCCCCCCC"
 
-      {:ok, packets, new_state} = Protocol.process(buffer, state)
+      {:ok, packets, new_state} = FixedProtocol.read_data(buffer, state)
 
       assert length(packets) == 2
       assert Enum.at(packets, 0) == "AAAABBBBBB"
@@ -217,14 +224,14 @@ defmodule Cadence.Telemetry.ProtocolTest do
     test "buffers incomplete packet", %{state: state} do
       partial = "12345"
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = FixedProtocol.read_data(partial, state)
 
       assert new_state.buffer == partial
       assert new_state.packets_extracted == 0
 
       # Send the rest
       rest = "67890"
-      {:ok, [extracted], final_state} = Protocol.process(rest, new_state)
+      {:ok, [extracted], final_state} = FixedProtocol.read_data(rest, new_state)
 
       assert extracted == "1234567890"
       assert final_state.packets_extracted == 1
@@ -234,7 +241,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # Exactly 3 packets
       buffer = String.duplicate("A", 30)
 
-      {:ok, packets, new_state} = Protocol.process(buffer, state)
+      {:ok, packets, new_state} = FixedProtocol.read_data(buffer, state)
 
       assert length(packets) == 3
       assert new_state.buffer == <<>>
@@ -244,18 +251,17 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # 2.5 packets
       buffer = String.duplicate("A", 25)
 
-      {:ok, packets, new_state} = Protocol.process(buffer, state)
+      {:ok, packets, new_state} = FixedProtocol.read_data(buffer, state)
 
       assert length(packets) == 2
       assert byte_size(new_state.buffer) == 5
     end
   end
 
-  describe "CCSDS template framing" do
+  describe "CCSDS template framing (TemplateProtocol)" do
     setup do
       state =
-        Protocol.new(
-          type: :template,
+        TemplateProtocol.new(
           sync_pattern: @ccsds_sync,
           header_length: 6
         )
@@ -265,8 +271,6 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
     test "extracts single CCSDS packet", %{state: state} do
       # Build a realistic CCSDS packet
-      apid = 100
-      seq_count = 0
       payload = :crypto.strong_rand_bytes(20)
 
       # Primary header
@@ -279,7 +283,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       header = <<packet_id::16, seq_control::16, data_length::16>>
       complete_packet = @ccsds_sync <> header <> payload
 
-      {:ok, [extracted], new_state} = Protocol.process(complete_packet, state)
+      {:ok, [extracted], new_state} = TemplateProtocol.read_data(complete_packet, state)
 
       assert extracted == complete_packet
       assert new_state.buffer == <<>>
@@ -296,7 +300,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       buffer = garbage <> packet
 
-      {:ok, [extracted], new_state} = Protocol.process(buffer, state)
+      {:ok, [extracted], new_state} = TemplateProtocol.read_data(buffer, state)
 
       assert extracted == packet
       assert new_state.packets_extracted == 1
@@ -306,7 +310,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       # Sync + partial header (only 3 of 6 bytes)
       partial = @ccsds_sync <> <<0x08, 0x64, 0xC0>>
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = TemplateProtocol.read_data(partial, state)
 
       assert byte_size(new_state.buffer) > 0
       assert new_state.packets_extracted == 0
@@ -319,14 +323,14 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       partial = @ccsds_sync <> header <> partial_payload
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
+      {:stop, new_state} = TemplateProtocol.read_data(partial, state)
 
       assert byte_size(new_state.buffer) > 0
       assert new_state.packets_extracted == 0
 
       # Send remaining payload
       rest = :crypto.strong_rand_bytes(10)
-      {:ok, [_extracted], final_state} = Protocol.process(rest, new_state)
+      {:ok, [_extracted], final_state} = TemplateProtocol.read_data(rest, new_state)
 
       assert final_state.packets_extracted == 1
     end
@@ -342,25 +346,25 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       buffer = Enum.join(packets, <<>>)
 
-      {:ok, extracted, new_state} = Protocol.process(buffer, state)
+      {:ok, extracted, new_state} = TemplateProtocol.read_data(buffer, state)
 
       assert length(extracted) == 3
       assert new_state.packets_extracted == 3
     end
 
     test "handles sync pattern at buffer boundary", %{state: state} do
-      # Split sync pattern across two process() calls
+      # Split sync pattern across two read_data() calls
       payload = :crypto.strong_rand_bytes(10)
       header = <<0x0864::16, 0xC000::16, 9::16>>
       complete_packet = @ccsds_sync <> header <> payload
 
       # Send first part with partial sync
       part1 = binary_part(complete_packet, 0, 2)
-      {:ok, [], state1} = Protocol.process(part1, state)
+      {:stop, state1} = TemplateProtocol.read_data(part1, state)
 
       # Send rest
       part2 = binary_part(complete_packet, 2, byte_size(complete_packet) - 2)
-      {:ok, [extracted], final_state} = Protocol.process(part2, state1)
+      {:ok, [extracted], final_state} = TemplateProtocol.read_data(part2, state1)
 
       assert extracted == complete_packet
       assert final_state.packets_extracted == 1
@@ -376,7 +380,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
 
       buffer = garbage <> packet
 
-      {:ok, [extracted], new_state} = Protocol.process(buffer, state)
+      {:ok, [extracted], new_state} = TemplateProtocol.read_data(buffer, state)
 
       assert extracted == packet
       assert new_state.buffer == <<>>
@@ -384,35 +388,31 @@ defmodule Cadence.Telemetry.ProtocolTest do
   end
 
   describe "protocol stats" do
-    test "returns correct stats for length-prefixed" do
-      state = Protocol.new(type: :length_prefixed)
-      stats = Protocol.stats(state)
+    test "length protocol has correct initial state" do
+      state = LengthProtocol.new(length_bit_size: 32)
 
-      assert stats.type == :length_prefixed
-      assert stats.buffer_size == 0
-      assert stats.packets_extracted == 0
-      assert is_map(stats.config)
+      assert state.buffer == <<>>
+      assert state.packets_extracted == 0
+      assert state.length_bit_size == 32
     end
 
     test "tracks packets extracted correctly" do
-      state = Protocol.new(type: :terminated, terminator: "\n")
+      state = TerminatedProtocol.new(terminator: "\n")
       buffer = "First\nSecond\nThird\n"
 
-      {:ok, _packets, new_state} = Protocol.process(buffer, state)
-      stats = Protocol.stats(new_state)
+      {:ok, _packets, new_state} = TerminatedProtocol.read_data(buffer, state)
 
-      assert stats.packets_extracted == 3
-      assert stats.buffer_size == 0
+      assert new_state.packets_extracted == 3
+      assert new_state.buffer == <<>>
     end
 
     test "tracks buffer size correctly" do
-      state = Protocol.new(type: :length_prefixed)
+      state = LengthProtocol.new(length_bit_size: 32)
       partial = <<0x00, 0x00, 0x00, 0x0A, 0x01, 0x02>>
 
-      {:ok, [], new_state} = Protocol.process(partial, state)
-      stats = Protocol.stats(new_state)
+      {:stop, new_state} = LengthProtocol.read_data(partial, state)
 
-      assert stats.buffer_size == byte_size(partial)
+      assert byte_size(new_state.buffer) == byte_size(partial)
     end
   end
 end

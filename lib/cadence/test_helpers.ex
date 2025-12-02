@@ -5,7 +5,8 @@ defmodule Cadence.TestHelpers do
   These functions make it easy to set up test data without building full UI.
   """
 
-  alias Cadence.{Targets, Missions}
+  alias Cadence.{Repo, Targets, Missions}
+  alias Cadence.MissionDatabase.{Database, DefinitionSet}
 
   @doc """
   Creates standard test targets for a mission.
@@ -27,6 +28,12 @@ defmodule Cadence.TestHelpers do
   end
 
   def create_test_targets(%Missions.Mission{} = mission) do
+    # Get or create a definition set for the mission
+    definition_set_id = get_or_create_definition_set(mission)
+    create_test_targets(mission, definition_set_id)
+  end
+
+  def create_test_targets(%Missions.Mission{} = mission, definition_set_id) do
     target_configs = [
       %{identifier: "SAT-1", name: "Satellite 1"},
       %{identifier: "SAT-2", name: "Satellite 2"},
@@ -36,6 +43,7 @@ defmodule Cadence.TestHelpers do
     results = Enum.map(target_configs, fn config ->
       Targets.create_target(%{
         mission_id: mission.id,
+        definition_set_id: definition_set_id,
         name: config.name,
         identifier: config.identifier,
         type: "spacecraft",
@@ -55,6 +63,41 @@ defmodule Cadence.TestHelpers do
     end
   end
 
+  defp get_or_create_definition_set(mission) do
+    mission = Repo.preload(mission, :organization)
+
+    # Try to find existing database for mission
+    database = Repo.get_by(Database, mission_id: mission.id) ||
+      create_database(mission)
+
+    # Try to find existing definition set for database
+    definition_set = Repo.get_by(DefinitionSet, database_id: database.id) ||
+      create_definition_set(mission.organization, database)
+
+    definition_set.id
+  end
+
+  defp create_database(mission) do
+    %Database{}
+    |> Database.changeset(%{
+      mission_id: mission.id,
+      name: "Test Database",
+      slug: "test-database-#{System.unique_integer([:positive])}"
+    })
+    |> Repo.insert!()
+  end
+
+  defp create_definition_set(organization, database) do
+    %DefinitionSet{}
+    |> DefinitionSet.changeset(%{
+      organization_id: organization.id,
+      database_id: database.id,
+      version: "1.0.0",
+      source_format: :yaml
+    })
+    |> Repo.insert!()
+  end
+
   @doc """
   Creates a custom target for a mission.
 
@@ -71,9 +114,11 @@ defmodule Cadence.TestHelpers do
     name = Keyword.get(opts, :name, identifier)
     type = Keyword.get(opts, :type, "spacecraft")
     status = Keyword.get(opts, :status, "online")
+    definition_set_id = Keyword.get(opts, :definition_set_id) || get_or_create_definition_set(mission)
 
     case Targets.create_target(%{
       mission_id: mission.id,
+      definition_set_id: definition_set_id,
       name: name,
       identifier: identifier,
       type: type,

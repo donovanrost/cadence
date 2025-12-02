@@ -6,6 +6,7 @@ defmodule Cadence.Commands.QueueTest do
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
+  alias Cadence.MissionDatabase.{Database, DefinitionSet}
 
   setup do
     # Create organization
@@ -31,11 +32,33 @@ defmodule Cadence.Commands.QueueTest do
       })
       |> Repo.insert!()
 
+    # Create database for the mission
+    database =
+      %Database{}
+      |> Database.changeset(%{
+        mission_id: mission.id,
+        name: "Test Database",
+        slug: "test-database-#{System.unique_integer([:positive])}"
+      })
+      |> Repo.insert!()
+
+    # Create definition set
+    definition_set =
+      %DefinitionSet{}
+      |> DefinitionSet.changeset(%{
+        organization_id: org.id,
+        database_id: database.id,
+        version: "1.0.0",
+        source_format: :yaml
+      })
+      |> Repo.insert!()
+
     # Create target
     target =
       %Target{}
       |> Target.changeset(%{
         mission_id: mission.id,
+        definition_set_id: definition_set.id,
         name: "SC1",
         type: "spacecraft",
         identifier: "SC1_#{System.unique_integer([:positive])}",
@@ -49,7 +72,8 @@ defmodule Cadence.Commands.QueueTest do
     %{
       org: org,
       mission: mission,
-      target: target
+      target: target,
+      definition_set: definition_set
     }
   end
 
@@ -196,12 +220,13 @@ defmodule Cadence.Commands.QueueTest do
       assert Enum.at(entries, 2).command_name == "LOW"
     end
 
-    test "filters by target_id", %{mission: mission, target: target} do
+    test "filters by target_id", %{mission: mission, target: target, definition_set: definition_set} do
       # Create another target
       target2 =
         %Target{}
         |> Target.changeset(%{
           mission_id: mission.id,
+          definition_set_id: definition_set.id,
           name: "SC2",
           type: "spacecraft",
           identifier: "SC2_#{System.unique_integer([:positive])}",
