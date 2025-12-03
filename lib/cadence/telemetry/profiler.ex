@@ -767,8 +767,6 @@ defmodule Cadence.Telemetry.Profiler do
     IO.puts("")
   end
 
-  defp print_timing(timing), do: print_timing(timing, nil)
-
   defp print_timing(timing, percentiles) do
     # Only print if we have data
     stages_with_data = Enum.filter(timing, fn {_stage, data} -> data.count > 0 end)

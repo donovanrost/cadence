@@ -128,9 +128,4 @@ defmodule Cadence.Telemetry.Decommutation do
     end
   end
 
-  defp max_bit_offset(items) do
-    items
-    |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
-    |> Enum.max(fn -> 0 end)
-  end
 end

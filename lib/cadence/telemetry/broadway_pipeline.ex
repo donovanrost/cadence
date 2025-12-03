@@ -103,7 +103,7 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
   end
 
   @impl Broadway
-  def handle_message(:default, %Message{data: %{packet: %Packet{} = packet, metadata: metadata}} = message, context) do
+  def handle_message(:default, %Message{data: %{packet: %Packet{} = packet, metadata: _metadata}} = message, context) do
     process_start = System.monotonic_time(:microsecond)
     mission_id = context.mission_id
 
@@ -265,7 +265,7 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
   defp identify_packet(%Packet{} = packet, :simulator, mission_id) do
     # Simulator format: Use type byte
     case Packet.get_type_byte(packet) do
-      {:ok, type_byte} ->
+      {:ok, _type_byte} ->
         # Extract target_id from packet
         case packet.raw do
           <<_type::8, target_id_len::8, rest::binary>> when byte_size(rest) >= target_id_len ->

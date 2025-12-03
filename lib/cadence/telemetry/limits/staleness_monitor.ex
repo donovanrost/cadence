@@ -42,7 +42,6 @@ defmodule Cadence.Telemetry.Limits.StalenessMonitor do
   alias Cadence.Telemetry.CurrentValueTable
 
   @default_check_interval_ms 5_000
-  @default_stale_timeout_ms 30_000
 
   # ============================================================================
   # Client API

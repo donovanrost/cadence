@@ -55,16 +55,17 @@ defmodule Cadence.Interfaces do
 
   @doc """
   Gets an interface by name within a mission.
+
+  Accepts either a `%Mission{}` struct or a mission ID string.
   """
+  def get_interface_by_name(mission_or_id, name)
+
   def get_interface_by_name(%Mission{id: mission_id}, name) do
     InterfaceSchema
     |> where([i], i.mission_id == ^mission_id and i.name == ^name)
     |> Repo.one()
   end
 
-  @doc """
-  Gets an interface by name within a mission (by ID).
-  """
   def get_interface_by_name(mission_id, name) when is_binary(mission_id) do
     InterfaceSchema
     |> where([i], i.mission_id == ^mission_id and i.name == ^name)
@@ -145,7 +146,11 @@ defmodule Cadence.Interfaces do
 
   @doc """
   Returns the list of protocols for an interface, ordered by execution order.
+
+  Accepts either an `%Interface{}` struct or an interface ID string.
   """
+  def list_protocols(interface_or_id)
+
   def list_protocols(%InterfaceSchema{id: interface_id}) do
     InterfaceProtocol
     |> where([p], p.interface_id == ^interface_id)
@@ -153,9 +158,6 @@ defmodule Cadence.Interfaces do
     |> Repo.all()
   end
 
-  @doc """
-  Returns the list of protocols for an interface (by ID), ordered by execution order.
-  """
   def list_protocols(interface_id) when is_binary(interface_id) do
     InterfaceProtocol
     |> where([p], p.interface_id == ^interface_id)

@@ -21,7 +21,7 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
   require Logger
 
   alias Cadence.Telemetry.{CurrentValueTable, Stats}
-  alias Cadence.Telemetry.PipelineV2.{PipelineEvent, PartitionSupervisor}
+  alias Cadence.Telemetry.PipelineV2.PartitionSupervisor
 
   # Increased batch size for high-throughput (was 50)
   @default_batch_size 500
@@ -237,60 +237,6 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
       end
     end)
     |> then(fn {items_map, count} -> {Map.values(items_map), count} end)
-  end
-
-  # Write a single event's items to CVT
-  defp write_event_to_cvt(mission_id, %PipelineEvent{} = event, broadcast_enabled) do
-    %{
-      packet: packet,
-      packet_def: packet_def,
-      metadata: metadata,
-      items_with_limits: items_with_limits
-    } = event
-
-    received_time = packet.received_time || metadata[:received_at] || DateTime.utc_now()
-    packet_time = packet.packet_time
-
-    # Check both metadata and packet struct for stored flag
-    is_stored = metadata[:stored] || packet.stored || false
-
-    # Skip CVT update for stored (historical) packets
-    # This preserves the current value table with real-time data
-    # while still allowing stored telemetry to flow through for logging/TSDB
-    if is_stored do
-      Logger.debug(
-        "Skipping CVT update for stored packet: #{packet_def.name} " <>
-          "(packet_time=#{inspect(packet_time)})"
-      )
-    else
-      target_id = event.target_id
-      packet_name = packet_def.name
-
-      # Build batch items list
-      # items_with_limits contains qualified names like "PACKET.item_name"
-      # We need to extract just the item name for the CVT key
-      batch_items =
-        items_with_limits
-        |> Enum.map(fn {qualified_name, value, limits_state} ->
-          # Extract item name from qualified name (PACKET.item -> item)
-          item_name = extract_item_name(qualified_name, packet_name)
-          {target_id, packet_name, item_name, value, limits_state}
-        end)
-
-      # Single batched ETS insert with both received and packet times
-      CurrentValueTable.set_batch(
-        mission_id,
-        batch_items,
-        received_time: received_time,
-        packet_time: packet_time
-      )
-
-      # Broadcast packet update via PubSub (disabled by default for performance)
-      # Only tests currently subscribe to these broadcasts
-      if broadcast_enabled do
-        CurrentValueTable.broadcast_packet_update(mission_id, target_id, packet_name, batch_items)
-      end
-    end
   end
 
   # Extract item name from qualified name

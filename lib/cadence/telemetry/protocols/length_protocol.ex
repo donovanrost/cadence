@@ -145,7 +145,7 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
       # Have length field, extract it
       true ->
         <<_skip::binary-size(length_byte_offset), length_bytes::binary-size(length_byte_size),
-          after_length::binary>> = buffer
+          _after_length::binary>> = buffer
 
         # Decode length field
         length_value = decode_length(length_bytes, state)

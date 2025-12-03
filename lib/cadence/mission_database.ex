@@ -335,14 +335,6 @@ defmodule Cadence.MissionDatabase do
     |> Repo.one()
   end
 
-  defp count_derived_items(mission_id) do
-    from(d in DerivedItem,
-      where: d.mission_id == ^mission_id,
-      select: count(d.id)
-    )
-    |> Repo.one()
-  end
-
   defp search_parameters(nil, _query, _limit, _offset), do: {[], 0}
 
   defp search_parameters(definition_set_id, query, limit, offset) do

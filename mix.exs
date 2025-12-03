@@ -72,7 +72,8 @@ defmodule Cadence.MixProject do
       {:yaml_elixir, "~> 2.9"},
       {:nimble_parsec, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:styler, "~> 1.9", only: [:dev, :test], runtime: false}
+      {:styler, "~> 1.9", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
     ]
   end
 

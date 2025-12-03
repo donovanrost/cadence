@@ -163,7 +163,7 @@ defmodule CadenceWeb.DesignSystemLive.Index do
 
         <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>&lt;.button&gt;Primary Button&lt;/.button&gt;
-&lt;button class="btn btn-secondary"&gt;Secondary&lt;/button&gt;</code></pre>
+          &lt;button class="btn btn-secondary"&gt;Secondary&lt;/button&gt;</code></pre>
         </div>
       </div>
 

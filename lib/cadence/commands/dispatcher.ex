@@ -504,29 +504,6 @@ defmodule Cadence.Commands.Dispatcher do
     end
   end
 
-  # Extracts target identifier from opts, looking up the target if needed
-  defp get_target_identifier_from_opts(mission_id, opts) do
-    target_id = Keyword.get(opts, :target) || Keyword.get(opts, :target_id)
-
-    if is_nil(target_id) do
-      nil
-    else
-      case Targets.get_target_by_identifier(mission_id, target_id) do
-        nil ->
-          # Maybe it's a target ID, not identifier - try to get the target
-          case Targets.get_target!(target_id) do
-            nil -> nil
-            target -> target.identifier
-          end
-
-        target ->
-          target.identifier
-      end
-    end
-  rescue
-    Ecto.NoResultsError -> nil
-  end
-
   defp start_verification(state, command_log_id, command, target) do
     timeout_ms = command.verification_timeout_ms || @default_verification_timeout_ms
 

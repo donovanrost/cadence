@@ -310,19 +310,6 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   end
 
-  # Calculate total trailer bytes that will be added by write chain protocols
-  # Currently only CRC protocol adds trailer bytes
-  defp calculate_write_chain_trailer_size(nil), do: 0
-  defp calculate_write_chain_trailer_size([]), do: 0
-
-  defp calculate_write_chain_trailer_size(write_chain) do
-    alias Cadence.Telemetry.Protocols.CRCProtocol
-
-    Enum.reduce(write_chain, 0, fn
-      {CRCProtocol, state}, acc -> acc + state.crc_size
-      _, acc -> acc
-    end)
-  end
 
   # Check if CCSDSProtocol is in the write chain
   defp has_ccsds_protocol?(nil), do: false

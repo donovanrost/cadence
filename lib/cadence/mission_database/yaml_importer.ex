@@ -670,7 +670,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     ctx
   end
 
-  defp import_command_argument(ctx, meta_command, param_data, display_order) do
+  defp import_command_argument(_ctx, meta_command, param_data, display_order) do
     # Parse valid_values as strings
     valid_values =
       case param_data["valid_values"] do

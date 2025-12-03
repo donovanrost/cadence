@@ -129,7 +129,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
   def handle_event("delete", %{"id" => protocol_id}, socket) do
     protocol = Interfaces.get_protocol!(protocol_id)
     interface = socket.assigns.interface
-    mission = socket.assigns.mission
+    _mission = socket.assigns.mission
 
     # Verify protocol belongs to this interface
     if protocol.interface_id == interface.id do

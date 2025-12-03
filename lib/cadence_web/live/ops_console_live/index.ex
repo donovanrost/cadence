@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, MissionDatabase, Missions, Targets, DashboardLayouts}
+  alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts}
   alias Cadence.DashboardLayouts.DashboardLayout
 
   @impl true

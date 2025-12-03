@@ -28,7 +28,7 @@ defmodule Cadence.Alarms.CoverageReport do
   """
 
   alias Cadence.Repo
-  alias Cadence.Alarms.{CoverageAnalyzer, RuleSuggester}
+  alias Cadence.Alarms.CoverageAnalyzer
   alias Cadence.MissionDatabase.DefinitionSet
 
   @type report :: %{

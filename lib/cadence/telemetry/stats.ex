@@ -488,7 +488,7 @@ defmodule Cadence.Telemetry.Stats do
     end
   end
 
-  def increment_stage_error(mission_id, stage) do
+  def increment_stage_error(mission_id, _stage) do
     # Unknown stage - just increment aggregate counter
     increment(mission_id, :stage_errors)
   end

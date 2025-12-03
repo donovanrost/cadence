@@ -527,8 +527,6 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp format_reductions(r) when r >= 1_000, do: "#{Float.round(r / 1_000, 1)}K"
   defp format_reductions(r), do: "#{r}"
 
-  defp print_timing(timing), do: print_timing(timing, nil)
-
   defp print_timing(timing, percentiles) do
     stages_with_data = Enum.filter(timing, fn {_stage, data} ->
       is_map(data) && Map.get(data, :count, 0) > 0

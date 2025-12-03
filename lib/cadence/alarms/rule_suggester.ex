@@ -220,7 +220,7 @@ defmodule Cadence.Alarms.RuleSuggester do
     Enum.filter(uncovered, &MapSet.member?(names_set, &1.qualified_name))
   end
 
-  defp build_rule_changeset(mission, suggestion, target_id \\ nil) do
+  defp build_rule_changeset(mission, suggestion, target_id) do
     attrs = %{
       organization_id: mission.organization_id,
       mission_id: mission.id,
@@ -237,7 +237,7 @@ defmodule Cadence.Alarms.RuleSuggester do
     AlarmRule.changeset(%AlarmRule{}, attrs)
   end
 
-  defp create_rules(mission, suggestions, target_id \\ nil) do
+  defp create_rules(mission, suggestions, target_id) do
     results =
       Enum.reduce_while(suggestions, {:ok, []}, fn suggestion, {:ok, acc} ->
         changeset = build_rule_changeset(mission, suggestion, target_id)

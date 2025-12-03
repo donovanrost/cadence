@@ -229,7 +229,7 @@ defmodule Cadence.Alarms.CoverageAnalyzer do
     {:ok, rules}
   end
 
-  defp perform_analysis(parameters_with_limits, rules, context \\ %{}) do
+  defp perform_analysis(parameters_with_limits, rules, context) do
     # For each parameter, find matching rules
     {covered, uncovered} =
       parameters_with_limits
