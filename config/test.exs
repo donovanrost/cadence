@@ -30,6 +30,8 @@ config :cadence, Cadence.Mailer, adapter: Swoosh.Adapters.Test
 config :swoosh, :api_client, false
 
 # Print only warnings and errors during test
+# Note: Some Postgrex disconnection errors may still appear during sandbox cleanup
+# when GenServers exit - these are expected and not indicative of actual problems
 config :logger, level: :warning
 
 # Initialize plugs at runtime for faster test compilation

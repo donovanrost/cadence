@@ -412,7 +412,8 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
       "crc16-ccitt" -> :crc16_ccitt
       "crc32" -> :crc32
       "crc16_xmodem" -> :crc16_xmodem
-      _ -> String.to_atom(alg)
+      "crc16-xmodem" -> :crc16_xmodem
+      other -> raise ArgumentError, "Unknown CRC algorithm: #{inspect(other)}"
     end
   end
 

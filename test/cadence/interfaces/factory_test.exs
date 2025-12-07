@@ -94,7 +94,7 @@ defmodule Cadence.Interfaces.FactoryTest do
         })
 
       # Build child spec using Factory
-      {module, opts} = Factory.child_spec_for(interface)
+      {_module, opts} = Factory.child_spec_for(interface)
 
       # Verify config uses "unknown" as fallback
       config = Keyword.get(opts, :config)
@@ -117,7 +117,7 @@ defmodule Cadence.Interfaces.FactoryTest do
         })
 
       # Build child spec using Factory
-      {module, opts} = Factory.child_spec_for(interface)
+      {_module, opts} = Factory.child_spec_for(interface)
 
       # Verify config uses ["unknown"] as fallback
       config = Keyword.get(opts, :config)

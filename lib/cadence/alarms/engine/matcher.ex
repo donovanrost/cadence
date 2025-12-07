@@ -98,10 +98,16 @@ defmodule Cadence.Alarms.Engine.Matcher do
   # item_name_pattern - matches if event's item_name matches the regex
   defp matches_condition?("item_name_pattern", pattern, %TelemetryLimitEvent{item_name: item_name})
        when is_binary(pattern) do
+    # Fallback for non-cached rules - compile on the fly
     case Regex.compile(pattern) do
       {:ok, regex} -> Regex.match?(regex, item_name)
       {:error, _} -> false
     end
+  end
+
+  # Pre-compiled regex from RuleCache - use directly without recompiling
+  defp matches_condition?(:compiled_item_name_pattern, %Regex{} = regex, %TelemetryLimitEvent{item_name: item_name}) do
+    Regex.match?(regex, item_name)
   end
 
   # target_id - matches if event's target_id is in the list

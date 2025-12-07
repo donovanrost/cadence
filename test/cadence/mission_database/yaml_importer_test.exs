@@ -4,7 +4,6 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
   alias Cadence.MissionDatabase.YamlImporter
 
   alias Cadence.MissionDatabase.{
-    DefinitionSet,
     DataType,
     Algorithm,
     Unit,

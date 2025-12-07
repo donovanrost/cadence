@@ -6,8 +6,7 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
   """
   use CadenceWeb, :live_component
 
-  alias Cadence.MissionDatabase
-  alias Cadence.MissionDatabase.{DefinitionSet, Database, YamlImporter}
+  alias Cadence.MissionDatabase.{DefinitionSet, YamlImporter}
 
   @impl true
   def render(assigns) do

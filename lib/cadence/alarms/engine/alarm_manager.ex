@@ -55,6 +55,7 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
+    # Note: We use via_tuple/1 for registration, then update metadata with table in init
     GenServer.start_link(__MODULE__, opts, name: via_tuple(mission_id))
   end
 
@@ -76,14 +77,14 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   """
   @spec get_active_alarms(String.t()) :: [Alarm.t()]
   def get_active_alarms(mission_id) do
-    table_name = table_name(mission_id)
+    case get_table(mission_id) do
+      nil ->
+        []
 
-    if :ets.whereis(table_name) != :undefined do
-      :ets.tab2list(table_name)
-      |> Enum.map(fn {_key, alarm} -> alarm end)
-      |> Enum.sort_by(& &1.triggered_at, {:desc, DateTime})
-    else
-      []
+      table ->
+        :ets.tab2list(table)
+        |> Enum.map(fn {_key, alarm} -> alarm end)
+        |> Enum.sort_by(& &1.triggered_at, {:desc, DateTime})
     end
   end
 
@@ -96,19 +97,76 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
           info: integer()
         }
   def get_alarm_counts(mission_id) do
-    table_name = table_name(mission_id)
+    case get_table(mission_id) do
+      nil ->
+        %{critical: 0, warning: 0, info: 0}
 
-    if :ets.whereis(table_name) != :undefined do
-      :ets.foldl(
-        fn {_key, alarm}, acc ->
-          Map.update(acc, alarm.severity, 1, &(&1 + 1))
-        end,
-        %{critical: 0, warning: 0, info: 0},
-        table_name
-      )
-    else
-      %{critical: 0, warning: 0, info: 0}
+      table ->
+        :ets.foldl(
+          fn {_key, alarm}, acc ->
+            Map.update(acc, alarm.severity, 1, &(&1 + 1))
+          end,
+          %{critical: 0, warning: 0, info: 0},
+          table
+        )
     end
+  end
+
+  # Gets the ETS table reference from Registry metadata
+  defp get_table(mission_id) do
+    case Registry.lookup(Cadence.MissionRegistry, {mission_id, :alarm_manager}) do
+      [{_pid, table}] -> table
+      [] -> nil
+    end
+  end
+
+  # ============================================================================
+  # Alarm Mutation APIs (for cache consistency)
+  # ============================================================================
+
+  @doc """
+  Acknowledges an alarm through the AlarmManager, ensuring cache consistency.
+  """
+  @spec acknowledge_alarm(String.t(), String.t(), String.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, term()}
+  def acknowledge_alarm(mission_id, alarm_id, user_id, note \\ nil) do
+    GenServer.call(via_tuple(mission_id), {:acknowledge, alarm_id, user_id, note})
+  end
+
+  @doc """
+  Shelves an alarm through the AlarmManager, ensuring cache consistency.
+  """
+  @spec shelve_alarm(String.t(), String.t(), String.t(), integer(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, term()}
+  def shelve_alarm(mission_id, alarm_id, user_id, duration_minutes, reason \\ nil) do
+    GenServer.call(via_tuple(mission_id), {:shelve, alarm_id, user_id, duration_minutes, reason})
+  end
+
+  @doc """
+  Unshelves an alarm through the AlarmManager, ensuring cache consistency.
+  """
+  @spec unshelve_alarm(String.t(), String.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, term()}
+  def unshelve_alarm(mission_id, alarm_id, user_id \\ nil) do
+    GenServer.call(via_tuple(mission_id), {:unshelve, alarm_id, user_id})
+  end
+
+  @doc """
+  Clears an alarm through the AlarmManager, ensuring cache consistency.
+  """
+  @spec clear_alarm(String.t(), String.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, term()}
+  def clear_alarm(mission_id, alarm_id, user_id \\ nil) do
+    GenServer.call(via_tuple(mission_id), {:clear, alarm_id, user_id})
+  end
+
+  @doc """
+  Updates an alarm's value through the AlarmManager, ensuring cache consistency.
+  """
+  @spec update_alarm_value(String.t(), String.t(), float(), atom(), atom(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, term()}
+  def update_alarm_value(mission_id, alarm_id, value, limit_state, severity, message \\ nil) do
+    GenServer.call(via_tuple(mission_id), {:update_value, alarm_id, value, limit_state, severity, message})
   end
 
   # ============================================================================
@@ -122,22 +180,25 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
     Logger.info("Starting AlarmManager for mission #{mission_id}")
 
-    # Create ETS table for active alarms cache
-    table_name = table_name(mission_id)
-
-    :ets.new(table_name, [
-      :named_table,
+    # Create anonymous ETS table for active alarms cache
+    # Using anonymous table (reference, not atom) to avoid atom table exhaustion
+    table = :ets.new(:alarm_cache, [
       :public,
       :set,
       read_concurrency: true
     ])
+
+    # Update Registry metadata to store the table reference
+    # This allows get_active_alarms/1 and get_alarm_counts/1 to access the table
+    # without a GenServer call
+    Registry.update_value(Cadence.MissionRegistry, {mission_id, :alarm_manager}, fn _ -> table end)
 
     # Subscribe to mission events
     events_topic = "mission:#{mission_id}:events"
     Phoenix.PubSub.subscribe(Cadence.PubSub, events_topic)
 
     # Load existing active alarms into cache
-    load_active_alarms(mission_id, table_name)
+    load_active_alarms(mission_id, table)
 
     # Schedule shelve expiration check
     schedule_shelve_check()
@@ -145,7 +206,7 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
     state = %{
       mission_id: mission_id,
       organization_id: organization_id,
-      table_name: table_name,
+      table: table,
       events_topic: events_topic,
       alarms_topic: "mission:#{mission_id}:alarms"
     }
@@ -172,9 +233,84 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   end
 
   @impl true
+  def handle_call({:acknowledge, alarm_id, user_id, note}, _from, state) do
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.do_acknowledge_alarm(alarm, user_id, note) do
+      {:ok, updated} ->
+        cache_alarm(updated, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_acknowledged, updated)
+        {:reply, {:ok, updated}, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:shelve, alarm_id, user_id, duration_minutes, reason}, _from, state) do
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.do_shelve_alarm(alarm, user_id, duration_minutes, reason) do
+      {:ok, updated} ->
+        cache_alarm(updated, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_shelved, updated)
+        {:reply, {:ok, updated}, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:unshelve, alarm_id, user_id}, _from, state) do
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.do_unshelve_alarm(alarm, user_id) do
+      {:ok, updated} ->
+        cache_alarm(updated, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_unshelved, updated)
+        {:reply, {:ok, updated}, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:clear, alarm_id, user_id}, _from, state) do
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.do_clear_alarm(alarm, user_id) do
+      {:ok, updated} ->
+        remove_from_cache(updated, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_cleared, updated)
+        {:reply, {:ok, updated}, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:update_value, alarm_id, value, limit_state, severity, message}, _from, state) do
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.do_update_alarm_value(alarm, value, limit_state, severity, message) do
+      {:ok, updated} ->
+        cache_alarm(updated, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_updated, updated)
+        {:reply, {:ok, updated}, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl true
   def terminate(_reason, state) do
     Logger.info("Terminating AlarmManager for mission #{state.mission_id}")
-    :ets.delete(state.table_name)
+    :ets.delete(state.table)
     :ok
   end
 
@@ -185,15 +321,15 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   defp handle_limit_event(%TelemetryLimitEvent{} = event, state) do
     case TelemetryLimitHandler.handle(event, state.organization_id) do
       {:created, alarm, _rule} ->
-        cache_alarm(alarm, state.table_name)
+        cache_alarm(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_triggered, alarm)
 
       {:updated, alarm, _rule} ->
-        cache_alarm(alarm, state.table_name)
+        cache_alarm(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_updated, alarm)
 
       {:cleared, alarm} ->
-        remove_from_cache(alarm, state.table_name)
+        remove_from_cache(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_cleared, alarm)
 
       {:no_rule, _event} ->
@@ -223,12 +359,13 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
         end
       end,
       [],
-      state.table_name
+      state.table
     )
     |> Enum.each(fn alarm ->
-      case Alarms.unshelve_alarm(alarm) do
+      # Use internal function to avoid deadlock (calling back into ourselves)
+      case Alarms.do_unshelve_alarm(alarm, nil) do
         {:ok, unshelved} ->
-          cache_alarm(unshelved, state.table_name)
+          cache_alarm(unshelved, state.table)
           broadcast_alarm(state.alarms_topic, :alarm_unshelved, unshelved)
 
         {:error, reason} ->
@@ -283,9 +420,5 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
   defp via_tuple(mission_id) do
     {:via, Registry, {Cadence.MissionRegistry, {mission_id, :alarm_manager}}}
-  end
-
-  defp table_name(mission_id) do
-    String.to_atom("alarms_#{mission_id}")
   end
 end

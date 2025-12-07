@@ -137,13 +137,15 @@ defmodule Cadence.Telemetry.Stats do
   Increments a counter for a mission.
   """
   def increment(mission_id, counter, amount \\ 1) do
+    ensure_table()
     key = {mission_id, counter}
 
-    try do
-      :ets.update_counter(@table_name, key, {2, amount})
-    rescue
-      ArgumentError ->
-        # Table or key doesn't exist, initialize and retry
+    case :ets.lookup(@table_name, key) do
+      [{^key, _}] ->
+        :ets.update_counter(@table_name, key, {2, amount})
+
+      [] ->
+        # Key doesn't exist - initialize mission stats first
         init(mission_id)
         :ets.update_counter(@table_name, key, {2, amount})
     end
@@ -157,27 +159,22 @@ defmodule Cadence.Telemetry.Stats do
   Also records samples for percentile-tracked stages (warmup/spike analysis).
   """
   def record_timing(mission_id, stage, duration_us) when is_integer(duration_us) do
+    ensure_table()
     key = {mission_id, :timing, stage}
 
-    try do
-      case :ets.lookup(@table_name, key) do
-        [{^key, {sum, count, min, max}}] ->
-          new_min = if min == nil, do: duration_us, else: min(min, duration_us)
-          new_max = if max == nil, do: duration_us, else: max(max, duration_us)
-          :ets.insert(@table_name, {key, {sum + duration_us, count + 1, new_min, new_max}})
+    case :ets.lookup(@table_name, key) do
+      [{^key, {sum, count, min, max}}] ->
+        new_min = if min == nil, do: duration_us, else: min(min, duration_us)
+        new_max = if max == nil, do: duration_us, else: max(max, duration_us)
+        :ets.insert(@table_name, {key, {sum + duration_us, count + 1, new_min, new_max}})
 
-        [] ->
-          :ets.insert(@table_name, {key, {duration_us, 1, duration_us, duration_us}})
-      end
-
-      # Also record sample for percentile/warmup/spike analysis
-      if stage in @percentile_stages do
-        record_timing_sample(mission_id, stage, duration_us)
-      end
-    rescue
-      _ ->
-        init(mission_id)
+      [] ->
         :ets.insert(@table_name, {key, {duration_us, 1, duration_us, duration_us}})
+    end
+
+    # Also record sample for percentile/warmup/spike analysis
+    if stage in @percentile_stages do
+      record_timing_sample(mission_id, stage, duration_us)
     end
   end
 
@@ -206,46 +203,40 @@ defmodule Cadence.Telemetry.Stats do
   Also tracks the first N samples separately for warmup analysis.
   """
   def record_timing_sample(mission_id, stage, duration_us) when is_integer(duration_us) do
+    ensure_table()
     key = {mission_id, :timing_samples, stage}
 
-    try do
-      case :ets.lookup(@table_name, key) do
-        [{^key, {samples_map, sample_count, total_count}}] ->
-          new_total = total_count + 1
+    case :ets.lookup(@table_name, key) do
+      [{^key, {samples_map, sample_count, total_count}}] when is_map(samples_map) ->
+        new_total = total_count + 1
 
-          # Track warmup samples (first N)
-          maybe_record_warmup_sample(mission_id, stage, duration_us, new_total)
+        # Track warmup samples (first N)
+        maybe_record_warmup_sample(mission_id, stage, duration_us, new_total)
 
-          {new_samples, new_sample_count} =
-            if sample_count < @default_sample_limit do
-              # Under limit: add at next index
-              {Map.put(samples_map, sample_count, duration_us), sample_count + 1}
+        {new_samples, new_sample_count} =
+          if sample_count < @default_sample_limit do
+            # Under limit: add at next index
+            {Map.put(samples_map, sample_count, duration_us), sample_count + 1}
+          else
+            # At limit: reservoir sampling - randomly decide whether to include
+            # Probability of inclusion: sample_limit / total_count
+            if :rand.uniform(new_total) <= @default_sample_limit do
+              # Replace a random existing sample (O(1) map update)
+              replace_idx = :rand.uniform(@default_sample_limit) - 1
+              {Map.put(samples_map, replace_idx, duration_us), sample_count}
             else
-              # At limit: reservoir sampling - randomly decide whether to include
-              # Probability of inclusion: sample_limit / total_count
-              if :rand.uniform(new_total) <= @default_sample_limit do
-                # Replace a random existing sample (O(1) map update)
-                replace_idx = :rand.uniform(@default_sample_limit) - 1
-                {Map.put(samples_map, replace_idx, duration_us), sample_count}
-              else
-                {samples_map, sample_count}
-              end
+              {samples_map, sample_count}
             end
+          end
 
-          :ets.insert(@table_name, {key, {new_samples, new_sample_count, new_total}})
+        :ets.insert(@table_name, {key, {new_samples, new_sample_count, new_total}})
 
-        # Handle legacy format or empty
-        [{^key, {[], 0}}] ->
-          maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
-          :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
+      # Handle legacy format or empty
+      [{^key, {[], 0}}] ->
+        maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
+        :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
 
-        [] ->
-          maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
-          :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
-      end
-    rescue
-      _ ->
-        init(mission_id)
+      [] ->
         maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
         :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
     end
@@ -478,12 +469,14 @@ defmodule Cadence.Telemetry.Stats do
     increment(mission_id, :stage_errors)
 
     # Increment per-stage counter
+    ensure_table()
     key = {mission_id, :stage_error, stage}
 
-    try do
-      :ets.update_counter(@table_name, key, {2, 1})
-    rescue
-      ArgumentError ->
+    case :ets.lookup(@table_name, key) do
+      [{^key, _}] ->
+        :ets.update_counter(@table_name, key, {2, 1})
+
+      [] ->
         init(mission_id)
         :ets.update_counter(@table_name, key, {2, 1})
     end
@@ -588,61 +581,34 @@ defmodule Cadence.Telemetry.Stats do
   Resets stats for a mission.
   """
   def reset(mission_id) do
-    Enum.each(@counters, fn counter ->
-      key = {mission_id, counter}
+    ensure_table()
 
-      try do
-        :ets.insert(@table_name, {key, 0})
-      rescue
-        _ -> :ok
-      end
+    # Reset counters
+    Enum.each(@counters, fn counter ->
+      safe_ets_insert({mission_id, counter}, 0)
     end)
 
     # Reset timing stats
     Enum.each(@timing_stages, fn stage ->
-      key = {mission_id, :timing, stage}
-
-      try do
-        :ets.insert(@table_name, {key, {0, 0, nil, nil}})
-      rescue
-        _ -> :ok
-      end
+      safe_ets_insert({mission_id, :timing, stage}, {0, 0, nil, nil})
     end)
 
     # Reset timing samples
     Enum.each(@percentile_stages, fn stage ->
-      key = {mission_id, :timing_samples, stage}
-
-      try do
-        :ets.insert(@table_name, {key, {%{}, 0, 0}})
-      rescue
-        _ -> :ok
-      end
+      safe_ets_insert({mission_id, :timing_samples, stage}, {%{}, 0, 0})
     end)
 
     # Reset warmup samples
     Enum.each(@percentile_stages, fn stage ->
-      key = {mission_id, :warmup_samples, stage}
-
-      try do
-        :ets.insert(@table_name, {key, []})
-      rescue
-        _ -> :ok
-      end
+      safe_ets_insert({mission_id, :warmup_samples, stage}, [])
     end)
 
     # Reset per-stage error counters
     Enum.each(@error_stages, fn stage ->
-      key = {mission_id, :stage_error, stage}
-
-      try do
-        :ets.insert(@table_name, {key, 0})
-      rescue
-        _ -> :ok
-      end
+      safe_ets_insert({mission_id, :stage_error, stage}, 0)
     end)
 
-    :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
+    safe_ets_insert({mission_id, :started_at}, System.monotonic_time(:millisecond))
     :ok
   end
 
@@ -654,59 +620,41 @@ defmodule Cadence.Telemetry.Stats do
 
     # Clean up counters
     Enum.each(@counters ++ [:started_at], fn counter ->
-      key = {mission_id, counter}
-
-      try do
-        :ets.delete(@table_name, key)
-      rescue
-        _ -> :ok
-      end
+      safe_ets_delete({mission_id, counter})
     end)
 
     # Clean up timing stats
     Enum.each(@timing_stages, fn stage ->
-      key = {mission_id, :timing, stage}
-
-      try do
-        :ets.delete(@table_name, key)
-      rescue
-        _ -> :ok
-      end
+      safe_ets_delete({mission_id, :timing, stage})
     end)
 
     # Clean up timing samples
     Enum.each(@percentile_stages, fn stage ->
-      key = {mission_id, :timing_samples, stage}
-
-      try do
-        :ets.delete(@table_name, key)
-      rescue
-        _ -> :ok
-      end
+      safe_ets_delete({mission_id, :timing_samples, stage})
     end)
 
     # Clean up warmup samples
     Enum.each(@percentile_stages, fn stage ->
-      key = {mission_id, :warmup_samples, stage}
-
-      try do
-        :ets.delete(@table_name, key)
-      rescue
-        _ -> :ok
-      end
+      safe_ets_delete({mission_id, :warmup_samples, stage})
     end)
 
     # Clean up per-stage error counters
     Enum.each(@error_stages, fn stage ->
-      key = {mission_id, :stage_error, stage}
-
-      try do
-        :ets.delete(@table_name, key)
-      rescue
-        _ -> :ok
-      end
+      safe_ets_delete({mission_id, :stage_error, stage})
     end)
 
+    :ok
+  end
+
+  # Private helpers for safe ETS operations without try/rescue
+
+  defp safe_ets_insert(key, value) do
+    :ets.insert(@table_name, {key, value})
+    :ok
+  end
+
+  defp safe_ets_delete(key) do
+    :ets.delete(@table_name, key)
     :ok
   end
 end

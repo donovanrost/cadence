@@ -2,7 +2,6 @@ defmodule Cadence.SchedulesTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Schedules
-  alias Cadence.Schedules.Schedule
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -29,7 +28,7 @@ defmodule Cadence.SchedulesTest do
       assert hd(schedules).id == schedule.id
     end
 
-    test "list_schedules/2 filters by mission", %{org: org, procedure: procedure} do
+    test "list_schedules/2 filters by mission", %{org: org, procedure: _procedure} do
       mission1 = mission_fixture(organization: org)
       mission2 = mission_fixture(organization: org)
       proc1 = procedure_fixture(organization: org, mission: mission1)

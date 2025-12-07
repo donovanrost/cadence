@@ -2,7 +2,7 @@ defmodule Cadence.AlarmsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Alarms
-  alias Cadence.Alarms.{Alarm, AlarmRule, AlarmEvent}
+  alias Cadence.Alarms.{Alarm, AlarmRule}
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

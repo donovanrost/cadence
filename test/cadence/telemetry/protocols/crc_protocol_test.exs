@@ -35,9 +35,15 @@ defmodule Cadence.Telemetry.Protocols.CRCProtocolTest do
       assert state.on_failure == :disconnect
     end
 
-    test "raises for unsupported algorithm" do
+    test "raises for unsupported algorithm atom" do
       assert_raise ArgumentError, ~r/Unsupported CRC algorithm/, fn ->
         CRCProtocol.new(algorithm: :unsupported)
+      end
+    end
+
+    test "raises for unsupported algorithm string" do
+      assert_raise ArgumentError, ~r/Unknown CRC algorithm/, fn ->
+        CRCProtocol.new(algorithm: "invalid_algorithm")
       end
     end
   end

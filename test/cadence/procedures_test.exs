@@ -2,7 +2,6 @@ defmodule Cadence.ProceduresTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Procedures
-  alias Cadence.Procedures.{Procedure, ProcedureVersion, ProcedureExecution}
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

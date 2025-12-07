@@ -2,7 +2,6 @@ defmodule Cadence.AutomationsTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Automations
-  alias Cadence.Automations.{Automation, AutomationExecution}
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

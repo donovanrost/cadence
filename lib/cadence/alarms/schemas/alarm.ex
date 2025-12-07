@@ -67,6 +67,14 @@ defmodule Cadence.Alarms.Alarm do
   @limit_state_values [:yellow, :red, :blue]
   @source_origin_values [:rule, :mission_db, :manual]
 
+  # Valid state transitions for the alarm state machine
+  @valid_transitions %{
+    active: [:acknowledged, :shelved, :cleared],
+    acknowledged: [:shelved, :cleared],
+    shelved: [:active, :acknowledged, :cleared],
+    cleared: []
+  }
+
   @type t :: %__MODULE__{
           id: Ecto.UUID.t(),
           organization_id: Ecto.UUID.t(),
@@ -170,26 +178,38 @@ defmodule Cadence.Alarms.Alarm do
     |> foreign_key_constraint(:target_id)
     |> foreign_key_constraint(:alarm_rule_id)
     |> foreign_key_constraint(:source_definition_set_id)
+    |> unique_constraint([:mission_id, :target_id, :source_type, :source_id],
+      name: :alarms_unique_active_source_idx,
+      message: "an active alarm already exists for this source"
+    )
   end
 
   @doc """
   Changeset for acknowledging an alarm.
+
+  Note: `acknowledged_by_id` is optional to support system actions (like auto_acknowledge).
+  When nil, it indicates the alarm was acknowledged automatically by the system.
   """
   def acknowledge_changeset(alarm, attrs) do
     alarm
     |> cast(attrs, [:acknowledged_by_id, :acknowledged_at, :acknowledgment_note])
+    |> validate_transition(:acknowledged)
     |> put_change(:status, :acknowledged)
-    |> validate_required([:acknowledged_by_id, :acknowledged_at])
+    |> validate_required([:acknowledged_at])
   end
 
   @doc """
   Changeset for shelving an alarm.
+
+  Note: `shelved_by_id` is optional to support system actions (like auto_shelve).
+  When nil, it indicates the alarm was shelved automatically by the system.
   """
   def shelve_changeset(alarm, attrs) do
     alarm
     |> cast(attrs, [:shelved_by_id, :shelved_at, :shelved_until, :shelve_reason])
+    |> validate_transition(:shelved)
     |> put_change(:status, :shelved)
-    |> validate_required([:shelved_by_id, :shelved_at, :shelved_until])
+    |> validate_required([:shelved_at, :shelved_until])
   end
 
   @doc """
@@ -197,10 +217,12 @@ defmodule Cadence.Alarms.Alarm do
   """
   def unshelve_changeset(alarm, previous_status) do
     status = if alarm.acknowledged_at, do: :acknowledged, else: :active
+    target_status = previous_status || status
 
     alarm
     |> change()
-    |> put_change(:status, previous_status || status)
+    |> validate_transition(target_status)
+    |> put_change(:status, target_status)
     |> put_change(:shelved_at, nil)
     |> put_change(:shelved_until, nil)
     |> put_change(:shelve_reason, nil)
@@ -212,6 +234,7 @@ defmodule Cadence.Alarms.Alarm do
   def clear_changeset(alarm, attrs) do
     alarm
     |> cast(attrs, [:cleared_at])
+    |> validate_transition(:cleared)
     |> put_change(:status, :cleared)
     |> validate_required([:cleared_at])
   end
@@ -222,6 +245,40 @@ defmodule Cadence.Alarms.Alarm do
   def update_value_changeset(alarm, attrs) do
     alarm
     |> cast(attrs, [:current_value, :limit_state, :last_value_at, :severity, :message])
+  end
+
+  # Validates that the state transition is allowed by the state machine.
+  # Returns the changeset with an error if the transition is invalid.
+  defp validate_transition(changeset, new_status) do
+    current_status = get_field(changeset, :status)
+    valid_next_states = Map.get(@valid_transitions, current_status, [])
+
+    if new_status in valid_next_states do
+      changeset
+    else
+      add_error(
+        changeset,
+        :status,
+        "cannot transition from #{current_status} to #{new_status}",
+        validation: :invalid_transition,
+        from: current_status,
+        to: new_status
+      )
+    end
+  end
+
+  @doc """
+  Returns the valid state transitions map.
+  """
+  @spec valid_transitions() :: map()
+  def valid_transitions, do: @valid_transitions
+
+  @doc """
+  Returns true if a transition from one status to another is valid.
+  """
+  @spec valid_transition?(atom(), atom()) :: boolean()
+  def valid_transition?(from_status, to_status) do
+    to_status in Map.get(@valid_transitions, from_status, [])
   end
 
   @doc """

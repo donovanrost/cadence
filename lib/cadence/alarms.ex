@@ -13,6 +13,7 @@ defmodule Cadence.Alarms do
 
   alias Cadence.Repo
   alias Cadence.Alarms.{Alarm, AlarmEvent, AlarmRule}
+  alias Cadence.Alarms.Engine.AlarmManager
 
   # ============================================================================
   # Alarm Rules
@@ -328,6 +329,116 @@ defmodule Cadence.Alarms do
     |> Repo.insert()
   end
 
+  @doc """
+  Finds an existing active alarm or creates a new one atomically.
+
+  This function handles the race condition where multiple concurrent events
+  might try to create an alarm for the same source. It uses the database
+  unique constraint (alarms_unique_active_source_idx) to ensure only one
+  active alarm exists per source.
+
+  Returns:
+  - `{:ok, alarm, :created}` - A new alarm was created
+  - `{:ok, alarm, :existing}` - An existing active alarm was found
+  - `{:error, changeset}` - Validation or other error
+
+  ## Example
+
+      attrs = %{
+        organization_id: org_id,
+        mission_id: mission_id,
+        target_id: target_id,
+        source_type: "telemetry_item",
+        source_id: "HEALTH.cpu_temp",
+        ...
+      }
+
+      case find_or_create_alarm(attrs) do
+        {:ok, alarm, :created} -> # New alarm created
+        {:ok, alarm, :existing} -> # Found existing alarm
+        {:error, changeset} -> # Handle error
+      end
+  """
+  @spec find_or_create_alarm(map()) ::
+          {:ok, Alarm.t(), :created | :existing} | {:error, Ecto.Changeset.t()}
+  def find_or_create_alarm(attrs) do
+    # Resolve target_id if it's a string identifier
+    attrs = resolve_target_id_in_attrs(attrs)
+
+    mission_id = attrs[:mission_id]
+    target_id = attrs[:target_id]
+    source_type = attrs[:source_type]
+    source_id = attrs[:source_id]
+
+    Repo.transaction(fn ->
+      # First, try to find an existing active alarm
+      case find_active_alarm(mission_id, target_id, source_type, source_id) do
+        nil ->
+          # No existing alarm, try to create one
+          case do_create_alarm_with_conflict_handling(attrs) do
+            {:ok, alarm} ->
+              # Successfully created - record the triggered event
+              case create_event(AlarmEvent.triggered(alarm, attrs[:current_value])) do
+                {:ok, _event} -> {alarm, :created}
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+
+            {:error, :conflict} ->
+              # Unique constraint violation - another process created the alarm
+              # Fetch the existing alarm and return it
+              case find_active_alarm(mission_id, target_id, source_type, source_id) do
+                nil ->
+                  # Very rare race: alarm was created and then cleared
+                  Repo.rollback(:alarm_not_found_after_conflict)
+
+                alarm ->
+                  {alarm, :existing}
+              end
+
+            {:error, changeset} ->
+              Repo.rollback(changeset)
+          end
+
+        existing_alarm ->
+          {existing_alarm, :existing}
+      end
+    end)
+    |> case do
+      {:ok, {alarm, status}} -> {:ok, alarm, status}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Attempts to create an alarm, handling unique constraint violations gracefully
+  defp do_create_alarm_with_conflict_handling(attrs) do
+    %Alarm{}
+    |> Alarm.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, alarm} ->
+        {:ok, alarm}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        # Check if this is a unique constraint violation
+        if unique_constraint_violation?(changeset) do
+          {:error, :conflict}
+        else
+          {:error, changeset}
+        end
+    end
+  end
+
+  # Checks if the changeset error is due to our unique active alarm constraint
+  defp unique_constraint_violation?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {_field, {_msg, [constraint: :unique, constraint_name: "alarms_unique_active_source_idx"]}} ->
+        true
+
+      _ ->
+        false
+    end)
+  end
+
   # Resolves target_id in attrs map if it's a string identifier
   defp resolve_target_id_in_attrs(attrs) do
     mission_id = attrs[:mission_id]
@@ -343,10 +454,29 @@ defmodule Cadence.Alarms do
 
   @doc """
   Acknowledges an alarm.
+
+  Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec acknowledge_alarm(Alarm.t(), String.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def acknowledge_alarm(%Alarm{} = alarm, user_id, note \\ nil) do
+  def acknowledge_alarm(%Alarm{mission_id: mission_id} = alarm, user_id, note \\ nil) do
+    case AlarmManager.whereis(mission_id) do
+      nil ->
+        # Mission not running, update directly
+        do_acknowledge_alarm(alarm, user_id, note)
+
+      _pid ->
+        # Route through AlarmManager for cache consistency
+        AlarmManager.acknowledge_alarm(mission_id, alarm.id, user_id, note)
+    end
+  end
+
+  @doc false
+  # Internal function called by AlarmManager. Performs the database update
+  # and records the event, but does NOT update the cache (caller handles that).
+  @spec do_acknowledge_alarm(Alarm.t(), String.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def do_acknowledge_alarm(%Alarm{} = alarm, user_id, note) do
     Repo.transaction(fn ->
       attrs = %{
         acknowledged_by_id: user_id,
@@ -354,7 +484,7 @@ defmodule Cadence.Alarms do
         acknowledgment_note: note
       }
 
-      with {:ok, updated} <- do_acknowledge_alarm(alarm, attrs),
+      with {:ok, updated} <- do_acknowledge_alarm_changeset(alarm, attrs),
            {:ok, _event} <- create_event(AlarmEvent.acknowledged(updated, user_id, note)) do
         updated
       else
@@ -363,7 +493,7 @@ defmodule Cadence.Alarms do
     end)
   end
 
-  defp do_acknowledge_alarm(alarm, attrs) do
+  defp do_acknowledge_alarm_changeset(alarm, attrs) do
     alarm
     |> Alarm.acknowledge_changeset(attrs)
     |> Repo.update()
@@ -371,10 +501,28 @@ defmodule Cadence.Alarms do
 
   @doc """
   Shelves an alarm for a specified duration.
+
+  Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec shelve_alarm(Alarm.t(), String.t(), integer(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def shelve_alarm(%Alarm{} = alarm, user_id, duration_minutes, reason \\ nil) do
+  def shelve_alarm(%Alarm{mission_id: mission_id} = alarm, user_id, duration_minutes, reason \\ nil) do
+    case AlarmManager.whereis(mission_id) do
+      nil ->
+        # Mission not running, update directly
+        do_shelve_alarm(alarm, user_id, duration_minutes, reason)
+
+      _pid ->
+        # Route through AlarmManager for cache consistency
+        AlarmManager.shelve_alarm(mission_id, alarm.id, user_id, duration_minutes, reason)
+    end
+  end
+
+  @doc false
+  # Internal function called by AlarmManager
+  @spec do_shelve_alarm(Alarm.t(), String.t(), integer(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def do_shelve_alarm(%Alarm{} = alarm, user_id, duration_minutes, reason) do
     Repo.transaction(fn ->
       now = DateTime.utc_now()
       shelved_until = DateTime.add(now, duration_minutes * 60, :second)
@@ -386,7 +534,7 @@ defmodule Cadence.Alarms do
         shelve_reason: reason
       }
 
-      with {:ok, updated} <- do_shelve_alarm(alarm, attrs),
+      with {:ok, updated} <- do_shelve_alarm_changeset(alarm, attrs),
            {:ok, _event} <- create_event(AlarmEvent.shelved(updated, user_id, reason)) do
         updated
       else
@@ -395,7 +543,7 @@ defmodule Cadence.Alarms do
     end)
   end
 
-  defp do_shelve_alarm(alarm, attrs) do
+  defp do_shelve_alarm_changeset(alarm, attrs) do
     alarm
     |> Alarm.shelve_changeset(attrs)
     |> Repo.update()
@@ -403,15 +551,33 @@ defmodule Cadence.Alarms do
 
   @doc """
   Unshelves an alarm, returning it to active/acknowledged state.
+
+  Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec unshelve_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def unshelve_alarm(%Alarm{} = alarm, user_id \\ nil) do
+  def unshelve_alarm(%Alarm{mission_id: mission_id} = alarm, user_id \\ nil) do
+    case AlarmManager.whereis(mission_id) do
+      nil ->
+        # Mission not running, update directly
+        do_unshelve_alarm(alarm, user_id)
+
+      _pid ->
+        # Route through AlarmManager for cache consistency
+        AlarmManager.unshelve_alarm(mission_id, alarm.id, user_id)
+    end
+  end
+
+  @doc false
+  # Internal function called by AlarmManager
+  @spec do_unshelve_alarm(Alarm.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def do_unshelve_alarm(%Alarm{} = alarm, user_id) do
     Repo.transaction(fn ->
       previous_state = %{"status" => "shelved", "shelved_until" => alarm.shelved_until}
       previous_status = if alarm.acknowledged_at, do: :acknowledged, else: :active
 
-      with {:ok, updated} <- do_unshelve_alarm(alarm, previous_status),
+      with {:ok, updated} <- do_unshelve_alarm_changeset(alarm, previous_status),
            {:ok, _event} <- create_event(AlarmEvent.unshelved(updated, previous_state, user_id)) do
         updated
       else
@@ -420,7 +586,7 @@ defmodule Cadence.Alarms do
     end)
   end
 
-  defp do_unshelve_alarm(alarm, previous_status) do
+  defp do_unshelve_alarm_changeset(alarm, previous_status) do
     alarm
     |> Alarm.unshelve_changeset(previous_status)
     |> Repo.update()
@@ -428,10 +594,28 @@ defmodule Cadence.Alarms do
 
   @doc """
   Clears an alarm (condition resolved).
+
+  Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec clear_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def clear_alarm(%Alarm{} = alarm, user_id \\ nil) do
+  def clear_alarm(%Alarm{mission_id: mission_id} = alarm, user_id \\ nil) do
+    case AlarmManager.whereis(mission_id) do
+      nil ->
+        # Mission not running, update directly
+        do_clear_alarm(alarm, user_id)
+
+      _pid ->
+        # Route through AlarmManager for cache consistency
+        AlarmManager.clear_alarm(mission_id, alarm.id, user_id)
+    end
+  end
+
+  @doc false
+  # Internal function called by AlarmManager
+  @spec do_clear_alarm(Alarm.t(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def do_clear_alarm(%Alarm{} = alarm, user_id) do
     Repo.transaction(fn ->
       previous_state = %{
         "status" => to_string(alarm.status),
@@ -439,7 +623,7 @@ defmodule Cadence.Alarms do
         "current_value" => alarm.current_value
       }
 
-      with {:ok, updated} <- do_clear_alarm(alarm),
+      with {:ok, updated} <- do_clear_alarm_changeset(alarm),
            {:ok, _event} <- create_event(AlarmEvent.cleared(updated, previous_state, user_id)) do
         updated
       else
@@ -448,7 +632,7 @@ defmodule Cadence.Alarms do
     end)
   end
 
-  defp do_clear_alarm(alarm) do
+  defp do_clear_alarm_changeset(alarm) do
     alarm
     |> Alarm.clear_changeset(%{cleared_at: DateTime.utc_now()})
     |> Repo.update()
@@ -458,10 +642,27 @@ defmodule Cadence.Alarms do
   Updates an alarm's value and optionally escalates/deescalates severity.
 
   Used when a telemetry item is still in violation but the value changed.
+  Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec update_alarm_value(Alarm.t(), float(), atom(), atom(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def update_alarm_value(%Alarm{} = alarm, value, limit_state, new_severity, message \\ nil) do
+  def update_alarm_value(%Alarm{mission_id: mission_id} = alarm, value, limit_state, new_severity, message \\ nil) do
+    case AlarmManager.whereis(mission_id) do
+      nil ->
+        # Mission not running, update directly
+        do_update_alarm_value(alarm, value, limit_state, new_severity, message)
+
+      _pid ->
+        # Route through AlarmManager for cache consistency
+        AlarmManager.update_alarm_value(mission_id, alarm.id, value, limit_state, new_severity, message)
+    end
+  end
+
+  @doc false
+  # Internal function called by AlarmManager
+  @spec do_update_alarm_value(Alarm.t(), float(), atom(), atom(), String.t() | nil) ::
+          {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def do_update_alarm_value(%Alarm{} = alarm, value, limit_state, new_severity, message) do
     Repo.transaction(fn ->
       previous_state = %{
         "severity" => to_string(alarm.severity),
@@ -477,7 +678,7 @@ defmodule Cadence.Alarms do
         message: message || alarm.message
       }
 
-      with {:ok, updated} <- do_update_alarm_value(alarm, attrs),
+      with {:ok, updated} <- do_update_alarm_value_changeset(alarm, attrs),
            {:ok, _event} <- create_value_event(alarm, updated, previous_state, value) do
         updated
       else
@@ -486,7 +687,7 @@ defmodule Cadence.Alarms do
     end)
   end
 
-  defp do_update_alarm_value(alarm, attrs) do
+  defp do_update_alarm_value_changeset(alarm, attrs) do
     alarm
     |> Alarm.update_value_changeset(attrs)
     |> Repo.update()

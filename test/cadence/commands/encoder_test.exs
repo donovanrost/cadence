@@ -211,6 +211,49 @@ defmodule Cadence.Commands.EncoderTest do
     end
   end
 
+  describe "encode_parameter/2 edge cases" do
+    test "raises ArgumentError for invalid data type" do
+      param = %CommandParameter{
+        name: "invalid_param",
+        data_type: "invalid_type",
+        bit_offset: 0,
+        bit_length: 8,
+        required: true
+      }
+
+      assert_raise ArgumentError, ~r/Invalid data type/, fn ->
+        Encoder.encode_parameter(param, 42)
+      end
+    end
+
+    test "accepts valid data type strings" do
+      for data_type <- ["uint", "int", "float", "string", "boolean", "enum"] do
+        param = %CommandParameter{
+          name: "test_param",
+          data_type: data_type,
+          bit_offset: 0,
+          bit_length: 32,
+          required: true
+        }
+
+        # Should not raise - specific encodings tested elsewhere
+        case data_type do
+          "float" ->
+            assert {:ok, _} = Encoder.encode_parameter(param, 1.0)
+
+          "string" ->
+            assert {:ok, _} = Encoder.encode_parameter(param, "test")
+
+          "boolean" ->
+            assert {:ok, _} = Encoder.encode_parameter(param, true)
+
+          _ ->
+            assert {:ok, _} = Encoder.encode_parameter(param, 1)
+        end
+      end
+    end
+  end
+
   # Helper functions
 
   defp build_command(opcode, parameters) do

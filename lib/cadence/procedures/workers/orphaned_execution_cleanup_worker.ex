@@ -38,7 +38,6 @@ defmodule Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker do
   alias Cadence.Repo
   alias Cadence.Procedures.ProcedureExecution
   alias Cadence.Procedures.Engine.ExecutionProcess
-  alias Cadence.Procedures.Engine.ExecutionPersistence
 
   # How long an execution must be stale before considered orphaned (2 minutes)
   @staleness_threshold_seconds 120

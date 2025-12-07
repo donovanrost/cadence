@@ -24,6 +24,11 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
   alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionProcess
 
+  # Note: Some Postgrex disconnection errors may appear during these tests.
+  # These are expected - they occur when the sandbox connection is rolled back
+  # while async DAG executor tasks are still attempting DB operations.
+  # The tests still pass correctly.
+
   setup do
     # Use shared sandbox mode for process spawning tests
     Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
@@ -503,6 +508,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
   # Message Handling
   # ============================================================================
 
+  # These tests run long-running procedures and may generate DB errors during cleanup
   describe "handle_info messages" do
     setup do
       org = organization_fixture()

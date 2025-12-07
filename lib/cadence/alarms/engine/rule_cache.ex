@@ -164,11 +164,40 @@ defmodule Cadence.Alarms.Engine.RuleCache do
     all_rules =
       Alarms.list_rules(organization_id, mission_id: mission_id, enabled: true)
 
-    # Cache the rules
-    :ets.insert(@table_name, {{:mission, mission_id}, all_rules})
+    # Pre-compile regex patterns for faster matching
+    rules_with_compiled_patterns = Enum.map(all_rules, &compile_patterns/1)
 
-    all_rules
+    # Cache the rules
+    :ets.insert(@table_name, {{:mission, mission_id}, rules_with_compiled_patterns})
+
+    rules_with_compiled_patterns
   end
+
+  # Pre-compiles regex patterns in rule conditions for faster matching
+  defp compile_patterns(%AlarmRule{conditions: conditions} = rule) when is_map(conditions) do
+    case Map.get(conditions, "item_name_pattern") do
+      nil ->
+        rule
+
+      pattern when is_binary(pattern) ->
+        case Regex.compile(pattern) do
+          {:ok, regex} ->
+            # Store compiled regex in conditions under a special key
+            updated_conditions = Map.put(conditions, :compiled_item_name_pattern, regex)
+            %{rule | conditions: updated_conditions}
+
+          {:error, _} ->
+            # Invalid regex, keep original (will fail matching)
+            Logger.warning("Invalid regex pattern in alarm rule #{rule.id}: #{pattern}")
+            rule
+        end
+
+      _ ->
+        rule
+    end
+  end
+
+  defp compile_patterns(rule), do: rule
 
   defp filter_and_sort_rules(rules, _organization_id, mission_id, target_id) do
     # Resolve target_id if it's a string identifier

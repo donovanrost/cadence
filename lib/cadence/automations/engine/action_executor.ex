@@ -12,7 +12,6 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
   require Logger
 
   alias Cadence.Alarms
-  alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionCoordinator
 
   @doc """

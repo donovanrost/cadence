@@ -22,6 +22,18 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   @type protocol_instance :: {module(), map()}
   @type protocol_chain :: [protocol_instance()]
 
+  # Valid CRC algorithms that can be safely converted to atoms
+  @valid_crc_algorithms ~w(crc32 crc16_ccitt crc16-ccitt crc16_xmodem crc16-xmodem crc8 xor_checksum xor)
+
+  # Known protocol config keys that can be safely converted to atoms
+  @known_protocol_keys ~w(
+    sync_pattern length_bit_size fill_fields include_sync discard_sync
+    terminator strip_terminator frame_size min_frame_size max_frame_size
+    sync_pattern_hex terminator_hex length_endian length_encoding
+    algorithm endian on_failure crc_algorithm crc_endian crc_on_failure
+    crc_enabled packet_length_field_offset packet_length_field_size
+  )
+
   @doc """
   Maps protocol type string to its implementing module.
   """
@@ -263,18 +275,24 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
         {:length_endian, String.to_atom(value)}
 
       # CRC protocol config conversions
+      {"algorithm", value} when value in @valid_crc_algorithms ->
+        {:algorithm, safe_crc_algorithm(value)}
+
       {"algorithm", value} when is_binary(value) ->
-        {:algorithm, String.to_atom(value)}
+        raise ArgumentError, "Unknown CRC algorithm: #{inspect(value)}"
 
       {"endian", value} when value in ["big", "little"] ->
-        {:endian, String.to_atom(value)}
+        {:endian, String.to_existing_atom(value)}
 
       {"on_failure", value} when value in ["skip", "disconnect", "pass"] ->
-        {:on_failure, String.to_atom(value)}
+        {:on_failure, String.to_existing_atom(value)}
 
       # CCSDS protocol config conversions
+      {"crc_algorithm", value} when value in @valid_crc_algorithms ->
+        {:crc_algorithm, safe_crc_algorithm(value)}
+
       {"crc_algorithm", value} when is_binary(value) ->
-        {:crc_algorithm, String.to_atom(value)}
+        raise ArgumentError, "Unknown CRC algorithm: #{inspect(value)}"
 
       {"crc_endian", value} when value in ["big", "little"] ->
         {:crc_endian, String.to_atom(value)}
@@ -297,9 +315,13 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
       {"discard_sync", value} when is_boolean(value) ->
         {:discard_sync, value}
 
-      # Convert other string keys to atoms
+      # Convert known string keys to atoms, keep unknown keys as strings
+      {key, value} when is_binary(key) and key in @known_protocol_keys ->
+        {String.to_existing_atom(key), value}
+
+      # Keep unknown keys as strings to avoid atom exhaustion
       {key, value} when is_binary(key) ->
-        {String.to_atom(key), value}
+        {key, value}
 
       {key, value} ->
         {key, value}
@@ -328,4 +350,18 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   end
 
   def hex_to_binary(_), do: nil
+
+  # Safely convert CRC algorithm strings to atoms without creating new atoms
+  defp safe_crc_algorithm(alg) do
+    case alg do
+      "crc32" -> :crc32
+      "crc16_ccitt" -> :crc16_ccitt
+      "crc16-ccitt" -> :crc16_ccitt
+      "crc16_xmodem" -> :crc16_xmodem
+      "crc16-xmodem" -> :crc16_xmodem
+      "crc8" -> :crc8
+      "xor_checksum" -> :xor_checksum
+      "xor" -> :xor_checksum
+    end
+  end
 end

@@ -186,7 +186,7 @@ defmodule Cadence.Telemetry.Protocols.CRCProtocol do
       "crc8" -> :crc8
       "xor_checksum" -> :xor_checksum
       "xor" -> :xor_checksum
-      _ -> String.to_atom(algorithm)
+      other -> raise ArgumentError, "Unknown CRC algorithm: #{inspect(other)}"
     end
   end
 

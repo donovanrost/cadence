@@ -79,12 +79,16 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler do
   # Recovery Handling
   # ============================================================================
 
+  # Note: This handler is called from within AlarmManager, so we use the internal
+  # do_* functions directly to avoid deadlock (calling back into the GenServer).
+  # The AlarmManager handles cache updates after this handler returns.
+
   defp handle_recovery(%TelemetryLimitEvent{} = event) do
     case find_existing_alarm(event) do
       %Alarm{} = alarm ->
         Logger.info("Clearing alarm #{alarm.id} due to recovery: #{event.item_name}")
 
-        case Alarms.clear_alarm(alarm) do
+        case Alarms.do_clear_alarm(alarm, nil) do
           {:ok, cleared} ->
             # Notify about clearing
             Dispatcher.dispatch(cleared, :cleared, nil)
@@ -190,7 +194,8 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler do
     new_severity = determine_severity(alarm, event, rule)
     message = Matcher.render_message(rule.message_template, event)
 
-    case Alarms.update_alarm_value(
+    # Use internal function to avoid deadlock (we're called from AlarmManager)
+    case Alarms.do_update_alarm_value(
            alarm,
            event.value,
            event.new_state,
@@ -250,8 +255,9 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler do
   defp severity_rank(:info), do: 0
   defp severity_rank(_), do: 0
 
+  # Use internal functions to avoid deadlock (we're called from AlarmManager)
   defp maybe_auto_acknowledge(%Alarm{} = alarm, %AlarmRule{auto_acknowledge: true}) do
-    case Alarms.acknowledge_alarm(alarm, nil, "Auto-acknowledged by rule") do
+    case Alarms.do_acknowledge_alarm(alarm, nil, "Auto-acknowledged by rule") do
       {:ok, acknowledged} -> acknowledged
       {:error, _} -> alarm
     end
@@ -261,7 +267,7 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler do
 
   defp maybe_auto_shelve(%Alarm{} = alarm, %AlarmRule{auto_shelve_duration_minutes: minutes})
        when is_integer(minutes) and minutes > 0 do
-    case Alarms.shelve_alarm(alarm, nil, minutes, "Auto-shelved by rule") do
+    case Alarms.do_shelve_alarm(alarm, nil, minutes, "Auto-shelved by rule") do
       {:ok, shelved} -> shelved
       {:error, _} -> alarm
     end

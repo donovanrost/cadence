@@ -22,6 +22,16 @@ defmodule Cadence.Commands.Encoder do
 
   alias Cadence.Commands.{CommandDefinition, CommandParameter}
 
+  # Valid data types that can be safely converted to atoms
+  @valid_data_types %{
+    "uint" => :uint,
+    "int" => :int,
+    "float" => :float,
+    "string" => :string,
+    "boolean" => :boolean,
+    "enum" => :enum
+  }
+
   @doc """
   Encodes a command with its parameters into binary format.
 
@@ -63,7 +73,7 @@ defmodule Cadence.Commands.Encoder do
   """
   @spec encode_parameter(CommandParameter.t(), term()) :: {:ok, binary()} | {:error, term()}
   def encode_parameter(%CommandParameter{} = param, value) do
-    data_type = String.to_atom(param.data_type)
+    data_type = safe_data_type(param.data_type)
     bit_length = param.bit_length || 0
 
     # Resolve enum values to their numeric representation
@@ -71,6 +81,14 @@ defmodule Cadence.Commands.Encoder do
 
     encode_value(resolved_value, data_type, bit_length)
   end
+
+  # Safely convert data type string to atom without creating new atoms
+  defp safe_data_type(type) when is_binary(type) do
+    Map.get(@valid_data_types, type) ||
+      raise ArgumentError, "Invalid data type: #{inspect(type)}"
+  end
+
+  defp safe_data_type(type) when is_atom(type), do: type
 
   @doc """
   Calculates the total payload size in bytes from parameter definitions.
