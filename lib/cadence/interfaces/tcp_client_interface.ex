@@ -211,9 +211,7 @@ defmodule Cadence.Interfaces.TcpClientInterface do
         {:noreply, %{new_state | protocol_chain: updated_chain}}
 
       {:disconnect, reason} ->
-        Logger.error(
-          "Protocol error for target=#{state.target_id}: #{reason}, disconnecting"
-        )
+        Logger.error("Protocol error for target=#{state.target_id}: #{reason}, disconnecting")
 
         schedule_reconnect(state.reconnect_interval)
         {:noreply, handle_disconnect(new_state)}
@@ -258,7 +256,10 @@ defmodule Cadence.Interfaces.TcpClientInterface do
         {:ok, pid}
 
       {:error, reason} ->
-        Logger.error("Failed to start protocol chain for interface #{interface_id}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to start protocol chain for interface #{interface_id}: #{inspect(reason)}"
+        )
+
         {:error, reason}
     end
   end

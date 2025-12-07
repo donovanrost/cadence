@@ -139,7 +139,6 @@ defmodule Cadence.Telemetry.Protocols.TerminatedProtocol do
 
   # Continue extraction after sync pattern found (or no sync configured)
   defp extract_packets_after_sync(buffer, sync_data, state, acc) do
-
     # Search for terminator
     case find_terminator(buffer, state.terminator) do
       {:ok, term_offset} ->

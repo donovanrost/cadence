@@ -164,6 +164,7 @@ defmodule Cadence.MissionDatabase.Argument do
   def value_hazardous?(%__MODULE__{hazardous_states: states}, value) when is_list(states) do
     Enum.any?(states, fn state -> state.value == value end)
   end
+
   def value_hazardous?(_, _), do: false
 
   @doc """

@@ -121,7 +121,9 @@ defmodule Cadence.Telemetry.PipelineV2.Stages.StageBehaviour do
           if upstream do
             sub_opts = [max_demand: max_demand, min_demand: min_demand]
             # Add partition option if upstream uses PartitionDispatcher
-            sub_opts = if upstream_partitioned, do: [{:partition, partition} | sub_opts], else: sub_opts
+            sub_opts =
+              if upstream_partitioned, do: [{:partition, partition} | sub_opts], else: sub_opts
+
             [{upstream, sub_opts}]
           else
             []

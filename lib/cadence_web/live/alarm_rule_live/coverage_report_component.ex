@@ -27,7 +27,11 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
             <div class="flex">
               <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                    clip-rule="evenodd"
+                  />
                 </svg>
               </div>
               <div class="ml-3">
@@ -51,7 +55,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
               <h4 class="text-sm font-medium text-zinc-900">Coverage Summary</h4>
               <%= if @summary.total_parameters_with_limits > 0 do %>
                 <span class="text-sm text-zinc-600">
-                  <%= @summary.covered_count %> of <%= @summary.total_parameters_with_limits %> parameters covered
+                  {@summary.covered_count} of {@summary.total_parameters_with_limits} parameters covered
                 </span>
               <% end %>
             </div>
@@ -62,7 +66,8 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                   class={[
                     "h-full rounded-full transition-all duration-500",
                     @summary.coverage_percentage >= 80 && "bg-green-500",
-                    @summary.coverage_percentage >= 50 && @summary.coverage_percentage < 80 && "bg-yellow-500",
+                    @summary.coverage_percentage >= 50 && @summary.coverage_percentage < 80 &&
+                      "bg-yellow-500",
                     @summary.coverage_percentage < 50 && "bg-red-500"
                   ]}
                   style={"width: #{@summary.coverage_percentage}%"}
@@ -70,8 +75,8 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                 </div>
               </div>
               <div class="flex justify-between text-xs text-zinc-500">
-                <span><%= Float.round(@summary.coverage_percentage, 1) %>% covered</span>
-                <span><%= @summary.uncovered_count %> uncovered</span>
+                <span>{Float.round(@summary.coverage_percentage, 1)}% covered</span>
+                <span>{@summary.uncovered_count} uncovered</span>
               </div>
             <% else %>
               <p class="text-sm text-zinc-500 italic">
@@ -85,21 +90,29 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
               <div class="flex">
                 <div class="flex-shrink-0">
                   <svg class="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                    <path
+                      fill-rule="evenodd"
+                      d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </div>
                 <div class="ml-3">
                   <h3 class="text-sm font-medium text-amber-800">
-                    <%= @summary.orphaned_rules_count %> Orphaned <%= ngettext("Rule", "Rules", @summary.orphaned_rules_count) %>
+                    {@summary.orphaned_rules_count} Orphaned {ngettext(
+                      "Rule",
+                      "Rules",
+                      @summary.orphaned_rules_count
+                    )}
                   </h3>
                   <div class="mt-2 text-sm text-amber-700">
                     <p>These rules don't match any parameters in the current database:</p>
                     <ul class="mt-2 list-disc list-inside space-y-1">
                       <%= for %{rule: rule, reason: reason} <- @analysis.orphaned_rules do %>
                         <li>
-                          <span class="font-medium"><%= rule.name %></span>
+                          <span class="font-medium">{rule.name}</span>
                           <span class="text-amber-600">
-                            (<%= format_orphan_reason(reason) %>)
+                            ({format_orphan_reason(reason)})
                           </span>
                         </li>
                       <% end %>
@@ -142,10 +155,10 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                     <%= for param <- @analysis.uncovered do %>
                       <tr class="hover:bg-zinc-50">
                         <td class="px-4 py-2 text-sm font-mono text-zinc-900">
-                          <%= param.parameter.name %>
+                          {param.parameter.name}
                         </td>
                         <td class="px-4 py-2 text-sm text-zinc-600">
-                          <%= param.container_name %>
+                          {param.container_name}
                         </td>
                         <td class="px-4 py-2 text-right">
                           <button
@@ -169,7 +182,11 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                 <div class="flex">
                   <div class="flex-shrink-0">
                     <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+                      <path
+                        fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+                        clip-rule="evenodd"
+                      />
                     </svg>
                   </div>
                   <div class="ml-3">
@@ -266,7 +283,9 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
   def handle_event("set_view_mode", %{"mode" => "target"}, socket) do
     # Switch to target view, select first target if none selected
     targets = socket.assigns.targets_using_database
-    selected_target_id = socket.assigns.selected_target_id || (targets |> List.first() |> then(& &1 && &1.id))
+
+    selected_target_id =
+      socket.assigns.selected_target_id || targets |> List.first() |> then(&(&1 && &1.id))
 
     socket =
       socket
@@ -298,13 +317,26 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
 
   def handle_event("open_bulk_create", _params, socket) do
     target_id = if socket.assigns.view_mode == :target, do: socket.assigns.selected_target_id
-    send(self(), {__MODULE__, {:open_bulk_create, socket.assigns.definition_set_id, socket.assigns.mission.id, target_id}})
+
+    send(
+      self(),
+      {__MODULE__,
+       {:open_bulk_create, socket.assigns.definition_set_id, socket.assigns.mission.id, target_id}}
+    )
+
     {:noreply, socket}
   end
 
   def handle_event("create_single_rule", %{"param" => qualified_name}, socket) do
     target_id = if socket.assigns.view_mode == :target, do: socket.assigns.selected_target_id
-    send(self(), {__MODULE__, {:create_single_rule, socket.assigns.definition_set_id, socket.assigns.mission.id, qualified_name, target_id}})
+
+    send(
+      self(),
+      {__MODULE__,
+       {:create_single_rule, socket.assigns.definition_set_id, socket.assigns.mission.id,
+        qualified_name, target_id}}
+    )
+
     {:noreply, socket}
   end
 
@@ -345,7 +377,13 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
     |> assign(:loading, false)
     |> assign(:error, nil)
     |> assign(:analysis, %{covered: [], uncovered: [], orphaned_rules: []})
-    |> assign(:summary, %{total_parameters_with_limits: 0, covered_count: 0, uncovered_count: 0, orphaned_rules_count: 0, coverage_percentage: 100.0})
+    |> assign(:summary, %{
+      total_parameters_with_limits: 0,
+      covered_count: 0,
+      uncovered_count: 0,
+      orphaned_rules_count: 0,
+      coverage_percentage: 100.0
+    })
   end
 
   defp load_coverage_for_view_mode(socket, _definition_set_id, _mission_id, :target, target_id) do
@@ -385,7 +423,8 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
       covered_count: covered_count,
       uncovered_count: uncovered_count,
       orphaned_rules_count: length(analysis.orphaned_rules),
-      coverage_percentage: if(total == 0, do: 100.0, else: Float.round(covered_count / total * 100, 1))
+      coverage_percentage:
+        if(total == 0, do: 100.0, else: Float.round(covered_count / total * 100, 1))
     }
   end
 
@@ -408,7 +447,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
             @view_mode != :database && "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
           ]}
         >
-          All Targets (<%= length(@targets_using_database) %>)
+          All Targets ({length(@targets_using_database)})
         </button>
         <button
           phx-click="set_view_mode"
@@ -434,7 +473,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
         >
           <%= for target <- @targets_using_database do %>
             <option value={target.id} selected={target.id == @selected_target_id}>
-              <%= target.identifier %>
+              {target.identifier}
             </option>
           <% end %>
         </select>

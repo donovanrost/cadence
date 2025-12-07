@@ -1,0 +1,4 @@
+We are working on Cadence -- a multi-tenant SaaS platform for managing constellation scale spacecraft operations.
+Cadences architecture is heavily inspired by Cosmos OpenC3, but adapted for Elixir idioms.
+
+We care about code quality and the health of the codebase. To this end we want to treat warnings as errors. We also want to follow the recommendations from `mix credo --strict`. We have only recently added credo, so there are many violations. From here on out, we should leave the code base better than we found it. Each session should aim to clean up at least one violation, over time this will be burned down.

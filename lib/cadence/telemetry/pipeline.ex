@@ -242,4 +242,3 @@ defmodule Cadence.Telemetry.Pipeline do
     }
   end
 end
-

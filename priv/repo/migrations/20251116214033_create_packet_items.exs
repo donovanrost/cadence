@@ -17,10 +17,12 @@ defmodule Cadence.Repo.Migrations.CreatePacketItems do
       # Bit-level extraction (decommutation)
       add :bit_offset, :integer, null: false
       add :bit_length, :integer, null: false
-      add :data_type, :string, null: false # uint, int, float, string, boolean
+      # uint, int, float, string, boolean
+      add :data_type, :string, null: false
 
       # Conversion configuration
-      add :conversion_type, :string # polynomial, state, segmented_polynomial
+      # polynomial, state, segmented_polynomial
+      add :conversion_type, :string
       add :conversion_config, :map, default: %{}
 
       # Units and formatting

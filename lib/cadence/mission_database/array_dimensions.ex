@@ -81,8 +81,11 @@ defmodule Cadence.MissionDatabase.ArrayDimensions do
   def static?(%__MODULE__{dimensions: dims, dynamic_dimension_refs: nil}) when is_list(dims) do
     Enum.all?(dims, &(not is_nil(&1)))
   end
-  def static?(%__MODULE__{dimensions: dims, dynamic_dimension_refs: refs}) when is_list(dims) and is_list(refs) do
+
+  def static?(%__MODULE__{dimensions: dims, dynamic_dimension_refs: refs})
+      when is_list(dims) and is_list(refs) do
     Enum.all?(dims, &(not is_nil(&1))) and Enum.all?(refs, &is_nil/1)
   end
+
   def static?(_), do: false
 end

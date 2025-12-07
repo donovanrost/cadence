@@ -281,7 +281,8 @@ defmodule Cadence.Telemetry.Stats do
     key = {mission_id, :timing_samples, stage}
 
     case :ets.lookup(@table_name, key) do
-      [{^key, {samples_map, sample_count, _total_count}}] when is_map(samples_map) and sample_count > 0 ->
+      [{^key, {samples_map, sample_count, _total_count}}]
+      when is_map(samples_map) and sample_count > 0 ->
         # Convert map values to sorted list for percentile calculation
         sorted = samples_map |> Map.values() |> Enum.sort()
         count = length(sorted)
@@ -323,7 +324,7 @@ defmodule Cadence.Telemetry.Stats do
 
   # Calculate percentile value from sorted list
   defp percentile_at(sorted, count, percentile) do
-    index = round((percentile / 100) * (count - 1))
+    index = round(percentile / 100 * (count - 1))
     index = max(0, min(index, count - 1))
     Enum.at(sorted, index, 0)
   end
@@ -549,9 +550,15 @@ defmodule Cadence.Telemetry.Stats do
       duration_ms: duration_ms,
       duration_sec: duration_ms / 1000,
       packets_per_sec:
-        if(duration_ms > 0, do: Float.round(stats.packets_processed / (duration_ms / 1000), 1), else: 0.0),
+        if(duration_ms > 0,
+          do: Float.round(stats.packets_processed / (duration_ms / 1000), 1),
+          else: 0.0
+        ),
       items_per_sec:
-        if(duration_ms > 0, do: Float.round(stats.items_processed / (duration_ms / 1000), 1), else: 0.0),
+        if(duration_ms > 0,
+          do: Float.round(stats.items_processed / (duration_ms / 1000), 1),
+          else: 0.0
+        ),
       timing: timing
     })
   end

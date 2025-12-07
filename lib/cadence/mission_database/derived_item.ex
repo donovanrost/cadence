@@ -143,6 +143,7 @@ defmodule Cadence.MissionDatabase.DerivedItem do
 
   # Extract parameter references (PACKET.ITEM format) from expression
   defp extract_parameter_refs(nil), do: []
+
   defp extract_parameter_refs(expression) do
     # Match patterns like PACKET.ITEM or PACKET.ITEM.SUBITEM
     ~r/[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*/

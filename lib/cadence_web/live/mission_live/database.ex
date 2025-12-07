@@ -44,7 +44,9 @@ defmodule CadenceWeb.MissionLive.Database do
     # Load all databases with their stats
     databases = MissionDatabase.list_databases_with_stats(mission.id)
 
-    Logger.debug("Database catalog loaded for mission #{mission.id}: #{length(databases)} databases")
+    Logger.debug(
+      "Database catalog loaded for mission #{mission.id}: #{length(databases)} databases"
+    )
 
     socket
     |> assign(:page_title, "Database Catalog")
@@ -87,7 +89,10 @@ defmodule CadenceWeb.MissionLive.Database do
     |> assign(:importing_to_database, database)
   end
 
-  defp apply_action(socket, :show_version, %{"database_id" => database_id, "version_id" => version_id}) do
+  defp apply_action(socket, :show_version, %{
+         "database_id" => database_id,
+         "version_id" => version_id
+       }) do
     socket
     |> apply_action(:show_database, %{"database_id" => database_id})
     |> assign(:page_title, "Version Details")
@@ -190,14 +195,12 @@ defmodule CadenceWeb.MissionLive.Database do
         <:actions>
           <.link navigate={~p"/missions/#{@mission}/catalog"}>
             <.button class="btn-ghost">
-              <.icon name="hero-magnifying-glass" class="h-4 w-4 mr-1" />
-              Browse Catalog
+              <.icon name="hero-magnifying-glass" class="h-4 w-4 mr-1" /> Browse Catalog
             </.button>
           </.link>
           <.link patch={~p"/missions/#{@mission}/database/new"}>
             <.button>
-              <.icon name="hero-plus" class="h-4 w-4 mr-1" />
-              New Database
+              <.icon name="hero-plus" class="h-4 w-4 mr-1" /> New Database
             </.button>
           </.link>
         </:actions>
@@ -224,8 +227,7 @@ defmodule CadenceWeb.MissionLive.Database do
               </p>
               <.link patch={~p"/missions/#{@mission}/database/new"} class="mt-4">
                 <.button>
-                  <.icon name="hero-plus" class="-ml-1 mr-2 h-5 w-5" />
-                  Create Database
+                  <.icon name="hero-plus" class="-ml-1 mr-2 h-5 w-5" /> Create Database
                 </.button>
               </.link>
             </div>
@@ -244,21 +246,23 @@ defmodule CadenceWeb.MissionLive.Database do
                         <.icon name="hero-circle-stack" class="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <h3 class="font-semibold"><%= db.name %></h3>
-                        <p class="text-xs text-base-content/50 font-mono"><%= db.slug %></p>
+                        <h3 class="font-semibold">{db.name}</h3>
+                        <p class="text-xs text-base-content/50 font-mono">{db.slug}</p>
                       </div>
                     </div>
                     <%= if latest_version do %>
-                      <span class="badge badge-sm">v<%= latest_version %></span>
+                      <span class="badge badge-sm">v{latest_version}</span>
                     <% end %>
                   </div>
 
                   <%= if db.description do %>
-                    <p class="text-sm text-base-content/70 mt-2 line-clamp-2"><%= db.description %></p>
+                    <p class="text-sm text-base-content/70 mt-2 line-clamp-2">{db.description}</p>
                   <% end %>
 
                   <div class="flex items-center justify-between mt-4 text-sm text-base-content/60">
-                    <span><%= version_count %> <%= if version_count == 1, do: "version", else: "versions" %></span>
+                    <span>
+                      {version_count} {if version_count == 1, do: "version", else: "versions"}
+                    </span>
                     <.icon name="hero-chevron-right" class="h-4 w-4" />
                   </div>
                 </div>
@@ -281,7 +285,11 @@ defmodule CadenceWeb.MissionLive.Database do
         id={if @live_action == :new_database, do: :new, else: @editing_database.id}
         title={if @live_action == :new_database, do: "New Database", else: "Edit Database"}
         action={if @live_action == :new_database, do: :new, else: :edit}
-        database={if @live_action == :new_database, do: %Cadence.MissionDatabase.Database{}, else: @editing_database}
+        database={
+          if @live_action == :new_database,
+            do: %Cadence.MissionDatabase.Database{},
+            else: @editing_database
+        }
         mission={@mission}
         current_scope={@current_scope}
         patch={~p"/missions/#{@mission}/database"}
@@ -336,26 +344,24 @@ defmodule CadenceWeb.MissionLive.Database do
       <!-- Back link and header -->
       <div class="flex items-center gap-4">
         <.link patch={~p"/missions/#{@mission}/database"} class="btn btn-ghost btn-sm">
-          <.icon name="hero-arrow-left" class="h-4 w-4" />
-          Back
+          <.icon name="hero-arrow-left" class="h-4 w-4" /> Back
         </.link>
         <div class="flex-1">
-          <h2 class="text-xl font-bold"><%= @database.name %></h2>
-          <p class="text-sm text-base-content/60 font-mono"><%= @database.slug %></p>
+          <h2 class="text-xl font-bold">{@database.name}</h2>
+          <p class="text-sm text-base-content/60 font-mono">{@database.slug}</p>
         </div>
         <.link patch={~p"/missions/#{@mission}/database/#{@database.id}/import"}>
           <.button>
-            <.icon name="hero-arrow-up-tray" class="h-4 w-4 mr-1" />
-            Import Version
+            <.icon name="hero-arrow-up-tray" class="h-4 w-4 mr-1" /> Import Version
           </.button>
         </.link>
       </div>
 
       <%= if @database.description do %>
-        <p class="text-base-content/70"><%= @database.description %></p>
+        <p class="text-base-content/70">{@database.description}</p>
       <% end %>
-
-      <!-- Versions List -->
+      
+    <!-- Versions List -->
       <div class="space-y-4">
         <h3 class="text-lg font-semibold">Versions</h3>
 
@@ -383,15 +389,15 @@ defmodule CadenceWeb.MissionLive.Database do
               <tbody>
                 <%= for ds <- @definition_sets do %>
                   <tr class="hover">
-                    <td class="font-mono font-medium">v<%= ds.version %></td>
+                    <td class="font-mono font-medium">v{ds.version}</td>
                     <td class="max-w-xs truncate text-base-content/70">
-                      <%= ds.description || "—" %>
+                      {ds.description || "—"}
                     </td>
                     <td>
                       <.version_status definition_set={ds} />
                     </td>
                     <td class="text-sm text-base-content/60">
-                      <%= format_datetime(ds.inserted_at) %>
+                      {format_datetime(ds.inserted_at)}
                     </td>
                     <td>
                       <.dropdown id={"version-actions-#{ds.id}"}>
@@ -401,16 +407,16 @@ defmodule CadenceWeb.MissionLive.Database do
                           </button>
                         </:trigger>
                         <li>
-                          <.link patch={~p"/missions/#{@mission}/database/#{@database.id}/versions/#{ds.id}"}>
-                            <.icon name="hero-eye" class="h-4 w-4" />
-                            View Details
+                          <.link patch={
+                            ~p"/missions/#{@mission}/database/#{@database.id}/versions/#{ds.id}"
+                          }>
+                            <.icon name="hero-eye" class="h-4 w-4" /> View Details
                           </.link>
                         </li>
                         <%= if is_nil(ds.published_at) do %>
                           <li>
                             <button phx-click="publish" phx-value-id={ds.id}>
-                              <.icon name="hero-arrow-up-circle" class="h-4 w-4" />
-                              Publish
+                              <.icon name="hero-arrow-up-circle" class="h-4 w-4" /> Publish
                             </button>
                           </li>
                         <% end %>
@@ -423,8 +429,8 @@ defmodule CadenceWeb.MissionLive.Database do
           </div>
         <% end %>
       </div>
-
-      <!-- Danger Zone -->
+      
+    <!-- Danger Zone -->
       <div class="collapse collapse-arrow bg-error/10 border border-error/20">
         <input type="checkbox" />
         <div class="collapse-title font-medium text-error">
@@ -460,7 +466,7 @@ defmodule CadenceWeb.MissionLive.Database do
         <div class="flex flex-col gap-1">
           <span class="badge badge-ghost badge-sm">Superseded</span>
           <span class="text-xs text-base-content/50">
-            <%= format_datetime(@definition_set.superseded_at) %>
+            {format_datetime(@definition_set.superseded_at)}
           </span>
         </div>
       <% true -> %>

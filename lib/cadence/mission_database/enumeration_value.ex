@@ -32,7 +32,8 @@ defmodule Cadence.MissionDatabase.EnumerationValue do
     field :value, :integer
     field :label, :string
     field :description, :string
-    field :max_value, :integer  # For ranges: value..max_value
+    # For ranges: value..max_value
+    field :max_value, :integer
   end
 
   @doc """
@@ -60,5 +61,7 @@ defmodule Cadence.MissionDatabase.EnumerationValue do
   Checks if a raw value matches this enumeration entry.
   """
   def matches?(%__MODULE__{value: v, max_value: nil}, raw_value), do: raw_value == v
-  def matches?(%__MODULE__{value: v, max_value: max}, raw_value), do: raw_value >= v and raw_value <= max
+
+  def matches?(%__MODULE__{value: v, max_value: max}, raw_value),
+    do: raw_value >= v and raw_value <= max
 end

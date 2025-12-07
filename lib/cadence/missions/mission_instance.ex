@@ -23,6 +23,8 @@ defmodule Cadence.Missions.MissionInstance do
   alias Cadence.Telemetry.Limits.StalenessMonitor
   alias Cadence.Commands.{Dispatcher, Queue}
   alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Automations.Engine.AutomationManager
+  alias Cadence.Procedures.Engine.ExecutionCoordinator
 
   @default_partition_count 16
 
@@ -71,7 +73,13 @@ defmodule Cadence.Missions.MissionInstance do
           {Dispatcher, mission_id: mission.id},
 
           # Command Queue - manages queued commands for ordered execution
-          {Queue, mission_id: mission.id}
+          {Queue, mission_id: mission.id},
+
+          # Procedure Execution Coordinator - manages procedure executions
+          {ExecutionCoordinator, mission_id: mission.id, organization_id: mission.organization_id},
+
+          # Automation Manager - processes events and triggers automations
+          {AutomationManager, mission_id: mission.id, organization_id: mission.organization_id}
         ]
 
     # Strategy: one_for_one means if a child crashes, only restart that child
@@ -91,7 +99,8 @@ defmodule Cadence.Missions.MissionInstance do
   end
 
   defp pipeline_children(:v2, mission_id) do
-    partition_count = Application.get_env(:cadence, :pipeline_v2_partition_count, @default_partition_count)
+    partition_count =
+      Application.get_env(:cadence, :pipeline_v2_partition_count, @default_partition_count)
 
     [
       # Telemetry Pipeline - processes incoming telemetry (GenServer, for simulator)
@@ -108,7 +117,8 @@ defmodule Cadence.Missions.MissionInstance do
 
   defp pipeline_children(:both, mission_id) do
     # Run both pipelines in parallel for testing/comparison
-    partition_count = Application.get_env(:cadence, :pipeline_v2_partition_count, @default_partition_count)
+    partition_count =
+      Application.get_env(:cadence, :pipeline_v2_partition_count, @default_partition_count)
 
     [
       # Telemetry Pipeline - processes incoming telemetry (GenServer, for simulator)

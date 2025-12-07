@@ -4,8 +4,12 @@ defmodule Cadence.Repo.Migrations.CreateMdbContextCalibrators do
   def change do
     create table(:mdb_context_calibrators, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :data_type_id, references(:mdb_data_types, type: :binary_id, on_delete: :delete_all), null: false
-      add :algorithm_id, references(:mdb_algorithms, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :data_type_id, references(:mdb_data_types, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :algorithm_id, references(:mdb_algorithms, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       # Condition that must be true for this calibrator to apply (embedded JSON)
       # MatchCriteria structure

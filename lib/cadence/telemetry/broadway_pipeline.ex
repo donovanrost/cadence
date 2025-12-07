@@ -39,7 +39,16 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
   require Logger
 
   alias Broadway.Message
-  alias Cadence.Telemetry.{Packet, PacketIdentifier, Decommutation, CurrentValueTable, Conversions, DerivedItems, Stats}
+
+  alias Cadence.Telemetry.{
+    Packet,
+    PacketIdentifier,
+    Decommutation,
+    CurrentValueTable,
+    Conversions,
+    DerivedItems,
+    Stats
+  }
 
   # Tunable parameters for throughput optimization
   @producer_concurrency 1
@@ -103,50 +112,61 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
   end
 
   @impl Broadway
-  def handle_message(:default, %Message{data: %{packet: %Packet{} = packet, metadata: _metadata}} = message, context) do
+  def handle_message(
+        :default,
+        %Message{data: %{packet: %Packet{} = packet, metadata: _metadata}} = message,
+        context
+      ) do
     process_start = System.monotonic_time(:microsecond)
     mission_id = context.mission_id
 
     # Step 1: Identify packet type based on format
     packet_format = Packet.get_format(packet)
 
-    identify_result = Stats.time(mission_id, :identify, fn ->
-      identify_packet(packet, packet_format, mission_id)
-    end)
+    identify_result =
+      Stats.time(mission_id, :identify, fn ->
+        identify_packet(packet, packet_format, mission_id)
+      end)
 
     case identify_result do
       {:ok, packet_def} ->
         # Step 2: Extract payload and decommutate
         case Packet.get_payload(packet) do
           {:ok, payload} ->
-            decom_result = Stats.time(mission_id, :decommutate, fn ->
-              Decommutation.decommutate(payload, packet_def, packet_format)
-            end)
+            decom_result =
+              Stats.time(mission_id, :decommutate, fn ->
+                Decommutation.decommutate(payload, packet_def, packet_format)
+              end)
 
             case decom_result do
               {:ok, raw_items} ->
                 # Step 3: Apply conversions
-                converted_items = Stats.time(mission_id, :convert, fn ->
-                  apply_conversions(raw_items, packet_def.items)
-                end)
+                converted_items =
+                  Stats.time(mission_id, :convert, fn ->
+                    apply_conversions(raw_items, packet_def.items)
+                  end)
 
                 # Step 4: Build qualified item names and compute derived items
-                all_items = Stats.time(mission_id, :derive, fn ->
-                  # Qualify item names with packet name (PACKET.item format)
-                  packet_name = packet_def.name
-                  qualified_items =
-                    converted_items
-                    |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
-                    |> Enum.into(%{})
+                all_items =
+                  Stats.time(mission_id, :derive, fn ->
+                    # Qualify item names with packet name (PACKET.item format)
+                    packet_name = packet_def.name
 
-                  # Compute derived items using mission's runtime overlay
-                  case DerivedItems.compute(qualified_items, mission_id) do
-                    {:ok, items} -> items
-                    {:error, reason} ->
-                      Logger.warning("Derived items computation failed: #{inspect(reason)}")
-                      qualified_items
-                  end
-                end)
+                    qualified_items =
+                      converted_items
+                      |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
+                      |> Enum.into(%{})
+
+                    # Compute derived items using mission's runtime overlay
+                    case DerivedItems.compute(qualified_items, mission_id) do
+                      {:ok, items} ->
+                        items
+
+                      {:error, reason} ->
+                        Logger.warning("Derived items computation failed: #{inspect(reason)}")
+                        qualified_items
+                    end
+                  end)
 
                 # Step 5: Check limits (TODO)
                 items_with_limits =
@@ -199,18 +219,19 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
         %{mission_id: mission_id} = _context
       ) do
     # Time the entire batch CVT update
-    total_items = Stats.time(mission_id, :cvt_batch, fn ->
-      Enum.reduce(messages, 0, fn message, acc ->
-        %{
-          packet_def: packet_def,
-          metadata: metadata,
-          items_with_limits: items_with_limits
-        } = message.data
+    total_items =
+      Stats.time(mission_id, :cvt_batch, fn ->
+        Enum.reduce(messages, 0, fn message, acc ->
+          %{
+            packet_def: packet_def,
+            metadata: metadata,
+            items_with_limits: items_with_limits
+          } = message.data
 
-        update_cvt_batch(mission_id, packet_def, metadata, items_with_limits)
-        acc + length(items_with_limits)
+          update_cvt_batch(mission_id, packet_def, metadata, items_with_limits)
+          acc + length(items_with_limits)
+        end)
       end)
-    end)
 
     # Update stats counters
     Stats.increment(mission_id, :packets_processed, length(messages))
@@ -251,13 +272,20 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
     # CCSDS format: Use APID from header
     case Packet.get_apid(packet) do
       nil ->
-        Logger.debug("CCSDS packet missing APID, raw header: #{inspect(:binary.part(packet.raw, 0, min(6, byte_size(packet.raw))), limit: :infinity)}")
+        Logger.debug(
+          "CCSDS packet missing APID, raw header: #{inspect(:binary.part(packet.raw, 0, min(6, byte_size(packet.raw))), limit: :infinity)}"
+        )
+
         {:error, :missing_apid}
 
       apid ->
         # Get target_id from packet for target-scoped definition lookup
         target_id = packet.target_id || "UNKNOWN"
-        Logger.debug("Looking up CCSDS packet with APID=#{apid} for mission_id=#{mission_id}, target_id=#{target_id}")
+
+        Logger.debug(
+          "Looking up CCSDS packet with APID=#{apid} for mission_id=#{mission_id}, target_id=#{target_id}"
+        )
+
         PacketIdentifier.identify_by_apid(mission_id, target_id, apid)
     end
   end
@@ -299,7 +327,9 @@ defmodule Cadence.Telemetry.BroadwayPipeline do
         case item_def do
           %{conversion: conversion} when not is_nil(conversion) ->
             case Conversions.apply_db_conversion(raw_value, conversion) do
-              {:ok, value} -> value
+              {:ok, value} ->
+                value
+
               {:error, reason} ->
                 Logger.warning(
                   "Conversion failed for #{item_name}: #{inspect(reason)}, using raw value"

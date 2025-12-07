@@ -121,14 +121,14 @@ defmodule CadenceWeb.MissionLive.Targets do
     </.header>
 
     <.table id="targets" rows={@targets}>
-      <:col :let={target} label="Name"><%= target.name %></:col>
-      <:col :let={target} label="Identifier"><%= target.identifier %></:col>
-      <:col :let={target} label="Type"><%= target.type %></:col>
+      <:col :let={target} label="Name">{target.name}</:col>
+      <:col :let={target} label="Identifier">{target.identifier}</:col>
+      <:col :let={target} label="Type">{target.type}</:col>
       <:col :let={target} label="Database">
         <%= if target.definition_set do %>
           <span class="text-sm">
-            <%= target.definition_set.database.name %>
-            <span class="text-zinc-400 text-xs ml-1">v<%= target.definition_set.version %></span>
+            {target.definition_set.database.name}
+            <span class="text-zinc-400 text-xs ml-1">v{target.definition_set.version}</span>
           </span>
         <% else %>
           <span class="text-zinc-500 text-sm italic">Not assigned</span>
@@ -142,7 +142,7 @@ defmodule CadenceWeb.MissionLive.Targets do
           target.status == "standby" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
           target.status == "fault" && "bg-red-50 text-red-700 ring-red-600/10"
         ]}>
-          <%= target.status %>
+          {target.status}
         </span>
       </:col>
       <:col :let={target} label="Circuit Breaker">
@@ -150,9 +150,10 @@ defmodule CadenceWeb.MissionLive.Targets do
           "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
           target.circuit_breaker_status == "closed" && "bg-green-50 text-green-700 ring-green-600/20",
           target.circuit_breaker_status == "open" && "bg-red-50 text-red-700 ring-red-600/10",
-          target.circuit_breaker_status == "half_open" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
+          target.circuit_breaker_status == "half_open" &&
+            "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
         ]}>
-          <%= target.circuit_breaker_status %>
+          {target.circuit_breaker_status}
         </span>
       </:col>
       <:action :let={target}>
@@ -174,8 +175,7 @@ defmodule CadenceWeb.MissionLive.Targets do
         <div class="mt-6">
           <.link patch={~p"/missions/#{@mission}/targets/new"}>
             <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" />
-              New Target
+              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Target
             </.button>
           </.link>
         </div>

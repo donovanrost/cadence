@@ -96,6 +96,7 @@ defmodule Cadence.Telemetry.CurrentValueTable do
     ets_entries =
       Enum.map(items, fn {target_id, packet_name, item_name, value, limits_state} ->
         key = {target_id, packet_name, item_name}
+
         telemetry_value = %{
           value: value,
           received_time: received_time,
@@ -103,6 +104,7 @@ defmodule Cadence.Telemetry.CurrentValueTable do
           limits_state: limits_state,
           metadata: %{}
         }
+
         {key, telemetry_value}
       end)
 
@@ -125,11 +127,13 @@ defmodule Cadence.Telemetry.CurrentValueTable do
     topic = "mission:#{mission_id}:telemetry"
 
     pubsub_start = System.monotonic_time(:microsecond)
+
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
       topic,
       {:telemetry_packet_update, target_id, packet_name, items}
     )
+
     pubsub_duration = System.monotonic_time(:microsecond) - pubsub_start
     Stats.record_timing(mission_id, :pubsub_broadcast, pubsub_duration)
   end
@@ -202,6 +206,7 @@ defmodule Cadence.Telemetry.CurrentValueTable do
 
       _info ->
         memory = :ets.info(table_name, :memory)
+
         %{
           total_entries: :ets.info(table_name, :size),
           memory_words: memory,

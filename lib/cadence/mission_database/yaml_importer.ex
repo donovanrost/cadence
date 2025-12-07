@@ -77,6 +77,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   require Logger
 
   alias Cadence.Repo
+
   alias Cadence.MissionDatabase.{
     DefinitionSet,
     DataType,
@@ -98,7 +99,6 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     with {:ok, content} <- File.read(file_path),
          {:ok, parsed} <- parse_yaml(content),
          {:ok, validated} <- validate_structure(parsed) do
-
       version = Keyword.get(opts, :version) || validated["version"] || "1.0.0"
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
@@ -119,7 +119,6 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   def import_string(database, yaml_content, opts \\ []) do
     with {:ok, parsed} <- parse_yaml(yaml_content),
          {:ok, validated} <- validate_structure(parsed) do
-
       version = Keyword.get(opts, :version) || validated["version"] || "1.0.0"
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, yaml_content) |> Base.encode16(case: :lower)
@@ -214,10 +213,14 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
     cond do
       not Enum.empty?(missing) ->
-        {:error, {:validation_error, "Item in packet '#{packet_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
+        {:error,
+         {:validation_error,
+          "Item in packet '#{packet_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
 
       item["bit_size"] <= 0 ->
-        {:error, {:validation_error, "Item '#{item["name"]}' in packet '#{packet_name}' must have bit_size > 0"}}
+        {:error,
+         {:validation_error,
+          "Item '#{item["name"]}' in packet '#{packet_name}' must have bit_size > 0"}}
 
       true ->
         :ok
@@ -242,13 +245,21 @@ defmodule Cadence.MissionDatabase.YamlImporter do
         {:error, {:validation_error, "Command missing 'name'"}}
 
       command["is_hazardous"] == true && is_nil(command["hazard_description"]) ->
-        {:error, {:validation_error, "Hazardous command '#{command["name"]}' missing 'hazard_description'"}}
+        {:error,
+         {:validation_error,
+          "Hazardous command '#{command["name"]}' missing 'hazard_description'"}}
 
       true ->
         case command["parameters"] do
-          nil -> :ok
-          params when is_list(params) -> validate_command_parameters(command["name"], params)
-          _ -> {:error, {:validation_error, "Command '#{command["name"]}' 'parameters' must be a list"}}
+          nil ->
+            :ok
+
+          params when is_list(params) ->
+            validate_command_parameters(command["name"], params)
+
+          _ ->
+            {:error,
+             {:validation_error, "Command '#{command["name"]}' 'parameters' must be a list"}}
         end
     end
   end
@@ -270,10 +281,15 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
     cond do
       not Enum.empty?(missing) ->
-        {:error, {:validation_error, "Parameter in command '#{command_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
+        {:error,
+         {:validation_error,
+          "Parameter in command '#{command_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
 
-      param["data_type"] == "enum" && (is_nil(param["valid_values"]) || param["valid_values"] == []) ->
-        {:error, {:validation_error, "Enum parameter '#{param["name"]}' in command '#{command_name}' missing 'valid_values'"}}
+      param["data_type"] == "enum" &&
+          (is_nil(param["valid_values"]) || param["valid_values"] == []) ->
+        {:error,
+         {:validation_error,
+          "Enum parameter '#{param["name"]}' in command '#{command_name}' missing 'valid_values'"}}
 
       true ->
         :ok
@@ -630,6 +646,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   defp parse_limits_to_alarm(_), do: nil
 
   defp build_range(nil, nil), do: nil
+
   defp build_range(min, max) do
     range = %{}
     range = if min, do: Map.put(range, :min_inclusive, min), else: range

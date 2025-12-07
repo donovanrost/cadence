@@ -4,7 +4,10 @@ defmodule Cadence.Repo.Migrations.CreateMdbArguments do
   def change do
     create table(:mdb_arguments, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :meta_command_id, references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :meta_command_id,
+          references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string, null: false
       add :description, :text
@@ -44,6 +47,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbArguments do
 
     create index(:mdb_arguments, [:meta_command_id])
     create index(:mdb_arguments, [:data_type_id])
-    create unique_index(:mdb_arguments, [:meta_command_id, :name], name: :mdb_arguments_command_name_index)
+
+    create unique_index(:mdb_arguments, [:meta_command_id, :name],
+             name: :mdb_arguments_command_name_index
+           )
   end
 end

@@ -109,14 +109,18 @@ defmodule Cadence.Commands.QueueTest do
 
     test "accepts scheduled_at option", %{mission: mission, target: target} do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
-      {:ok, entry} = Commands.enqueue(mission.id, "DELAYED", %{}, target: target.id, scheduled_at: future)
+
+      {:ok, entry} =
+        Commands.enqueue(mission.id, "DELAYED", %{}, target: target.id, scheduled_at: future)
 
       assert entry.scheduled_at == future
     end
 
     test "accepts expires_at option", %{mission: mission, target: target} do
       future = DateTime.add(DateTime.utc_now(), 300, :second)
-      {:ok, entry} = Commands.enqueue(mission.id, "EXPIRING", %{}, target: target.id, expires_at: future)
+
+      {:ok, entry} =
+        Commands.enqueue(mission.id, "EXPIRING", %{}, target: target.id, expires_at: future)
 
       assert entry.expires_at == future
     end
@@ -220,7 +224,11 @@ defmodule Cadence.Commands.QueueTest do
       assert Enum.at(entries, 2).command_name == "LOW"
     end
 
-    test "filters by target_id", %{mission: mission, target: target, definition_set: definition_set} do
+    test "filters by target_id", %{
+      mission: mission,
+      target: target,
+      definition_set: definition_set
+    } do
       # Create another target
       target2 =
         %Target{}
@@ -246,7 +254,8 @@ defmodule Cadence.Commands.QueueTest do
 
   describe "reorder_queued/3" do
     test "changes priority of a queued entry", %{mission: mission, target: target} do
-      {:ok, entry} = Commands.enqueue(mission.id, "TO_REORDER", %{}, target: target.id, priority: 3)
+      {:ok, entry} =
+        Commands.enqueue(mission.id, "TO_REORDER", %{}, target: target.id, priority: 3)
 
       {:ok, updated} = Commands.reorder_queued(mission.id, entry.id, 1)
 

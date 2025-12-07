@@ -40,5 +40,7 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 # Disable the outbox processor in tests - tests should manage their own processing
-config :cadence, Cadence.Outbox.Processor,
-  enabled: false
+config :cadence, Cadence.Outbox.Processor, enabled: false
+
+# Configure Oban for testing - inline execution
+config :cadence, Oban, testing: :inline

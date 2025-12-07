@@ -157,9 +157,10 @@ defmodule Cadence.Telemetry.ProtocolChain do
     mission_id = Keyword.fetch!(opts, :mission_id)
 
     # Load protocols from opts or database
-    protocol_configs = Keyword.get_lazy(opts, :protocols, fn ->
-      Interfaces.list_protocols(interface_id)
-    end)
+    protocol_configs =
+      Keyword.get_lazy(opts, :protocols, fn ->
+        Interfaces.list_protocols(interface_id)
+      end)
 
     # Initialize read and write chains
     read_chain = Processor.init_chain(protocol_configs, "read")
@@ -240,7 +241,10 @@ defmodule Cadence.Telemetry.ProtocolChain do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info("ProtocolChain terminating for interface_id=#{state.interface_id}: #{inspect(reason)}")
+    Logger.info(
+      "ProtocolChain terminating for interface_id=#{state.interface_id}: #{inspect(reason)}"
+    )
+
     :ok
   end
 end

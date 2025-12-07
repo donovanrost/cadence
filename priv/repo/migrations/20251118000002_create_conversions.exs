@@ -23,6 +23,7 @@ defmodule Cadence.Repo.Migrations.CreateConversions do
     # Polynomial conversions (y = c0 + c1*x + c2*x^2 + ...)
     create table(:polynomial_conversions, primary_key: false) do
       add :id, :uuid, primary_key: true, default: fragment("gen_random_uuid()")
+
       add :conversion_id, references(:conversions, type: :uuid, on_delete: :delete_all),
         null: false
 
@@ -38,6 +39,7 @@ defmodule Cadence.Repo.Migrations.CreateConversions do
     # State table conversions (maps raw value → state string)
     create table(:state_table_conversions, primary_key: false) do
       add :id, :uuid, primary_key: true, default: fragment("gen_random_uuid()")
+
       add :conversion_id, references(:conversions, type: :uuid, on_delete: :delete_all),
         null: false
 
@@ -55,6 +57,7 @@ defmodule Cadence.Repo.Migrations.CreateConversions do
     # Generic conversions (custom Elixir module)
     create table(:generic_conversions, primary_key: false) do
       add :id, :uuid, primary_key: true, default: fragment("gen_random_uuid()")
+
       add :conversion_id, references(:conversions, type: :uuid, on_delete: :delete_all),
         null: false
 

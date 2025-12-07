@@ -103,7 +103,6 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
     with {:ok, content} <- File.read(file_path),
          {:ok, parsed} <- parse_yaml(content),
          {:ok, validated} <- validate_structure(parsed) do
-
       version = Keyword.get(opts, :version) || validated["version"] || "1.0.0"
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
@@ -124,7 +123,6 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
   def import_string(mission, yaml_content, opts \\ []) do
     with {:ok, parsed} <- parse_yaml(yaml_content),
          {:ok, validated} <- validate_structure(parsed) do
-
       version = Keyword.get(opts, :version) || validated["version"] || "1.0.0"
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, yaml_content) |> Base.encode16(case: :lower)
@@ -223,10 +221,14 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
 
     cond do
       not Enum.empty?(missing) ->
-        {:error, {:validation_error, "Item in packet '#{packet_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
+        {:error,
+         {:validation_error,
+          "Item in packet '#{packet_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
 
       item["bit_size"] <= 0 ->
-        {:error, {:validation_error, "Item '#{item["name"]}' in packet '#{packet_name}' must have bit_size > 0"}}
+        {:error,
+         {:validation_error,
+          "Item '#{item["name"]}' in packet '#{packet_name}' must have bit_size > 0"}}
 
       true ->
         :ok
@@ -252,17 +254,27 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
         {:error, {:validation_error, "Command missing 'name'"}}
 
       command["is_hazardous"] == true && is_nil(command["hazard_description"]) ->
-        {:error, {:validation_error, "Hazardous command '#{command["name"]}' missing 'hazard_description'"}}
+        {:error,
+         {:validation_error,
+          "Hazardous command '#{command["name"]}' missing 'hazard_description'"}}
 
       command["has_verification"] == true && is_nil(command["verification_item"]) ->
-        {:error, {:validation_error, "Command '#{command["name"]}' with verification missing 'verification_item'"}}
+        {:error,
+         {:validation_error,
+          "Command '#{command["name"]}' with verification missing 'verification_item'"}}
 
       true ->
         # Validate parameters if present
         case command["parameters"] do
-          nil -> :ok
-          params when is_list(params) -> validate_command_parameters(command["name"], params)
-          _ -> {:error, {:validation_error, "Command '#{command["name"]}' 'parameters' must be a list"}}
+          nil ->
+            :ok
+
+          params when is_list(params) ->
+            validate_command_parameters(command["name"], params)
+
+          _ ->
+            {:error,
+             {:validation_error, "Command '#{command["name"]}' 'parameters' must be a list"}}
         end
     end
   end
@@ -284,10 +296,15 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
 
     cond do
       not Enum.empty?(missing) ->
-        {:error, {:validation_error, "Parameter in command '#{command_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
+        {:error,
+         {:validation_error,
+          "Parameter in command '#{command_name}' missing required fields: #{Enum.join(missing, ", ")}"}}
 
-      param["data_type"] == "enum" && (is_nil(param["valid_values"]) || param["valid_values"] == []) ->
-        {:error, {:validation_error, "Enum parameter '#{param["name"]}' in command '#{command_name}' missing 'valid_values'"}}
+      param["data_type"] == "enum" &&
+          (is_nil(param["valid_values"]) || param["valid_values"] == []) ->
+        {:error,
+         {:validation_error,
+          "Enum parameter '#{param["name"]}' in command '#{command_name}' missing 'valid_values'"}}
 
       true ->
         :ok
@@ -369,8 +386,11 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
     # Handle inline conversion if present
     conversion_id =
       case item_data["conversion"] do
-        nil -> nil
-        conversion_data -> create_conversion(mission, definition_set, item_data["name"], conversion_data)
+        nil ->
+          nil
+
+        conversion_data ->
+          create_conversion(mission, definition_set, item_data["name"], conversion_data)
       end
 
     # Parse limits configuration if present
@@ -432,7 +452,11 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
 
       config = %{"DEFAULT" => stringify_keys(thresholds)}
       config = if persistence, do: Map.put(config, "persistence", persistence), else: config
-      config = if stale_timeout_ms, do: Map.put(config, "stale_timeout_ms", stale_timeout_ms), else: config
+
+      config =
+        if stale_timeout_ms,
+          do: Map.put(config, "stale_timeout_ms", stale_timeout_ms),
+          else: config
 
       {true, config}
     else
@@ -446,7 +470,11 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
         |> Map.new()
 
       config = if persistence, do: Map.put(config, "persistence", persistence), else: config
-      config = if stale_timeout_ms, do: Map.put(config, "stale_timeout_ms", stale_timeout_ms), else: config
+
+      config =
+        if stale_timeout_ms,
+          do: Map.put(config, "stale_timeout_ms", stale_timeout_ms),
+          else: config
 
       {map_size(sets) > 0, config}
     end
@@ -463,7 +491,10 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
 
   defp stringify_keys(other), do: other
 
-  defp create_conversion(mission, definition_set, item_name, %{"type" => "polynomial", "coefficients" => coefficients}) do
+  defp create_conversion(mission, definition_set, item_name, %{
+         "type" => "polynomial",
+         "coefficients" => coefficients
+       }) do
     # Use a short hash of definition_set_id to make conversion name unique across imports
     unique_suffix = definition_set.id |> String.slice(0, 8)
 
@@ -488,7 +519,10 @@ defmodule Cadence.Telemetry.Database.YamlImporter do
     conversion.id
   end
 
-  defp create_conversion(mission, definition_set, item_name, %{"type" => "state_table", "states" => states}) do
+  defp create_conversion(mission, definition_set, item_name, %{
+         "type" => "state_table",
+         "states" => states
+       }) do
     # Convert keys to strings if they're integers
     string_states =
       Enum.into(states, %{}, fn {k, v} -> {to_string(k), v} end)

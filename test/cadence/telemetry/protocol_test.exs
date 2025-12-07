@@ -24,7 +24,9 @@ defmodule Cadence.Telemetry.ProtocolTest do
   describe "length-prefixed framing (LengthProtocol)" do
     setup do
       # Use discard_leading_bytes to strip the 4-byte length header
-      state = LengthProtocol.new(length_bit_size: 32, length_endian: :big, discard_leading_bytes: 4)
+      state =
+        LengthProtocol.new(length_bit_size: 32, length_endian: :big, discard_leading_bytes: 4)
+
       %{state: state}
     end
 
@@ -103,7 +105,8 @@ defmodule Cadence.Telemetry.ProtocolTest do
     end
 
     test "handles little-endian length field" do
-      state = LengthProtocol.new(length_bit_size: 32, length_endian: :little, discard_leading_bytes: 4)
+      state =
+        LengthProtocol.new(length_bit_size: 32, length_endian: :little, discard_leading_bytes: 4)
 
       payload = "Test"
       length = byte_size(payload)
@@ -340,7 +343,7 @@ defmodule Cadence.Telemetry.ProtocolTest do
       packets =
         for seq <- 0..2 do
           payload = :crypto.strong_rand_bytes(15)
-          header = <<0x0864::16, (0xC000 + seq)::16, 14::16>>
+          header = <<0x0864::16, 0xC000 + seq::16, 14::16>>
           @ccsds_sync <> header <> payload
         end
 

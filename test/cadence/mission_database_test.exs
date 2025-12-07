@@ -6,6 +6,7 @@ defmodule Cadence.MissionDatabaseTest do
   import Cadence.OrganizationsFixtures
 
   alias Cadence.MissionDatabase.Database
+
   alias Cadence.MissionDatabase.{
     Algorithm,
     Argument,
@@ -41,26 +42,27 @@ defmodule Cadence.MissionDatabaseTest do
 
     test "requires organization_id, database_id, version, and source_format" do
       changeset = DefinitionSet.changeset(%DefinitionSet{}, %{})
+
       assert %{
-        organization_id: ["can't be blank"],
-        database_id: ["can't be blank"],
-        version: ["can't be blank"],
-        source_format: ["can't be blank"]
-      } = errors_on(changeset)
+               organization_id: ["can't be blank"],
+               database_id: ["can't be blank"],
+               version: ["can't be blank"],
+               source_format: ["can't be blank"]
+             } = errors_on(changeset)
     end
 
     test "enforces unique version per database" do
       ds = definition_set_fixture()
 
       assert {:error, changeset} =
-        %DefinitionSet{}
-        |> DefinitionSet.changeset(%{
-          organization_id: ds.organization_id,
-          database_id: ds.database_id,
-          version: ds.version,
-          source_format: :yaml
-        })
-        |> Repo.insert()
+               %DefinitionSet{}
+               |> DefinitionSet.changeset(%{
+                 organization_id: ds.organization_id,
+                 database_id: ds.database_id,
+                 version: ds.version,
+                 source_format: :yaml
+               })
+               |> Repo.insert()
 
       # Unique constraint error appears on database_id (composite key)
       errors = errors_on(changeset)
@@ -150,15 +152,15 @@ defmodule Cadence.MissionDatabaseTest do
       unit = unit_fixture()
 
       assert {:error, changeset} =
-        %Unit{}
-        |> Unit.changeset(%{
-          organization_id: unit.organization_id,
-          mission_id: unit.mission_id,
-          definition_set_id: unit.definition_set_id,
-          name: unit.name,
-          symbol: "x"
-        })
-        |> Repo.insert()
+               %Unit{}
+               |> Unit.changeset(%{
+                 organization_id: unit.organization_id,
+                 mission_id: unit.mission_id,
+                 definition_set_id: unit.definition_set_id,
+                 name: unit.name,
+                 symbol: "x"
+               })
+               |> Repo.insert()
 
       # The unique constraint is on [definition_set_id, name]
       errors = errors_on(changeset)
@@ -200,12 +202,13 @@ defmodule Cadence.MissionDatabaseTest do
     test "validates algorithm_type is in allowed list" do
       ds = definition_set_fixture()
 
-      changeset = Algorithm.changeset(%Algorithm{}, %{
-        organization_id: ds.organization_id,
-        definition_set_id: ds.id,
-        name: "test",
-        algorithm_type: :invalid_type
-      })
+      changeset =
+        Algorithm.changeset(%Algorithm{}, %{
+          organization_id: ds.organization_id,
+          definition_set_id: ds.id,
+          name: "test",
+          algorithm_type: :invalid_type
+        })
 
       assert "is invalid" in errors_on(changeset).algorithm_type
     end
@@ -502,11 +505,12 @@ defmodule Cadence.MissionDatabaseTest do
       container = container_fixture()
 
       # fixed_value requires fixed_value and fixed_value_size_bits
-      changeset = ContainerEntry.changeset(%ContainerEntry{}, %{
-        container_id: container.id,
-        entry_type: :fixed_value,
-        bit_offset: 0
-      })
+      changeset =
+        ContainerEntry.changeset(%ContainerEntry{}, %{
+          container_id: container.id,
+          entry_type: :fixed_value,
+          bit_offset: 0
+        })
 
       errors = errors_on(changeset)
       assert "required for fixed_value entry type" in errors.fixed_value
@@ -722,11 +726,12 @@ defmodule Cadence.MissionDatabaseTest do
     test "requires either match_criteria or telemetry_item_ref" do
       cmd = meta_command_fixture()
 
-      changeset = CommandVerifier.changeset(%CommandVerifier{}, %{
-        meta_command_id: cmd.id,
-        stage: :complete,
-        timeout_ms: 5000
-      })
+      changeset =
+        CommandVerifier.changeset(%CommandVerifier{}, %{
+          meta_command_id: cmd.id,
+          stage: :complete,
+          timeout_ms: 5000
+        })
 
       assert "must specify either match_criteria or telemetry_item_ref" in errors_on(changeset).match_criteria
     end
@@ -764,11 +769,12 @@ defmodule Cadence.MissionDatabaseTest do
     test "validates size_in_bits <= max_size_in_bits" do
       cmd = meta_command_fixture()
 
-      changeset = CommandContainer.changeset(%CommandContainer{}, %{
-        meta_command_id: cmd.id,
-        size_in_bits: 100,
-        max_size_in_bits: 64
-      })
+      changeset =
+        CommandContainer.changeset(%CommandContainer{}, %{
+          meta_command_id: cmd.id,
+          size_in_bits: 100,
+          max_size_in_bits: 64
+        })
 
       assert "cannot be greater than max_size_in_bits" in errors_on(changeset).size_in_bits
     end
@@ -836,10 +842,11 @@ defmodule Cadence.MissionDatabaseTest do
       cc = command_container_fixture()
 
       # argument_ref requires argument_id
-      changeset = CommandContainerEntry.changeset(%CommandContainerEntry{}, %{
-        command_container_id: cc.id,
-        entry_type: :argument_ref
-      })
+      changeset =
+        CommandContainerEntry.changeset(%CommandContainerEntry{}, %{
+          command_container_id: cc.id,
+          entry_type: :argument_ref
+        })
 
       assert "required for argument_ref entry type" in errors_on(changeset).argument_id
     end
@@ -875,21 +882,23 @@ defmodule Cadence.MissionDatabaseTest do
     end
 
     test "supports rolling average expression" do
-      di = derived_item_fixture(
-        name: "TEMP_AVG",
-        expression: "rolling_avg(HEALTH.TEMP, 10)",
-        source_items: ["HEALTH.TEMP"]
-      )
+      di =
+        derived_item_fixture(
+          name: "TEMP_AVG",
+          expression: "rolling_avg(HEALTH.TEMP, 10)",
+          source_items: ["HEALTH.TEMP"]
+        )
 
       assert di.expression =~ "rolling_avg"
     end
 
     test "supports conditional expressions" do
-      di = derived_item_fixture(
-        name: "STATUS",
-        expression: "if POWER.VOLTAGE > 28 then 1 else 0",
-        data_type: "int"
-      )
+      di =
+        derived_item_fixture(
+          name: "STATUS",
+          expression: "if POWER.VOLTAGE > 28 then 1 else 0",
+          data_type: "int"
+        )
 
       assert di.data_type == "int"
     end
@@ -898,13 +907,14 @@ defmodule Cadence.MissionDatabaseTest do
       org = organization_fixture()
       mission = mission_fixture(organization: org)
 
-      changeset = DerivedItem.changeset(%DerivedItem{}, %{
-        organization_id: org.id,
-        mission_id: mission.id,
-        name: "BAD_TYPE",
-        expression: "1 + 1",
-        data_type: "invalid_type"
-      })
+      changeset =
+        DerivedItem.changeset(%DerivedItem{}, %{
+          organization_id: org.id,
+          mission_id: mission.id,
+          name: "BAD_TYPE",
+          expression: "1 + 1",
+          data_type: "invalid_type"
+        })
 
       assert "is invalid" in errors_on(changeset).data_type
     end
@@ -913,14 +923,14 @@ defmodule Cadence.MissionDatabaseTest do
       di = derived_item_fixture()
 
       assert {:error, changeset} =
-        %DerivedItem{}
-        |> DerivedItem.changeset(%{
-          organization_id: di.organization_id,
-          mission_id: di.mission_id,
-          name: di.name,
-          expression: "1 + 1"
-        })
-        |> Repo.insert()
+               %DerivedItem{}
+               |> DerivedItem.changeset(%{
+                 organization_id: di.organization_id,
+                 mission_id: di.mission_id,
+                 name: di.name,
+                 expression: "1 + 1"
+               })
+               |> Repo.insert()
 
       # Unique constraint error
       errors = errors_on(changeset)
@@ -950,10 +960,22 @@ defmodule Cadence.MissionDatabaseTest do
       unit = unit_fixture(definition_set: ds, name: "celsius", symbol: "C")
 
       # Add algorithms
-      algo = algorithm_fixture(definition_set: ds, name: "temp_cal", algorithm_type: :polynomial, coefficients: [0.0, 0.1])
+      algo =
+        algorithm_fixture(
+          definition_set: ds,
+          name: "temp_cal",
+          algorithm_type: :polynomial,
+          coefficients: [0.0, 0.1]
+        )
 
       # Add data types with calibrator reference
-      dt = data_type_fixture(definition_set: ds, name: "TEMP_TYPE", default_calibrator_id: algo.id, unit_id: unit.id)
+      dt =
+        data_type_fixture(
+          definition_set: ds,
+          name: "TEMP_TYPE",
+          default_calibrator_id: algo.id,
+          unit_id: unit.id
+        )
 
       # Add streams
       _stream = stream_fixture(definition_set: ds, name: "TLM_STREAM")

@@ -183,7 +183,9 @@ defmodule Cadence.Telemetry.PacketIdentifier do
   def init(mission_id) do
     table_name = table_name(mission_id)
 
-    Logger.info("Creating packet identification table: #{table_name} for mission_id=#{mission_id}")
+    Logger.info(
+      "Creating packet identification table: #{table_name} for mission_id=#{mission_id}"
+    )
 
     # Create ETS table for fast lookups
     _table =
@@ -319,10 +321,7 @@ defmodule Cadence.Telemetry.PacketIdentifier do
       "Loaded #{total_packets} packets from #{length(definition_set_ids)} definition_sets for mission_id=#{state.mission_id}"
     )
 
-    %{state |
-      packets_loaded: total_packets,
-      definition_sets_loaded: definition_set_ids
-    }
+    %{state | packets_loaded: total_packets, definition_sets_loaded: definition_set_ids}
   end
 
   # Cache target identifier → definition_set_id mappings in ETS
@@ -342,7 +341,9 @@ defmodule Cadence.Telemetry.PacketIdentifier do
       :ets.insert(table_name, {{:target_ds, identifier}, ds_id})
     end)
 
-    Logger.debug("Cached #{length(targets)} target definition_set mappings for mission_id=#{mission_id}")
+    Logger.debug(
+      "Cached #{length(targets)} target definition_set mappings for mission_id=#{mission_id}"
+    )
   end
 
   # Gets all unique definition_set_ids used by targets in this mission
@@ -377,7 +378,10 @@ defmodule Cadence.Telemetry.PacketIdentifier do
 
         # Index by type byte (simulator format) - scoped by definition_set_id
         if container.packet_type do
-          :ets.insert(table_name, {{definition_set_id, :type_byte, container.packet_type}, packet_map})
+          :ets.insert(
+            table_name,
+            {{definition_set_id, :type_byte, container.packet_type}, packet_map}
+          )
         end
 
         # Index by APID if present (CCSDS format) - scoped by definition_set_id
@@ -389,7 +393,6 @@ defmodule Cadence.Telemetry.PacketIdentifier do
       length(containers)
     end
   end
-
 
   # Normalize endianness strings to atoms expected by BinaryExtractor
   defp normalize_endianness("big"), do: :big_endian
@@ -446,7 +449,8 @@ defmodule Cadence.Telemetry.PacketIdentifier do
       id: container.id,
       mission_id: container.mission_id,
       definition_set_id: definition_set_id,
-      target_id: nil,  # target_id is set at runtime by the interface
+      # target_id is set at runtime by the interface
+      target_id: nil,
       name: container.name,
       type_byte: container.packet_type,
       apid: container.apid,
@@ -460,7 +464,10 @@ defmodule Cadence.Telemetry.PacketIdentifier do
   # Get the base type as an atom for binary extraction
   # Maps MDB base types to BinaryExtractor types (:uint, :int, :float, :string, :block)
   defp get_base_type_atom(nil), do: :uint
-  defp get_base_type_atom(%{base_type: nil, encoding: encoding}), do: encoding_to_extractor_type(encoding)
+
+  defp get_base_type_atom(%{base_type: nil, encoding: encoding}),
+    do: encoding_to_extractor_type(encoding)
+
   defp get_base_type_atom(%{base_type: base_type, encoding: encoding}) do
     # Map MDB base types to BinaryExtractor types
     case base_type do
@@ -468,13 +475,20 @@ defmodule Cadence.Telemetry.PacketIdentifier do
       :float -> :float
       :string -> :string
       :binary -> :block
-      :boolean -> :uint  # Boolean is typically 1 bit unsigned
-      :enumerated -> :uint  # Enums are unsigned integers
-      :aggregate -> :block  # Aggregates are raw binary
-      :array -> :block  # Arrays are raw binary
-      :absolute_time -> :uint  # Time is typically unsigned integer
-      :relative_time -> :uint  # Duration is typically unsigned integer
-      _ -> :uint  # Default to unsigned integer
+      # Boolean is typically 1 bit unsigned
+      :boolean -> :uint
+      # Enums are unsigned integers
+      :enumerated -> :uint
+      # Aggregates are raw binary
+      :aggregate -> :block
+      # Arrays are raw binary
+      :array -> :block
+      # Time is typically unsigned integer
+      :absolute_time -> :uint
+      # Duration is typically unsigned integer
+      :relative_time -> :uint
+      # Default to unsigned integer
+      _ -> :uint
     end
   end
 
@@ -489,13 +503,17 @@ defmodule Cadence.Telemetry.PacketIdentifier do
 
   # Get endianness from encoding or container default
   defp get_endianness(nil, container), do: normalize_endianness(container.byte_order)
-  defp get_endianness(%{byte_order: nil}, container), do: normalize_endianness(container.byte_order)
+
+  defp get_endianness(%{byte_order: nil}, container),
+    do: normalize_endianness(container.byte_order)
+
   defp get_endianness(%{byte_order: byte_order}, _container), do: normalize_endianness(byte_order)
 
   # Build conversion structure from MDB calibrator (Algorithm)
   # Returns nil if no calibration is needed
   defp build_conversion_from_calibrator(nil), do: nil
   defp build_conversion_from_calibrator(%{default_calibrator: nil}), do: nil
+
   defp build_conversion_from_calibrator(%{default_calibrator: calibrator}) do
     case calibrator.algorithm_type do
       :polynomial ->

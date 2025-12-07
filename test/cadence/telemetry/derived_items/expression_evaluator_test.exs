@@ -86,7 +86,10 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
 
     test "handles mixed variables and constants" do
       bindings = %{"POWER.VOLTAGE" => 28.0, "POWER.CURRENT" => 5.0}
-      {:ok, result} = ExpressionEvaluator.evaluate("(POWER.VOLTAGE * POWER.CURRENT) / 1000", bindings)
+
+      {:ok, result} =
+        ExpressionEvaluator.evaluate("(POWER.VOLTAGE * POWER.CURRENT) / 1000", bindings)
+
       assert_in_delta result, 0.14, 0.001
     end
 
@@ -213,7 +216,9 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
 
     test "min with variables" do
       bindings = %{"THERMAL.T1" => 25.0, "THERMAL.T2" => 30.0, "THERMAL.T3" => 20.0}
-      assert {:ok, 20.0} = ExpressionEvaluator.evaluate("min(THERMAL.T1, THERMAL.T2, THERMAL.T3)", bindings)
+
+      assert {:ok, 20.0} =
+               ExpressionEvaluator.evaluate("min(THERMAL.T1, THERMAL.T2, THERMAL.T3)", bindings)
     end
 
     test "max returns maximum of two values" do
@@ -226,7 +231,9 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
 
     test "max with variables" do
       bindings = %{"THERMAL.T1" => 25.0, "THERMAL.T2" => 30.0, "THERMAL.T3" => 20.0}
-      assert {:ok, 30.0} = ExpressionEvaluator.evaluate("max(THERMAL.T1, THERMAL.T2, THERMAL.T3)", bindings)
+
+      assert {:ok, 30.0} =
+               ExpressionEvaluator.evaluate("max(THERMAL.T1, THERMAL.T2, THERMAL.T3)", bindings)
     end
 
     test "clamp constrains value to range" do
@@ -353,38 +360,51 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
 
     test "if-then-else with comparison" do
       bindings = %{"POWER.VOLTAGE" => 10.5}
-      assert {:ok, 1} = ExpressionEvaluator.evaluate("if POWER.VOLTAGE < 11.0 then 1 else 0", bindings)
+
+      assert {:ok, 1} =
+               ExpressionEvaluator.evaluate("if POWER.VOLTAGE < 11.0 then 1 else 0", bindings)
     end
 
     test "if-then-else with comparison - else branch" do
       bindings = %{"POWER.VOLTAGE" => 12.0}
-      assert {:ok, 0} = ExpressionEvaluator.evaluate("if POWER.VOLTAGE < 11.0 then 1 else 0", bindings)
+
+      assert {:ok, 0} =
+               ExpressionEvaluator.evaluate("if POWER.VOLTAGE < 11.0 then 1 else 0", bindings)
     end
 
     test "if-then-else with expressions in branches" do
       bindings = %{"HEALTH.TEMP" => 75.0}
-      {:ok, result} = ExpressionEvaluator.evaluate(
-        "if HEALTH.TEMP > 50 then HEALTH.TEMP * 2 else HEALTH.TEMP / 2",
-        bindings
-      )
+
+      {:ok, result} =
+        ExpressionEvaluator.evaluate(
+          "if HEALTH.TEMP > 50 then HEALTH.TEMP * 2 else HEALTH.TEMP / 2",
+          bindings
+        )
+
       assert_in_delta result, 150.0, 0.001
     end
 
     test "nested conditionals" do
       bindings = %{"HEALTH.TEMP" => 75.0}
-      {:ok, result} = ExpressionEvaluator.evaluate(
-        "if HEALTH.TEMP > 100 then 3 else if HEALTH.TEMP > 50 then 2 else 1",
-        bindings
-      )
+
+      {:ok, result} =
+        ExpressionEvaluator.evaluate(
+          "if HEALTH.TEMP > 100 then 3 else if HEALTH.TEMP > 50 then 2 else 1",
+          bindings
+        )
+
       assert result == 2
     end
 
     test "conditional with function in condition" do
       bindings = %{"HEALTH.TEMP" => -15.0}
-      {:ok, result} = ExpressionEvaluator.evaluate(
-        "if abs(HEALTH.TEMP) > 10 then 1 else 0",
-        bindings
-      )
+
+      {:ok, result} =
+        ExpressionEvaluator.evaluate(
+          "if abs(HEALTH.TEMP) > 10 then 1 else 0",
+          bindings
+        )
+
       assert result == 1
     end
   end
@@ -410,7 +430,10 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
 
     test "handles deeply nested expressions" do
       bindings = %{"CALC.A" => 1.0, "CALC.B" => 2.0, "CALC.C" => 3.0}
-      {:ok, result} = ExpressionEvaluator.evaluate("((CALC.A + CALC.B) * (CALC.B + CALC.C)) / 2", bindings)
+
+      {:ok, result} =
+        ExpressionEvaluator.evaluate("((CALC.A + CALC.B) * (CALC.B + CALC.C)) / 2", bindings)
+
       # ((1+2) * (2+3)) / 2 = (3 * 5) / 2 = 7.5
       assert_in_delta result, 7.5, 0.001
     end
@@ -421,11 +444,14 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
         "THERMAL.TEMP2" => 90.0,
         "THERMAL.TEMP3" => 88.0
       }
+
       # Return 1 (warning) if max temp > 80, else 0
-      {:ok, result} = ExpressionEvaluator.evaluate(
-        "if max(THERMAL.TEMP1, THERMAL.TEMP2, THERMAL.TEMP3) > 80 then 1 else 0",
-        bindings
-      )
+      {:ok, result} =
+        ExpressionEvaluator.evaluate(
+          "if max(THERMAL.TEMP1, THERMAL.TEMP2, THERMAL.TEMP3) > 80 then 1 else 0",
+          bindings
+        )
+
       assert result == 1
     end
 
@@ -435,11 +461,14 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
         "POWER.V_MIN" => 10.0,
         "POWER.V_MAX" => 14.0
       }
+
       # SOC% = clamp((V - Vmin) / (Vmax - Vmin) * 100, 0, 100)
-      {:ok, result} = ExpressionEvaluator.evaluate(
-        "clamp((POWER.VOLTAGE - POWER.V_MIN) / (POWER.V_MAX - POWER.V_MIN) * 100, 0, 100)",
-        bindings
-      )
+      {:ok, result} =
+        ExpressionEvaluator.evaluate(
+          "clamp((POWER.VOLTAGE - POWER.V_MIN) / (POWER.V_MAX - POWER.V_MIN) * 100, 0, 100)",
+          bindings
+        )
+
       assert_in_delta result, 50.0, 0.001
     end
   end
@@ -533,9 +562,11 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluatorTest do
     end
 
     test "extracts variables from conditionals" do
-      {:ok, vars} = ExpressionEvaluator.extract_variables(
-        "if POWER.VOLTAGE < 11.0 then HEALTH.WARN else HEALTH.OK"
-      )
+      {:ok, vars} =
+        ExpressionEvaluator.extract_variables(
+          "if POWER.VOLTAGE < 11.0 then HEALTH.WARN else HEALTH.OK"
+        )
+
       assert Enum.sort(vars) == ["HEALTH.OK", "HEALTH.WARN", "POWER.VOLTAGE"]
     end
 

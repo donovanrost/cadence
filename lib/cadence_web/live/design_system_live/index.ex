@@ -16,12 +16,12 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           Cadence's vaporwave/Tokyo Night inspired design language and component library
         </:subtitle>
       </.header>
-
-      <!-- Color Palette -->
+      
+    <!-- Color Palette -->
       <div class="mt-8">
         <h2 class="text-2xl font-bold mb-4">Color Palette</h2>
-
-        <!-- Dark Mode Colors -->
+        
+    <!-- Dark Mode Colors -->
         <div class="mb-6">
           <h3 class="text-lg font-semibold mb-3">Dark Mode (Tokyo Night)</h3>
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -82,8 +82,8 @@ defmodule CadenceWeb.DesignSystemLive.Index do
             </div>
           </div>
         </div>
-
-        <!-- Base Colors -->
+        
+    <!-- Base Colors -->
         <div class="mb-6">
           <h3 class="text-lg font-semibold mb-3">Background & Surface Colors</h3>
           <div class="grid grid-cols-3 gap-4">
@@ -110,8 +110,8 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           </div>
         </div>
       </div>
-
-      <!-- Typography -->
+      
+    <!-- Typography -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Typography</h2>
         <div class="space-y-4">
@@ -145,8 +145,8 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           </div>
         </div>
       </div>
-
-      <!-- Buttons -->
+      
+    <!-- Buttons -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Buttons</h2>
         <div class="flex flex-wrap gap-4">
@@ -166,8 +166,8 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           &lt;button class="btn btn-secondary"&gt;Secondary&lt;/button&gt;</code></pre>
         </div>
       </div>
-
-      <!-- Badges -->
+      
+    <!-- Badges -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Badges</h2>
         <div class="flex flex-wrap gap-3">
@@ -185,8 +185,8 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           <pre class="text-sm"><code>&lt;.badge variant="primary"&gt;Primary&lt;/.badge&gt;</code></pre>
         </div>
       </div>
-
-      <!-- Avatars -->
+      
+    <!-- Avatars -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Avatars</h2>
         <div class="flex flex-wrap gap-4 items-end">
@@ -198,11 +198,11 @@ defmodule CadenceWeb.DesignSystemLive.Index do
 
         <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>&lt;.avatar email="user@example.com" /&gt;
-&lt;.avatar email="user@example.com" name="Full Name" size="lg" /&gt;</code></pre>
+    &lt;.avatar email="user@example.com" name="Full Name" size="lg" /&gt;</code></pre>
         </div>
       </div>
-
-      <!-- Forms -->
+      
+    <!-- Forms -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Form Elements</h2>
         <div class="max-w-md space-y-4">
@@ -234,15 +234,14 @@ defmodule CadenceWeb.DesignSystemLive.Index do
           <div class="fieldset mb-2">
             <label>
               <span class="label">
-                <input type="checkbox" class="checkbox checkbox-sm" />
-                Checkbox Label
+                <input type="checkbox" class="checkbox checkbox-sm" /> Checkbox Label
               </span>
             </label>
           </div>
         </div>
       </div>
-
-      <!-- Vaporwave Effects -->
+      
+    <!-- Vaporwave Effects -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Vaporwave Effects</h2>
 
@@ -264,9 +263,9 @@ defmodule CadenceWeb.DesignSystemLive.Index do
 
         <div class="p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>class="glow-cyan"
-class="glow-purple"
-class="glow-pink"
-class="hover-glow-cyan"</code></pre>
+    class="glow-purple"
+    class="glow-pink"
+    class="hover-glow-cyan"</code></pre>
         </div>
 
         <h3 class="text-lg font-semibold mb-3 mt-6">Gradients</h3>
@@ -281,11 +280,11 @@ class="hover-glow-cyan"</code></pre>
 
         <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>class="gradient-vaporwave"
-class="gradient-vaporwave-subtle"</code></pre>
+    class="gradient-vaporwave-subtle"</code></pre>
         </div>
       </div>
-
-      <!-- Alerts -->
+      
+    <!-- Alerts -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Alerts</h2>
         <div class="space-y-4">
@@ -310,8 +309,8 @@ class="gradient-vaporwave-subtle"</code></pre>
           </div>
         </div>
       </div>
-
-      <!-- Cards -->
+      
+    <!-- Cards -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Cards</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -337,8 +336,8 @@ class="gradient-vaporwave-subtle"</code></pre>
           </div>
         </div>
       </div>
-
-      <!-- Icons -->
+      
+    <!-- Icons -->
       <div class="mt-12 mb-12">
         <h2 class="text-2xl font-bold mb-4">Icons (Heroicons)</h2>
         <div class="flex flex-wrap gap-6">
@@ -371,11 +370,14 @@ class="gradient-vaporwave-subtle"</code></pre>
         <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>&lt;.icon name="hero-home" class="h-6 w-6" /&gt;</code></pre>
           <p class="text-sm mt-2 text-base-content/70">
-            Browse all icons at <a
+            Browse all icons at
+            <a
               href="https://heroicons.com"
               target="_blank"
               class="link link-primary"
-            >heroicons.com</a>
+            >
+              heroicons.com
+            </a>
           </p>
         </div>
       </div>

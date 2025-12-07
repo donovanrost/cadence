@@ -10,7 +10,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>
           Derived items are computed values calculated from other telemetry items.
         </:subtitle>
@@ -52,16 +52,26 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
             <%= if @expression_validation.valid do %>
               <div class="flex items-center gap-2 text-green-600">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
                 Expression is valid
               </div>
             <% else %>
               <div class="flex items-center gap-2 text-red-600">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
-                <%= @expression_validation.error %>
+                {@expression_validation.error}
               </div>
             <% end %>
           </div>
@@ -72,11 +82,17 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
               <%= for item <- @source_items do %>
                 <span class={[
                   "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-                  item_exists?(item, @available_items) && "bg-green-50 text-green-700 ring-green-600/20",
-                  !item_exists?(item, @available_items) && "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
+                  item_exists?(item, @available_items) &&
+                    "bg-green-50 text-green-700 ring-green-600/20",
+                  !item_exists?(item, @available_items) &&
+                    "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
                 ]}>
-                  <%= item %>
-                  <span :if={!item_exists?(item, @available_items)} class="ml-1" title="Item not found in active database">
+                  {item}
+                  <span
+                    :if={!item_exists?(item, @available_items)}
+                    class="ml-1"
+                    title="Item not found in active database"
+                  >
                     ?
                   </span>
                 </span>
@@ -86,7 +102,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
 
           <details :if={@available_items != []} class="mt-3">
             <summary class="text-sm font-medium text-zinc-700 cursor-pointer hover:text-zinc-900">
-              Available items from active database (<%= length(@available_items) %>)
+              Available items from active database ({length(@available_items)})
             </summary>
             <div class="mt-2 max-h-48 overflow-y-auto border border-zinc-200 rounded-md p-2 bg-zinc-50">
               <div class="grid grid-cols-2 gap-1 text-xs">
@@ -99,7 +115,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
                     phx-target={@myself}
                     title={item}
                   >
-                    <%= item %>
+                    {item}
                   </button>
                 <% end %>
               </div>
@@ -140,7 +156,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
 
         <:actions>
           <.button phx-disable-with="Saving..." type="submit">
-            <%= if @action == :new, do: "Create Derived Item", else: "Save Changes" %>
+            {if @action == :new, do: "Create Derived Item", else: "Save Changes"}
           </.button>
         </:actions>
       </.simple_form>

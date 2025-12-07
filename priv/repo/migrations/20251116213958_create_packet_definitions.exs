@@ -36,6 +36,7 @@ defmodule Cadence.Repo.Migrations.CreatePacketDefinitions do
     create index(:packet_definitions, [:organization_id])
     create index(:packet_definitions, [:mission_id])
     create index(:packet_definitions, [:apid])
+
     # Note: unique constraint on (definition_set_id, name) is created in create_definition_sets migration
   end
 end

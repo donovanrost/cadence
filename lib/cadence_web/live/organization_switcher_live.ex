@@ -41,7 +41,7 @@ defmodule CadenceWeb.OrganizationSwitcherLive do
           class="inline-flex w-full justify-center gap-x-1.5 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
         >
           <%= if @current_organization do %>
-            <%= @current_organization.name %>
+            {@current_organization.name}
           <% else %>
             Select Organization
           <% end %>
@@ -68,12 +68,12 @@ defmodule CadenceWeb.OrganizationSwitcherLive do
               phx-value-organization_id={org.id}
               class={[
                 "block w-full text-left px-4 py-2 text-sm",
-                org.id == @current_organization.id &&
-                  "bg-gray-100 text-gray-900 font-semibold" || "text-gray-700 hover:bg-gray-50"
+                (org.id == @current_organization.id &&
+                   "bg-gray-100 text-gray-900 font-semibold") || "text-gray-700 hover:bg-gray-50"
               ]}
               role="menuitem"
             >
-              <%= org.name %>
+              {org.name}
               <%= if org.id == @current_organization.id do %>
                 <span class="float-right">✓</span>
               <% end %>

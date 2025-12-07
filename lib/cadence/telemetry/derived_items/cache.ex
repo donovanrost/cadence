@@ -129,12 +129,13 @@ defmodule Cadence.Telemetry.DerivedItems.Cache do
   @impl GenServer
   def init(_opts) do
     # Create ETS table owned by this process
-    table = :ets.new(@table, [
-      :named_table,
-      :public,
-      :set,
-      read_concurrency: true
-    ])
+    table =
+      :ets.new(@table, [
+        :named_table,
+        :public,
+        :set,
+        read_concurrency: true
+      ])
 
     Logger.info("Derived items cache started (table: #{inspect(table)})")
 
@@ -240,15 +241,13 @@ defmodule Cadence.Telemetry.DerivedItems.Cache do
 
         Logger.debug(
           "Cached #{length(enriched_defs)} derived items for mission #{mission_id} " <>
-          "(#{map_size(packet_index)} packet types indexed)"
+            "(#{map_size(packet_index)} packet types indexed)"
         )
 
         {:ok, {enriched_defs, packet_index}}
 
       {:error, reason} = error ->
-        Logger.error(
-          "Failed to sort derived items for mission #{mission_id}: #{inspect(reason)}"
-        )
+        Logger.error("Failed to sort derived items for mission #{mission_id}: #{inspect(reason)}")
 
         error
     end
@@ -278,7 +277,8 @@ defmodule Cadence.Telemetry.DerivedItems.Cache do
           if MapSet.member?(derived_names, packet_name) do
             # This depends on another derived item - get its root packets
             case Map.get(computed_so_far, packet_name) do
-              nil -> acc  # Not yet computed (shouldn't happen due to topo sort)
+              # Not yet computed (shouldn't happen due to topo sort)
+              nil -> acc
               root_packets -> MapSet.union(acc, root_packets)
             end
           else

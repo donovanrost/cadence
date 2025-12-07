@@ -104,8 +104,8 @@ defmodule Cadence.Alarms.SuggestionStrategy.Semantic do
       String.contains?(name, "CURRENT") ||
       String.contains?(name, "POWER") ||
       String.contains?(name, "BATTERY") ||
-      String.contains?(name, "_V") && !String.contains?(name, "VALVE") ||
-      String.contains?(name, "_I") && !String.contains?(name, "INFO") ||
+      (String.contains?(name, "_V") && !String.contains?(name, "VALVE")) ||
+      (String.contains?(name, "_I") && !String.contains?(name, "INFO")) ||
       String.contains?(name, "EPS") ||
       String.contains?(name, "PDU")
   end

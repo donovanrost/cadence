@@ -106,7 +106,10 @@ defmodule CadenceWeb.Router do
       # Protocol management for interfaces
       live "/missions/:id/interfaces/:interface_id/protocols", ProtocolLive.Index, :index
       live "/missions/:id/interfaces/:interface_id/protocols/new", ProtocolLive.Index, :new
-      live "/missions/:id/interfaces/:interface_id/protocols/:protocol_id/edit", ProtocolLive.Index, :edit
+
+      live "/missions/:id/interfaces/:interface_id/protocols/:protocol_id/edit",
+           ProtocolLive.Index,
+           :edit
 
       # Database catalog section (database and version management)
       live "/missions/:id/database", MissionLive.Database, :index
@@ -114,7 +117,10 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/database/:database_id", MissionLive.Database, :show_database
       live "/missions/:id/database/:database_id/edit", MissionLive.Database, :edit_database
       live "/missions/:id/database/:database_id/import", MissionLive.Database, :import
-      live "/missions/:id/database/:database_id/versions/:version_id", MissionLive.Database, :show_version
+
+      live "/missions/:id/database/:database_id/versions/:version_id",
+           MissionLive.Database,
+           :show_version
 
       # Catalog section (search/browse telemetry, commands, derived)
       live "/missions/:id/catalog", MissionLive.Catalog, :index
@@ -128,6 +134,27 @@ defmodule CadenceWeb.Router do
 
       # Command sender
       live "/missions/:id/commands", CommandLive.Sender, :index
+
+      # Procedures
+      live "/missions/:id/procedures", MissionLive.Procedures, :index
+      live "/missions/:id/procedures/new", ProcedureLive.Edit, :new
+      live "/missions/:id/procedures/:procedure_id", MissionLive.Procedures, :show
+      live "/missions/:id/procedures/:procedure_id/edit", ProcedureLive.Edit, :edit
+      live "/missions/:id/procedures/:procedure_id/execute", MissionLive.Procedures, :execute
+
+      live "/missions/:id/procedures/:procedure_id/executions/:execution_id",
+           MissionLive.ExecutionShow,
+           :show
+
+      # Automations
+      live "/missions/:id/automations", MissionLive.Automations, :index
+      live "/missions/:id/automations/new", MissionLive.Automations, :new
+      live "/missions/:id/automations/:automation_id/edit", MissionLive.Automations, :edit
+
+      # Schedules
+      live "/missions/:id/schedules", MissionLive.Schedules, :index
+      live "/missions/:id/schedules/new", MissionLive.Schedules, :new
+      live "/missions/:id/schedules/:schedule_id/edit", MissionLive.Schedules, :edit
     end
 
     # Ops Console - full screen layout (no sidebar)

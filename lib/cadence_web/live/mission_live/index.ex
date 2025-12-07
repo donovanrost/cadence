@@ -10,11 +10,12 @@ defmodule CadenceWeb.MissionLive.Index do
     scope = socket.assigns.current_scope
     current_org = scope.current_organization
 
-    missions = if current_org do
-      Missions.list_missions(current_org)
-    else
-      []
-    end
+    missions =
+      if current_org do
+        Missions.list_missions(current_org)
+      else
+        []
+      end
 
     {:ok, stream(socket, :missions, missions)}
   end
@@ -44,7 +45,8 @@ defmodule CadenceWeb.MissionLive.Index do
 
   defp apply_action(socket, :new, params) do
     # Use organization_id from params if provided (admin view), otherwise use current org
-    org_id = Map.get(params, "organization_id") || socket.assigns.current_scope.current_organization.id
+    org_id =
+      Map.get(params, "organization_id") || socket.assigns.current_scope.current_organization.id
 
     socket
     |> assign(:page_title, "New Mission")

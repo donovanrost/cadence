@@ -1,5 +1,5 @@
 <.header>
-  <%= @organization.name %>
+  {@organization.name}
   <:subtitle>Organization details and missions</:subtitle>
   <:actions>
     <.link navigate={~p"/admin/organizations/#{@organization}/members"}>
@@ -12,16 +12,16 @@
 </.header>
 
 <.list>
-  <:item title="Slug"><%= @organization.slug %></:item>
-  <:item title="Status"><%= @organization.status %></:item>
-  <:item title="Subscription Tier"><%= @organization.subscription_tier %></:item>
+  <:item title="Slug">{@organization.slug}</:item>
+  <:item title="Status">{@organization.status}</:item>
+  <:item title="Subscription Tier">{@organization.subscription_tier}</:item>
   <:item title="Max Missions">
-    <%= @stats.mission_count %> / <%= @stats.mission_quota %>
+    {@stats.mission_count} / {@stats.mission_quota}
   </:item>
   <:item title="Max Users">
-    <%= @stats.user_count %> / <%= @stats.user_quota %>
+    {@stats.user_count} / {@stats.user_quota}
   </:item>
-  <:item title="Storage Quota"><%= @organization.storage_quota_gb %> GB</:item>
+  <:item title="Storage Quota">{@organization.storage_quota_gb} GB</:item>
 </.list>
 
 <.header class="mt-8">
@@ -34,10 +34,10 @@
 </.header>
 
 <.table id="missions" rows={@missions}>
-  <:col :let={mission} label="Name"><%= mission.name %></:col>
-  <:col :let={mission} label="Slug"><%= mission.slug %></:col>
-  <:col :let={mission} label="Status"><%= mission.status %></:col>
-  <:col :let={mission} label="Phase"><%= mission.phase %></:col>
+  <:col :let={mission} label="Name">{mission.name}</:col>
+  <:col :let={mission} label="Slug">{mission.slug}</:col>
+  <:col :let={mission} label="Status">{mission.status}</:col>
+  <:col :let={mission} label="Phase">{mission.phase}</:col>
   <:action :let={mission}>
     <.link navigate={~p"/missions/#{mission}"}>Show</.link>
   </:action>

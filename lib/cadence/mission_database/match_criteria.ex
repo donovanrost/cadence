@@ -41,11 +41,19 @@ defmodule Cadence.MissionDatabase.MatchCriteria do
   embedded_schema do
     # Simple comparison
     field :parameter_ref, :string
-    field :comparison, Ecto.Enum, values: [
-      :equal, :not_equal, :greater, :less,
-      :greater_equal, :less_equal,
-      :in_range, :not_in_range
-    ]
+
+    field :comparison, Ecto.Enum,
+      values: [
+        :equal,
+        :not_equal,
+        :greater,
+        :less,
+        :greater_equal,
+        :less_equal,
+        :in_range,
+        :not_in_range
+      ]
+
     field :value, :string
     field :use_calibrated, :boolean, default: true
 
@@ -94,7 +102,11 @@ defmodule Cadence.MissionDatabase.MatchCriteria do
     if has_simple or has_expression or has_compound or has_algorithm do
       changeset
     else
-      add_error(changeset, :base, "must specify parameter_ref, boolean_expression, operator with conditions, or algorithm_ref")
+      add_error(
+        changeset,
+        :base,
+        "must specify parameter_ref, boolean_expression, operator with conditions, or algorithm_ref"
+      )
     end
   end
 end

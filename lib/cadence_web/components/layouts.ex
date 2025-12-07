@@ -101,23 +101,23 @@ defmodule CadenceWeb.Layouts do
             <div class="flex-1 text-center font-semibold text-lg">CADENCE</div>
             <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
           </div>
-
-          <!-- Main content area -->
+          
+    <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: User menu in top-right -->
             <div class="hidden lg:flex justify-end p-4 border-b border-base-300">
               <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
             </div>
-
-            <!-- Page content -->
+            
+    <!-- Page content -->
             <div class="p-6">
               {@inner_content}
             </div>
           </main>
         </div>
       </div>
-
-      <!-- Sidebar -->
+      
+    <!-- Sidebar -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
         <div class="min-h-full w-72 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-base-300">
@@ -130,15 +130,15 @@ defmodule CadenceWeb.Layouts do
               </span>
             </.link>
           </div>
-
-          <!-- Navigation -->
+          
+    <!-- Navigation -->
           <nav class="flex-1 overflow-y-auto p-4">
             <ul class="menu space-y-1">
               <.sidebar_navigation current_scope={@current_scope} current_path={@current_path} />
             </ul>
           </nav>
-
-          <!-- Theme toggle at bottom -->
+          
+    <!-- Theme toggle at bottom -->
           <div class="p-4 border-t border-base-300">
             <.theme_toggle />
           </div>
@@ -280,8 +280,8 @@ defmodule CadenceWeb.Layouts do
           <.icon name="hero-chevron-down" class="h-4 w-4 hidden sm:block" />
         </div>
       </:trigger>
-
-      <!-- Organizations Section -->
+      
+    <!-- Organizations Section -->
       <%= if @all_orgs != [] do %>
         <li class="menu-title px-4 py-2">
           <span class="text-xs uppercase tracking-wide text-base-content/50">Organizations</span>
@@ -300,8 +300,8 @@ defmodule CadenceWeb.Layouts do
         <% end %>
         <li class="border-t border-base-300 my-1"></li>
       <% end %>
-
-      <!-- User Actions -->
+      
+    <!-- User Actions -->
       <li>
         <.link navigate={~p"/settings/account"} class="hover-glow-cyan transition-glow">
           <.icon name="hero-user" class="h-4 w-4" /> Your Profile
@@ -313,8 +313,8 @@ defmodule CadenceWeb.Layouts do
           <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Account Settings
         </.link>
       </li>
-
-      <!-- System Admin Link -->
+      
+    <!-- System Admin Link -->
       <%= if @is_system_admin do %>
         <li class="border-t border-base-300 my-1"></li>
         <li>
@@ -422,27 +422,27 @@ defmodule CadenceWeb.Layouts do
               <.icon name="hero-bars-3" class="h-6 w-6" />
             </label>
             <div class="flex-1 text-center font-semibold text-lg">
-              <%= if @mission, do: @mission.name, else: "CADENCE" %>
+              {if @mission, do: @mission.name, else: "CADENCE"}
             </div>
             <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
           </div>
-
-          <!-- Main content area -->
+          
+    <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: User menu in top-right -->
             <div class="hidden lg:flex justify-end p-4 border-b border-base-300">
               <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
             </div>
-
-            <!-- Page content -->
+            
+    <!-- Page content -->
             <div class="p-6">
               {@inner_content}
             </div>
           </main>
         </div>
       </div>
-
-      <!-- Sidebar -->
+      
+    <!-- Sidebar -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
         <div class="min-h-full w-72 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-base-300">
@@ -455,8 +455,8 @@ defmodule CadenceWeb.Layouts do
               </span>
             </.link>
           </div>
-
-          <!-- Back to missions link -->
+          
+    <!-- Back to missions link -->
           <div class="px-4 py-3 border-b border-base-300">
             <.link
               navigate={~p"/missions"}
@@ -466,8 +466,8 @@ defmodule CadenceWeb.Layouts do
               <span>All Missions</span>
             </.link>
           </div>
-
-          <!-- Mission Header -->
+          
+    <!-- Mission Header -->
           <%= if @mission do %>
             <div class="px-4 py-4 border-b border-base-300">
               <div class="flex items-center gap-3">
@@ -487,15 +487,15 @@ defmodule CadenceWeb.Layouts do
               </div>
             </div>
           <% end %>
-
-          <!-- Mission Navigation -->
+          
+    <!-- Mission Navigation -->
           <nav class="flex-1 overflow-y-auto p-4">
             <ul class="menu space-y-1">
               <.mission_navigation mission={@mission} current_path={@current_path} />
             </ul>
           </nav>
-
-          <!-- Theme toggle at bottom -->
+          
+    <!-- Theme toggle at bottom -->
           <div class="p-4 border-t border-base-300">
             <.theme_toggle />
           </div>
@@ -523,13 +523,19 @@ defmodule CadenceWeb.Layouts do
     assigns =
       assigns
       |> assign(:base_path, base_path)
-      |> assign(:is_overview, assigns.current_path == base_path or assigns.current_path == "#{base_path}/show/edit")
+      |> assign(
+        :is_overview,
+        assigns.current_path == base_path or assigns.current_path == "#{base_path}/show/edit"
+      )
       |> assign(:is_targets, String.contains?(assigns.current_path, "#{base_path}/targets"))
       |> assign(:is_interfaces, String.contains?(assigns.current_path, "#{base_path}/interfaces"))
       |> assign(:is_database, String.contains?(assigns.current_path, "#{base_path}/database"))
       |> assign(:is_catalog, String.contains?(assigns.current_path, "#{base_path}/catalog"))
       |> assign(:is_alarms, String.contains?(assigns.current_path, "#{base_path}/alarm"))
       |> assign(:is_commands, String.contains?(assigns.current_path, "#{base_path}/commands"))
+      |> assign(:is_procedures, String.contains?(assigns.current_path, "#{base_path}/procedures"))
+      |> assign(:is_automations, String.contains?(assigns.current_path, "#{base_path}/automations"))
+      |> assign(:is_schedules, String.contains?(assigns.current_path, "#{base_path}/schedules"))
 
     ~H"""
     <%= if @mission do %>
@@ -571,13 +577,28 @@ defmodule CadenceWeb.Layouts do
         Commands
       </.sidebar_nav_item>
 
+      <.sidebar_nav_group
+        label="Procedures"
+        icon="hero-document-text"
+        expanded={@is_procedures or @is_automations or @is_schedules}
+      >
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/procedures"} active={@is_procedures}>
+          Procedures
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/automations"} active={@is_automations}>
+          Automations
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/schedules"} active={@is_schedules}>
+          Schedules
+        </.sidebar_nav_child>
+      </.sidebar_nav_group>
+
       <li class="my-3 border-t border-base-300"></li>
 
       <.sidebar_nav_item navigate={~p"/missions/#{@mission}/ops"} active={false}>
         <:icon><.icon name="hero-play" class="h-5 w-5" /></:icon>
         <span class="flex items-center gap-2">
-          Ops Console
-          <span class="badge badge-xs badge-primary">Live</span>
+          Ops Console <span class="badge badge-xs badge-primary">Live</span>
         </span>
       </.sidebar_nav_item>
     <% end %>

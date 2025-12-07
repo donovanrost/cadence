@@ -232,6 +232,7 @@ defmodule Cadence.Simulator.Providers.ScenarioProvider do
 
     # Spike goes up in first half, down in second half
     half_steps = steps / 2
+
     progress =
       if pattern_step <= half_steps do
         pattern_step / half_steps

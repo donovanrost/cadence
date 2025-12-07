@@ -226,7 +226,9 @@ defmodule Mix.Tasks.Cadence.Profile do
     Mission: #{config.mission_id}
     """)
 
-    case rpc_call(config.node, Cadence.Telemetry.Stats, :get_all_timing_analysis, [config.mission_id]) do
+    case rpc_call(config.node, Cadence.Telemetry.Stats, :get_all_timing_analysis, [
+           config.mission_id
+         ]) do
       {:badrpc, reason} ->
         Mix.raise("RPC failed: #{inspect(reason)}")
 
@@ -264,7 +266,10 @@ defmodule Mix.Tasks.Cadence.Profile do
     stage_name = stage |> to_string() |> String.upcase()
 
     Mix.shell().info("#{stage_name} (#{data.sample_count} samples)")
-    Mix.shell().info("  Averages:  avg=#{format_us(data.avg_us)}  trimmed=#{format_us(data.trimmed_avg_us)}  median=#{format_us(data.median_us)}")
+
+    Mix.shell().info(
+      "  Averages:  avg=#{format_us(data.avg_us)}  trimmed=#{format_us(data.trimmed_avg_us)}  median=#{format_us(data.median_us)}"
+    )
 
     # Warmup analysis
     if length(data.warmup_samples) > 0 do
@@ -273,26 +278,38 @@ defmodule Mix.Tasks.Cadence.Profile do
 
       # Check if first packet is an outlier
       first = List.first(data.warmup_samples)
+
       if first && data.avg_us > 0 && first > data.avg_us * 2 do
-        Mix.shell().info("  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg")
+        Mix.shell().info(
+          "  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg"
+        )
       end
 
       # Check if warmup avg is significantly higher
       if data.trimmed_avg_us > 0 && data.warmup_avg_us > data.trimmed_avg_us * 1.5 do
-        Mix.shell().info("  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state")
+        Mix.shell().info(
+          "  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state"
+        )
       end
     end
 
     # Spike analysis
     if data.spike_count > 0 do
       spike_pct = Float.round(data.spike_count / data.sample_count * 100, 2)
-      Mix.shell().info("  Spikes:    #{data.spike_count} samples (#{spike_pct}%) > #{format_us(data.spike_threshold_us)}")
+
+      Mix.shell().info(
+        "  Spikes:    #{data.spike_count} samples (#{spike_pct}%) > #{format_us(data.spike_threshold_us)}"
+      )
     end
 
     # Show how much outliers affect the average
-    if data.trimmed_avg_us > 0 && abs(data.avg_us - data.trimmed_avg_us) > data.trimmed_avg_us * 0.1 do
+    if data.trimmed_avg_us > 0 &&
+         abs(data.avg_us - data.trimmed_avg_us) > data.trimmed_avg_us * 0.1 do
       diff_pct = Float.round((data.avg_us - data.trimmed_avg_us) / data.trimmed_avg_us * 100, 1)
-      Mix.shell().info("  📊 Outliers inflate avg by #{diff_pct}% (use trimmed for accurate measurement)")
+
+      Mix.shell().info(
+        "  📊 Outliers inflate avg by #{diff_pct}% (use trimmed for accurate measurement)"
+      )
     end
 
     Mix.shell().info("")
@@ -401,7 +418,12 @@ defmodule Mix.Tasks.Cadence.Profile do
 
     # Stats (from ETS counters - works with Broadway)
     case snapshot[:stats] do
-      %{packets_received: recv, packets_processed: proc, packets_failed: failed, items_processed: items} ->
+      %{
+        packets_received: recv,
+        packets_processed: proc,
+        packets_failed: failed,
+        items_processed: items
+      } ->
         delta =
           case prev do
             %{stats: %{packets_processed: prev_proc}} ->
@@ -412,7 +434,11 @@ defmodule Mix.Tasks.Cadence.Profile do
           end
 
         pending = recv - proc - failed
-        Mix.shell().info("Packets: #{proc} processed#{delta}, #{recv} received, #{pending} pending, #{failed} failed")
+
+        Mix.shell().info(
+          "Packets: #{proc} processed#{delta}, #{recv} received, #{pending} pending, #{failed} failed"
+        )
+
         Mix.shell().info("Items: #{items} processed")
 
         # Show timing if available (with percentiles)
@@ -420,6 +446,7 @@ defmodule Mix.Tasks.Cadence.Profile do
           %{timing: timing} when is_map(timing) ->
             percentiles = snapshot[:percentiles]
             print_timing(timing, percentiles)
+
           _ ->
             :ok
         end
@@ -428,6 +455,7 @@ defmodule Mix.Tasks.Cadence.Profile do
         case snapshot[:stage_errors] do
           errors when is_map(errors) ->
             print_stage_errors(errors)
+
           _ ->
             :ok
         end
@@ -451,6 +479,7 @@ defmodule Mix.Tasks.Cadence.Profile do
         # Show V2-specific counters
         stage_errors = Map.get(v2, :stage_errors, 0)
         dropped = Map.get(v2, :packets_dropped, 0)
+
         if stage_errors > 0 or dropped > 0 do
           Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
         end
@@ -458,8 +487,10 @@ defmodule Mix.Tasks.Cadence.Profile do
         # Show partition queue depths if any are backed up
         partitions = Map.get(v2, :partitions, %{})
         backed_up_stages = find_backed_up_v2_stages(partitions)
+
         if length(backed_up_stages) > 0 do
           Mix.shell().info("⚠️  V2 backed up stages:")
+
           Enum.each(backed_up_stages, fn {partition, stage, queue_len} ->
             Mix.shell().info("   p#{partition}:#{stage}: #{queue_len} messages")
           end)
@@ -528,9 +559,10 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp format_reductions(r), do: "#{r}"
 
   defp print_timing(timing, percentiles) do
-    stages_with_data = Enum.filter(timing, fn {_stage, data} ->
-      is_map(data) && Map.get(data, :count, 0) > 0
-    end)
+    stages_with_data =
+      Enum.filter(timing, fn {_stage, data} ->
+        is_map(data) && Map.get(data, :count, 0) > 0
+      end)
 
     if length(stages_with_data) > 0 do
       if percentiles && is_map(percentiles) do
@@ -542,13 +574,19 @@ defmodule Mix.Tasks.Cadence.Profile do
       # V1 Broadway stages + V2 GenStage stages
       all_stages = [
         # V1 Broadway stages
-        :identify, :decommutate, :convert, :derive,
+        :identify,
+        :decommutate,
+        :convert,
+        :derive,
         # V2 GenStage stages (decom is shorter name for decommutation)
         :decom,
         # Limits evaluation
         :limits,
         # Shared stages
-        :cvt_batch, :ets_write, :pubsub_broadcast, :total_process,
+        :cvt_batch,
+        :ets_write,
+        :pubsub_broadcast,
+        :total_process,
         # End-to-end latency
         :end_to_end
       ]
@@ -642,9 +680,11 @@ defmodule Mix.Tasks.Cadence.Profile do
           {%{stage_errors: se1, packets_dropped: pd1}, %{stage_errors: se2, packets_dropped: pd2}} ->
             stage_errors = (se2 || 0) - (se1 || 0)
             dropped = (pd2 || 0) - (pd1 || 0)
+
             if stage_errors > 0 or dropped > 0 do
               Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
             end
+
           _ ->
             :ok
         end
@@ -663,9 +703,11 @@ defmodule Mix.Tasks.Cadence.Profile do
       %{partition_count: partition_count, router_queue: router_queue} when partition_count > 0 ->
         router_q = if is_integer(router_queue), do: router_queue, else: 0
         Mix.shell().info("\nV2 Pipeline: #{partition_count} partitions")
+
         if router_q > 0 do
           Mix.shell().info("Router queue: #{router_q} pending")
         end
+
       _ ->
         :ok
     end

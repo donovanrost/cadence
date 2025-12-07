@@ -118,11 +118,11 @@ defmodule Cadence.Outbox do
   This function is useful for standalone events that don't need to be
   part of a larger transaction.
   """
-  @spec insert(map()) :: {:ok, Event.t()} | {:error, Ecto.Changeset.t()}
-  def insert(attrs) do
+  @spec insert(map(), keyword()) :: {:ok, Event.t()} | {:error, Ecto.Changeset.t()}
+  def insert(attrs, opts \\ []) do
     attrs
     |> Event.new()
-    |> Repo.insert()
+    |> Repo.insert(opts)
   end
 
   # ============================================================================

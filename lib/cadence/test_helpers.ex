@@ -40,16 +40,17 @@ defmodule Cadence.TestHelpers do
       %{identifier: "SAT-3", name: "Satellite 3"}
     ]
 
-    results = Enum.map(target_configs, fn config ->
-      Targets.create_target(%{
-        mission_id: mission.id,
-        definition_set_id: definition_set_id,
-        name: config.name,
-        identifier: config.identifier,
-        type: "spacecraft",
-        status: "online"
-      })
-    end)
+    results =
+      Enum.map(target_configs, fn config ->
+        Targets.create_target(%{
+          mission_id: mission.id,
+          definition_set_id: definition_set_id,
+          name: config.name,
+          identifier: config.identifier,
+          type: "spacecraft",
+          status: "online"
+        })
+      end)
 
     # Check if all succeeded
     if Enum.all?(results, &match?({:ok, _}, &1)) do
@@ -67,12 +68,14 @@ defmodule Cadence.TestHelpers do
     mission = Repo.preload(mission, :organization)
 
     # Try to find existing database for mission
-    database = Repo.get_by(Database, mission_id: mission.id) ||
-      create_database(mission)
+    database =
+      Repo.get_by(Database, mission_id: mission.id) ||
+        create_database(mission)
 
     # Try to find existing definition set for database
-    definition_set = Repo.get_by(DefinitionSet, database_id: database.id) ||
-      create_definition_set(mission.organization, database)
+    definition_set =
+      Repo.get_by(DefinitionSet, database_id: database.id) ||
+        create_definition_set(mission.organization, database)
 
     definition_set.id
   end
@@ -114,16 +117,18 @@ defmodule Cadence.TestHelpers do
     name = Keyword.get(opts, :name, identifier)
     type = Keyword.get(opts, :type, "spacecraft")
     status = Keyword.get(opts, :status, "online")
-    definition_set_id = Keyword.get(opts, :definition_set_id) || get_or_create_definition_set(mission)
+
+    definition_set_id =
+      Keyword.get(opts, :definition_set_id) || get_or_create_definition_set(mission)
 
     case Targets.create_target(%{
-      mission_id: mission.id,
-      definition_set_id: definition_set_id,
-      name: name,
-      identifier: identifier,
-      type: type,
-      status: status
-    }) do
+           mission_id: mission.id,
+           definition_set_id: definition_set_id,
+           name: name,
+           identifier: identifier,
+           type: type,
+           status: status
+         }) do
       {:ok, target} ->
         IO.puts("✅ Created target: #{identifier}")
         {:ok, target}
@@ -152,29 +157,32 @@ defmodule Cadence.TestHelpers do
     mission_name = Keyword.get(opts, :mission_name, "Test Mission")
 
     # Create organization
-    {:ok, org} = Organizations.create_organization(%{
-      name: org_name,
-      slug: "test-org-#{System.unique_integer([:positive])}",
-      status: "active",
-      subscription_tier: "pro"
-    })
+    {:ok, org} =
+      Organizations.create_organization(%{
+        name: org_name,
+        slug: "test-org-#{System.unique_integer([:positive])}",
+        status: "active",
+        subscription_tier: "pro"
+      })
 
     # Create user
-    {:ok, user} = Accounts.register_user(%{
-      email: "test-#{System.unique_integer([:positive])}@example.com",
-      organization_id: org.id,
-      role: "admin"
-    })
+    {:ok, user} =
+      Accounts.register_user(%{
+        email: "test-#{System.unique_integer([:positive])}@example.com",
+        organization_id: org.id,
+        role: "admin"
+      })
 
     # Create mission
-    {:ok, mission} = Missions.create_mission(%{
-      organization_id: org.id,
-      name: mission_name,
-      slug: "test-mission-#{System.unique_integer([:positive])}",
-      description: "Test mission for development",
-      status: "active",
-      creator_user_id: user.id
-    })
+    {:ok, mission} =
+      Missions.create_mission(%{
+        organization_id: org.id,
+        name: mission_name,
+        slug: "test-mission-#{System.unique_integer([:positive])}",
+        description: "Test mission for development",
+        status: "active",
+        creator_user_id: user.id
+      })
 
     # Create targets
     {:ok, targets} = create_test_targets(mission)

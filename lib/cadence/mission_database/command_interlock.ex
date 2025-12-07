@@ -46,7 +46,8 @@ defmodule Cadence.MissionDatabase.CommandInterlock do
   embedded_schema do
     field :previous_command_ref, :string
     field :verification_stage, Ecto.Enum, values: @verification_stages
-    field :verification_progress_percent, :integer  # For :executing stage
+    # For :executing stage
+    field :verification_progress_percent, :integer
     field :suspendable, :boolean, default: false
   end
 
@@ -55,7 +56,12 @@ defmodule Cadence.MissionDatabase.CommandInterlock do
   """
   def changeset(interlock, attrs) do
     interlock
-    |> cast(attrs, [:previous_command_ref, :verification_stage, :verification_progress_percent, :suspendable])
+    |> cast(attrs, [
+      :previous_command_ref,
+      :verification_stage,
+      :verification_progress_percent,
+      :suspendable
+    ])
     |> validate_required([:previous_command_ref, :verification_stage])
     |> validate_inclusion(:verification_stage, @verification_stages)
     |> validate_progress_percent()

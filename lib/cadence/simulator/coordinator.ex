@@ -176,11 +176,12 @@ defmodule Cadence.Simulator.Coordinator do
     interval_ms = trunc(1000 / state.rate_hz)
     timer_ref = Process.send_after(self(), :generate, interval_ms)
 
-    new_state = %{state |
-      provider_state: provider_state,
-      timer_ref: timer_ref,
-      step: state.step + 1,
-      packet_count: state.packet_count + 1
+    new_state = %{
+      state
+      | provider_state: provider_state,
+        timer_ref: timer_ref,
+        step: state.step + 1,
+        packet_count: state.packet_count + 1
     }
 
     {:noreply, new_state}
@@ -253,6 +254,7 @@ defmodule Cadence.Simulator.Coordinator do
           definitions_path: definitions_path,
           noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)
         }
+
         {DatabaseDynamics, config}
 
       # Default to BasicDynamics
@@ -358,19 +360,21 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp group_and_encode_legacy(values, target_id, step) do
     # Group by packet name
-    by_packet = Enum.group_by(values, fn {qualified_name, _} ->
-      case String.split(qualified_name, ".", parts: 2) do
-        [packet_name, _] -> packet_name
-        _ -> "UNKNOWN"
-      end
-    end)
+    by_packet =
+      Enum.group_by(values, fn {qualified_name, _} ->
+        case String.split(qualified_name, ".", parts: 2) do
+          [packet_name, _] -> packet_name
+          _ -> "UNKNOWN"
+        end
+      end)
 
     # Encode each packet
     Enum.flat_map(by_packet, fn {packet_name, items} ->
-      item_values = Enum.into(items, %{}, fn {qualified, value} ->
-        [_, item] = String.split(qualified, ".", parts: 2)
-        {item, value}
-      end)
+      item_values =
+        Enum.into(items, %{}, fn {qualified, value} ->
+          [_, item] = String.split(qualified, ".", parts: 2)
+          {item, value}
+        end)
 
       case encode_legacy_packet(packet_name, target_id, item_values, step) do
         nil -> []
@@ -441,12 +445,13 @@ defmodule Cadence.Simulator.Coordinator do
     bus_voltage = Map.get(data, "bus_voltage", 27.5)
     bus_current = Map.get(data, "bus_current", 3.2)
 
-    power_mode = case Map.get(data, "power_mode", "NOMINAL") do
-      "NOMINAL" -> 0
-      "BATTERY" -> 1
-      "CHARGING" -> 2
-      _ -> 255
-    end
+    power_mode =
+      case Map.get(data, "power_mode", "NOMINAL") do
+        "NOMINAL" -> 0
+        "BATTERY" -> 1
+        "CHARGING" -> 2
+        _ -> 255
+      end
 
     user_data = <<
       solar_voltage::float-32,

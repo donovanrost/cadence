@@ -151,18 +151,20 @@ defmodule Mix.Tasks.Cadence.Simulate do
     ]
 
     # Add scenario if provided
-    opts = if config.scenario_path do
-      Keyword.put(opts, :scenario_path, config.scenario_path)
-    else
-      opts
-    end
+    opts =
+      if config.scenario_path do
+        Keyword.put(opts, :scenario_path, config.scenario_path)
+      else
+        opts
+      end
 
     # Add definitions if provided
-    opts = if config.definitions_path do
-      Keyword.put(opts, :definitions_path, config.definitions_path)
-    else
-      opts
-    end
+    opts =
+      if config.definitions_path do
+        Keyword.put(opts, :definitions_path, config.definitions_path)
+      else
+        opts
+      end
 
     opts
   end
@@ -215,10 +217,12 @@ defmodule Mix.Tasks.Cadence.Simulate do
 
   defp parse_rate(nil), do: @default_rate
   defp parse_rate(rate) when rate > 0 and rate <= @max_rate, do: rate
+
   defp parse_rate(rate) when rate > @max_rate do
     Mix.shell().info("Note: Rate clamped to maximum #{@max_rate} Hz")
     @max_rate * 1.0
   end
+
   defp parse_rate(rate), do: Mix.raise("Rate must be positive, got: #{rate}")
 
   defp parse_duration(nil), do: @default_duration
@@ -268,17 +272,19 @@ defmodule Mix.Tasks.Cadence.Simulate do
         {"burst", "#{packets_per_tick} packets/ms"}
       end
 
-    provider_info = if config.scenario_path do
-      "scenario (#{Path.basename(config.scenario_path)})"
-    else
-      "basic dynamics"
-    end
+    provider_info =
+      if config.scenario_path do
+        "scenario (#{Path.basename(config.scenario_path)})"
+      else
+        "basic dynamics"
+      end
 
-    definitions_info = if config.definitions_path do
-      Path.basename(config.definitions_path)
-    else
-      "hardcoded (legacy)"
-    end
+    definitions_info =
+      if config.definitions_path do
+        Path.basename(config.definitions_path)
+      else
+        "hardcoded (legacy)"
+      end
 
     Mix.shell().info("""
 

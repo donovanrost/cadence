@@ -74,9 +74,16 @@ defmodule Cadence.MissionDatabase.DataType do
   @foreign_key_type :binary_id
 
   @base_types [
-    :integer, :float, :string, :binary, :boolean,
-    :enumerated, :aggregate, :array,
-    :absolute_time, :relative_time
+    :integer,
+    :float,
+    :string,
+    :binary,
+    :boolean,
+    :enumerated,
+    :aggregate,
+    :array,
+    :absolute_time,
+    :relative_time
   ]
 
   @usages [:parameter, :argument, :both]
@@ -266,8 +273,13 @@ defmodule Cadence.MissionDatabase.DataType do
   Returns true if the value is within the valid range.
   """
   def valid_value?(%__MODULE__{valid_range_min: nil, valid_range_max: nil}, _value), do: true
-  def valid_value?(%__MODULE__{valid_range_min: min, valid_range_max: nil}, value), do: value >= min
-  def valid_value?(%__MODULE__{valid_range_min: nil, valid_range_max: max}, value), do: value <= max
+
+  def valid_value?(%__MODULE__{valid_range_min: min, valid_range_max: nil}, value),
+    do: value >= min
+
+  def valid_value?(%__MODULE__{valid_range_min: nil, valid_range_max: max}, value),
+    do: value <= max
+
   def valid_value?(%__MODULE__{valid_range_min: min, valid_range_max: max}, value) do
     value >= min and value <= max
   end

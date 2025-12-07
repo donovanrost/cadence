@@ -135,8 +135,8 @@ defmodule CadenceWeb.MissionLive.Show do
     <div class="mb-8">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-2xl font-bold text-base-content"><%= @mission.name %></h1>
-          <p class="mt-1 text-sm text-base-content/60"><%= @mission.description || "No description" %></p>
+          <h1 class="text-2xl font-bold text-base-content">{@mission.name}</h1>
+          <p class="mt-1 text-sm text-base-content/60">{@mission.description || "No description"}</p>
         </div>
         <div class="flex items-center gap-3">
           <span class={[
@@ -145,20 +145,21 @@ defmodule CadenceWeb.MissionLive.Show do
             @mission.status == "inactive" && "bg-base-300 text-base-content/60",
             @mission.status == "suspended" && "bg-error/20 text-error"
           ]}>
-            <%= @mission.status %>
+            {@mission.status}
           </span>
-          <.button :if={@mission.status == "active"} phx-click="start_mission" class="btn-success btn-sm">
-            <.icon name="hero-play" class="h-4 w-4 mr-1" />
-            Start
+          <.button
+            :if={@mission.status == "active"}
+            phx-click="start_mission"
+            class="btn-success btn-sm"
+          >
+            <.icon name="hero-play" class="h-4 w-4 mr-1" /> Start
           </.button>
           <.button phx-click="stop_mission" class="btn-ghost btn-sm">
-            <.icon name="hero-stop" class="h-4 w-4 mr-1" />
-            Stop
+            <.icon name="hero-stop" class="h-4 w-4 mr-1" /> Stop
           </.button>
           <.link patch={~p"/missions/#{@mission}/show/edit"}>
             <.button class="btn-ghost btn-sm">
-              <.icon name="hero-pencil" class="h-4 w-4 mr-1" />
-              Edit
+              <.icon name="hero-pencil" class="h-4 w-4 mr-1" /> Edit
             </.button>
           </.link>
         </div>
@@ -175,9 +176,9 @@ defmodule CadenceWeb.MissionLive.Show do
               <div>
                 <p class="text-sm text-base-content/60">Targets</p>
                 <p class="text-2xl font-bold">
-                  <span class="text-success"><%= @targets_online %></span>
+                  <span class="text-success">{@targets_online}</span>
                   <span class="text-base-content/40">/</span>
-                  <span><%= length(@targets) %></span>
+                  <span>{length(@targets)}</span>
                 </p>
                 <p class="text-xs text-base-content/50">online</p>
               </div>
@@ -188,8 +189,8 @@ defmodule CadenceWeb.MissionLive.Show do
           </div>
         </div>
       </.link>
-
-      <!-- Interfaces Card -->
+      
+    <!-- Interfaces Card -->
       <.link navigate={~p"/missions/#{@mission}/interfaces"} class="block">
         <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
           <div class="card-body p-4">
@@ -197,9 +198,9 @@ defmodule CadenceWeb.MissionLive.Show do
               <div>
                 <p class="text-sm text-base-content/60">Interfaces</p>
                 <p class="text-2xl font-bold">
-                  <span class="text-success"><%= @interfaces_connected %></span>
+                  <span class="text-success">{@interfaces_connected}</span>
                   <span class="text-base-content/40">/</span>
-                  <span><%= length(@interfaces) %></span>
+                  <span>{length(@interfaces)}</span>
                 </p>
                 <p class="text-xs text-base-content/50">connected</p>
               </div>
@@ -210,8 +211,8 @@ defmodule CadenceWeb.MissionLive.Show do
           </div>
         </div>
       </.link>
-
-      <!-- Database Card -->
+      
+    <!-- Database Card -->
       <.link navigate={~p"/missions/#{@mission}/database"} class="block">
         <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
           <div class="card-body p-4">
@@ -219,9 +220,9 @@ defmodule CadenceWeb.MissionLive.Show do
               <div>
                 <p class="text-sm text-base-content/60">Database</p>
                 <%= if @active_definition_set do %>
-                  <p class="text-2xl font-bold">v<%= @active_definition_set.version %></p>
+                  <p class="text-2xl font-bold">v{@active_definition_set.version}</p>
                   <p class="text-xs text-base-content/50">
-                    <%= length(@databases) %> <%= ngettext("database", "databases", length(@databases)) %>, <%= @derived_items_count %> derived
+                    {length(@databases)} {ngettext("database", "databases", length(@databases))}, {@derived_items_count} derived
                   </p>
                 <% else %>
                   <p class="text-2xl font-bold text-base-content/40">-</p>
@@ -235,8 +236,8 @@ defmodule CadenceWeb.MissionLive.Show do
           </div>
         </div>
       </.link>
-
-      <!-- Alarms Card -->
+      
+    <!-- Alarms Card -->
       <.link navigate={~p"/missions/#{@mission}/alarms"} class="block">
         <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
           <div class="card-body p-4">
@@ -244,9 +245,9 @@ defmodule CadenceWeb.MissionLive.Show do
               <div>
                 <p class="text-sm text-base-content/60">Alarm Rules</p>
                 <p class="text-2xl font-bold">
-                  <span class="text-success"><%= @enabled_alarms %></span>
+                  <span class="text-success">{@enabled_alarms}</span>
                   <span class="text-base-content/40">/</span>
-                  <span><%= length(@alarm_rules) %></span>
+                  <span>{length(@alarm_rules)}</span>
                 </p>
                 <p class="text-xs text-base-content/50">enabled</p>
               </div>
@@ -268,34 +269,41 @@ defmodule CadenceWeb.MissionLive.Show do
           <div class="divide-y divide-base-300">
             <div class="py-3 flex justify-between">
               <span class="text-base-content/60">Slug</span>
-              <span class="font-mono text-sm"><%= @mission.slug %></span>
+              <span class="font-mono text-sm">{@mission.slug}</span>
             </div>
             <div class="py-3 flex justify-between">
               <span class="text-base-content/60">Phase</span>
-              <span><%= @mission.phase || "Not set" %></span>
+              <span>{@mission.phase || "Not set"}</span>
             </div>
             <div class="py-3 flex justify-between">
               <span class="text-base-content/60">Start Date</span>
               <span>
-                <%= if @mission.start_date, do: Calendar.strftime(@mission.start_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+                {if @mission.start_date,
+                  do: Calendar.strftime(@mission.start_date, "%Y-%m-%d %H:%M"),
+                  else: "Not set"}
               </span>
             </div>
             <div class="py-3 flex justify-between">
               <span class="text-base-content/60">End Date</span>
               <span>
-                <%= if @mission.end_date, do: Calendar.strftime(@mission.end_date, "%Y-%m-%d %H:%M"), else: "Not set" %>
+                {if @mission.end_date,
+                  do: Calendar.strftime(@mission.end_date, "%Y-%m-%d %H:%M"),
+                  else: "Not set"}
               </span>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Recent Targets -->
+      
+    <!-- Recent Targets -->
       <div class="card bg-base-200">
         <div class="card-body">
           <div class="flex items-center justify-between mb-2">
             <h2 class="card-title text-lg">Targets</h2>
-            <.link navigate={~p"/missions/#{@mission}/targets"} class="text-sm text-primary hover:underline">
+            <.link
+              navigate={~p"/missions/#{@mission}/targets"}
+              class="text-sm text-primary hover:underline"
+            >
               View all
             </.link>
           </div>
@@ -312,18 +320,19 @@ defmodule CadenceWeb.MissionLive.Show do
                       target.status == "offline" && "bg-base-content/30",
                       target.status == "standby" && "bg-warning",
                       target.status == "fault" && "bg-error"
-                    ]}></span>
+                    ]}>
+                    </span>
                     <div>
-                      <p class="font-medium text-sm"><%= target.name %></p>
-                      <p class="text-xs text-base-content/50"><%= target.identifier %></p>
+                      <p class="font-medium text-sm">{target.name}</p>
+                      <p class="text-xs text-base-content/50">{target.identifier}</p>
                     </div>
                   </div>
-                  <span class="text-xs text-base-content/50"><%= target.type %></span>
+                  <span class="text-xs text-base-content/50">{target.type}</span>
                 </div>
               <% end %>
               <%= if length(@targets) > 5 do %>
                 <p class="text-xs text-base-content/50 pt-2">
-                  + <%= length(@targets) - 5 %> more targets
+                  + {length(@targets) - 5} more targets
                 </p>
               <% end %>
             </div>

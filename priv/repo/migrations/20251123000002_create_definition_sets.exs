@@ -4,7 +4,9 @@ defmodule Cadence.Repo.Migrations.CreateDefinitionSets do
   def change do
     create table(:definition_sets, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       add :version, :string, null: false
       add :description, :text
@@ -29,7 +31,8 @@ defmodule Cadence.Repo.Migrations.CreateDefinitionSets do
 
     # Add definition_set_id to packet_definitions
     alter table(:packet_definitions) do
-      add :definition_set_id, references(:definition_sets, type: :binary_id, on_delete: :delete_all)
+      add :definition_set_id,
+          references(:definition_sets, type: :binary_id, on_delete: :delete_all)
     end
 
     create index(:packet_definitions, [:definition_set_id])

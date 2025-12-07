@@ -63,11 +63,9 @@ defmodule Cadence.Telemetry.Limits.Evaluator do
       # Red limits (most severe) - check first
       check_red_low(value, limits) -> :red_low
       check_red_high(value, limits) -> :red_high
-
       # Yellow limits (warning)
       check_yellow_low(value, limits) -> :yellow_low
       check_yellow_high(value, limits) -> :yellow_high
-
       # Within all limits
       true -> :green
     end

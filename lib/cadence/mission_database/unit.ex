@@ -71,6 +71,7 @@ defmodule Cadence.MissionDatabase.Unit do
   Returns nil if no SI conversion is defined.
   """
   def to_si(%__MODULE__{si_conversion_factor: nil}, _value), do: nil
+
   def to_si(%__MODULE__{si_conversion_factor: factor, si_conversion_offset: offset}, value) do
     value * factor + (offset || 0)
   end
@@ -81,6 +82,7 @@ defmodule Cadence.MissionDatabase.Unit do
   """
   def from_si(%__MODULE__{si_conversion_factor: nil}, _value), do: nil
   def from_si(%__MODULE__{si_conversion_factor: 0}, _value), do: nil
+
   def from_si(%__MODULE__{si_conversion_factor: factor, si_conversion_offset: offset}, value) do
     (value - (offset || 0)) / factor
   end

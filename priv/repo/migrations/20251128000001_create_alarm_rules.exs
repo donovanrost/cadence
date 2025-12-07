@@ -17,7 +17,8 @@ defmodule Cadence.Repo.Migrations.CreateAlarmRules do
       add :description, :text
 
       # What triggers this rule
-      add :event_type, :string, null: false  # "telemetry_limit", "command_failure", etc.
+      # "telemetry_limit", "command_failure", etc.
+      add :event_type, :string, null: false
       add :conditions, :map, null: false, default: %{}
 
       # What alarm to generate

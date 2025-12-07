@@ -302,19 +302,67 @@ defmodule Cadence.Telemetry.DecommutationTest do
 
       packet =
         <<timestamp::48, target_hash::16>> <>
-          <<cpu_temp::float-32, voltage::float-32, current::float-32, battery_pct::8,
-            uptime::32, memory::16>>
+          <<cpu_temp::float-32, voltage::float-32, current::float-32, battery_pct::8, uptime::32,
+            memory::16>>
 
       # Build field_specs for binary extraction (the new required format)
       field_specs = [
-        %{name: "timestamp", bit_offset: 0, bit_size: 48, data_type: :uint, endianness: :big_endian},
-        %{name: "target_hash", bit_offset: 48, bit_size: 16, data_type: :uint, endianness: :big_endian},
-        %{name: "cpu_temp", bit_offset: 64, bit_size: 32, data_type: :float, endianness: :big_endian},
-        %{name: "battery_voltage", bit_offset: 96, bit_size: 32, data_type: :float, endianness: :big_endian},
-        %{name: "battery_current", bit_offset: 128, bit_size: 32, data_type: :float, endianness: :big_endian},
-        %{name: "battery_percentage", bit_offset: 160, bit_size: 8, data_type: :uint, endianness: :big_endian},
-        %{name: "uptime_seconds", bit_offset: 168, bit_size: 32, data_type: :uint, endianness: :big_endian},
-        %{name: "memory_used_mb", bit_offset: 200, bit_size: 16, data_type: :uint, endianness: :big_endian}
+        %{
+          name: "timestamp",
+          bit_offset: 0,
+          bit_size: 48,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "target_hash",
+          bit_offset: 48,
+          bit_size: 16,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "cpu_temp",
+          bit_offset: 64,
+          bit_size: 32,
+          data_type: :float,
+          endianness: :big_endian
+        },
+        %{
+          name: "battery_voltage",
+          bit_offset: 96,
+          bit_size: 32,
+          data_type: :float,
+          endianness: :big_endian
+        },
+        %{
+          name: "battery_current",
+          bit_offset: 128,
+          bit_size: 32,
+          data_type: :float,
+          endianness: :big_endian
+        },
+        %{
+          name: "battery_percentage",
+          bit_offset: 160,
+          bit_size: 8,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "uptime_seconds",
+          bit_offset: 168,
+          bit_size: 32,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "memory_used_mb",
+          bit_offset: 200,
+          bit_size: 16,
+          data_type: :uint,
+          endianness: :big_endian
+        }
       ]
 
       packet_def = %{
@@ -346,8 +394,20 @@ defmodule Cadence.Telemetry.DecommutationTest do
       packet = <<status::8>> <> <<temp::float-32>> <> <<count::16, name::binary>>
 
       field_specs = [
-        %{name: "status_flags", bit_offset: 0, bit_size: 8, data_type: :uint, endianness: :big_endian},
-        %{name: "temperature", bit_offset: 8, bit_size: 32, data_type: :float, endianness: :big_endian},
+        %{
+          name: "status_flags",
+          bit_offset: 0,
+          bit_size: 8,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "temperature",
+          bit_offset: 8,
+          bit_size: 32,
+          data_type: :float,
+          endianness: :big_endian
+        },
         %{name: "count", bit_offset: 40, bit_size: 16, data_type: :uint, endianness: :big_endian},
         %{name: "name", bit_offset: 56, bit_size: 32, data_type: :string, endianness: :big_endian}
       ]
@@ -412,9 +472,27 @@ defmodule Cadence.Telemetry.DecommutationTest do
       packet = <<0x00, 0x19, 0x0E, 0x10, 0xAB, 0xCF>>
 
       field_specs = [
-        %{name: "temperature", bit_offset: 0, bit_size: 16, data_type: :uint, endianness: :big_endian},
-        %{name: "voltage", bit_offset: 16, bit_size: 16, data_type: :uint, endianness: :big_endian},
-        %{name: "current", bit_offset: 32, bit_size: 12, data_type: :uint, endianness: :big_endian},
+        %{
+          name: "temperature",
+          bit_offset: 0,
+          bit_size: 16,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "voltage",
+          bit_offset: 16,
+          bit_size: 16,
+          data_type: :uint,
+          endianness: :big_endian
+        },
+        %{
+          name: "current",
+          bit_offset: 32,
+          bit_size: 12,
+          data_type: :uint,
+          endianness: :big_endian
+        },
         %{name: "status", bit_offset: 44, bit_size: 4, data_type: :uint, endianness: :big_endian}
       ]
 

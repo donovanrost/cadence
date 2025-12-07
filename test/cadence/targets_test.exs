@@ -25,7 +25,10 @@ defmodule Cadence.TargetsTest do
   end
 
   describe "targets" do
-    test "list_targets/1 returns all targets for a mission", %{mission: mission, definition_set: ds} do
+    test "list_targets/1 returns all targets for a mission", %{
+      mission: mission,
+      definition_set: ds
+    } do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
@@ -53,7 +56,10 @@ defmodule Cadence.TargetsTest do
       assert Targets.get_target!(target.id).id == target.id
     end
 
-    test "get_target_by_identifier/2 returns target by identifier", %{mission: mission, definition_set: ds} do
+    test "get_target_by_identifier/2 returns target by identifier", %{
+      mission: mission,
+      definition_set: ds
+    } do
       {:ok, target} =
         Targets.create_target(%{
           mission_id: mission.id,
@@ -67,7 +73,10 @@ defmodule Cadence.TargetsTest do
       assert found.id == target.id
     end
 
-    test "create_target/1 with valid data creates a target", %{mission: mission, definition_set: ds} do
+    test "create_target/1 with valid data creates a target", %{
+      mission: mission,
+      definition_set: ds
+    } do
       valid_attrs = %{
         mission_id: mission.id,
         definition_set_id: ds.id,
@@ -83,7 +92,10 @@ defmodule Cadence.TargetsTest do
       assert target.type == "spacecraft"
     end
 
-    test "create_target/1 enforces unique identifier per mission", %{mission: mission, definition_set: ds} do
+    test "create_target/1 enforces unique identifier per mission", %{
+      mission: mission,
+      definition_set: ds
+    } do
       attrs = %{
         mission_id: mission.id,
         definition_set_id: ds.id,
@@ -228,7 +240,11 @@ defmodule Cadence.TargetsTest do
       assert length(updated_group.targets) == 1
     end
 
-    test "add_target_to_group/2 rejects mismatched missions", %{mission: mission, organization: org, definition_set: ds} do
+    test "add_target_to_group/2 rejects mismatched missions", %{
+      mission: mission,
+      organization: org,
+      definition_set: ds
+    } do
       {:ok, other_mission} =
         Missions.create_mission(%{
           organization_id: org.id,

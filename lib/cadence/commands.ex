@@ -29,7 +29,16 @@ defmodule Cadence.Commands do
   import Ecto.Query
 
   alias Cadence.Repo
-  alias Cadence.Commands.{CommandDefinition, CommandParameter, CommandLog, Dispatcher, Queue, QueueEntry}
+
+  alias Cadence.Commands.{
+    CommandDefinition,
+    CommandParameter,
+    CommandLog,
+    Dispatcher,
+    Queue,
+    QueueEntry
+  }
+
   alias Cadence.Telemetry.CurrentValueTable
 
   # ============================================================================
@@ -402,10 +411,28 @@ defmodule Cadence.Commands do
 
     deadline = System.monotonic_time(:millisecond) + timeout
 
-    poll_cvt(mission_id, target_id, packet_name, item_name, expected, comparison, poll_interval, deadline)
+    poll_cvt(
+      mission_id,
+      target_id,
+      packet_name,
+      item_name,
+      expected,
+      comparison,
+      poll_interval,
+      deadline
+    )
   end
 
-  defp poll_cvt(mission_id, target_id, packet_name, item_name, expected, comparison, interval, deadline) do
+  defp poll_cvt(
+         mission_id,
+         target_id,
+         packet_name,
+         item_name,
+         expected,
+         comparison,
+         interval,
+         deadline
+       ) do
     case CurrentValueTable.get(mission_id, target_id, packet_name, item_name) do
       {:ok, %{value: value}} ->
         if compare_value(value, expected, comparison) do
@@ -415,7 +442,17 @@ defmodule Cadence.Commands do
             {:error, :mismatch, value}
           else
             Process.sleep(interval)
-            poll_cvt(mission_id, target_id, packet_name, item_name, expected, comparison, interval, deadline)
+
+            poll_cvt(
+              mission_id,
+              target_id,
+              packet_name,
+              item_name,
+              expected,
+              comparison,
+              interval,
+              deadline
+            )
           end
         end
 
@@ -424,7 +461,17 @@ defmodule Cadence.Commands do
           {:error, :timeout}
         else
           Process.sleep(interval)
-          poll_cvt(mission_id, target_id, packet_name, item_name, expected, comparison, interval, deadline)
+
+          poll_cvt(
+            mission_id,
+            target_id,
+            packet_name,
+            item_name,
+            expected,
+            comparison,
+            interval,
+            deadline
+          )
         end
     end
   end

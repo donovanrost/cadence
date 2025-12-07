@@ -127,7 +127,11 @@ defmodule Cadence.MissionDatabase.CommandContainerEntry do
     end)
     |> then(fn cs ->
       if is_nil(size) or size <= 0 do
-        add_error(cs, :fixed_value_size_bits, "required and must be positive for fixed_value entry type")
+        add_error(
+          cs,
+          :fixed_value_size_bits,
+          "required and must be positive for fixed_value entry type"
+        )
       else
         cs
       end

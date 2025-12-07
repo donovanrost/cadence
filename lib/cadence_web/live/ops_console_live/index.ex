@@ -88,7 +88,9 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       phx-hook="OpsConsole"
       data-mission-id={@mission.id}
       data-mission-name={@mission.name}
-      data-layout={Jason.encode!(@current_layout.frame_layout || DashboardLayouts.default_frame_layout())}
+      data-layout={
+        Jason.encode!(@current_layout.frame_layout || DashboardLayouts.default_frame_layout())
+      }
       data-widgets={Jason.encode!(@current_layout.widgets || [])}
       data-targets={Jason.encode!(Enum.map(@targets, &target_json/1))}
       data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
@@ -168,7 +170,11 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     >
       <.header>Rename Dashboard</.header>
       <.simple_form for={%{}} phx-submit="rename_dashboard">
-        <input type="hidden" name="dashboard_id" value={@show_rename_dashboard && @show_rename_dashboard.id} />
+        <input
+          type="hidden"
+          name="dashboard_id"
+          value={@show_rename_dashboard && @show_rename_dashboard.id}
+        />
         <.input
           name="name"
           label="Dashboard Name"
@@ -190,7 +196,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     >
       <.header>Delete Dashboard</.header>
       <p class="text-base-content/70 mb-4">
-        Are you sure you want to delete "<%= @show_delete_confirm && @show_delete_confirm.name %>"?
+        Are you sure you want to delete "{@show_delete_confirm && @show_delete_confirm.name}"?
         This action cannot be undone.
       </p>
       <div class="flex gap-2 justify-end">
@@ -237,7 +243,12 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
           ]}
           value="30"
         />
-        <.input name="reason" type="text" label="Reason (optional)" placeholder="e.g., Known issue, waiting for fix" />
+        <.input
+          name="reason"
+          type="text"
+          label="Reason (optional)"
+          placeholder="e.g., Known issue, waiting for fix"
+        />
         <:actions>
           <.button type="submit" phx-disable-with="Shelving...">Shelve Alarm</.button>
         </:actions>
@@ -295,7 +306,11 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
      |> push_event("add_widget", params)}
   end
 
-  def handle_event("open_widget_config", %{"widget_id" => id, "widget_type" => type, "config" => config}, socket) do
+  def handle_event(
+        "open_widget_config",
+        %{"widget_id" => id, "widget_type" => type, "config" => config},
+        socket
+      ) do
     {:noreply, assign(socket, :configuring_widget, %{id: id, type: type, config: config})}
   end
 
@@ -528,7 +543,8 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
             socket =
               if should_load do
                 push_event(socket, "load_layout", %{
-                  frame_layout: current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
+                  frame_layout:
+                    current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
                   widgets: current_layout.widgets || []
                 })
               else
@@ -561,6 +577,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
   def handle_info({:add_widget, widget}, socket) do
     IO.inspect(widget, label: "[OpsConsole] Pushing add_widget event")
+
     {:noreply,
      socket
      |> assign(:show_widget_palette, false)
@@ -590,7 +607,12 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     widget = %{
       id: "widget-#{System.unique_integer([:positive])}",
       type: widget_type,
-      position: %{x: 0, y: 0, w: default_widget_size(widget_type, :w), h: default_widget_size(widget_type, :h)},
+      position: %{
+        x: 0,
+        y: 0,
+        w: default_widget_size(widget_type, :w),
+        h: default_widget_size(widget_type, :h)
+      },
       config: Map.put(config, "title", "#{config["title"]} (Copy)")
     }
 
@@ -712,7 +734,11 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     {:noreply, assign(socket, :show_shelve_modal, nil)}
   end
 
-  def handle_event("confirm_shelve_alarm", %{"alarm_id" => alarm_id, "duration" => duration, "reason" => reason}, socket) do
+  def handle_event(
+        "confirm_shelve_alarm",
+        %{"alarm_id" => alarm_id, "duration" => duration, "reason" => reason},
+        socket
+      ) do
     user = socket.assigns.current_scope.user
     alarm = Alarms.get_alarm!(alarm_id)
     duration_minutes = String.to_integer(duration)

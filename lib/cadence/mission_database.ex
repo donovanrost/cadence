@@ -374,7 +374,7 @@ defmodule Cadence.MissionDatabase do
       )
       |> Repo.all()
       |> Enum.map(fn %{parameter: p, container_name: container_name} ->
-        p = Repo.preload(p, [data_type: :unit])
+        p = Repo.preload(p, data_type: :unit)
         build_catalog_item(:telemetry, p, container_name)
       end)
 
@@ -514,14 +514,15 @@ defmodule Cadence.MissionDatabase do
         hazard_description: command.hazard_description,
         significance: command.significance,
         argument_count: length(command.arguments || []),
-        arguments: Enum.map(command.arguments || [], fn arg ->
-          %{
-            name: arg.name,
-            data_type_ref: arg.data_type_ref,
-            required: arg.required,
-            default_value: arg.default_value
-          }
-        end)
+        arguments:
+          Enum.map(command.arguments || [], fn arg ->
+            %{
+              name: arg.name,
+              data_type_ref: arg.data_type_ref,
+              required: arg.required,
+              default_value: arg.default_value
+            }
+          end)
       }
     }
   end

@@ -131,9 +131,12 @@ defmodule Cadence.MissionDatabase.Database do
   Loads a database with its definition sets.
   """
   def with_definition_sets(%__MODULE__{} = database) do
-    Repo.preload(database, definition_sets: from(ds in Cadence.MissionDatabase.DefinitionSet,
-      order_by: [desc: ds.inserted_at]
-    ))
+    Repo.preload(database,
+      definition_sets:
+        from(ds in Cadence.MissionDatabase.DefinitionSet,
+          order_by: [desc: ds.inserted_at]
+        )
+    )
   end
 
   @doc """

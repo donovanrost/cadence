@@ -4,6 +4,7 @@ defmodule Cadence.Repo.Migrations.CreateInterfaceProtocols do
   def change do
     create table(:interface_protocols, primary_key: false) do
       add :id, :binary_id, primary_key: true
+
       add :interface_id, references(:interfaces, on_delete: :delete_all, type: :binary_id),
         null: false
 

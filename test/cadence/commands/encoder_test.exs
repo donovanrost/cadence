@@ -16,9 +16,10 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes command with single uint parameter" do
-      command = build_command(0x10, [
-        build_param("mode", "uint", bit_offset: 0, bit_length: 8)
-      ])
+      command =
+        build_command(0x10, [
+          build_param("mode", "uint", bit_offset: 0, bit_length: 8)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"mode" => 1})
       # Opcode (2 bytes) + mode (1 byte)
@@ -26,10 +27,11 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes command with multiple parameters" do
-      command = build_command(0x20, [
-        build_param("mode", "uint", bit_offset: 0, bit_length: 8),
-        build_param("value", "uint", bit_offset: 8, bit_length: 16)
-      ])
+      command =
+        build_command(0x20, [
+          build_param("mode", "uint", bit_offset: 0, bit_length: 8),
+          build_param("value", "uint", bit_offset: 8, bit_length: 16)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"mode" => 2, "value" => 1000})
       # Opcode (2 bytes) + mode (1 byte) + value (2 bytes big-endian)
@@ -37,9 +39,10 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes signed integer parameter" do
-      command = build_command(0x30, [
-        build_param("offset", "int", bit_offset: 0, bit_length: 16)
-      ])
+      command =
+        build_command(0x30, [
+          build_param("offset", "int", bit_offset: 0, bit_length: 16)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"offset" => -100})
       # -100 as 16-bit signed = 0xFF9C
@@ -47,9 +50,10 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes float parameter (32-bit)" do
-      command = build_command(0x40, [
-        build_param("temp", "float", bit_offset: 0, bit_length: 32)
-      ])
+      command =
+        build_command(0x40, [
+          build_param("temp", "float", bit_offset: 0, bit_length: 32)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"temp" => 25.5})
       # 25.5 as IEEE 754 32-bit float big-endian
@@ -58,27 +62,30 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes boolean parameter as true" do
-      command = build_command(0x50, [
-        build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
-      ])
+      command =
+        build_command(0x50, [
+          build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"enabled" => true})
       assert binary == <<0x00, 0x50, 0x01>>
     end
 
     test "encodes boolean parameter as false" do
-      command = build_command(0x50, [
-        build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
-      ])
+      command =
+        build_command(0x50, [
+          build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"enabled" => false})
       assert binary == <<0x00, 0x50, 0x00>>
     end
 
     test "encodes string parameter with padding" do
-      command = build_command(0x60, [
-        build_param("name", "string", bit_offset: 0, bit_length: 40)
-      ])
+      command =
+        build_command(0x60, [
+          build_param("name", "string", bit_offset: 0, bit_length: 40)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"name" => "ABC"})
       # "ABC" padded to 5 bytes
@@ -86,13 +93,14 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "encodes enum parameter by index" do
-      command = build_command(0x70, [
-        build_param("state", "enum",
-          bit_offset: 0,
-          bit_length: 8,
-          valid_values: ["OFF", "ON", "AUTO"]
-        )
-      ])
+      command =
+        build_command(0x70, [
+          build_param("state", "enum",
+            bit_offset: 0,
+            bit_length: 8,
+            valid_values: ["OFF", "ON", "AUTO"]
+          )
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"state" => "ON"})
       # "ON" is index 1
@@ -100,32 +108,35 @@ defmodule Cadence.Commands.EncoderTest do
     end
 
     test "uses default value when parameter not provided" do
-      command = build_command(0x80, [
-        build_param("mode", "uint",
-          bit_offset: 0,
-          bit_length: 8,
-          required: false,
-          default_value: "5"
-        )
-      ])
+      command =
+        build_command(0x80, [
+          build_param("mode", "uint",
+            bit_offset: 0,
+            bit_length: 8,
+            required: false,
+            default_value: "5"
+          )
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{})
       assert binary == <<0x00, 0x80, 0x05>>
     end
 
     test "accepts atom keys in params" do
-      command = build_command(0x10, [
-        build_param("mode", "uint", bit_offset: 0, bit_length: 8)
-      ])
+      command =
+        build_command(0x10, [
+          build_param("mode", "uint", bit_offset: 0, bit_length: 8)
+        ])
 
       assert {:ok, binary} = Encoder.encode(command, %{mode: 1})
       assert binary == <<0x00, 0x10, 0x01>>
     end
 
     test "returns error for missing required parameter" do
-      command = build_command(0x10, [
-        build_param("mode", "uint", bit_offset: 0, bit_length: 8, required: true)
-      ])
+      command =
+        build_command(0x10, [
+          build_param("mode", "uint", bit_offset: 0, bit_length: 8, required: true)
+        ])
 
       assert {:error, {:validation, errors}} = Encoder.encode(command, %{})
       assert {"mode", "is required"} in errors

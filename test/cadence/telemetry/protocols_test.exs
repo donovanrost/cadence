@@ -402,6 +402,7 @@ defmodule Cadence.Telemetry.ProtocolsTest do
 
     test "handles sync pattern with terminator" do
       sync = <<0xAA>>
+
       state =
         TerminatedProtocol.new(
           sync_pattern: sync,

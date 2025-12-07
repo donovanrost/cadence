@@ -126,7 +126,11 @@ defmodule Cadence.MissionDatabase.CommandVerifier do
 
     cond do
       not has_criteria and not has_simple ->
-        add_error(changeset, :match_criteria, "must specify either match_criteria or telemetry_item_ref")
+        add_error(
+          changeset,
+          :match_criteria,
+          "must specify either match_criteria or telemetry_item_ref"
+        )
 
       has_simple and is_nil(get_field(changeset, :comparison)) ->
         add_error(changeset, :comparison, "required when using telemetry_item_ref")
@@ -139,7 +143,9 @@ defmodule Cadence.MissionDatabase.CommandVerifier do
   @doc """
   Returns true if this verifier uses a simple telemetry check.
   """
-  def simple_check?(%__MODULE__{telemetry_item_ref: ref}) when not is_nil(ref) and ref != "", do: true
+  def simple_check?(%__MODULE__{telemetry_item_ref: ref}) when not is_nil(ref) and ref != "",
+    do: true
+
   def simple_check?(_), do: false
 
   @doc """

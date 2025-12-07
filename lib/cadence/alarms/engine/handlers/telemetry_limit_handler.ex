@@ -181,7 +181,11 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler do
     end
   end
 
-  defp update_existing_alarm(%Alarm{} = alarm, %TelemetryLimitEvent{} = event, %AlarmRule{} = rule) do
+  defp update_existing_alarm(
+         %Alarm{} = alarm,
+         %TelemetryLimitEvent{} = event,
+         %AlarmRule{} = rule
+       ) do
     # Determine if severity should change based on limit state change
     new_severity = determine_severity(alarm, event, rule)
     message = Matcher.render_message(rule.message_template, event)

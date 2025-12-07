@@ -1,0 +1,800 @@
+defmodule CadenceWeb.MissionLive.Procedures do
+  @moduledoc """
+  LiveView for managing and executing procedures within a mission.
+  """
+  use CadenceWeb, :live_view
+
+  alias Cadence.Procedures
+  alias Cadence.Procedures.Procedure
+  alias Cadence.Procedures.Runtime
+
+  @impl true
+  def mount(_params, _session, socket) do
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    mission = socket.assigns.mission
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :view, socket.assigns.current_scope, mission) do
+      :ok ->
+        # Subscribe to procedure execution updates
+        if connected?(socket) do
+          Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:procedures")
+        end
+
+        {:noreply, apply_action(socket, socket.assigns.live_action, params)}
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "You don't have permission to view this mission")
+         |> push_navigate(to: ~p"/missions")}
+    end
+  end
+
+  defp apply_action(socket, :index, _params) do
+    mission = socket.assigns.mission
+    procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
+
+    # Get active execution counts
+    execution_counts = get_execution_counts(mission.id)
+    active_executions = get_active_executions(mission.id)
+
+    socket
+    |> assign(:page_title, "Procedures")
+    |> assign(:procedures, procedures)
+    |> assign(:procedure, nil)
+    |> assign(:execution_counts, execution_counts)
+    |> assign(:active_executions, active_executions)
+    |> assign(:selected_procedure, nil)
+  end
+
+  defp apply_action(socket, :new, _params) do
+    socket = apply_action(socket, :index, %{})
+
+    socket
+    |> assign(:page_title, "New Procedure")
+    |> assign(:procedure, %Procedure{type: :dag})
+  end
+
+  defp apply_action(socket, :edit, %{"procedure_id" => procedure_id}) do
+    socket = apply_action(socket, :index, %{})
+    mission = socket.assigns.mission
+
+    case Procedures.get_procedure(procedure_id) do
+      nil ->
+        socket
+        |> put_flash(:error, "Procedure not found")
+        |> push_patch(to: ~p"/missions/#{mission}/procedures")
+
+      procedure when procedure.mission_id == mission.id ->
+        socket
+        |> assign(:page_title, "Edit Procedure")
+        |> assign(:procedure, procedure)
+
+      _procedure ->
+        socket
+        |> put_flash(:error, "Procedure not found in this mission")
+        |> push_patch(to: ~p"/missions/#{mission}/procedures")
+    end
+  end
+
+  defp apply_action(socket, :show, %{"procedure_id" => procedure_id}) do
+    socket = apply_action(socket, :index, %{})
+    mission = socket.assigns.mission
+
+    case Procedures.get_procedure(procedure_id) do
+      nil ->
+        socket
+        |> put_flash(:error, "Procedure not found")
+        |> push_patch(to: ~p"/missions/#{mission}/procedures")
+
+      procedure when procedure.mission_id == mission.id ->
+        # Load versions and executions for this procedure
+        versions = Procedures.list_versions(procedure.id)
+        executions = Procedures.list_executions(procedure_id: procedure.id, limit: 10)
+
+        socket
+        |> assign(:page_title, procedure.name)
+        |> assign(:selected_procedure, procedure)
+        |> assign(:versions, versions)
+        |> assign(:recent_executions, executions)
+
+      _procedure ->
+        socket
+        |> put_flash(:error, "Procedure not found in this mission")
+        |> push_patch(to: ~p"/missions/#{mission}/procedures")
+    end
+  end
+
+  defp apply_action(socket, :execute, %{"procedure_id" => procedure_id}) do
+    socket = apply_action(socket, :show, %{"procedure_id" => procedure_id})
+    procedure = socket.assigns.selected_procedure
+
+    # Get the current version's parameter schema
+    parameters_schema =
+      if procedure.current_version_id do
+        case Procedures.get_version(procedure.current_version_id) do
+          nil -> nil
+          version -> version.parameters_schema
+        end
+      else
+        nil
+      end
+
+    socket
+    |> assign(:page_title, "Execute #{procedure.name}")
+    |> assign(:execution_params, %{})
+    |> assign(:parameters_schema, parameters_schema)
+  end
+
+  defp get_execution_counts(mission_id) do
+    Runtime.get_execution_counts(mission_id)
+  end
+
+  defp get_active_executions(mission_id) do
+    Runtime.list_active_executions(mission_id)
+  end
+
+  # ============================================================================
+  # Event Handlers
+  # ============================================================================
+
+  @impl true
+  def handle_event("execute", %{"id" => procedure_id}, socket) do
+    mission = socket.assigns.mission
+
+    {:noreply, push_patch(socket, to: ~p"/missions/#{mission}/procedures/#{procedure_id}/execute")}
+  end
+
+  def handle_event("start_execution", %{"procedure_id" => procedure_id} = params, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    # Parse parameters from form
+    parameters = params["parameters"] || %{}
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
+      :ok ->
+        case Runtime.start_execution(mission.id, procedure_id,
+               parameters: parameters,
+               user_id: scope.user.id
+             ) do
+          {:ok, _execution} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Procedure execution started")
+             |> push_patch(to: ~p"/missions/#{mission}/procedures/#{procedure_id}")}
+
+          {:error, :mission_not_running} ->
+            {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+          {:error, :at_concurrency_limit} ->
+            {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
+    end
+  end
+
+  def handle_event("pause_execution", %{"id" => execution_id}, socket) do
+    mission = socket.assigns.mission
+
+    case Runtime.pause_execution(mission.id, execution_id) do
+      :ok ->
+        {:noreply, put_flash(socket, :info, "Execution paused")}
+
+      {:error, :mission_not_running} ->
+        {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to pause: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("resume_execution", %{"id" => execution_id}, socket) do
+    mission = socket.assigns.mission
+
+    case Runtime.resume_execution(mission.id, execution_id) do
+      :ok ->
+        {:noreply, put_flash(socket, :info, "Execution resumed")}
+
+      {:error, :mission_not_running} ->
+        {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to resume: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("abort_execution", %{"id" => execution_id}, socket) do
+    mission = socket.assigns.mission
+
+    case Runtime.abort_execution(mission.id, execution_id) do
+      :ok ->
+        {:noreply, put_flash(socket, :info, "Execution aborted")}
+
+      {:error, :mission_not_running} ->
+        {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to abort: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("approve_version", %{"version_id" => version_id}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok ->
+        version = Procedures.get_version!(version_id)
+
+        case Procedures.approve_version(version, scope.user.id) do
+          {:ok, _version} ->
+            # Reload procedure and versions
+            procedure = Procedures.get_procedure!(socket.assigns.selected_procedure.id)
+            versions = Procedures.list_versions(procedure.id)
+
+            {:noreply,
+             socket
+             |> assign(:selected_procedure, procedure)
+             |> assign(:versions, versions)
+             |> put_flash(:info, "Version approved and set as current")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to approve: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to approve versions")}
+    end
+  end
+
+  def handle_event("run_version", %{"version_id" => version_id, "procedure_id" => procedure_id}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
+      :ok ->
+        case Runtime.start_execution(mission.id, procedure_id,
+               version_id: version_id,
+               user_id: scope.user.id
+             ) do
+          {:ok, execution} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Procedure execution started")
+             |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure_id}/executions/#{execution}")}
+
+          {:error, :mission_not_running} ->
+            {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+          {:error, :at_concurrency_limit} ->
+            {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
+    end
+  end
+
+  def handle_event("delete", %{"id" => procedure_id}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        procedure = Procedures.get_procedure(procedure_id)
+
+        if procedure do
+          case Procedures.delete_procedure(procedure) do
+            {:ok, _} ->
+              procedures =
+                Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
+
+              {:noreply,
+               socket
+               |> put_flash(:info, "Procedure deleted")
+               |> assign(:procedures, procedures)}
+
+            {:error, _changeset} ->
+              {:noreply, put_flash(socket, :error, "Failed to delete procedure")}
+          end
+        else
+          {:noreply, put_flash(socket, :error, "Procedure not found")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete procedures")}
+    end
+  end
+
+  # ============================================================================
+  # PubSub Handlers
+  # ============================================================================
+
+  @impl true
+  def handle_info({:execution_started, execution}, socket) do
+    active_executions = [execution | socket.assigns.active_executions]
+    execution_counts = update_count(socket.assigns.execution_counts, :running, 1)
+
+    {:noreply,
+     socket
+     |> assign(:active_executions, active_executions)
+     |> assign(:execution_counts, execution_counts)}
+  end
+
+  def handle_info({:execution_completed, execution}, socket) do
+    active_executions =
+      Enum.reject(socket.assigns.active_executions, &(&1.id == execution.id))
+
+    execution_counts = update_count(socket.assigns.execution_counts, :running, -1)
+
+    {:noreply,
+     socket
+     |> assign(:active_executions, active_executions)
+     |> assign(:execution_counts, execution_counts)}
+  end
+
+  def handle_info({:execution_failed, execution}, socket) do
+    active_executions =
+      Enum.reject(socket.assigns.active_executions, &(&1.id == execution.id))
+
+    execution_counts = update_count(socket.assigns.execution_counts, :running, -1)
+
+    {:noreply,
+     socket
+     |> assign(:active_executions, active_executions)
+     |> assign(:execution_counts, execution_counts)
+     |> put_flash(:error, "Procedure #{execution.id} failed")}
+  end
+
+  def handle_info({:execution_paused, execution}, socket) do
+    active_executions =
+      Enum.map(socket.assigns.active_executions, fn ex ->
+        if ex.id == execution.id, do: execution, else: ex
+      end)
+
+    {:noreply, assign(socket, :active_executions, active_executions)}
+  end
+
+  def handle_info({:execution_cancelled, execution}, socket) do
+    active_executions =
+      Enum.reject(socket.assigns.active_executions, &(&1.id == execution.id))
+
+    {:noreply, assign(socket, :active_executions, active_executions)}
+  end
+
+  def handle_info({CadenceWeb.ProcedureLive.FormComponent, {:saved, _procedure}}, socket) do
+    mission = socket.assigns.mission
+    procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
+
+    {:noreply,
+     socket
+     |> assign(:procedures, procedures)
+     |> push_patch(to: ~p"/missions/#{mission}/procedures")}
+  end
+
+  def handle_info({CadenceWeb.ProcedureLive.ParameterFormComponent, {:submit_parameters, params}}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+    procedure = socket.assigns.selected_procedure
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
+      :ok ->
+        case Runtime.start_execution(mission.id, procedure.id,
+               parameters: params,
+               user_id: scope.user.id
+             ) do
+          {:ok, execution} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Procedure execution started")
+             |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure.id}/executions/#{execution}")}
+
+          {:error, :mission_not_running} ->
+            {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+
+          {:error, :at_concurrency_limit} ->
+            {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
+
+          {:error, {:validation_failed, errors}} ->
+            error_msg = Enum.map_join(errors, ", ", fn {k, v} -> "#{k}: #{v}" end)
+            {:noreply, put_flash(socket, :error, "Parameter validation failed: #{error_msg}")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
+    end
+  end
+
+  # Forward DAG editor step changes to the FormComponent
+  def handle_info({CadenceWeb.ProcedureLive.DagEditorComponent, {:steps_changed, steps}}, socket) do
+    # Use send_update to pass the updated steps to the FormComponent
+    send_update(CadenceWeb.ProcedureLive.FormComponent,
+      id: socket.assigns.procedure && socket.assigns.procedure.id || :new,
+      dag_steps: steps
+    )
+
+    {:noreply, socket}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp update_count(counts, key, delta) do
+    Map.update(counts, key, delta, &(&1 + delta))
+  end
+
+  # ============================================================================
+  # Render
+  # ============================================================================
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">Procedures</h1>
+          <p class="text-base-content/60 text-sm mt-1">
+            Manage and execute operational procedures
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 mr-4">
+            <div
+              :if={@execution_counts.running > 0}
+              class="badge badge-success gap-1 animate-pulse"
+            >
+              <.icon name="hero-play" class="h-3 w-3" />
+              {@execution_counts.running} running
+            </div>
+            <div :if={@execution_counts.paused > 0} class="badge badge-warning gap-1">
+              <.icon name="hero-pause" class="h-3 w-3" />
+              {@execution_counts.paused} paused
+            </div>
+          </div>
+          <.link patch={~p"/missions/#{@mission}/procedures/new"}>
+            <.button class="btn-primary btn-sm">
+              <.icon name="hero-plus" class="h-4 w-4 mr-1" /> New Procedure
+            </.button>
+          </.link>
+        </div>
+      </div>
+
+      <!-- Active Executions Banner -->
+      <div
+        :if={length(@active_executions) > 0}
+        class="bg-success/10 border border-success/20 rounded-lg p-4"
+      >
+        <h3 class="font-medium text-success mb-2">Active Executions</h3>
+        <div class="space-y-2">
+          <div
+            :for={execution <- @active_executions}
+            class="flex items-center justify-between bg-base-100 rounded p-3"
+          >
+            <div class="flex items-center gap-3">
+              <span class={[
+                "w-2 h-2 rounded-full",
+                execution.status == :running && "bg-success animate-pulse",
+                execution.status == :paused && "bg-warning"
+              ]}>
+              </span>
+              <div>
+                <span class="font-medium">{execution.id |> String.slice(0, 8)}</span>
+                <span class="text-sm text-base-content/60">
+                  Step {execution.current_step_index || 0}
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <.button
+                :if={execution.status == :running}
+                phx-click="pause_execution"
+                phx-value-id={execution.id}
+                class="btn-ghost btn-xs"
+              >
+                <.icon name="hero-pause" class="h-4 w-4" />
+              </.button>
+              <.button
+                :if={execution.status == :paused}
+                phx-click="resume_execution"
+                phx-value-id={execution.id}
+                class="btn-ghost btn-xs"
+              >
+                <.icon name="hero-play" class="h-4 w-4" />
+              </.button>
+              <.button
+                phx-click="abort_execution"
+                phx-value-id={execution.id}
+                class="btn-ghost btn-xs text-error"
+                data-confirm="Are you sure you want to abort this execution?"
+              >
+                <.icon name="hero-x-mark" class="h-4 w-4" />
+              </.button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Procedures List -->
+      <div class="card bg-base-200">
+        <div class="card-body p-0">
+          <%= if Enum.empty?(@procedures) do %>
+            <div class="p-8 text-center">
+              <.icon name="hero-document-text" class="h-12 w-12 mx-auto text-base-content/30" />
+              <p class="mt-4 text-base-content/60">No procedures defined</p>
+              <.link patch={~p"/missions/#{@mission}/procedures/new"} class="mt-4 inline-block">
+                <.button class="btn-primary btn-sm">
+                  Create your first procedure
+                </.button>
+              </.link>
+            </div>
+          <% else %>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th class="w-32"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={procedure <- @procedures} class="hover">
+                  <td>
+                    <.link
+                      patch={~p"/missions/#{@mission}/procedures/#{procedure.id}"}
+                      class="font-medium hover:text-primary"
+                    >
+                      {procedure.name}
+                    </.link>
+                    <p :if={procedure.description} class="text-xs text-base-content/50 mt-1">
+                      {String.slice(procedure.description, 0, 60)}
+                    </p>
+                  </td>
+                  <td>
+                    <span class={[
+                      "badge badge-sm",
+                      procedure.type == :dag && "badge-primary",
+                      procedure.type == :script && "badge-secondary"
+                    ]}>
+                      {procedure.type}
+                    </span>
+                  </td>
+                  <td>
+                    <%= if procedure.current_version_id do %>
+                      <span class="text-sm">v{get_version_number(procedure)}</span>
+                    <% else %>
+                      <span class="text-sm text-base-content/40">-</span>
+                    <% end %>
+                  </td>
+                  <td>
+                    <%= if procedure.current_version_id do %>
+                      <span class="badge badge-sm badge-success">Ready</span>
+                    <% else %>
+                      <span class="badge badge-sm badge-warning">No version</span>
+                    <% end %>
+                  </td>
+                  <td class="text-right">
+                    <div class="flex items-center justify-end gap-1">
+                      <.button
+                        :if={procedure.current_version_id}
+                        phx-click="execute"
+                        phx-value-id={procedure.id}
+                        class="btn-success btn-xs"
+                      >
+                        <.icon name="hero-play" class="h-3 w-3" />
+                      </.button>
+                      <.link patch={~p"/missions/#{@mission}/procedures/#{procedure.id}/edit"}>
+                        <.button class="btn-ghost btn-xs">
+                          <.icon name="hero-pencil" class="h-3 w-3" />
+                        </.button>
+                      </.link>
+                      <.button
+                        phx-click="delete"
+                        phx-value-id={procedure.id}
+                        class="btn-ghost btn-xs text-error"
+                        data-confirm="Are you sure you want to delete this procedure?"
+                      >
+                        <.icon name="hero-trash" class="h-3 w-3" />
+                      </.button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- New/Edit Procedure Modal -->
+    <.modal
+      :if={@live_action in [:new, :edit]}
+      id="procedure-modal"
+      show
+      on_cancel={JS.patch(~p"/missions/#{@mission}/procedures")}
+    >
+      <.live_component
+        module={CadenceWeb.ProcedureLive.FormComponent}
+        id={@procedure.id || :new}
+        title={if @live_action == :new, do: "New Procedure", else: "Edit Procedure"}
+        action={@live_action}
+        procedure={@procedure}
+        mission={@mission}
+        current_user={@current_scope.user}
+        patch={~p"/missions/#{@mission}/procedures"}
+      />
+    </.modal>
+
+    <!-- Procedure Detail Slide-over -->
+    <.modal
+      :if={@live_action in [:show, :execute] and @selected_procedure}
+      id="procedure-detail-modal"
+      show
+      on_cancel={JS.patch(~p"/missions/#{@mission}/procedures")}
+    >
+      <div class="space-y-6">
+        <div>
+          <h3 class="text-lg font-bold">{@selected_procedure.name}</h3>
+          <p :if={@selected_procedure.description} class="text-base-content/60 mt-1">
+            {@selected_procedure.description}
+          </p>
+        </div>
+
+        <!-- Version Info -->
+        <div>
+          <h4 class="font-medium mb-2">Versions</h4>
+          <div class="space-y-2">
+            <div
+              :for={version <- @versions}
+              class={[
+                "flex items-center justify-between p-2 rounded",
+                version.id == @selected_procedure.current_version_id && "bg-success/10 ring-1 ring-success/30",
+                version.id != @selected_procedure.current_version_id && "bg-base-200"
+              ]}
+            >
+              <div class="flex items-center gap-2">
+                <span class="font-medium">v{version.version_number}</span>
+                <span class={[
+                  "badge badge-sm",
+                  version.status == :approved && "badge-success",
+                  version.status == :draft && "badge-warning",
+                  version.status == :deprecated && "badge-ghost"
+                ]}>
+                  {version.status}
+                </span>
+                <%= if version.id == @selected_procedure.current_version_id do %>
+                  <span class="badge badge-sm badge-info">current</span>
+                <% end %>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-base-content/50">
+                  {Calendar.strftime(version.inserted_at, "%Y-%m-%d")}
+                </span>
+                <%= if version.status == :draft do %>
+                  <button
+                    type="button"
+                    phx-click="approve_version"
+                    phx-value-version_id={version.id}
+                    class="btn btn-xs btn-success"
+                    title="Approve and make current"
+                  >
+                    Approve
+                  </button>
+                <% end %>
+                <button
+                  type="button"
+                  phx-click="run_version"
+                  phx-value-version_id={version.id}
+                  phx-value-procedure_id={@selected_procedure.id}
+                  class="btn btn-xs btn-ghost"
+                  title="Run this version"
+                >
+                  <.icon name="hero-play" class="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Execute Form -->
+        <%= if @live_action == :execute do %>
+          <div class="border-t border-base-300 pt-4">
+            <h4 class="font-medium mb-4">Execute Procedure</h4>
+            <.live_component
+              module={CadenceWeb.ProcedureLive.ParameterFormComponent}
+              id="parameter-form"
+              parameters_schema={@parameters_schema}
+              mission_id={@mission.id}
+              values={%{}}
+              on_cancel={JS.patch(~p"/missions/#{@mission}/procedures/#{@selected_procedure.id}")}
+            />
+          </div>
+        <% else %>
+          <!-- Action Buttons -->
+          <div class="flex justify-end gap-2 border-t border-base-300 pt-4">
+            <.link patch={~p"/missions/#{@mission}/procedures/#{@selected_procedure.id}/execute"}>
+              <.button class="btn-success">
+                <.icon name="hero-play" class="h-4 w-4 mr-1" /> Execute
+              </.button>
+            </.link>
+          </div>
+        <% end %>
+
+        <!-- Recent Executions -->
+        <div :if={@live_action == :show}>
+          <h4 class="font-medium mb-2">Recent Executions</h4>
+          <%= if Enum.empty?(@recent_executions) do %>
+            <p class="text-sm text-base-content/50">No executions yet</p>
+          <% else %>
+            <div class="space-y-2">
+              <.link
+                :for={execution <- @recent_executions}
+                navigate={~p"/missions/#{@mission}/procedures/#{@selected_procedure}/executions/#{execution}"}
+                class="flex items-center justify-between p-2 bg-base-200 rounded hover:bg-base-300 transition-colors cursor-pointer"
+              >
+                <div class="flex items-center gap-2">
+                  <span class={[
+                    "w-2 h-2 rounded-full",
+                    execution.status == :completed && "bg-success",
+                    execution.status == :failed && "bg-error",
+                    execution.status == :running && "bg-success animate-pulse",
+                    execution.status == :paused && "bg-warning",
+                    execution.status in [:pending, :cancelled] && "bg-base-content/30"
+                  ]}>
+                  </span>
+                  <span class="font-mono text-sm">
+                    {execution.id |> String.slice(0, 8)}
+                  </span>
+                  <span class={[
+                    "text-xs px-1.5 py-0.5 rounded",
+                    execution.status == :completed && "bg-success/20 text-success",
+                    execution.status == :failed && "bg-error/20 text-error",
+                    execution.status == :running && "bg-info/20 text-info",
+                    execution.status == :paused && "bg-warning/20 text-warning",
+                    execution.status in [:pending, :cancelled] && "bg-base-content/10 text-base-content/50"
+                  ]}>
+                    {Phoenix.Naming.humanize(execution.status)}
+                  </span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-base-content/50">
+                  <span>{Calendar.strftime(execution.inserted_at, "%Y-%m-%d %H:%M")}</span>
+                  <.icon name="hero-chevron-right" class="h-4 w-4" />
+                </div>
+              </.link>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </.modal>
+    """
+  end
+
+  defp get_version_number(procedure) do
+    if procedure.current_version_id do
+      case Procedures.get_version(procedure.current_version_id) do
+        nil -> "?"
+        version -> version.version_number
+      end
+    else
+      "-"
+    end
+  end
+end

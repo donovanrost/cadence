@@ -5,7 +5,10 @@ defmodule Cadence.Repo.Migrations.CreateOrganizationMemberships do
     create table(:organization_memberships, primary_key: false) do
       add :id, :binary_id, primary_key: true
       add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :role, :string, null: false, default: "member"
 
       timestamps(type: :utc_datetime)

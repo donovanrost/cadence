@@ -246,7 +246,12 @@ defmodule Cadence.Commands.Dispatcher do
 
       %{timeout_ref: ref} ->
         Process.cancel_timer(ref)
-        new_state = %{state | pending_verifications: Map.delete(state.pending_verifications, command_log_id)}
+
+        new_state = %{
+          state
+          | pending_verifications: Map.delete(state.pending_verifications, command_log_id)
+        }
+
         {:noreply, new_state}
     end
   end
@@ -265,7 +270,11 @@ defmodule Cadence.Commands.Dispatcher do
           error_reason: "Verification timeout"
         })
 
-        new_state = %{state | pending_verifications: Map.delete(state.pending_verifications, command_log_id)}
+        new_state = %{
+          state
+          | pending_verifications: Map.delete(state.pending_verifications, command_log_id)
+        }
+
         {:noreply, new_state}
     end
   end
@@ -413,7 +422,10 @@ defmodule Cadence.Commands.Dispatcher do
 
   defp send_to_interface(interface, data) do
     # Look up the interface process
-    case Registry.lookup(Cadence.MissionRegistry, {:interface, interface.mission_id, interface.id}) do
+    case Registry.lookup(
+           Cadence.MissionRegistry,
+           {:interface, interface.mission_id, interface.id}
+         ) do
       [{pid, _}] ->
         case GenServer.call(pid, {:send_data, data}) do
           :ok -> :ok
@@ -521,7 +533,10 @@ defmodule Cadence.Commands.Dispatcher do
     }
 
     # Return updated state with pending verification
-    %{state | pending_verifications: Map.put(state.pending_verifications, command_log_id, verification)}
+    %{
+      state
+      | pending_verifications: Map.put(state.pending_verifications, command_log_id, verification)
+    }
   end
 
   defp check_verification(state, command_log_id, verification, actual_value) do

@@ -74,8 +74,7 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionRouter do
     {:producer, state,
      dispatcher: {
        GenStage.PartitionDispatcher,
-       partitions: 0..(partition_count - 1),
-       hash: &partition_hash/1
+       partitions: 0..(partition_count - 1), hash: &partition_hash/1
      }}
   end
 

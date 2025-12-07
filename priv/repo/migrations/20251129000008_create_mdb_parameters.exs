@@ -4,9 +4,16 @@ defmodule Cadence.Repo.Migrations.CreateMdbParameters do
   def change do
     create table(:mdb_parameters, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
-      add :definition_set_id, references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :definition_set_id,
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string, null: false
       add :description, :text
@@ -14,14 +21,16 @@ defmodule Cadence.Repo.Migrations.CreateMdbParameters do
 
       # Type reference
       add :data_type_id, references(:mdb_data_types, type: :binary_id, on_delete: :restrict)
-      add :data_type_ref, :string  # Name reference for import resolution
+      # Name reference for import resolution
+      add :data_type_ref, :string
 
       # Parameter source: telemetry, derived, constant, local
       add :parameter_source, :string, default: "telemetry"
 
       # For derived parameters
       add :derivation_expression, :text
-      add :derivation_trigger, :string  # on_parameter_update, on_container_update, periodic
+      # on_parameter_update, on_container_update, periodic
+      add :derivation_trigger, :string
       add :derivation_trigger_refs, {:array, :string}, default: []
 
       # System-level parameters
@@ -47,6 +56,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbParameters do
     create index(:mdb_parameters, [:mission_id])
     create index(:mdb_parameters, [:definition_set_id])
     create index(:mdb_parameters, [:data_type_id])
-    create unique_index(:mdb_parameters, [:definition_set_id, :name], name: :mdb_parameters_definition_set_name_index)
+
+    create unique_index(:mdb_parameters, [:definition_set_id, :name],
+             name: :mdb_parameters_definition_set_name_index
+           )
   end
 end

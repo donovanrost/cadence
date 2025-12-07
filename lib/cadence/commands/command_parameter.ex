@@ -220,7 +220,9 @@ defmodule Cadence.Commands.CommandParameter do
   defp validate_type(%__MODULE__{data_type: "string"}, value) when is_binary(value), do: :ok
   defp validate_type(%__MODULE__{data_type: "boolean"}, value) when is_boolean(value), do: :ok
   defp validate_type(%__MODULE__{data_type: "enum"}, value) when is_binary(value), do: :ok
-  defp validate_type(%__MODULE__{data_type: type}, _value), do: {:error, "invalid type for #{type}"}
+
+  defp validate_type(%__MODULE__{data_type: type}, _value),
+    do: {:error, "invalid type for #{type}"}
 
   defp validate_range(%__MODULE__{min_value: nil, max_value: nil}, _value), do: :ok
 

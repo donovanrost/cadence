@@ -58,7 +58,8 @@ defmodule Mix.Tasks.Cadence.StressDerived do
       {"YAW_ABS", "abs(ATTITUDE.yaw)", "deg"},
       {"SOLAR_POWER", "POWER.solar_panel_voltage * POWER.solar_panel_current", "W"},
       {"BUS_POWER", "POWER.bus_voltage * POWER.bus_current", "W"},
-      {"TOTAL_RATE", "abs(ATTITUDE.roll_rate) + abs(ATTITUDE.pitch_rate) + abs(ATTITUDE.yaw_rate)", "deg/s"},
+      {"TOTAL_RATE",
+       "abs(ATTITUDE.roll_rate) + abs(ATTITUDE.pitch_rate) + abs(ATTITUDE.yaw_rate)", "deg/s"},
       {"UPTIME_HOURS", "HEALTH.uptime_seconds / 3600", "h"},
       {"MEMORY_PERCENT", "HEALTH.memory_used_mb / 1024 * 100", "%"}
     ]
@@ -66,7 +67,8 @@ defmodule Mix.Tasks.Cadence.StressDerived do
     # Layer 2: Derived from Layer 1 (tests dependency ordering)
     layer2_items = [
       {"POWER_EFFICIENCY", "SOLAR_POWER / max(BUS_POWER, 0.001) * 100", "%"},
-      {"ATTITUDE_MAG", "sqrt(ROLL_ABS * ROLL_ABS + PITCH_ABS * PITCH_ABS + YAW_ABS * YAW_ABS)", "deg"},
+      {"ATTITUDE_MAG", "sqrt(ROLL_ABS * ROLL_ABS + PITCH_ABS * PITCH_ABS + YAW_ABS * YAW_ABS)",
+       "deg"},
       {"BATTERY_POWER_SCALED", "BATTERY_POWER * 10", "dW"},
       {"TEMP_NORMALIZED", "(TEMP_KELVIN - 273) / 100", ""},
       {"RATE_SEVERITY", "if TOTAL_RATE > 10 then 2 else if TOTAL_RATE > 5 then 1 else 0", ""}

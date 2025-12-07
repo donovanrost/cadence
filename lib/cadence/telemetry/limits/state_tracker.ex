@@ -136,16 +136,18 @@ defmodule Cadence.Telemetry.Limits.StateTracker do
     table_exists? = :ets.whereis(table_name) != :undefined
 
     Enum.map(items, fn {item_name, value} ->
-      state = evaluate_item_batch(
-        mission_id,
-        target_id,
-        item_name,
-        value,
-        cache_data,
-        table_name,
-        table_exists?,
-        now
-      )
+      state =
+        evaluate_item_batch(
+          mission_id,
+          target_id,
+          item_name,
+          value,
+          cache_data,
+          table_name,
+          table_exists?,
+          now
+        )
+
       {item_name, value, state}
     end)
   end
@@ -203,9 +205,9 @@ defmodule Cadence.Telemetry.Limits.StateTracker do
 
       %{has_limits: true, limits_config: limits_config} = config ->
         limits = Map.get(limits_config, active_limit_set) || Map.get(limits_config, "DEFAULT")
+
         if limits do
-          {:ok, limits,
-           Map.get(config, :persistence, 1),
+          {:ok, limits, Map.get(config, :persistence, 1),
            Map.get(config, :stale_timeout_ms, 30_000)}
         else
           :not_configured

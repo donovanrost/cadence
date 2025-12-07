@@ -54,9 +54,15 @@ defmodule Cadence.MissionDatabase.DataEncoding do
 
     # Integer-specific
     field :signed, :boolean, default: false
-    field :integer_encoding, Ecto.Enum, values: [
-      :unsigned, :twos_complement, :sign_magnitude, :ones_complement
-    ], default: :unsigned
+
+    field :integer_encoding, Ecto.Enum,
+      values: [
+        :unsigned,
+        :twos_complement,
+        :sign_magnitude,
+        :ones_complement
+      ],
+      default: :unsigned
 
     # Float-specific
     field :float_encoding, Ecto.Enum, values: [:ieee754, :mil_std_1750a], default: :ieee754
@@ -125,7 +131,11 @@ defmodule Cadence.MissionDatabase.DataEncoding do
 
     case termination do
       :length_prefixed when is_nil(prefix_bits) ->
-        add_error(changeset, :string_length_prefix_bits, "required when string_termination is :length_prefixed")
+        add_error(
+          changeset,
+          :string_length_prefix_bits,
+          "required when string_termination is :length_prefixed"
+        )
 
       _ ->
         changeset

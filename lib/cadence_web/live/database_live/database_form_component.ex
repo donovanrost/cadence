@@ -14,7 +14,7 @@ defmodule CadenceWeb.DatabaseLive.DatabaseFormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>
           <%= if @action == :new do %>
             Create a new database to hold versioned command and telemetry definitions.

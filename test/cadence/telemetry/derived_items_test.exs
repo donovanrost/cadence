@@ -115,7 +115,10 @@ defmodule Cadence.Telemetry.DerivedItemsTest do
       items = [
         derived_item("POWER_CALC", "POWER.VOLTAGE * POWER.CURRENT"),
         derived_item("TEMP_AVG", "(HEALTH.TEMP1 + HEALTH.TEMP2) / 2"),
-        derived_item("ATTITUDE_MAG", "ATTITUDE.ROLL * ATTITUDE.ROLL + ATTITUDE.PITCH * ATTITUDE.PITCH")
+        derived_item(
+          "ATTITUDE_MAG",
+          "ATTITUDE.ROLL * ATTITUDE.ROLL + ATTITUDE.PITCH * ATTITUDE.PITCH"
+        )
       ]
 
       {:ok, sorted} = DerivedItems.sort_by_dependencies(items)
@@ -215,15 +218,17 @@ defmodule Cadence.Telemetry.DerivedItemsTest do
 
       {:error, errors} = DerivedItems.validate_definitions(item_defs)
 
-      bad1_error = Enum.find(errors, fn
-        {:invalid_expression, "BAD1", _} -> true
-        _ -> false
-      end)
+      bad1_error =
+        Enum.find(errors, fn
+          {:invalid_expression, "BAD1", _} -> true
+          _ -> false
+        end)
 
-      bad2_error = Enum.find(errors, fn
-        {:invalid_expression, "BAD2", _} -> true
-        _ -> false
-      end)
+      bad2_error =
+        Enum.find(errors, fn
+          {:invalid_expression, "BAD2", _} -> true
+          _ -> false
+        end)
 
       assert bad1_error != nil
       assert bad2_error != nil
@@ -289,7 +294,10 @@ defmodule Cadence.Telemetry.DerivedItemsTest do
         regular_item("THERMAL.PANEL_B_TEMP"),
         regular_item("THERMAL.PAYLOAD_TEMP"),
         derived_item("AVG_PANEL_TEMP", "(THERMAL.PANEL_A_TEMP + THERMAL.PANEL_B_TEMP) / 2"),
-        derived_item("TEMP_DELTA", "THERMAL.PAYLOAD_TEMP - (THERMAL.PANEL_A_TEMP + THERMAL.PANEL_B_TEMP) / 2")
+        derived_item(
+          "TEMP_DELTA",
+          "THERMAL.PAYLOAD_TEMP - (THERMAL.PANEL_A_TEMP + THERMAL.PANEL_B_TEMP) / 2"
+        )
       ]
 
       assert :ok = DerivedItems.validate_definitions(item_defs)

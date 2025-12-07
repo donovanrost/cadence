@@ -86,12 +86,13 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "accepts CRC options" do
-      state = CCSDSProtocol.new(
-        crc_enabled: true,
-        crc_algorithm: :crc32,
-        crc_endian: :little,
-        crc_on_failure: :disconnect
-      )
+      state =
+        CCSDSProtocol.new(
+          crc_enabled: true,
+          crc_algorithm: :crc32,
+          crc_endian: :little,
+          crc_on_failure: :disconnect
+        )
 
       assert state.crc_enabled == true
       assert state.crc_algorithm == :crc32
@@ -226,11 +227,12 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "skips packet on CRC failure with on_failure: :skip" do
-      state = CCSDSProtocol.new(
-        crc_enabled: true,
-        crc_algorithm: :crc16_ccitt,
-        crc_on_failure: :skip
-      )
+      state =
+        CCSDSProtocol.new(
+          crc_enabled: true,
+          crc_algorithm: :crc16_ccitt,
+          crc_on_failure: :skip
+        )
 
       # Build packet with incorrect CRC
       payload = "Test payload"
@@ -243,11 +245,12 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "disconnects on CRC failure with on_failure: :disconnect" do
-      state = CCSDSProtocol.new(
-        crc_enabled: true,
-        crc_algorithm: :crc16_ccitt,
-        crc_on_failure: :disconnect
-      )
+      state =
+        CCSDSProtocol.new(
+          crc_enabled: true,
+          crc_algorithm: :crc16_ccitt,
+          crc_on_failure: :disconnect
+        )
 
       # Build packet with incorrect CRC
       payload = "Test payload"
@@ -260,11 +263,12 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "respects CRC endianness" do
-      state = CCSDSProtocol.new(
-        crc_enabled: true,
-        crc_algorithm: :crc16_ccitt,
-        crc_endian: :little
-      )
+      state =
+        CCSDSProtocol.new(
+          crc_enabled: true,
+          crc_algorithm: :crc16_ccitt,
+          crc_endian: :little
+        )
 
       payload = "Test payload"
       packet = build_packet_with_crc(100, 1, payload, :crc16_ccitt, endian: :little)
@@ -517,11 +521,12 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "tracks crc_failures" do
-      state = CCSDSProtocol.new(
-        crc_enabled: true,
-        crc_algorithm: :crc16_ccitt,
-        crc_on_failure: :skip
-      )
+      state =
+        CCSDSProtocol.new(
+          crc_enabled: true,
+          crc_algorithm: :crc16_ccitt,
+          crc_on_failure: :skip
+        )
 
       # Build packet with bad CRC
       payload = "Bad CRC"

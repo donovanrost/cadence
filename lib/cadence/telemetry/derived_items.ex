@@ -217,7 +217,11 @@ defmodule Cadence.Telemetry.DerivedItems do
   # Compute a single derived item - optimized path with pre-parsed AST
   # Uses pre-extracted required_vars and pre-parsed AST to avoid parsing in hot path
   # Fast path for pure expressions (no stateful functions)
-  defp compute_single(%{parsed_ast: parsed_ast, required_vars: required_vars, has_stateful: false}, bindings, _mission_id)
+  defp compute_single(
+         %{parsed_ast: parsed_ast, required_vars: required_vars, has_stateful: false},
+         bindings,
+         _mission_id
+       )
        when not is_nil(parsed_ast) do
     if all_vars_present?(required_vars, bindings) do
       # Use pure AST evaluator - no stateful context needed
@@ -228,7 +232,11 @@ defmodule Cadence.Telemetry.DerivedItems do
   end
 
   # Stateful path - expressions containing stateful functions
-  defp compute_single(%{parsed_ast: parsed_ast, required_vars: required_vars, name: name}, bindings, mission_id)
+  defp compute_single(
+         %{parsed_ast: parsed_ast, required_vars: required_vars, name: name},
+         bindings,
+         mission_id
+       )
        when not is_nil(parsed_ast) do
     # Check if all required variables are available (short-circuit, no allocation)
     if all_vars_present?(required_vars, bindings) do
@@ -241,7 +249,11 @@ defmodule Cadence.Telemetry.DerivedItems do
   end
 
   # Fallback: pre-extracted required_vars but no cached AST (parse at runtime)
-  defp compute_single(%{derived_config: config, required_vars: required_vars, name: name}, bindings, mission_id) do
+  defp compute_single(
+         %{derived_config: config, required_vars: required_vars, name: name},
+         bindings,
+         mission_id
+       ) do
     expression = config["expression"]
 
     if is_nil(expression) or expression == "" do
@@ -271,6 +283,7 @@ defmodule Cadence.Telemetry.DerivedItems do
   # Short-circuit check - returns false as soon as a missing var is found
   # Avoids allocating a list of missing vars
   defp all_vars_present?([], _bindings), do: true
+
   defp all_vars_present?([var | rest], bindings) do
     Map.has_key?(bindings, var) and all_vars_present?(rest, bindings)
   end

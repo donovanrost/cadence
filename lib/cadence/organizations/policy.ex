@@ -53,7 +53,7 @@ defmodule Cadence.Organizations.Policy do
   defp authorize(_action, _user, _org, _role), do: :error
 
   defp get_membership_role(%User{organization_memberships: memberships}, %Organization{id: org_id})
-      when is_list(memberships) do
+       when is_list(memberships) do
     case Enum.find(memberships, &(&1.organization_id == org_id)) do
       %{role: role} -> role
       nil -> nil

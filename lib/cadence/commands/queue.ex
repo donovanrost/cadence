@@ -285,7 +285,9 @@ defmodule Cadence.Commands.Queue do
   def handle_info({:retry_command, entry_id}, state) do
     # Re-mark as pending to be picked up by next process cycle
     case Repo.get(QueueEntry, entry_id) do
-      nil -> :ok
+      nil ->
+        :ok
+
       entry ->
         entry
         |> QueueEntry.execution_changeset(%{status: :pending})
@@ -456,7 +458,9 @@ defmodule Cadence.Commands.Queue do
   end
 
   defp process_queue(%State{paused: true} = state), do: state
-  defp process_queue(%State{executing_count: count} = state) when count >= @max_concurrent, do: state
+
+  defp process_queue(%State{executing_count: count} = state) when count >= @max_concurrent,
+    do: state
 
   defp process_queue(state) do
     # Check for expired entries first

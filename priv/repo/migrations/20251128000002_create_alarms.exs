@@ -18,16 +18,22 @@ defmodule Cadence.Repo.Migrations.CreateAlarms do
       add :alarm_rule_id, references(:alarm_rules, type: :binary_id, on_delete: :nilify_all)
 
       # Classification
-      add :alarm_type, :string, null: false  # "telemetry_limit", "command_failure", etc.
-      add :severity, :string, null: false    # "info", "warning", "critical"
-      add :status, :string, null: false, default: "active"  # "active", "acknowledged", "cleared", "shelved"
+      # "telemetry_limit", "command_failure", etc.
+      add :alarm_type, :string, null: false
+      # "info", "warning", "critical"
+      add :severity, :string, null: false
+      # "active", "acknowledged", "cleared", "shelved"
+      add :status, :string, null: false, default: "active"
 
       # Source identification - what triggered this alarm
-      add :source_type, :string, null: false  # "telemetry_item", "command", etc.
-      add :source_id, :string, null: false    # e.g., "HEALTH.cpu_temp"
+      # "telemetry_item", "command", etc.
+      add :source_type, :string, null: false
+      # e.g., "HEALTH.cpu_temp"
+      add :source_id, :string, null: false
 
       # Current state (for telemetry limit alarms)
-      add :limit_state, :string              # "yellow", "red", "blue"
+      # "yellow", "red", "blue"
+      add :limit_state, :string
       add :current_value, :float
       add :message, :text
 
@@ -45,7 +51,8 @@ defmodule Cadence.Repo.Migrations.CreateAlarms do
       # Lifecycle timestamps
       add :triggered_at, :utc_datetime_usec, null: false
       add :cleared_at, :utc_datetime_usec
-      add :last_value_at, :utc_datetime_usec  # Last time value was updated
+      # Last time value was updated
+      add :last_value_at, :utc_datetime_usec
 
       # Metadata for additional context
       add :metadata, :map, default: %{}
@@ -70,8 +77,8 @@ defmodule Cadence.Repo.Migrations.CreateAlarms do
 
     # For finding active alarm for a specific source (deduplication)
     create index(:alarms, [:mission_id, :target_id, :source_type, :source_id],
-      where: "status IN ('active', 'acknowledged', 'shelved')",
-      name: :alarms_active_source_idx
-    )
+             where: "status IN ('active', 'acknowledged', 'shelved')",
+             name: :alarms_active_source_idx
+           )
   end
 end

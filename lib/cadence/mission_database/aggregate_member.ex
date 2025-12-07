@@ -20,7 +20,8 @@ defmodule Cadence.MissionDatabase.AggregateMember do
   @primary_key false
   embedded_schema do
     field :name, :string
-    field :type_ref, :string  # Reference to DataType name
+    # Reference to DataType name
+    field :type_ref, :string
     field :description, :string
     field :initial_value, :string
   end

@@ -114,7 +114,13 @@ defmodule Cadence.MissionDatabase.Algorithm do
       :extensions
     ])
     |> cast_embed(:spline_points)
-    |> validate_required([:organization_id, :mission_id, :definition_set_id, :name, :algorithm_type])
+    |> validate_required([
+      :organization_id,
+      :mission_id,
+      :definition_set_id,
+      :name,
+      :algorithm_type
+    ])
     |> validate_inclusion(:algorithm_type, @algorithm_types)
     |> validate_algorithm_type_fields()
     |> unique_constraint([:definition_set_id, :name],
@@ -224,7 +230,8 @@ defmodule Cadence.MissionDatabase.Algorithm do
     case order do
       0 -> apply_step_spline(sorted, x)
       1 -> apply_linear_spline(sorted, extrapolate, x)
-      _ -> apply_linear_spline(sorted, extrapolate, x)  # Default to linear
+      # Default to linear
+      _ -> apply_linear_spline(sorted, extrapolate, x)
     end
   end
 

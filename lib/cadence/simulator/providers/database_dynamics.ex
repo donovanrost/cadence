@@ -244,7 +244,8 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
 
     # Generate sinusoidal value within range
     mid = (min_val + max_val) / 2
-    amplitude = (max_val - min_val) / 2 * 0.8  # Use 80% of range
+    # Use 80% of range
+    amplitude = (max_val - min_val) / 2 * 0.8
 
     # Use item name hash to create different phases for different items
     phase = :erlang.phash2(item.name) / 1000.0
@@ -285,7 +286,7 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
         {-5.0, 5.0}
 
       String.contains?(item.name, "angle") || String.contains?(item.name, "roll") ||
-          String.contains?(item.name, "pitch") || String.contains?(item.name, "yaw") ->
+        String.contains?(item.name, "pitch") || String.contains?(item.name, "yaw") ->
         {-180.0, 180.0}
 
       true ->

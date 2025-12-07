@@ -37,10 +37,12 @@ defmodule Cadence.Telemetry.Packet do
     :packet_time,
 
     # Binary Data
-    :raw,  # Original packet bytes
+    # Original packet bytes
+    :raw,
 
     # Format-Specific Headers (optional)
-    :ccsds_header,  # CCSDSHeader struct or nil
+    # CCSDSHeader struct or nil
+    :ccsds_header,
 
     # Packet Definition (after identification)
     :definition,
@@ -71,17 +73,26 @@ defmodule Cadence.Telemetry.Packet do
     """
     defstruct [
       # Primary Header (6 bytes)
-      :apid,              # 11-bit Application Process ID
-      :sequence_count,    # 14-bit sequence number
-      :sequence_flags,    # 2-bit flags (0=continuation, 1=first, 2=last, 3=standalone)
-      :packet_length,     # 16-bit data length (excludes primary header)
-      :version,           # 3-bit version (always 0 for space packets)
-      :type,              # 1-bit type (0=telemetry, 1=command)
-      :secondary_header_flag,  # 1-bit flag
+      # 11-bit Application Process ID
+      :apid,
+      # 14-bit sequence number
+      :sequence_count,
+      # 2-bit flags (0=continuation, 1=first, 2=last, 3=standalone)
+      :sequence_flags,
+      # 16-bit data length (excludes primary header)
+      :packet_length,
+      # 3-bit version (always 0 for space packets)
+      :version,
+      # 1-bit type (0=telemetry, 1=command)
+      :type,
+      # 1-bit flag
+      :secondary_header_flag,
 
       # Secondary Header (8 bytes, mission-specific)
-      :timestamp,         # 6-byte mission time (CCSDS day segmented time code)
-      :target_hash        # 2-byte target identifier hash
+      # 6-byte mission time (CCSDS day segmented time code)
+      :timestamp,
+      # 2-byte target identifier hash
+      :target_hash
     ]
   end
 
@@ -149,7 +160,8 @@ defmodule Cadence.Telemetry.Packet do
       target_id: metadata[:target_id],
       received_time: metadata[:received_at] || DateTime.utc_now(),
       raw: binary,
-      ccsds_header: nil,  # No CCSDS header for simulator packets
+      # No CCSDS header for simulator packets
+      ccsds_header: nil,
       stored: metadata[:stored] || false,
       interface_id: metadata[:interface_id],
       source: metadata

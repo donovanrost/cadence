@@ -19,6 +19,15 @@ defmodule Cadence.Application do
       # Protocol Chain Registry - registers protocol chains by interface_id
       {Registry, keys: :unique, name: Cadence.ProtocolChainRegistry},
 
+      # Procedure Registry - registers procedure execution processes
+      {Registry, keys: :unique, name: Cadence.ProcedureRegistry},
+
+      # Automation Registry - registers automation managers by mission_id
+      {Registry, keys: :unique, name: Cadence.AutomationRegistry},
+
+      # Procedure Execution Supervisor - manages execution processes
+      {DynamicSupervisor, name: Cadence.Procedures.ExecutionSupervisor, strategy: :one_for_one},
+
       # Derived Items Cache - caches derived item definitions per mission
       Cadence.Telemetry.DerivedItems.Cache,
 
@@ -36,6 +45,9 @@ defmodule Cadence.Application do
 
       # Mission Supervisor - manages all mission supervision trees
       Cadence.Missions.MissionSupervisor,
+
+      # Oban - background job processing and scheduled tasks
+      {Oban, Application.fetch_env!(:cadence, Oban)},
 
       # Start to serve requests, typically the last entry
       CadenceWeb.Endpoint

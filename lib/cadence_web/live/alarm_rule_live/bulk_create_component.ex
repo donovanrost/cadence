@@ -34,13 +34,17 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
             <div class="flex">
               <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                    clip-rule="evenodd"
+                  />
                 </svg>
               </div>
               <div class="ml-3">
                 <h3 class="text-sm font-medium text-red-800">Error Loading Suggestions</h3>
                 <p class="mt-1 text-sm text-red-700">
-                  <%= @error %>
+                  {@error}
                 </p>
               </div>
             </div>
@@ -82,7 +86,8 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                     class={[
                       "px-3 py-1 text-sm rounded-full transition-colors",
                       @severity_filter == :warning && "bg-yellow-600 text-white",
-                      @severity_filter != :warning && "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                      @severity_filter != :warning &&
+                        "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
                     ]}
                   >
                     Warning Only
@@ -108,8 +113,8 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                 </button>
               </div>
             </div>
-
-            <!-- Rule Scope Selection -->
+            
+    <!-- Rule Scope Selection -->
             <div class="flex items-center gap-4 p-3 bg-zinc-50 rounded-lg border border-zinc-200">
               <span class="text-sm font-medium text-zinc-700">Rule Scope:</span>
               <div class="flex items-center gap-4">
@@ -140,7 +145,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                       class="text-blue-600 focus:ring-blue-500"
                     />
                     <span class="text-sm text-zinc-700">Target-specific</span>
-                    <span class="text-xs text-zinc-500">(<%= @target_identifier %>)</span>
+                    <span class="text-xs text-zinc-500">({@target_identifier})</span>
                   </label>
                 <% end %>
               </div>
@@ -187,23 +192,28 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                         />
                       </td>
                       <td class="px-4 py-2 text-sm font-medium text-zinc-900">
-                        <%= suggestion.name %>
+                        {suggestion.name}
                       </td>
                       <td class="px-4 py-2">
                         <span class={[
                           "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-                          suggestion.severity == :critical && "bg-red-50 text-red-700 ring-red-600/20",
-                          suggestion.severity == :warning && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
+                          suggestion.severity == :critical &&
+                            "bg-red-50 text-red-700 ring-red-600/20",
+                          suggestion.severity == :warning &&
+                            "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
                           suggestion.severity == :info && "bg-blue-50 text-blue-700 ring-blue-600/20"
                         ]}>
-                          <%= suggestion.severity %>
+                          {suggestion.severity}
                         </span>
                       </td>
-                      <td class="px-4 py-2 text-sm text-zinc-600 truncate max-w-xs" title={suggestion.message_template}>
-                        <%= truncate(suggestion.message_template, 50) %>
+                      <td
+                        class="px-4 py-2 text-sm text-zinc-600 truncate max-w-xs"
+                        title={suggestion.message_template}
+                      >
+                        {truncate(suggestion.message_template, 50)}
                       </td>
                       <td class="px-4 py-2 text-xs text-zinc-500 italic">
-                        <%= suggestion[:rationale] || "-" %>
+                        {suggestion[:rationale] || "-"}
                       </td>
                     </tr>
                   <% end %>
@@ -219,7 +229,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
 
             <div class="flex items-center justify-between pt-4 border-t border-zinc-200">
               <span class="text-sm text-zinc-600">
-                <%= MapSet.size(@selected) %> of <%= length(@filtered_suggestions) %> rules selected
+                {MapSet.size(@selected)} of {length(@filtered_suggestions)} rules selected
               </span>
               <div class="flex gap-3">
                 <.button
@@ -236,7 +246,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                   phx-disable-with="Creating..."
                   disabled={MapSet.size(@selected) == 0}
                 >
-                  Create <%= MapSet.size(@selected) %> <%= ngettext("Rule", "Rules", MapSet.size(@selected)) %>
+                  Create {MapSet.size(@selected)} {ngettext("Rule", "Rules", MapSet.size(@selected))}
                 </.button>
               </div>
             </div>
@@ -345,7 +355,9 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
 
   def handle_event("select_none", _params, socket) do
     visible_names = Enum.map(socket.assigns.filtered_suggestions, & &1.name) |> MapSet.new()
-    {:noreply, assign(socket, :selected, MapSet.difference(socket.assigns.selected, visible_names))}
+
+    {:noreply,
+     assign(socket, :selected, MapSet.difference(socket.assigns.selected, visible_names))}
   end
 
   def handle_event("cancel", _params, socket) do
@@ -379,7 +391,10 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
     target_id = if socket.assigns.rule_scope == :target, do: socket.assigns.target_id
 
     opts = [parameters: selected_params]
-    opts = if severity_filter, do: Keyword.put(opts, :severity_filter, severity_filter), else: opts
+
+    opts =
+      if severity_filter, do: Keyword.put(opts, :severity_filter, severity_filter), else: opts
+
     opts = if target_id, do: Keyword.put(opts, :target_id, target_id), else: opts
 
     definition_set_id = socket.assigns.definition_set_id
@@ -421,7 +436,9 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
   end
 
   defp filter_by_severity(suggestions, :both), do: suggestions
-  defp filter_by_severity(suggestions, severity), do: Enum.filter(suggestions, &(&1.severity == severity))
+
+  defp filter_by_severity(suggestions, severity),
+    do: Enum.filter(suggestions, &(&1.severity == severity))
 
   defp all_visible_selected?(filtered, selected) do
     visible_names = Enum.map(filtered, & &1.name) |> MapSet.new()

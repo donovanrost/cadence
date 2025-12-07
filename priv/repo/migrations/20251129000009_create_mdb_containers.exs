@@ -4,9 +4,16 @@ defmodule Cadence.Repo.Migrations.CreateMdbContainers do
   def change do
     create table(:mdb_containers, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
-      add :definition_set_id, references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :definition_set_id,
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string, null: false
       add :description, :text
@@ -55,6 +62,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbContainers do
     create index(:mdb_containers, [:definition_set_id])
     create index(:mdb_containers, [:stream_id])
     create index(:mdb_containers, [:apid])
-    create unique_index(:mdb_containers, [:definition_set_id, :name], name: :mdb_containers_definition_set_name_index)
+
+    create unique_index(:mdb_containers, [:definition_set_id, :name],
+             name: :mdb_containers_definition_set_name_index
+           )
   end
 end

@@ -5,6 +5,7 @@ defmodule Cadence.Repo.Migrations.CreateDictionaries do
     # Create the dictionaries catalog table
     create table(:dictionaries, primary_key: false) do
       add :id, :binary_id, primary_key: true
+
       add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
         null: false
 
@@ -29,10 +30,12 @@ defmodule Cadence.Repo.Migrations.CreateDictionaries do
 
     # Update unique constraint: version unique per dictionary, not per mission
     drop_if_exists unique_index(:mdb_definition_sets, [:mission_id, :version],
-                     name: :mdb_definition_sets_mission_version_index)
+                     name: :mdb_definition_sets_mission_version_index
+                   )
 
     create unique_index(:mdb_definition_sets, [:dictionary_id, :version],
-             name: :mdb_definition_sets_dictionary_version_index)
+             name: :mdb_definition_sets_dictionary_version_index
+           )
 
     # Add definition_set_id to targets
     alter table(:targets) do

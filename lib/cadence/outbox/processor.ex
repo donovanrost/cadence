@@ -115,7 +115,10 @@ defmodule Cadence.Outbox.Processor do
     }
 
     if enabled do
-      Logger.info("Starting Outbox.Processor with poll_interval=#{poll_interval_ms}ms, batch_size=#{batch_size}")
+      Logger.info(
+        "Starting Outbox.Processor with poll_interval=#{poll_interval_ms}ms, batch_size=#{batch_size}"
+      )
+
       # Process any pending events immediately on startup
       send(self(), :process)
       {:ok, state}

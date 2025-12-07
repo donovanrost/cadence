@@ -111,9 +111,14 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
     |> unwrap_and_tag(:unqualified_variable)
 
   # Keywords for conditionals (with lookahead to not match as identifier)
-  if_keyword = string("if") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:if)
-  then_keyword = string("then") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:then)
-  else_keyword = string("else") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:else)
+  if_keyword =
+    string("if") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:if)
+
+  then_keyword =
+    string("then") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:then)
+
+  else_keyword =
+    string("else") |> lookahead_not(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_])) |> replace(:else)
 
   # Operators with whitespace handling
   plus = concat(ws, ascii_char([?+]) |> replace(:add)) |> concat(ws)
@@ -136,7 +141,8 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
 
   # Primary expressions (atoms of the grammar)
   # Order matters: try qualified_variable before unqualified to get better errors
-  defcombinatorp :primary,
+  defcombinatorp(
+    :primary,
     choice([
       number,
       concat(ws, ignore(lparen))
@@ -148,9 +154,11 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
       qualified_variable,
       unqualified_variable
     ])
+  )
 
   # Function call: func_name(arg1, arg2, ...)
-  defcombinatorp :function_call,
+  defcombinatorp(
+    :function_call,
     identifier
     |> concat(ws)
     |> ignore(lparen)
@@ -169,16 +177,20 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
     |> ignore(rparen)
     |> reduce({__MODULE__, :make_function, []})
     |> unwrap_and_tag(:function)
+  )
 
   # Call or primary (function call takes precedence if followed by paren)
-  defcombinatorp :call_or_primary,
+  defcombinatorp(
+    :call_or_primary,
     choice([
       parsec(:function_call),
       parsec(:primary)
     ])
+  )
 
   # Unary: -expr or call_or_primary
-  defcombinatorp :unary,
+  defcombinatorp(
+    :unary,
     choice([
       concat(ws, ignore(ascii_char([?-])))
       |> concat(ws)
@@ -186,36 +198,44 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
       |> tag(:negate),
       parsec(:call_or_primary)
     ])
+  )
 
   # Multiplicative: unary (("*" | "/") unary)*
-  defcombinatorp :multiplicative,
+  defcombinatorp(
+    :multiplicative,
     parsec(:unary)
     |> repeat(
       choice([times, divide])
       |> parsec(:unary)
     )
     |> reduce({__MODULE__, :build_binary_expr, []})
+  )
 
   # Additive: multiplicative (("+" | "-") multiplicative)*
-  defcombinatorp :additive,
+  defcombinatorp(
+    :additive,
     parsec(:multiplicative)
     |> repeat(
       choice([plus, minus_op])
       |> parsec(:multiplicative)
     )
     |> reduce({__MODULE__, :build_binary_expr, []})
+  )
 
   # Comparison: additive (comp_op additive)?
-  defcombinatorp :comparison,
+  defcombinatorp(
+    :comparison,
     parsec(:additive)
     |> optional(
       comparison_op
       |> parsec(:additive)
     )
     |> reduce({__MODULE__, :build_comparison, []})
+  )
 
   # Conditional: "if" expr "then" expr "else" expr | comparison
-  defcombinatorp :conditional,
+  defcombinatorp(
+    :conditional,
     choice([
       concat(ws, ignore(if_keyword))
       |> concat(ws)
@@ -232,15 +252,18 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
       |> unwrap_and_tag(:conditional),
       parsec(:comparison)
     ])
+  )
 
   # Top-level expression
-  defcombinatorp :expr, parsec(:conditional)
+  defcombinatorp(:expr, parsec(:conditional))
 
   # Main parser entry point
-  defparsec :parse_expression,
+  defparsec(
+    :parse_expression,
     concat(ws, parsec(:expr))
     |> concat(ws)
     |> eos()
+  )
 
   # ============================================================================
   # Reducer Functions
@@ -421,15 +444,15 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionParser do
   # ============================================================================
 
   @stateful_functions MapSet.new([
-    :rolling_avg,
-    :rolling_min,
-    :rolling_max,
-    :stddev,
-    :rate,
-    :delta,
-    :count,
-    :elapsed
-  ])
+                        :rolling_avg,
+                        :rolling_min,
+                        :rolling_max,
+                        :stddev,
+                        :rate,
+                        :delta,
+                        :count,
+                        :elapsed
+                      ])
 
   @doc """
   Returns the set of stateful function names.

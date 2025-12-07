@@ -145,7 +145,6 @@ defmodule Cadence.Telemetry.Protocols.FixedProtocol do
 
   # Continue extraction after sync pattern found (or no sync configured)
   defp extract_packets_after_sync(buffer, sync_offset, state, acc) do
-
     # Calculate total bytes needed
     total_needed = sync_offset + state.packet_size
 

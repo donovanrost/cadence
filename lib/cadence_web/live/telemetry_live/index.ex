@@ -28,11 +28,12 @@ defmodule CadenceWeb.TelemetryLive.Index do
     targets = Targets.list_targets(mission)
 
     # Load telemetry data if mission is running
-    telemetry_data = if mission_running? do
-      load_telemetry_data(mission_id, targets)
-    else
-      %{}
-    end
+    telemetry_data =
+      if mission_running? do
+        load_telemetry_data(mission_id, targets)
+      else
+        %{}
+      end
 
     socket =
       socket
@@ -81,13 +82,11 @@ defmodule CadenceWeb.TelemetryLive.Index do
         <div class="text-sm">
           <%= if @mission_running? do %>
             <span class="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-800">
-              <span class="h-2 w-2 bg-green-600 rounded-full mr-2 animate-pulse"></span>
-              LIVE
+              <span class="h-2 w-2 bg-green-600 rounded-full mr-2 animate-pulse"></span> LIVE
             </span>
           <% else %>
             <span class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 text-gray-800">
-              <span class="h-2 w-2 bg-gray-600 rounded-full mr-2"></span>
-              OFFLINE
+              <span class="h-2 w-2 bg-gray-600 rounded-full mr-2"></span> OFFLINE
             </span>
           <% end %>
         </div>
@@ -95,8 +94,12 @@ defmodule CadenceWeb.TelemetryLive.Index do
 
       <%= if not @mission_running? do %>
         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-          <p class="text-yellow-800 mb-4">Mission runtime is not running. Start the mission to view telemetry.</p>
-          <p class="text-sm text-yellow-700">You can start the mission from the mission details page.</p>
+          <p class="text-yellow-800 mb-4">
+            Mission runtime is not running. Start the mission to view telemetry.
+          </p>
+          <p class="text-sm text-yellow-700">
+            You can start the mission from the mission details page.
+          </p>
         </div>
       <% else %>
         <%= if Enum.empty?(@targets) do %>
@@ -104,33 +107,36 @@ defmodule CadenceWeb.TelemetryLive.Index do
             <p class="text-yellow-800">No targets found for this mission.</p>
           </div>
         <% else %>
-        <div class="space-y-6">
-          <%= for target <- @targets do %>
-            <div class="bg-white shadow rounded-lg overflow-hidden">
-              <div class="bg-gray-50 px-6 py-3 border-b">
-                <h2 class="text-xl font-semibold">Target: {target.name} ({target.identifier})</h2>
-              </div>
+          <div class="space-y-6">
+            <%= for target <- @targets do %>
+              <div class="bg-white shadow rounded-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-3 border-b">
+                  <h2 class="text-xl font-semibold">Target: {target.name} ({target.identifier})</h2>
+                </div>
 
-              <div class="grid grid-cols-3 gap-4 p-6">
-                <%= for packet_name <- ["HEALTH", "ATTITUDE", "POWER"] do %>
-                  <div>
-                    <h3 class="font-semibold text-gray-700 mb-3">{packet_name}</h3>
-                    <div class="space-y-2">
-                      <%= for {key, value} <- filter_telemetry(@telemetry_data, target.identifier, packet_name) do %>
-                        <div class="flex justify-between items-center text-sm">
-                          <span class="text-gray-600">{elem(key, 2)}:</span>
-                          <span class={["font-mono font-semibold", limits_color_class(value.limits_state)]}>
-                            {format_value(value.value)}
-                          </span>
-                        </div>
-                      <% end %>
+                <div class="grid grid-cols-3 gap-4 p-6">
+                  <%= for packet_name <- ["HEALTH", "ATTITUDE", "POWER"] do %>
+                    <div>
+                      <h3 class="font-semibold text-gray-700 mb-3">{packet_name}</h3>
+                      <div class="space-y-2">
+                        <%= for {key, value} <- filter_telemetry(@telemetry_data, target.identifier, packet_name) do %>
+                          <div class="flex justify-between items-center text-sm">
+                            <span class="text-gray-600">{elem(key, 2)}:</span>
+                            <span class={[
+                              "font-mono font-semibold",
+                              limits_color_class(value.limits_state)
+                            ]}>
+                              {format_value(value.value)}
+                            </span>
+                          </div>
+                        <% end %>
+                      </div>
                     </div>
-                  </div>
-                <% end %>
+                  <% end %>
+                </div>
               </div>
-            </div>
-          <% end %>
-        </div>
+            <% end %>
+          </div>
         <% end %>
       <% end %>
     </div>

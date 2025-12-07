@@ -165,9 +165,9 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     </.header>
 
     <.table id="interfaces" rows={@interfaces}>
-      <:col :let={interface} label="Name"><%= interface.name %></:col>
+      <:col :let={interface} label="Name">{interface.name}</:col>
       <:col :let={interface} label="Connection Type">
-        <%= String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize() %>
+        {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
       </:col>
       <:col :let={interface} label="Targets">
         <% targets = Map.get(@interface_targets, interface.id, []) %>
@@ -177,7 +177,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
           <div class="flex flex-wrap gap-1">
             <%= for target <- targets do %>
               <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                <%= target.identifier %>
+                {target.identifier}
               </span>
             <% end %>
           </div>
@@ -188,12 +188,18 @@ defmodule CadenceWeb.MissionLive.Interfaces do
           <% 0 -> %>
             <span class="text-gray-500">No protocols</span>
           <% 1 -> %>
-            <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"} class="text-blue-600 hover:underline">
+            <.link
+              navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
+              class="text-blue-600 hover:underline"
+            >
               1 protocol
             </.link>
           <% count -> %>
-            <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"} class="text-blue-600 hover:underline">
-              <%= count %> protocols
+            <.link
+              navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
+              class="text-blue-600 hover:underline"
+            >
+              {count} protocols
             </.link>
         <% end %>
       </:col>
@@ -205,7 +211,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
           interface.status == "connecting" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
           interface.status == "error" && "bg-red-50 text-red-700 ring-red-600/10"
         ]}>
-          <%= interface.status %>
+          {interface.status}
         </span>
       </:col>
       <:col :let={interface} label="Auto Reconnect">
@@ -214,7 +220,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
           interface.auto_reconnect && "bg-green-50 text-green-700 ring-green-600/20",
           !interface.auto_reconnect && "bg-gray-50 text-gray-600 ring-gray-500/10"
         ]}>
-          <%= if interface.auto_reconnect, do: "Enabled", else: "Disabled" %>
+          {if interface.auto_reconnect, do: "Enabled", else: "Disabled"}
         </span>
       </:col>
       <:action :let={interface}>
@@ -239,8 +245,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         <div class="mt-6">
           <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
             <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" />
-              New Interface
+              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Interface
             </.button>
           </.link>
         </div>

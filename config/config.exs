@@ -81,6 +81,23 @@ config :phoenix, :json_library, Jason
 
 config :cadence, :pipeline_version, :v2
 
+# Configure Oban for background job processing
+config :cadence, Oban,
+  repo: Cadence.Repo,
+  queues: [
+    default: 10,
+    schedules: 5,
+    procedures: 10
+  ],
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Clean up orphaned executions every minute
+       {"* * * * *", Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker}
+     ]}
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

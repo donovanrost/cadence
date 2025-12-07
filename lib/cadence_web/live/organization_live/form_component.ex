@@ -8,7 +8,7 @@ defmodule CadenceWeb.OrganizationLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>Use this form to manage organization records in your database.</:subtitle>
       </.header>
 

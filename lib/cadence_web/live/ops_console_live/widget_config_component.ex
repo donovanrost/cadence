@@ -44,7 +44,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
               filter={@filter}
               myself={@myself}
             />
-
           <% "line_chart" -> %>
             <.line_chart_config
               widget={@widget}
@@ -53,7 +52,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
               filter={@filter}
               myself={@myself}
             />
-
           <% "gauge" -> %>
             <.gauge_config
               widget={@widget}
@@ -62,7 +60,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
               filter={@filter}
               myself={@myself}
             />
-
           <% "table" -> %>
             <.table_config
               widget={@widget}
@@ -71,9 +68,10 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
               filter={@filter}
               myself={@myself}
             />
-
           <% _ -> %>
-            <p class="text-base-content/50">No configuration options available for this widget type.</p>
+            <p class="text-base-content/50">
+              No configuration options available for this widget type.
+            </p>
         <% end %>
 
         <div class="flex justify-between items-center mt-6">
@@ -93,8 +91,7 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
               class="btn btn-ghost btn-sm"
               title="Create a copy of this widget"
             >
-              <.icon name="hero-document-duplicate" class="h-4 w-4" />
-              Duplicate
+              <.icon name="hero-document-duplicate" class="h-4 w-4" /> Duplicate
             </button>
           </div>
           <div class="flex gap-2">
@@ -202,7 +199,7 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
           <span class="label-text">Telemetry Items</span>
         </label>
         <p class="text-sm text-base-content/50 mb-2">
-          Currently plotting <%= length(@telemetry_items) %> item(s).
+          Currently plotting {length(@telemetry_items)} item(s).
           Select items to add/remove from the chart.
         </p>
 
@@ -235,7 +232,14 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
                           name="items[]"
                           value={"#{target.identifier}:#{packet.name}:#{item.name}"}
                           class="checkbox checkbox-sm checkbox-primary"
-                          checked={item_selected?(@telemetry_items, target.identifier, packet.name, item.name)}
+                          checked={
+                            item_selected?(
+                              @telemetry_items,
+                              target.identifier,
+                              packet.name,
+                              item.name
+                            )
+                          }
                         />
                         <span class="text-sm" title={item.description || ""}>
                           {item.name}
@@ -251,8 +255,7 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
                 <%= if @filtered_derived != [] do %>
                   <div class="ml-4 mb-2">
                     <p class="text-xs text-base-content/50 mb-1 font-medium flex items-center gap-1">
-                      DERIVED
-                      <span class="badge badge-xs badge-info">calculated</span>
+                      DERIVED <span class="badge badge-xs badge-info">calculated</span>
                     </p>
                     <%= for item <- @filtered_derived do %>
                       <label class="flex items-center gap-2 cursor-pointer py-0.5">
@@ -261,7 +264,9 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
                           name="items[]"
                           value={"#{target.identifier}:DERIVED:#{item.name}"}
                           class="checkbox checkbox-sm checkbox-primary"
-                          checked={item_selected?(@telemetry_items, target.identifier, "DERIVED", item.name)}
+                          checked={
+                            item_selected?(@telemetry_items, target.identifier, "DERIVED", item.name)
+                          }
                         />
                         <span class="text-sm" title={item.expression || ""}>
                           {item.name}
@@ -280,14 +285,32 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
       </div>
 
       <div class="grid grid-cols-2 gap-4">
-        <.input name="y_min" type="number" label="Y-Axis Min" value={@y_axis["min"] || ""} placeholder="Auto" />
-        <.input name="y_max" type="number" label="Y-Axis Max" value={@y_axis["max"] || ""} placeholder="Auto" />
+        <.input
+          name="y_min"
+          type="number"
+          label="Y-Axis Min"
+          value={@y_axis["min"] || ""}
+          placeholder="Auto"
+        />
+        <.input
+          name="y_max"
+          type="number"
+          label="Y-Axis Max"
+          value={@y_axis["max"] || ""}
+          placeholder="Auto"
+        />
       </div>
       <p class="text-xs text-base-content/50 -mt-2">
         Leave empty for auto-scaling based on data
       </p>
 
-      <.input name="y_unit" type="text" label="Y-Axis Unit" value={@y_axis["unit"] || ""} placeholder="e.g., °C, V, mA" />
+      <.input
+        name="y_unit"
+        type="text"
+        label="Y-Axis Unit"
+        value={@y_axis["unit"] || ""}
+        placeholder="e.g., °C, V, mA"
+      />
 
       <.input
         name="time_window"
@@ -346,8 +369,18 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
       <% end %>
 
       <div class="grid grid-cols-2 gap-4">
-        <.input name="min_value" type="number" label="Min Value" value={@widget.config["min_value"] || 0} />
-        <.input name="max_value" type="number" label="Max Value" value={@widget.config["max_value"] || 100} />
+        <.input
+          name="min_value"
+          type="number"
+          label="Min Value"
+          value={@widget.config["min_value"] || 0}
+        />
+        <.input
+          name="max_value"
+          type="number"
+          label="Max Value"
+          value={@widget.config["max_value"] || 100}
+        />
       </div>
 
       <.input name="unit" type="text" label="Unit" value={@widget.config["unit"] || ""} />
@@ -358,7 +391,9 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetConfigComponent do
   # Table configuration
   defp table_config(assigns) do
     current_value = build_current_packet_value(assigns.widget.config)
-    packet_options = build_packet_options(assigns.targets, assigns.telemetry_catalog, assigns.filter)
+
+    packet_options =
+      build_packet_options(assigns.targets, assigns.telemetry_catalog, assigns.filter)
 
     assigns =
       assigns

@@ -123,7 +123,13 @@ defmodule Cadence.Telemetry.Limits.StalenessMonitor do
   @impl GenServer
   def handle_call(:check_staleness, _from, state) do
     count = do_staleness_check(state.mission_id)
-    new_state = %{state | last_check: DateTime.utc_now(), items_marked_stale: state.items_marked_stale + count}
+
+    new_state = %{
+      state
+      | last_check: DateTime.utc_now(),
+        items_marked_stale: state.items_marked_stale + count
+    }
+
     {:reply, {:ok, count}, new_state}
   end
 

@@ -416,7 +416,10 @@ defmodule Cadence.Interfaces.TcpServerInterface do
         {:ok, pid}
 
       {:error, reason} ->
-        Logger.error("Failed to start protocol chain for interface #{interface_id}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to start protocol chain for interface #{interface_id}: #{inspect(reason)}"
+        )
+
         {:error, reason}
     end
   end

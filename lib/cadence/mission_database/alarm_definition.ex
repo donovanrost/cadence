@@ -102,6 +102,7 @@ defmodule Cadence.MissionDatabase.AlarmDefinition do
   end
 
   defp build_range(nil, nil), do: nil
+
   defp build_range(low, high) do
     %AlarmRange{
       min_inclusive: low,

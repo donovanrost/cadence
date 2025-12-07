@@ -97,9 +97,12 @@ defmodule Cadence.Telemetry.Limits.Cache do
               nil ->
                 # Active set not defined for this item, try "DEFAULT" or return not_configured
                 case Map.get(limits_config, "DEFAULT") do
-                  nil -> :not_configured
-                  limits -> {:ok, limits, config[:persistence] || @default_persistence,
-                             config[:stale_timeout_ms] || @default_stale_timeout_ms}
+                  nil ->
+                    :not_configured
+
+                  limits ->
+                    {:ok, limits, config[:persistence] || @default_persistence,
+                     config[:stale_timeout_ms] || @default_stale_timeout_ms}
                 end
 
               limits ->
@@ -310,7 +313,11 @@ defmodule Cadence.Telemetry.Limits.Cache do
     case load_limits_data(mission_id, target_id) do
       {:ok, item_limits_map, active_limit_set} ->
         cached_at = System.monotonic_time(:millisecond)
-        :ets.insert(@table, {{mission_id, target_id}, item_limits_map, active_limit_set, cached_at})
+
+        :ets.insert(
+          @table,
+          {{mission_id, target_id}, item_limits_map, active_limit_set, cached_at}
+        )
 
         Logger.debug(
           "Cached limits for mission=#{mission_id}, target=#{target_id}: " <>
@@ -320,7 +327,10 @@ defmodule Cadence.Telemetry.Limits.Cache do
         {:ok, item_limits_map, active_limit_set}
 
       {:error, reason} = error ->
-        Logger.error("Failed to load limits for mission=#{mission_id}, target=#{target_id}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to load limits for mission=#{mission_id}, target=#{target_id}: #{inspect(reason)}"
+        )
+
         error
     end
   end

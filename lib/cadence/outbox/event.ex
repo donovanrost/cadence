@@ -99,6 +99,9 @@ defmodule Cadence.Outbox.Event do
     field :last_attempted_at, :utc_datetime_usec
     field :dead_lettered_at, :utc_datetime_usec
 
+    # Idempotency support for safe retries
+    field :idempotency_key, :string
+
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -115,7 +118,8 @@ defmodule Cadence.Outbox.Event do
       :aggregate_id,
       :actor_id,
       :actor_type,
-      :payload
+      :payload,
+      :idempotency_key
     ])
     |> validate_required([
       :organization_id,
@@ -126,6 +130,7 @@ defmodule Cadence.Outbox.Event do
     |> validate_inclusion(:actor_type, @actor_types ++ [nil])
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
+    |> unique_constraint(:idempotency_key)
   end
 
   @doc """

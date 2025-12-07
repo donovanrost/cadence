@@ -90,7 +90,11 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   @doc """
   Gets alarm counts by severity from the ETS cache.
   """
-  @spec get_alarm_counts(String.t()) :: %{critical: integer(), warning: integer(), info: integer()}
+  @spec get_alarm_counts(String.t()) :: %{
+          critical: integer(),
+          warning: integer(),
+          info: integer()
+        }
   def get_alarm_counts(mission_id) do
     table_name = table_name(mission_id)
 
@@ -210,8 +214,8 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
     # Check ETS cache for expired shelved alarms
     :ets.foldl(
       fn {_key, alarm}, acc ->
-        if alarm.status == :shelved and
-             alarm.shelved_until &&
+        if (alarm.status == :shelved and
+              alarm.shelved_until) &&
              DateTime.compare(now, alarm.shelved_until) == :gt do
           [alarm | acc]
         else

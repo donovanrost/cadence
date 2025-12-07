@@ -48,7 +48,10 @@ defmodule CadenceWeb.LiveAuth do
     current_scope = Map.get(session, "current_scope")
 
     require Logger
-    Logger.debug("LiveAuth.require_authenticated - current_scope from session: #{inspect(current_scope)}")
+
+    Logger.debug(
+      "LiveAuth.require_authenticated - current_scope from session: #{inspect(current_scope)}"
+    )
 
     # Assign it to socket so it's available in LiveView
     socket = assign(socket, :current_scope, current_scope)
@@ -56,18 +59,22 @@ defmodule CadenceWeb.LiveAuth do
     cond do
       is_nil(current_scope) ->
         Logger.debug("LiveAuth.require_authenticated - FAILED: current_scope is nil")
+
         socket =
           socket
           |> put_flash(:error, "You must log in to access this page.")
           |> redirect(to: "/users/log-in")
+
         {:halt, socket}
 
       is_nil(current_scope.user) ->
         Logger.debug("LiveAuth.require_authenticated - FAILED: current_scope.user is nil")
+
         socket =
           socket
           |> put_flash(:error, "You must log in to access this page.")
           |> redirect(to: "/users/log-in")
+
         {:halt, socket}
 
       true ->
@@ -89,6 +96,7 @@ defmodule CadenceWeb.LiveAuth do
       {:cont, socket}
     else
       Logger.debug("LiveAuth.require_system_admin - FAILED")
+
       socket =
         socket
         |> put_flash(:error, "You must be a system administrator to access this page.")

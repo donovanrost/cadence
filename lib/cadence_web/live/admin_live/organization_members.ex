@@ -49,7 +49,8 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
         {:noreply, socket}
 
       {:error, changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to add member: #{inspect(changeset.errors)}")}
+        {:noreply,
+         put_flash(socket, :error, "Failed to add member: #{inspect(changeset.errors)}")}
     end
   end
 
@@ -99,8 +100,8 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
         <h1 class="text-3xl font-bold">Organization Members</h1>
         <p class="text-gray-600 mt-2">{@organization.name}</p>
       </div>
-
-      <!-- Add Member Form -->
+      
+    <!-- Add Member Form -->
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h2 class="text-xl font-semibold mb-4">Add Member</h2>
         <form phx-submit="add_member" class="flex gap-4">
@@ -131,8 +132,8 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
           </div>
         </form>
       </div>
-
-      <!-- Members List -->
+      
+    <!-- Members List -->
       <div class="bg-white shadow rounded-lg overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
@@ -202,7 +203,10 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
       </div>
 
       <div class="mt-6">
-        <.link navigate={~p"/admin/organizations/#{@organization}"} class="text-blue-600 hover:text-blue-800">
+        <.link
+          navigate={~p"/admin/organizations/#{@organization}"}
+          class="text-blue-600 hover:text-blue-800"
+        >
           ← Back to Organization
         </.link>
       </div>

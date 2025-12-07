@@ -12,7 +12,7 @@ defmodule Cadence.Repo.Migrations.AddAlarmProvenanceFields do
       # Which DefinitionSet version's limits triggered this alarm?
       # Useful for understanding alarm behavior across C&T database versions
       add :source_definition_set_id,
-        references(:mdb_definition_sets, type: :binary_id, on_delete: :nilify_all)
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :nilify_all)
     end
 
     create index(:alarms, [:source_origin])

@@ -121,7 +121,10 @@ defmodule Cadence.Organizations do
   @doc """
   Updates an organization membership.
   """
-  def update_organization_membership(%Cadence.Organizations.OrganizationMembership{} = membership, attrs) do
+  def update_organization_membership(
+        %Cadence.Organizations.OrganizationMembership{} = membership,
+        attrs
+      ) do
     alias Cadence.Organizations.OrganizationMembership
 
     membership

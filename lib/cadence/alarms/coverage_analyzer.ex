@@ -136,7 +136,8 @@ defmodule Cadence.Alarms.CoverageAnalyzer do
 
   This is a convenience function for quickly identifying coverage gaps.
   """
-  @spec get_uncovered(String.t(), String.t()) :: {:ok, [parameter_with_limits()]} | {:error, term()}
+  @spec get_uncovered(String.t(), String.t()) ::
+          {:ok, [parameter_with_limits()]} | {:error, term()}
   def get_uncovered(definition_set_id, mission_id) do
     case analyze(definition_set_id, mission_id) do
       {:ok, %{uncovered: uncovered}} -> {:ok, uncovered}

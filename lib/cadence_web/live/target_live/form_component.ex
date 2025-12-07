@@ -9,8 +9,10 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
-        <:subtitle>Configure target details. The identifier must be unique within this mission.</:subtitle>
+        {@title}
+        <:subtitle>
+          Configure target details. The identifier must be unique within this mission.
+        </:subtitle>
       </.header>
 
       <.simple_form
@@ -84,7 +86,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                   <option value="">Choose a database...</option>
                   <%= for db <- @available_databases do %>
                     <option value={db.id} selected={@selected_database_id == db.id}>
-                      <%= db.name %>
+                      {db.name}
                     </option>
                   <% end %>
                 </select>
@@ -102,7 +104,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                     <option value="">Choose a version...</option>
                     <%= for ds <- @available_versions do %>
                       <option value={ds.id} selected={@selected_definition_set_id == ds.id}>
-                        v<%= ds.version %> <%= version_status_label(ds) %>
+                        v{ds.version} {version_status_label(ds)}
                       </option>
                     <% end %>
                   </select>
@@ -156,8 +158,10 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                       class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                     />
                     <span class="text-sm font-medium text-zinc-700">
-                      <%= interface.name %>
-                      <span class="text-zinc-500">(<%= String.replace(interface.connection_type || "none", "_", " ") %>)</span>
+                      {interface.name}
+                      <span class="text-zinc-500">
+                        ({String.replace(interface.connection_type || "none", "_", " ")})
+                      </span>
                     </span>
                   </label>
                   <%= if is_selected do %>
@@ -168,9 +172,15 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                       phx-target={@myself}
                       class="text-sm rounded-md border-zinc-300 py-1 pl-2 pr-8 focus:border-zinc-400 focus:ring-zinc-400"
                     >
-                      <option value="read" selected={current_direction == "read"}>Read (Telemetry)</option>
-                      <option value="write" selected={current_direction == "write"}>Write (Commands)</option>
-                      <option value="read_write" selected={current_direction == "read_write"}>Read/Write</option>
+                      <option value="read" selected={current_direction == "read"}>
+                        Read (Telemetry)
+                      </option>
+                      <option value="write" selected={current_direction == "write"}>
+                        Write (Commands)
+                      </option>
+                      <option value="read_write" selected={current_direction == "read_write"}>
+                        Read/Write
+                      </option>
                     </select>
                   <% end %>
                 </div>
@@ -241,6 +251,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
       if target.definition_set_id do
         # Target has a specific definition set - find its database
         ds = Cadence.Repo.get(DefinitionSet, target.definition_set_id)
+
         if ds do
           {ds.database_id, ds.id}
         else
@@ -293,7 +304,11 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     {:noreply, assign(socket, :selected_interfaces, updated_interfaces)}
   end
 
-  def handle_event("update_interface_direction", %{"interface-id" => interface_id, "value" => direction}, socket) do
+  def handle_event(
+        "update_interface_direction",
+        %{"interface-id" => interface_id, "value" => direction},
+        socket
+      ) do
     selected_interfaces = socket.assigns.selected_interfaces
     updated_interfaces = Map.put(selected_interfaces, interface_id, direction)
     {:noreply, assign(socket, :selected_interfaces, updated_interfaces)}
@@ -335,14 +350,20 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     mission = socket.assigns.mission
 
     # Add definition_set_id from selection
-    target_params = Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
+    target_params =
+      Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
         case Targets.update_target(socket.assigns.target, target_params) do
           {:ok, target} ->
             # Sync interface associations
-            sync_interface_associations(target, socket.assigns.selected_interfaces, socket.assigns.available_interfaces)
+            sync_interface_associations(
+              target,
+              socket.assigns.selected_interfaces,
+              socket.assigns.available_interfaces
+            )
+
             notify_parent({:saved, target})
 
             {:noreply,
@@ -368,7 +389,8 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     mission = socket.assigns.mission
 
     # Add definition_set_id from selection
-    target_params = Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
+    target_params =
+      Map.put(target_params, "definition_set_id", socket.assigns.selected_definition_set_id)
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
@@ -378,7 +400,12 @@ defmodule CadenceWeb.TargetLive.FormComponent do
         case Targets.create_target(params_with_mission) do
           {:ok, target} ->
             # Add interface associations for new target
-            sync_interface_associations(target, socket.assigns.selected_interfaces, socket.assigns.available_interfaces)
+            sync_interface_associations(
+              target,
+              socket.assigns.selected_interfaces,
+              socket.assigns.available_interfaces
+            )
+
             notify_parent({:saved, target})
 
             {:noreply,
@@ -407,6 +434,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
     # Remove interfaces that are no longer selected
     interfaces_to_remove = MapSet.difference(current_interface_ids, selected_interface_ids)
+
     for interface_id <- interfaces_to_remove do
       interface = Enum.find(current_interfaces, &(&1.id == interface_id))
       if interface, do: Interfaces.remove_target_from_interface(target, interface)
@@ -415,6 +443,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     # Add or update interfaces that are selected
     for {interface_id, direction} <- selected_interfaces do
       interface = Enum.find(available_interfaces, &(&1.id == interface_id))
+
       if interface do
         if MapSet.member?(current_interface_ids, interface_id) do
           # Update direction if changed
@@ -435,6 +464,9 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
   # Returns a status label for a DefinitionSet based on its lifecycle fields
   defp version_status_label(%DefinitionSet{published_at: nil}), do: "(draft)"
-  defp version_status_label(%DefinitionSet{superseded_at: ts}) when not is_nil(ts), do: "(deprecated)"
+
+  defp version_status_label(%DefinitionSet{superseded_at: ts}) when not is_nil(ts),
+    do: "(deprecated)"
+
   defp version_status_label(%DefinitionSet{published_at: _}), do: "(published)"
 end

@@ -18,28 +18,31 @@ defmodule CadenceWeb.TargetLive.Index do
     current_org = scope.current_organization
 
     # Get all missions for the organization to determine which targets are viewable
-    missions = if current_org do
-      Missions.list_missions(current_org)
-    else
-      []
-    end
+    missions =
+      if current_org do
+        Missions.list_missions(current_org)
+      else
+        []
+      end
 
     # Collect all targets from viewable missions
-    all_targets = missions
-    |> Enum.flat_map(fn mission ->
-      # Check if user can view this mission
-      case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
-        :ok -> Targets.list_targets(mission)
-        {:error, _} -> []
-      end
-    end)
-    |> Enum.sort_by(& &1.identifier)
+    all_targets =
+      missions
+      |> Enum.flat_map(fn mission ->
+        # Check if user can view this mission
+        case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
+          :ok -> Targets.list_targets(mission)
+          {:error, _} -> []
+        end
+      end)
+      |> Enum.sort_by(& &1.identifier)
 
     # Optionally filter by mission_id if provided
-    targets = case Map.get(params, "mission_id") do
-      nil -> all_targets
-      mission_id -> Enum.filter(all_targets, &(&1.mission_id == mission_id))
-    end
+    targets =
+      case Map.get(params, "mission_id") do
+        nil -> all_targets
+        mission_id -> Enum.filter(all_targets, &(&1.mission_id == mission_id))
+      end
 
     socket
     |> assign(:page_title, "Targets")

@@ -53,7 +53,11 @@ defmodule CadenceWeb.MissionLive.Alarms do
     |> assign(:page_title, "New Alarm Rule")
     |> assign(:alarm_rules, alarm_rules)
     |> assign(:targets, targets)
-    |> assign(:alarm_rule, %AlarmRule{enabled: true, severity: :warning, event_type: "telemetry_limit"})
+    |> assign(:alarm_rule, %AlarmRule{
+      enabled: true,
+      severity: :warning,
+      event_type: "telemetry_limit"
+    })
     |> assign(:definition_set_id, definition_set_id)
     |> assign_coverage_modal_defaults()
   end
@@ -94,16 +98,28 @@ defmodule CadenceWeb.MissionLive.Alarms do
 
   @impl true
   def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:saved, _alarm_rule}}, socket) do
-    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
+    alarm_rules =
+      Alarms.list_rules(socket.assigns.mission.organization_id,
+        mission_id: socket.assigns.mission.id
+      )
+
     {:noreply, assign(socket, :alarm_rules, alarm_rules)}
   end
 
   def handle_info({CadenceWeb.AlarmRuleLive.FormComponent, {:deleted, _alarm_rule}}, socket) do
-    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
+    alarm_rules =
+      Alarms.list_rules(socket.assigns.mission.organization_id,
+        mission_id: socket.assigns.mission.id
+      )
+
     {:noreply, assign(socket, :alarm_rules, alarm_rules)}
   end
 
-  def handle_info({CadenceWeb.AlarmRuleLive.CoverageReportComponent, {:open_bulk_create, definition_set_id, _mission_id, target_id}}, socket) do
+  def handle_info(
+        {CadenceWeb.AlarmRuleLive.CoverageReportComponent,
+         {:open_bulk_create, definition_set_id, _mission_id, target_id}},
+        socket
+      ) do
     {:noreply,
      socket
      |> assign(:show_coverage_modal, false)
@@ -113,7 +129,11 @@ defmodule CadenceWeb.MissionLive.Alarms do
      |> assign(:bulk_create_parameters, nil)}
   end
 
-  def handle_info({CadenceWeb.AlarmRuleLive.CoverageReportComponent, {:create_single_rule, definition_set_id, _mission_id, qualified_name, target_id}}, socket) do
+  def handle_info(
+        {CadenceWeb.AlarmRuleLive.CoverageReportComponent,
+         {:create_single_rule, definition_set_id, _mission_id, qualified_name, target_id}},
+        socket
+      ) do
     {:noreply,
      socket
      |> assign(:show_coverage_modal, false)
@@ -132,8 +152,15 @@ defmodule CadenceWeb.MissionLive.Alarms do
      |> assign(:bulk_create_parameters, nil)}
   end
 
-  def handle_info({CadenceWeb.AlarmRuleLive.BulkCreateComponent, {:created, created_rules}}, socket) do
-    alarm_rules = Alarms.list_rules(socket.assigns.mission.organization_id, mission_id: socket.assigns.mission.id)
+  def handle_info(
+        {CadenceWeb.AlarmRuleLive.BulkCreateComponent, {:created, created_rules}},
+        socket
+      ) do
+    alarm_rules =
+      Alarms.list_rules(socket.assigns.mission.organization_id,
+        mission_id: socket.assigns.mission.id
+      )
+
     count = length(created_rules)
 
     {:noreply,
@@ -250,7 +277,10 @@ defmodule CadenceWeb.MissionLive.Alarms do
       Alarm Rules
       <:subtitle>Define when alarms are generated from telemetry limit violations</:subtitle>
       <:actions>
-        <.button phx-click="show_coverage_analysis" class="bg-zinc-100 text-zinc-700 hover:bg-zinc-200">
+        <.button
+          phx-click="show_coverage_analysis"
+          class="bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+        >
           Coverage Analysis
         </.button>
         <.link patch={~p"/missions/#{@mission}/alarms/new"}>
@@ -260,13 +290,13 @@ defmodule CadenceWeb.MissionLive.Alarms do
     </.header>
 
     <.table id="alarm-rules" rows={@alarm_rules}>
-      <:col :let={rule} label="Name"><%= rule.name %></:col>
+      <:col :let={rule} label="Name">{rule.name}</:col>
       <:col :let={rule} label="Event Type">
         <%= case rule.event_type do %>
           <% "telemetry_limit" -> %>
             <span class="text-blue-600">Telemetry Limit</span>
           <% other -> %>
-            <%= other %>
+            {other}
         <% end %>
       </:col>
       <:col :let={rule} label="Conditions">
@@ -279,13 +309,13 @@ defmodule CadenceWeb.MissionLive.Alarms do
                 state == "yellow" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
                 state == "blue" && "bg-blue-50 text-blue-700 ring-blue-600/20"
               ]}>
-                <%= state %>
+                {state}
               </span>
             <% end %>
           <% end %>
           <%= if rule.conditions["item_name_pattern"] do %>
             <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-              <%= rule.conditions["item_name_pattern"] %>
+              {rule.conditions["item_name_pattern"]}
             </span>
           <% end %>
           <%= if rule.conditions == %{} do %>
@@ -300,7 +330,7 @@ defmodule CadenceWeb.MissionLive.Alarms do
           rule.severity == :warning && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
           rule.severity == :info && "bg-blue-50 text-blue-700 ring-blue-600/20"
         ]}>
-          <%= rule.severity %>
+          {rule.severity}
         </span>
       </:col>
       <:col :let={rule} label="Status">
@@ -309,12 +339,12 @@ defmodule CadenceWeb.MissionLive.Alarms do
           rule.enabled && "bg-green-50 text-green-700 ring-green-600/20",
           !rule.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
         ]}>
-          <%= if rule.enabled, do: "Enabled", else: "Disabled" %>
+          {if rule.enabled, do: "Enabled", else: "Disabled"}
         </span>
       </:col>
       <:action :let={rule}>
         <.link phx-click={JS.push("toggle", value: %{id: rule.id})}>
-          <%= if rule.enabled, do: "Disable", else: "Enable" %>
+          {if rule.enabled, do: "Disable", else: "Enable"}
         </.link>
         <.link patch={~p"/missions/#{@mission}/alarms/#{rule}/edit"}>Edit</.link>
         <.link
@@ -330,12 +360,13 @@ defmodule CadenceWeb.MissionLive.Alarms do
       <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
         <.icon name="hero-bell-alert" class="mx-auto h-12 w-12 text-gray-400" />
         <h3 class="mt-2 text-sm font-semibold text-gray-900">No alarm rules</h3>
-        <p class="mt-1 text-sm text-gray-500">Create rules to generate alarms when telemetry exceeds limits.</p>
+        <p class="mt-1 text-sm text-gray-500">
+          Create rules to generate alarms when telemetry exceeds limits.
+        </p>
         <div class="mt-6">
           <.link patch={~p"/missions/#{@mission}/alarms/new"}>
             <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" />
-              New Rule
+              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Rule
             </.button>
           </.link>
         </div>

@@ -4,9 +4,16 @@ defmodule Cadence.Repo.Migrations.CreateMdbDataTypes do
   def change do
     create table(:mdb_data_types, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
-      add :definition_set_id, references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :definition_set_id,
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string, null: false
       add :description, :text
@@ -38,13 +45,15 @@ defmodule Cadence.Repo.Migrations.CreateMdbDataTypes do
       add :array_dimensions, :map
 
       # For time types
-      add :epoch, :string  # unix, tai, gps, j2000, custom
+      # unix, tai, gps, j2000, custom
+      add :epoch, :string
       add :epoch_custom, :utc_datetime
       add :time_scale, :float
       add :time_offset, :float
 
       # Calibrator reference (raw -> engineering conversion)
-      add :default_calibrator_id, references(:mdb_algorithms, type: :binary_id, on_delete: :nilify_all)
+      add :default_calibrator_id,
+          references(:mdb_algorithms, type: :binary_id, on_delete: :nilify_all)
 
       # Alarm definitions (embedded JSON)
       # Contains nested ranges for watch, warning, distress, critical, severe
@@ -72,6 +81,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbDataTypes do
     create index(:mdb_data_types, [:definition_set_id])
     create index(:mdb_data_types, [:default_calibrator_id])
     create index(:mdb_data_types, [:unit_id])
-    create unique_index(:mdb_data_types, [:definition_set_id, :name], name: :mdb_data_types_definition_set_name_index)
+
+    create unique_index(:mdb_data_types, [:definition_set_id, :name],
+             name: :mdb_data_types_definition_set_name_index
+           )
   end
 end

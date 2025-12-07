@@ -133,8 +133,8 @@ defmodule Cadence.Telemetry.Protocols.TemplateProtocol do
           return_packets(acc, %{state | buffer: buffer})
         else
           # Extract header
-          <<_sync::binary-size(sync_size), header::binary-size(header_size),
-            _rest::binary>> = buffer
+          <<_sync::binary-size(sync_size), header::binary-size(header_size), _rest::binary>> =
+            buffer
 
           # Parse length field from header
           length_byte_offset = state.length_offset

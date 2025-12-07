@@ -4,9 +4,16 @@ defmodule Cadence.Repo.Migrations.CreateMdbAlgorithms do
   def change do
     create table(:mdb_algorithms, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
-      add :definition_set_id, references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :definition_set_id,
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string, null: false
       add :description, :text
@@ -20,7 +27,8 @@ defmodule Cadence.Repo.Migrations.CreateMdbAlgorithms do
       # Spline: interpolation points stored as embedded JSON
       # [{raw: float, calibrated: float}, ...]
       add :spline_points, {:array, :map}, default: []
-      add :spline_order, :integer, default: 1  # 0=step, 1=linear, 2=quadratic
+      # 0=step, 1=linear, 2=quadratic
+      add :spline_order, :integer, default: 1
       add :spline_extrapolate, :boolean, default: false
 
       # MathOperation: RPN expression
@@ -46,6 +54,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbAlgorithms do
     create index(:mdb_algorithms, [:organization_id])
     create index(:mdb_algorithms, [:mission_id])
     create index(:mdb_algorithms, [:definition_set_id])
-    create unique_index(:mdb_algorithms, [:definition_set_id, :name], name: :mdb_algorithms_definition_set_name_index)
+
+    create unique_index(:mdb_algorithms, [:definition_set_id, :name],
+             name: :mdb_algorithms_definition_set_name_index
+           )
   end
 end

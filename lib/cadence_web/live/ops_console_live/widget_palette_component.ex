@@ -92,8 +92,7 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
             phx-target={@myself}
             class="btn btn-ghost btn-sm"
           >
-            <.icon name="hero-arrow-left" class="h-4 w-4" />
-            Back
+            <.icon name="hero-arrow-left" class="h-4 w-4" /> Back
           </button>
 
           <.form for={%{}} phx-submit="add_widget" phx-target={@myself} class="space-y-4">
@@ -113,7 +112,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                   filter={@filter}
                   myself={@myself}
                 />
-
               <% "value_display" -> %>
                 <.single_item_config
                   targets={@targets}
@@ -123,7 +121,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                   show_precision={true}
                   show_trend={true}
                 />
-
               <% "gauge" -> %>
                 <.single_item_config
                   targets={@targets}
@@ -132,7 +129,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                   myself={@myself}
                   show_min_max={true}
                 />
-
               <% "table" -> %>
                 <.table_config
                   targets={@targets}
@@ -140,7 +136,6 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                   filter={@filter}
                   myself={@myself}
                 />
-
               <% _ -> %>
                 <p class="text-base-content/50">No additional configuration needed.</p>
             <% end %>
@@ -221,8 +216,7 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                 <%= if @filtered_derived != [] do %>
                   <div class="ml-4 mb-2">
                     <p class="text-xs text-base-content/50 mb-1 font-medium flex items-center gap-1">
-                      DERIVED
-                      <span class="badge badge-xs badge-info">calculated</span>
+                      DERIVED <span class="badge badge-xs badge-info">calculated</span>
                     </p>
                     <%= for item <- @filtered_derived do %>
                       <label class="flex items-center gap-2 cursor-pointer py-0.5">
@@ -340,7 +334,9 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
 
   # Table configuration - select target and packet
   defp table_config(assigns) do
-    packet_options = build_packet_options(assigns.targets, assigns.telemetry_catalog, assigns.filter)
+    packet_options =
+      build_packet_options(assigns.targets, assigns.telemetry_catalog, assigns.filter)
+
     assigns = assign(assigns, :packet_options, packet_options)
 
     ~H"""
@@ -500,11 +496,12 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
   def handle_event("add_widget", params, socket) do
     widget_type = Enum.find(@widget_types, &(&1.type == socket.assigns.selected_type))
 
-    config = build_widget_config(
-      socket.assigns.selected_type,
-      params,
-      socket.assigns.telemetry_catalog
-    )
+    config =
+      build_widget_config(
+        socket.assigns.selected_type,
+        params,
+        socket.assigns.telemetry_catalog
+      )
 
     widget = %{
       id: "widget-#{System.unique_integer([:positive])}",

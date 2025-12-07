@@ -131,7 +131,6 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
 
   # Continue extraction after sync pattern found (or no sync configured)
   defp extract_packets_after_sync(buffer, state, acc) do
-
     # Calculate offsets for length field
     length_byte_offset = div(state.length_bit_offset, 8)
     length_byte_size = div(state.length_bit_size, 8)
@@ -169,7 +168,11 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
           packet =
             if state.discard_leading_bytes > 0 and
                  byte_size(packet) > state.discard_leading_bytes do
-              binary_part(packet, state.discard_leading_bytes, byte_size(packet) - state.discard_leading_bytes)
+              binary_part(
+                packet,
+                state.discard_leading_bytes,
+                byte_size(packet) - state.discard_leading_bytes
+              )
             else
               packet
             end

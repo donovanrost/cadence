@@ -69,11 +69,13 @@ defmodule Cadence.MixProject do
       {:bandit, "~> 1.5"},
       {:bodyguard, "~> 2.4"},
       {:broadway, "~> 1.1"},
+      {:oban, "~> 2.19"},
+      {:luerl, "~> 1.2"},
       {:yaml_elixir, "~> 2.9"},
       {:nimble_parsec, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:styler, "~> 1.9", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -96,7 +98,13 @@ defmodule Cadence.MixProject do
         "esbuild cadence --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: [
+        "compile --warning-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "test",
+        "credo --strict"
+      ]
     ]
   end
 end

@@ -4,7 +4,10 @@ defmodule Cadence.Repo.Migrations.CreateMdbCommandContainers do
   def change do
     create table(:mdb_command_containers, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :meta_command_id, references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :meta_command_id,
+          references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string
       add :description, :text
@@ -31,7 +34,10 @@ defmodule Cadence.Repo.Migrations.CreateMdbCommandContainers do
     # Command container entries
     create table(:mdb_command_container_entries, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :command_container_id, references(:mdb_command_containers, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :command_container_id,
+          references(:mdb_command_containers, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       # Entry type: argument_ref, fixed_value, parameter_ref
       add :entry_type, :string, null: false

@@ -245,14 +245,13 @@ defmodule CadenceWeb.MissionLive.Catalog do
           </.link>
           <.link navigate={~p"/missions/#{@mission}/database"}>
             <.button class="btn-ghost">
-              <.icon name="hero-circle-stack" class="h-4 w-4 mr-1" />
-              Manage Database
+              <.icon name="hero-circle-stack" class="h-4 w-4 mr-1" /> Manage Database
             </.button>
           </.link>
         </:actions>
       </.header>
-
-      <!-- Definition Set Selector -->
+      
+    <!-- Definition Set Selector -->
       <div class="flex items-center gap-4">
         <label class="text-sm font-medium text-base-content/70">Searching:</label>
         <select
@@ -263,23 +262,27 @@ defmodule CadenceWeb.MissionLive.Catalog do
           <option value="">Select a database version...</option>
           <%= for ds <- @available_definition_sets do %>
             <option value={ds.id} selected={@selected_definition_set_id == ds.id}>
-              <%= ds.database_name %> v<%= ds.version %><%= if ds.published_at, do: "", else: " (draft)" %>
+              {ds.database_name} v{ds.version}{if ds.published_at, do: "", else: " (draft)"}
             </option>
           <% end %>
         </select>
         <span class="text-sm text-base-content/60">
-          <%= @total_count %> items in catalog
+          {@total_count} items in catalog
         </span>
       </div>
 
       <%= if Enum.empty?(@available_definition_sets) do %>
         <div class="alert">
           <.icon name="hero-information-circle" class="h-5 w-5" />
-          <span>No databases available. <.link navigate={~p"/missions/#{@mission}/database"} class="link">Import one</.link> to search telemetry and commands.</span>
+          <span>
+            No databases available.
+            <.link navigate={~p"/missions/#{@mission}/database"} class="link">Import one</.link>
+            to search telemetry and commands.
+          </span>
         </div>
       <% end %>
-
-      <!-- Search and Filters -->
+      
+    <!-- Search and Filters -->
       <div class="space-y-4">
         <!-- Search Bar -->
         <div class="form-control">
@@ -300,8 +303,8 @@ defmodule CadenceWeb.MissionLive.Catalog do
             />
           </div>
         </div>
-
-        <!-- Filter Chips -->
+        
+    <!-- Filter Chips -->
         <div class="flex items-center justify-between">
           <div class="btn-group">
             <button
@@ -334,12 +337,12 @@ defmodule CadenceWeb.MissionLive.Catalog do
             </button>
           </div>
           <span class="text-sm text-base-content/60">
-            <%= @total_count %> <%= if @total_count == 1, do: "item", else: "items" %>
+            {@total_count} {if @total_count == 1, do: "item", else: "items"}
           </span>
         </div>
       </div>
-
-      <!-- Results -->
+      
+    <!-- Results -->
       <div class="space-y-2">
         <%= if Enum.empty?(@catalog_items) do %>
           <div class="card bg-base-200">
@@ -372,13 +375,12 @@ defmodule CadenceWeb.MissionLive.Catalog do
               mission={@mission}
             />
           <% end %>
-
-          <!-- Load More Button -->
+          
+    <!-- Load More Button -->
           <%= if @has_more do %>
             <div class="flex justify-center pt-4">
               <button class="btn btn-ghost" phx-click="load_more">
-                Load More
-                <.icon name="hero-chevron-down" class="h-4 w-4 ml-1" />
+                Load More <.icon name="hero-chevron-down" class="h-4 w-4 ml-1" />
               </button>
             </div>
           <% end %>
@@ -426,49 +428,52 @@ defmodule CadenceWeb.MissionLive.Catalog do
               @item.type == :command && "badge-warning",
               @item.type == :derived && "badge-secondary"
             ]}>
-              <%= type_label(@item.type) %>
+              {type_label(@item.type)}
             </span>
-
-            <!-- Name -->
-            <span class="font-mono font-medium truncate"><%= @item.name %></span>
-
-            <!-- Data Type -->
+            
+    <!-- Name -->
+            <span class="font-mono font-medium truncate">{@item.name}</span>
+            
+    <!-- Data Type -->
             <%= if @item.data_type do %>
-              <span class="text-sm text-base-content/60"><%= @item.data_type %></span>
+              <span class="text-sm text-base-content/60">{@item.data_type}</span>
             <% end %>
-
-            <!-- Units -->
+            
+    <!-- Units -->
             <%= if @item.units do %>
-              <span class="text-sm text-base-content/50"><%= @item.units %></span>
+              <span class="text-sm text-base-content/50">{@item.units}</span>
             <% end %>
-
-            <!-- Hazardous Badge for Commands -->
+            
+    <!-- Hazardous Badge for Commands -->
             <%= if @item.type == :command && @item.metadata.is_hazardous do %>
               <span class="badge badge-error badge-sm">Hazardous</span>
             <% end %>
-
-            <!-- Disabled Badge for Derived -->
+            
+    <!-- Disabled Badge for Derived -->
             <%= if @item.type == :derived && !@item.metadata.enabled do %>
               <span class="badge badge-ghost badge-sm">Disabled</span>
             <% end %>
           </div>
-
-          <!-- Expand Button -->
+          
+    <!-- Expand Button -->
           <button
             class="btn btn-ghost btn-sm"
             phx-click="toggle_expand"
             phx-value-id={@item.id}
           >
-            <.icon name={if @expanded, do: "hero-chevron-up", else: "hero-chevron-down"} class="h-4 w-4" />
+            <.icon
+              name={if @expanded, do: "hero-chevron-up", else: "hero-chevron-down"}
+              class="h-4 w-4"
+            />
           </button>
         </div>
-
-        <!-- Description -->
+        
+    <!-- Description -->
         <%= if @item.description do %>
-          <p class="text-sm text-base-content/70 mt-1 line-clamp-1"><%= @item.description %></p>
+          <p class="text-sm text-base-content/70 mt-1 line-clamp-1">{@item.description}</p>
         <% end %>
-
-        <!-- Expanded Details -->
+        
+    <!-- Expanded Details -->
         <%= if @expanded do %>
           <div class="mt-4 pt-4 border-t border-base-300">
             <.item_details item={@item} mission={@mission} />
@@ -501,20 +506,20 @@ defmodule CadenceWeb.MissionLive.Catalog do
     <div class="grid grid-cols-2 gap-4 text-sm">
       <div>
         <span class="text-base-content/60">Container:</span>
-        <span class="ml-2 font-mono"><%= @item.container_name || "—" %></span>
+        <span class="ml-2 font-mono">{@item.container_name || "—"}</span>
       </div>
       <div>
         <span class="text-base-content/60">Parameter Source:</span>
-        <span class="ml-2"><%= @item.metadata.parameter_source || "telemetry" %></span>
+        <span class="ml-2">{@item.metadata.parameter_source || "telemetry"}</span>
       </div>
       <div>
         <span class="text-base-content/60">Significance:</span>
-        <span class="ml-2"><%= @item.metadata.significance || "none" %></span>
+        <span class="ml-2">{@item.metadata.significance || "none"}</span>
       </div>
       <div>
         <span class="text-base-content/60">Stale Timeout:</span>
         <span class="ml-2">
-          <%= if @item.metadata.stale_timeout_ms, do: "#{@item.metadata.stale_timeout_ms}ms", else: "—" %>
+          {if @item.metadata.stale_timeout_ms, do: "#{@item.metadata.stale_timeout_ms}ms", else: "—"}
         </span>
       </div>
     </div>
@@ -528,25 +533,27 @@ defmodule CadenceWeb.MissionLive.Catalog do
         <div>
           <span class="text-base-content/60">Opcode:</span>
           <span class="ml-2 font-mono">
-            <%= if @item.metadata.opcode, do: "0x#{Integer.to_string(@item.metadata.opcode, 16)}", else: "—" %>
+            {if @item.metadata.opcode,
+              do: "0x#{Integer.to_string(@item.metadata.opcode, 16)}",
+              else: "—"}
           </span>
         </div>
         <div>
           <span class="text-base-content/60">Significance:</span>
-          <span class="ml-2"><%= @item.metadata.significance || "none" %></span>
+          <span class="ml-2">{@item.metadata.significance || "none"}</span>
         </div>
       </div>
 
       <%= if @item.metadata.is_hazardous && @item.metadata.hazard_description do %>
         <div class="alert alert-warning py-2">
           <.icon name="hero-exclamation-triangle" class="h-4 w-4" />
-          <span class="text-sm"><%= @item.metadata.hazard_description %></span>
+          <span class="text-sm">{@item.metadata.hazard_description}</span>
         </div>
       <% end %>
 
       <%= if length(@item.metadata.arguments) > 0 do %>
         <div>
-          <h4 class="font-medium text-sm mb-2">Arguments (<%= length(@item.metadata.arguments) %>)</h4>
+          <h4 class="font-medium text-sm mb-2">Arguments ({length(@item.metadata.arguments)})</h4>
           <div class="overflow-x-auto">
             <table class="table table-xs">
               <thead>
@@ -560,8 +567,8 @@ defmodule CadenceWeb.MissionLive.Catalog do
               <tbody>
                 <%= for arg <- @item.metadata.arguments do %>
                   <tr>
-                    <td class="font-mono"><%= arg.name %></td>
-                    <td><%= arg.data_type_ref %></td>
+                    <td class="font-mono">{arg.name}</td>
+                    <td>{arg.data_type_ref}</td>
                     <td>
                       <%= if arg.required do %>
                         <span class="badge badge-xs badge-primary">Required</span>
@@ -569,7 +576,7 @@ defmodule CadenceWeb.MissionLive.Catalog do
                         <span class="text-base-content/50">Optional</span>
                       <% end %>
                     </td>
-                    <td class="font-mono text-base-content/60"><%= arg.default_value || "—" %></td>
+                    <td class="font-mono text-base-content/60">{arg.default_value || "—"}</td>
                   </tr>
                 <% end %>
               </tbody>
@@ -594,7 +601,7 @@ defmodule CadenceWeb.MissionLive.Catalog do
           <span class="text-base-content/60 text-sm">Source Items:</span>
           <div class="flex flex-wrap gap-1 mt-1">
             <%= for source <- @item.metadata.source_items do %>
-              <span class="badge badge-outline badge-sm font-mono"><%= source %></span>
+              <span class="badge badge-outline badge-sm font-mono">{source}</span>
             <% end %>
           </div>
         </div>
@@ -605,8 +612,7 @@ defmodule CadenceWeb.MissionLive.Catalog do
           patch={~p"/missions/#{@mission}/catalog/derived/#{@item.id}/edit"}
           class="btn btn-ghost btn-sm"
         >
-          <.icon name="hero-pencil" class="h-4 w-4 mr-1" />
-          Edit
+          <.icon name="hero-pencil" class="h-4 w-4 mr-1" /> Edit
         </.link>
       </div>
     </div>

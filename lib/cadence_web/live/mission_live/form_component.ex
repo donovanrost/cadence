@@ -8,7 +8,7 @@ defmodule CadenceWeb.MissionLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>Use this form to manage mission records in your database.</:subtitle>
       </.header>
 
@@ -108,7 +108,8 @@ defmodule CadenceWeb.MissionLive.FormComponent do
 
   defp save_mission(socket, :new, mission_params) do
     # Add creator_user_id so mission_membership is auto-created
-    params_with_creator = Map.put(mission_params, "creator_user_id", socket.assigns.current_user.id)
+    params_with_creator =
+      Map.put(mission_params, "creator_user_id", socket.assigns.current_user.id)
 
     case Missions.create_mission(params_with_creator) do
       {:ok, mission} ->

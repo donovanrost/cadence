@@ -65,18 +65,21 @@ defmodule Cadence.Telemetry.PipelineV2.Supervisor do
       for partition <- 0..(partition_count - 1) do
         %{
           id: {PartitionSupervisor, partition},
-          start: {PartitionSupervisor, :start_link, [
-            [
-              mission_id: mission_id,
-              partition: partition,
-              router_pid: router_name,
-              name: partition_supervisor_name(mission_id, partition)
-            ]
-          ]},
+          start:
+            {PartitionSupervisor, :start_link,
+             [
+               [
+                 mission_id: mission_id,
+                 partition: partition,
+                 router_pid: router_name,
+                 name: partition_supervisor_name(mission_id, partition)
+               ]
+             ]},
           type: :supervisor
         }
       end
 
+    # 2. Start PartitionSupervisors for each partition (with unique IDs)
     children =
       [
         # 1. Start the PartitionRouter (producer)
@@ -87,7 +90,6 @@ defmodule Cadence.Telemetry.PipelineV2.Supervisor do
            name: router_name
          ]}
       ] ++
-        # 2. Start PartitionSupervisors for each partition (with unique IDs)
         partition_children ++
         [
           # 3. Start the CVTBatcher (consumer)

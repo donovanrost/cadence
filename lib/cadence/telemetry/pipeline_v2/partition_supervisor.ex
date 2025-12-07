@@ -89,7 +89,8 @@ defmodule Cadence.Telemetry.PipelineV2.PartitionSupervisor do
   Returns the registered name for a stage in a partition.
   """
   def stage_name(mission_id, partition, stage) do
-    {:via, Registry, {Cadence.MissionRegistry, {:pipeline_v2, mission_id, {:stage, partition, stage}}}}
+    {:via, Registry,
+     {Cadence.MissionRegistry, {:pipeline_v2, mission_id, {:stage, partition, stage}}}}
   end
 
   @doc """

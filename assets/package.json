@@ -9,6 +9,7 @@
   "dependencies": {
     "@tanstack/table-core": "^8.21.3",
     "@tanstack/virtual-core": "^3.13.12",
+    "dagre": "^0.8.5",
     "golden-layout": "^2.6.0",
     "gridstack": "^10.3.1",
     "scichart": "^3.5.698"

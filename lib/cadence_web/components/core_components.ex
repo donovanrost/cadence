@@ -526,7 +526,7 @@ defmodule CadenceWeb.CoreComponents do
                 </button>
               </div>
               <div id={"#{@id}-content"}>
-                <%= render_slot(@inner_block) %>
+                {render_slot(@inner_block)}
               </div>
             </.focus_wrap>
           </div>
@@ -574,7 +574,7 @@ defmodule CadenceWeb.CoreComponents do
         class="text-sm font-semibold leading-6 text-zinc-900 hover:text-zinc-700"
       >
         <.icon name="hero-arrow-left-solid" class="h-3 w-3" />
-        <%= render_slot(@inner_block) %>
+        {render_slot(@inner_block)}
       </.link>
     </div>
     """
@@ -597,9 +597,9 @@ defmodule CadenceWeb.CoreComponents do
     ~H"""
     <.form :let={f} for={@for} as={@as} {@rest}>
       <div class="mt-10 space-y-8 bg-white">
-        <%= render_slot(@inner_block, f) %>
+        {render_slot(@inner_block, f)}
         <div :for={action <- @actions} class="mt-2 flex items-center justify-between gap-6">
-          <%= render_slot(action, f) %>
+          {render_slot(action, f)}
         </div>
       </div>
     </.form>
@@ -780,9 +780,10 @@ defmodule CadenceWeb.CoreComponents do
 
   def sidebar_nav_group(assigns) do
     # Generate a unique ID if not provided
-    assigns = assign_new(assigns, :group_id, fn ->
-      assigns[:id] || "nav-group-#{:erlang.phash2(assigns.label)}"
-    end)
+    assigns =
+      assign_new(assigns, :group_id, fn ->
+        assigns[:id] || "nav-group-#{:erlang.phash2(assigns.label)}"
+      end)
 
     ~H"""
     <li>

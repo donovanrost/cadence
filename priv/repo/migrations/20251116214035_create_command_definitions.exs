@@ -26,12 +26,14 @@ defmodule Cadence.Repo.Migrations.CreateCommandDefinitions do
       add :allowed_phases, {:array, :string}, default: []
 
       # Encoding configuration
-      add :encoding_format, :string # binary, ascii, json
+      # binary, ascii, json
+      add :encoding_format, :string
       add :encoding_config, :map, default: %{}
 
       # Verification configuration
       add :has_verification, :boolean, default: false
-      add :verification_item, :string # CVT item name to watch
+      # CVT item name to watch
+      add :verification_item, :string
       add :verification_timeout_ms, :integer, default: 5000
 
       # Metadata

@@ -86,7 +86,8 @@ defmodule Cadence.Simulator.Providers.BasicDynamics do
 
     [
       {"HEALTH.cpu_temp", base_temp + temp_variation + random_noise(1.0 * noise_amp)},
-      {"HEALTH.battery_voltage", 14.5 + :math.sin(step / 20.0) * 0.5 + random_noise(0.1 * noise_amp)},
+      {"HEALTH.battery_voltage",
+       14.5 + :math.sin(step / 20.0) * 0.5 + random_noise(0.1 * noise_amp)},
       {"HEALTH.battery_current", 2.3 + random_noise(0.2 * noise_amp)},
       {"HEALTH.battery_percentage", min(100.0, 75.0 + :math.sin(step / 50.0) * 20.0)},
       {"HEALTH.uptime_seconds", step * 10},

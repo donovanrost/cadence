@@ -128,8 +128,12 @@ defmodule Cadence.Interfaces.Factory do
       target_ids: target_ids,
       bind_address: interface.bind_address || "0.0.0.0",
       bind_port: interface.bind_port,
-      max_clients: get_in(interface.config, ["max_clients"]) || get_in(interface.config, [:max_clients]) || 100,
-      client_timeout: get_in(interface.config, ["client_timeout"]) || get_in(interface.config, [:client_timeout]) || 300_000
+      max_clients:
+        get_in(interface.config, ["max_clients"]) || get_in(interface.config, [:max_clients]) ||
+          100,
+      client_timeout:
+        get_in(interface.config, ["client_timeout"]) ||
+          get_in(interface.config, [:client_timeout]) || 300_000
     }
 
     # Merge with additional config from database if present

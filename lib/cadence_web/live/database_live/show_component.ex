@@ -9,7 +9,7 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
     ~H"""
     <div>
       <.header>
-        Database Version <%= @definition_set.version %>
+        Database Version {@definition_set.version}
         <:subtitle>
           <.version_badge definition_set={@definition_set} is_active={@is_active} />
         </:subtitle>
@@ -33,47 +33,47 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
       <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
         <div>
           <span class="text-base-content/60">Description</span>
-          <p class="mt-1"><%= @definition_set.description || "No description" %></p>
+          <p class="mt-1">{@definition_set.description || "No description"}</p>
         </div>
         <div>
           <span class="text-base-content/60">Source Format</span>
-          <p class="mt-1"><%= @definition_set.source_format %></p>
+          <p class="mt-1">{@definition_set.source_format}</p>
         </div>
         <div>
           <span class="text-base-content/60">Created</span>
-          <p class="mt-1"><%= format_datetime(@definition_set.inserted_at) %></p>
+          <p class="mt-1">{format_datetime(@definition_set.inserted_at)}</p>
         </div>
         <div>
           <span class="text-base-content/60">Published</span>
-          <p class="mt-1"><%= format_datetime(@definition_set.published_at) || "Not published" %></p>
+          <p class="mt-1">{format_datetime(@definition_set.published_at) || "Not published"}</p>
         </div>
         <%= if @definition_set.superseded_at do %>
           <div>
             <span class="text-base-content/60">Superseded</span>
-            <p class="mt-1"><%= format_datetime(@definition_set.superseded_at) %></p>
+            <p class="mt-1">{format_datetime(@definition_set.superseded_at)}</p>
           </div>
         <% end %>
       </div>
 
       <div class="divider"></div>
-
-      <!-- Stats -->
+      
+    <!-- Stats -->
       <div class="stats stats-horizontal shadow w-full">
         <div class="stat">
           <div class="stat-title">Containers</div>
-          <div class="stat-value text-2xl"><%= @stats.container_count %></div>
+          <div class="stat-value text-2xl">{@stats.container_count}</div>
         </div>
         <div class="stat">
           <div class="stat-title">Parameters</div>
-          <div class="stat-value text-2xl"><%= @stats.parameter_count %></div>
+          <div class="stat-value text-2xl">{@stats.parameter_count}</div>
         </div>
         <div class="stat">
           <div class="stat-title">Commands</div>
-          <div class="stat-value text-2xl"><%= @stats.command_count %></div>
+          <div class="stat-value text-2xl">{@stats.command_count}</div>
         </div>
       </div>
-
-      <!-- Containers (Packets) -->
+      
+    <!-- Containers (Packets) -->
       <%= if @containers != [] do %>
         <div class="mt-8">
           <h3 class="text-lg font-semibold mb-4">Packet Definitions</h3>
@@ -82,18 +82,18 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
               <details class="collapse collapse-arrow bg-base-200">
                 <summary class="collapse-title">
                   <div class="flex items-center gap-4">
-                    <span class="font-medium font-mono"><%= container.name %></span>
+                    <span class="font-medium font-mono">{container.name}</span>
                     <%= if container.apid do %>
-                      <span class="text-sm text-base-content/60">APID: <%= container.apid %></span>
+                      <span class="text-sm text-base-content/60">APID: {container.apid}</span>
                     <% end %>
                     <span class="text-sm text-base-content/50">
-                      <%= length(container.container_entries) %> items
+                      {length(container.container_entries)} items
                     </span>
                   </div>
                 </summary>
                 <div class="collapse-content">
                   <%= if container.description do %>
-                    <p class="text-sm text-base-content/70 mb-4"><%= container.description %></p>
+                    <p class="text-sm text-base-content/70 mb-4">{container.description}</p>
                   <% end %>
                   <div class="overflow-x-auto">
                     <table class="table table-xs">
@@ -109,11 +109,11 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
                       <tbody>
                         <%= for entry <- Enum.sort_by(container.container_entries, & &1.bit_offset) do %>
                           <tr>
-                            <td class="font-mono"><%= entry.parameter && entry.parameter.name %></td>
-                            <td><%= entry.bit_offset %></td>
-                            <td><%= get_size_in_bits(entry.parameter) %></td>
-                            <td><%= get_data_type(entry.parameter) %></td>
-                            <td><%= get_units(entry.parameter) || "—" %></td>
+                            <td class="font-mono">{entry.parameter && entry.parameter.name}</td>
+                            <td>{entry.bit_offset}</td>
+                            <td>{get_size_in_bits(entry.parameter)}</td>
+                            <td>{get_data_type(entry.parameter)}</td>
+                            <td>{get_units(entry.parameter) || "—"}</td>
                           </tr>
                         <% end %>
                       </tbody>
@@ -125,8 +125,8 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
           </div>
         </div>
       <% end %>
-
-      <!-- Commands -->
+      
+    <!-- Commands -->
       <%= if @commands != [] do %>
         <div class="mt-8">
           <h3 class="text-lg font-semibold mb-4">Command Definitions</h3>
@@ -135,28 +135,28 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
               <details class="collapse collapse-arrow bg-base-200">
                 <summary class="collapse-title">
                   <div class="flex items-center gap-4">
-                    <span class="font-medium font-mono"><%= command.name %></span>
+                    <span class="font-medium font-mono">{command.name}</span>
                     <%= if command.opcode do %>
                       <span class="text-sm text-base-content/60">
-                        Opcode: 0x<%= Integer.to_string(command.opcode, 16) %>
+                        Opcode: 0x{Integer.to_string(command.opcode, 16)}
                       </span>
                     <% end %>
                     <%= if command.is_hazardous do %>
                       <span class="badge badge-error badge-sm">Hazardous</span>
                     <% end %>
                     <span class="text-sm text-base-content/50">
-                      <%= length(command.arguments) %> args
+                      {length(command.arguments)} args
                     </span>
                   </div>
                 </summary>
                 <div class="collapse-content">
                   <%= if command.description do %>
-                    <p class="text-sm text-base-content/70 mb-4"><%= command.description %></p>
+                    <p class="text-sm text-base-content/70 mb-4">{command.description}</p>
                   <% end %>
                   <%= if command.is_hazardous && command.hazard_description do %>
                     <div class="alert alert-warning mb-4">
                       <.icon name="hero-exclamation-triangle" class="h-4 w-4" />
-                      <span><%= command.hazard_description %></span>
+                      <span>{command.hazard_description}</span>
                     </div>
                   <% end %>
                   <%= if command.arguments != [] do %>
@@ -173,8 +173,8 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
                         <tbody>
                           <%= for arg <- command.arguments do %>
                             <tr>
-                              <td class="font-mono"><%= arg.name %></td>
-                              <td><%= arg.data_type_ref %></td>
+                              <td class="font-mono">{arg.name}</td>
+                              <td>{arg.data_type_ref}</td>
                               <td>
                                 <%= if arg.required do %>
                                   <span class="badge badge-xs badge-primary">Yes</span>
@@ -182,7 +182,9 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
                                   <span class="text-base-content/50">No</span>
                                 <% end %>
                               </td>
-                              <td class="font-mono text-base-content/60"><%= arg.default_value || "—" %></td>
+                              <td class="font-mono text-base-content/60">
+                                {arg.default_value || "—"}
+                              </td>
                             </tr>
                           <% end %>
                         </tbody>
@@ -200,8 +202,7 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
 
       <div class="mt-8">
         <.link patch={@patch} class="btn btn-ghost btn-sm">
-          <.icon name="hero-arrow-left" class="h-4 w-4 mr-1" />
-          Back
+          <.icon name="hero-arrow-left" class="h-4 w-4 mr-1" /> Back
         </.link>
       </div>
     </div>
@@ -336,7 +337,9 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
 
   defp get_units(parameter) do
     case parameter.data_type do
-      nil -> nil
+      nil ->
+        nil
+
       data_type ->
         case data_type.unit do
           nil -> nil

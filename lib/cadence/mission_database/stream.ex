@@ -120,7 +120,14 @@ defmodule Cadence.MissionDatabase.Stream do
       :error_detection_polynomial,
       :extensions
     ])
-    |> validate_required([:organization_id, :mission_id, :definition_set_id, :name, :stream_type, :framing_protocol])
+    |> validate_required([
+      :organization_id,
+      :mission_id,
+      :definition_set_id,
+      :name,
+      :stream_type,
+      :framing_protocol
+    ])
     |> validate_inclusion(:stream_type, @stream_types)
     |> validate_inclusion(:framing_protocol, @framing_protocols)
     |> validate_framing_config()

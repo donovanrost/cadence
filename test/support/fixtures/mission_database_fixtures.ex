@@ -605,7 +605,7 @@ defmodule Cadence.MissionDatabaseFixtures do
     command_container = attrs[:command_container] || command_container_fixture()
     argument = attrs[:argument]
 
-    entry_type = attrs[:entry_type] || (if argument, do: :argument_ref, else: :fixed_value)
+    entry_type = attrs[:entry_type] || if argument, do: :argument_ref, else: :fixed_value
 
     base_attrs = %{
       command_container_id: command_container.id,

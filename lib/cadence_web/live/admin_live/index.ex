@@ -27,8 +27,8 @@ defmodule CadenceWeb.AdminLive.Index do
           Manage organizations, users, and system settings
         </:subtitle>
       </.header>
-
-      <!-- Stats Overview -->
+      
+    <!-- Stats Overview -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
         <div class="card bg-base-200 p-6 hover-glow-cyan transition-glow">
           <div class="flex items-center justify-between">
@@ -69,8 +69,8 @@ defmodule CadenceWeb.AdminLive.Index do
           </button>
         </div>
       </div>
-
-      <!-- Quick Actions -->
+      
+    <!-- Quick Actions -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">Quick Actions</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -107,8 +107,8 @@ defmodule CadenceWeb.AdminLive.Index do
           </.link>
         </div>
       </div>
-
-      <!-- System Info -->
+      
+    <!-- System Info -->
       <div class="mt-12">
         <h2 class="text-2xl font-bold mb-4">System Information</h2>
         <div class="card bg-base-200 p-6">

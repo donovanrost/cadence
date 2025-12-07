@@ -4,7 +4,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbContainerEntries do
   def change do
     create table(:mdb_container_entries, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :container_id, references(:mdb_containers, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :container_id, references(:mdb_containers, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       # Entry type: parameter_ref, fixed_value, container_ref, array_parameter_ref
       add :entry_type, :string, null: false

@@ -47,7 +47,9 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
     min_demand = Keyword.get(opts, :min_demand, @default_min_demand)
     broadcast_enabled = Keyword.get(opts, :broadcast_enabled, @default_broadcast_enabled)
 
-    Logger.info("CVTBatcher starting for mission_id=#{mission_id}, batch_size=#{batch_size}, broadcast=#{broadcast_enabled}")
+    Logger.info(
+      "CVTBatcher starting for mission_id=#{mission_id}, batch_size=#{batch_size}, broadcast=#{broadcast_enabled}"
+    )
 
     state = %{
       mission_id: mission_id,
@@ -100,7 +102,9 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
       min_demand: min_demand
     } = state
 
-    Logger.debug("CVTBatcher subscribing to #{partition_count} partitions with demand #{max_demand}/#{min_demand}")
+    Logger.debug(
+      "CVTBatcher subscribing to #{partition_count} partitions with demand #{max_demand}/#{min_demand}"
+    )
 
     # Subscribe to each partition's DeriveStage
     for partition <- 0..(partition_count - 1) do
@@ -112,7 +116,11 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
           Process.send_after(self(), :subscribe_to_partitions, 100)
 
         _pid ->
-          GenStage.async_subscribe(self(), to: derive_stage, max_demand: max_demand, min_demand: min_demand)
+          GenStage.async_subscribe(self(),
+            to: derive_stage,
+            max_demand: max_demand,
+            min_demand: min_demand
+          )
       end
     end
   end
@@ -164,7 +172,9 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
 
       # Record end-to-end latency (sample from last event in batch)
       case List.last(events) do
-        nil -> :ok
+        nil ->
+          :ok
+
         event ->
           completion_time = System.monotonic_time(:microsecond)
           e2e_latency = completion_time - event.received_at
@@ -176,7 +186,9 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
     |> case do
       total_items when is_integer(total_items) ->
         Stats.increment(mission_id, :items_processed, total_items)
-      _ -> :ok
+
+      _ ->
+        :ok
     end
 
     # Update stats
@@ -196,10 +208,16 @@ defmodule Cadence.Telemetry.PipelineV2.CVTBatcher do
       # Convert to format expected by broadcast_packet_update
       formatted_items =
         Enum.map(items, fn {_target, _packet, item_name, value, limits_state} ->
-          {item_name, %{value: value, limits_state: limits_state, received_time: DateTime.utc_now()}}
+          {item_name,
+           %{value: value, limits_state: limits_state, received_time: DateTime.utc_now()}}
         end)
 
-      CurrentValueTable.broadcast_packet_update(mission_id, target_id, packet_name, formatted_items)
+      CurrentValueTable.broadcast_packet_update(
+        mission_id,
+        target_id,
+        packet_name,
+        formatted_items
+      )
     end)
   end
 

@@ -13,7 +13,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>
           Alarm rules define when alarms are generated from telemetry events.
         </:subtitle>
@@ -26,7 +26,12 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
         phx-change="validate"
         phx-submit="save"
       >
-        <.input field={@form[:name]} type="text" label="Name" placeholder="e.g., Battery Critical Alert" />
+        <.input
+          field={@form[:name]}
+          type="text"
+          label="Name"
+          placeholder="e.g., Battery Critical Alert"
+        />
 
         <.input
           field={@form[:description]}
@@ -100,9 +105,12 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-zinc-700 mb-1">Item Filter (Optional)</label>
+              <label class="block text-sm font-medium text-zinc-700 mb-1">
+                Item Filter (Optional)
+              </label>
               <p class="text-xs text-zinc-500 mb-2">
-                Leave empty to match all items, or enter a pattern like <code class="bg-zinc-200 px-1 rounded">POWER\..*</code>
+                Leave empty to match all items, or enter a pattern like
+                <code class="bg-zinc-200 px-1 rounded">POWER\..*</code>
               </p>
               <input
                 type="text"
@@ -123,8 +131,8 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
           rows="2"
         />
         <p class="text-xs text-zinc-500 -mt-4">
-          Available variables: <code>{"{{item_name}}"}</code>, <code>{"{{value}}"}</code>,
-          <code>{"{{limit_state}}"}</code>, <code>{"{{previous_state}}"}</code>, <code>{"{{target_id}}"}</code>
+          Available variables: <code>{"{{item_name}}"}</code>, <code>{"{{value}}"}</code>, <code>{"{{limit_state}}"}</code>, <code>{"{{previous_state}}"}</code>,
+          <code>{"{{target_id}}"}</code>
         </p>
 
         <div class="grid grid-cols-2 gap-4">
@@ -164,7 +172,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
 
         <:actions>
           <.button phx-disable-with="Saving..." type="submit">
-            <%= if @action == :new, do: "Create Rule", else: "Save Changes" %>
+            {if @action == :new, do: "Create Rule", else: "Save Changes"}
           </.button>
         </:actions>
       </.simple_form>

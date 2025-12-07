@@ -15,7 +15,8 @@ defmodule Cadence.Repo.Migrations.CreateCommandParameters do
       add :description, :text
 
       # Data type and validation
-      add :data_type, :string, null: false # uint, int, float, string, boolean, enum
+      # uint, int, float, string, boolean, enum
+      add :data_type, :string, null: false
       add :required, :boolean, default: true, null: false
 
       # Default and constraints

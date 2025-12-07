@@ -42,7 +42,9 @@ defmodule Cadence.Telemetry.Database.YamlImporterTest do
               data_type: float
       """
 
-      assert {:error, {:validation_error, message}} = YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+      assert {:error, {:validation_error, message}} =
+               YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+
       assert message =~ "bit_size > 0"
     end
 
@@ -58,7 +60,9 @@ defmodule Cadence.Telemetry.Database.YamlImporterTest do
               data_type: float
       """
 
-      assert {:error, {:validation_error, message}} = YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+      assert {:error, {:validation_error, message}} =
+               YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+
       assert message =~ "bit_size"
     end
   end
@@ -86,7 +90,9 @@ defmodule Cadence.Telemetry.Database.YamlImporterTest do
           is_hazardous: true
       """
 
-      assert {:error, {:validation_error, message}} = YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+      assert {:error, {:validation_error, message}} =
+               YamlImporter.import_string(%{id: "test", organization_id: "test"}, yaml)
+
       assert message =~ "hazard_description"
     end
   end

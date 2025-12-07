@@ -165,17 +165,30 @@ defmodule Cadence.Alarms do
     |> where([r], r.organization_id == ^organization_id)
     |> where([r], r.event_type == ^event_type)
     |> where([r], r.enabled == true)
-    |> where(
-      [r],
-      # Org-wide rules
-      (is_nil(r.mission_id) and is_nil(r.target_id)) or
-        # Mission-wide rules
-        (r.mission_id == ^mission_id and is_nil(r.target_id)) or
-        # Target-specific rules
-        (r.mission_id == ^mission_id and r.target_id == ^target_id)
-    )
+    |> apply_scope_filter(mission_id, target_id)
     |> Repo.all()
     |> Enum.sort_by(&AlarmRule.specificity/1, :desc)
+  end
+
+  defp apply_scope_filter(query, mission_id, nil) do
+    # When no target specified, return org-wide and mission-wide rules only
+    where(
+      query,
+      [r],
+      (is_nil(r.mission_id) and is_nil(r.target_id)) or
+        (r.mission_id == ^mission_id and is_nil(r.target_id))
+    )
+  end
+
+  defp apply_scope_filter(query, mission_id, target_id) do
+    # When target specified, return org-wide, mission-wide, and target-specific rules
+    where(
+      query,
+      [r],
+      (is_nil(r.mission_id) and is_nil(r.target_id)) or
+        (r.mission_id == ^mission_id and is_nil(r.target_id)) or
+        (r.mission_id == ^mission_id and r.target_id == ^target_id)
+    )
   end
 
   # ============================================================================

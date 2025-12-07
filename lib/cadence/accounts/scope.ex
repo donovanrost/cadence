@@ -40,13 +40,15 @@ defmodule Cadence.Accounts.Scope do
   def for_user(%User{} = user, opts) do
     preload_orgs? = Keyword.get(opts, :preload_organizations, true)
 
-    user = if preload_orgs? do
-      Cadence.Repo.preload(user, :organization_memberships, force: true)
-      |> Cadence.Repo.preload([organization_memberships: :organization], force: true)
-      |> Cadence.Repo.preload(:organization, force: true)  # Preload deprecated association
-    else
-      user
-    end
+    user =
+      if preload_orgs? do
+        Cadence.Repo.preload(user, :organization_memberships, force: true)
+        |> Cadence.Repo.preload([organization_memberships: :organization], force: true)
+        # Preload deprecated association
+        |> Cadence.Repo.preload(:organization, force: true)
+      else
+        user
+      end
 
     organizations = get_user_organizations(user)
     current_org = get_current_organization(user, organizations, opts)
@@ -84,9 +86,10 @@ defmodule Cadence.Accounts.Scope do
   def system_admin?(_), do: false
 
   defp get_user_organizations(%User{organization_memberships: memberships})
-      when is_list(memberships) do
+       when is_list(memberships) do
     Enum.map(memberships, & &1.organization)
   end
+
   defp get_user_organizations(_), do: []
 
   defp get_current_organization(user, organizations, opts) do

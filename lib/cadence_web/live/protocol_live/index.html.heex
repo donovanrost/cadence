@@ -1,5 +1,5 @@
 <.header>
-  Protocol Chain for <%= @interface.name %>
+  Protocol Chain for {@interface.name}
   <:subtitle>
     Configure the protocol chain for packet processing. READ protocols execute top-to-bottom, WRITE protocols execute bottom-to-top.
   </:subtitle>
@@ -12,11 +12,11 @@
 
 <div class="mb-4">
   <.list>
-    <:item title="Interface"><%= @interface.name %></:item>
+    <:item title="Interface">{@interface.name}</:item>
     <:item title="Connection Type">
-      <%= String.replace(@interface.connection_type || "none", "_", " ") |> String.capitalize() %>
+      {String.replace(@interface.connection_type || "none", "_", " ") |> String.capitalize()}
     </:item>
-    <:item title="Protocol Count"><%= length(@protocols) %></:item>
+    <:item title="Protocol Count">{length(@protocols)}</:item>
   </.list>
 </div>
 
@@ -61,7 +61,12 @@
             ]}
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 15l7-7 7 7"
+              />
             </svg>
           </button>
           <button
@@ -74,36 +79,43 @@
             ]}
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
         </div>
 
         <div class="flex-shrink-0">
           <div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold">
-            <%= protocol.order %>
+            {protocol.order}
           </div>
         </div>
 
         <div class="flex-1">
           <div class="flex items-center gap-2">
             <h3 class="text-lg font-semibold text-gray-900">
-              <%= format_protocol_type(protocol.protocol_type) %>
+              {format_protocol_type(protocol.protocol_type)}
             </h3>
             <span class={[
               "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
               direction_badge_class(protocol.protocol_direction)
             ]}>
-              <%= format_direction(protocol.protocol_direction) %>
+              {format_direction(protocol.protocol_direction)}
             </span>
           </div>
           <div class="mt-1 text-sm text-gray-600">
-            <%= protocol_config_summary(protocol) %>
+            {protocol_config_summary(protocol)}
           </div>
         </div>
 
         <div class="flex gap-2">
-          <.link patch={~p"/missions/#{@mission}/interfaces/#{@interface}/protocols/#{protocol}/edit"}>
+          <.link patch={
+            ~p"/missions/#{@mission}/interfaces/#{@interface}/protocols/#{protocol}/edit"
+          }>
             <.button>Edit</.button>
           </.link>
           <.button

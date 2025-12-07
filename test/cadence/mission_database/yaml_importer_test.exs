@@ -2,6 +2,7 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
   use Cadence.DataCase
 
   alias Cadence.MissionDatabase.YamlImporter
+
   alias Cadence.MissionDatabase.{
     DefinitionSet,
     DataType,
@@ -54,7 +55,9 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       assert container.byte_order == :big_endian
 
       # Check parameter was created
-      parameter = Repo.get_by(Parameter, definition_set_id: definition_set.id, name: "HEALTH.cpu_temp")
+      parameter =
+        Repo.get_by(Parameter, definition_set_id: definition_set.id, name: "HEALTH.cpu_temp")
+
       assert parameter.description == "CPU temperature"
       assert parameter.parameter_source == :telemetry
 
@@ -92,12 +95,19 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
       {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
       # Check algorithm was created
-      algorithm = Repo.get_by(Algorithm, definition_set_id: definition_set.id, name: "SENSORS_temp_raw_Type_cal")
+      algorithm =
+        Repo.get_by(Algorithm,
+          definition_set_id: definition_set.id,
+          name: "SENSORS_temp_raw_Type_cal"
+        )
+
       assert algorithm.algorithm_type == :polynomial
       assert algorithm.polynomial_coefficients == [-40.0, 0.01, 0.000001]
 
       # Check data type references the algorithm
-      data_type = Repo.get_by(DataType, definition_set_id: definition_set.id, name: "SENSORS_temp_raw_Type")
+      data_type =
+        Repo.get_by(DataType, definition_set_id: definition_set.id, name: "SENSORS_temp_raw_Type")
+
       assert data_type.default_calibrator_id == algorithm.id
     end
 
@@ -123,7 +133,12 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
 
       {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
-      algorithm = Repo.get_by(Algorithm, definition_set_id: definition_set.id, name: "STATUS_mode_Type_states")
+      algorithm =
+        Repo.get_by(Algorithm,
+          definition_set_id: definition_set.id,
+          name: "STATUS_mode_Type_states"
+        )
+
       assert algorithm.algorithm_type == :state_table
       assert algorithm.state_table == %{"0" => "OFF", "1" => "STANDBY", "2" => "ACTIVE"}
     end
@@ -149,7 +164,9 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
 
       {:ok, definition_set} = YamlImporter.import_string(database, yaml)
 
-      data_type = Repo.get_by(DataType, definition_set_id: definition_set.id, name: "THERMAL_temp_Type")
+      data_type =
+        Repo.get_by(DataType, definition_set_id: definition_set.id, name: "THERMAL_temp_Type")
+
       assert data_type.default_alarm != nil
       assert data_type.default_alarm.watch_range.min_inclusive == -20.0
       assert data_type.default_alarm.watch_range.max_inclusive == 70.0
@@ -340,7 +357,8 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
               data_type: uint
       """
 
-      assert {:error, {:validation_error, "Packet missing 'name'"}} = YamlImporter.import_string(database, yaml)
+      assert {:error, {:validation_error, "Packet missing 'name'"}} =
+               YamlImporter.import_string(database, yaml)
     end
 
     test "rejects packet without items", %{database: database} do
@@ -394,7 +412,8 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
         - opcode: 0x01
       """
 
-      assert {:error, {:validation_error, "Command missing 'name'"}} = YamlImporter.import_string(database, yaml)
+      assert {:error, {:validation_error, "Command missing 'name'"}} =
+               YamlImporter.import_string(database, yaml)
     end
   end
 
@@ -416,7 +435,9 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
         assert definition_set.source_format == :yaml
 
         # Check that containers were created
-        containers = Repo.all(Container) |> Enum.filter(&(&1.definition_set_id == definition_set.id))
+        containers =
+          Repo.all(Container) |> Enum.filter(&(&1.definition_set_id == definition_set.id))
+
         assert length(containers) > 0
 
         # Check HEALTH packet exists

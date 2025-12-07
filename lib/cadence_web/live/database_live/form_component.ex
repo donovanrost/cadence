@@ -14,8 +14,8 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
-        <:subtitle>Upload a YAML file to import a new version into <%= @database.name %>.</:subtitle>
+        {@title}
+        <:subtitle>Upload a YAML file to import a new version into {@database.name}.</:subtitle>
       </.header>
 
       <form
@@ -78,9 +78,9 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    <span class="text-sm font-medium text-zinc-700"><%= entry.client_name %></span>
+                    <span class="text-sm font-medium text-zinc-700">{entry.client_name}</span>
                     <span class="text-xs text-zinc-500">
-                      (<%= format_bytes(entry.client_size) %>)
+                      ({format_bytes(entry.client_size)})
                     </span>
                   </div>
                   <button
@@ -94,10 +94,10 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                   </button>
                 </div>
                 <progress value={entry.progress} max="100" class="w-full h-1 mt-2">
-                  <%= entry.progress %>%
+                  {entry.progress}%
                 </progress>
                 <%= for err <- upload_errors(@uploads.yaml_file, entry) do %>
-                  <p class="text-red-600 text-sm mt-2"><%= error_to_string(err) %></p>
+                  <p class="text-red-600 text-sm mt-2">{error_to_string(err)}</p>
                 <% end %>
               </div>
             <% end %>
@@ -218,7 +218,9 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     publish = Map.get(params, "publish", "false") == "on"
 
     opts = [database_id: database.id]
-    opts = if version_override != "", do: Keyword.put(opts, :version, version_override), else: opts
+
+    opts =
+      if version_override != "", do: Keyword.put(opts, :version, version_override), else: opts
 
     case YamlImporter.import_string(database, yaml_content, opts) do
       {:ok, definition_set} ->

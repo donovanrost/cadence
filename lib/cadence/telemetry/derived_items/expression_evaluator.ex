@@ -554,7 +554,11 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluator do
           0.0
         else
           mean = Enum.sum(new_buffer) / length(new_buffer)
-          variance = Enum.sum(Enum.map(new_buffer, fn x -> (x - mean) * (x - mean) end)) / length(new_buffer)
+
+          variance =
+            Enum.sum(Enum.map(new_buffer, fn x -> (x - mean) * (x - mean) end)) /
+              length(new_buffer)
+
           :math.sqrt(variance)
         end
 

@@ -281,7 +281,11 @@ defmodule Cadence.Simulator.PacketSimulator do
       nil
     else
       chain = Processor.init_chain(protocols, "write")
-      Logger.debug("Initialized write chain with #{length(chain)} protocol(s) for interface #{interface_id}")
+
+      Logger.debug(
+        "Initialized write chain with #{length(chain)} protocol(s) for interface #{interface_id}"
+      )
+
       chain
     end
   rescue
@@ -309,7 +313,6 @@ defmodule Cadence.Simulator.PacketSimulator do
         {packet, state}
     end
   end
-
 
   # Check if CCSDSProtocol is in the write chain
   defp has_ccsds_protocol?(nil), do: false
@@ -582,7 +585,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     # User data - packed binary telemetry
     # Total: 19 bytes
     user_data =
-      <<data.cpu_temp::float-32,
+      <<
+        data.cpu_temp::float-32,
         # 0-3: CPU temp (float, °C)
         data.battery_voltage::float-32,
         # 4-7: Battery voltage (float, V)
@@ -592,7 +596,8 @@ defmodule Cadence.Simulator.PacketSimulator do
         # 12: Battery % (uint8, 0-100)
         data.uptime_seconds::32,
         # 13-16: Uptime (uint32, seconds)
-        data.memory_used_mb::16>>
+        data.memory_used_mb::16
+      >>
 
     # 17-18: Memory (uint16, MB)
 
@@ -606,7 +611,8 @@ defmodule Cadence.Simulator.PacketSimulator do
 
     # User data - attitude telemetry (24 bytes)
     user_data =
-      <<data.roll::float-32,
+      <<
+        data.roll::float-32,
         # 0-3: Roll (float, deg)
         data.pitch::float-32,
         # 4-7: Pitch (float, deg)
@@ -616,7 +622,8 @@ defmodule Cadence.Simulator.PacketSimulator do
         # 12-15: Roll rate (float, deg/s)
         data.pitch_rate::float-32,
         # 16-19: Pitch rate (float, deg/s)
-        data.yaw_rate::float-32>>
+        data.yaw_rate::float-32
+      >>
 
     # 20-23: Yaw rate (float, deg/s)
 
@@ -639,7 +646,8 @@ defmodule Cadence.Simulator.PacketSimulator do
 
     # User data - power telemetry (17 bytes)
     user_data =
-      <<data.solar_panel_voltage::float-32,
+      <<
+        data.solar_panel_voltage::float-32,
         # 0-3: Solar voltage (float, V)
         data.solar_panel_current::float-32,
         # 4-7: Solar current (float, A)
@@ -647,7 +655,8 @@ defmodule Cadence.Simulator.PacketSimulator do
         # 8-11: Bus voltage (float, V)
         data.bus_current::float-32,
         # 12-15: Bus current (float, A)
-        power_mode_byte::8>>
+        power_mode_byte::8
+      >>
 
     # 16: Power mode (uint8)
 

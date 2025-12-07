@@ -10,6 +10,7 @@ defmodule CadenceWeb.UserSocket do
 
   # Channels
   channel "telemetry:*", CadenceWeb.TelemetryChannel
+  channel "execution:*", CadenceWeb.ExecutionChannel
 
   @impl true
   def connect(%{"token" => token}, socket, _connect_info) do

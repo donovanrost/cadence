@@ -24,37 +24,33 @@ defmodule Cadence.Telemetry.CRC do
 
   # CRC-16-CCITT lookup table (polynomial 0x1021, reflected)
   # Pre-computed for performance
-  @crc16_ccitt_table (
-    for byte <- 0..255 do
-      Enum.reduce(0..7, byte <<< 8, fn _, crc ->
-        if (crc &&& 0x8000) != 0 do
-          bxor(crc <<< 1, 0x1021)
-        else
-          crc <<< 1
-        end
-        |> band(0xFFFF)
-      end)
-    end
-    |> List.to_tuple()
-  )
+  @crc16_ccitt_table (for byte <- 0..255 do
+                        Enum.reduce(0..7, byte <<< 8, fn _, crc ->
+                          if (crc &&& 0x8000) != 0 do
+                            bxor(crc <<< 1, 0x1021)
+                          else
+                            crc <<< 1
+                          end
+                          |> band(0xFFFF)
+                        end)
+                      end)
+                     |> List.to_tuple()
 
   # CRC-16-XMODEM lookup table (polynomial 0x1021, not reflected, init 0)
   @crc16_xmodem_table @crc16_ccitt_table
 
   # CRC-8 lookup table (polynomial 0x07)
-  @crc8_table (
-    for byte <- 0..255 do
-      Enum.reduce(0..7, byte, fn _, crc ->
-        if (crc &&& 0x80) != 0 do
-          bxor(crc <<< 1, 0x07)
-        else
-          crc <<< 1
-        end
-        |> band(0xFF)
-      end)
-    end
-    |> List.to_tuple()
-  )
+  @crc8_table (for byte <- 0..255 do
+                 Enum.reduce(0..7, byte, fn _, crc ->
+                   if (crc &&& 0x80) != 0 do
+                     bxor(crc <<< 1, 0x07)
+                   else
+                     crc <<< 1
+                   end
+                   |> band(0xFF)
+                 end)
+               end)
+              |> List.to_tuple()
 
   @doc """
   Calculate CRC using the specified algorithm.

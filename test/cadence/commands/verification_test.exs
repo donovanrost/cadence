@@ -5,12 +5,13 @@ defmodule Cadence.Commands.VerificationTest do
 
   describe "new/4" do
     test "creates verification with default mode :any_update" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       assert verification.command_log_id == "cmd-123"
       assert verification.mission_id == "mission-1"
@@ -21,26 +22,28 @@ defmodule Cadence.Commands.VerificationTest do
     end
 
     test "creates verification with :value_match mode when expected_value provided" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "THERMAL.MODE",
-        expected_value: "HEATING"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "THERMAL.MODE",
+          expected_value: "HEATING"
+        )
 
       assert verification.mode == :value_match
       assert verification.expected_value == "HEATING"
     end
 
     test "creates verification with custom timeout" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.STATUS",
-        timeout_ms: 10_000
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.STATUS",
+          timeout_ms: 10_000
+        )
 
       assert verification.timeout_ms == 10_000
     end
@@ -48,12 +51,13 @@ defmodule Cadence.Commands.VerificationTest do
 
   describe "check_update/2 with :any_update mode" do
     test "verifies on any value" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       assert {:verified, 42} = Verification.check_update(verification, 42)
       assert {:verified, "hello"} = Verification.check_update(verification, "hello")
@@ -63,50 +67,54 @@ defmodule Cadence.Commands.VerificationTest do
 
   describe "check_update/2 with :value_match mode" do
     test "verifies when value matches expected string" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "THERMAL.MODE",
-        expected_value: "HEATING"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "THERMAL.MODE",
+          expected_value: "HEATING"
+        )
 
       assert {:verified, "HEATING"} = Verification.check_update(verification, "HEATING")
     end
 
     test "returns :pending when value doesn't match" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "THERMAL.MODE",
-        expected_value: "HEATING"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "THERMAL.MODE",
+          expected_value: "HEATING"
+        )
 
       assert :pending = Verification.check_update(verification, "COOLING")
     end
 
     test "verifies when numeric value matches" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.STATE",
-        expected_value: 1
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.STATE",
+          expected_value: 1
+        )
 
       assert {:verified, 1} = Verification.check_update(verification, 1)
       assert {:verified, 1.0} = Verification.check_update(verification, 1.0)
     end
 
     test "handles string-to-number comparison" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.STATE",
-        expected_value: "ON"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.STATE",
+          expected_value: "ON"
+        )
 
       # Should verify when string representation matches
       assert {:verified, "ON"} = Verification.check_update(verification, "ON")
@@ -236,45 +244,49 @@ defmodule Cadence.Commands.VerificationTest do
 
   describe "matches_update?/4" do
     test "returns true when update matches verification" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       assert Verification.matches_update?(verification, "target-1", "HEALTH", "CMD_ACK")
     end
 
     test "returns false when target doesn't match" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       refute Verification.matches_update?(verification, "target-2", "HEALTH", "CMD_ACK")
     end
 
     test "returns false when packet doesn't match" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       refute Verification.matches_update?(verification, "target-1", "THERMAL", "CMD_ACK")
     end
 
     test "returns false when item doesn't match" do
-      verification = Verification.new(
-        "cmd-123",
-        "mission-1",
-        "target-1",
-        item: "HEALTH.CMD_ACK"
-      )
+      verification =
+        Verification.new(
+          "cmd-123",
+          "mission-1",
+          "target-1",
+          item: "HEALTH.CMD_ACK"
+        )
 
       refute Verification.matches_update?(verification, "target-1", "HEALTH", "STATUS")
     end

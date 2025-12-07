@@ -54,7 +54,9 @@ defmodule Cadence.Telemetry.Decommutation do
         items =
           packet_def.items
           |> Enum.map(fn item_def ->
-            value = Map.get(json_data, item_def.name) || Map.get(json_data, to_string(item_def.name))
+            value =
+              Map.get(json_data, item_def.name) || Map.get(json_data, to_string(item_def.name))
+
             {item_def.name, value}
           end)
           |> Enum.into(%{})
@@ -127,5 +129,4 @@ defmodule Cadence.Telemetry.Decommutation do
       {:error, {:missing_item_fields, item_def.name, missing_fields}}
     end
   end
-
 end

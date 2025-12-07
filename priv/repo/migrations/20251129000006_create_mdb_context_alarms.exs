@@ -4,7 +4,9 @@ defmodule Cadence.Repo.Migrations.CreateMdbContextAlarms do
   def change do
     create table(:mdb_context_alarms, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :data_type_id, references(:mdb_data_types, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :data_type_id, references(:mdb_data_types, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       # Condition that activates this alarm set (embedded JSON)
       add :match_criteria, :map, null: false

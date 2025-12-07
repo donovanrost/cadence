@@ -312,11 +312,17 @@ defmodule Cadence.Telemetry.Database.DefinitionSet do
   """
   def get_stats(definition_set_id) do
     packet_count =
-      from(p in PacketDefinition, where: p.definition_set_id == ^definition_set_id, select: count())
+      from(p in PacketDefinition,
+        where: p.definition_set_id == ^definition_set_id,
+        select: count()
+      )
       |> Repo.one()
 
     command_count =
-      from(c in CommandDefinition, where: c.definition_set_id == ^definition_set_id, select: count())
+      from(c in CommandDefinition,
+        where: c.definition_set_id == ^definition_set_id,
+        select: count()
+      )
       |> Repo.one()
 
     %{

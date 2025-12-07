@@ -12,8 +12,8 @@
   rows={@streams.missions}
   row_click={fn {_id, mission} -> JS.navigate(~p"/missions/#{mission}") end}
 >
-  <:col :let={{_id, mission}} label="Name"><%= mission.name %></:col>
-  <:col :let={{_id, mission}} label="Slug"><%= mission.slug %></:col>
+  <:col :let={{_id, mission}} label="Name">{mission.name}</:col>
+  <:col :let={{_id, mission}} label="Slug">{mission.slug}</:col>
   <:col :let={{_id, mission}} label="Status">
     <span class={[
       "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
@@ -21,10 +21,10 @@
       mission.status == "inactive" && "bg-gray-50 text-gray-600 ring-gray-500/10",
       mission.status == "suspended" && "bg-red-50 text-red-700 ring-red-600/10"
     ]}>
-      <%= mission.status %>
+      {mission.status}
     </span>
   </:col>
-  <:col :let={{_id, mission}} label="Phase"><%= mission.phase %></:col>
+  <:col :let={{_id, mission}} label="Phase">{mission.phase}</:col>
   <:action :let={{_id, mission}}>
     <div class="sr-only">
       <.link navigate={~p"/missions/#{mission}"}>Show</.link>

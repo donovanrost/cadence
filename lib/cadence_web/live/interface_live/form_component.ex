@@ -8,7 +8,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>Configure interface connection and protocol settings.</:subtitle>
       </.header>
 
@@ -96,8 +96,8 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
                       class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                     />
                     <span class="text-sm font-medium text-zinc-700">
-                      <%= target.name %>
-                      <span class="text-zinc-500">(<%= target.identifier %>)</span>
+                      {target.name}
+                      <span class="text-zinc-500">({target.identifier})</span>
                     </span>
                   </label>
                   <%= if is_selected do %>
@@ -108,9 +108,15 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
                       phx-target={@myself}
                       class="text-sm rounded-md border-zinc-300 py-1 pl-2 pr-8 focus:border-zinc-400 focus:ring-zinc-400"
                     >
-                      <option value="read" selected={current_direction == "read"}>Read (Telemetry)</option>
-                      <option value="write" selected={current_direction == "write"}>Write (Commands)</option>
-                      <option value="read_write" selected={current_direction == "read_write"}>Read/Write</option>
+                      <option value="read" selected={current_direction == "read"}>
+                        Read (Telemetry)
+                      </option>
+                      <option value="write" selected={current_direction == "write"}>
+                        Write (Commands)
+                      </option>
+                      <option value="read_write" selected={current_direction == "read_write"}>
+                        Read/Write
+                      </option>
                     </select>
                   <% end %>
                 </div>
@@ -230,7 +236,12 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
         case Interfaces.update_interface(socket.assigns.interface, interface_params) do
           {:ok, interface} ->
             # Sync target associations
-            sync_target_associations(interface, socket.assigns.selected_targets, socket.assigns.available_targets)
+            sync_target_associations(
+              interface,
+              socket.assigns.selected_targets,
+              socket.assigns.available_targets
+            )
+
             notify_parent({:saved, interface})
 
             {:noreply,
@@ -263,7 +274,12 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
         case Interfaces.create_interface(params_with_mission) do
           {:ok, interface} ->
             # Add target associations for new interface
-            sync_target_associations(interface, socket.assigns.selected_targets, socket.assigns.available_targets)
+            sync_target_associations(
+              interface,
+              socket.assigns.selected_targets,
+              socket.assigns.available_targets
+            )
+
             notify_parent({:saved, interface})
 
             {:noreply,
@@ -292,6 +308,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
 
     # Remove targets that are no longer selected
     targets_to_remove = MapSet.difference(current_target_ids, selected_target_ids)
+
     for target_id <- targets_to_remove do
       target = Enum.find(current_targets, &(&1.id == target_id))
       if target, do: Interfaces.remove_target_from_interface(target, interface)
@@ -300,6 +317,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
     # Add or update targets that are selected
     for {target_id, direction} <- selected_targets do
       target = Enum.find(available_targets, &(&1.id == target_id))
+
       if target do
         if MapSet.member?(current_target_ids, target_id) do
           # Update direction if changed

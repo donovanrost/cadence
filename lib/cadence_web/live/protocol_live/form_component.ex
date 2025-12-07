@@ -8,7 +8,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
     ~H"""
     <div>
       <.header>
-        <%= @title %>
+        {@title}
         <:subtitle>Configure protocol type and packet framing settings.</:subtitle>
       </.header>
 

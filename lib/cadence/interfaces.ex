@@ -186,10 +186,11 @@ defmodule Cadence.Interfaces do
       |> Repo.one() || -1
 
     # Add protocol at next order position
-    attrs_with_interface = Map.merge(attrs, %{
-      "interface_id" => interface_id,
-      "order" => max_order + 1
-    })
+    attrs_with_interface =
+      Map.merge(attrs, %{
+        "interface_id" => interface_id,
+        "order" => max_order + 1
+      })
 
     %InterfaceProtocol{}
     |> InterfaceProtocol.changeset(attrs_with_interface)

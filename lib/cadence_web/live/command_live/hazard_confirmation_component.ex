@@ -16,8 +16,7 @@ defmodule CadenceWeb.CommandLive.HazardConfirmationComponent do
     <div>
       <.header>
         <span class="text-warning">
-          <.icon name="hero-exclamation-triangle" class="size-6 inline" />
-          Hazardous Command
+          <.icon name="hero-exclamation-triangle" class="size-6 inline" /> Hazardous Command
         </span>
         <:subtitle>
           This command requires confirmation before execution
@@ -69,8 +68,7 @@ defmodule CadenceWeb.CommandLive.HazardConfirmationComponent do
             class="btn btn-warning"
             disabled={not @confirmed}
           >
-            <.icon name="hero-bolt" class="size-4" />
-            Execute Command
+            <.icon name="hero-bolt" class="size-4" /> Execute Command
           </button>
         </:actions>
       </.simple_form>

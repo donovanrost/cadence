@@ -24,7 +24,7 @@ defmodule Cadence.Targets do
     Target
     |> where([t], t.mission_id == ^mission_id)
     |> order_by([t], t.identifier)
-    |> preload([definition_set: :database])
+    |> preload(definition_set: :database)
     |> Repo.all()
   end
 
@@ -99,7 +99,8 @@ defmodule Cadence.Targets do
   Returns nil if target not found or has no definition_set assigned.
   This is used by the telemetry pipeline to look up the correct dictionary.
   """
-  def get_definition_set_id(mission_id, target_identifier) when is_binary(mission_id) and is_binary(target_identifier) do
+  def get_definition_set_id(mission_id, target_identifier)
+      when is_binary(mission_id) and is_binary(target_identifier) do
     Target
     |> where([t], t.mission_id == ^mission_id and t.identifier == ^target_identifier)
     |> select([t], t.definition_set_id)

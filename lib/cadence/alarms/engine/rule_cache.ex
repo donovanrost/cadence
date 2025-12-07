@@ -123,6 +123,22 @@ defmodule Cadence.Alarms.Engine.RuleCache do
   end
 
   @impl true
+  def handle_info({:alarm_rule_changed, _event_type, %AlarmRule{mission_id: nil}}, state) do
+    # Org-wide rule changed - invalidate entire cache since it could affect any mission
+    Logger.debug("Org-wide alarm rule changed, invalidating entire cache")
+    invalidate_all()
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:alarm_rule_changed, _event_type, %AlarmRule{mission_id: mission_id}}, state) do
+    Logger.debug("Alarm rule changed for mission #{mission_id}, invalidating cache")
+    invalidate_mission(mission_id)
+    {:noreply, state}
+  end
+
+  # Legacy handlers for backwards compatibility
+  @impl true
   def handle_info({:rule_changed, :all}, state) do
     Logger.debug("Invalidating entire alarm rule cache")
     invalidate_all()

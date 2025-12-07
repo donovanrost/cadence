@@ -78,7 +78,9 @@ defmodule Cadence.Telemetry.BinaryExtractor do
     field_byte_size = div(bit_size, 8)
 
     if byte_offset + field_byte_size <= Kernel.byte_size(binary) do
-      <<_skip::binary-size(byte_offset), value::binary-size(field_byte_size), _rest::binary>> = binary
+      <<_skip::binary-size(byte_offset), value::binary-size(field_byte_size), _rest::binary>> =
+        binary
+
       decode_value(value, data_type, endianness)
     else
       {:error, :insufficient_data}
@@ -127,17 +129,31 @@ defmodule Cadence.Telemetry.BinaryExtractor do
 
   defp decode_value(binary, :float, :big_endian) do
     case byte_size(binary) do
-      4 -> <<value::float-32-big>> = binary; {:ok, value}
-      8 -> <<value::float-64-big>> = binary; {:ok, value}
-      _ -> {:error, :invalid_float_size}
+      4 ->
+        <<value::float-32-big>> = binary
+        {:ok, value}
+
+      8 ->
+        <<value::float-64-big>> = binary
+        {:ok, value}
+
+      _ ->
+        {:error, :invalid_float_size}
     end
   end
 
   defp decode_value(binary, :float, :little_endian) do
     case byte_size(binary) do
-      4 -> <<value::float-32-little>> = binary; {:ok, value}
-      8 -> <<value::float-64-little>> = binary; {:ok, value}
-      _ -> {:error, :invalid_float_size}
+      4 ->
+        <<value::float-32-little>> = binary
+        {:ok, value}
+
+      8 ->
+        <<value::float-64-little>> = binary
+        {:ok, value}
+
+      _ ->
+        {:error, :invalid_float_size}
     end
   end
 

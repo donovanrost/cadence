@@ -258,9 +258,10 @@ defmodule Cadence.Simulator.PacketEncoder do
 
   defp encode_packet_binary(encoder, packet_def, target_id, item_values) do
     # Calculate packet size from item definitions
-    max_bit = packet_def.items
-    |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
-    |> Enum.max(fn -> 0 end)
+    max_bit =
+      packet_def.items
+      |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
+      |> Enum.max(fn -> 0 end)
 
     # Round up to byte boundary
     payload_size = div(max_bit + 7, 8)
@@ -386,6 +387,7 @@ defmodule Cadence.Simulator.PacketEncoder do
   defp value_to_binary(value, "string", bit_size, _endianness) do
     str = to_string(value)
     byte_size = div(bit_size, 8)
+
     String.pad_trailing(str, byte_size, <<0>>)
     |> String.slice(0, byte_size)
   end
@@ -437,11 +439,13 @@ defmodule Cadence.Simulator.PacketEncoder do
 
     # Primary header (6 bytes)
     version = 0
-    type = 0  # telemetry
+    # telemetry
+    type = 0
     sec_hdr_flag = 1
     packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
 
-    sequence_flags = 3  # unsegmented
+    # unsegmented
+    sequence_flags = 3
     seq_control = sequence_flags <<< 14 ||| sequence
 
     data_length = byte_size(user_data) - 1

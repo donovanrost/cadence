@@ -61,7 +61,8 @@ defmodule Cadence.Telemetry.Conversions do
       nil ->
         # Try converting value to string key
         case Map.get(states, to_string(value)) do
-          nil -> {:ok, value} # Return raw value if no mapping
+          # Return raw value if no mapping
+          nil -> {:ok, value}
           state_string -> {:ok, state_string}
         end
 
@@ -202,6 +203,7 @@ defmodule Cadence.Telemetry.Conversions do
   require Logger
 
   alias Cadence.Repo
+
   alias Cadence.Telemetry.Conversions.{
     Conversion,
     PolynomialConversion,

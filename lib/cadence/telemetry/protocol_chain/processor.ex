@@ -53,7 +53,10 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
     end
   rescue
     error ->
-      Logger.error("Failed to initialize protocol #{protocol_config.protocol_type}: #{inspect(error)}")
+      Logger.error(
+        "Failed to initialize protocol #{protocol_config.protocol_type}: #{inspect(error)}"
+      )
+
       nil
   end
 
@@ -140,6 +143,7 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   """
   @spec chain_format(protocol_chain()) :: :ccsds | :raw | :simulator
   def chain_format([]), do: :simulator
+
   def chain_format(chain) do
     {module, _state} = List.last(chain)
 
@@ -303,7 +307,10 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
   catch
     error ->
-      Logger.error("Failed to atomize protocol config: #{inspect(error)}, config: #{inspect(config)}")
+      Logger.error(
+        "Failed to atomize protocol config: #{inspect(error)}, config: #{inspect(config)}"
+      )
+
       []
   end
 

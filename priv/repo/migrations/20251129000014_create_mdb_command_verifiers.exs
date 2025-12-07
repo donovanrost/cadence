@@ -4,7 +4,10 @@ defmodule Cadence.Repo.Migrations.CreateMdbCommandVerifiers do
   def change do
     create table(:mdb_command_verifiers, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :meta_command_id, references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :meta_command_id,
+          references(:mdb_meta_commands, type: :binary_id, on_delete: :delete_all),
+          null: false
 
       add :name, :string
       add :description, :text
