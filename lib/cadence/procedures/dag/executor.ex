@@ -223,7 +223,7 @@ defmodule Cadence.Procedures.Dag.Executor do
         cancel_running_steps(state)
         {:error, {:global_timeout, build_result(state)}}
 
-      global_timeout_warning?(state) and not state[:timeout_warned] ->
+      global_timeout_warning?(state) and not state.timeout_warned ->
         # Log warning when approaching timeout, but only once
         remaining_ms = state.global_deadline - System.monotonic_time(:millisecond)
         Logger.warning("DAG: Approaching global timeout - #{div(remaining_ms, 1000)}s remaining")

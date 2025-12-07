@@ -302,10 +302,16 @@ defmodule Cadence.Procedures.ConditionEvaluator do
 
   defp parse_value(value), do: value
 
-  defp get_nested_value(map, []) when is_map(map), do: map
+  defp get_nested_value(value, []), do: value
   defp get_nested_value(nil, _), do: nil
   defp get_nested_value(map, [key | rest]) when is_map(map) do
-    value = Map.get(map, key) || Map.get(map, String.to_atom(key))
+    # Try string key first, then atom key. Must use explicit nil check
+    # because false/0 are valid values that would be falsy with ||
+    value =
+      case Map.fetch(map, key) do
+        {:ok, v} -> v
+        :error -> Map.get(map, String.to_atom(key))
+      end
     get_nested_value(value, rest)
   end
   defp get_nested_value(_, _), do: nil

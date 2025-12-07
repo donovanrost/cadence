@@ -94,6 +94,192 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
     test "rejects non-map input" do
       assert {:error, ["Steps must be a map"]} = Validator.validate([])
     end
+
+    test "accepts empty steps map" do
+      assert :ok = Validator.validate(%{})
+    end
+
+    test "rejects step definition that is not a map" do
+      steps = %{
+        "step_a" => "not a map"
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "must be a map"))
+    end
+
+    test "rejects self-referential step" do
+      steps = %{
+        "step_a" => %{"type" => "log", "depends_on" => ["step_a"]}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "Cycle detected"))
+    end
+
+    test "detects longer cycle chains" do
+      steps = %{
+        "step_a" => %{"type" => "log", "depends_on" => ["step_d"]},
+        "step_b" => %{"type" => "log", "depends_on" => ["step_a"]},
+        "step_c" => %{"type" => "log", "depends_on" => ["step_b"]},
+        "step_d" => %{"type" => "log", "depends_on" => ["step_c"]}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "Cycle detected"))
+    end
+  end
+
+  describe "step type validation" do
+    test "command step requires 'name' field" do
+      steps = %{
+        "send_cmd" => %{"type" => "command"}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "command"))
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'name'"))
+    end
+
+    test "command step with name is valid" do
+      steps = %{
+        "send_cmd" => %{"type" => "command", "name" => "POWER_ON"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "wait step requires 'duration' field" do
+      steps = %{
+        "wait_step" => %{"type" => "wait"}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "wait"))
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'duration'"))
+    end
+
+    test "wait step with integer duration is valid" do
+      steps = %{
+        "wait_step" => %{"type" => "wait", "duration" => 1000}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "wait step with string duration is valid" do
+      steps = %{
+        "wait_step" => %{"type" => "wait", "duration" => "{{params.delay}}"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "wait step rejects invalid duration type" do
+      steps = %{
+        "wait_step" => %{"type" => "wait", "duration" => %{}}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "must be a number or string"))
+    end
+
+    test "wait_for step requires 'item' field" do
+      steps = %{
+        "wait_step" => %{"type" => "wait_for", "value" => 100}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'item'"))
+    end
+
+    test "wait_for step requires 'value' field" do
+      steps = %{
+        "wait_step" => %{"type" => "wait_for", "item" => "temperature"}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'value'"))
+    end
+
+    test "wait_for step with both fields is valid" do
+      steps = %{
+        "wait_step" => %{"type" => "wait_for", "item" => "temperature", "value" => 100}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "check step requires 'condition' field" do
+      steps = %{
+        "check_step" => %{"type" => "check"}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "check"))
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'condition'"))
+    end
+
+    test "check step with condition is valid" do
+      steps = %{
+        "check_step" => %{"type" => "check", "condition" => "temperature > 50"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "assert step requires 'condition' field" do
+      steps = %{
+        "assert_step" => %{"type" => "assert"}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "assert"))
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'condition'"))
+    end
+
+    test "assert step with condition is valid" do
+      steps = %{
+        "assert_step" => %{"type" => "assert", "condition" => "1 == 1"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "set step requires 'name' field (variable name)" do
+      steps = %{
+        "set_step" => %{"type" => "set", "value" => 42}
+      }
+
+      assert {:error, reasons} = Validator.validate(steps)
+      assert Enum.any?(reasons, &String.contains?(&1, "set"))
+      assert Enum.any?(reasons, &String.contains?(&1, "missing required field 'name'"))
+    end
+
+    test "set step with name is valid" do
+      steps = %{
+        "set_step" => %{"type" => "set", "name" => "my_var", "value" => 42}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "log step does not require message" do
+      steps = %{
+        "log_step" => %{"type" => "log"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
+
+    test "unknown step type passes validation" do
+      # Unknown types don't have additional validation
+      steps = %{
+        "custom_step" => %{"type" => "custom_type", "some_field" => "value"}
+      }
+
+      assert :ok = Validator.validate(steps)
+    end
   end
 
   describe "is_dag_format?/1" do
@@ -158,18 +344,11 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
     test "finds steps with no dependencies" do
       steps = %{
         "init" => %{"type" => "log"},
-        "start" => %{"type" => "log"},
-        "process" => %{"type" => "log", "depends_on" => ["init", "start"]}
-      }
-
-      # Filtering out reserved names for the test
-      steps_renamed = %{
-        "init" => %{"type" => "log"},
         "begin" => %{"type" => "log"},
         "process" => %{"type" => "log", "depends_on" => ["init", "begin"]}
       }
 
-      roots = Validator.find_root_steps(steps_renamed)
+      roots = Validator.find_root_steps(steps)
       assert Enum.sort(roots) == ["begin", "init"]
     end
   end

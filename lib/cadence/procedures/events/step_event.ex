@@ -249,7 +249,7 @@ defmodule Cadence.Procedures.Events.StepEvent do
     "procedure:#{execution_id}"
   end
 
-  # Serialize data for JSON storage, handling atoms and other non-JSON types
+  # Serialize data for JSON storage, handling atoms, tuples, and other non-JSON types
   defp serialize_data(nil), do: nil
 
   defp serialize_data(data) when is_map(data) do
@@ -261,5 +261,11 @@ defmodule Cadence.Procedures.Events.StepEvent do
 
   defp serialize_data(data) when is_atom(data), do: Atom.to_string(data)
   defp serialize_data(data) when is_list(data), do: Enum.map(data, &serialize_data/1)
+
+  # Tuples aren't JSON-encodable - convert to lists with serialized elements
+  defp serialize_data(data) when is_tuple(data) do
+    data |> Tuple.to_list() |> Enum.map(&serialize_data/1)
+  end
+
   defp serialize_data(data), do: data
 end

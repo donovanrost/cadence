@@ -607,11 +607,12 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   end
 
   defp handle_failure(state, step_index, reason) do
+    error_message = format_error_reason(reason)
     state = update_status(state, :failed, %{
-      error_message: to_string(reason),
+      error_message: error_message,
       error_step_index: step_index
     })
-    persist_log(state, :error, "Step #{step_index} failed: #{reason}")
+    persist_log(state, :error, "Step #{step_index} failed: #{error_message}")
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
   end
@@ -702,4 +703,11 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   defp via_tuple(execution_id) do
     {:via, Registry, {Cadence.ProcedureRegistry, execution_id}}
   end
+
+  # Format error reasons for storage - handles various error types including Luerl parse errors
+  defp format_error_reason(reason) when is_binary(reason), do: reason
+  defp format_error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_error_reason(reason) when is_list(reason), do: inspect(reason)
+  defp format_error_reason({:lua_error, error, _stacktrace}), do: "Lua error: #{inspect(error)}"
+  defp format_error_reason(reason), do: inspect(reason)
 end
