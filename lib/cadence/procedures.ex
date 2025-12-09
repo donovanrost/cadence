@@ -6,18 +6,19 @@ defmodule Cadence.Procedures do
   """
 
   import Ecto.Query
-  alias Cadence.Repo
-  alias Cadence.Settings
 
   alias Cadence.Procedures.{
+    Parameters,
     Procedure,
     ProcedureApproval,
     ProcedureExecution,
     ProcedureLog,
-    Parameters,
     ProcedureVersion,
     ProcedureVersionEvent
   }
+
+  alias Cadence.Repo
+  alias Cadence.Settings
 
   # ============================================================================
   # Procedures
@@ -112,6 +113,7 @@ defmodule Cadence.Procedures do
         version_number: 1,
         source: source,
         parameters_schema: Keyword.get(opts, :parameters_schema, %{}),
+        allow_hazardous_commands: Keyword.get(opts, :allow_hazardous_commands, false),
         created_by_id: user_id
       }
 
@@ -679,4 +681,124 @@ defmodule Cadence.Procedures do
     |> ProcedureLog.changeset(attrs)
     |> Repo.insert()
   end
+
+  # ============================================================================
+  # Import/Export
+  # ============================================================================
+
+  @doc """
+  Exports a procedure to a portable JSON-compatible map.
+
+  Exports the current approved version (or latest draft if none approved).
+  Does not include version history or execution records.
+  """
+  def export_procedure(%Procedure{} = procedure) do
+    procedure = Repo.preload(procedure, :current_version)
+
+    version_data =
+      if procedure.current_version do
+        %{
+          "version_number" => procedure.current_version.version_number,
+          "source" => procedure.current_version.source,
+          "parameters_schema" => procedure.current_version.parameters_schema,
+          "change_summary" => procedure.current_version.change_summary,
+          "allow_hazardous_commands" => procedure.current_version.allow_hazardous_commands
+        }
+      else
+        nil
+      end
+
+    %{
+      "export_version" => "1.0.0",
+      "exported_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source_procedure_id" => procedure.id,
+      "source_mission_id" => procedure.mission_id,
+      "procedure" => %{
+        "name" => procedure.name,
+        "description" => procedure.description,
+        "type" => to_string(procedure.type),
+        "tags" => procedure.tags || [],
+        "version" => version_data
+      }
+    }
+  end
+
+  @doc """
+  Imports a procedure from an export map into a target mission.
+
+  Creates a new procedure with version 1 in draft status.
+  The imported procedure requires approval before use.
+
+  ## Options
+  - `:user_id` - User performing the import (required, for audit)
+  - `:name` - Override the procedure name (optional)
+
+  ## Returns
+  `{:ok, procedure}` or `{:error, reason}`
+
+  ## Error Reasons
+  - `:invalid_export_format` - Export data doesn't match expected schema
+  - `:name_already_exists` - A procedure with this name already exists
+  - `:missing_version_data` - Export has no version data to import
+  """
+  def import_procedure(organization_id, mission_id, export_data, opts \\ []) do
+    user_id = Keyword.fetch!(opts, :user_id)
+    name_override = Keyword.get(opts, :name)
+
+    with {:ok, validated} <- validate_export_format(export_data),
+         {:ok, name} <- resolve_import_name(organization_id, mission_id, validated, name_override),
+         {:ok, version_data} <- extract_version_data(validated) do
+      procedure_attrs = %{
+        name: name,
+        description: validated["procedure"]["description"],
+        type: String.to_existing_atom(validated["procedure"]["type"]),
+        tags: validated["procedure"]["tags"] || [],
+        organization_id: organization_id,
+        mission_id: mission_id
+      }
+
+      create_procedure(
+        procedure_attrs,
+        user_id: user_id,
+        source: version_data["source"] || %{"steps" => %{}},
+        parameters_schema: version_data["parameters_schema"] || %{},
+        allow_hazardous_commands: version_data["allow_hazardous_commands"] || false
+      )
+    end
+  end
+
+  defp validate_export_format(%{"export_version" => "1.0.0", "procedure" => proc} = data)
+       when is_map(proc) do
+    case {proc["name"], proc["type"]} do
+      {name, type} when is_binary(name) and is_binary(type) -> {:ok, data}
+      _ -> {:error, :invalid_export_format}
+    end
+  end
+
+  defp validate_export_format(_), do: {:error, :invalid_export_format}
+
+  defp resolve_import_name(org_id, mission_id, validated, nil) do
+    name = validated["procedure"]["name"]
+
+    case get_procedure_by_name(org_id, mission_id, name) do
+      nil -> {:ok, name}
+      _ -> {:error, :name_already_exists}
+    end
+  end
+
+  defp resolve_import_name(org_id, mission_id, _validated, name_override) do
+    case get_procedure_by_name(org_id, mission_id, name_override) do
+      nil -> {:ok, name_override}
+      _ -> {:error, :name_already_exists}
+    end
+  end
+
+  defp extract_version_data(%{"procedure" => %{"version" => nil}}),
+    do: {:error, :missing_version_data}
+
+  defp extract_version_data(%{"procedure" => %{"version" => v}}) when is_map(v),
+    do: {:ok, v}
+
+  defp extract_version_data(_),
+    do: {:error, :missing_version_data}
 end
