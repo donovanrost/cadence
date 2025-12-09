@@ -34,9 +34,22 @@ defmodule CadenceWeb.MissionLive.Procedures do
     end
   end
 
-  defp apply_action(socket, :index, _params) do
+  defp apply_action(socket, :index, params) do
     mission = socket.assigns.mission
-    procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
+
+    # Parse tag filters from URL params
+    selected_tags = parse_tag_params(params["tags"])
+
+    # Get available tags for filter dropdown
+    available_tags = Procedures.list_tags(mission.organization_id, mission_id: mission.id)
+
+    # List procedures with optional tag filter
+    procedures =
+      Procedures.list_procedures(
+        mission.organization_id,
+        mission_id: mission.id,
+        tags: selected_tags
+      )
 
     # Get active execution counts
     execution_counts = get_execution_counts(mission.id)
@@ -49,6 +62,18 @@ defmodule CadenceWeb.MissionLive.Procedures do
     |> assign(:execution_counts, execution_counts)
     |> assign(:active_executions, active_executions)
     |> assign(:selected_procedure, nil)
+    |> assign(:available_tags, available_tags)
+    |> assign(:selected_tags, selected_tags)
+  end
+
+  defp parse_tag_params(nil), do: []
+  defp parse_tag_params(""), do: []
+
+  defp parse_tag_params(tags) when is_binary(tags) do
+    tags
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp apply_action(socket, :new, _params) do
@@ -143,6 +168,33 @@ defmodule CadenceWeb.MissionLive.Procedures do
   # ============================================================================
 
   @impl true
+  def handle_event("toggle_tag", %{"tag" => tag}, socket) do
+    mission = socket.assigns.mission
+    selected_tags = socket.assigns.selected_tags
+
+    new_tags =
+      if tag in selected_tags do
+        List.delete(selected_tags, tag)
+      else
+        [tag | selected_tags]
+      end
+
+    # Build URL with new tags
+    path =
+      if new_tags == [] do
+        ~p"/missions/#{mission}/procedures"
+      else
+        ~p"/missions/#{mission}/procedures?tags=#{Enum.join(new_tags, ",")}"
+      end
+
+    {:noreply, push_patch(socket, to: path)}
+  end
+
+  def handle_event("clear_tags", _params, socket) do
+    mission = socket.assigns.mission
+    {:noreply, push_patch(socket, to: ~p"/missions/#{mission}/procedures")}
+  end
+
   def handle_event("execute", %{"id" => procedure_id}, socket) do
     mission = socket.assigns.mission
 
@@ -531,9 +583,44 @@ defmodule CadenceWeb.MissionLive.Procedures do
         </div>
       </div>
 
+      <!-- Tag Filters -->
+      <div :if={length(@available_tags) > 0} class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-base-content/60">Filter by tags:</span>
+        <button
+          :for={tag <- @available_tags}
+          type="button"
+          phx-click="toggle_tag"
+          phx-value-tag={tag}
+          class={[
+            "badge cursor-pointer transition-colors",
+            tag in @selected_tags && "badge-primary",
+            tag not in @selected_tags && "badge-outline hover:badge-primary"
+          ]}
+        >
+          {tag}
+        </button>
+        <button
+          :if={length(@selected_tags) > 0}
+          type="button"
+          phx-click="clear_tags"
+          class="btn btn-ghost btn-xs"
+        >
+          Clear filters
+        </button>
+      </div>
+
       <!-- Procedures List -->
       <div class="card bg-base-200">
         <div class="card-body p-0">
+          <%= if Enum.empty?(@procedures) and length(@selected_tags) > 0 do %>
+            <div class="p-8 text-center">
+              <.icon name="hero-funnel" class="h-12 w-12 mx-auto text-base-content/30" />
+              <p class="mt-4 text-base-content/60">No procedures match the selected tags</p>
+              <button type="button" phx-click="clear_tags" class="btn btn-ghost btn-sm mt-2">
+                Clear filters
+              </button>
+            </div>
+          <% else %>
           <%= if Enum.empty?(@procedures) do %>
             <div class="p-8 text-center">
               <.icon name="hero-document-text" class="h-12 w-12 mx-auto text-base-content/30" />
@@ -549,6 +636,7 @@ defmodule CadenceWeb.MissionLive.Procedures do
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Tags</th>
                   <th>Type</th>
                   <th>Version</th>
                   <th>Status</th>
@@ -567,6 +655,22 @@ defmodule CadenceWeb.MissionLive.Procedures do
                     <p :if={procedure.description} class="text-xs text-base-content/50 mt-1">
                       {String.slice(procedure.description, 0, 60)}
                     </p>
+                  </td>
+                  <td>
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        :for={tag <- procedure.tags || []}
+                        class="badge badge-sm badge-outline"
+                      >
+                        {tag}
+                      </span>
+                      <span
+                        :if={length(procedure.tags || []) == 0}
+                        class="text-base-content/40 text-xs"
+                      >
+                        -
+                      </span>
+                    </div>
                   </td>
                   <td>
                     <span class={[
@@ -620,6 +724,7 @@ defmodule CadenceWeb.MissionLive.Procedures do
               </tbody>
             </table>
           <% end %>
+          <% end %>
         </div>
       </div>
     </div>
@@ -656,6 +761,14 @@ defmodule CadenceWeb.MissionLive.Procedures do
           <p :if={@selected_procedure.description} class="text-base-content/60 mt-1">
             {@selected_procedure.description}
           </p>
+          <div :if={length(@selected_procedure.tags || []) > 0} class="flex flex-wrap gap-1 mt-2">
+            <span
+              :for={tag <- @selected_procedure.tags}
+              class="badge badge-sm badge-outline"
+            >
+              {tag}
+            </span>
+          </div>
         </div>
 
         <!-- Version Info -->

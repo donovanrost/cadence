@@ -19,15 +19,20 @@ defmodule Cadence.ProceduresFixtures do
 
     source = attrs[:source] || default_dag_source()
 
+    procedure_attrs = %{
+      organization_id: org.id,
+      mission_id: mission.id,
+      name: attrs[:name] || "Test Procedure #{System.unique_integer([:positive])}",
+      description: attrs[:description] || "A test procedure",
+      type: attrs[:type] || :dag
+    }
+
+    procedure_attrs =
+      if attrs[:tags], do: Map.put(procedure_attrs, :tags, attrs[:tags]), else: procedure_attrs
+
     {:ok, procedure} =
       Procedures.create_procedure(
-        %{
-          organization_id: org.id,
-          mission_id: mission.id,
-          name: attrs[:name] || "Test Procedure #{System.unique_integer([:positive])}",
-          description: attrs[:description] || "A test procedure",
-          type: attrs[:type] || :dag
-        },
+        procedure_attrs,
         source: source,
         user_id: user.id
       )

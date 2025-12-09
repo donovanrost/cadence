@@ -14,14 +14,37 @@ defmodule Cadence.Procedures do
   # ============================================================================
 
   @doc """
-  Lists procedures for an organization, optionally filtered by mission.
+  Lists all unique tags used in procedures for an organization/mission.
   """
-  def list_procedures(organization_id, opts \\ []) do
+  def list_tags(organization_id, opts \\ []) do
     mission_id = Keyword.get(opts, :mission_id)
 
     Procedure
     |> where([p], p.organization_id == ^organization_id)
     |> maybe_filter_by_mission(mission_id)
+    |> select([p], p.tags)
+    |> Repo.all()
+    |> List.flatten()
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Lists procedures for an organization, optionally filtered by mission and tags.
+
+  ## Options
+
+  - `:mission_id` - Filter to procedures in this mission
+  - `:tags` - Filter to procedures that have ALL specified tags (AND logic)
+  """
+  def list_procedures(organization_id, opts \\ []) do
+    mission_id = Keyword.get(opts, :mission_id)
+    tags = Keyword.get(opts, :tags, [])
+
+    Procedure
+    |> where([p], p.organization_id == ^organization_id)
+    |> maybe_filter_by_mission(mission_id)
+    |> maybe_filter_by_tags(tags)
     |> order_by([p], asc: p.name)
     |> Repo.all()
   end
@@ -30,6 +53,12 @@ defmodule Cadence.Procedures do
 
   defp maybe_filter_by_mission(query, mission_id) do
     where(query, [p], p.mission_id == ^mission_id or is_nil(p.mission_id))
+  end
+
+  defp maybe_filter_by_tags(query, []), do: query
+
+  defp maybe_filter_by_tags(query, tags) when is_list(tags) do
+    where(query, [p], fragment("? @> ?", p.tags, ^tags))
   end
 
   @doc """

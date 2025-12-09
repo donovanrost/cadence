@@ -119,6 +119,151 @@ defmodule Cadence.ProceduresTest do
     end
   end
 
+  describe "tags" do
+    test "list_tags/2 returns unique tags across procedures" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      procedure_fixture(organization: org, mission: mission, tags: ["safety", "recovery"])
+      procedure_fixture(organization: org, mission: mission, tags: ["safety", "commissioning"])
+
+      tags = Procedures.list_tags(org.id, mission_id: mission.id)
+      assert tags == ["commissioning", "recovery", "safety"]
+    end
+
+    test "list_tags/2 returns empty list when no tags" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      procedure_fixture(organization: org, mission: mission)
+
+      tags = Procedures.list_tags(org.id, mission_id: mission.id)
+      assert tags == []
+    end
+
+    test "list_procedures/2 filters by tags with AND logic" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      p1 = procedure_fixture(organization: org, mission: mission, tags: ["safety", "recovery"])
+      p2 = procedure_fixture(organization: org, mission: mission, tags: ["safety"])
+
+      # Filter by single tag
+      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["safety"])
+      assert length(results) == 2
+
+      # Filter by multiple tags (AND)
+      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["safety", "recovery"])
+      assert length(results) == 1
+      assert hd(results).id == p1.id
+
+      # No procedures with non-existent tag
+      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["nonexistent"])
+      assert results == []
+
+      # Empty tags list returns all
+      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: [])
+      assert length(results) == 2
+
+      # Verify p2 excluded from multi-tag query
+      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["recovery"])
+      assert length(results) == 1
+      assert hd(results).id == p1.id
+      refute Enum.any?(results, &(&1.id == p2.id))
+    end
+
+    test "tags are normalized to lowercase and deduped" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      {:ok, proc} =
+        Procedures.create_procedure(
+          %{
+            organization_id: org.id,
+            mission_id: mission.id,
+            name: "Tag Test",
+            tags: ["safety", "recovery", "safety"]
+          },
+          user_id: user.id
+        )
+
+      # Tags should be deduped
+      assert proc.tags == ["safety", "recovery"]
+    end
+
+    test "tags are normalized via changeset" do
+      # Test normalization via changeset directly
+      changeset =
+        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+          name: "Tag Test",
+          organization_id: Ecto.UUID.generate(),
+          tags: ["Safety", "RECOVERY", "safety"]
+        })
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :tags) == ["safety", "recovery"]
+    end
+
+    test "invalid tags are rejected" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+
+      # Test validation via changeset directly since create_procedure uses insert!
+      changeset =
+        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+          organization_id: org.id,
+          mission_id: mission.id,
+          name: "Tag Test",
+          tags: ["invalid tag with spaces"]
+        })
+
+      refute changeset.valid?
+      errors = errors_on(changeset)
+      assert "tags must contain only lowercase letters, numbers, and hyphens (max 50 chars)" in errors.tags
+    end
+
+    test "tags starting with hyphen are rejected" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+
+      # Test validation via changeset directly since create_procedure uses insert!
+      changeset =
+        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+          organization_id: org.id,
+          mission_id: mission.id,
+          name: "Tag Test",
+          tags: ["-invalid"]
+        })
+
+      refute changeset.valid?
+      errors = errors_on(changeset)
+      assert "tags must contain only lowercase letters, numbers, and hyphens (max 50 chars)" in errors.tags
+    end
+
+    test "valid tags with hyphens and numbers are accepted" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      {:ok, proc} =
+        Procedures.create_procedure(
+          %{
+            organization_id: org.id,
+            mission_id: mission.id,
+            name: "Tag Test",
+            tags: ["phase-1", "v2-release", "test123"]
+          },
+          user_id: user.id
+        )
+
+      assert proc.tags == ["phase-1", "v2-release", "test123"]
+    end
+
+    test "update_procedure/2 can update tags" do
+      procedure = procedure_fixture(tags: ["old-tag"])
+      {:ok, updated} = Procedures.update_procedure(procedure, %{tags: ["new-tag", "another"]})
+      assert updated.tags == ["new-tag", "another"]
+    end
+  end
+
   describe "versions" do
     test "list_versions/1 returns versions for procedure" do
       procedure = procedure_fixture()
