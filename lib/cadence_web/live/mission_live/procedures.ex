@@ -64,6 +64,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
     |> assign(:selected_procedure, nil)
     |> assign(:available_tags, available_tags)
     |> assign(:selected_tags, selected_tags)
+    |> assign(:show_import_modal, false)
+    |> assign(:import_form, to_form(%{"json" => "", "name" => ""}))
+    |> assign(:import_preview, nil)
   end
 
   defp parse_tag_params(nil), do: []
@@ -496,6 +499,107 @@ defmodule CadenceWeb.MissionLive.Procedures do
     end
   end
 
+  def handle_event("export_procedure", %{"id" => procedure_id}, socket) do
+    procedure = Procedures.get_procedure!(procedure_id)
+    export_data = Procedures.export_procedure(procedure)
+    json = Jason.encode!(export_data, pretty: true)
+    filename = "#{procedure.name |> String.replace(~r/[^a-z0-9_-]/i, "_")}_export.json"
+
+    {:noreply,
+     push_event(socket, "download", %{
+       filename: filename,
+       content: json,
+       content_type: "application/json"
+     })}
+  end
+
+  def handle_event("show_import_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_import_modal, true)
+     |> assign(:import_form, to_form(%{"json" => "", "name" => ""}))
+     |> assign(:import_preview, nil)}
+  end
+
+  def handle_event("hide_import_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_import_modal, false)
+     |> assign(:import_preview, nil)}
+  end
+
+  def handle_event("validate_import", %{"import" => import_params}, socket) do
+    json_string = import_params["json"] || ""
+
+    preview =
+      case Jason.decode(json_string) do
+        {:ok, data} ->
+          # Validate basic structure
+          if is_map(data["procedure"]) and is_binary(data["procedure"]["name"]) do
+            data
+          else
+            nil
+          end
+
+        _ ->
+          nil
+      end
+
+    {:noreply,
+     socket
+     |> assign(:import_form, to_form(import_params))
+     |> assign(:import_preview, preview)}
+  end
+
+  def handle_event("import_procedure", %{"import" => import_params}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+    json_string = import_params["json"] || ""
+    name = import_params["name"]
+    name_opt = if name == "", do: [], else: [name: name]
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        with {:ok, export_data} <- Jason.decode(json_string),
+             {:ok, procedure} <-
+               Procedures.import_procedure(
+                 mission.organization_id,
+                 mission.id,
+                 export_data,
+                 [user_id: scope.user.id] ++ name_opt
+               ) do
+          {:noreply,
+           socket
+           |> put_flash(:info, "Procedure '#{procedure.name}' imported successfully as draft")
+           |> assign(:show_import_modal, false)
+           |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure}")}
+        else
+          {:error, :invalid_export_format} ->
+            {:noreply, put_flash(socket, :error, "Invalid export format")}
+
+          {:error, :name_already_exists} ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               "A procedure with this name already exists. Please provide a different name."
+             )}
+
+          {:error, :missing_version_data} ->
+            {:noreply, put_flash(socket, :error, "Export file contains no version data")}
+
+          {:error, %Jason.DecodeError{}} ->
+            {:noreply, put_flash(socket, :error, "Invalid JSON format")}
+
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to import procedure")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to import procedures")}
+    end
+  end
+
   # ============================================================================
   # PubSub Handlers
   # ============================================================================
@@ -650,6 +754,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
               {@execution_counts.paused} paused
             </div>
           </div>
+          <.button phx-click="show_import_modal" class="btn-ghost btn-sm">
+            <.icon name="hero-arrow-down-tray" class="h-4 w-4 mr-1" /> Import
+          </.button>
           <.link patch={~p"/missions/#{@mission}/procedures/new"}>
             <.button class="btn-primary btn-sm">
               <.icon name="hero-plus" class="h-4 w-4 mr-1" /> New Procedure
@@ -1070,6 +1177,13 @@ defmodule CadenceWeb.MissionLive.Procedures do
         <% else %>
           <!-- Action Buttons -->
           <div class="flex justify-end gap-2 border-t border-base-300 pt-4">
+            <.button
+              phx-click="export_procedure"
+              phx-value-id={@selected_procedure.id}
+              class="btn-ghost"
+            >
+              <.icon name="hero-arrow-up-tray" class="h-4 w-4 mr-1" /> Export
+            </.button>
             <.link patch={~p"/missions/#{@mission}/procedures/#{@selected_procedure.id}/execute"}>
               <.button class="btn-success">
                 <.icon name="hero-play" class="h-4 w-4 mr-1" /> Execute
@@ -1125,6 +1239,89 @@ defmodule CadenceWeb.MissionLive.Procedures do
             </div>
           <% end %>
         </div>
+      </div>
+    </.modal>
+
+    <!-- Import Modal -->
+    <.modal
+      :if={@show_import_modal}
+      id="import-modal"
+      show
+      on_cancel={JS.push("hide_import_modal")}
+    >
+      <div class="space-y-4" id="import-container" phx-hook="Download">
+        <h3 class="text-lg font-bold">Import Procedure</h3>
+        <p class="text-sm text-base-content/60">
+          Import a procedure from a JSON export file. The imported procedure will be created as a new draft that requires approval.
+        </p>
+
+        <.simple_form for={@import_form} phx-submit="import_procedure" phx-change="validate_import">
+          <div class="space-y-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-medium">Paste JSON export</span>
+              </label>
+              <textarea
+                name="import[json]"
+                class="textarea textarea-bordered w-full h-48 font-mono text-sm"
+                placeholder='{"export_version": "1.0.0", ...}'
+                phx-debounce="300"
+              ><%= @import_form[:json].value %></textarea>
+            </div>
+
+            <!-- Import Preview -->
+            <div :if={@import_preview} class="bg-base-200 rounded-lg p-4">
+              <h4 class="font-medium mb-2">Preview</h4>
+              <dl class="space-y-1 text-sm">
+                <div class="flex gap-2">
+                  <dt class="text-base-content/60">Name:</dt>
+                  <dd class="font-medium">{@import_preview["procedure"]["name"]}</dd>
+                </div>
+                <div :if={@import_preview["procedure"]["description"]} class="flex gap-2">
+                  <dt class="text-base-content/60">Description:</dt>
+                  <dd>{@import_preview["procedure"]["description"]}</dd>
+                </div>
+                <div class="flex gap-2">
+                  <dt class="text-base-content/60">Type:</dt>
+                  <dd><span class="badge badge-sm">{@import_preview["procedure"]["type"]}</span></dd>
+                </div>
+                <div :if={length(@import_preview["procedure"]["tags"] || []) > 0} class="flex gap-2">
+                  <dt class="text-base-content/60">Tags:</dt>
+                  <dd>
+                    <span :for={tag <- @import_preview["procedure"]["tags"]} class="badge badge-sm badge-outline mr-1">
+                      {tag}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text">Name override (optional)</span>
+              </label>
+              <input
+                type="text"
+                name="import[name]"
+                class="input input-bordered w-full"
+                placeholder="Leave empty to use original name"
+                value={@import_form[:name].value}
+              />
+              <p class="text-xs text-base-content/60 mt-1">
+                Use this if a procedure with the same name already exists
+              </p>
+            </div>
+          </div>
+
+          <:actions>
+            <.button type="button" class="btn-ghost" phx-click="hide_import_modal">
+              Cancel
+            </.button>
+            <.button type="submit" class="btn-primary" disabled={is_nil(@import_preview)}>
+              <.icon name="hero-arrow-down-tray" class="h-4 w-4 mr-1" /> Import
+            </.button>
+          </:actions>
+        </.simple_form>
       </div>
     </.modal>
     """

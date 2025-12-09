@@ -195,6 +195,24 @@ const SortableHook = {
 }
 
 /**
+ * Download hook for triggering file downloads from LiveView
+ * Listens for "download" events and creates blob downloads
+ */
+const DownloadHook = {
+  mounted() {
+    this.handleEvent("download", ({ filename, content, content_type }) => {
+      const blob = new Blob([content], { type: content_type })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+}
+
+/**
  * LogFilter hook for client-side log filtering
  * Filters log entries by level without server round-trips
  * Uses MutationObserver to catch DOM changes from LiveView updates
@@ -271,7 +289,8 @@ export const Hooks = {
   Sortable: SortableHook,
   DagEditor: DagEditorHook,
   DagViewer: DagViewerHook,
-  ExecutionChannel: ExecutionChannelHook
+  ExecutionChannel: ExecutionChannelHook,
+  Download: DownloadHook
 }
 
 export default Hooks

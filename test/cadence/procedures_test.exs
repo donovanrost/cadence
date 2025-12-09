@@ -652,4 +652,265 @@ defmodule Cadence.ProceduresTest do
       assert procedure.current_version_id == version.id
     end
   end
+
+  describe "export_procedure/1" do
+    test "exports procedure with current version" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      {:ok, procedure} =
+        Procedures.create_procedure(
+          %{
+            organization_id: org.id,
+            mission_id: mission.id,
+            name: "Export Test",
+            description: "A procedure to export",
+            type: :dag,
+            tags: ["safety", "recovery"]
+          },
+          user_id: user.id,
+          source: %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Hello"}}},
+          parameters_schema: %{"param1" => %{"type" => "string"}}
+        )
+
+      export = Procedures.export_procedure(procedure)
+
+      assert export["export_version"] == "1.0.0"
+      assert export["exported_at"] != nil
+      assert export["source_procedure_id"] == procedure.id
+      assert export["source_mission_id"] == mission.id
+      assert export["procedure"]["name"] == "Export Test"
+      assert export["procedure"]["description"] == "A procedure to export"
+      assert export["procedure"]["type"] == "dag"
+      assert export["procedure"]["tags"] == ["safety", "recovery"]
+      assert export["procedure"]["version"]["version_number"] == 1
+      assert export["procedure"]["version"]["source"] == %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Hello"}}}
+      assert export["procedure"]["version"]["parameters_schema"] == %{"param1" => %{"type" => "string"}}
+    end
+
+    test "exports procedure without version when none exists" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+
+      # Directly create a procedure without version (simulating edge case)
+      {:ok, procedure} =
+        Cadence.Repo.insert(%Cadence.Procedures.Procedure{
+          organization_id: org.id,
+          mission_id: mission.id,
+          name: "No Version Procedure",
+          type: :dag,
+          tags: []
+        })
+
+      export = Procedures.export_procedure(procedure)
+
+      assert export["export_version"] == "1.0.0"
+      assert export["procedure"]["name"] == "No Version Procedure"
+      assert export["procedure"]["version"] == nil
+    end
+
+    test "exports approved version data" do
+      procedure = approved_procedure_fixture(tags: ["approved-tag"])
+
+      export = Procedures.export_procedure(procedure)
+
+      assert export["procedure"]["tags"] == ["approved-tag"]
+      assert export["procedure"]["version"]["version_number"] == 1
+    end
+  end
+
+  describe "import_procedure/4" do
+    test "creates new procedure in draft status" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "exported_at" => "2025-01-15T14:30:00Z",
+        "source_procedure_id" => Ecto.UUID.generate(),
+        "source_mission_id" => Ecto.UUID.generate(),
+        "procedure" => %{
+          "name" => "Imported Procedure",
+          "description" => "A test import",
+          "type" => "dag",
+          "tags" => ["imported", "test"],
+          "version" => %{
+            "version_number" => 3,
+            "source" => %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Imported"}}},
+            "parameters_schema" => %{"temp" => %{"type" => "number"}},
+            "allow_hazardous_commands" => false
+          }
+        }
+      }
+
+      {:ok, procedure} =
+        Procedures.import_procedure(org.id, mission.id, export_data, user_id: user.id)
+
+      assert procedure.name == "Imported Procedure"
+      assert procedure.description == "A test import"
+      assert procedure.type == :dag
+      assert procedure.tags == ["imported", "test"]
+
+      version = Procedures.get_version!(procedure.current_version_id)
+      assert version.status == :draft
+      assert version.version_number == 1
+      assert version.source == %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Imported"}}}
+      assert version.parameters_schema == %{"temp" => %{"type" => "number"}}
+    end
+
+    test "returns error for duplicate name" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      # Create existing procedure
+      procedure_fixture(organization: org, mission: mission, name: "Existing Procedure")
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "procedure" => %{
+          "name" => "Existing Procedure",
+          "type" => "dag",
+          "version" => %{
+            "source" => %{"steps" => %{}},
+            "parameters_schema" => %{}
+          }
+        }
+      }
+
+      assert {:error, :name_already_exists} =
+               Procedures.import_procedure(org.id, mission.id, export_data, user_id: user.id)
+    end
+
+    test "allows name override" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      # Create existing procedure with original name
+      procedure_fixture(organization: org, mission: mission, name: "Original Name")
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "procedure" => %{
+          "name" => "Original Name",
+          "type" => "dag",
+          "version" => %{
+            "source" => %{"steps" => %{}},
+            "parameters_schema" => %{}
+          }
+        }
+      }
+
+      {:ok, procedure} =
+        Procedures.import_procedure(org.id, mission.id, export_data,
+          user_id: user.id,
+          name: "Renamed Import"
+        )
+
+      assert procedure.name == "Renamed Import"
+    end
+
+    test "returns error for invalid export format" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      # Missing export_version
+      assert {:error, :invalid_export_format} =
+               Procedures.import_procedure(org.id, mission.id, %{"procedure" => %{}},
+                 user_id: user.id
+               )
+
+      # Wrong export_version
+      assert {:error, :invalid_export_format} =
+               Procedures.import_procedure(
+                 org.id,
+                 mission.id,
+                 %{"export_version" => "2.0.0", "procedure" => %{"name" => "Test", "type" => "dag"}},
+                 user_id: user.id
+               )
+
+      # Missing procedure name
+      assert {:error, :invalid_export_format} =
+               Procedures.import_procedure(
+                 org.id,
+                 mission.id,
+                 %{"export_version" => "1.0.0", "procedure" => %{"type" => "dag"}},
+                 user_id: user.id
+               )
+    end
+
+    test "returns error for missing version data" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "procedure" => %{
+          "name" => "No Version",
+          "type" => "dag",
+          "version" => nil
+        }
+      }
+
+      assert {:error, :missing_version_data} =
+               Procedures.import_procedure(org.id, mission.id, export_data, user_id: user.id)
+    end
+
+    test "imports script type procedures" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "procedure" => %{
+          "name" => "Script Procedure",
+          "type" => "script",
+          "tags" => [],
+          "version" => %{
+            "source" => %{"code" => "cadence.log('Hello')"},
+            "parameters_schema" => %{}
+          }
+        }
+      }
+
+      {:ok, procedure} =
+        Procedures.import_procedure(org.id, mission.id, export_data, user_id: user.id)
+
+      assert procedure.type == :script
+
+      version = Procedures.get_version!(procedure.current_version_id)
+      assert version.source == %{"code" => "cadence.log('Hello')"}
+    end
+
+    test "imports allow_hazardous_commands flag" do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      user = user_fixture()
+
+      export_data = %{
+        "export_version" => "1.0.0",
+        "procedure" => %{
+          "name" => "Hazardous Procedure",
+          "type" => "dag",
+          "version" => %{
+            "source" => %{"steps" => %{}},
+            "parameters_schema" => %{},
+            "allow_hazardous_commands" => true
+          }
+        }
+      }
+
+      {:ok, procedure} =
+        Procedures.import_procedure(org.id, mission.id, export_data, user_id: user.id)
+
+      version = Procedures.get_version!(procedure.current_version_id)
+      assert version.allow_hazardous_commands == true
+    end
+  end
 end
