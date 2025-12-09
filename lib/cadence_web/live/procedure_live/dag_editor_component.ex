@@ -403,8 +403,8 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
           </button>
         <% end %>
       </div>
-
-      <!-- Validation Errors -->
+      
+    <!-- Validation Errors -->
       <%= if @validation_errors != [] do %>
         <div class="alert alert-error mb-4">
           <.icon name="hero-exclamation-triangle" class="h-5 w-5" />
@@ -451,7 +451,8 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
             <div class={[
               "p-4 rounded-lg border-2 transition-colors",
               @selected_step == step_name && "border-primary bg-primary/5",
-              @selected_step != step_name && "border-base-300 bg-base-100 hover:border-base-content/30"
+              @selected_step != step_name &&
+                "border-base-300 bg-base-100 hover:border-base-content/30"
             ]}>
               <div class="flex items-start justify-between">
                 <div
@@ -502,8 +503,8 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
           <% end %>
         </div>
       <% end %>
-
-      <!-- Step Editor Modal -->
+      
+    <!-- Step Editor Modal -->
       <%= if @editing_step do %>
         <.step_editor_modal
           step_name={@editing_step}
@@ -528,13 +529,17 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
       <% "wait" -> %>
         <span>Wait {@step["duration"] || 0}ms</span>
       <% "wait_for" -> %>
-        <span>Wait for <code class="text-xs">{@step["item"]} {@step["operator"]} {@step["value"]}</code></span>
+        <span>
+          Wait for <code class="text-xs">{@step["item"]} {@step["operator"]} {@step["value"]}</code>
+        </span>
       <% "log" -> %>
         <span>{@step["level"] || "info"}: "{@step["message"]}"</span>
       <% "set" -> %>
         <span>Set {@step["name"]} = <code class="text-xs">{inspect(@step["value"])}</code></span>
       <% "assert" -> %>
-        <span>Assert: <code class="text-xs bg-base-200 px-1 rounded">{@step["condition"]}</code></span>
+        <span>
+          Assert: <code class="text-xs bg-base-200 px-1 rounded">{@step["condition"]}</code>
+        </span>
       <% _ -> %>
         <span>Unknown step type</span>
     <% end %>
@@ -583,8 +588,8 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
                 required
               />
             </div>
-
-            <!-- Step Type -->
+            
+    <!-- Step Type -->
             <div>
               <label class="label"><span class="label-text">Type</span></label>
               <select name="step[type]" class="select select-bordered w-full" id="step-type-select">
@@ -595,11 +600,11 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
                 <% end %>
               </select>
             </div>
-
-            <!-- Type-specific fields -->
+            
+    <!-- Type-specific fields -->
             <.step_type_fields step={@step} />
-
-            <!-- Dependencies -->
+            
+    <!-- Dependencies -->
             <div>
               <label class="label"><span class="label-text">Depends On</span></label>
               <%= if @available_deps == [] do %>
@@ -676,7 +681,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               <option value="warn" selected={@step["on_fail"] == "warn"}>Warn and continue</option>
             </select>
           </div>
-
         <% "command" -> %>
           <div>
             <label class="label"><span class="label-text">Command Name</span></label>
@@ -697,7 +701,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               rows="2"
             >{if @step["args"], do: Jason.encode!(@step["args"]), else: ""}</textarea>
           </div>
-
         <% "wait" -> %>
           <div>
             <label class="label"><span class="label-text">Duration (ms)</span></label>
@@ -709,7 +712,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               min="0"
             />
           </div>
-
         <% "wait_for" -> %>
           <div>
             <label class="label"><span class="label-text">Telemetry Item</span></label>
@@ -753,13 +755,14 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               min="0"
             />
           </div>
-
         <% "log" -> %>
           <div>
             <label class="label"><span class="label-text">Level</span></label>
             <select name="step[level]" class="select select-bordered w-full">
               <option value="debug" selected={@step["level"] == "debug"}>Debug</option>
-              <option value="info" selected={@step["level"] == "info" or is_nil(@step["level"])}>Info</option>
+              <option value="info" selected={@step["level"] == "info" or is_nil(@step["level"])}>
+                Info
+              </option>
               <option value="warn" selected={@step["level"] == "warn"}>Warning</option>
               <option value="error" selected={@step["level"] == "error"}>Error</option>
             </select>
@@ -774,7 +777,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               placeholder="Starting procedure..."
             />
           </div>
-
         <% "set" -> %>
           <div>
             <label class="label"><span class="label-text">Variable Name</span></label>
@@ -796,7 +798,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               placeholder="telemetry.PACKET.item"
             />
           </div>
-
         <% "assert" -> %>
           <div>
             <label class="label"><span class="label-text">Condition</span></label>
@@ -818,7 +819,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
               placeholder="Threshold must be positive"
             />
           </div>
-
         <% _ -> %>
           <p class="text-base-content/50">Unknown step type</p>
       <% end %>

@@ -2,6 +2,7 @@ defmodule Cadence.ProceduresTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Procedures
+  alias Cadence.Settings
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -150,7 +151,9 @@ defmodule Cadence.ProceduresTest do
       assert length(results) == 2
 
       # Filter by multiple tags (AND)
-      results = Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["safety", "recovery"])
+      results =
+        Procedures.list_procedures(org.id, mission_id: mission.id, tags: ["safety", "recovery"])
+
       assert length(results) == 1
       assert hd(results).id == p1.id
 
@@ -217,6 +220,7 @@ defmodule Cadence.ProceduresTest do
 
       refute changeset.valid?
       errors = errors_on(changeset)
+
       assert "tags must contain only lowercase letters, numbers, and hyphens (max 50 chars)" in errors.tags
     end
 
@@ -235,6 +239,7 @@ defmodule Cadence.ProceduresTest do
 
       refute changeset.valid?
       errors = errors_on(changeset)
+
       assert "tags must contain only lowercase letters, numbers, and hyphens (max 50 chars)" in errors.tags
     end
 
@@ -443,6 +448,208 @@ defmodule Cadence.ProceduresTest do
 
       error_logs = Procedures.list_logs(execution.id, level: :error)
       assert length(error_logs) == 1
+    end
+  end
+
+  describe "approval workflow" do
+    setup do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      author = user_fixture()
+      approver = user_fixture()
+      approver2 = user_fixture()
+      procedure = procedure_fixture(organization: org, mission: mission, user: author)
+      version = Procedures.get_version!(procedure.current_version_id)
+
+      %{
+        org: org,
+        mission: mission,
+        author: author,
+        approver: approver,
+        approver2: approver2,
+        procedure: procedure,
+        version: version
+      }
+    end
+
+    test "submit_for_review transitions draft to in_review", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      assert version.status == :in_review
+      assert version.submitted_at != nil
+      assert version.submitted_by_id == ctx.author.id
+
+      events = Procedures.list_version_events(version.id)
+      assert length(events) == 1
+      assert hd(events).event_type == :submitted
+    end
+
+    test "submit_for_review fails if not in draft status", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      assert {:error, :invalid_status} = Procedures.submit_for_review(version, ctx.author.id)
+    end
+
+    test "withdraw_submission returns to draft and clears approvals", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      {:ok, withdrawn} = Procedures.withdraw_submission(version, ctx.author.id)
+
+      assert withdrawn.status == :draft
+      assert withdrawn.submitted_at == nil
+      assert withdrawn.submitted_by_id == nil
+      assert Procedures.list_approvals(version.id) == []
+
+      events = Procedures.list_version_events(version.id)
+      assert Enum.any?(events, &(&1.event_type == :withdrawn))
+    end
+
+    test "withdraw_submission fails if not author", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      assert {:error, :not_author} = Procedures.withdraw_submission(version, ctx.approver.id)
+    end
+
+    test "withdraw_submission fails if withdrawal disabled", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :allow_withdrawal, false)
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      assert {:error, :withdrawal_not_allowed} =
+               Procedures.withdraw_submission(version, ctx.author.id)
+    end
+
+    test "add_approval with required=1 immediately approves", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 1)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, %{version: version}} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      assert version.status == :approved
+      assert version.approved_at != nil
+      assert version.approved_by_id == ctx.approver.id
+    end
+
+    test "add_approval with required=2 needs two approvals", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 2)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, %{version: version}} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      # Still in review - need one more approval
+      assert version.status == :in_review
+
+      {:ok, %{version: version}} = Procedures.add_approval(version, ctx.approver2.id, :approved)
+
+      assert version.status == :approved
+    end
+
+    test "rejection returns version to draft", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      {:ok, %{version: version}} =
+        Procedures.add_approval(version, ctx.approver.id, :rejected, comment: "Needs work")
+
+      assert version.status == :draft
+      assert version.rejected_at != nil
+      assert version.rejected_by_id == ctx.approver.id
+      assert version.rejection_reason == "Needs work"
+    end
+
+    test "cannot approve own work when setting is false", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :allow_self_approval, false)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      # Version was created by author, so they can't approve
+      assert {:error, :cannot_approve_own_work} =
+               Procedures.add_approval(version, ctx.author.id, :approved)
+    end
+
+    test "can approve own work when setting is true", ctx do
+      # Default is true, but let's be explicit
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :allow_self_approval, true)
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 1)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+
+      {:ok, %{version: version}} = Procedures.add_approval(version, ctx.author.id, :approved)
+      assert version.status == :approved
+    end
+
+    test "cannot submit decision twice", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      assert {:error, :already_submitted_decision} =
+               Procedures.add_approval(version, ctx.approver.id, :approved)
+    end
+
+    test "get_approval_status returns correct summary", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 2)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      status = Procedures.get_approval_status(version)
+
+      assert status.required == 2
+      assert status.approved == 1
+      assert status.rejected == 0
+      assert status.pending == 1
+      assert status.can_be_approved == false
+      assert status.is_blocked == false
+      assert length(status.approvals) == 1
+    end
+
+    test "get_approval_status shows blocked when pending rejection exists", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 2)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      {:ok, _} =
+        Procedures.add_approval(version, ctx.approver2.id, :rejected, comment: "Needs work")
+
+      # Rejection returns to draft
+      version = Procedures.get_version!(ctx.version.id)
+      assert version.status == :draft
+      assert version.rejection_reason == "Needs work"
+    end
+
+    test "list_approvals returns approvals for version", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved, comment: "LGTM")
+
+      approvals = Procedures.list_approvals(version.id)
+      assert length(approvals) == 1
+
+      approval = hd(approvals)
+      assert approval.decision == :approved
+      assert approval.comment == "LGTM"
+      assert approval.user.id == ctx.approver.id
+    end
+
+    test "list_version_events returns audit trail", ctx do
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      events = Procedures.list_version_events(version.id)
+
+      assert length(events) >= 2
+      event_types = Enum.map(events, & &1.event_type)
+      assert :submitted in event_types
+      assert :approval_added in event_types
+    end
+
+    test "approval updates procedure current_version_id", ctx do
+      {:ok, _} = Settings.set_org(ctx.org, :procedures, :required_approvals, 1)
+
+      {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
+      {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
+
+      procedure = Procedures.get_procedure!(ctx.procedure.id)
+      assert procedure.current_version_id == version.id
     end
   end
 end

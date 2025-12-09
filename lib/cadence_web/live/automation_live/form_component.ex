@@ -59,8 +59,8 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
             options={@action_types}
           />
         </div>
-
-        <!-- Trigger Conditions -->
+        
+    <!-- Trigger Conditions -->
         <div class="border rounded-lg p-4 bg-gray-50">
           <h4 class="text-sm font-medium text-gray-900 mb-3">Trigger Conditions</h4>
           <p class="text-xs text-gray-500 mb-3">
@@ -112,8 +112,8 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
             />
           </div>
         </div>
-
-        <!-- Action Configuration -->
+        
+    <!-- Action Configuration -->
         <div class="border rounded-lg p-4 bg-gray-50">
           <h4 class="text-sm font-medium text-gray-900 mb-3">Action Configuration</h4>
 
@@ -173,8 +173,8 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
             />
           </div>
         </div>
-
-        <!-- Rate Limiting -->
+        
+    <!-- Rate Limiting -->
         <div class="grid grid-cols-2 gap-4">
           <.input
             field={@form[:cooldown_seconds]}

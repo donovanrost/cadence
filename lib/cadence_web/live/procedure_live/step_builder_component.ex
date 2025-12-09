@@ -69,8 +69,8 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
       <% else %>
         <.raw_json_editor raw_json={@raw_json} myself={@myself} />
       <% end %>
-
-      <!-- Hidden input to store serialized steps for form submission -->
+      
+    <!-- Hidden input to store serialized steps for form submission -->
       <input type="hidden" name="source_json" value={serialize_steps(@steps)} />
     </div>
     """
@@ -97,8 +97,8 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
           <% end %>
         </div>
       <% end %>
-
-      <!-- Add Step Dropdown -->
+      
+    <!-- Add Step Dropdown -->
       <div class="dropdown dropdown-top">
         <div tabindex="0" role="button" class="btn btn-outline btn-sm gap-1">
           <.icon name="hero-plus" class="size-4" /> Add Step
@@ -173,8 +173,8 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
           </button>
         </div>
       </div>
-
-      <!-- Step Form (expanded) -->
+      
+    <!-- Step Form (expanded) -->
       <div :if={@is_expanded} class="p-4 pt-0 border-t border-base-300">
         <.step_form step={@step} myself={@myself} />
         <%= if @errors != [] do %>
@@ -799,7 +799,8 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
     {:error, "Wait step requires a positive duration in milliseconds"}
   end
 
-  defp validate_step(%{"type" => "command", "name" => name}) when is_binary(name) and name != "" do
+  defp validate_step(%{"type" => "command", "name" => name})
+       when is_binary(name) and name != "" do
     :ok
   end
 

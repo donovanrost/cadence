@@ -218,7 +218,10 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
     {:noreply,
      socket
      |> update(:step_progress, fn progress -> Map.put(progress, step_name, progress_data) end)
-     |> push_event("step_progress", %{step_name: step_name, progress: stringify_progress(progress_data)})}
+     |> push_event("step_progress", %{
+       step_name: step_name,
+       progress: stringify_progress(progress_data)
+     })}
   end
 
   def handle_info(_msg, socket) do
@@ -450,7 +453,10 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
           {:ok, new_execution} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Retrying from last successful step (#{length(completed_steps)} steps already complete)")
+             |> put_flash(
+               :info,
+               "Retrying from last successful step (#{length(completed_steps)} steps already complete)"
+             )
              |> push_navigate(
                to:
                  ~p"/missions/#{mission}/procedures/#{execution.procedure_id}/executions/#{new_execution}"
@@ -475,7 +481,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
     socket
   end
 
-  defp maybe_clear_running_steps(socket, status) when status in [:completed, :failed, :cancelled] do
+  defp maybe_clear_running_steps(socket, status)
+       when status in [:completed, :failed, :cancelled] do
     # Clear running steps when execution reaches terminal state
     assign(socket, :running_steps, [])
   end
@@ -601,8 +608,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
             class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
-            <.icon name="hero-arrow-left" class="h-4 w-4" />
-            Back to {@procedure.name}
+            <.icon name="hero-arrow-left" class="h-4 w-4" /> Back to {@procedure.name}
           </.link>
           <h1 class="mt-2 text-2xl font-bold text-gray-900">Execution Details</h1>
           <p class="text-sm text-gray-500 font-mono">{@execution.id}</p>
@@ -652,8 +658,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
                 class="btn-warning"
                 title="Resume from where the previous execution failed, skipping already completed steps"
               >
-                <.icon name="hero-forward" class="h-4 w-4 mr-1" />
-                Retry from failure
+                <.icon name="hero-forward" class="h-4 w-4 mr-1" /> Retry from failure
               </.button>
             <% end %>
             <.button
@@ -661,13 +666,13 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
               class={if @execution.status == :failed, do: "btn-secondary", else: "btn-primary"}
             >
               <.icon name="hero-arrow-path" class="h-4 w-4 mr-1" />
-              <%= if @execution.status == :failed, do: "Re-run from start", else: "Re-run" %>
+              {if @execution.status == :failed, do: "Re-run from start", else: "Re-run"}
             </.button>
           <% end %>
         </div>
       </div>
-
-      <!-- Status Card -->
+      
+    <!-- Status Card -->
       <div class="bg-white shadow rounded-lg p-6">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
@@ -721,8 +726,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
           </div>
         <% end %>
       </div>
-
-      <!-- Failure Summary (for failed DAG executions) -->
+      
+    <!-- Failure Summary (for failed DAG executions) -->
       <%= if @execution.status == :failed and @is_dag and (length(@failed_steps) > 0 or length(@timed_out_steps) > 0) do %>
         <div class="bg-red-50 border border-red-200 rounded-lg p-4">
           <div class="flex items-start gap-3">
@@ -779,8 +784,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
           </div>
         </div>
       <% end %>
-
-      <!-- DAG Visualization (for DAG procedures) -->
+      
+    <!-- DAG Visualization (for DAG procedures) -->
       <%= if @is_dag do %>
         <div class="bg-white shadow rounded-lg overflow-hidden" style="height: 500px;">
           <%!-- Outer wrapper updates data attributes, inner div is phx-update="ignore" for hook content --%>
@@ -803,8 +808,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
           </div>
         </div>
       <% end %>
-
-      <!-- Logs Section -->
+      
+    <!-- Logs Section -->
       <div id="log-section" class="bg-white shadow rounded-lg" phx-hook="LogFilter">
         <div class="px-6 py-4 border-b flex items-center justify-between">
           <h2 class="text-lg font-medium text-gray-900">Execution Logs</h2>
@@ -824,8 +829,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
                 <option value="error">Error</option>
               </select>
             </div>
-
-            <!-- Auto-scroll toggle -->
+            
+    <!-- Auto-scroll toggle -->
             <button
               type="button"
               phx-click="toggle_auto_scroll"
@@ -837,8 +842,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             >
               Auto-scroll: {if @auto_scroll, do: "On", else: "Off"}
             </button>
-
-            <!-- Refresh button for terminal states -->
+            
+    <!-- Refresh button for terminal states -->
             <%= if terminal_status?(@execution.status) do %>
               <button
                 type="button"
@@ -850,8 +855,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             <% end %>
           </div>
         </div>
-
-        <!-- Log entries -->
+        
+    <!-- Log entries -->
         <div
           id="log-container"
           data-log-container

@@ -121,10 +121,20 @@ defmodule CadenceWeb.MissionLive.Procedures do
         versions = Procedures.list_versions(procedure.id)
         executions = Procedures.list_executions(procedure_id: procedure.id, limit: 10)
 
+        # Load approval status for in_review versions
+        versions_with_status =
+          Enum.map(versions, fn version ->
+            if version.status == :in_review do
+              Map.put(version, :approval_status, Procedures.get_approval_status(version))
+            else
+              version
+            end
+          end)
+
         socket
         |> assign(:page_title, procedure.name)
         |> assign(:selected_procedure, procedure)
-        |> assign(:versions, versions)
+        |> assign(:versions, versions_with_status)
         |> assign(:recent_executions, executions)
 
       _procedure ->
@@ -198,7 +208,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
   def handle_event("execute", %{"id" => procedure_id}, socket) do
     mission = socket.assigns.mission
 
-    {:noreply, push_patch(socket, to: ~p"/missions/#{mission}/procedures/#{procedure_id}/execute")}
+    {:noreply,
+     push_patch(socket, to: ~p"/missions/#{mission}/procedures/#{procedure_id}/execute")}
   end
 
   def handle_event("start_execution", %{"procedure_id" => procedure_id} = params, socket) do
@@ -280,6 +291,101 @@ defmodule CadenceWeb.MissionLive.Procedures do
     end
   end
 
+  def handle_event("submit_for_review", %{"version_id" => version_id}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        version = Procedures.get_version!(version_id)
+
+        case Procedures.submit_for_review(version, scope.user.id) do
+          {:ok, _version} ->
+            reload_versions_and_procedure(socket, "Version submitted for review")
+
+          {:error, :invalid_status} ->
+            {:noreply, put_flash(socket, :error, "Can only submit draft versions")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to submit: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to submit versions")}
+    end
+  end
+
+  def handle_event("withdraw_submission", %{"version_id" => version_id}, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        version = Procedures.get_version!(version_id)
+
+        case Procedures.withdraw_submission(version, scope.user.id) do
+          {:ok, _version} ->
+            reload_versions_and_procedure(socket, "Submission withdrawn")
+
+          {:error, :invalid_status} ->
+            {:noreply, put_flash(socket, :error, "Can only withdraw versions in review")}
+
+          {:error, :not_author} ->
+            {:noreply, put_flash(socket, :error, "Only the author can withdraw a submission")}
+
+          {:error, :withdrawal_not_allowed} ->
+            {:noreply, put_flash(socket, :error, "Withdrawal is not allowed for this mission")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to withdraw: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to withdraw submissions")}
+    end
+  end
+
+  def handle_event(
+        "add_approval",
+        %{"version_id" => version_id, "decision" => decision} = params,
+        socket
+      ) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok ->
+        version = Procedures.get_version!(version_id)
+        decision_atom = String.to_existing_atom(decision)
+        comment = params["comment"]
+
+        case Procedures.add_approval(version, scope.user.id, decision_atom, comment: comment) do
+          {:ok, %{version: _version}} ->
+            message =
+              if decision_atom == :approved,
+                do: "Approval recorded",
+                else: "Rejection recorded - version returned to draft"
+
+            reload_versions_and_procedure(socket, message)
+
+          {:error, :invalid_status} ->
+            {:noreply, put_flash(socket, :error, "Can only review versions in review status")}
+
+          {:error, :cannot_approve_own_work} ->
+            {:noreply, put_flash(socket, :error, "You cannot approve your own work")}
+
+          {:error, :already_submitted_decision} ->
+            {:noreply, put_flash(socket, :error, "You have already submitted a decision")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to add approval: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to approve versions")}
+    end
+  end
+
   def handle_event("approve_version", %{"version_id" => version_id}, socket) do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
@@ -290,15 +396,7 @@ defmodule CadenceWeb.MissionLive.Procedures do
 
         case Procedures.approve_version(version, scope.user.id) do
           {:ok, _version} ->
-            # Reload procedure and versions
-            procedure = Procedures.get_procedure!(socket.assigns.selected_procedure.id)
-            versions = Procedures.list_versions(procedure.id)
-
-            {:noreply,
-             socket
-             |> assign(:selected_procedure, procedure)
-             |> assign(:versions, versions)
-             |> put_flash(:info, "Version approved and set as current")}
+            reload_versions_and_procedure(socket, "Version approved and set as current")
 
           {:error, reason} ->
             {:noreply, put_flash(socket, :error, "Failed to approve: #{inspect(reason)}")}
@@ -309,7 +407,32 @@ defmodule CadenceWeb.MissionLive.Procedures do
     end
   end
 
-  def handle_event("run_version", %{"version_id" => version_id, "procedure_id" => procedure_id}, socket) do
+  defp reload_versions_and_procedure(socket, message) do
+    procedure = Procedures.get_procedure!(socket.assigns.selected_procedure.id)
+    versions = Procedures.list_versions(procedure.id)
+
+    # Load approval status for in_review versions
+    versions_with_status =
+      Enum.map(versions, fn version ->
+        if version.status == :in_review do
+          Map.put(version, :approval_status, Procedures.get_approval_status(version))
+        else
+          version
+        end
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:selected_procedure, procedure)
+     |> assign(:versions, versions_with_status)
+     |> put_flash(:info, message)}
+  end
+
+  def handle_event(
+        "run_version",
+        %{"version_id" => version_id, "procedure_id" => procedure_id},
+        socket
+      ) do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
@@ -323,7 +446,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
             {:noreply,
              socket
              |> put_flash(:info, "Procedure execution started")
-             |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure_id}/executions/#{execution}")}
+             |> push_navigate(
+               to: ~p"/missions/#{mission}/procedures/#{procedure_id}/executions/#{execution}"
+             )}
 
           {:error, :mission_not_running} ->
             {:noreply, put_flash(socket, :error, "Mission is not currently active")}
@@ -437,7 +562,10 @@ defmodule CadenceWeb.MissionLive.Procedures do
      |> push_patch(to: ~p"/missions/#{mission}/procedures")}
   end
 
-  def handle_info({CadenceWeb.ProcedureLive.ParameterFormComponent, {:submit_parameters, params}}, socket) do
+  def handle_info(
+        {CadenceWeb.ProcedureLive.ParameterFormComponent, {:submit_parameters, params}},
+        socket
+      ) do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
     procedure = socket.assigns.selected_procedure
@@ -452,7 +580,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
             {:noreply,
              socket
              |> put_flash(:info, "Procedure execution started")
-             |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure.id}/executions/#{execution}")}
+             |> push_navigate(
+               to: ~p"/missions/#{mission}/procedures/#{procedure.id}/executions/#{execution}"
+             )}
 
           {:error, :mission_not_running} ->
             {:noreply, put_flash(socket, :error, "Mission is not currently active")}
@@ -477,7 +607,7 @@ defmodule CadenceWeb.MissionLive.Procedures do
   def handle_info({CadenceWeb.ProcedureLive.DagEditorComponent, {:steps_changed, steps}}, socket) do
     # Use send_update to pass the updated steps to the FormComponent
     send_update(CadenceWeb.ProcedureLive.FormComponent,
-      id: socket.assigns.procedure && socket.assigns.procedure.id || :new,
+      id: (socket.assigns.procedure && socket.assigns.procedure.id) || :new,
       dag_steps: steps
     )
 
@@ -527,8 +657,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
           </.link>
         </div>
       </div>
-
-      <!-- Active Executions Banner -->
+      
+    <!-- Active Executions Banner -->
       <div
         :if={length(@active_executions) > 0}
         class="bg-success/10 border border-success/20 rounded-lg p-4"
@@ -582,8 +712,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
           </div>
         </div>
       </div>
-
-      <!-- Tag Filters -->
+      
+    <!-- Tag Filters -->
       <div :if={length(@available_tags) > 0} class="flex flex-wrap items-center gap-2">
         <span class="text-sm text-base-content/60">Filter by tags:</span>
         <button
@@ -608,8 +738,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
           Clear filters
         </button>
       </div>
-
-      <!-- Procedures List -->
+      
+    <!-- Procedures List -->
       <div class="card bg-base-200">
         <div class="card-body p-0">
           <%= if Enum.empty?(@procedures) and length(@selected_tags) > 0 do %>
@@ -621,109 +751,109 @@ defmodule CadenceWeb.MissionLive.Procedures do
               </button>
             </div>
           <% else %>
-          <%= if Enum.empty?(@procedures) do %>
-            <div class="p-8 text-center">
-              <.icon name="hero-document-text" class="h-12 w-12 mx-auto text-base-content/30" />
-              <p class="mt-4 text-base-content/60">No procedures defined</p>
-              <.link patch={~p"/missions/#{@mission}/procedures/new"} class="mt-4 inline-block">
-                <.button class="btn-primary btn-sm">
-                  Create your first procedure
-                </.button>
-              </.link>
-            </div>
-          <% else %>
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Tags</th>
-                  <th>Type</th>
-                  <th>Version</th>
-                  <th>Status</th>
-                  <th class="w-32"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={procedure <- @procedures} class="hover">
-                  <td>
-                    <.link
-                      patch={~p"/missions/#{@mission}/procedures/#{procedure.id}"}
-                      class="font-medium hover:text-primary"
-                    >
-                      {procedure.name}
-                    </.link>
-                    <p :if={procedure.description} class="text-xs text-base-content/50 mt-1">
-                      {String.slice(procedure.description, 0, 60)}
-                    </p>
-                  </td>
-                  <td>
-                    <div class="flex flex-wrap gap-1">
-                      <span
-                        :for={tag <- procedure.tags || []}
-                        class="badge badge-sm badge-outline"
+            <%= if Enum.empty?(@procedures) do %>
+              <div class="p-8 text-center">
+                <.icon name="hero-document-text" class="h-12 w-12 mx-auto text-base-content/30" />
+                <p class="mt-4 text-base-content/60">No procedures defined</p>
+                <.link patch={~p"/missions/#{@mission}/procedures/new"} class="mt-4 inline-block">
+                  <.button class="btn-primary btn-sm">
+                    Create your first procedure
+                  </.button>
+                </.link>
+              </div>
+            <% else %>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Tags</th>
+                    <th>Type</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th class="w-32"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={procedure <- @procedures} class="hover">
+                    <td>
+                      <.link
+                        patch={~p"/missions/#{@mission}/procedures/#{procedure.id}"}
+                        class="font-medium hover:text-primary"
                       >
-                        {tag}
-                      </span>
-                      <span
-                        :if={length(procedure.tags || []) == 0}
-                        class="text-base-content/40 text-xs"
-                      >
-                        -
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span class={[
-                      "badge badge-sm",
-                      procedure.type == :dag && "badge-primary",
-                      procedure.type == :script && "badge-secondary"
-                    ]}>
-                      {procedure.type}
-                    </span>
-                  </td>
-                  <td>
-                    <%= if procedure.current_version_id do %>
-                      <span class="text-sm">v{get_version_number(procedure)}</span>
-                    <% else %>
-                      <span class="text-sm text-base-content/40">-</span>
-                    <% end %>
-                  </td>
-                  <td>
-                    <%= if procedure.current_version_id do %>
-                      <span class="badge badge-sm badge-success">Ready</span>
-                    <% else %>
-                      <span class="badge badge-sm badge-warning">No version</span>
-                    <% end %>
-                  </td>
-                  <td class="text-right">
-                    <div class="flex items-center justify-end gap-1">
-                      <.button
-                        :if={procedure.current_version_id}
-                        phx-click="execute"
-                        phx-value-id={procedure.id}
-                        class="btn-success btn-xs"
-                      >
-                        <.icon name="hero-play" class="h-3 w-3" />
-                      </.button>
-                      <.link patch={~p"/missions/#{@mission}/procedures/#{procedure.id}/edit"}>
-                        <.button class="btn-ghost btn-xs">
-                          <.icon name="hero-pencil" class="h-3 w-3" />
-                        </.button>
+                        {procedure.name}
                       </.link>
-                      <.button
-                        phx-click="delete"
-                        phx-value-id={procedure.id}
-                        class="btn-ghost btn-xs text-error"
-                        data-confirm="Are you sure you want to delete this procedure?"
-                      >
-                        <.icon name="hero-trash" class="h-3 w-3" />
-                      </.button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          <% end %>
+                      <p :if={procedure.description} class="text-xs text-base-content/50 mt-1">
+                        {String.slice(procedure.description, 0, 60)}
+                      </p>
+                    </td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <span
+                          :for={tag <- procedure.tags || []}
+                          class="badge badge-sm badge-outline"
+                        >
+                          {tag}
+                        </span>
+                        <span
+                          :if={length(procedure.tags || []) == 0}
+                          class="text-base-content/40 text-xs"
+                        >
+                          -
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class={[
+                        "badge badge-sm",
+                        procedure.type == :dag && "badge-primary",
+                        procedure.type == :script && "badge-secondary"
+                      ]}>
+                        {procedure.type}
+                      </span>
+                    </td>
+                    <td>
+                      <%= if procedure.current_version_id do %>
+                        <span class="text-sm">v{get_version_number(procedure)}</span>
+                      <% else %>
+                        <span class="text-sm text-base-content/40">-</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <%= if procedure.current_version_id do %>
+                        <span class="badge badge-sm badge-success">Ready</span>
+                      <% else %>
+                        <span class="badge badge-sm badge-warning">No version</span>
+                      <% end %>
+                    </td>
+                    <td class="text-right">
+                      <div class="flex items-center justify-end gap-1">
+                        <.button
+                          :if={procedure.current_version_id}
+                          phx-click="execute"
+                          phx-value-id={procedure.id}
+                          class="btn-success btn-xs"
+                        >
+                          <.icon name="hero-play" class="h-3 w-3" />
+                        </.button>
+                        <.link patch={~p"/missions/#{@mission}/procedures/#{procedure.id}/edit"}>
+                          <.button class="btn-ghost btn-xs">
+                            <.icon name="hero-pencil" class="h-3 w-3" />
+                          </.button>
+                        </.link>
+                        <.button
+                          phx-click="delete"
+                          phx-value-id={procedure.id}
+                          class="btn-ghost btn-xs text-error"
+                          data-confirm="Are you sure you want to delete this procedure?"
+                        >
+                          <.icon name="hero-trash" class="h-3 w-3" />
+                        </.button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            <% end %>
           <% end %>
         </div>
       </div>
@@ -770,64 +900,161 @@ defmodule CadenceWeb.MissionLive.Procedures do
             </span>
           </div>
         </div>
-
-        <!-- Version Info -->
+        
+    <!-- Version Info -->
         <div>
           <h4 class="font-medium mb-2">Versions</h4>
-          <div class="space-y-2">
+          <div class="space-y-3">
             <div
               :for={version <- @versions}
               class={[
-                "flex items-center justify-between p-2 rounded",
-                version.id == @selected_procedure.current_version_id && "bg-success/10 ring-1 ring-success/30",
+                "p-3 rounded-lg",
+                version.id == @selected_procedure.current_version_id &&
+                  "bg-success/10 ring-1 ring-success/30",
                 version.id != @selected_procedure.current_version_id && "bg-base-200"
               ]}
             >
-              <div class="flex items-center gap-2">
-                <span class="font-medium">v{version.version_number}</span>
-                <span class={[
-                  "badge badge-sm",
-                  version.status == :approved && "badge-success",
-                  version.status == :draft && "badge-warning",
-                  version.status == :deprecated && "badge-ghost"
-                ]}>
-                  {version.status}
-                </span>
-                <%= if version.id == @selected_procedure.current_version_id do %>
-                  <span class="badge badge-sm badge-info">current</span>
-                <% end %>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-base-content/50">
-                  {Calendar.strftime(version.inserted_at, "%Y-%m-%d")}
-                </span>
-                <%= if version.status == :draft do %>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium">v{version.version_number}</span>
+                  <span class={[
+                    "badge badge-sm",
+                    version.status == :approved && "badge-success",
+                    version.status == :draft && "badge-outline",
+                    version.status == :in_review && "badge-warning",
+                    version.status == :deprecated && "badge-ghost"
+                  ]}>
+                    <%= if version.status == :in_review do %>
+                      awaiting approval
+                    <% else %>
+                      {version.status}
+                    <% end %>
+                  </span>
+                  <%= if version.id == @selected_procedure.current_version_id do %>
+                    <span class="badge badge-sm badge-info">current</span>
+                  <% end %>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-base-content/50">
+                    {Calendar.strftime(version.inserted_at, "%Y-%m-%d")}
+                  </span>
                   <button
                     type="button"
-                    phx-click="approve_version"
+                    phx-click="run_version"
                     phx-value-version_id={version.id}
-                    class="btn btn-xs btn-success"
-                    title="Approve and make current"
+                    phx-value-procedure_id={@selected_procedure.id}
+                    class="btn btn-xs btn-ghost"
+                    title="Run this version"
                   >
-                    Approve
+                    <.icon name="hero-play" class="h-3 w-3" />
                   </button>
-                <% end %>
-                <button
-                  type="button"
-                  phx-click="run_version"
-                  phx-value-version_id={version.id}
-                  phx-value-procedure_id={@selected_procedure.id}
-                  class="btn btn-xs btn-ghost"
-                  title="Run this version"
-                >
-                  <.icon name="hero-play" class="h-3 w-3" />
-                </button>
+                </div>
               </div>
+              
+    <!-- Draft: Submit for Review button -->
+              <%= if version.status == :draft do %>
+                <div class="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    phx-click="submit_for_review"
+                    phx-value-version_id={version.id}
+                    class="btn btn-xs btn-primary"
+                    title="Submit for review"
+                  >
+                    <.icon name="hero-paper-airplane" class="h-3 w-3 mr-1" /> Submit for Review
+                  </button>
+                </div>
+              <% end %>
+              
+    <!-- In Review: Approval status and actions -->
+              <%= if version.status == :in_review do %>
+                <div class="mt-3 pt-3 border-t border-base-300">
+                  <!-- Approval Progress -->
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-base-content/70">Approval Progress</span>
+                    <span class={[
+                      "text-sm font-medium",
+                      Map.get(version, :approval_status, %{})[:is_blocked] && "text-error",
+                      not Map.get(version, :approval_status, %{})[:is_blocked] && "text-base-content"
+                    ]}>
+                      <%= if Map.get(version, :approval_status) do %>
+                        {version.approval_status.approved} / {version.approval_status.required}
+                        <%= if version.approval_status.is_blocked do %>
+                          <span class="text-error ml-1">(blocked)</span>
+                        <% end %>
+                      <% end %>
+                    </span>
+                  </div>
+                  
+    <!-- Existing Approvals List -->
+                  <%= if Map.get(version, :approval_status) && length(version.approval_status.approvals) > 0 do %>
+                    <div class="space-y-1 mb-3">
+                      <div
+                        :for={approval <- version.approval_status.approvals}
+                        class="flex items-center gap-2 text-sm"
+                      >
+                        <span class={[
+                          "w-2 h-2 rounded-full",
+                          approval.decision == :approved && "bg-success",
+                          approval.decision == :rejected && "bg-error"
+                        ]}>
+                        </span>
+                        <span class="font-medium">
+                          {(approval.user && approval.user.email) || "Unknown"}
+                        </span>
+                        <span class={[
+                          approval.decision == :approved && "text-success",
+                          approval.decision == :rejected && "text-error"
+                        ]}>
+                          {approval.decision}
+                        </span>
+                        <%= if approval.comment do %>
+                          <span class="text-base-content/50">- {approval.comment}</span>
+                        <% end %>
+                      </div>
+                    </div>
+                  <% end %>
+                  
+    <!-- Action Buttons -->
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      phx-click="add_approval"
+                      phx-value-version_id={version.id}
+                      phx-value-decision="approved"
+                      class="btn btn-xs btn-success"
+                      title="Approve this version"
+                    >
+                      <.icon name="hero-check" class="h-3 w-3 mr-1" /> Approve
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="add_approval"
+                      phx-value-version_id={version.id}
+                      phx-value-decision="rejected"
+                      class="btn btn-xs btn-error btn-outline"
+                      title="Reject this version"
+                    >
+                      <.icon name="hero-x-mark" class="h-3 w-3 mr-1" /> Reject
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="withdraw_submission"
+                      phx-value-version_id={version.id}
+                      class="btn btn-xs btn-ghost"
+                      title="Withdraw submission"
+                      data-confirm="Withdraw this submission? All approvals will be cleared."
+                    >
+                      Withdraw
+                    </button>
+                  </div>
+                </div>
+              <% end %>
             </div>
           </div>
         </div>
-
-        <!-- Execute Form -->
+        
+    <!-- Execute Form -->
         <%= if @live_action == :execute do %>
           <div class="border-t border-base-300 pt-4">
             <h4 class="font-medium mb-4">Execute Procedure</h4>
@@ -850,8 +1077,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
             </.link>
           </div>
         <% end %>
-
-        <!-- Recent Executions -->
+        
+    <!-- Recent Executions -->
         <div :if={@live_action == :show}>
           <h4 class="font-medium mb-2">Recent Executions</h4>
           <%= if Enum.empty?(@recent_executions) do %>
@@ -860,7 +1087,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
             <div class="space-y-2">
               <.link
                 :for={execution <- @recent_executions}
-                navigate={~p"/missions/#{@mission}/procedures/#{@selected_procedure}/executions/#{execution}"}
+                navigate={
+                  ~p"/missions/#{@mission}/procedures/#{@selected_procedure}/executions/#{execution}"
+                }
                 class="flex items-center justify-between p-2 bg-base-200 rounded hover:bg-base-300 transition-colors cursor-pointer"
               >
                 <div class="flex items-center gap-2">
@@ -882,7 +1111,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
                     execution.status == :failed && "bg-error/20 text-error",
                     execution.status == :running && "bg-info/20 text-info",
                     execution.status == :paused && "bg-warning/20 text-warning",
-                    execution.status in [:pending, :cancelled] && "bg-base-content/10 text-base-content/50"
+                    execution.status in [:pending, :cancelled] &&
+                      "bg-base-content/10 text-base-content/50"
                   ]}>
                     {Phoenix.Naming.humanize(execution.status)}
                   </span>

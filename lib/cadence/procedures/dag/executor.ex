@@ -421,6 +421,7 @@ defmodule Cadence.Procedures.Dag.Executor do
   end
 
   defp available_concurrency_slots(%{max_concurrency: :unlimited}), do: 1000
+
   defp available_concurrency_slots(%{max_concurrency: max, running: running}) do
     max(0, max - map_size(running))
   end
@@ -440,6 +441,7 @@ defmodule Cadence.Procedures.Dag.Executor do
   # Check if cancellation is signaled (via token or control_signal)
   defp cancellation_signaled?(%{cancellation_token: nil, control_signal: nil}), do: false
   defp cancellation_signaled?(%{control_signal: signal}) when signal != nil, do: true
+
   defp cancellation_signaled?(%{cancellation_token: token}) do
     token && CancellationToken.signaled?(token)
   end
@@ -479,21 +481,36 @@ defmodule Cadence.Procedures.Dag.Executor do
             try do
               result = state.step_executor.(step_name, step, state.context)
               duration = System.monotonic_time() - start_time
-              emit_step_telemetry(:stop, step_name, execution_id, %{duration: duration, result: result_type(result)})
+
+              emit_step_telemetry(:stop, step_name, execution_id, %{
+                duration: duration,
+                result: result_type(result)
+              })
+
               send(parent, {:step_result, step_name, result})
               result
             rescue
               e ->
                 duration = System.monotonic_time() - start_time
                 result = {:error, Exception.message(e)}
-                emit_step_telemetry(:exception, step_name, execution_id, %{duration: duration, exception: e})
+
+                emit_step_telemetry(:exception, step_name, execution_id, %{
+                  duration: duration,
+                  exception: e
+                })
+
                 send(parent, {:step_result, step_name, result})
                 result
             catch
               kind, reason ->
                 duration = System.monotonic_time() - start_time
                 result = {:error, {kind, reason}}
-                emit_step_telemetry(:exception, step_name, execution_id, %{duration: duration, kind: kind})
+
+                emit_step_telemetry(:exception, step_name, execution_id, %{
+                  duration: duration,
+                  kind: kind
+                })
+
                 send(parent, {:step_result, step_name, result})
                 result
             end
@@ -563,7 +580,15 @@ defmodule Cadence.Procedures.Dag.Executor do
           case find_step_by_ref(state, ref) do
             {:ok, step_name} ->
               Logger.error("DAG: Step '#{step_name}' task crashed: #{inspect(reason)}")
-              state = handle_step_result(state, step_name, {:error, {:task_crashed, reason}}, on_status_change)
+
+              state =
+                handle_step_result(
+                  state,
+                  step_name,
+                  {:error, {:task_crashed, reason}},
+                  on_status_change
+                )
+
               run_loop(state, on_status_change)
 
             :not_found ->
@@ -610,8 +635,18 @@ defmodule Cadence.Procedures.Dag.Executor do
         {:DOWN, ref, :process, _pid, reason} when is_reference(ref) ->
           case find_step_by_ref(state, ref) do
             {:ok, step_name} ->
-              Logger.error("DAG: Step '#{step_name}' task crashed during pause: #{inspect(reason)}")
-              state = handle_step_result(state, step_name, {:error, {:task_crashed, reason}}, on_status_change)
+              Logger.error(
+                "DAG: Step '#{step_name}' task crashed during pause: #{inspect(reason)}"
+              )
+
+              state =
+                handle_step_result(
+                  state,
+                  step_name,
+                  {:error, {:task_crashed, reason}},
+                  on_status_change
+                )
+
               wait_for_pause_completion(state, on_status_change)
 
             :not_found ->
@@ -649,7 +684,8 @@ defmodule Cadence.Procedures.Dag.Executor do
         %{
           state
           | completed: MapSet.put(state.completed, step_name),
-            step_results: Map.put(state.step_results, step_name, %{status: :completed, result: step_result}),
+            step_results:
+              Map.put(state.step_results, step_name, %{status: :completed, result: step_result}),
             context: updated_context
         }
 
@@ -660,7 +696,8 @@ defmodule Cadence.Procedures.Dag.Executor do
         %{
           state
           | skipped: MapSet.put(state.skipped, step_name),
-            step_results: Map.put(state.step_results, step_name, %{status: :skipped, reason: reason})
+            step_results:
+              Map.put(state.step_results, step_name, %{status: :skipped, reason: reason})
         }
 
       {:error, reason} ->
@@ -715,7 +752,14 @@ defmodule Cadence.Procedures.Dag.Executor do
            not MapSet.member?(acc.completed, step_name) and
            not MapSet.member?(acc.failed, step_name) do
         Logger.debug("DAG: Blocking step '#{step_name}' (depends on failed step)")
-        notify_status_change(on_status_change, step_name, :blocked, {:dependency_failed, failed_step})
+
+        notify_status_change(
+          on_status_change,
+          step_name,
+          :blocked,
+          {:dependency_failed, failed_step}
+        )
+
         %{acc | blocked: MapSet.put(acc.blocked, step_name)}
       else
         acc

@@ -7,7 +7,17 @@ defmodule Cadence.Procedures do
 
   import Ecto.Query
   alias Cadence.Repo
-  alias Cadence.Procedures.{Procedure, ProcedureVersion, ProcedureExecution, ProcedureLog, Parameters}
+  alias Cadence.Settings
+
+  alias Cadence.Procedures.{
+    Procedure,
+    ProcedureApproval,
+    ProcedureExecution,
+    ProcedureLog,
+    Parameters,
+    ProcedureVersion,
+    ProcedureVersionEvent
+  }
 
   # ============================================================================
   # Procedures
@@ -242,6 +252,260 @@ defmodule Cadence.Procedures do
   end
 
   # ============================================================================
+  # Approval Workflow
+  # ============================================================================
+
+  @doc """
+  Submits a procedure version for review. (draft → in_review)
+
+  Creates an audit event recording the submission.
+  """
+  def submit_for_review(%ProcedureVersion{} = version, user_id) do
+    with :ok <- validate_status(version, :draft) do
+      Repo.transaction(fn ->
+        updated =
+          version
+          |> ProcedureVersion.submit_changeset(%{
+            status: :in_review,
+            submitted_at: DateTime.utc_now(),
+            submitted_by_id: user_id
+          })
+          |> Repo.update!()
+
+        create_version_event!(ProcedureVersionEvent.submitted(updated, user_id))
+
+        updated
+      end)
+    end
+  end
+
+  @doc """
+  Withdraws a submission. (in_review → draft)
+
+  Only the author (submitted_by or created_by) can withdraw, and only if
+  the `allow_withdrawal` setting is enabled for the mission.
+
+  Deletes any existing approvals and creates an audit event.
+  """
+  def withdraw_submission(%ProcedureVersion{} = version, user_id) do
+    with :ok <- validate_status(version, :in_review),
+         :ok <- validate_can_withdraw(version, user_id) do
+      Repo.transaction(fn ->
+        # Delete any existing approvals
+        from(a in ProcedureApproval, where: a.procedure_version_id == ^version.id)
+        |> Repo.delete_all()
+
+        updated =
+          version
+          |> ProcedureVersion.withdrawal_changeset(%{})
+          |> Repo.update!()
+
+        create_version_event!(ProcedureVersionEvent.withdrawn(updated, user_id))
+
+        updated
+      end)
+    end
+  end
+
+  @doc """
+  Adds an approval or rejection decision to a version in review.
+
+  If this is a rejection, the version immediately returns to draft status.
+
+  If this is an approval and the required approval count is met (with no
+  rejections), the version automatically transitions to :approved status.
+
+  ## Options
+
+  - `:comment` - Optional comment explaining the decision
+  """
+  def add_approval(%ProcedureVersion{} = version, user_id, decision, opts \\ []) do
+    comment = Keyword.get(opts, :comment)
+
+    with :ok <- validate_status(version, :in_review),
+         :ok <- validate_can_approve(version, user_id),
+         :ok <- validate_not_already_decided(version, user_id) do
+      Repo.transaction(fn ->
+        # Create approval record
+        {:ok, approval} =
+          %ProcedureApproval{}
+          |> ProcedureApproval.changeset(%{
+            procedure_version_id: version.id,
+            user_id: user_id,
+            decision: decision,
+            comment: comment
+          })
+          |> Repo.insert()
+
+        # Record audit event
+        create_version_event!(
+          ProcedureVersionEvent.approval_added(version, user_id, decision, comment)
+        )
+
+        # Handle decision consequences
+        updated_version = handle_approval_decision(version, user_id, decision, comment)
+
+        %{approval: approval, version: updated_version}
+      end)
+    end
+  end
+
+  @doc """
+  Gets approval status summary for a version.
+
+  Returns a map with:
+  - `:required` - Number of approvals required
+  - `:approved` - Number of approvals received
+  - `:rejected` - Number of rejections received
+  - `:pending` - Number of approvals still needed
+  - `:can_be_approved` - Whether the version has enough approvals
+  - `:is_blocked` - Whether there are any rejections
+  - `:approvals` - List of approval records with users preloaded
+  """
+  def get_approval_status(%ProcedureVersion{} = version) do
+    version = Repo.preload(version, procedure: :mission, approvals: :user)
+    required = Settings.get(version.procedure.mission, :procedures, :required_approvals)
+
+    approvals = version.approvals
+    approved_count = Enum.count(approvals, &(&1.decision == :approved))
+    rejected_count = Enum.count(approvals, &(&1.decision == :rejected))
+
+    %{
+      required: required,
+      approved: approved_count,
+      rejected: rejected_count,
+      pending: max(0, required - approved_count),
+      can_be_approved: approved_count >= required and rejected_count == 0,
+      is_blocked: rejected_count > 0,
+      approvals: approvals
+    }
+  end
+
+  @doc """
+  Lists all approvals for a version.
+  """
+  def list_approvals(version_id) do
+    from(a in ProcedureApproval,
+      where: a.procedure_version_id == ^version_id,
+      preload: :user,
+      order_by: [asc: a.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Lists all audit events for a version.
+
+  ## Options
+
+  - `:limit` - Maximum number of events to return (default: 100)
+  """
+  def list_version_events(version_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+
+    from(e in ProcedureVersionEvent,
+      where: e.procedure_version_id == ^version_id,
+      preload: :user,
+      order_by: [asc: e.inserted_at],
+      limit: ^limit
+    )
+    |> Repo.all()
+  end
+
+  # Private approval workflow helpers
+
+  defp validate_status(version, expected) do
+    if version.status == expected, do: :ok, else: {:error, :invalid_status}
+  end
+
+  defp validate_can_withdraw(version, user_id) do
+    version = Repo.preload(version, procedure: :mission)
+
+    if Settings.get(version.procedure.mission, :procedures, :allow_withdrawal) do
+      if version.submitted_by_id == user_id or version.created_by_id == user_id do
+        :ok
+      else
+        {:error, :not_author}
+      end
+    else
+      {:error, :withdrawal_not_allowed}
+    end
+  end
+
+  defp validate_can_approve(version, user_id) do
+    version = Repo.preload(version, procedure: :mission)
+    allow_self = Settings.get(version.procedure.mission, :procedures, :allow_self_approval)
+
+    if not allow_self and version.created_by_id == user_id do
+      {:error, :cannot_approve_own_work}
+    else
+      :ok
+    end
+  end
+
+  defp validate_not_already_decided(version, user_id) do
+    case Repo.get_by(ProcedureApproval, procedure_version_id: version.id, user_id: user_id) do
+      nil -> :ok
+      _ -> {:error, :already_submitted_decision}
+    end
+  end
+
+  defp handle_approval_decision(version, user_id, :rejected, reason) do
+    updated =
+      version
+      |> ProcedureVersion.rejection_changeset(%{
+        rejected_at: DateTime.utc_now(),
+        rejected_by_id: user_id,
+        rejection_reason: reason
+      })
+      |> Repo.update!()
+
+    create_version_event!(ProcedureVersionEvent.rejected(updated, user_id, reason))
+
+    updated
+  end
+
+  defp handle_approval_decision(version, user_id, :approved, _comment) do
+    version = Repo.preload(version, procedure: :mission)
+    required = Settings.get(version.procedure.mission, :procedures, :required_approvals)
+    current_approvals = count_approvals(version.id)
+
+    if current_approvals >= required do
+      updated =
+        version
+        |> ProcedureVersion.approval_changeset(%{
+          status: :approved,
+          approved_at: DateTime.utc_now(),
+          approved_by_id: user_id
+        })
+        |> Repo.update!()
+
+      # Update procedure's current version pointer
+      from(p in Procedure, where: p.id == ^version.procedure_id)
+      |> Repo.update_all(set: [current_version_id: version.id])
+
+      create_version_event!(ProcedureVersionEvent.approved(updated, user_id))
+
+      updated
+    else
+      version
+    end
+  end
+
+  defp count_approvals(version_id) do
+    from(a in ProcedureApproval,
+      where: a.procedure_version_id == ^version_id and a.decision == :approved
+    )
+    |> Repo.aggregate(:count)
+  end
+
+  defp create_version_event!(attrs) do
+    %ProcedureVersionEvent{}
+    |> ProcedureVersionEvent.changeset(attrs)
+    |> Repo.insert!()
+  end
+
+  # ============================================================================
   # Executions
   # ============================================================================
 
@@ -349,7 +613,8 @@ defmodule Cadence.Procedures do
       organization_id: procedure.organization_id
     }
 
-    with {:ok, validated_params} <- maybe_validate_params(parameters, version, validation_context, skip_validation) do
+    with {:ok, validated_params} <-
+           maybe_validate_params(parameters, version, validation_context, skip_validation) do
       # Create execution record
       execution_attrs = %{
         procedure_id: procedure_id,

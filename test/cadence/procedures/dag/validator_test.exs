@@ -19,7 +19,11 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
         "init" => %{"type" => "log", "message" => "Start"},
         "branch_a" => %{"type" => "wait", "duration" => 100, "depends_on" => ["init"]},
         "branch_b" => %{"type" => "wait", "duration" => 100, "depends_on" => ["init"]},
-        "join" => %{"type" => "log", "message" => "Done", "depends_on" => ["branch_a", "branch_b"]}
+        "join" => %{
+          "type" => "log",
+          "message" => "Done",
+          "depends_on" => ["branch_a", "branch_b"]
+        }
       }
 
       assert :ok = Validator.validate(steps)

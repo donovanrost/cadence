@@ -231,6 +231,7 @@ defmodule CadenceWeb.ExecutionChannel do
   defp format_datetime(dt), do: DateTime.to_iso8601(dt)
 
   defp serialize_data(nil), do: nil
+
   defp serialize_data(data) when is_map(data) do
     # Convert atoms to strings for JSON serialization
     Map.new(data, fn
@@ -238,6 +239,7 @@ defmodule CadenceWeb.ExecutionChannel do
       {k, v} -> {k, serialize_data(v)}
     end)
   end
+
   defp serialize_data(data) when is_atom(data), do: Atom.to_string(data)
   defp serialize_data(data), do: data
 end

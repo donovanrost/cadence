@@ -123,12 +123,13 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
       target: target
     } do
       # Create rule with auto_acknowledge
-      rule = alarm_rule_fixture(
-        organization: org,
-        mission: mission,
-        conditions: %{"limit_state" => ["red"]},
-        auto_acknowledge: true
-      )
+      rule =
+        alarm_rule_fixture(
+          organization: org,
+          mission: mission,
+          conditions: %{"limit_state" => ["red"]},
+          auto_acknowledge: true
+        )
 
       # Verify the rule was created correctly
       assert rule.auto_acknowledge == true
@@ -159,12 +160,13 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
       target: target
     } do
       # Create rule with auto_shelve
-      rule = alarm_rule_fixture(
-        organization: org,
-        mission: mission,
-        conditions: %{"limit_state" => ["red"]},
-        auto_shelve_duration_minutes: 30
-      )
+      rule =
+        alarm_rule_fixture(
+          organization: org,
+          mission: mission,
+          conditions: %{"limit_state" => ["red"]},
+          auto_shelve_duration_minutes: 30
+        )
 
       assert rule.auto_shelve_duration_minutes == 30
 
@@ -295,7 +297,11 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
       assert cleared.status == :cleared
     end
 
-    test "returns :no_action when no alarm to clear", %{org: org, mission: mission, target: target} do
+    test "returns :no_action when no alarm to clear", %{
+      org: org,
+      mission: mission,
+      target: target
+    } do
       # No existing alarm
 
       event =
@@ -402,11 +408,12 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
         )
 
       # Send escalation event
-      event = build_escalation_event(
-        mission_id: mission.id,
-        target_id: target.id,
-        item_name: "HEALTH.cpu_temp"
-      )
+      event =
+        build_escalation_event(
+          mission_id: mission.id,
+          target_id: target.id,
+          item_name: "HEALTH.cpu_temp"
+        )
 
       result = TelemetryLimitHandler.handle(event, org.id)
 
@@ -449,11 +456,12 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
         )
 
       # Send deescalation event
-      event = build_deescalation_event(
-        mission_id: mission.id,
-        target_id: target.id,
-        item_name: "HEALTH.cpu_temp"
-      )
+      event =
+        build_deescalation_event(
+          mission_id: mission.id,
+          target_id: target.id,
+          item_name: "HEALTH.cpu_temp"
+        )
 
       result = TelemetryLimitHandler.handle(event, org.id)
 

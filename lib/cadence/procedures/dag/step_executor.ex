@@ -82,7 +82,9 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
     # Resolve template variables in args
     resolved_args = resolve_values(args, context)
 
-    Logger.info("DAG step '#{step_name}': Sending command #{name} with args #{inspect(resolved_args)}")
+    Logger.info(
+      "DAG step '#{step_name}': Sending command #{name} with args #{inspect(resolved_args)}"
+    )
 
     case send_command(name, resolved_args, context) do
       {:ok, result} ->
@@ -250,7 +252,13 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
     do_wait_with_progress(step_name, end_time, update_interval, progress_callback, duration)
   end
 
-  defp do_wait_with_progress(step_name, end_time, update_interval, progress_callback, total_duration) do
+  defp do_wait_with_progress(
+         step_name,
+         end_time,
+         update_interval,
+         progress_callback,
+         total_duration
+       ) do
     now = System.monotonic_time(:millisecond)
     remaining = max(0, end_time - now)
 
@@ -259,6 +267,7 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
     else
       # Emit progress
       elapsed = total_duration - remaining
+
       progress_callback.(step_name, %{
         type: :wait,
         total_ms: total_duration,
@@ -270,20 +279,56 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
       sleep_time = min(update_interval, remaining)
       Process.sleep(sleep_time)
 
-      do_wait_with_progress(step_name, end_time, update_interval, progress_callback, total_duration)
+      do_wait_with_progress(
+        step_name,
+        end_time,
+        update_interval,
+        progress_callback,
+        total_duration
+      )
     end
   end
 
-  defp wait_for_condition(step_name, item, operator, expected, timeout, context, progress_callback) do
+  defp wait_for_condition(
+         step_name,
+         item,
+         operator,
+         expected,
+         timeout,
+         context,
+         progress_callback
+       ) do
     deadline = System.monotonic_time(:millisecond) + timeout
     poll_interval = 100
     # Emit progress every 500ms to avoid flooding
     progress_interval = 500
 
-    do_wait_for(step_name, item, operator, expected, deadline, poll_interval, progress_interval, context, progress_callback, 0)
+    do_wait_for(
+      step_name,
+      item,
+      operator,
+      expected,
+      deadline,
+      poll_interval,
+      progress_interval,
+      context,
+      progress_callback,
+      0
+    )
   end
 
-  defp do_wait_for(step_name, item, operator, expected, deadline, poll_interval, progress_interval, context, progress_callback, last_progress_at) do
+  defp do_wait_for(
+         step_name,
+         item,
+         operator,
+         expected,
+         deadline,
+         poll_interval,
+         progress_interval,
+         context,
+         progress_callback,
+         last_progress_at
+       ) do
     now = System.monotonic_time(:millisecond)
 
     if now >= deadline do
@@ -296,8 +341,9 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
           else
             # Emit progress if callback provided and enough time has passed
             last_progress_at =
-              if is_function(progress_callback, 2) and (now - last_progress_at) >= progress_interval do
+              if is_function(progress_callback, 2) and now - last_progress_at >= progress_interval do
                 remaining_ms = max(0, deadline - now)
+
                 progress_callback.(step_name, %{
                   type: :wait_for,
                   item: item,
@@ -306,20 +352,34 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
                   actual: actual,
                   remaining_ms: remaining_ms
                 })
+
                 now
               else
                 last_progress_at
               end
 
             Process.sleep(poll_interval)
-            do_wait_for(step_name, item, operator, expected, deadline, poll_interval, progress_interval, context, progress_callback, last_progress_at)
+
+            do_wait_for(
+              step_name,
+              item,
+              operator,
+              expected,
+              deadline,
+              poll_interval,
+              progress_interval,
+              context,
+              progress_callback,
+              last_progress_at
+            )
           end
 
         {:error, _} ->
           # Emit progress even when value not available
           last_progress_at =
-            if is_function(progress_callback, 2) and (now - last_progress_at) >= progress_interval do
+            if is_function(progress_callback, 2) and now - last_progress_at >= progress_interval do
               remaining_ms = max(0, deadline - now)
+
               progress_callback.(step_name, %{
                 type: :wait_for,
                 item: item,
@@ -328,13 +388,26 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
                 actual: nil,
                 remaining_ms: remaining_ms
               })
+
               now
             else
               last_progress_at
             end
 
           Process.sleep(poll_interval)
-          do_wait_for(step_name, item, operator, expected, deadline, poll_interval, progress_interval, context, progress_callback, last_progress_at)
+
+          do_wait_for(
+            step_name,
+            item,
+            operator,
+            expected,
+            deadline,
+            poll_interval,
+            progress_interval,
+            context,
+            progress_callback,
+            last_progress_at
+          )
       end
     end
   end
@@ -342,12 +415,16 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
   # Simple comparison for wait_for conditions
   defp compare_for_wait(actual, ">=", expected) when is_number(actual) and is_number(expected),
     do: actual >= expected
+
   defp compare_for_wait(actual, "<=", expected) when is_number(actual) and is_number(expected),
     do: actual <= expected
+
   defp compare_for_wait(actual, ">", expected) when is_number(actual) and is_number(expected),
     do: actual > expected
+
   defp compare_for_wait(actual, "<", expected) when is_number(actual) and is_number(expected),
     do: actual < expected
+
   defp compare_for_wait(actual, "==", expected), do: actual == expected
   defp compare_for_wait(actual, "!=", expected), do: actual != expected
   defp compare_for_wait(_, _, _), do: false
@@ -402,10 +479,12 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
       # Handle ${input.name} syntax - interpolate input references first
       InputReferences.has_references?(value) ->
         params = context[:params] || %{}
+
         case InputReferences.interpolate(value, params) do
           {:ok, interpolated} ->
             # The result may still need further resolution (e.g., if it became a params. reference)
             if interpolated == value, do: value, else: resolve_value(interpolated, context)
+
           {:error, :missing_input, name} ->
             Logger.warning("Missing input reference: ${input.#{name}}")
             value
@@ -413,7 +492,9 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
       String.starts_with?(value, "params.") ->
         param_name = String.replace_prefix(value, "params.", "")
-        get_in(context, [:params, param_name]) || get_in(context, [:params, String.to_atom(param_name)])
+
+        get_in(context, [:params, param_name]) ||
+          get_in(context, [:params, String.to_atom(param_name)])
 
       String.starts_with?(value, "trigger.") ->
         path = String.replace_prefix(value, "trigger.", "") |> String.split(".")
@@ -425,6 +506,7 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
       String.starts_with?(value, "telemetry.") ->
         item = String.replace_prefix(value, "telemetry.", "")
+
         case get_telemetry_value(item, context) do
           {:ok, val} -> val
           _ -> nil
@@ -442,18 +524,25 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
   # Resolve a duration value - handles input references and ensures integer result
   defp resolve_duration(value, _context) when is_integer(value), do: value
+
   defp resolve_duration(value, context) when is_binary(value) do
     resolved = resolve_value(value, context)
+
     case resolved do
-      v when is_integer(v) -> v
+      v when is_integer(v) ->
+        v
+
       v when is_binary(v) ->
         case Integer.parse(v) do
           {int, _} -> int
           :error -> 0
         end
-      _ -> 0
+
+      _ ->
+        0
     end
   end
+
   defp resolve_duration(_, _), do: 0
 
   defp resolve_template(template, context) do
@@ -465,10 +554,12 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
   defp get_nested(map, []), do: map
   defp get_nested(nil, _), do: nil
+
   defp get_nested(map, [key | rest]) when is_map(map) do
     value = Map.get(map, key) || Map.get(map, String.to_atom(key))
     get_nested(value, rest)
   end
+
   defp get_nested(_, _), do: nil
 
   defp log_message(:debug, msg), do: Logger.debug(msg)

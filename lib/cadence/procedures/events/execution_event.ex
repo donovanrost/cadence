@@ -98,8 +98,11 @@ defmodule Cadence.Procedures.Events.ExecutionEvent do
       end
 
     case Outbox.insert(attrs, insert_opts) do
-      {:ok, event} -> event
-      {:error, changeset} -> raise "Failed to insert execution event: #{inspect(changeset.errors)}"
+      {:ok, event} ->
+        event
+
+      {:error, changeset} ->
+        raise "Failed to insert execution event: #{inspect(changeset.errors)}"
     end
   end
 

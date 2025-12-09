@@ -223,9 +223,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   @impl true
   def handle_cast({:control_signal, signal}, state) do
-    Logger.info(
-      "Received control signal #{inspect(signal)} for execution #{state.execution_id}"
-    )
+    Logger.info("Received control signal #{inspect(signal)} for execution #{state.execution_id}")
 
     case signal do
       :pause when state.status in [:running, :pausing] ->
@@ -234,7 +232,13 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
         state =
           if state.status == :running do
             new_state = update_status(state, :pausing)
-            persist_log(new_state, :info, "Pause requested, waiting for current step to complete...")
+
+            persist_log(
+              new_state,
+              :info,
+              "Pause requested, waiting for current step to complete..."
+            )
+
             new_state
           else
             # Already in :pausing, just log
@@ -446,7 +450,12 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
     # This is lightweight (no DB writes) to avoid performance issues with frequent updates
     on_progress = fn step_name, progress_data ->
       topic = "procedure:#{state.execution_id}"
-      Phoenix.PubSub.broadcast(Cadence.PubSub, topic, {:dag_step_progress, step_name, progress_data})
+
+      Phoenix.PubSub.broadcast(
+        Cadence.PubSub,
+        topic,
+        {:dag_step_progress, step_name, progress_data}
+      )
     end
 
     # Create step executor with progress callback
@@ -494,9 +503,10 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
       on_status_change: on_status_change
     ]
 
-    task = Task.async(fn ->
-      Executor.execute(steps, step_executor, dag_context, opts)
-    end)
+    task =
+      Task.async(fn ->
+        Executor.execute(steps, step_executor, dag_context, opts)
+      end)
 
     # Return immediately - result will be handled in handle_info via Task ref pattern
     # Store the Task struct so we can match on ref and forward control signals
@@ -508,7 +518,9 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   end
 
   defp handle_dag_completion(state, result) do
-    Logger.info("DAG execution completed: #{length(result.completed_steps)} completed, #{length(result.skipped_steps)} skipped")
+    Logger.info(
+      "DAG execution completed: #{length(result.completed_steps)} completed, #{length(result.skipped_steps)} skipped"
+    )
 
     # Use ExecutionPersistence for atomic update + outbox event
     case ExecutionPersistence.persist_dag_result(state.execution, :completed, result) do
@@ -590,10 +602,12 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   end
 
   defp handle_abort_with_message(state, message) do
-    state = update_status(state, :failed, %{
-      error_message: message,
-      error_step_index: state.current_step_index
-    })
+    state =
+      update_status(state, :failed, %{
+        error_message: message,
+        error_step_index: state.current_step_index
+      })
+
     persist_log(state, :error, "Execution aborted: #{message}")
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
@@ -608,10 +622,13 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   defp handle_failure(state, step_index, reason) do
     error_message = format_error_reason(reason)
-    state = update_status(state, :failed, %{
-      error_message: error_message,
-      error_step_index: step_index
-    })
+
+    state =
+      update_status(state, :failed, %{
+        error_message: error_message,
+        error_step_index: step_index
+      })
+
     persist_log(state, :error, "Step #{step_index} failed: #{error_message}")
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}

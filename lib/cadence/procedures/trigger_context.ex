@@ -167,7 +167,8 @@ defmodule Cadence.Procedures.TriggerContext do
   or when building from stored data.
   """
   @spec build(map()) :: t()
-  def build(%{type: type} = context) when type in [:manual, :schedule, :alarm, :telemetry_event] do
+  def build(%{type: type} = context)
+      when type in [:manual, :schedule, :alarm, :telemetry_event] do
     %{
       type: type,
       source_id: context[:source_id],

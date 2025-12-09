@@ -106,7 +106,9 @@ defmodule Cadence.Alarms.Engine.Matcher do
   end
 
   # Pre-compiled regex from RuleCache - use directly without recompiling
-  defp matches_condition?(:compiled_item_name_pattern, %Regex{} = regex, %TelemetryLimitEvent{item_name: item_name}) do
+  defp matches_condition?(:compiled_item_name_pattern, %Regex{} = regex, %TelemetryLimitEvent{
+         item_name: item_name
+       }) do
     Regex.match?(regex, item_name)
   end
 

@@ -75,12 +75,15 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
 
       # Should transition to running
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: status} -> status in [:running, :completed]
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: status} -> status in [:running, :completed]
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       GenServer.stop(pid)
     end
@@ -168,23 +171,29 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
 
     test "transitions running to pausing", %{execution: execution} do
       # Wait for execution to start running
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: :running} -> true
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: :running} -> true
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       # Send pause signal
       assert :ok = ExecutionProcess.pause(execution.id)
 
       # Should transition to pausing or paused
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: status} -> status in [:pausing, :paused]
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: status} -> status in [:pausing, :paused]
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
     end
 
     test "returns error for non-existent execution" do
@@ -219,12 +228,15 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       subscribe_to_execution(execution.id)
 
       # Wait for execution to start
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: :running} -> true
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: :running} -> true
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       # Send abort signal
       assert :ok = ExecutionProcess.abort(execution.id)
@@ -273,39 +285,53 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       subscribe_to_execution(execution.id)
 
       # Wait for execution to be running
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: :running} -> true
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: :running} -> true
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       # Pause the execution
       assert :ok = ExecutionProcess.pause(execution.id)
 
       # Wait for it to be paused (or pausing) - give more time
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: status} when status in [:pausing, :paused] -> true
-          _ -> false
-        end
-      end, timeout: 5000, message: "Execution did not pause")
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: status} when status in [:pausing, :paused] -> true
+            _ -> false
+          end
+        end,
+        timeout: 5000,
+        message: "Execution did not pause"
+      )
 
       # Resume the execution
       result = ExecutionProcess.resume(execution.id)
-      assert result in [:ok, {:error, :not_found}]  # Process might have stopped during pause
+      # Process might have stopped during pause
+      assert result in [:ok, {:error, :not_found}]
 
       # If we successfully resumed, check the status
       # The execution might complete quickly or still be running
       if result == :ok do
-        assert_eventually(fn ->
-          state = ExecutionProcess.get_state(execution.id)
-          case state do
-            %{status: status} -> status in [:running, :completed, :paused]
-            {:error, :not_found} -> true  # Process stopped
-            nil -> true  # Process not found
-          end
-        end, timeout: 3000)
+        assert_eventually(
+          fn ->
+            state = ExecutionProcess.get_state(execution.id)
+
+            case state do
+              %{status: status} -> status in [:running, :completed, :paused]
+              # Process stopped
+              {:error, :not_found} -> true
+              # Process not found
+              nil -> true
+            end
+          end,
+          timeout: 3000
+        )
       end
     end
 
@@ -359,7 +385,8 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
         "steps" => %{
           "step_1" => %{
             "type" => "assert",
-            "condition" => "1 == 0",  # Simple false comparison
+            # Simple false comparison
+            "condition" => "1 == 0",
             "message" => "Assertion intentionally failed for test",
             "depends_on" => []
           }
@@ -382,7 +409,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       # the executor may return :aborted which results in :cancelled status
       # Both are acceptable outcomes for "step failure with abort mode"
       assert final.status in [:failed, :cancelled],
-        "Expected status to be :failed or :cancelled, got #{final.status}"
+             "Expected status to be :failed or :cancelled, got #{final.status}"
     end
 
     test "broadcasts step events during execution", %{org: org, mission: mission} do
@@ -407,10 +434,11 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       messages = collect_messages(100)
 
       # Check for status changes
-      status_changes = Enum.filter(messages, fn
-        {:status_changed, _, _} -> true
-        _ -> false
-      end)
+      status_changes =
+        Enum.filter(messages, fn
+          {:status_changed, _, _} -> true
+          _ -> false
+        end)
 
       assert length(status_changes) >= 1
     end
@@ -436,12 +464,14 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
         """
       }
 
-      procedure = approved_procedure_fixture(
-        organization: org,
-        mission: mission,
-        source: source,
-        type: :script
-      )
+      procedure =
+        approved_procedure_fixture(
+          organization: org,
+          mission: mission,
+          source: source,
+          type: :script
+        )
+
       execution = execution_fixture(procedure: procedure, mission: mission, organization: org)
 
       subscribe_to_execution(execution.id)
@@ -463,12 +493,14 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
         """
       }
 
-      procedure = approved_procedure_fixture(
-        organization: org,
-        mission: mission,
-        source: source,
-        type: :script
-      )
+      procedure =
+        approved_procedure_fixture(
+          organization: org,
+          mission: mission,
+          source: source,
+          type: :script
+        )
+
       execution = execution_fixture(procedure: procedure, mission: mission, organization: org)
 
       {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
@@ -485,12 +517,14 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
     test "handles missing code key", %{org: org, mission: mission} do
       source = %{"invalid" => "source"}
 
-      procedure = approved_procedure_fixture(
-        organization: org,
-        mission: mission,
-        source: source,
-        type: :script
-      )
+      procedure =
+        approved_procedure_fixture(
+          organization: org,
+          mission: mission,
+          source: source,
+          type: :script
+        )
+
       execution = execution_fixture(procedure: procedure, mission: mission, organization: org)
 
       {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
@@ -527,12 +561,15 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
 
       # Wait for it to start running
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: :running} -> true
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: :running} -> true
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       on_exit(fn ->
         if Process.alive?(pid), do: GenServer.stop(pid)
@@ -582,12 +619,15 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       send(pid, {:abort_requested, "User requested abort"})
 
       # Should set control signal
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{control_signal: :abort} -> true
-          _ -> false
-        end
-      end, timeout: 1000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{control_signal: :abort} -> true
+            _ -> false
+          end
+        end,
+        timeout: 1000
+      )
     end
 
     test "ignores unknown messages", %{pid: pid} do
@@ -722,12 +762,15 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
 
       # Wait for running state
-      assert_eventually(fn ->
-        case ExecutionProcess.get_state(execution.id) do
-          %{status: :running} -> true
-          _ -> false
-        end
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          case ExecutionProcess.get_state(execution.id) do
+            %{status: :running} -> true
+            _ -> false
+          end
+        end,
+        timeout: 2000
+      )
 
       # Send rapid signals
       ExecutionProcess.pause(execution.id)

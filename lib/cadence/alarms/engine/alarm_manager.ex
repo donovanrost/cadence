@@ -166,7 +166,10 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   @spec update_alarm_value(String.t(), String.t(), float(), atom(), atom(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, term()}
   def update_alarm_value(mission_id, alarm_id, value, limit_state, severity, message \\ nil) do
-    GenServer.call(via_tuple(mission_id), {:update_value, alarm_id, value, limit_state, severity, message})
+    GenServer.call(
+      via_tuple(mission_id),
+      {:update_value, alarm_id, value, limit_state, severity, message}
+    )
   end
 
   # ============================================================================
@@ -182,11 +185,12 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
     # Create anonymous ETS table for active alarms cache
     # Using anonymous table (reference, not atom) to avoid atom table exhaustion
-    table = :ets.new(:alarm_cache, [
-      :public,
-      :set,
-      read_concurrency: true
-    ])
+    table =
+      :ets.new(:alarm_cache, [
+        :public,
+        :set,
+        read_concurrency: true
+      ])
 
     # Update Registry metadata to store the table reference
     # This allows get_active_alarms/1 and get_alarm_counts/1 to access the table

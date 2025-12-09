@@ -144,37 +144,58 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   end
 
   # Handle formal procedure execution events
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :completed} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :completed} = event},
+        state
+      ) do
     process_event("procedure_completed", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :failed} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :failed} = event},
+        state
+      ) do
     process_event("procedure_failed", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :started} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :started} = event},
+        state
+      ) do
     process_event("procedure_started", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :cancelled} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :cancelled} = event},
+        state
+      ) do
     process_event("procedure_cancelled", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :paused} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :paused} = event},
+        state
+      ) do
     process_event("procedure_paused", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :step_started} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :step_started} = event},
+        state
+      ) do
     process_event("procedure_step_started", procedure_event_to_map(event), state)
     {:noreply, state}
   end
 
-  def handle_info({:procedure_event, %ProcedureExecutionEvent{event_type: :step_completed} = event}, state) do
+  def handle_info(
+        {:procedure_event, %ProcedureExecutionEvent{event_type: :step_completed} = event},
+        state
+      ) do
     process_event("procedure_step_completed", procedure_event_to_map(event), state)
     {:noreply, state}
   end
@@ -289,7 +310,8 @@ defmodule Cadence.Automations.Engine.AutomationManager do
          }) do
       {:ok, execution} ->
         # Execute the action
-        result = ActionExecutor.execute(automation.action_type, automation.action_config, event, state)
+        result =
+          ActionExecutor.execute(automation.action_type, automation.action_config, event, state)
 
         # Update execution status
         case result do

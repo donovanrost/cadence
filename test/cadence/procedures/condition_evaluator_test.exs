@@ -111,18 +111,21 @@ defmodule Cadence.Procedures.ConditionEvaluatorTest do
 
     test "missing param returns error" do
       context = build_context(params: %{})
+
       assert {:error, {:param_not_found, "missing"}} =
                ConditionEvaluator.evaluate("params.missing > 0", context)
     end
 
     test "missing nested param returns error" do
       context = build_context(params: %{"config" => %{}})
+
       assert {:error, {:param_not_found, "config.missing"}} =
                ConditionEvaluator.evaluate("params.config.missing > 0", context)
     end
 
     test "nil params map treated as empty" do
       context = %{params: nil}
+
       assert {:error, {:param_not_found, "key"}} =
                ConditionEvaluator.evaluate("params.key > 0", context)
     end
@@ -344,6 +347,7 @@ defmodule Cadence.Procedures.ConditionEvaluatorTest do
     test "param with nil value is considered not found" do
       # This is by design - nil values are treated as missing params
       context = build_context(params: %{"val" => nil})
+
       assert {:error, {:param_not_found, "val"}} =
                ConditionEvaluator.evaluate("params.val == nil", context)
     end
@@ -413,30 +417,32 @@ defmodule Cadence.Procedures.ConditionEvaluatorTest do
     end
 
     test "deeply nested params" do
-      context = build_context(
-        params: %{
-          "level1" => %{
-            "level2" => %{
-              "level3" => 42
+      context =
+        build_context(
+          params: %{
+            "level1" => %{
+              "level2" => %{
+                "level3" => 42
+              }
             }
           }
-        }
-      )
+        )
 
       assert {:ok, true} =
                ConditionEvaluator.evaluate("params.level1.level2.level3 == 42", context)
     end
 
     test "deeply nested vars" do
-      context = build_context(
-        vars: %{
-          "step1" => %{
-            "result" => %{
-              "nested" => "value"
+      context =
+        build_context(
+          vars: %{
+            "step1" => %{
+              "result" => %{
+                "nested" => "value"
+              }
             }
           }
-        }
-      )
+        )
 
       assert {:ok, true} =
                ConditionEvaluator.evaluate("vars.step1.result.nested == \"value\"", context)
@@ -477,15 +483,18 @@ defmodule Cadence.Procedures.ConditionEvaluatorTest do
 
     test "mode check" do
       context = build_context(params: %{"spacecraft_mode" => "nominal"})
+
       assert {:ok, true} =
                ConditionEvaluator.evaluate("params.spacecraft_mode == \"nominal\"", context)
     end
 
     test "threshold with step result" do
-      context = build_context(
-        params: %{"threshold" => 100},
-        vars: %{"measure" => %{"value" => 150}}
-      )
+      context =
+        build_context(
+          params: %{"threshold" => 100},
+          vars: %{"measure" => %{"value" => 150}}
+        )
+
       assert {:ok, true} = ConditionEvaluator.evaluate("vars.measure.value >= 100", context)
     end
 

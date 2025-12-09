@@ -84,6 +84,7 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
   # - New format: %{"parameters" => [%{"name" => "x", "type" => "string"}, ...]}
   # - Legacy format: %{"x" => %{"type" => "string"}, ...}
   defp normalize_param_defs(%{"parameters" => params}) when is_list(params), do: params
+
   defp normalize_param_defs(schema) when is_map(schema) and map_size(schema) > 0 do
     # Check if it's legacy format (no "parameters" key, values are maps with "type")
     if Enum.all?(schema, fn {k, v} -> is_binary(k) and is_map(v) and Map.has_key?(v, "type") end) do
@@ -95,6 +96,7 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
       []
     end
   end
+
   defp normalize_param_defs(_), do: []
 
   defp extract_defaults(param_defs) do
@@ -182,7 +184,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             minlength={@param["min_length"]}
             maxlength={@param["max_length"]}
           />
-
         <% "number" -> %>
           <input
             type="number"
@@ -193,7 +194,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             min={@param["min"]}
             max={@param["max"]}
           />
-
         <% "integer" -> %>
           <input
             type="number"
@@ -204,7 +204,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             min={@param["min"]}
             max={@param["max"]}
           />
-
         <% "boolean" -> %>
           <div class="flex items-center gap-2">
             <input
@@ -216,7 +215,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             />
             <input type="hidden" name={"parameters[#{@param["name"]}]"} value="false" />
           </div>
-
         <% "enum" -> %>
           <select
             name={"parameters[#{@param["name"]}]"}
@@ -231,7 +229,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
               {option}
             </option>
           </select>
-
         <% "target" -> %>
           <select
             name={"parameters[#{@param["name"]}]"}
@@ -242,7 +239,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
               {target.name}
             </option>
           </select>
-
         <% "telemetry_item" -> %>
           <input
             type="text"
@@ -251,7 +247,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             class={["input input-bordered w-full font-mono", @error && "input-error"]}
             placeholder="PACKET.item_name"
           />
-
         <% "command" -> %>
           <input
             type="text"
@@ -260,7 +255,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             class={["input input-bordered w-full font-mono", @error && "input-error"]}
             placeholder="COMMAND_NAME"
           />
-
         <% "duration" -> %>
           <div class="flex items-center gap-2">
             <input
@@ -274,7 +268,6 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             />
             <span class="text-sm text-base-content/60">ms</span>
           </div>
-
         <% "datetime" -> %>
           <input
             type="datetime-local"
@@ -282,10 +275,8 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
             value={format_datetime_local(@value)}
             class={["input input-bordered w-full", @error && "input-error"]}
           />
-
         <% "array" -> %>
           <.array_field param={@param} value={@value} error={@error} />
-
         <% _ -> %>
           <input
             type="text"
@@ -340,14 +331,17 @@ defmodule CadenceWeb.ProcedureLive.ParameterFormComponent do
   end
 
   defp format_datetime_local(nil), do: ""
+
   defp format_datetime_local(%DateTime{} = dt) do
     Calendar.strftime(dt, "%Y-%m-%dT%H:%M")
   end
+
   defp format_datetime_local(str) when is_binary(str) do
     case DateTime.from_iso8601(str) do
       {:ok, dt, _} -> format_datetime_local(dt)
       _ -> str
     end
   end
+
   defp format_datetime_local(_), do: ""
 end

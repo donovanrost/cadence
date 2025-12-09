@@ -60,8 +60,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
             {"Script", "script"}
           ]}
         />
-
-        <!-- DAG Settings -->
+        
+    <!-- DAG Settings -->
         <div :if={@form[:type].value == "dag" or @form[:type].value == :dag} class="space-y-4">
           <p class="text-sm text-base-content/60">
             DAG format allows parallel execution of independent steps with explicit dependencies.
@@ -94,8 +94,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
             </label>
           </div>
         </div>
-
-        <!-- Script Code Editor -->
+        
+    <!-- Script Code Editor -->
         <div :if={@form[:type].value == "script" or @form[:type].value == :script}>
           <label class="block text-sm font-medium mb-2">Lua Code</label>
           <textarea
@@ -114,8 +114,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
           <.button phx-disable-with="Saving..." class="btn-primary">Save Procedure</.button>
         </:actions>
       </.simple_form>
-
-      <!-- DAG Editor - outside the form to prevent event bubbling issues -->
+      
+    <!-- DAG Editor - outside the form to prevent event bubbling issues -->
       <div
         :if={@form[:type].value == "dag" or @form[:type].value == :dag}
         class="mt-4"
@@ -187,8 +187,18 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
 
   defp default_dag_steps do
     %{
-      "init" => %{"type" => "log", "level" => "info", "message" => "Starting procedure", "depends_on" => []},
-      "finish" => %{"type" => "log", "level" => "info", "message" => "Procedure complete", "depends_on" => ["init"]}
+      "init" => %{
+        "type" => "log",
+        "level" => "info",
+        "message" => "Starting procedure",
+        "depends_on" => []
+      },
+      "finish" => %{
+        "type" => "log",
+        "level" => "info",
+        "message" => "Procedure complete",
+        "depends_on" => ["init"]
+      }
     }
   end
 

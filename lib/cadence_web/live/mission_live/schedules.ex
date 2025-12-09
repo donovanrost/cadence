@@ -188,7 +188,9 @@ defmodule CadenceWeb.MissionLive.Schedules do
     ~H"""
     <.header>
       Schedules
-      <:subtitle>Scheduled procedure executions using cron expressions or one-time triggers</:subtitle>
+      <:subtitle>
+        Scheduled procedure executions using cron expressions or one-time triggers
+      </:subtitle>
       <:actions>
         <.link patch={~p"/missions/#{@mission}/schedules/new"}>
           <.button>New Schedule</.button>

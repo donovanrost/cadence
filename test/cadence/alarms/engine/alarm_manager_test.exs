@@ -210,7 +210,6 @@ defmodule Cadence.Alarms.Engine.AlarmManagerTest do
       active = AlarmManager.get_active_alarms(mission.id)
       assert Enum.any?(active, &(&1.id == alarm.id))
     end
-
   end
 
   describe "alarm recovery" do

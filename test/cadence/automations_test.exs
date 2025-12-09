@@ -149,7 +149,9 @@ defmodule Cadence.AutomationsTest do
     end
 
     test "matches_conditions?/2 returns true when no conditions", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission, trigger_conditions: %{})
+      automation =
+        automation_fixture(organization: org, mission: mission, trigger_conditions: %{})
+
       event = %{severity: "critical", item_name: "TEMP_SENSOR"}
 
       assert Automations.matches_conditions?(automation, event)

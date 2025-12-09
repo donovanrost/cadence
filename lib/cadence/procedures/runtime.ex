@@ -44,7 +44,11 @@ defmodule Cadence.Procedures.Runtime do
       iex> Runtime.get_execution_counts(mission_id)
       %{running: 2, paused: 1, pending: 0}
   """
-  @spec get_execution_counts(mission_id()) :: %{running: integer(), paused: integer(), pending: integer()}
+  @spec get_execution_counts(mission_id()) :: %{
+          running: integer(),
+          paused: integer(),
+          pending: integer()
+        }
   def get_execution_counts(mission_id) do
     case coordinator_pid(mission_id) do
       nil -> %{running: 0, paused: 0, pending: 0}

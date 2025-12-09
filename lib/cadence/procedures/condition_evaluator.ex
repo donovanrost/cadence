@@ -287,16 +287,29 @@ defmodule Cadence.Procedures.ConditionEvaluator do
     str = String.trim(str)
 
     cond do
-      str == "true" -> true
-      str == "false" -> false
-      str == "nil" -> nil
+      str == "true" ->
+        true
+
+      str == "false" ->
+        false
+
+      str == "nil" ->
+        nil
+
       String.starts_with?(str, "\"") and String.ends_with?(str, "\"") ->
         String.slice(str, 1..-2//1)
+
       String.starts_with?(str, "'") and String.ends_with?(str, "'") ->
         String.slice(str, 1..-2//1)
-      String.match?(str, ~r/^-?\d+$/) -> String.to_integer(str)
-      String.match?(str, ~r/^-?\d+\.\d+$/) -> String.to_float(str)
-      true -> str
+
+      String.match?(str, ~r/^-?\d+$/) ->
+        String.to_integer(str)
+
+      String.match?(str, ~r/^-?\d+\.\d+$/) ->
+        String.to_float(str)
+
+      true ->
+        str
     end
   end
 
@@ -304,6 +317,7 @@ defmodule Cadence.Procedures.ConditionEvaluator do
 
   defp get_nested_value(value, []), do: value
   defp get_nested_value(nil, _), do: nil
+
   defp get_nested_value(map, [key | rest]) when is_map(map) do
     # Try string key first, then atom key. Must use explicit nil check
     # because false/0 are valid values that would be falsy with ||
@@ -312,8 +326,10 @@ defmodule Cadence.Procedures.ConditionEvaluator do
         {:ok, v} -> v
         :error -> Map.get(map, String.to_atom(key))
       end
+
     get_nested_value(value, rest)
   end
+
   defp get_nested_value(_, _), do: nil
 
   # ============================================================================
