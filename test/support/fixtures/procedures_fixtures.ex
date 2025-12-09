@@ -19,15 +19,20 @@ defmodule Cadence.ProceduresFixtures do
 
     source = attrs[:source] || default_dag_source()
 
+    procedure_attrs = %{
+      organization_id: org.id,
+      mission_id: mission.id,
+      name: attrs[:name] || "Test Procedure #{System.unique_integer([:positive])}",
+      description: attrs[:description] || "A test procedure",
+      type: attrs[:type] || :dag
+    }
+
+    procedure_attrs =
+      if attrs[:tags], do: Map.put(procedure_attrs, :tags, attrs[:tags]), else: procedure_attrs
+
     {:ok, procedure} =
       Procedures.create_procedure(
-        %{
-          organization_id: org.id,
-          mission_id: mission.id,
-          name: attrs[:name] || "Test Procedure #{System.unique_integer([:positive])}",
-          description: attrs[:description] || "A test procedure",
-          type: attrs[:type] || :dag
-        },
+        procedure_attrs,
         source: source,
         user_id: user.id
       )
@@ -125,14 +130,15 @@ defmodule Cadence.ProceduresFixtures do
 
     # Optionally update status and completed_steps for testing specific states
     if attrs[:status] || attrs[:completed_steps] do
-      status_attrs = %{}
-      |> maybe_add(:status, attrs[:status])
-      |> maybe_add(:completed_steps, attrs[:completed_steps])
-      |> maybe_add(:failed_steps, attrs[:failed_steps])
-      |> maybe_add(:skipped_steps, attrs[:skipped_steps])
-      |> maybe_add(:blocked_steps, attrs[:blocked_steps])
-      |> maybe_add(:current_step_index, attrs[:current_step_index])
-      |> maybe_add(:started_at, attrs[:started_at])
+      status_attrs =
+        %{}
+        |> maybe_add(:status, attrs[:status])
+        |> maybe_add(:completed_steps, attrs[:completed_steps])
+        |> maybe_add(:failed_steps, attrs[:failed_steps])
+        |> maybe_add(:skipped_steps, attrs[:skipped_steps])
+        |> maybe_add(:blocked_steps, attrs[:blocked_steps])
+        |> maybe_add(:current_step_index, attrs[:current_step_index])
+        |> maybe_add(:started_at, attrs[:started_at])
 
       {:ok, execution} = Procedures.update_execution_status(execution, status_attrs)
       execution

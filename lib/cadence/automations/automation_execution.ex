@@ -60,6 +60,13 @@ defmodule Cadence.Automations.AutomationExecution do
   @doc false
   def status_changeset(execution, attrs) do
     execution
-    |> cast(attrs, [:status, :action_result, :error_message, :started_at, :completed_at, :procedure_execution_id])
+    |> cast(attrs, [
+      :status,
+      :action_result,
+      :error_message,
+      :started_at,
+      :completed_at,
+      :procedure_execution_id
+    ])
   end
 end

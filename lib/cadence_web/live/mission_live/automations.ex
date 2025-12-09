@@ -161,7 +161,9 @@ defmodule CadenceWeb.MissionLive.Automations do
     ~H"""
     <.header>
       Automations
-      <:subtitle>Event-triggered actions that respond to alarms, telemetry, or procedure events</:subtitle>
+      <:subtitle>
+        Event-triggered actions that respond to alarms, telemetry, or procedure events
+      </:subtitle>
       <:actions>
         <.link patch={~p"/missions/#{@mission}/automations/new"}>
           <.button>New Automation</.button>

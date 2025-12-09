@@ -102,7 +102,8 @@ defmodule Cadence.Procedures.Parameters do
           {:ok, map()} | {:error, list(validation_error())}
   def validate(params, nil, _context), do: {:ok, params || %{}}
 
-  def validate(params, %{"parameters" => param_defs}, context) when is_list(param_defs) and param_defs != [] do
+  def validate(params, %{"parameters" => param_defs}, context)
+      when is_list(param_defs) and param_defs != [] do
     params = params || %{}
 
     {validated, errors} =
@@ -425,7 +426,10 @@ defmodule Cadence.Procedures.Parameters do
       if is_map(param) and Map.has_key?(param, "type") and param["type"] in @supported_types do
         errors
       else
-        ["Parameter #{index}: must have a valid 'type' (#{Enum.join(@supported_types, ", ")})" | errors]
+        [
+          "Parameter #{index}: must have a valid 'type' (#{Enum.join(@supported_types, ", ")})"
+          | errors
+        ]
       end
 
     errors =

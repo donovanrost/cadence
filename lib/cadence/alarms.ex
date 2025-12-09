@@ -506,7 +506,12 @@ defmodule Cadence.Alarms do
   """
   @spec shelve_alarm(Alarm.t(), String.t(), integer(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def shelve_alarm(%Alarm{mission_id: mission_id} = alarm, user_id, duration_minutes, reason \\ nil) do
+  def shelve_alarm(
+        %Alarm{mission_id: mission_id} = alarm,
+        user_id,
+        duration_minutes,
+        reason \\ nil
+      ) do
     case AlarmManager.whereis(mission_id) do
       nil ->
         # Mission not running, update directly
@@ -646,7 +651,13 @@ defmodule Cadence.Alarms do
   """
   @spec update_alarm_value(Alarm.t(), float(), atom(), atom(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def update_alarm_value(%Alarm{mission_id: mission_id} = alarm, value, limit_state, new_severity, message \\ nil) do
+  def update_alarm_value(
+        %Alarm{mission_id: mission_id} = alarm,
+        value,
+        limit_state,
+        new_severity,
+        message \\ nil
+      ) do
     case AlarmManager.whereis(mission_id) do
       nil ->
         # Mission not running, update directly
@@ -654,7 +665,14 @@ defmodule Cadence.Alarms do
 
       _pid ->
         # Route through AlarmManager for cache consistency
-        AlarmManager.update_alarm_value(mission_id, alarm.id, value, limit_state, new_severity, message)
+        AlarmManager.update_alarm_value(
+          mission_id,
+          alarm.id,
+          value,
+          limit_state,
+          new_severity,
+          message
+        )
     end
   end
 

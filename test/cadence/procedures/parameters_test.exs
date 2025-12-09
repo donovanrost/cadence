@@ -32,7 +32,9 @@ defmodule Cadence.Procedures.ParametersTest do
         ]
       }
 
-      assert {:ok, %{"name" => "test"}} = Parameters.validate(%{"name" => "test"}, schema, context)
+      assert {:ok, %{"name" => "test"}} =
+               Parameters.validate(%{"name" => "test"}, schema, context)
+
       assert {:error, [{"name", "is required"}]} = Parameters.validate(%{}, schema, context)
       assert {:error, [{"name", "is required"}]} = Parameters.validate(nil, schema, context)
     end
@@ -45,7 +47,9 @@ defmodule Cadence.Procedures.ParametersTest do
       }
 
       assert {:ok, %{"threshold" => 50}} = Parameters.validate(%{}, schema, context)
-      assert {:ok, %{"threshold" => 75}} = Parameters.validate(%{"threshold" => 75}, schema, context)
+
+      assert {:ok, %{"threshold" => 75}} =
+               Parameters.validate(%{"threshold" => 75}, schema, context)
     end
 
     test "validates string min/max length", %{context: context} do
@@ -122,12 +126,18 @@ defmodule Cadence.Procedures.ParametersTest do
         ]
       }
 
-      assert {:ok, %{"enabled" => true}} = Parameters.validate(%{"enabled" => true}, schema, context)
-      assert {:ok, %{"enabled" => false}} = Parameters.validate(%{"enabled" => false}, schema, context)
+      assert {:ok, %{"enabled" => true}} =
+               Parameters.validate(%{"enabled" => true}, schema, context)
+
+      assert {:ok, %{"enabled" => false}} =
+               Parameters.validate(%{"enabled" => false}, schema, context)
 
       # String coercion
-      assert {:ok, %{"enabled" => true}} = Parameters.validate(%{"enabled" => "true"}, schema, context)
-      assert {:ok, %{"enabled" => false}} = Parameters.validate(%{"enabled" => "false"}, schema, context)
+      assert {:ok, %{"enabled" => true}} =
+               Parameters.validate(%{"enabled" => "true"}, schema, context)
+
+      assert {:ok, %{"enabled" => false}} =
+               Parameters.validate(%{"enabled" => "false"}, schema, context)
 
       assert {:error, [{"enabled", "must be a boolean"}]} =
                Parameters.validate(%{"enabled" => "yes"}, schema, context)
@@ -140,8 +150,11 @@ defmodule Cadence.Procedures.ParametersTest do
         ]
       }
 
-      assert {:ok, %{"mode" => "nominal"}} = Parameters.validate(%{"mode" => "nominal"}, schema, context)
-      assert {:ok, %{"mode" => "safe"}} = Parameters.validate(%{"mode" => "safe"}, schema, context)
+      assert {:ok, %{"mode" => "nominal"}} =
+               Parameters.validate(%{"mode" => "nominal"}, schema, context)
+
+      assert {:ok, %{"mode" => "safe"}} =
+               Parameters.validate(%{"mode" => "safe"}, schema, context)
 
       assert {:error, [{"mode", "must be one of: nominal, safe, emergency"}]} =
                Parameters.validate(%{"mode" => "invalid"}, schema, context)
@@ -160,7 +173,8 @@ defmodule Cadence.Procedures.ParametersTest do
         ]
       }
 
-      assert {:ok, %{"zones" => [1, 2]}} = Parameters.validate(%{"zones" => [1, 2]}, schema, context)
+      assert {:ok, %{"zones" => [1, 2]}} =
+               Parameters.validate(%{"zones" => [1, 2]}, schema, context)
 
       assert {:error, [{"zones", "must have at least 1 items"}]} =
                Parameters.validate(%{"zones" => []}, schema, context)
@@ -179,7 +193,8 @@ defmodule Cadence.Procedures.ParametersTest do
         ]
       }
 
-      assert {:ok, %{"timeout" => 5000}} = Parameters.validate(%{"timeout" => 5000}, schema, context)
+      assert {:ok, %{"timeout" => 5000}} =
+               Parameters.validate(%{"timeout" => 5000}, schema, context)
 
       assert {:error, [{"timeout", "must be at least 1000"}]} =
                Parameters.validate(%{"timeout" => 500}, schema, context)

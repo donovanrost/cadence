@@ -534,7 +534,10 @@ defmodule CadenceWeb.Layouts do
       |> assign(:is_alarms, String.contains?(assigns.current_path, "#{base_path}/alarm"))
       |> assign(:is_commands, String.contains?(assigns.current_path, "#{base_path}/commands"))
       |> assign(:is_procedures, String.contains?(assigns.current_path, "#{base_path}/procedures"))
-      |> assign(:is_automations, String.contains?(assigns.current_path, "#{base_path}/automations"))
+      |> assign(
+        :is_automations,
+        String.contains?(assigns.current_path, "#{base_path}/automations")
+      )
       |> assign(:is_schedules, String.contains?(assigns.current_path, "#{base_path}/schedules"))
 
     ~H"""

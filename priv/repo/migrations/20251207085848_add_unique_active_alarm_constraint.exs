@@ -13,17 +13,19 @@ defmodule Cadence.Repo.Migrations.AddUniqueActiveAlarmConstraint do
   def change do
     # Create a unique partial index on active alarms
     # This prevents duplicate alarms for the same source while the alarm is still active
-    create unique_index(:alarms,
-      [:mission_id, :target_id, :source_type, :source_id],
-      where: "status IN ('active', 'acknowledged', 'shelved')",
-      name: :alarms_unique_active_source_idx
-    )
+    create unique_index(
+             :alarms,
+             [:mission_id, :target_id, :source_type, :source_id],
+             where: "status IN ('active', 'acknowledged', 'shelved')",
+             name: :alarms_unique_active_source_idx
+           )
 
     # Also add an index for efficient lookups of active alarms by source
     # This improves the find_active_alarm query performance
-    create index(:alarms,
-      [:mission_id, :target_id, :source_type, :source_id, :status],
-      name: :alarms_source_lookup_idx
-    )
+    create index(
+             :alarms,
+             [:mission_id, :target_id, :source_type, :source_id, :status],
+             name: :alarms_source_lookup_idx
+           )
   end
 end

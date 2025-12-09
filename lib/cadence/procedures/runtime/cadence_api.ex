@@ -173,7 +173,10 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
     send_and_verify_fn = fn args, state ->
       [name, lua_args, timeout_ms] = normalize_args(args, 3)
       args_map = lua_table_to_map(lua_args)
-      result = command_send_and_verify(context, to_string(name), args_map, trunc(timeout_ms || 5000))
+
+      result =
+        command_send_and_verify(context, to_string(name), args_map, trunc(timeout_ms || 5000))
+
       {[result], state}
     end
 

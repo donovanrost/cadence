@@ -248,7 +248,10 @@ defmodule Cadence.Automations do
   Returns `true` if all conditions match, `false` otherwise.
   """
   def matches_conditions?(%Automation{trigger_conditions: nil}, _event), do: true
-  def matches_conditions?(%Automation{trigger_conditions: conditions}, _event) when conditions == %{}, do: true
+
+  def matches_conditions?(%Automation{trigger_conditions: conditions}, _event)
+      when conditions == %{},
+      do: true
 
   def matches_conditions?(%Automation{trigger_conditions: conditions}, event) do
     Enum.all?(conditions, fn {key, value} ->

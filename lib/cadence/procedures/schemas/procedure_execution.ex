@@ -231,7 +231,8 @@ defmodule Cadence.Procedures.ProcedureExecution do
 
         if old_status == :pending do
           # First time running - must have started_at
-          if is_nil(get_field(changeset, :started_at)) and is_nil(get_change(changeset, :started_at)) do
+          if is_nil(get_field(changeset, :started_at)) and
+               is_nil(get_change(changeset, :started_at)) do
             add_error(changeset, :started_at, "must be set when starting execution")
           else
             changeset
@@ -249,7 +250,8 @@ defmodule Cadence.Procedures.ProcedureExecution do
         # error_message is strongly recommended for failures
         # We add it as a warning via Logger rather than blocking the transition
         # since some crash scenarios might not have a message ready
-        if is_nil(get_change(changeset, :error_message)) and is_nil(get_field(changeset, :error_message)) do
+        if is_nil(get_change(changeset, :error_message)) and
+             is_nil(get_field(changeset, :error_message)) do
           require Logger
           Logger.warning("Execution transitioning to failed without error_message")
         end

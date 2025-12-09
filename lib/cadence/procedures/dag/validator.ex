@@ -305,7 +305,9 @@ defmodule Cadence.Procedures.Dag.Validator do
 
     Enum.reduce_while(all_names, nil, fn name, _acc ->
       case dfs_detect_cycle(name, deps_graph, initial_state) do
-        {:cycle, cycle} -> {:halt, cycle}
+        {:cycle, cycle} ->
+          {:halt, cycle}
+
         {:ok, new_state} ->
           # Merge visited sets for next iteration
           {:cont, nil}

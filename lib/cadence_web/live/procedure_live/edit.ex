@@ -94,6 +94,7 @@ defmodule CadenceWeb.ProcedureLive.Edit do
 
   # Convert from storage format {"parameters" => [...]} to editor format {"name" => {...}}
   defp params_schema_to_editor_format(nil), do: %{}
+
   defp params_schema_to_editor_format(%{"parameters" => params}) when is_list(params) do
     params
     |> Enum.map(fn param ->
@@ -103,10 +104,12 @@ defmodule CadenceWeb.ProcedureLive.Edit do
     end)
     |> Map.new()
   end
+
   defp params_schema_to_editor_format(schema) when is_map(schema) do
     # Already in editor format or empty
     if Map.has_key?(schema, "parameters"), do: %{}, else: schema
   end
+
   defp params_schema_to_editor_format(_), do: %{}
 
   # Convert from editor format {"name" => {...}} to storage format {"parameters" => [...]}
@@ -120,6 +123,7 @@ defmodule CadenceWeb.ProcedureLive.Edit do
 
     %{"parameters" => params}
   end
+
   defp editor_format_to_params_schema(_), do: %{}
 
   # ============================================================================
@@ -127,7 +131,11 @@ defmodule CadenceWeb.ProcedureLive.Edit do
   # ============================================================================
 
   @impl true
-  def handle_event("save", %{"name" => name, "steps" => steps_json, "inputs" => inputs_json} = params, socket) do
+  def handle_event(
+        "save",
+        %{"name" => name, "steps" => steps_json, "inputs" => inputs_json} = params,
+        socket
+      ) do
     mission = socket.assigns.mission
     procedure = socket.assigns.procedure
     on_step_failure = params["on_step_failure"] || socket.assigns.on_step_failure
@@ -176,7 +184,8 @@ defmodule CadenceWeb.ProcedureLive.Edit do
     result =
       if procedure.id do
         with {:ok, procedure} <- Procedures.update_procedure(procedure, params),
-             {:ok, _version} <- maybe_create_version(procedure, source, inputs, socket.assigns.current_scope.user) do
+             {:ok, _version} <-
+               maybe_create_version(procedure, source, inputs, socket.assigns.current_scope.user) do
           {:ok, procedure}
         end
       else
@@ -223,13 +232,15 @@ defmodule CadenceWeb.ProcedureLive.Edit do
       end
 
     if source != current_source || inputs != current_inputs do
-      with {:ok, version} <- Procedures.create_version(procedure, %{
-             source: source,
-             parameters_schema: inputs,
-             status: :draft,
-             created_by_id: user.id
-           }),
-           {:ok, _procedure} <- Procedures.update_procedure(procedure, %{current_version_id: version.id}) do
+      with {:ok, version} <-
+             Procedures.create_version(procedure, %{
+               source: source,
+               parameters_schema: inputs,
+               status: :draft,
+               created_by_id: user.id
+             }),
+           {:ok, _procedure} <-
+             Procedures.update_procedure(procedure, %{current_version_id: version.id}) do
         {:ok, version}
       end
     else

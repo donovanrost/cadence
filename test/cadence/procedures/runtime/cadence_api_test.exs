@@ -49,7 +49,8 @@ defmodule Cadence.Procedures.Runtime.CadenceApiTest do
       {:ok, [count], _} = :luerl.do("return cadence.params.count", installed_state)
 
       assert name == "TestProc"
-      assert count == 5.0  # Lua numbers are floats
+      # Lua numbers are floats
+      assert count == 5.0
     end
 
     test "installs target_id and execution_id" do
@@ -201,7 +202,10 @@ defmodule Cadence.Procedures.Runtime.CadenceApiTest do
       installed_state = CadenceApi.install(lua_state, context)
 
       {:ok, [result], _} =
-        :luerl.do("return cadence.telemetry.wait_for('TEMP.value', '==', 100, 50)", installed_state)
+        :luerl.do(
+          "return cadence.telemetry.wait_for('TEMP.value', '==', 100, 50)",
+          installed_state
+        )
 
       assert result == false
     end
@@ -224,7 +228,9 @@ defmodule Cadence.Procedures.Runtime.CadenceApiTest do
       context = test_context()
       installed_state = CadenceApi.install(lua_state, context)
 
-      {:ok, [result], _} = :luerl.do("return type(cadence.command.send_and_verify)", installed_state)
+      {:ok, [result], _} =
+        :luerl.do("return type(cadence.command.send_and_verify)", installed_state)
+
       assert result == "function"
     end
 
@@ -256,7 +262,9 @@ defmodule Cadence.Procedures.Runtime.CadenceApiTest do
       assert result == "table"
 
       {:ok, [get_type], _} = :luerl.do("return type(cadence.telemetry.get)", installed_state)
-      {:ok, [wait_type], _} = :luerl.do("return type(cadence.telemetry.wait_for)", installed_state)
+
+      {:ok, [wait_type], _} =
+        :luerl.do("return type(cadence.telemetry.wait_for)", installed_state)
 
       assert get_type == "function"
       assert wait_type == "function"

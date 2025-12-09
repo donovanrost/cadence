@@ -411,6 +411,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
         {:ok, alarm} ->
           # Cache should contain this alarm
           cached_alarms = AlarmManager.get_active_alarms(mission.id)
+
           assert Enum.any?(cached_alarms, &(&1.id == alarm.id)),
                  "Alarm created via AlarmManager not found in cache!"
 
@@ -457,6 +458,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
 
       # Verify alarm is in cache initially
       initial_cached = AlarmManager.get_active_alarms(mission.id)
+
       assert Enum.any?(initial_cached, &(&1.id == alarm.id)),
              "Alarm should be in cache after creation via AlarmManager"
 

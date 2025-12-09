@@ -301,7 +301,9 @@ defmodule Cadence.ProceduresHelpers do
         :ok
 
       {:DOWN, ^ref, :process, _pid, actual_reason} ->
-        flunk("Process exited with #{inspect(actual_reason)}, expected #{inspect(expected_reason)}")
+        flunk(
+          "Process exited with #{inspect(actual_reason)}, expected #{inspect(expected_reason)}"
+        )
     after
       timeout ->
         flunk("Process did not exit within #{timeout}ms")

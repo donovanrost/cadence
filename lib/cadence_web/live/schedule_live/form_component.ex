@@ -59,8 +59,8 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
           label="Schedule Type"
           options={@schedule_types}
         />
-
-        <!-- Cron Configuration -->
+        
+    <!-- Cron Configuration -->
         <div :if={to_string(@form[:schedule_type].value) == "cron"} class="space-y-4">
           <div class="border rounded-lg p-4 bg-gray-50">
             <h4 class="text-sm font-medium text-gray-900 mb-3">Cron Expression</h4>
@@ -105,8 +105,8 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
             options={@timezone_options}
           />
         </div>
-
-        <!-- One-time Configuration -->
+        
+    <!-- One-time Configuration -->
         <div :if={to_string(@form[:schedule_type].value) == "once"} class="space-y-4">
           <div class="border rounded-lg p-4 bg-gray-50">
             <h4 class="text-sm font-medium text-gray-900 mb-3">Scheduled Time</h4>
@@ -123,8 +123,8 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
             </p>
           </div>
         </div>
-
-        <!-- Parameters (Optional) -->
+        
+    <!-- Parameters (Optional) -->
         <div class="border rounded-lg p-4 bg-gray-50">
           <h4 class="text-sm font-medium text-gray-900 mb-3">Parameters (Optional)</h4>
           <.input

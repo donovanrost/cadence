@@ -301,7 +301,11 @@ defmodule Cadence.ProceduresBuilders do
       "steps" => %{
         "step_1" => %{"type" => "log", "message" => "Starting procedure", "depends_on" => []},
         "step_2" => %{"type" => "wait", "duration" => 10, "depends_on" => ["step_1"]},
-        "step_3" => %{"type" => "log", "message" => "Procedure complete", "depends_on" => ["step_2"]}
+        "step_3" => %{
+          "type" => "log",
+          "message" => "Procedure complete",
+          "depends_on" => ["step_2"]
+        }
       }
     }
   end

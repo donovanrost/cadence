@@ -324,14 +324,15 @@ defmodule Cadence.AlarmsHelpers do
     remaining = max(0, deadline - System.monotonic_time(:millisecond))
 
     receive do
-      {event_type, %{id: ^alarm_id} = alarm} when event_type in [
-        :alarm_triggered,
-        :alarm_updated,
-        :alarm_acknowledged,
-        :alarm_shelved,
-        :alarm_unshelved,
-        :alarm_cleared
-      ] ->
+      {event_type, %{id: ^alarm_id} = alarm}
+      when event_type in [
+             :alarm_triggered,
+             :alarm_updated,
+             :alarm_acknowledged,
+             :alarm_shelved,
+             :alarm_unshelved,
+             :alarm_cleared
+           ] ->
         {:ok, event_type, alarm}
 
       {_event_type, %{id: _other_id}} ->
@@ -396,16 +397,17 @@ defmodule Cadence.AlarmsHelpers do
       send_limit_event(mission_id, "POWER.voltage", :yellow, value: 3.2)
   """
   def send_limit_event(mission_id, item_name, new_state, opts \\ []) do
-    event = TelemetryLimitEvent.new(%{
-      mission_id: mission_id,
-      target_id: Keyword.get(opts, :target_id, Ecto.UUID.generate()),
-      item_name: item_name,
-      previous_state: Keyword.get(opts, :previous_state, :green),
-      new_state: new_state,
-      value: Keyword.get(opts, :value, 100.0),
-      limit_set: Keyword.get(opts, :limit_set, "NOMINAL"),
-      timestamp: Keyword.get(opts, :timestamp, DateTime.utc_now())
-    })
+    event =
+      TelemetryLimitEvent.new(%{
+        mission_id: mission_id,
+        target_id: Keyword.get(opts, :target_id, Ecto.UUID.generate()),
+        item_name: item_name,
+        previous_state: Keyword.get(opts, :previous_state, :green),
+        new_state: new_state,
+        value: Keyword.get(opts, :value, 100.0),
+        limit_set: Keyword.get(opts, :limit_set, "NOMINAL"),
+        timestamp: Keyword.get(opts, :timestamp, DateTime.utc_now())
+      })
 
     case AlarmManager.whereis(mission_id) do
       nil ->
@@ -463,7 +465,9 @@ defmodule Cadence.AlarmsHelpers do
         :ok
 
       {:DOWN, ^ref, :process, _pid, actual_reason} ->
-        flunk("Process exited with #{inspect(actual_reason)}, expected #{inspect(expected_reason)}")
+        flunk(
+          "Process exited with #{inspect(actual_reason)}, expected #{inspect(expected_reason)}"
+        )
     after
       timeout ->
         flunk("Process did not exit within #{timeout}ms")

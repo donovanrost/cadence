@@ -76,7 +76,8 @@ defmodule Cadence.Missions.MissionInstance do
           {Queue, mission_id: mission.id},
 
           # Procedure Execution Coordinator - manages procedure executions
-          {ExecutionCoordinator, mission_id: mission.id, organization_id: mission.organization_id},
+          {ExecutionCoordinator,
+           mission_id: mission.id, organization_id: mission.organization_id},
 
           # Automation Manager - processes events and triggers automations
           {AutomationManager, mission_id: mission.id, organization_id: mission.organization_id}

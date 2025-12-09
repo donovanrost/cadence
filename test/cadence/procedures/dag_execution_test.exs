@@ -33,14 +33,15 @@ defmodule Cadence.Procedures.DagExecutionTest do
     parameters = Keyword.get(opts, :parameters, %{})
 
     # Create execution record
-    {:ok, execution} = Procedures.create_execution(%{
-      procedure_id: procedure.id,
-      procedure_version_id: procedure.current_version_id,
-      organization_id: procedure.organization_id,
-      mission_id: procedure.mission_id,
-      parameters: parameters,
-      triggered_by: :manual
-    })
+    {:ok, execution} =
+      Procedures.create_execution(%{
+        procedure_id: procedure.id,
+        procedure_version_id: procedure.current_version_id,
+        organization_id: procedure.organization_id,
+        mission_id: procedure.mission_id,
+        parameters: parameters,
+        triggered_by: :manual
+      })
 
     # Start the execution process
     {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
@@ -157,7 +158,11 @@ defmodule Cadence.Procedures.DagExecutionTest do
           "start" => %{"type" => "log", "message" => "Start", "depends_on" => []},
           "parallel_a" => %{"type" => "wait", "duration" => 50, "depends_on" => ["start"]},
           "parallel_b" => %{"type" => "wait", "duration" => 50, "depends_on" => ["start"]},
-          "end" => %{"type" => "log", "message" => "End", "depends_on" => ["parallel_a", "parallel_b"]}
+          "end" => %{
+            "type" => "log",
+            "message" => "End",
+            "depends_on" => ["parallel_a", "parallel_b"]
+          }
         }
       }
 
@@ -180,7 +185,7 @@ defmodule Cadence.Procedures.DagExecutionTest do
       final = Procedures.get_execution!(execution.id)
       # Allow for DB connection errors that may cause failure in test env
       assert final.status in [:completed, :failed],
-        "Expected completed or failed (due to test env), got #{final.status}"
+             "Expected completed or failed (due to test env), got #{final.status}"
     end
 
     test "respects dependencies before starting steps", %{org: org, mission: mission} do
@@ -189,7 +194,11 @@ defmodule Cadence.Procedures.DagExecutionTest do
         "steps" => %{
           "step_1" => %{"type" => "log", "message" => "First", "depends_on" => []},
           "step_2" => %{"type" => "log", "message" => "Second", "depends_on" => ["step_1"]},
-          "step_3" => %{"type" => "log", "message" => "Third", "depends_on" => ["step_1", "step_2"]}
+          "step_3" => %{
+            "type" => "log",
+            "message" => "Third",
+            "depends_on" => ["step_1", "step_2"]
+          }
         }
       }
 
@@ -318,7 +327,7 @@ defmodule Cadence.Procedures.DagExecutionTest do
       final = Procedures.get_execution!(execution.id)
       # The dependent step should be blocked
       assert "should_be_blocked" in (final.blocked_steps || []) or
-             "should_be_blocked" not in final.completed_steps
+               "should_be_blocked" not in final.completed_steps
     end
 
     test "handles empty DAG gracefully", %{org: org, mission: mission} do
@@ -365,10 +374,13 @@ defmodule Cadence.Procedures.DagExecutionTest do
       ref = Process.monitor(pid)
 
       # Wait for it to start running
-      assert_eventually(fn ->
-        exec = Procedures.get_execution!(execution.id)
-        exec.status == :running
-      end, timeout: 2000)
+      assert_eventually(
+        fn ->
+          exec = Procedures.get_execution!(execution.id)
+          exec.status == :running
+        end,
+        timeout: 2000
+      )
 
       # Send abort via ExecutionProcess
       :ok = ExecutionProcess.abort(execution.id)

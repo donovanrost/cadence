@@ -164,7 +164,8 @@ defmodule Cadence.Alarms.IntegrationTest do
       # Verify shelved_until is set correctly (approximately 30 minutes from now)
       expected_until = DateTime.add(DateTime.utc_now(), 30 * 60, :second)
       diff = DateTime.diff(shelved_alarm.shelved_until, expected_until, :second)
-      assert abs(diff) < 5  # Allow 5 seconds tolerance
+      # Allow 5 seconds tolerance
+      assert abs(diff) < 5
 
       # Step 3: Unshelve the alarm
       {:ok, unshelved_alarm} = Alarms.unshelve_alarm(shelved_alarm, user.id)
@@ -400,7 +401,9 @@ defmodule Cadence.Alarms.IntegrationTest do
           assert is_nil(cached), "Expected alarm to be removed from cache"
         else
           assert cached != nil, "Expected alarm to be in cache"
-          assert cached.status == expected_status, "Expected status #{expected_status}, got #{cached.status}"
+
+          assert cached.status == expected_status,
+                 "Expected status #{expected_status}, got #{cached.status}"
         end
       end
 

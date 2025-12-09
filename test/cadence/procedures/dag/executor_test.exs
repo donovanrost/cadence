@@ -72,7 +72,11 @@ defmodule Cadence.Procedures.Dag.ExecutorTest do
         "init" => %{"type" => "log", "message" => "init"},
         "branch_a" => %{"type" => "wait", "duration" => 50, "depends_on" => ["init"]},
         "branch_b" => %{"type" => "wait", "duration" => 50, "depends_on" => ["init"]},
-        "join" => %{"type" => "log", "message" => "join", "depends_on" => ["branch_a", "branch_b"]}
+        "join" => %{
+          "type" => "log",
+          "message" => "join",
+          "depends_on" => ["branch_a", "branch_b"]
+        }
       }
 
       # Both branches have same delay, so should run in parallel

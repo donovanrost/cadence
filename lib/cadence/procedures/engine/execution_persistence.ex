@@ -54,7 +54,14 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
           keyword()
         ) ::
           {:ok, Cadence.Procedures.ProcedureExecution.t()} | {:error, term()}
-  def update_status_with_log(execution, new_status, extra_attrs \\ %{}, log_level, log_message, opts \\ []) do
+  def update_status_with_log(
+        execution,
+        new_status,
+        extra_attrs \\ %{},
+        log_level,
+        log_message,
+        opts \\ []
+      ) do
     attrs = Map.merge(%{status: new_status}, extra_attrs)
     skip_outbox = Keyword.get(opts, :skip_outbox, false)
 
@@ -191,7 +198,11 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
     # Build the multi transaction - all inserts are atomic
     multi =
       Multi.new()
-      |> Multi.insert(:step_event, StepEvent.new(execution, step_name, status, data, idempotency_key: idempotency_key), upsert_opts(idempotency_key))
+      |> Multi.insert(
+        :step_event,
+        StepEvent.new(execution, step_name, status, data, idempotency_key: idempotency_key),
+        upsert_opts(idempotency_key)
+      )
       |> Multi.insert(:log, build_log_changeset(execution.id, level, message))
 
     # Add user log if this is a completed log step with a message
@@ -289,6 +300,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
           blocked_steps: result.blocked_steps,
           error_message: attrs[:error_message]
         }
+
         ExecutionEvent.new(updated, final_status, event_data)
       end)
 
@@ -362,11 +374,16 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   end
 
   defp dag_status_to_event(:running, step_name, data), do: {:dag_step_started, step_name, data}
-  defp dag_status_to_event(:completed, step_name, data), do: {:dag_step_completed, step_name, data}
+
+  defp dag_status_to_event(:completed, step_name, data),
+    do: {:dag_step_completed, step_name, data}
+
   defp dag_status_to_event(:failed, step_name, data), do: {:dag_step_failed, step_name, data}
   defp dag_status_to_event(:blocked, step_name, data), do: {:dag_step_blocked, step_name, data}
   defp dag_status_to_event(:skipped, step_name, data), do: {:dag_step_skipped, step_name, data}
-  defp dag_status_to_event(:timed_out, step_name, data), do: {:dag_step_timed_out, step_name, data}
+
+  defp dag_status_to_event(:timed_out, step_name, data),
+    do: {:dag_step_timed_out, step_name, data}
 
   defp dag_status_to_event(status, step_name, data),
     do: {:dag_step_status, step_name, status, data}

@@ -40,7 +40,7 @@ defmodule Cadence.Procedures.ProcedureVersion do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Procedures.Procedure
+  alias Cadence.Procedures.{Procedure, ProcedureApproval, ProcedureVersionEvent}
 
   @type t :: %__MODULE__{}
 
@@ -63,15 +63,38 @@ defmodule Cadence.Procedures.ProcedureVersion do
     field :approved_at, :utc_datetime
     field :change_summary, :string
 
+    # Submission tracking
+    field :submitted_at, :utc_datetime
+    field :rejected_at, :utc_datetime
+    field :rejection_reason, :string
+
     belongs_to :procedure, Procedure
     belongs_to :created_by, Cadence.Accounts.User
     belongs_to :approved_by, Cadence.Accounts.User
+    belongs_to :submitted_by, Cadence.Accounts.User
+    belongs_to :rejected_by, Cadence.Accounts.User
+
+    has_many :approvals, ProcedureApproval
+    has_many :events, ProcedureVersionEvent
 
     timestamps(type: :utc_datetime)
   end
 
   @required_fields [:procedure_id, :version_number, :source]
-  @optional_fields [:parameters_schema, :status, :approved_at, :approved_by_id, :created_by_id, :change_summary, :allow_hazardous_commands]
+  @optional_fields [
+    :parameters_schema,
+    :status,
+    :approved_at,
+    :approved_by_id,
+    :created_by_id,
+    :change_summary,
+    :allow_hazardous_commands,
+    :submitted_at,
+    :submitted_by_id,
+    :rejected_at,
+    :rejected_by_id,
+    :rejection_reason
+  ]
 
   def changeset(version, attrs) do
     version
@@ -83,16 +106,52 @@ defmodule Cadence.Procedures.ProcedureVersion do
     |> foreign_key_constraint(:procedure_id)
     |> foreign_key_constraint(:created_by_id)
     |> foreign_key_constraint(:approved_by_id)
+    |> foreign_key_constraint(:submitted_by_id)
+    |> foreign_key_constraint(:rejected_by_id)
     |> unique_constraint([:procedure_id, :version_number],
       name: :procedure_versions_procedure_version_index,
       message: "version number already exists"
     )
   end
 
+  @doc """
+  Changeset for approving a version.
+  """
   def approval_changeset(version, attrs) do
     version
     |> cast(attrs, [:status, :approved_at, :approved_by_id])
     |> validate_inclusion(:status, [:approved, :deprecated])
+  end
+
+  @doc """
+  Changeset for submitting a version for review.
+  """
+  def submit_changeset(version, attrs) do
+    version
+    |> cast(attrs, [:status, :submitted_at, :submitted_by_id])
+    |> validate_inclusion(:status, [:in_review])
+  end
+
+  @doc """
+  Changeset for withdrawing a submission.
+  """
+  def withdrawal_changeset(version, _attrs) do
+    version
+    |> change()
+    |> put_change(:status, :draft)
+    |> put_change(:submitted_at, nil)
+    |> put_change(:submitted_by_id, nil)
+  end
+
+  @doc """
+  Changeset for rejecting a version.
+  """
+  def rejection_changeset(version, attrs) do
+    version
+    |> cast(attrs, [:rejected_at, :rejected_by_id, :rejection_reason])
+    |> put_change(:status, :draft)
+    |> validate_required([:rejection_reason])
+    |> validate_length(:rejection_reason, max: 2000)
   end
 
   defp validate_source(changeset) do

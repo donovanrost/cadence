@@ -28,6 +28,29 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
 
         <.input field={@form[:description]} type="textarea" label="Description" rows={3} />
 
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">Tags</span>
+          </label>
+          <input
+            type="text"
+            name="tags_input"
+            value={@tags_input}
+            class="input input-bordered w-full"
+            placeholder="Enter tags separated by commas (e.g., safety, recovery, phase-1)"
+            phx-target={@myself}
+            phx-debounce="blur"
+          />
+          <label class="label">
+            <span class="label-text-alt text-base-content/50">
+              Tags must contain only lowercase letters, numbers, and hyphens
+            </span>
+          </label>
+          <div :if={length(@parsed_tags) > 0} class="flex flex-wrap gap-1 mt-1">
+            <span :for={tag <- @parsed_tags} class="badge badge-primary badge-sm">{tag}</span>
+          </div>
+        </div>
+
         <.input
           field={@form[:type]}
           type="select"
@@ -37,8 +60,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
             {"Script", "script"}
           ]}
         />
-
-        <!-- DAG Settings -->
+        
+    <!-- DAG Settings -->
         <div :if={@form[:type].value == "dag" or @form[:type].value == :dag} class="space-y-4">
           <p class="text-sm text-base-content/60">
             DAG format allows parallel execution of independent steps with explicit dependencies.
@@ -71,8 +94,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
             </label>
           </div>
         </div>
-
-        <!-- Script Code Editor -->
+        
+    <!-- Script Code Editor -->
         <div :if={@form[:type].value == "script" or @form[:type].value == :script}>
           <label class="block text-sm font-medium mb-2">Lua Code</label>
           <textarea
@@ -91,8 +114,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
           <.button phx-disable-with="Saving..." class="btn-primary">Save Procedure</.button>
         </:actions>
       </.simple_form>
-
-      <!-- DAG Editor - outside the form to prevent event bubbling issues -->
+      
+    <!-- DAG Editor - outside the form to prevent event bubbling issues -->
       <div
         :if={@form[:type].value == "dag" or @form[:type].value == :dag}
         class="mt-4"
@@ -117,6 +140,10 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
     # Extract source data for editing
     {source_json, code, dag_steps, on_step_failure} = extract_source(procedure)
 
+    # Extract tags for editing
+    tags = procedure.tags || []
+    tags_input = Enum.join(tags, ", ")
+
     changeset = Procedures.change_procedure(procedure)
 
     {:ok,
@@ -126,6 +153,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
      |> assign(:code, code)
      |> assign(:dag_steps, dag_steps)
      |> assign(:on_step_failure, on_step_failure)
+     |> assign(:tags_input, tags_input)
+     |> assign(:parsed_tags, tags)
      |> assign_form(changeset)}
   end
 
@@ -158,13 +187,27 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
 
   defp default_dag_steps do
     %{
-      "init" => %{"type" => "log", "level" => "info", "message" => "Starting procedure", "depends_on" => []},
-      "finish" => %{"type" => "log", "level" => "info", "message" => "Procedure complete", "depends_on" => ["init"]}
+      "init" => %{
+        "type" => "log",
+        "level" => "info",
+        "message" => "Starting procedure",
+        "depends_on" => []
+      },
+      "finish" => %{
+        "type" => "log",
+        "level" => "info",
+        "message" => "Procedure complete",
+        "depends_on" => ["init"]
+      }
     }
   end
 
   @impl true
   def handle_event("validate", %{"procedure" => procedure_params} = params, socket) do
+    # Parse tags from input
+    tags_input = params["tags_input"] || socket.assigns.tags_input
+    parsed_tags = parse_tags(tags_input)
+
     changeset =
       socket.assigns.procedure
       |> Procedures.change_procedure(procedure_params)
@@ -175,6 +218,8 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
      |> assign(:source_json, params["source_json"] || socket.assigns.source_json)
      |> assign(:code, params["code"] || socket.assigns.code)
      |> assign(:on_step_failure, params["on_step_failure"] || socket.assigns.on_step_failure)
+     |> assign(:tags_input, tags_input)
+     |> assign(:parsed_tags, parsed_tags)
      |> assign_form(changeset)}
   end
 
@@ -183,6 +228,13 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
     # Type could be string or atom depending on whether the select was changed
     type = to_string(procedure_params["type"] || socket.assigns.procedure.type || "dag")
     on_step_failure = params["on_step_failure"] || socket.assigns.on_step_failure
+
+    # Parse tags from input
+    tags_input = params["tags_input"] || socket.assigns.tags_input
+    parsed_tags = parse_tags(tags_input)
+
+    # Add tags to procedure params
+    procedure_params = Map.put(procedure_params, "tags", parsed_tags)
 
     source =
       case type do
@@ -285,4 +337,15 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
   end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
+
+  defp parse_tags(input) when is_binary(input) do
+    input
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&String.downcase/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp parse_tags(_), do: []
 end
