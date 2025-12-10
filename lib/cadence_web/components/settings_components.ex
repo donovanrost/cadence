@@ -24,7 +24,77 @@ defmodule CadenceWeb.SettingsComponents do
   def restrictiveness_hint(:none), do: "Missions can set any valid value"
   def restrictiveness_hint(_), do: nil
 
-  ## Components
+  ## Layout Components
+
+  @doc """
+  Renders a settings layout with tabs and content.
+  """
+  slot :tabs, required: true
+  slot :content, required: true
+
+  def settings_layout(assigns) do
+    ~H"""
+    <div class="flex gap-8">
+      <nav class="w-48 shrink-0">
+        <ul class="space-y-1">
+          {render_slot(@tabs)}
+        </ul>
+      </nav>
+      <div class="flex-1 min-w-0">
+        {render_slot(@content)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a settings navigation tab.
+  """
+  attr :navigate, :string, required: true
+  attr :active, :boolean, default: false
+  attr :icon, :string, required: true
+  slot :inner_block, required: true
+
+  def settings_tab(assigns) do
+    ~H"""
+    <li>
+      <.link
+        navigate={@navigate}
+        class={[
+          "flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm",
+          @active && "bg-primary/10 text-primary font-medium",
+          not @active && "text-base-content/70 hover:bg-base-200"
+        ]}
+      >
+        <.icon name={@icon} class="h-4 w-4" />
+        {render_slot(@inner_block)}
+      </.link>
+    </li>
+    """
+  end
+
+  @doc """
+  Renders a settings section with title and optional description.
+  """
+  attr :title, :string, required: true
+  attr :description, :string, default: nil
+  slot :inner_block, required: true
+
+  def settings_section(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div>
+        <h2 class="text-lg font-semibold">{@title}</h2>
+        <p :if={@description} class="text-sm text-base-content/60 mt-1">{@description}</p>
+      </div>
+      <div class="space-y-4">
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
+  ## Card Components
 
   @doc """
   Renders a base card wrapper for any setting.
@@ -209,14 +279,19 @@ defmodule CadenceWeb.SettingsComponents do
   attr :description, :string, required: true, doc: "Setting description from definition"
   attr :type, :atom, required: true, values: [:integer, :boolean], doc: "Setting value type"
   attr :org_value, :any, required: true, doc: "Organization default value"
-  attr :mission_override, :any, default: nil, doc: "Current override value (nil if not overridden)"
+
+  attr :mission_override, :any,
+    default: nil,
+    doc: "Current override value (nil if not overridden)"
+
   attr :has_override, :boolean, required: true, doc: "Whether override is enabled"
   attr :min_value, :integer, default: nil, doc: "Minimum allowed value (for integers)"
   attr :max_value, :integer, default: nil, doc: "Maximum allowed value (for integers)"
   attr :restrictiveness, :atom, default: :none, doc: "Restrictiveness rule for generating hint"
-  attr :name, :string, required: true, doc: "Form field name"
+  attr :name, :any, required: true, doc: "Form field name (string or atom)"
   attr :error, :string, default: nil, doc: "Error message"
   attr :saved, :boolean, default: false, doc: "Whether to show saved indicator"
+  attr :can_override, :boolean, default: true, doc: "Whether override is allowed"
   attr :rest, :global, include: ~w(phx-change phx-target)
 
   def setting_override_card(assigns) do
@@ -231,10 +306,22 @@ defmodule CadenceWeb.SettingsComponents do
     # Generate constraint hint based on restrictiveness
     constraint_hint = build_constraint_hint(assigns.restrictiveness, assigns.org_value)
 
+    # Determine if override is disabled (for boolean with false_is_stricter when org is false)
+    override_disabled =
+      not assigns.can_override or
+        (assigns.type == :boolean and
+           assigns.restrictiveness == :false_is_stricter and
+           assigns.org_value == false)
+
+    # Ensure name is a string for the form
+    name_str = to_string(assigns.name)
+
     assigns =
       assigns
       |> assign(:effective_value, effective_value)
       |> assign(:constraint_hint, constraint_hint)
+      |> assign(:override_disabled, override_disabled)
+      |> assign(:name_str, name_str)
 
     ~H"""
     <div class="card bg-base-100 border border-base-300 p-4">
@@ -251,11 +338,16 @@ defmodule CadenceWeb.SettingsComponents do
           type="checkbox"
           class="checkbox checkbox-sm"
           checked={@has_override}
+          disabled={@override_disabled}
           phx-click="toggle_override"
-          phx-value-name={@name}
+          phx-value-key={@name}
         />
         <span class="text-sm">Override for this mission</span>
       </label>
+
+      <div :if={@override_disabled and not @has_override} class="text-xs text-warning mt-2">
+        Cannot override - disabled at organization level
+      </div>
 
       <div :if={@has_override} class="flex items-center gap-3">
         <%= if @type == :integer do %>
@@ -263,24 +355,22 @@ defmodule CadenceWeb.SettingsComponents do
             value={@effective_value}
             min={@min_value}
             max={@max_value}
-            name={@name}
+            name={@name_str}
             {@rest}
           />
         <% else %>
-          <.setting_toggle
-            value={@effective_value}
-            name={@name}
-            {@rest}
-          />
+          <.setting_toggle value={@effective_value} name={@name_str} {@rest} />
         <% end %>
 
         <span :if={@saved} class="text-xs text-success flex items-center gap-1">
-          <.icon name="hero-check" class="size-4" />
-          Saved
+          <.icon name="hero-check" class="size-4" /> Saved
         </span>
       </div>
 
-      <div :if={@constraint_hint && @has_override} class="text-xs text-info mt-2 flex items-center gap-1">
+      <div
+        :if={@constraint_hint && @has_override}
+        class="text-xs text-info mt-2 flex items-center gap-1"
+      >
         <.icon name="hero-information-circle" class="size-4" />
         <span>{@constraint_hint}</span>
       </div>
