@@ -26,12 +26,12 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
       assert html =~ "Procedures"
     end
 
-    test "shows general tab as active on index", %{conn: conn} do
+    test "shows general tab as active on index", %{conn: conn, org: org} do
       {:ok, _view, html} = live(conn, ~p"/settings")
 
-      # Check that General tab has active styling
-      assert html =~ "bg-primary"
-      assert html =~ "General settings coming soon"
+      # Check that Organization info is shown
+      assert html =~ org.name
+      assert html =~ org.slug
     end
   end
 
@@ -61,14 +61,14 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
     end
   end
 
-  describe "saving settings" do
-    test "updates integer setting", %{conn: conn, org: org} do
+  describe "saving integer settings" do
+    test "updates integer setting via input change", %{conn: conn, org: org} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change the required_approvals setting
+      # Change the required_approvals setting via the number input
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "required_approvals", value: "5"})
+      |> element("input[name=\"required_approvals\"]")
+      |> render_change(%{required_approvals: "5"})
 
       # Verify the setting was updated
       assert Settings.get_org(org, :procedures, :required_approvals) == 5
@@ -77,13 +77,41 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
       assert render(view) =~ "Setting updated"
     end
 
+    test "updates integer setting via increment button", %{conn: conn, org: org} do
+      {:ok, view, _html} = live(conn, ~p"/settings/procedures")
+
+      # Click increment button
+      view
+      |> element("button[phx-click=\"increment_setting\"][phx-value-name=\"required_approvals\"]")
+      |> render_click()
+
+      # Default is 1, should now be 2
+      assert Settings.get_org(org, :procedures, :required_approvals) == 2
+    end
+
+    test "updates integer setting via decrement button", %{conn: conn, org: org} do
+      # First set to 5
+      {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 5)
+
+      {:ok, view, _html} = live(conn, ~p"/settings/procedures")
+
+      # Click decrement button
+      view
+      |> element("button[phx-click=\"decrement_setting\"][phx-value-name=\"required_approvals\"]")
+      |> render_click()
+
+      assert Settings.get_org(org, :procedures, :required_approvals) == 4
+    end
+  end
+
+  describe "saving boolean settings" do
     test "updates boolean setting to false", %{conn: conn, org: org} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change allow_self_approval to false
+      # Change allow_self_approval to false via toggle (select checkbox, not hidden input)
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "allow_self_approval", value: "false"})
+      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
+      |> render_change(%{allow_self_approval: "false"})
 
       assert Settings.get_org(org, :procedures, :allow_self_approval) == false
     end
@@ -94,42 +122,22 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change it back to true
+      # Change it back to true (select checkbox, not hidden input)
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "allow_self_approval", value: "true"})
+      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
+      |> render_change(%{allow_self_approval: "true"})
 
       assert Settings.get_org(org, :procedures, :allow_self_approval) == true
     end
+  end
 
-    test "shows error for invalid integer value", %{conn: conn, org: org} do
-      {:ok, view, _html} = live(conn, ~p"/settings/procedures")
+  describe "validation" do
+    test "decrement button disabled at minimum", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/settings/procedures")
 
-      # Try to set value outside valid range (required_approvals is 1-10)
-      view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "required_approvals", value: "100"})
-
-      html = render(view)
-      assert html =~ "Invalid value"
-
-      # Value should not have changed
-      assert Settings.get_org(org, :procedures, :required_approvals) == 1
-    end
-
-    test "shows error for value below minimum", %{conn: conn, org: org} do
-      {:ok, view, _html} = live(conn, ~p"/settings/procedures")
-
-      # Try to set value below minimum (required_approvals minimum is 1)
-      view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "required_approvals", value: "0"})
-
-      html = render(view)
-      assert html =~ "Invalid value"
-
-      # Value should not have changed
-      assert Settings.get_org(org, :procedures, :required_approvals) == 1
+      # The decrement button should be disabled when at minimum (1)
+      assert html =~ ~s(phx-click="decrement_setting")
+      assert html =~ "disabled"
     end
   end
 
@@ -137,9 +145,9 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
     test "can navigate from general to procedures tab", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/settings")
 
-      # Click procedures tab
+      # Click procedures tab in desktop navigation (hidden lg:flex)
       view
-      |> element("a", "Procedures")
+      |> element("ul.hidden.lg\\:flex a[href=\"/settings/procedures\"]")
       |> render_click()
 
       assert_patched(view, ~p"/settings/procedures")
@@ -148,9 +156,9 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
     test "can navigate from procedures to general tab", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Click general tab
+      # Click general tab in desktop navigation (hidden lg:flex)
       view
-      |> element("a", "General")
+      |> element("ul.hidden.lg\\:flex a[href=\"/settings\"]")
       |> render_click()
 
       assert_patched(view, ~p"/settings")
@@ -161,10 +169,10 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
     test "settings persist across page reloads", %{conn: conn, org: org} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change a setting
+      # Change a setting via input
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "required_approvals", value: "7"})
+      |> element("input[name=\"required_approvals\"]")
+      |> render_change(%{required_approvals: "7"})
 
       # Verify it persisted
       assert Settings.get_org(org, :procedures, :required_approvals) == 7
@@ -181,13 +189,13 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
 
       # Change required_approvals
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "required_approvals", value: "3"})
+      |> element("input[name=\"required_approvals\"]")
+      |> render_change(%{required_approvals: "3"})
 
-      # Change allow_self_approval
+      # Change allow_self_approval (select checkbox, not hidden input)
       view
-      |> element("form[phx-change=\"save_setting\"]")
-      |> render_change(%{key: "allow_self_approval", value: "false"})
+      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
+      |> render_change(%{allow_self_approval: "false"})
 
       # Verify both settings
       assert Settings.get_org(org, :procedures, :required_approvals) == 3

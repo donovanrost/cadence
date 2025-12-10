@@ -136,9 +136,17 @@ defmodule CadenceWeb.SettingsLive.Index do
   defp extract_setting_key(params) do
     # Handle both direct key and nested form params
     cond do
-      Map.has_key?(params, "key") -> params["key"]
-      Map.has_key?(params, "_target") -> List.first(params["_target"])
-      true -> nil
+      Map.has_key?(params, "key") ->
+        params["key"]
+
+      Map.has_key?(params, "_target") ->
+        List.first(params["_target"])
+
+      true ->
+        # Fall back to first non-internal key in params (e.g., "required_approvals" => "5")
+        params
+        |> Map.keys()
+        |> Enum.find(fn key -> not String.starts_with?(key, "_") end)
     end
   end
 

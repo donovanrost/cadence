@@ -233,6 +233,7 @@ defmodule CadenceWeb.MissionLive.Settings do
                 name={setting.key}
                 error={Map.get(@errors, setting.key)}
                 can_override={setting.can_override}
+                phx-change="save_setting"
               />
             <% end %>
           </.settings_section>

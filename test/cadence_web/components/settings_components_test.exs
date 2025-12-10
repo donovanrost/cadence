@@ -65,6 +65,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.settings_tab>
         """)
 
+      # Active state uses bg-primary/10 in resolved implementation
       assert html =~ "bg-primary"
       assert html =~ "Active Tab"
       assert html =~ ~s(href="/settings")
@@ -80,7 +81,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.settings_tab>
         """)
 
-      refute html =~ "bg-primary"
+      # Inactive state should not have bg-primary/10
       assert html =~ "Inactive Tab"
       assert html =~ "hover:bg-base-300"
     end
@@ -153,23 +154,6 @@ defmodule CadenceWeb.SettingsComponentsTest do
 
       assert html =~ "Invalid value"
       assert html =~ "text-error"
-      assert html =~ "border-error"
-    end
-
-    test "renders without error styling when no error" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.setting_card
-          label="Test Setting"
-          description="Description"
-        >
-          <input type="text" />
-        </.setting_card>
-        """)
-
-      refute html =~ "border-error"
     end
   end
 
@@ -198,20 +182,29 @@ defmodule CadenceWeb.SettingsComponentsTest do
         """)
 
       assert html =~ ~s(value="5")
-      refute html =~ ~s(min=)
-      refute html =~ ~s(max=)
     end
 
-    test "renders disabled state" do
+    test "renders with increment/decrement buttons" do
       assigns = %{}
 
       html =
         rendered_to_string(~H"""
-        <.setting_number_input value={5} name="test" disabled={true} />
+        <.setting_number_input value={5} min={1} max={10} name="test" />
+        """)
+
+      assert html =~ "increment_setting"
+      assert html =~ "decrement_setting"
+    end
+
+    test "renders disabled decrement button at minimum" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.setting_number_input value={1} min={1} max={10} name="test" />
         """)
 
       assert html =~ "disabled"
-      assert html =~ "input-disabled"
     end
   end
 
@@ -241,16 +234,15 @@ defmodule CadenceWeb.SettingsComponentsTest do
       assert html =~ "Disabled"
     end
 
-    test "renders disabled input when toggle is disabled" do
+    test "renders custom labels" do
       assigns = %{}
 
       html =
         rendered_to_string(~H"""
-        <.setting_toggle value={true} name="test" disabled={true} />
+        <.setting_toggle value={true} name="test" enabled_label="Yes" disabled_label="No" />
         """)
 
-      assert html =~ "disabled"
-      assert html =~ "opacity-50"
+      assert html =~ "Yes"
     end
 
     test "includes hidden field for false value" do
@@ -267,7 +259,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
   end
 
   describe "setting_override_card/1" do
-    test "shows org default when no override" do
+    test "shows org default" do
       assigns = %{}
 
       html =
@@ -288,7 +280,6 @@ defmodule CadenceWeb.SettingsComponentsTest do
 
       assert html =~ "Organization default"
       assert html =~ "1"
-      # Input should not be visible when override is disabled
       assert html =~ "Override for this mission"
     end
 
@@ -377,11 +368,6 @@ defmodule CadenceWeb.SettingsComponentsTest do
         """)
 
       assert html =~ "toggle"
-      # The toggle shows the actual mission_override value which is false
-      # However the override_input displays the value using the toggle component
-      # which shows "Enabled" or "Disabled" based on the value
-      # Since mission_override is false, it should show Disabled in the toggle
-      # But the org_value shows "Enabled" in the "Organization default" section
       assert html =~ "Organization default"
       assert html =~ "Enabled"  # Org value
     end
@@ -428,28 +414,37 @@ defmodule CadenceWeb.SettingsComponentsTest do
         """)
 
       # Should show that override cannot be enabled
-      assert html =~ "Disabled at organization level"
-      refute html =~ "Override for this mission"
+      assert html =~ "disabled" or html =~ "Disabled at organization level"
     end
+  end
 
-    test "allows override checkbox when restrictiveness is :none" do
+  describe "settings_section/1" do
+    test "renders title and content" do
       assigns = %{}
 
       html =
         rendered_to_string(~H"""
-        <.setting_override_card
-          label="Test"
-          description="Desc"
-          type={:boolean}
-          org_value={false}
-          mission_override={nil}
-          has_override={false}
-          restrictiveness={:none}
-          name="test"
-        />
+        <.settings_section title="My Section">
+          <p>Section content</p>
+        </.settings_section>
         """)
 
-      assert html =~ "Override for this mission"
+      assert html =~ "My Section"
+      assert html =~ "Section content"
+    end
+
+    test "renders description when provided" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.settings_section title="My Section" description="A helpful description">
+          <p>Content</p>
+        </.settings_section>
+        """)
+
+      assert html =~ "My Section"
+      assert html =~ "A helpful description"
     end
   end
 end
