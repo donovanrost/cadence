@@ -14,12 +14,18 @@ defmodule CadenceWeb.MissionLive.Settings do
   @impl true
   def mount(_params, _session, socket) do
     # Mission is already loaded via :load_mission hook in router
-    {:ok, socket}
+    {:ok, assign(socket, :errors, %{})}
   end
 
   @impl true
   def handle_params(params, _url, socket) do
     {:noreply, apply_action(socket, socket.assigns.live_action, params)}
+  end
+
+  defp apply_action(socket, :index, _params) do
+    socket
+    |> assign(:page_title, "Mission Settings")
+    |> assign(:active_tab, :general)
   end
 
   defp apply_action(socket, :general, _params) do
@@ -36,7 +42,6 @@ defmodule CadenceWeb.MissionLive.Settings do
     |> assign(:page_title, "Mission Settings - Procedures")
     |> assign(:active_tab, :procedures)
     |> assign(:settings, settings)
-    |> assign(:errors, %{})
   end
 
   @impl true
@@ -59,6 +64,7 @@ defmodule CadenceWeb.MissionLive.Settings do
         {:noreply,
          socket
          |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
+         |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
          |> put_flash(
            :info,
            "Override #{if setting.has_override, do: "removed", else: "enabled"}"
@@ -68,6 +74,7 @@ defmodule CadenceWeb.MissionLive.Settings do
         {:noreply,
          socket
          |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
+         |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
          |> put_flash(:info, "Override removed")}
 
       {:error, _} ->
@@ -159,8 +166,8 @@ defmodule CadenceWeb.MissionLive.Settings do
     definition = Settings.get_definition(:procedures, key)
 
     case definition.restrictiveness do
-      :higher -> "Must be at least #{org_value} (organization minimum)"
-      :lower -> "Must be at most #{org_value} (organization maximum)"
+      :higher -> "Must be at least #{org_value}"
+      :lower -> "Must be at most #{org_value}"
       :false_is_stricter -> "Cannot enable - disabled at organization level"
       _ -> "Value not allowed"
     end
@@ -177,14 +184,14 @@ defmodule CadenceWeb.MissionLive.Settings do
     <.settings_layout>
       <:tabs>
         <.settings_tab
-          navigate={~p"/missions/#{@mission}/settings"}
+          patch={~p"/missions/#{@mission}/settings"}
           active={@active_tab == :general}
           icon="hero-squares-2x2"
         >
           General
         </.settings_tab>
         <.settings_tab
-          navigate={~p"/missions/#{@mission}/settings/procedures"}
+          patch={~p"/missions/#{@mission}/settings/procedures"}
           active={@active_tab == :procedures}
           icon="hero-document-text"
         >

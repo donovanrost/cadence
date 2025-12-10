@@ -26,7 +26,7 @@ defmodule CadenceWeb.SettingsComponents do
 
       <.settings_layout>
         <:tabs>
-          <.settings_tab navigate={~p"/settings"} active={@live_action == :general} icon="hero-cog-6-tooth">
+          <.settings_tab patch={~p"/settings"} active={@live_action == :general} icon="hero-cog-6-tooth">
             General
           </.settings_tab>
         </:tabs>
@@ -67,10 +67,11 @@ defmodule CadenceWeb.SettingsComponents do
   Renders a tab navigation item for settings pages.
 
   Styled to match the existing `sidebar_nav_item` component patterns from layouts.ex.
+  Supports both `patch` (same LiveView) and `navigate` (different LiveView) modes.
 
   ## Examples
 
-      <.settings_tab navigate={~p"/settings"} active={true} icon="hero-cog-6-tooth">
+      <.settings_tab patch={~p"/settings"} active={true} icon="hero-cog-6-tooth">
         General
       </.settings_tab>
 
@@ -78,7 +79,8 @@ defmodule CadenceWeb.SettingsComponents do
         Procedures
       </.settings_tab>
   """
-  attr :navigate, :string, required: true, doc: "URL path to navigate to"
+  attr :patch, :string, default: nil, doc: "URL path to patch to (stays on same LiveView)"
+  attr :navigate, :string, default: nil, doc: "URL path to navigate to (different LiveView)"
   attr :active, :boolean, default: false, doc: "Whether this tab is currently active"
   attr :icon, :string, required: true, doc: "Hero icon name (e.g., \"hero-cog-6-tooth\")"
 
@@ -88,6 +90,7 @@ defmodule CadenceWeb.SettingsComponents do
     ~H"""
     <li class="flex-shrink-0 lg:flex-shrink">
       <.link
+        patch={@patch}
         navigate={@navigate}
         class={[
           "flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap",
@@ -223,7 +226,7 @@ defmodule CadenceWeb.SettingsComponents do
   attr :max, :integer, default: nil, doc: "Maximum allowed value"
   attr :name, :string, required: true, doc: "Form field name"
   attr :disabled, :boolean, default: false, doc: "Whether the input is disabled"
-  attr :rest, :global, include: ~w(phx-change phx-target)
+  attr :rest, :global, include: ~w(phx-change phx-target phx-debounce)
 
   def setting_number_input(assigns) do
     ~H"""
@@ -349,6 +352,7 @@ defmodule CadenceWeb.SettingsComponents do
   attr :error, :string, default: nil, doc: "Error message"
   attr :saved, :boolean, default: false, doc: "Whether to show saved indicator"
   attr :can_override, :boolean, default: true, doc: "Whether override is allowed"
+  attr :disabled, :boolean, default: false, doc: "Whether the setting is fully disabled"
   attr :rest, :global, include: ~w(phx-change phx-target)
 
   def setting_override_card(assigns) do
@@ -365,7 +369,7 @@ defmodule CadenceWeb.SettingsComponents do
 
     # Determine if override is disabled (for boolean with false_is_stricter when org is false)
     override_disabled =
-      not assigns.can_override or
+      assigns.disabled or not assigns.can_override or
         (assigns.type == :boolean and
            assigns.restrictiveness == :false_is_stricter and
            assigns.org_value == false)
@@ -403,7 +407,7 @@ defmodule CadenceWeb.SettingsComponents do
       </label>
 
       <div :if={@override_disabled and not @has_override} class="text-xs text-warning mt-2">
-        Cannot override - disabled at organization level
+        Disabled at organization level
       </div>
 
       <div :if={@has_override} class="flex items-center gap-3">
@@ -448,11 +452,11 @@ defmodule CadenceWeb.SettingsComponents do
   defp format_value(value), do: to_string(value)
 
   defp build_constraint_hint(:higher, org_value) when is_integer(org_value) do
-    "Must be ≥ #{org_value} (organization minimum)"
+    "Must be at least #{org_value}"
   end
 
   defp build_constraint_hint(:lower, org_value) when is_integer(org_value) do
-    "Must be ≤ #{org_value} (organization maximum)"
+    "Must be at most #{org_value}"
   end
 
   defp build_constraint_hint(:false_is_stricter, true) do
