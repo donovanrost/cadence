@@ -30,55 +30,13 @@ defmodule CadenceWeb.MissionLive.Settings do
 
   defp apply_action(socket, :procedures, _params) do
     mission = socket.assigns.mission
-    settings = load_mission_settings(mission)
+    settings = Settings.get_all_mission_settings(mission, :procedures)
 
     socket
     |> assign(:page_title, "Mission Settings - Procedures")
     |> assign(:active_tab, :procedures)
     |> assign(:settings, settings)
     |> assign(:errors, %{})
-  end
-
-  defp load_mission_settings(mission) do
-    mission = Cadence.Repo.preload(mission, :organization)
-
-    Settings.list_definitions(:procedures)
-    |> Enum.filter(fn def -> def.scope in [:both, :mission_only] end)
-    |> Enum.map(fn definition ->
-      org_value = Settings.get_org(mission.organization, :procedures, definition.key)
-      mission_override = Settings.get_mission_override(mission, :procedures, definition.key)
-
-      %{
-        key: definition.key,
-        label: definition.label,
-        description: definition.description,
-        type: definition.type,
-        org_value: org_value,
-        mission_override: mission_override,
-        has_override: not is_nil(mission_override),
-        effective_value: mission_override || org_value,
-        restrictiveness: definition.restrictiveness,
-        validate: definition.validate,
-        min_value: compute_min(definition, org_value),
-        max_value: compute_max(definition, org_value)
-      }
-    end)
-  end
-
-  defp compute_min(definition, org_value) do
-    case {definition.type, definition.restrictiveness, definition.validate} do
-      {:integer, :higher, {:range, _, _}} -> org_value
-      {:integer, _, {:range, min, _}} -> min
-      _ -> nil
-    end
-  end
-
-  defp compute_max(definition, org_value) do
-    case {definition.type, definition.restrictiveness, definition.validate} do
-      {:integer, :lower, {:range, _, _}} -> org_value
-      {:integer, _, {:range, _, max}} -> max
-      _ -> nil
-    end
   end
 
   @impl true
@@ -100,7 +58,7 @@ defmodule CadenceWeb.MissionLive.Settings do
       {:ok, _} ->
         {:noreply,
          socket
-         |> assign(:settings, load_mission_settings(mission))
+         |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
          |> put_flash(
            :info,
            "Override #{if setting.has_override, do: "removed", else: "enabled"}"
@@ -109,7 +67,7 @@ defmodule CadenceWeb.MissionLive.Settings do
       :ok ->
         {:noreply,
          socket
-         |> assign(:settings, load_mission_settings(mission))
+         |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
          |> put_flash(:info, "Override removed")}
 
       {:error, _} ->
@@ -118,16 +76,56 @@ defmodule CadenceWeb.MissionLive.Settings do
   end
 
   @impl true
+  def handle_event("increment_setting", %{"name" => name}, socket) do
+    mission = socket.assigns.mission
+    key_atom = String.to_existing_atom(name)
+    setting = Enum.find(socket.assigns.settings, &(&1.key == key_atom))
+
+    new_value = setting.effective_value + 1
+
+    save_setting_value(socket, mission, key_atom, new_value)
+  end
+
+  @impl true
+  def handle_event("decrement_setting", %{"name" => name}, socket) do
+    mission = socket.assigns.mission
+    key_atom = String.to_existing_atom(name)
+    setting = Enum.find(socket.assigns.settings, &(&1.key == key_atom))
+
+    new_value = setting.effective_value - 1
+
+    save_setting_value(socket, mission, key_atom, new_value)
+  end
+
+  @impl true
   def handle_event("save_setting", %{"key" => key, "value" => value}, socket) do
     mission = socket.assigns.mission
     key_atom = String.to_existing_atom(key)
     parsed_value = parse_value(key_atom, value)
 
-    case Settings.set_mission(mission, :procedures, key_atom, parsed_value) do
+    save_setting_value(socket, mission, key_atom, parsed_value)
+  end
+
+  @impl true
+  def handle_event("save_setting", params, socket) do
+    mission = socket.assigns.mission
+
+    # Handle form params from number input (e.g., %{"required_approvals" => "2"})
+    key = Map.keys(params) |> Enum.find(&is_binary/1) || ""
+    value = Map.get(params, key, "")
+
+    key_atom = String.to_existing_atom(key)
+    parsed_value = parse_value(key_atom, value)
+
+    save_setting_value(socket, mission, key_atom, parsed_value)
+  end
+
+  defp save_setting_value(socket, mission, key_atom, value) do
+    case Settings.set_mission(mission, :procedures, key_atom, value) do
       {:ok, _} ->
         {:noreply,
          socket
-         |> assign(:settings, load_mission_settings(mission))
+         |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
          |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
          |> put_flash(:info, "Setting updated")}
 
@@ -145,7 +143,7 @@ defmodule CadenceWeb.MissionLive.Settings do
     end
   end
 
-  defp parse_value(key, value) do
+  defp parse_value(key, value) when is_binary(value) do
     definition = Settings.get_definition(:procedures, key)
 
     case definition.type do
@@ -154,6 +152,8 @@ defmodule CadenceWeb.MissionLive.Settings do
       :string -> value
     end
   end
+
+  defp parse_value(_key, value), do: value
 
   defp restrictiveness_error_message(key, %{org_value: org_value}) do
     definition = Settings.get_definition(:procedures, key)
@@ -225,6 +225,7 @@ defmodule CadenceWeb.MissionLive.Settings do
                 restrictiveness={setting.restrictiveness}
                 name={setting.key}
                 error={Map.get(@errors, setting.key)}
+                can_override={setting.can_override}
               />
             <% end %>
           </.settings_section>
