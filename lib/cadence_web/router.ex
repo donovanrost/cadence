@@ -77,6 +77,10 @@ defmodule CadenceWeb.Router do
       # Standalone target routes
       live "/targets", TargetLive.Index, :index
       live "/targets/:id", TargetLive.Show, :show
+
+      # Organization settings
+      live "/settings", SettingsLive.Index, :general
+      live "/settings/procedures", SettingsLive.Index, :procedures
     end
 
     # Mission-specific routes (mission sidebar with mission context)
