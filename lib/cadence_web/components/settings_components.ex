@@ -1,6 +1,10 @@
 defmodule CadenceWeb.SettingsComponents do
   @moduledoc """
-  UI components for displaying and editing settings.
+  UI components for settings pages.
+
+  Provides layout components (settings_layout, settings_tab, settings_section) for
+  organizing settings pages, plus card components (setting_card, setting_toggle,
+  setting_number_input, setting_override_card) for displaying and editing settings.
 
   These components support hierarchical settings with organization defaults
   and mission-level overrides, including restrictiveness hints.
@@ -10,7 +14,130 @@ defmodule CadenceWeb.SettingsComponents do
 
   import CadenceWeb.CoreComponents, only: [icon: 1]
 
-  # Restrictiveness Hint Text Helpers
+  ## Layout Components
+
+  @doc """
+  Renders a two-column settings layout with tab navigation.
+
+  On desktop, displays tabs in a left sidebar (25% width) with content on the right.
+  On mobile, tabs render as a horizontal scrollable row above the content.
+
+  ## Examples
+
+      <.settings_layout>
+        <:tabs>
+          <.settings_tab navigate={~p"/settings"} active={@live_action == :general} icon="hero-cog-6-tooth">
+            General
+          </.settings_tab>
+        </:tabs>
+        <:content>
+          <.settings_section title="Approval Workflow">
+            <!-- Settings cards here -->
+          </.settings_section>
+        </:content>
+      </.settings_layout>
+  """
+  slot :tabs, required: true, doc: "Tab navigation items"
+  slot :content, required: true, doc: "Main content area"
+
+  def settings_layout(assigns) do
+    ~H"""
+    <div class="flex flex-col lg:flex-row min-h-[calc(100vh-12rem)]">
+      <!-- Tab Navigation - Horizontal on mobile, Vertical sidebar on desktop -->
+      <nav class="lg:w-1/4 lg:min-w-[200px] lg:max-w-[280px] bg-base-200 lg:border-r border-base-300">
+        <!-- Mobile: Horizontal scrollable tabs -->
+        <ul class="flex lg:hidden flex-row overflow-x-auto gap-1 p-2 border-b border-base-300">
+          {render_slot(@tabs)}
+        </ul>
+        <!-- Desktop: Vertical tab list -->
+        <ul class="hidden lg:flex flex-col gap-1 p-4">
+          {render_slot(@tabs)}
+        </ul>
+      </nav>
+
+      <!-- Content Area -->
+      <div class="flex-1 p-4 lg:p-6 overflow-y-auto">
+        {render_slot(@content)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a tab navigation item for settings pages.
+
+  Styled to match the existing `sidebar_nav_item` component patterns from layouts.ex.
+
+  ## Examples
+
+      <.settings_tab navigate={~p"/settings"} active={true} icon="hero-cog-6-tooth">
+        General
+      </.settings_tab>
+
+      <.settings_tab navigate={~p"/settings/procedures"} active={false} icon="hero-document-text">
+        Procedures
+      </.settings_tab>
+  """
+  attr :navigate, :string, required: true, doc: "URL path to navigate to"
+  attr :active, :boolean, default: false, doc: "Whether this tab is currently active"
+  attr :icon, :string, required: true, doc: "Hero icon name (e.g., \"hero-cog-6-tooth\")"
+
+  slot :inner_block, required: true, doc: "Tab label text"
+
+  def settings_tab(assigns) do
+    ~H"""
+    <li class="flex-shrink-0 lg:flex-shrink">
+      <.link
+        navigate={@navigate}
+        class={[
+          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap",
+          @active && "bg-primary/10 text-primary font-semibold glow-cyan",
+          !@active && "text-base-content/70 hover:bg-base-300 hover-glow-purple"
+        ]}
+      >
+        <.icon name={@icon} class="h-5 w-5" />
+        <span>{render_slot(@inner_block)}</span>
+      </.link>
+    </li>
+    """
+  end
+
+  @doc """
+  Renders a settings section with a header and grouped content.
+
+  Use this to group related settings together with a descriptive title
+  and optional description.
+
+  ## Examples
+
+      <.settings_section title="Approval Workflow" description="Configure how procedures are approved">
+        <!-- Settings cards here -->
+      </.settings_section>
+
+      <.settings_section title="General Settings">
+        <!-- Settings cards here -->
+      </.settings_section>
+  """
+  attr :title, :string, required: true, doc: "Section title"
+  attr :description, :string, default: nil, doc: "Optional section description"
+
+  slot :inner_block, required: true, doc: "Settings cards or content"
+
+  def settings_section(assigns) do
+    ~H"""
+    <section class="mb-8">
+      <header class="mb-4">
+        <h2 class="text-lg font-semibold mb-1">{@title}</h2>
+        <p :if={@description} class="text-sm text-base-content/60">{@description}</p>
+      </header>
+      <div class="space-y-4">
+        {render_slot(@inner_block)}
+      </div>
+    </section>
+    """
+  end
+
+  ## Restrictiveness Hint Text Helpers
 
   @doc """
   Returns a human-readable hint based on the restrictiveness rule.
@@ -23,76 +150,6 @@ defmodule CadenceWeb.SettingsComponents do
 
   def restrictiveness_hint(:none), do: "Missions can set any valid value"
   def restrictiveness_hint(_), do: nil
-
-  ## Layout Components
-
-  @doc """
-  Renders a settings layout with tabs and content.
-  """
-  slot :tabs, required: true
-  slot :content, required: true
-
-  def settings_layout(assigns) do
-    ~H"""
-    <div class="flex gap-8">
-      <nav class="w-48 shrink-0">
-        <ul class="space-y-1">
-          {render_slot(@tabs)}
-        </ul>
-      </nav>
-      <div class="flex-1 min-w-0">
-        {render_slot(@content)}
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
-  Renders a settings navigation tab.
-  """
-  attr :navigate, :string, required: true
-  attr :active, :boolean, default: false
-  attr :icon, :string, required: true
-  slot :inner_block, required: true
-
-  def settings_tab(assigns) do
-    ~H"""
-    <li>
-      <.link
-        navigate={@navigate}
-        class={[
-          "flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm",
-          @active && "bg-primary/10 text-primary font-medium",
-          not @active && "text-base-content/70 hover:bg-base-200"
-        ]}
-      >
-        <.icon name={@icon} class="h-4 w-4" />
-        {render_slot(@inner_block)}
-      </.link>
-    </li>
-    """
-  end
-
-  @doc """
-  Renders a settings section with title and optional description.
-  """
-  attr :title, :string, required: true
-  attr :description, :string, default: nil
-  slot :inner_block, required: true
-
-  def settings_section(assigns) do
-    ~H"""
-    <div class="space-y-4">
-      <div>
-        <h2 class="text-lg font-semibold">{@title}</h2>
-        <p :if={@description} class="text-sm text-base-content/60 mt-1">{@description}</p>
-      </div>
-      <div class="space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </div>
-    """
-  end
 
   ## Card Components
 
