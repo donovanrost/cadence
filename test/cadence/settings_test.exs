@@ -335,6 +335,147 @@ defmodule Cadence.SettingsTest do
     end
   end
 
+  describe "get_all_org_settings/2" do
+    test "returns all settings with values and metadata" do
+      org = organization_fixture()
+      settings = Settings.get_all_org_settings(org, :procedures)
+
+      assert length(settings) == 3
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.label == "Required Approvals"
+      assert approvals.value == 1
+      assert approvals.type == :integer
+      assert approvals.restrictiveness == :higher
+    end
+
+    test "returns stored org values instead of defaults" do
+      org = organization_fixture()
+      {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 5)
+
+      settings = Settings.get_all_org_settings(org, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.value == 5
+      assert approvals.default == 1
+    end
+
+    test "includes description and validate fields" do
+      org = organization_fixture()
+      settings = Settings.get_all_org_settings(org, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.description != nil
+      assert approvals.validate == {:range, 1, 10}
+    end
+  end
+
+  describe "get_all_mission_settings/2" do
+    setup do
+      org = organization_fixture()
+      mission = mission_fixture(organization: org)
+      %{org: org, mission: mission}
+    end
+
+    test "returns settings with override info", %{mission: mission} do
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.org_value == 1
+      assert approvals.has_override == false
+      assert approvals.min_value == 1
+    end
+
+    test "shows mission override when set", %{mission: mission} do
+      {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 3)
+
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.org_value == 1
+      assert approvals.mission_override == 3
+      assert approvals.has_override == true
+      assert approvals.effective_value == 3
+    end
+
+    test "computes effective_value from org when no override", %{org: org, mission: mission} do
+      {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 4)
+
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      assert approvals.org_value == 4
+      assert approvals.effective_value == 4
+      assert approvals.has_override == false
+    end
+
+    test "computes can_override for false_is_stricter when org allows", %{mission: mission} do
+      # By default, org allows self-approval (true)
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+      self_approval = Enum.find(settings, &(&1.key == :allow_self_approval))
+      assert self_approval.can_override == true
+    end
+
+    test "computes can_override for false_is_stricter when org disables", %{
+      org: org,
+      mission: mission
+    } do
+      # When org disables self-approval
+      {:ok, _} = Settings.set_org(org, :procedures, :allow_self_approval, false)
+
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+      self_approval = Enum.find(settings, &(&1.key == :allow_self_approval))
+      assert self_approval.can_override == false
+    end
+
+    test "computes min_value for higher restrictiveness", %{org: org, mission: mission} do
+      {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 3)
+
+      settings = Settings.get_all_mission_settings(mission, :procedures)
+
+      approvals = Enum.find(settings, &(&1.key == :required_approvals))
+      # min_value should be org value (3) since restrictiveness is :higher
+      assert approvals.min_value == 3
+      # max_value should be the range max (10)
+      assert approvals.max_value == 10
+    end
+  end
+
+  describe "get_namespace_info/1" do
+    test "returns info for procedures namespace" do
+      info = Settings.get_namespace_info(:procedures)
+
+      assert info.key == :procedures
+      assert info.label == "Procedures"
+      assert info.description == "Settings for procedure approval workflows"
+      assert info.icon == "hero-document-text"
+    end
+
+    test "returns nil for unknown namespace" do
+      assert Settings.get_namespace_info(:unknown) == nil
+    end
+  end
+
+  describe "list_namespaces_with_info/0" do
+    test "returns all namespaces with their display info" do
+      namespaces = Settings.list_namespaces_with_info()
+
+      assert length(namespaces) >= 1
+      assert Enum.any?(namespaces, &(&1.key == :procedures))
+    end
+
+    test "excludes namespaces without info" do
+      namespaces = Settings.list_namespaces_with_info()
+
+      # All returned namespaces should have required fields
+      for ns <- namespaces do
+        assert Map.has_key?(ns, :key)
+        assert Map.has_key?(ns, :label)
+        assert Map.has_key?(ns, :description)
+      end
+    end
+  end
+
   describe "Setting schema" do
     test "wrap_value/2 creates properly formatted value" do
       assert Setting.wrap_value(42, :integer) == %{"type" => "integer", "value" => 42}

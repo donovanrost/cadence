@@ -539,6 +539,7 @@ defmodule CadenceWeb.Layouts do
         String.contains?(assigns.current_path, "#{base_path}/automations")
       )
       |> assign(:is_schedules, String.contains?(assigns.current_path, "#{base_path}/schedules"))
+      |> assign(:is_settings, String.contains?(assigns.current_path, "#{base_path}/settings"))
 
     ~H"""
     <%= if @mission do %>
@@ -595,6 +596,11 @@ defmodule CadenceWeb.Layouts do
           Schedules
         </.sidebar_nav_child>
       </.sidebar_nav_group>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/settings"} active={@is_settings}>
+        <:icon><.icon name="hero-cog-6-tooth" class="h-5 w-5" /></:icon>
+        Settings
+      </.sidebar_nav_item>
 
       <li class="my-3 border-t border-base-300"></li>
 
