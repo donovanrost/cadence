@@ -9,6 +9,8 @@ defmodule CadenceWeb.SettingsLive.Index do
 
   alias Cadence.Settings
 
+  import CadenceWeb.SettingsComponents
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok, socket}
@@ -30,7 +32,7 @@ defmodule CadenceWeb.SettingsLive.Index do
 
   defp apply_action(socket, :procedures, _params) do
     org = socket.assigns.current_scope.current_organization
-    settings = load_procedure_settings(org)
+    settings = Settings.get_all_org_settings(org, :procedures)
 
     socket
     |> assign(:page_title, "Settings - Procedures")
@@ -39,26 +41,13 @@ defmodule CadenceWeb.SettingsLive.Index do
     |> assign(:settings, settings)
   end
 
-  defp load_procedure_settings(org) do
-    Settings.list_definitions(:procedures)
-    |> Enum.map(fn definition ->
-      %{
-        key: definition.key,
-        label: definition.label,
-        description: definition.description,
-        type: definition.type,
-        value: Settings.get_org(org, :procedures, definition.key),
-        restrictiveness: definition.restrictiveness,
-        validate: definition.validate
-      }
-    end)
-  end
-
   @impl true
-  def handle_event("save_setting", %{"key" => key, "value" => value}, socket) do
+  def handle_event("save_setting", %{} = params, socket) do
     org = socket.assigns.organization
-    key_atom = String.to_existing_atom(key)
+    key = extract_setting_key(params)
+    value = extract_setting_value(params)
 
+    key_atom = String.to_existing_atom(key)
     parsed_value = parse_value(key_atom, value)
 
     case Settings.set_org(org, :procedures, key_atom, parsed_value) do
@@ -66,7 +55,7 @@ defmodule CadenceWeb.SettingsLive.Index do
         {:noreply,
          socket
          |> put_flash(:info, "Setting updated")
-         |> assign(:settings, load_procedure_settings(org))}
+         |> assign(:settings, Settings.get_all_org_settings(org, :procedures))}
 
       {:error, :invalid_value} ->
         {:noreply, put_flash(socket, :error, "Invalid value")}
@@ -76,24 +65,105 @@ defmodule CadenceWeb.SettingsLive.Index do
     end
   end
 
+  def handle_event("increment_setting", %{"name" => name}, socket) do
+    org = socket.assigns.organization
+    key_atom = String.to_existing_atom(name)
+    current_value = Settings.get_org(org, :procedures, key_atom)
+    definition = Settings.get_definition(:procedures, key_atom)
+
+    max_value =
+      case definition.validate do
+        {:range, _, max} -> max
+        _ -> nil
+      end
+
+    new_value =
+      if max_value && current_value >= max_value do
+        current_value
+      else
+        current_value + 1
+      end
+
+    case Settings.set_org(org, :procedures, key_atom, new_value) do
+      {:ok, _setting} ->
+        {:noreply, assign(socket, :settings, Settings.get_all_org_settings(org, :procedures))}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update setting")}
+    end
+  end
+
+  def handle_event("decrement_setting", %{"name" => name}, socket) do
+    org = socket.assigns.organization
+    key_atom = String.to_existing_atom(name)
+    current_value = Settings.get_org(org, :procedures, key_atom)
+    definition = Settings.get_definition(:procedures, key_atom)
+
+    min_value =
+      case definition.validate do
+        {:range, min, _} -> min
+        _ -> nil
+      end
+
+    new_value =
+      if min_value && current_value <= min_value do
+        current_value
+      else
+        current_value - 1
+      end
+
+    case Settings.set_org(org, :procedures, key_atom, new_value) do
+      {:ok, _setting} ->
+        {:noreply, assign(socket, :settings, Settings.get_all_org_settings(org, :procedures))}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update setting")}
+    end
+  end
+
+  defp extract_setting_key(params) do
+    # Handle both direct key and nested form params
+    cond do
+      Map.has_key?(params, "key") -> params["key"]
+      Map.has_key?(params, "_target") -> List.first(params["_target"])
+      true -> nil
+    end
+  end
+
+  defp extract_setting_value(params) do
+    # Handle both direct value and nested form params
+    if Map.has_key?(params, "value") do
+      params["value"]
+    else
+      Map.get(params, extract_setting_key(params))
+    end
+  end
+
   defp parse_value(key, value) do
     definition = Settings.get_definition(:procedures, key)
 
     case definition.type do
-      :integer -> String.to_integer(value)
-      :boolean -> value == "true"
+      :integer when is_binary(value) -> String.to_integer(value)
+      :integer -> value
+      :boolean when is_binary(value) -> value == "true"
+      :boolean -> value
       :string -> value
     end
   end
 
-  defp restrictiveness_hint(:higher), do: "Missions can require more, but not fewer"
-  defp restrictiveness_hint(:lower), do: "Missions can set lower values, but not higher"
+  defp get_min_value(setting) do
+    case setting.validate do
+      {:range, min, _max} -> min
+      _ -> nil
+    end
+  end
 
-  defp restrictiveness_hint(:false_is_stricter),
-    do: "Missions can disable this, but cannot re-enable if disabled here"
-
-  defp restrictiveness_hint(:none), do: "Missions can override with any valid value"
-  defp restrictiveness_hint(_), do: nil
+  defp get_max_value(setting) do
+    case setting.validate do
+      {:range, _min, max} -> max
+      _ -> nil
+    end
+  end
 
   @impl true
   def render(assigns) do
@@ -151,15 +221,15 @@ defmodule CadenceWeb.SettingsLive.Index do
                   <%= if setting.type == :integer do %>
                     <.setting_number_input
                       value={setting.value}
-                      min={elem(setting.validate, 1)}
-                      max={elem(setting.validate, 2)}
-                      name={setting.key}
+                      min={get_min_value(setting)}
+                      max={get_max_value(setting)}
+                      name={to_string(setting.key)}
                       phx-change="save_setting"
                     />
                   <% else %>
                     <.setting_toggle
                       value={setting.value}
-                      name={setting.key}
+                      name={to_string(setting.key)}
                       phx-change="save_setting"
                     />
                   <% end %>
