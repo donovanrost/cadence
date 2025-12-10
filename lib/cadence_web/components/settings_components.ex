@@ -1,6 +1,10 @@
 defmodule CadenceWeb.SettingsComponents do
   @moduledoc """
-  UI components for displaying and editing settings.
+  UI components for settings pages.
+
+  Provides layout components (settings_layout, settings_tab, settings_section) for
+  organizing settings pages, plus card components (setting_card, setting_toggle,
+  setting_number_input, setting_override_card) for displaying and editing settings.
 
   These components support hierarchical settings with organization defaults
   and mission-level overrides, including restrictiveness hints.
@@ -8,7 +12,132 @@ defmodule CadenceWeb.SettingsComponents do
 
   use Phoenix.Component
 
-  # Restrictiveness Hint Text Helpers
+  import CadenceWeb.CoreComponents, only: [icon: 1]
+
+  ## Layout Components
+
+  @doc """
+  Renders a two-column settings layout with tab navigation.
+
+  On desktop, displays tabs in a left sidebar (25% width) with content on the right.
+  On mobile, tabs render as a horizontal scrollable row above the content.
+
+  ## Examples
+
+      <.settings_layout>
+        <:tabs>
+          <.settings_tab navigate={~p"/settings"} active={@live_action == :general} icon="hero-cog-6-tooth">
+            General
+          </.settings_tab>
+        </:tabs>
+        <:content>
+          <.settings_section title="Approval Workflow">
+            <!-- Settings cards here -->
+          </.settings_section>
+        </:content>
+      </.settings_layout>
+  """
+  slot :tabs, required: true, doc: "Tab navigation items"
+  slot :content, required: true, doc: "Main content area"
+
+  def settings_layout(assigns) do
+    ~H"""
+    <div class="flex flex-col lg:flex-row min-h-[calc(100vh-12rem)]">
+      <!-- Tab Navigation - Horizontal on mobile, Vertical sidebar on desktop -->
+      <nav class="lg:w-1/4 lg:min-w-[200px] lg:max-w-[280px] bg-base-200 lg:border-r border-base-300">
+        <!-- Mobile: Horizontal scrollable tabs -->
+        <ul class="flex lg:hidden flex-row overflow-x-auto gap-1 p-2 border-b border-base-300">
+          {render_slot(@tabs)}
+        </ul>
+        <!-- Desktop: Vertical tab list -->
+        <ul class="hidden lg:flex flex-col gap-1 p-4">
+          {render_slot(@tabs)}
+        </ul>
+      </nav>
+
+      <!-- Content Area -->
+      <div class="flex-1 p-4 lg:p-6 overflow-y-auto">
+        {render_slot(@content)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a tab navigation item for settings pages.
+
+  Styled to match the existing `sidebar_nav_item` component patterns from layouts.ex.
+
+  ## Examples
+
+      <.settings_tab navigate={~p"/settings"} active={true} icon="hero-cog-6-tooth">
+        General
+      </.settings_tab>
+
+      <.settings_tab navigate={~p"/settings/procedures"} active={false} icon="hero-document-text">
+        Procedures
+      </.settings_tab>
+  """
+  attr :navigate, :string, required: true, doc: "URL path to navigate to"
+  attr :active, :boolean, default: false, doc: "Whether this tab is currently active"
+  attr :icon, :string, required: true, doc: "Hero icon name (e.g., \"hero-cog-6-tooth\")"
+
+  slot :inner_block, required: true, doc: "Tab label text"
+
+  def settings_tab(assigns) do
+    ~H"""
+    <li class="flex-shrink-0 lg:flex-shrink">
+      <.link
+        navigate={@navigate}
+        class={[
+          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap",
+          @active && "bg-primary/10 text-primary font-semibold glow-cyan",
+          !@active && "text-base-content/70 hover:bg-base-300 hover-glow-purple"
+        ]}
+      >
+        <.icon name={@icon} class="h-5 w-5" />
+        <span>{render_slot(@inner_block)}</span>
+      </.link>
+    </li>
+    """
+  end
+
+  @doc """
+  Renders a settings section with a header and grouped content.
+
+  Use this to group related settings together with a descriptive title
+  and optional description.
+
+  ## Examples
+
+      <.settings_section title="Approval Workflow" description="Configure how procedures are approved">
+        <!-- Settings cards here -->
+      </.settings_section>
+
+      <.settings_section title="General Settings">
+        <!-- Settings cards here -->
+      </.settings_section>
+  """
+  attr :title, :string, required: true, doc: "Section title"
+  attr :description, :string, default: nil, doc: "Optional section description"
+
+  slot :inner_block, required: true, doc: "Settings cards or content"
+
+  def settings_section(assigns) do
+    ~H"""
+    <section class="mb-8">
+      <header class="mb-4">
+        <h2 class="text-lg font-semibold mb-1">{@title}</h2>
+        <p :if={@description} class="text-sm text-base-content/60">{@description}</p>
+      </header>
+      <div class="space-y-4">
+        {render_slot(@inner_block)}
+      </div>
+    </section>
+    """
+  end
+
+  ## Restrictiveness Hint Text Helpers
 
   @doc """
   Returns a human-readable hint based on the restrictiveness rule.
@@ -22,100 +151,7 @@ defmodule CadenceWeb.SettingsComponents do
   def restrictiveness_hint(:none), do: "Missions can set any valid value"
   def restrictiveness_hint(_), do: nil
 
-  ## Layout Components
-
-  @doc """
-  Renders a settings page layout with tabs and content area.
-
-  ## Examples
-
-      <.settings_layout>
-        <:tabs>
-          <.settings_tab navigate={~p"/settings"} active={true}>General</.settings_tab>
-        </:tabs>
-        <:content>
-          Settings content here
-        </:content>
-      </.settings_layout>
-  """
-  slot :tabs, required: true
-  slot :content, required: true
-
-  def settings_layout(assigns) do
-    ~H"""
-    <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Tabs sidebar -->
-      <div class="lg:w-64 shrink-0">
-        <nav class="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible">
-          {render_slot(@tabs)}
-        </nav>
-      </div>
-      <!-- Content area -->
-      <div class="flex-1 min-w-0">
-        {render_slot(@content)}
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
-  Renders a settings tab navigation item.
-
-  ## Examples
-
-      <.settings_tab navigate={~p"/settings"} active={true} icon="hero-building-office">
-        General
-      </.settings_tab>
-  """
-  attr :navigate, :string, required: true
-  attr :active, :boolean, default: false
-  attr :icon, :string, default: nil
-  slot :inner_block, required: true
-
-  def settings_tab(assigns) do
-    ~H"""
-    <.link
-      navigate={@navigate}
-      class={[
-        "flex items-center gap-3 px-4 py-3 rounded-lg whitespace-nowrap transition-all",
-        @active && "bg-primary/10 text-primary font-semibold",
-        !@active && "text-base-content/70 hover:bg-base-200"
-      ]}
-    >
-      <CadenceWeb.CoreComponents.icon :if={@icon} name={@icon} class="h-5 w-5" />
-      {render_slot(@inner_block)}
-    </.link>
-    """
-  end
-
-  @doc """
-  Renders a settings section with title and optional description.
-
-  ## Examples
-
-      <.settings_section title="Approval Workflow" description="Configure how procedures are reviewed">
-        Section content here
-      </.settings_section>
-  """
-  attr :title, :string, required: true
-  attr :description, :string, default: nil
-  slot :inner_block, required: true
-
-  def settings_section(assigns) do
-    ~H"""
-    <div class="space-y-4">
-      <div>
-        <h2 class="text-lg font-semibold">{@title}</h2>
-        <p :if={@description} class="text-sm text-base-content/60 mt-1">{@description}</p>
-      </div>
-      <div class="space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </div>
-    """
-  end
-
-  ## Setting Card Components
+  ## Card Components
 
   @doc """
   Renders a base card wrapper for any setting.
@@ -155,12 +191,12 @@ defmodule CadenceWeb.SettingsComponents do
       </div>
 
       <div :if={@hint} class="text-xs text-info mt-2 flex items-center gap-1">
-        <CadenceWeb.CoreComponents.icon name="hero-information-circle" class="size-4" />
+        <.icon name="hero-information-circle" class="size-4" />
         <span>{@hint}</span>
       </div>
 
       <div :if={@error} class="text-xs text-error mt-2 flex items-center gap-1">
-        <CadenceWeb.CoreComponents.icon name="hero-exclamation-circle" class="size-4" />
+        <.icon name="hero-exclamation-circle" class="size-4" />
         <span>{@error}</span>
       </div>
     </div>
@@ -199,7 +235,7 @@ defmodule CadenceWeb.SettingsComponents do
         phx-value-name={@name}
         disabled={@disabled || (@min != nil && @value <= @min)}
       >
-        <CadenceWeb.CoreComponents.icon name="hero-minus" class="size-4" />
+        <.icon name="hero-minus" class="size-4" />
       </button>
       <input
         type="number"
@@ -221,7 +257,7 @@ defmodule CadenceWeb.SettingsComponents do
         phx-value-name={@name}
         disabled={@disabled || (@max != nil && @value >= @max)}
       >
-        <CadenceWeb.CoreComponents.icon name="hero-plus" class="size-4" />
+        <.icon name="hero-plus" class="size-4" />
       </button>
     </div>
     """
@@ -300,14 +336,19 @@ defmodule CadenceWeb.SettingsComponents do
   attr :description, :string, required: true, doc: "Setting description from definition"
   attr :type, :atom, required: true, values: [:integer, :boolean], doc: "Setting value type"
   attr :org_value, :any, required: true, doc: "Organization default value"
-  attr :mission_override, :any, default: nil, doc: "Current override value (nil if not overridden)"
+
+  attr :mission_override, :any,
+    default: nil,
+    doc: "Current override value (nil if not overridden)"
+
   attr :has_override, :boolean, required: true, doc: "Whether override is enabled"
   attr :min_value, :integer, default: nil, doc: "Minimum allowed value (for integers)"
   attr :max_value, :integer, default: nil, doc: "Maximum allowed value (for integers)"
   attr :restrictiveness, :atom, default: :none, doc: "Restrictiveness rule for generating hint"
-  attr :name, :string, required: true, doc: "Form field name"
+  attr :name, :any, required: true, doc: "Form field name (string or atom)"
   attr :error, :string, default: nil, doc: "Error message"
   attr :saved, :boolean, default: false, doc: "Whether to show saved indicator"
+  attr :can_override, :boolean, default: true, doc: "Whether override is allowed"
   attr :rest, :global, include: ~w(phx-change phx-target)
 
   def setting_override_card(assigns) do
@@ -322,10 +363,22 @@ defmodule CadenceWeb.SettingsComponents do
     # Generate constraint hint based on restrictiveness
     constraint_hint = build_constraint_hint(assigns.restrictiveness, assigns.org_value)
 
+    # Determine if override is disabled (for boolean with false_is_stricter when org is false)
+    override_disabled =
+      not assigns.can_override or
+        (assigns.type == :boolean and
+           assigns.restrictiveness == :false_is_stricter and
+           assigns.org_value == false)
+
+    # Ensure name is a string for the form
+    name_str = to_string(assigns.name)
+
     assigns =
       assigns
       |> assign(:effective_value, effective_value)
       |> assign(:constraint_hint, constraint_hint)
+      |> assign(:override_disabled, override_disabled)
+      |> assign(:name_str, name_str)
 
     ~H"""
     <div class="card bg-base-100 border border-base-300 p-4">
@@ -342,11 +395,16 @@ defmodule CadenceWeb.SettingsComponents do
           type="checkbox"
           class="checkbox checkbox-sm"
           checked={@has_override}
+          disabled={@override_disabled}
           phx-click="toggle_override"
-          phx-value-name={@name}
+          phx-value-key={@name}
         />
         <span class="text-sm">Override for this mission</span>
       </label>
+
+      <div :if={@override_disabled and not @has_override} class="text-xs text-warning mt-2">
+        Cannot override - disabled at organization level
+      </div>
 
       <div :if={@has_override} class="flex items-center gap-3">
         <%= if @type == :integer do %>
@@ -354,30 +412,28 @@ defmodule CadenceWeb.SettingsComponents do
             value={@effective_value}
             min={@min_value}
             max={@max_value}
-            name={@name}
+            name={@name_str}
             {@rest}
           />
         <% else %>
-          <.setting_toggle
-            value={@effective_value}
-            name={@name}
-            {@rest}
-          />
+          <.setting_toggle value={@effective_value} name={@name_str} {@rest} />
         <% end %>
 
         <span :if={@saved} class="text-xs text-success flex items-center gap-1">
-          <CadenceWeb.CoreComponents.icon name="hero-check" class="size-4" />
-          Saved
+          <.icon name="hero-check" class="size-4" /> Saved
         </span>
       </div>
 
-      <div :if={@constraint_hint && @has_override} class="text-xs text-info mt-2 flex items-center gap-1">
-        <CadenceWeb.CoreComponents.icon name="hero-information-circle" class="size-4" />
+      <div
+        :if={@constraint_hint && @has_override}
+        class="text-xs text-info mt-2 flex items-center gap-1"
+      >
+        <.icon name="hero-information-circle" class="size-4" />
         <span>{@constraint_hint}</span>
       </div>
 
       <div :if={@error} class="text-xs text-error mt-2 flex items-center gap-1">
-        <CadenceWeb.CoreComponents.icon name="hero-exclamation-circle" class="size-4" />
+        <.icon name="hero-exclamation-circle" class="size-4" />
         <span>{@error}</span>
       </div>
     </div>
