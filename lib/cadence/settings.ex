@@ -234,6 +234,95 @@ defmodule Cadence.Settings do
     Enum.map(@definition_modules, & &1.__namespace__())
   end
 
+  ## Public API - UI Helpers
+
+  @doc """
+  Gets all settings for an organization with their current values and metadata.
+  Useful for rendering settings UI.
+  """
+  @spec get_all_org_settings(Organization.t(), atom()) :: [map()]
+  def get_all_org_settings(%Organization{} = org, namespace) do
+    list_definitions(namespace)
+    |> Enum.filter(fn def -> def.scope in [:both, :org_only] end)
+    |> Enum.map(fn definition ->
+      %{
+        key: definition.key,
+        label: definition.label,
+        description: definition.description,
+        type: definition.type,
+        default: definition.default,
+        value: get_org(org, namespace, definition.key),
+        restrictiveness: definition.restrictiveness,
+        validate: definition.validate,
+        scope: definition.scope
+      }
+    end)
+  end
+
+  @doc """
+  Gets all settings for a mission with org defaults, overrides, and constraints.
+  Useful for rendering mission settings UI with override support.
+  """
+  @spec get_all_mission_settings(Mission.t(), atom()) :: [map()]
+  def get_all_mission_settings(%Mission{} = mission, namespace) do
+    mission = ensure_organization_loaded(mission)
+
+    list_definitions(namespace)
+    |> Enum.filter(fn def -> def.scope in [:both, :mission_only] end)
+    |> Enum.map(fn definition ->
+      org_value = get_org(mission.organization, namespace, definition.key)
+      mission_override = get_mission_override(mission, namespace, definition.key)
+
+      %{
+        key: definition.key,
+        label: definition.label,
+        description: definition.description,
+        type: definition.type,
+        org_value: org_value,
+        mission_override: mission_override,
+        has_override: not is_nil(mission_override),
+        effective_value: if(is_nil(mission_override), do: org_value, else: mission_override),
+        restrictiveness: definition.restrictiveness,
+        validate: definition.validate,
+        scope: definition.scope,
+        # Computed constraints for UI
+        min_value: compute_min_value(definition, org_value),
+        max_value: compute_max_value(definition, org_value),
+        can_override: can_override?(definition, org_value)
+      }
+    end)
+  end
+
+  @doc """
+  Gets display information for a settings namespace.
+  Returns label, description, and icon for UI rendering.
+  """
+  @spec get_namespace_info(atom()) :: map() | nil
+  def get_namespace_info(namespace) do
+    case namespace do
+      :procedures ->
+        %{
+          key: :procedures,
+          label: "Procedures",
+          description: "Settings for procedure approval workflows",
+          icon: "hero-document-text"
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  @doc """
+  Lists all namespaces with their display information.
+  """
+  @spec list_namespaces_with_info() :: [map()]
+  def list_namespaces_with_info do
+    list_namespaces()
+    |> Enum.map(&get_namespace_info/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
   ## Public API - Validation Helpers
 
   @doc """
@@ -378,5 +467,29 @@ defmodule Cadence.Settings do
 
   defp ensure_organization_loaded(%Mission{} = mission) do
     Repo.preload(mission, :organization)
+  end
+
+  defp compute_min_value(definition, org_value) do
+    case {definition.type, definition.restrictiveness, definition.validate} do
+      {:integer, :higher, {:range, _, _}} -> org_value
+      {:integer, _, {:range, min, _}} -> min
+      _ -> nil
+    end
+  end
+
+  defp compute_max_value(definition, org_value) do
+    case {definition.type, definition.restrictiveness, definition.validate} do
+      {:integer, :lower, {:range, _, _}} -> org_value
+      {:integer, _, {:range, _, max}} -> max
+      _ -> nil
+    end
+  end
+
+  defp can_override?(definition, org_value) do
+    # For false_is_stricter booleans, can only override if org is true
+    case {definition.type, definition.restrictiveness} do
+      {:boolean, :false_is_stricter} -> org_value == true
+      _ -> true
+    end
   end
 end
