@@ -13,12 +13,21 @@ defmodule CadenceWeb.SettingsLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket}
+    {:ok, assign(socket, :errors, %{})}
   end
 
   @impl true
   def handle_params(params, _url, socket) do
     {:noreply, apply_action(socket, socket.assigns.live_action, params)}
+  end
+
+  defp apply_action(socket, :index, _params) do
+    org = socket.assigns.current_scope.current_organization
+
+    socket
+    |> assign(:page_title, "Settings")
+    |> assign(:organization, org)
+    |> assign(:active_tab, :general)
   end
 
   defp apply_action(socket, :general, _params) do
@@ -54,14 +63,17 @@ defmodule CadenceWeb.SettingsLive.Index do
       {:ok, _setting} ->
         {:noreply,
          socket
+         |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
          |> put_flash(:info, "Setting updated")
          |> assign(:settings, Settings.get_all_org_settings(org, :procedures))}
 
       {:error, :invalid_value} ->
-        {:noreply, put_flash(socket, :error, "Invalid value")}
+        errors = Map.put(socket.assigns.errors, key_atom, "Invalid value")
+        {:noreply, assign(socket, :errors, errors)}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to save setting")}
+        errors = Map.put(socket.assigns.errors, key_atom, "Failed to save setting")
+        {:noreply, assign(socket, :errors, errors)}
     end
   end
 
@@ -124,9 +136,17 @@ defmodule CadenceWeb.SettingsLive.Index do
   defp extract_setting_key(params) do
     # Handle both direct key and nested form params
     cond do
-      Map.has_key?(params, "key") -> params["key"]
-      Map.has_key?(params, "_target") -> List.first(params["_target"])
-      true -> nil
+      Map.has_key?(params, "key") ->
+        params["key"]
+
+      Map.has_key?(params, "_target") ->
+        List.first(params["_target"])
+
+      true ->
+        # Fall back to first non-internal key in params (e.g., "required_approvals" => "5")
+        params
+        |> Map.keys()
+        |> Enum.find(fn key -> not String.starts_with?(key, "_") end)
     end
   end
 
@@ -177,14 +197,14 @@ defmodule CadenceWeb.SettingsLive.Index do
       <.settings_layout>
         <:tabs>
           <.settings_tab
-            navigate={~p"/settings"}
+            patch={~p"/settings"}
             active={@active_tab == :general}
             icon="hero-building-office"
           >
             General
           </.settings_tab>
           <.settings_tab
-            navigate={~p"/settings/procedures"}
+            patch={~p"/settings/procedures"}
             active={@active_tab == :procedures}
             icon="hero-document-text"
           >
@@ -217,6 +237,7 @@ defmodule CadenceWeb.SettingsLive.Index do
                   label={setting.label}
                   description={setting.description}
                   hint={restrictiveness_hint(setting.restrictiveness)}
+                  error={Map.get(@errors, setting.key)}
                 >
                   <%= if setting.type == :integer do %>
                     <.setting_number_input

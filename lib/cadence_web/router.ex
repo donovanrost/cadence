@@ -79,7 +79,7 @@ defmodule CadenceWeb.Router do
       live "/targets/:id", TargetLive.Show, :show
 
       # Organization settings
-      live "/settings", SettingsLive.Index, :general
+      live "/settings", SettingsLive.Index, :index
       live "/settings/procedures", SettingsLive.Index, :procedures
     end
 
@@ -161,7 +161,7 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/schedules/:schedule_id/edit", MissionLive.Schedules, :edit
 
       # Mission Settings
-      live "/missions/:id/settings", MissionLive.Settings, :general
+      live "/missions/:id/settings", MissionLive.Settings, :index
       live "/missions/:id/settings/procedures", MissionLive.Settings, :procedures
     end
 
