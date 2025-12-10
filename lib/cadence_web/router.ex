@@ -155,6 +155,10 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/schedules", MissionLive.Schedules, :index
       live "/missions/:id/schedules/new", MissionLive.Schedules, :new
       live "/missions/:id/schedules/:schedule_id/edit", MissionLive.Schedules, :edit
+
+      # Mission Settings
+      live "/missions/:id/settings", MissionLive.Settings, :general
+      live "/missions/:id/settings/procedures", MissionLive.Settings, :procedures
     end
 
     # Ops Console - full screen layout (no sidebar)
