@@ -903,12 +903,12 @@ defmodule CadenceWeb.CoreComponents do
 
   def sidebar_nav_item(assigns) do
     ~H"""
-    <li>
+    <li class="relative">
       <.link
         navigate={@navigate}
         patch={@patch}
         class={[
-          "flex items-center gap-3 px-4 py-2.5 transition-all text-sm tracking-wide",
+          "flex items-center gap-2 px-3 py-2 transition-all text-xs tracking-wide",
           @active && [
             "bg-primary/10 text-primary border-l-2 border-primary",
             "shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
@@ -920,11 +920,14 @@ defmodule CadenceWeb.CoreComponents do
           @class
         ]}
       >
-        <span :if={@icon != []} class="opacity-80">
+        <span :if={@icon != []} class="opacity-80 flex-shrink-0 w-5 h-5 flex items-center justify-center">
           {render_slot(@icon)}
         </span>
-        <span class="flex-1 uppercase font-medium">{render_slot(@inner_block)}</span>
-        <span :if={@active} class="w-1.5 h-1.5 bg-primary rounded-sm shadow-[0_0_6px_rgba(125,207,255,0.8)]"></span>
+        <span class="flex-1 uppercase font-medium sidebar-label">{render_slot(@inner_block)}</span>
+        <span :if={@active} class="w-4 h-4 flex items-center justify-center flex-shrink-0">
+          <span class="w-1.5 h-1.5 bg-primary rounded-sm shadow-[0_0_6px_rgba(125,207,255,0.8)]">
+          </span>
+        </span>
       </.link>
     </li>
     """
@@ -960,25 +963,27 @@ defmodule CadenceWeb.CoreComponents do
       end)
 
     ~H"""
-    <li>
+    <li class="relative">
       <details open={@expanded} class="group">
         <summary class={[
-          "flex items-center gap-3 px-4 py-2.5 transition-all cursor-pointer text-sm tracking-wide",
+          "flex items-center gap-2 px-3 py-2 transition-all cursor-pointer text-xs tracking-wide",
           "text-base-content/60 border-l-2 border-transparent",
           "hover:bg-primary/5 hover:text-base-content hover:border-primary/30",
           "[&::-webkit-details-marker]:hidden [&::marker]:hidden",
           @expanded && "text-base-content"
         ]}>
-          <span class="opacity-80">
-            <.icon name={@icon} class="h-5 w-5" />
+          <span class="opacity-80 flex-shrink-0 w-5 h-5 flex items-center justify-center">
+            <.icon name={@icon} class="h-4 w-4" />
           </span>
-          <span class="flex-1 uppercase font-medium">{@label}</span>
-          <.icon
-            name="hero-chevron-down"
-            class="h-3 w-3 transition-transform group-open:rotate-180 opacity-50"
-          />
+          <span class="flex-1 uppercase font-medium sidebar-label">{@label}</span>
+          <span class="w-4 h-4 flex items-center justify-center flex-shrink-0">
+            <.icon
+              name="hero-chevron-right"
+              class="h-3 w-3 opacity-60 transition-transform group-open:rotate-90"
+            />
+          </span>
         </summary>
-        <ul class="ml-6 mt-1 space-y-0.5 border-l border-primary/20 pl-3">
+        <ul class="ml-5 mt-1 space-y-0.5 border-l border-primary/20 pl-2 sidebar-expanded-only">
           {render_slot(@inner_block)}
         </ul>
       </details>

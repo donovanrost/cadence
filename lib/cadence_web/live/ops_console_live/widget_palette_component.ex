@@ -10,33 +10,71 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
   use CadenceWeb, :live_component
 
   @widget_types [
+    # Telemetry widgets
     %{
       type: "line_chart",
       name: "Line Chart",
       description: "Real-time line chart for telemetry trends",
       icon: "hero-chart-bar",
-      default_size: %{w: 6, h: 3}
+      default_size: %{w: 6, h: 3},
+      category: :telemetry
     },
     %{
       type: "value_display",
       name: "Value Display",
       description: "Current value with limits coloring",
       icon: "hero-hashtag",
-      default_size: %{w: 3, h: 2}
+      default_size: %{w: 3, h: 2},
+      category: :telemetry
     },
     %{
       type: "gauge",
       name: "Gauge",
       description: "Radial gauge with thresholds",
       icon: "hero-signal",
-      default_size: %{w: 3, h: 3}
+      default_size: %{w: 3, h: 3},
+      category: :telemetry
     },
     %{
       type: "table",
       name: "Data Table",
       description: "Tabular view of multiple telemetry items",
       icon: "hero-table-cells",
-      default_size: %{w: 6, h: 4}
+      default_size: %{w: 6, h: 4},
+      category: :telemetry
+    },
+    # Operations widgets
+    %{
+      type: "command",
+      name: "Command Button",
+      description: "Quick-send a single command with one click",
+      icon: "hero-play",
+      default_size: %{w: 3, h: 2},
+      category: :operations
+    },
+    %{
+      type: "procedure",
+      name: "Procedure Status",
+      description: "Monitor and control running procedure execution",
+      icon: "hero-clipboard-document-check",
+      default_size: %{w: 4, h: 4},
+      category: :operations
+    },
+    %{
+      type: "fleet_health",
+      name: "Fleet Health",
+      description: "Aggregated constellation health overview",
+      icon: "hero-server-stack",
+      default_size: %{w: 4, h: 3},
+      category: :operations
+    },
+    %{
+      type: "alarm",
+      name: "Alarm Summary",
+      description: "Filtered alarm list with inline actions",
+      icon: "hero-bell-alert",
+      default_size: %{w: 4, h: 4},
+      category: :operations
     }
   ]
 
@@ -136,6 +174,14 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
                   filter={@filter}
                   myself={@myself}
                 />
+              <% "command" -> %>
+                <.command_config targets={@targets} />
+              <% "procedure" -> %>
+                <.procedure_config />
+              <% "fleet_health" -> %>
+                <.fleet_health_config />
+              <% "alarm" -> %>
+                <.alarm_config />
               <% _ -> %>
                 <p class="text-base-content/50">No additional configuration needed.</p>
             <% end %>
@@ -371,6 +417,212 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
     """
   end
 
+  # Command widget configuration
+  defp command_config(assigns) do
+    target_options =
+      Enum.map(assigns.targets, fn target ->
+        {target.name, target.identifier}
+      end)
+
+    assigns = assign(assigns, :target_options, target_options)
+
+    ~H"""
+    <div class="space-y-4">
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text">Target</span>
+        </label>
+        <select name="target_id" class="select select-bordered w-full" required>
+          <option value="">Select target...</option>
+          <%= for {label, value} <- @target_options do %>
+            <option value={value}>{label}</option>
+          <% end %>
+        </select>
+      </div>
+
+      <.input
+        name="command_name"
+        type="text"
+        label="Command Name"
+        value=""
+        placeholder="e.g., SAFE_MODE"
+        required
+      />
+
+      <.input
+        name="button_label"
+        type="text"
+        label="Button Label"
+        value=""
+        placeholder="e.g., Emergency Safe Mode"
+      />
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="require_confirmation" class="checkbox checkbox-sm" checked />
+          <span class="label-text">Require confirmation before sending</span>
+        </label>
+        <p class="text-xs text-base-content/50 ml-6">
+          Recommended for hazardous or irreversible commands
+        </p>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="hazardous" class="checkbox checkbox-sm checkbox-warning" />
+          <span class="label-text">Mark as hazardous</span>
+        </label>
+        <p class="text-xs text-base-content/50 ml-6">
+          Displays warning styling on the command button
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  # Procedure widget configuration
+  defp procedure_config(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div class="alert alert-info">
+        <.icon name="hero-information-circle" class="h-5 w-5" />
+        <span>
+          Procedure widgets automatically connect to running procedures.
+          Configure which procedure to monitor after adding the widget.
+        </span>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="show_logs" class="checkbox checkbox-sm" checked />
+          <span class="label-text">Show log output</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="show_controls" class="checkbox checkbox-sm" checked />
+          <span class="label-text">Show control buttons (Pause/Resume/Abort)</span>
+        </label>
+      </div>
+
+      <.input
+        name="max_log_lines"
+        type="number"
+        label="Max Log Lines"
+        value="10"
+        placeholder="10"
+      />
+    </div>
+    """
+  end
+
+  # Fleet Health widget configuration
+  defp fleet_health_config(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text">Group By</span>
+        </label>
+        <select name="group_by" class="select select-bordered w-full">
+          <option value="none">No grouping (flat list)</option>
+          <option value="plane" selected>Orbital Plane</option>
+          <option value="shell">Shell</option>
+          <option value="cluster">Cluster</option>
+        </select>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="show_individual" class="checkbox checkbox-sm" checked />
+          <span class="label-text">Show individual vehicles on expand</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="show_critical_only" class="checkbox checkbox-sm" />
+          <span class="label-text">Show critical/warning only</span>
+        </label>
+        <p class="text-xs text-base-content/50 ml-6">
+          Hide healthy groups to focus on issues
+        </p>
+      </div>
+    </div>
+    """
+  end
+
+  # Alarm widget configuration
+  defp alarm_config(assigns) do
+    ~H"""
+    <div class="space-y-4">
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text">Severity Filter</span>
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              name="severity_filter[]"
+              value="critical"
+              class="checkbox checkbox-sm checkbox-error"
+              checked
+            />
+            <span class="text-sm">Critical</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              name="severity_filter[]"
+              value="warning"
+              class="checkbox checkbox-sm checkbox-warning"
+              checked
+            />
+            <span class="text-sm">Warning</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              name="severity_filter[]"
+              value="info"
+              class="checkbox checkbox-sm checkbox-info"
+              checked
+            />
+            <span class="text-sm">Info</span>
+          </label>
+        </div>
+        <p class="text-xs text-base-content/50 mt-1">
+          Leave all checked to show all severities
+        </p>
+      </div>
+
+      <.input
+        name="max_alarms"
+        type="number"
+        label="Max Alarms Displayed"
+        value="20"
+        placeholder="20"
+      />
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="show_cleared" class="checkbox checkbox-sm" />
+          <span class="label-text">Show cleared alarms</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="auto_scroll" class="checkbox checkbox-sm" checked />
+          <span class="label-text">Auto-scroll to new alarms</span>
+        </label>
+      </div>
+    </div>
+    """
+  end
+
   # Warning when no telemetry catalog is available
   defp no_catalog_warning(assigns) do
     ~H"""
@@ -599,6 +851,45 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
     }
   end
 
+  defp build_widget_config("command", params, _catalog) do
+    %{
+      "title" => params["title"],
+      "target_id" => params["target_id"],
+      "command_name" => params["command_name"],
+      "button_label" => params["button_label"],
+      "require_confirmation" => params["require_confirmation"] == "on",
+      "hazardous" => params["hazardous"] == "on"
+    }
+  end
+
+  defp build_widget_config("procedure", params, _catalog) do
+    %{
+      "title" => params["title"],
+      "show_logs" => params["show_logs"] == "on",
+      "show_controls" => params["show_controls"] == "on",
+      "max_log_lines" => parse_integer(params["max_log_lines"], 10)
+    }
+  end
+
+  defp build_widget_config("fleet_health", params, _catalog) do
+    %{
+      "title" => params["title"],
+      "group_by" => params["group_by"] || "plane",
+      "show_individual" => params["show_individual"] == "on",
+      "show_critical_only" => params["show_critical_only"] == "on"
+    }
+  end
+
+  defp build_widget_config("alarm", params, _catalog) do
+    %{
+      "title" => params["title"],
+      "severity_filter" => params["severity_filter"] || [],
+      "max_alarms" => parse_integer(params["max_alarms"], 20),
+      "show_cleared" => params["show_cleared"] == "on",
+      "auto_scroll" => params["auto_scroll"] == "on"
+    }
+  end
+
   defp build_widget_config(_type, params, _catalog) do
     %{"title" => params["title"]}
   end
@@ -632,6 +923,16 @@ defmodule CadenceWeb.OpsConsoleLive.WidgetPaletteComponent do
     case Float.parse(str) do
       {num, ""} -> num
       _ -> nil
+    end
+  end
+
+  defp parse_integer(nil, default), do: default
+  defp parse_integer("", default), do: default
+
+  defp parse_integer(str, default) when is_binary(str) do
+    case Integer.parse(str) do
+      {num, ""} -> num
+      _ -> default
     end
   end
 end

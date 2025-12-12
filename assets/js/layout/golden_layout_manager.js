@@ -14,8 +14,8 @@ import { GoldenLayout, LayoutConfig, ComponentContainer, ContentItem } from "gol
  */
 
 // Panel size constants
-// Full minimum widths (expanded state)
-const NAV_PANEL_MIN_WIDTH = 180
+// Full widths (expanded state) - navigation matches w-48 (192px) from other sidebars
+const NAV_PANEL_FIXED_WIDTH = 192  // Fixed width, matches Tailwind w-48
 const CONTEXT_PANEL_MIN_WIDTH = 180
 const DASHBOARD_MIN_WIDTH = 400
 
@@ -31,15 +31,20 @@ const SNAP_THRESHOLD_BUFFER = 20
  * Snap point configuration for each panel.
  * Panels will snap between compact and full widths to avoid
  * awkward in-between states.
+ *
+ * Navigation panel has fixedWidth=true meaning it cannot be resized
+ * larger than its full width - it only toggles between compact and full.
  */
 export const PANEL_SNAP_POINTS = {
   navigation: {
     compact: NAV_PANEL_COMPACT_WIDTH,
-    full: NAV_PANEL_MIN_WIDTH
+    full: NAV_PANEL_FIXED_WIDTH,
+    fixedWidth: true  // Cannot be resized larger than full width
   },
   context: {
     compact: CONTEXT_PANEL_COMPACT_WIDTH,
-    full: CONTEXT_PANEL_MIN_WIDTH
+    full: CONTEXT_PANEL_MIN_WIDTH,
+    fixedWidth: false  // Can be resized freely when expanded
   }
   // dashboard doesn't snap - it's the flexible center panel
 }
@@ -70,6 +75,7 @@ export const DEFAULT_LAYOUT_CONFIG = {
         isClosable: false,
         header: { show: false },
         minWidth: NAV_PANEL_COMPACT_WIDTH,  // Allow collapse to compact
+        width: NAV_PANEL_FIXED_WIDTH,  // Start at fixed width
         componentState: {}
       },
       {
@@ -427,7 +433,19 @@ export class GoldenLayoutManager {
       if (!element) continue
 
       const currentWidth = element.offsetWidth
-      const { compact, full } = snapPoints
+      const { compact, full, fixedWidth } = snapPoints
+
+      // If panel has fixed width and user dragged it larger, snap back to full
+      if (fixedWidth && currentWidth > full + SNAP_THRESHOLD_BUFFER) {
+        needsSnap = true
+        snapAdjustments.push({
+          item,
+          currentWidth,
+          targetWidth: full,
+          componentType
+        })
+        continue
+      }
 
       // Define the dead zone: between compact+buffer and full-buffer
       const deadZoneMin = compact + SNAP_THRESHOLD_BUFFER

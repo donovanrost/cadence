@@ -181,6 +181,18 @@ defmodule CadenceWeb.Router do
       session: {CadenceWeb.LiveAuth, :on_session_init, []} do
       live "/missions/:id/ops", OpsConsoleLive.Index, :index
     end
+
+    # Ops Console V2 - Next generation mission control interface
+    live_session :ops_console_v2,
+      layout: {CadenceWeb.Layouts, :ops_console},
+      on_mount: [
+        {CadenceWeb.LiveAuth, :require_authenticated},
+        {CadenceWeb.LiveAuth, :require_organization},
+        {CadenceWeb.LiveAuth, :load_mission}
+      ],
+      session: {CadenceWeb.LiveAuth, :on_session_init, []} do
+      live "/missions/:id/ops-v2", OpsConsoleV2Live.Index, :index
+    end
   end
 
   # User Profile routes (authentication required, no organization required)

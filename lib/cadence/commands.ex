@@ -696,6 +696,7 @@ defmodule Cadence.Commands do
   def list_queue_entries(mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
     status = Keyword.get(opts, :status)
+    preload = Keyword.get(opts, :preload, [])
 
     query =
       from(e in QueueEntry,
@@ -706,11 +707,14 @@ defmodule Cadence.Commands do
 
     query =
       if status do
-        from(e in query, where: e.status == ^status)
+        statuses = List.wrap(status)
+        from(e in query, where: e.status in ^statuses)
       else
         query
       end
 
-    Repo.all(query)
+    query
+    |> Repo.all()
+    |> Repo.preload(preload)
   end
 end

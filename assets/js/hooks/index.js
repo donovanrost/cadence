@@ -5,6 +5,7 @@
  */
 
 import { OpsConsoleHook } from "./ops_console_hook"
+import { OpsConsoleV2Hook } from "./ops_console_v2_hook"
 import { DagEditorHook } from "./dag_editor"
 import { DagViewerHook } from "./dag_viewer"
 import { ExecutionChannelHook } from "./execution_channel_hook"
@@ -284,6 +285,7 @@ const LogFilterHook = {
 
 export const Hooks = {
   OpsConsole: OpsConsoleHook,
+  OpsConsoleV2: OpsConsoleV2Hook,
   AutoScroll: AutoScrollHook,
   LogFilter: LogFilterHook,
   Sortable: SortableHook,

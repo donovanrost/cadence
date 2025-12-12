@@ -134,19 +134,22 @@ defmodule CadenceWeb.Layouts do
     <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
+        <div
+          data-sidebar-collapsible
+          class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid relative"
+        >
           <!-- Logo/Brand -->
-          <div class="p-5 border-b border-primary/20">
-            <.link navigate={~p"/"} class="flex items-center gap-3">
-              <div class="relative">
-                <img src={~p"/images/logo.svg"} width="28" class="relative z-10" />
+          <div class="p-3 border-b border-primary/20">
+            <.link navigate={~p"/"} class="flex items-center gap-2">
+              <div class="relative flex-shrink-0">
+                <img src={~p"/images/logo.svg"} width="24" class="relative z-10" />
                 <div class="absolute inset-0 blur-md bg-primary/30"></div>
               </div>
-              <div class="flex flex-col">
-                <span class="text-sm font-bold tracking-[0.2em] text-primary">
+              <div class="flex flex-col sidebar-label">
+                <span class="text-xs font-bold tracking-[0.15em] text-primary">
                   CADENCE
                 </span>
-                <span class="text-[0.6rem] tracking-[0.15em] text-base-content/40 uppercase">
+                <span class="text-[0.5rem] tracking-[0.1em] text-base-content/40 uppercase">
                   Mission Control
                 </span>
               </div>
@@ -154,14 +157,24 @@ defmodule CadenceWeb.Layouts do
           </div>
 
     <!-- Navigation -->
-          <nav class="flex-1 overflow-y-auto py-4">
-            <div class="px-4 mb-3">
+          <nav class="flex-1 overflow-y-auto py-2">
+            <div class="px-3 mb-2 sidebar-expanded-only">
               <span class="hud-label text-base-content/30">Navigation</span>
             </div>
-            <ul class="menu space-y-0.5">
+            <ul class="menu menu-sm space-y-0.5">
               <.sidebar_navigation current_scope={@current_scope} current_path={@current_path} />
             </ul>
           </nav>
+
+    <!-- Toggle Button -->
+          <button
+            type="button"
+            class="sidebar-toggle-btn hidden lg:flex"
+            phx-click={JS.dispatch("phx:toggle-sidebar")}
+            title="Toggle sidebar"
+          >
+            <.icon name="hero-chevron-left" class="h-3 w-3 toggle-chevron transition-transform" />
+          </button>
         </div>
       </div>
     </div>
@@ -494,34 +507,37 @@ defmodule CadenceWeb.Layouts do
     <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
+        <div
+          data-sidebar-collapsible
+          class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid relative"
+        >
           <!-- Logo/Brand -->
-          <div class="p-4 border-b border-primary/20">
+          <div class="p-3 border-b border-primary/20">
             <.link navigate={~p"/"} class="flex items-center gap-2">
-              <div class="relative">
+              <div class="relative flex-shrink-0">
                 <img src={~p"/images/logo.svg"} width="24" class="relative z-10" />
                 <div class="absolute inset-0 blur-md bg-primary/30"></div>
               </div>
-              <span class="text-xs font-bold tracking-[0.15em] text-primary">
+              <span class="text-xs font-bold tracking-[0.15em] text-primary sidebar-label">
                 CADENCE
               </span>
             </.link>
           </div>
 
     <!-- Back to missions link -->
-          <div class="px-3 py-2 border-b border-primary/20">
+          <div class="py-2 border-b border-primary/20 sidebar-back-link">
             <.link
               navigate={~p"/missions"}
               class="flex items-center gap-2 text-xs text-base-content/50 hover:text-primary transition-colors uppercase tracking-wide"
             >
-              <.icon name="hero-arrow-left" class="h-3 w-3" />
-              <span>All Missions</span>
+              <.icon name="hero-arrow-left" class="h-3 w-3 flex-shrink-0" />
+              <span class="sidebar-label">All Missions</span>
             </.link>
           </div>
 
     <!-- Mission Header -->
           <%= if @mission do %>
-            <div class="px-3 py-3 border-b border-primary/20">
+            <div class="px-3 py-2 border-b border-primary/20 sidebar-expanded-only">
               <div class="flex flex-col gap-1">
                 <span class="hud-label text-base-content/40">Mission</span>
                 <h2 class="font-medium text-sm truncate">{@mission.name}</h2>
@@ -531,11 +547,21 @@ defmodule CadenceWeb.Layouts do
           <% end %>
 
     <!-- Mission Navigation -->
-          <nav class="flex-1 overflow-y-auto py-3">
-            <ul class="menu space-y-0.5">
+          <nav class="flex-1 overflow-y-auto py-2">
+            <ul class="menu menu-sm space-y-0.5">
               <.mission_navigation mission={@mission} current_path={@current_path} />
             </ul>
           </nav>
+
+    <!-- Toggle Button -->
+          <button
+            type="button"
+            class="sidebar-toggle-btn hidden lg:flex"
+            phx-click={JS.dispatch("phx:toggle-sidebar")}
+            title="Toggle sidebar"
+          >
+            <.icon name="hero-chevron-left" class="h-3 w-3 toggle-chevron transition-transform" />
+          </button>
         </div>
       </div>
     </div>
@@ -666,6 +692,13 @@ defmodule CadenceWeb.Layouts do
           Ops Console <span class="badge badge-xs badge-primary">Live</span>
         </span>
       </.sidebar_nav_item>
+
+      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/ops-v2"} active={false}>
+        <:icon><.icon name="hero-sparkles" class="h-5 w-5" /></:icon>
+        <span class="flex items-center gap-2">
+          Ops Console V2 <span class="badge badge-xs badge-accent">New</span>
+        </span>
+      </.sidebar_nav_item>
     <% end %>
     """
   end
@@ -756,20 +789,23 @@ defmodule CadenceWeb.Layouts do
       <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="profile-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
+        <div
+          data-sidebar-collapsible
+          class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid relative"
+        >
           <!-- Back link -->
           <div class="px-3 py-2 border-b border-primary/20">
             <.link
               navigate={~p"/missions"}
               class="flex items-center gap-2 text-xs text-base-content/50 hover:text-primary transition-colors uppercase tracking-wide"
             >
-              <.icon name="hero-arrow-left" class="h-3 w-3" />
-              <span>Back to Cadence</span>
+              <.icon name="hero-arrow-left" class="h-3 w-3 flex-shrink-0" />
+              <span class="sidebar-label">Back to Cadence</span>
             </.link>
           </div>
 
           <!-- User header -->
-          <div class="p-3 border-b border-primary/20">
+          <div class="p-3 border-b border-primary/20 sidebar-expanded-only">
             <div class="flex items-center gap-2">
               <.avatar email={@current_scope.user.email} size="sm" />
               <div class="flex-1 min-w-0">
@@ -779,12 +815,27 @@ defmodule CadenceWeb.Layouts do
             </div>
           </div>
 
+          <!-- Collapsed avatar - visible only when collapsed -->
+          <div class="p-2 border-b border-primary/20 sidebar-collapsed-only flex justify-center">
+            <.avatar email={@current_scope.user.email} size="sm" />
+          </div>
+
           <!-- Navigation -->
-          <nav class="flex-1 overflow-y-auto py-3">
-            <ul class="menu space-y-0.5">
+          <nav class="flex-1 overflow-y-auto py-2">
+            <ul class="menu menu-sm space-y-0.5">
               <.profile_navigation current_path={@current_path} />
             </ul>
           </nav>
+
+          <!-- Toggle Button -->
+          <button
+            type="button"
+            class="sidebar-toggle-btn hidden lg:flex"
+            phx-click={JS.dispatch("phx:toggle-sidebar")}
+            title="Toggle sidebar"
+          >
+            <.icon name="hero-chevron-left" class="h-3 w-3 toggle-chevron transition-transform" />
+          </button>
         </div>
       </div>
     </div>
