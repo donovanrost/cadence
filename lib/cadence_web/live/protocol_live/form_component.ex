@@ -47,8 +47,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
 
         <%!-- Protocol-specific configuration fields --%>
         <%= if @protocol_type == "template" do %>
-          <div class="space-y-4 rounded-lg bg-blue-50 p-4 border border-blue-200">
-            <p class="text-sm font-semibold text-blue-900">Template Protocol Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">Template Protocol Configuration</p>
 
             <.input
               field={@form[:sync_pattern_hex]}
@@ -56,7 +56,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
               label="Sync Pattern (Hex)"
               placeholder="1ACFFC1D"
             />
-            <p class="mt-1 text-xs text-gray-600">
+            <p class="mt-1 text-xs text-base-content/60">
               CCSDS standard: 1ACFFC1D
             </p>
 
@@ -103,8 +103,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
         <% end %>
 
         <%= if @protocol_type == "length" do %>
-          <div class="space-y-4 rounded-lg bg-green-50 p-4 border border-green-200">
-            <p class="text-sm font-semibold text-green-900">Length Protocol Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">Length Protocol Configuration</p>
 
             <div class="grid grid-cols-2 gap-4">
               <.input
@@ -141,8 +141,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
         <% end %>
 
         <%= if @protocol_type == "terminated" do %>
-          <div class="space-y-4 rounded-lg bg-purple-50 p-4 border border-purple-200">
-            <p class="text-sm font-semibold text-purple-900">Terminated Protocol Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">Terminated Protocol Configuration</p>
 
             <.input
               field={@form[:terminator_hex]}
@@ -150,7 +150,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
               label="Terminator (Hex)"
               placeholder="0A"
             />
-            <p class="mt-1 text-xs text-gray-600">
+            <p class="mt-1 text-xs text-base-content/60">
               Common: 0A (newline), 0D0A (CRLF)
             </p>
 
@@ -163,8 +163,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
         <% end %>
 
         <%= if @protocol_type == "fixed" do %>
-          <div class="space-y-4 rounded-lg bg-yellow-50 p-4 border border-yellow-200">
-            <p class="text-sm font-semibold text-yellow-900">Fixed Protocol Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">Fixed Protocol Configuration</p>
 
             <.input
               field={@form[:packet_size]}
@@ -176,8 +176,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
         <% end %>
 
         <%= if @protocol_type == "crc" do %>
-          <div class="space-y-4 rounded-lg bg-red-50 p-4 border border-red-200">
-            <p class="text-sm font-semibold text-red-900">CRC Protocol Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">CRC Protocol Configuration</p>
 
             <.input
               field={@form[:crc_algorithm]}
@@ -212,15 +212,15 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
                 {"Pass packet anyway (log warning)", "pass"}
               ]}
             />
-            <p class="mt-1 text-xs text-gray-600">
+            <p class="mt-1 text-xs text-base-content/60">
               Skip is recommended for noisy links. Disconnect for strict validation.
             </p>
           </div>
         <% end %>
 
         <%= if @protocol_type == "ccsds" do %>
-          <div class="space-y-4 rounded-lg bg-indigo-50 p-4 border border-indigo-200">
-            <p class="text-sm font-semibold text-indigo-900">CCSDS Space Packet Configuration</p>
+          <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
+            <p class="text-sm font-semibold text-base-content">CCSDS Space Packet Configuration</p>
 
             <.input
               field={@form[:sync_pattern_hex]}
@@ -228,7 +228,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
               label="Sync Pattern (Hex)"
               placeholder="1ACFFC1D"
             />
-            <p class="mt-1 text-xs text-gray-600">
+            <p class="mt-1 text-xs text-base-content/60">
               CCSDS standard ASM: 1ACFFC1D
             </p>
 
@@ -238,12 +238,12 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
               label="Include sync pattern when writing packets"
               checked={@form[:include_sync].value != false}
             />
-            <p class="mt-1 text-xs text-gray-600">
+            <p class="mt-1 text-xs text-base-content/60">
               Sync pattern is always stripped from incoming packets for proper header parsing.
             </p>
 
-            <div class="border-t border-indigo-200 pt-4 mt-4">
-              <p class="text-sm font-medium text-indigo-800 mb-3">CRC Validation (Optional)</p>
+            <div class="border-t border-base-300 pt-4 mt-4">
+              <p class="text-sm font-medium text-base-content mb-3">CRC Validation (Optional)</p>
 
               <.input
                 field={@form[:ccsds_crc_enabled]}
@@ -252,7 +252,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
               />
 
               <%= if @ccsds_crc_enabled do %>
-                <div class="mt-3 space-y-3 pl-4 border-l-2 border-indigo-200">
+                <div class="mt-3 space-y-3 pl-4 border-l-2 border-base-300">
                   <.input
                     field={@form[:ccsds_crc_algorithm]}
                     type="select"

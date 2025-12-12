@@ -30,7 +30,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
           placeholder="SAT-1"
           phx-debounce="blur"
         />
-        <p class="mt-2 text-sm text-gray-600">
+        <p class="mt-2 text-sm text-base-content/60">
           Uppercase alphanumeric with hyphens/underscores (e.g., SAT-1, GROUND_STATION_ALPHA)
         </p>
 
@@ -59,29 +59,29 @@ defmodule CadenceWeb.TargetLive.FormComponent do
           ]}
         />
 
-        <hr class="my-6 border-zinc-300" />
+        <hr class="my-6 border-base-300" />
 
         <div>
-          <label class="block text-sm font-semibold leading-6 text-zinc-800 mb-2">
+          <label class="block text-sm font-semibold leading-6 text-base-content mb-2">
             Command & Telemetry Database
           </label>
-          <p class="text-sm text-gray-600 mb-3">
+          <p class="text-sm text-base-content/60 mb-3">
             Select which database version this target uses for commands and telemetry.
           </p>
 
-          <div class="space-y-4 border border-zinc-200 rounded-lg p-4">
+          <div class="space-y-4 border border-base-300 rounded-sm p-4 bg-base-200/50">
             <%= if Enum.empty?(@available_databases) do %>
-              <p class="text-sm text-gray-500 italic">
+              <p class="text-sm text-base-content/50 italic">
                 No databases available for this mission. Create a database first to configure targets.
               </p>
             <% else %>
               <div>
-                <label class="block text-xs font-medium text-zinc-600 mb-1">Database</label>
+                <label class="hud-label block mb-1">Database</label>
                 <select
                   name="selected_database_id"
                   phx-change="select_database"
                   phx-target={@myself}
-                  class="w-full text-sm rounded-md border-zinc-300 focus:border-zinc-400 focus:ring-zinc-400"
+                  class="w-full select select-sm"
                 >
                   <option value="">Choose a database...</option>
                   <%= for db <- @available_databases do %>
@@ -94,12 +94,12 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
               <%= if @selected_database_id && length(@available_versions) > 0 do %>
                 <div>
-                  <label class="block text-xs font-medium text-zinc-600 mb-1">Version</label>
+                  <label class="hud-label block mb-1">Version</label>
                   <select
                     name="definition_set_id"
                     phx-change="select_version"
                     phx-target={@myself}
-                    class="w-full text-sm rounded-md border-zinc-300 focus:border-zinc-400 focus:ring-zinc-400"
+                    class="w-full select select-sm"
                   >
                     <option value="">Choose a version...</option>
                     <%= for ds <- @available_versions do %>
@@ -112,13 +112,13 @@ defmodule CadenceWeb.TargetLive.FormComponent do
               <% end %>
 
               <%= if @selected_database_id && length(@available_versions) == 0 do %>
-                <p class="text-sm text-gray-500 italic">
+                <p class="text-sm text-base-content/50 italic">
                   No versions available for this database yet.
                 </p>
               <% end %>
 
               <%= if is_nil(@selected_definition_set_id) do %>
-                <p class="text-xs text-amber-600">
+                <p class="text-xs text-warning">
                   A database version is required to save the target.
                 </p>
               <% end %>
@@ -126,26 +126,26 @@ defmodule CadenceWeb.TargetLive.FormComponent do
           </div>
         </div>
 
-        <hr class="my-6 border-zinc-300" />
+        <hr class="my-6 border-base-300" />
 
         <div>
-          <label class="block text-sm font-semibold leading-6 text-zinc-800 mb-2">
+          <label class="block text-sm font-semibold leading-6 text-base-content mb-2">
             Associated Interfaces
           </label>
-          <p class="text-sm text-gray-600 mb-3">
+          <p class="text-sm text-base-content/60 mb-3">
             Select interfaces that communicate with this target.
           </p>
 
           <%= if Enum.empty?(@available_interfaces) do %>
-            <p class="text-sm text-gray-500 italic">
+            <p class="text-sm text-base-content/50 italic">
               No interfaces defined for this mission. Create interfaces first.
             </p>
           <% else %>
-            <div class="space-y-2 max-h-48 overflow-y-auto border border-zinc-200 rounded-lg p-3">
+            <div class="space-y-2 max-h-48 overflow-y-auto border border-base-300 rounded-sm p-3 bg-base-200/50">
               <%= for interface <- @available_interfaces do %>
                 <% is_selected = Map.has_key?(@selected_interfaces, interface.id) %>
                 <% current_direction = Map.get(@selected_interfaces, interface.id, "read_write") %>
-                <div class="flex items-center justify-between py-2 px-3 rounded-md hover:bg-zinc-50">
+                <div class="flex items-center justify-between py-2 px-3 rounded-sm hover:bg-base-300/50">
                   <label class="flex items-center gap-3 cursor-pointer flex-1">
                     <input
                       type="checkbox"
@@ -155,11 +155,11 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                       phx-click="toggle_interface"
                       phx-value-interface-id={interface.id}
                       phx-target={@myself}
-                      class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      class="checkbox checkbox-sm"
                     />
-                    <span class="text-sm font-medium text-zinc-700">
+                    <span class="text-sm font-medium text-base-content">
                       {interface.name}
-                      <span class="text-zinc-500">
+                      <span class="text-base-content/50">
                         ({String.replace(interface.connection_type || "none", "_", " ")})
                       </span>
                     </span>
@@ -170,7 +170,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
                       phx-change="update_interface_direction"
                       phx-value-interface-id={interface.id}
                       phx-target={@myself}
-                      class="text-sm rounded-md border-zinc-300 py-1 pl-2 pr-8 focus:border-zinc-400 focus:ring-zinc-400"
+                      class="select select-sm"
                     >
                       <option value="read" selected={current_direction == "read"}>
                         Read (Telemetry)
@@ -190,23 +190,23 @@ defmodule CadenceWeb.TargetLive.FormComponent do
         </div>
 
         <%= if @action == :edit and (@target.config != %{} or @target.metadata != %{}) do %>
-          <hr class="my-6 border-zinc-300" />
+          <hr class="my-6 border-base-300" />
           <div class="space-y-4">
             <%= if @target.config != %{} do %>
               <div>
-                <label class="block text-sm font-semibold leading-6 text-zinc-800">
+                <label class="block text-sm font-semibold leading-6 text-base-content">
                   Configuration (Read-only)
                 </label>
-                <pre class="mt-2 block w-full rounded-lg text-zinc-900 bg-zinc-50 border border-zinc-300 py-2 px-3 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.config, pretty: true) %></pre>
+                <pre class="mt-2 block w-full rounded-sm text-base-content bg-base-200 border border-base-300 py-2 px-3 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.config, pretty: true) %></pre>
               </div>
             <% end %>
 
             <%= if @target.metadata != %{} do %>
               <div>
-                <label class="block text-sm font-semibold leading-6 text-zinc-800">
+                <label class="block text-sm font-semibold leading-6 text-base-content">
                   Metadata (Read-only)
                 </label>
-                <pre class="mt-2 block w-full rounded-lg text-zinc-900 bg-zinc-50 border border-zinc-300 py-2 px-3 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.metadata, pretty: true) %></pre>
+                <pre class="mt-2 block w-full rounded-sm text-base-content bg-base-200 border border-base-300 py-2 px-3 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.metadata, pretty: true) %></pre>
               </div>
             <% end %>
           </div>

@@ -8,15 +8,7 @@
   <:col :let={target} label="Name">{target.name}</:col>
   <:col :let={target} label="Type">{target.type}</:col>
   <:col :let={target} label="Status">
-    <span class={[
-      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-      target.status == "online" && "bg-green-50 text-green-700 ring-green-600/20",
-      target.status == "offline" && "bg-gray-50 text-gray-600 ring-gray-500/10",
-      target.status == "standby" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-      target.status == "fault" && "bg-red-50 text-red-700 ring-red-600/10"
-    ]}>
-      {target.status}
-    </span>
+    <.status_badge status={target.status} />
   </:col>
   <:action :let={target}>
     <.link navigate={~p"/targets/#{target}"}>Show</.link>

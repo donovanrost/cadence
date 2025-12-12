@@ -26,16 +26,16 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
       >
         <div class="space-y-6">
           <div>
-            <label class="block text-sm font-semibold leading-6 text-zinc-800 mb-2">
+            <label class="block text-sm font-semibold leading-6 text-base-content mb-2">
               Database File (YAML)
             </label>
             <div
-              class="mt-2 flex justify-center rounded-lg border border-dashed border-zinc-900/25 px-6 py-10"
+              class="mt-2 flex justify-center rounded-sm border border-dashed border-base-content/25 px-6 py-10 bg-base-200/50"
               phx-drop-target={@uploads.yaml_file.ref}
             >
               <div class="text-center">
                 <svg
-                  class="mx-auto h-12 w-12 text-gray-300"
+                  class="mx-auto h-12 w-12 text-base-content/30"
                   viewBox="0 0 24 24"
                   fill="currentColor"
                   aria-hidden="true"
@@ -46,26 +46,26 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                     clip-rule="evenodd"
                   />
                 </svg>
-                <div class="mt-4 flex text-sm leading-6 text-gray-600">
+                <div class="mt-4 flex text-sm leading-6 text-base-content/60">
                   <label
                     for={@uploads.yaml_file.ref}
-                    class="relative cursor-pointer rounded-md bg-white font-semibold text-zinc-900 focus-within:outline-none focus-within:ring-2 focus-within:ring-zinc-900 focus-within:ring-offset-2 hover:text-zinc-700"
+                    class="relative cursor-pointer rounded-sm bg-base-100 px-2 py-1 font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-primary/80"
                   >
                     <span>Upload a file</span>
                     <.live_file_input upload={@uploads.yaml_file} class="sr-only" />
                   </label>
                   <p class="pl-1">or drag and drop</p>
                 </div>
-                <p class="text-xs leading-5 text-gray-600">YAML files (.yaml or .yml)</p>
+                <p class="text-xs leading-5 text-base-content/60">YAML files (.yaml or .yml)</p>
               </div>
             </div>
 
             <%= for entry <- @uploads.yaml_file.entries do %>
-              <div class="mt-4 p-4 bg-zinc-50 rounded-lg border border-zinc-200">
+              <div class="mt-4 p-4 bg-base-200 rounded-sm border border-base-300">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <svg
-                      class="h-5 w-5 text-zinc-500"
+                      class="h-5 w-5 text-base-content/50"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -77,8 +77,8 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    <span class="text-sm font-medium text-zinc-700">{entry.client_name}</span>
-                    <span class="text-xs text-zinc-500">
+                    <span class="text-sm font-medium text-base-content">{entry.client_name}</span>
+                    <span class="text-xs text-base-content/50">
                       ({format_bytes(entry.client_size)})
                     </span>
                   </div>
@@ -87,23 +87,23 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                     phx-click="cancel-upload"
                     phx-value-ref={entry.ref}
                     phx-target={@myself}
-                    class="text-sm text-zinc-500 hover:text-zinc-700"
+                    class="text-sm text-base-content/50 hover:text-base-content"
                   >
                     Remove
                   </button>
                 </div>
-                <progress value={entry.progress} max="100" class="w-full h-1 mt-2">
+                <progress value={entry.progress} max="100" class="progress progress-primary w-full h-1 mt-2">
                   {entry.progress}%
                 </progress>
                 <%= for err <- upload_errors(@uploads.yaml_file, entry) do %>
-                  <p class="text-red-600 text-sm mt-2">{error_to_string(err)}</p>
+                  <p class="text-error text-sm mt-2">{error_to_string(err)}</p>
                 <% end %>
               </div>
             <% end %>
           </div>
 
           <div>
-            <label class="block text-sm font-semibold leading-6 text-zinc-800" for="version">
+            <label class="block text-sm font-semibold leading-6 text-base-content" for="version">
               Version Override (optional)
             </label>
             <input
@@ -112,9 +112,9 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
               id="version"
               value={@version_override}
               placeholder="Leave blank to use version from YAML"
-              class="mt-2 block w-full rounded-md border-zinc-300 shadow-sm focus:border-zinc-900 focus:ring-zinc-900 sm:text-sm"
+              class="mt-2 block w-full input input-sm"
             />
-            <p class="mt-1 text-sm text-zinc-500">
+            <p class="mt-1 text-sm text-base-content/50">
               Override the version string if you need to specify a different version.
             </p>
           </div>
@@ -125,16 +125,16 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
               name="publish"
               id="publish"
               checked={@publish_immediately}
-              class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              class="checkbox checkbox-sm"
             />
-            <label for="publish" class="text-sm font-medium text-zinc-700">
+            <label for="publish" class="text-sm font-medium text-base-content">
               Publish immediately after import
             </label>
           </div>
         </div>
 
         <div class="mt-6 flex items-center justify-end gap-x-6">
-          <.link patch={@patch} class="text-sm font-semibold leading-6 text-zinc-900">
+          <.link patch={@patch} class="text-sm font-semibold leading-6 text-base-content hover:text-primary">
             Cancel
           </.link>
           <.button

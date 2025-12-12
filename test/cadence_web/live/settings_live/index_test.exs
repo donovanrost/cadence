@@ -108,10 +108,10 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
     test "updates boolean setting to false", %{conn: conn, org: org} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change allow_self_approval to false via toggle (select checkbox, not hidden input)
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
-      |> render_change(%{allow_self_approval: "false"})
+      |> form("form:has(input[name=allow_self_approval])", %{allow_self_approval: "false"})
+      |> render_change()
 
       assert Settings.get_org(org, :procedures, :allow_self_approval) == false
     end
@@ -122,10 +122,10 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
 
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Change it back to true (select checkbox, not hidden input)
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
-      |> render_change(%{allow_self_approval: "true"})
+      |> form("form:has(input[name=allow_self_approval])", %{allow_self_approval: "true"})
+      |> render_change()
 
       assert Settings.get_org(org, :procedures, :allow_self_approval) == true
     end
@@ -142,26 +142,30 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
   end
 
   describe "navigation" do
-    test "can navigate from general to procedures tab", %{conn: conn} do
+    test "can navigate from general to procedures via sidebar", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/settings")
 
-      # Click procedures tab in desktop navigation (hidden lg:flex)
-      view
-      |> element("ul.hidden.lg\\:flex a[href=\"/settings/procedures\"]")
-      |> render_click()
+      # Settings dropdown in sidebar should show both General and Procedures links
+      html = render(view)
+      assert html =~ ~r/href="\/settings"[^>]*>.*General/s
+      assert html =~ ~r/href="\/settings\/procedures"[^>]*>.*Procedures/s
 
-      assert_patched(view, ~p"/settings/procedures")
+      # Navigate to procedures via direct URL (sidebar uses navigate, not patch)
+      {:ok, _view, html} = live(conn, ~p"/settings/procedures")
+      assert html =~ "Procedures Settings"
     end
 
-    test "can navigate from procedures to general tab", %{conn: conn} do
+    test "can navigate from procedures to general via sidebar", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/settings/procedures")
 
-      # Click general tab in desktop navigation (hidden lg:flex)
-      view
-      |> element("ul.hidden.lg\\:flex a[href=\"/settings\"]")
-      |> render_click()
+      # Settings dropdown in sidebar should show both General and Procedures links
+      html = render(view)
+      assert html =~ ~r/href="\/settings"[^>]*>.*General/s
+      assert html =~ ~r/href="\/settings\/procedures"[^>]*>.*Procedures/s
 
-      assert_patched(view, ~p"/settings")
+      # Navigate to general via direct URL (sidebar uses navigate, not patch)
+      {:ok, _view, html} = live(conn, ~p"/settings")
+      assert html =~ "General Settings"
     end
   end
 
@@ -192,10 +196,10 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
       |> element("input[name=\"required_approvals\"]")
       |> render_change(%{required_approvals: "3"})
 
-      # Change allow_self_approval (select checkbox, not hidden input)
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
-      |> render_change(%{allow_self_approval: "false"})
+      |> form("form:has(input[name=allow_self_approval])", %{allow_self_approval: "false"})
+      |> render_change()
 
       # Verify both settings
       assert Settings.get_org(org, :procedures, :required_approvals) == 3

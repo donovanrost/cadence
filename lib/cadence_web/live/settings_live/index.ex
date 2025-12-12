@@ -139,6 +139,10 @@ defmodule CadenceWeb.SettingsLive.Index do
       Map.has_key?(params, "key") ->
         params["key"]
 
+      # Handle phx-click from toggle which sends "name" and "value"
+      Map.has_key?(params, "name") ->
+        params["name"]
+
       Map.has_key?(params, "_target") ->
         List.first(params["_target"])
 
@@ -188,79 +192,63 @@ defmodule CadenceWeb.SettingsLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Settings
-      <:subtitle>Configure organization defaults for all missions</:subtitle>
-    </.header>
+    <%= if @active_tab == :general do %>
+      <.header>
+        General Settings
+        <:subtitle>Organization information</:subtitle>
+      </.header>
 
-    <div class="mt-6">
-      <.settings_layout>
-        <:tabs>
-          <.settings_tab
-            patch={~p"/settings"}
-            active={@active_tab == :general}
-            icon="hero-building-office"
-          >
-            General
-          </.settings_tab>
-          <.settings_tab
-            patch={~p"/settings/procedures"}
-            active={@active_tab == :procedures}
-            icon="hero-document-text"
-          >
-            Procedures
-          </.settings_tab>
-        </:tabs>
-        <:content>
-          <%= if @active_tab == :general do %>
-            <.settings_section title="Organization">
-              <div class="card bg-base-100 border border-base-300 p-4">
-                <dl class="space-y-2">
-                  <div>
-                    <dt class="text-sm text-base-content/60">Name</dt>
-                    <dd class="font-medium">{@organization.name}</dd>
-                  </div>
-                  <div>
-                    <dt class="text-sm text-base-content/60">Slug</dt>
-                    <dd class="font-medium font-mono">{@organization.slug}</dd>
-                  </div>
-                </dl>
+      <div class="mt-6">
+        <.settings_section title="Organization">
+          <div class="card bg-base-100 border border-base-300 p-4">
+            <dl class="space-y-2">
+              <div>
+                <dt class="text-sm text-base-content/60">Name</dt>
+                <dd class="font-medium">{@organization.name}</dd>
               </div>
-            </.settings_section>
-          <% else %>
-            <.settings_section
-              title="Approval Workflow"
-              description="Configure how procedure versions are reviewed and approved"
+              <div>
+                <dt class="text-sm text-base-content/60">Slug</dt>
+                <dd class="font-medium font-mono">{@organization.slug}</dd>
+              </div>
+            </dl>
+          </div>
+        </.settings_section>
+      </div>
+    <% else %>
+      <.header>
+        Procedures Settings
+        <:subtitle>Configure how procedure versions are reviewed and approved</:subtitle>
+      </.header>
+
+      <div class="mt-6">
+        <.settings_section title="Approval Workflow">
+          <%= for setting <- @settings do %>
+            <.setting_card
+              label={setting.label}
+              description={setting.description}
+              hint={restrictiveness_hint(setting.restrictiveness)}
+              error={Map.get(@errors, setting.key)}
             >
-              <%= for setting <- @settings do %>
-                <.setting_card
-                  label={setting.label}
-                  description={setting.description}
-                  hint={restrictiveness_hint(setting.restrictiveness)}
-                  error={Map.get(@errors, setting.key)}
-                >
-                  <%= if setting.type == :integer do %>
-                    <.setting_number_input
-                      value={setting.value}
-                      min={get_min_value(setting)}
-                      max={get_max_value(setting)}
-                      name={to_string(setting.key)}
-                      phx-change="save_setting"
-                    />
-                  <% else %>
-                    <.setting_toggle
-                      value={setting.value}
-                      name={to_string(setting.key)}
-                      phx-change="save_setting"
-                    />
-                  <% end %>
-                </.setting_card>
+              <%= if setting.type == :integer do %>
+                <.setting_number_input
+                  value={setting.value}
+                  min={get_min_value(setting)}
+                  max={get_max_value(setting)}
+                  name={to_string(setting.key)}
+                  phx-change="save_setting"
+                />
+              <% else %>
+                <.setting_toggle
+                  value={setting.value}
+                  name={to_string(setting.key)}
+                  phx-change="save_setting"
+                />
               <% end %>
-            </.settings_section>
+            </.setting_card>
           <% end %>
-        </:content>
-      </.settings_layout>
-    </div>
+        </.settings_section>
+      </div>
+    <% end %>
     """
   end
 end

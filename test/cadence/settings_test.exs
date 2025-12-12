@@ -272,24 +272,33 @@ defmodule Cadence.SettingsTest do
     end
   end
 
-  describe "restrictiveness - :none (no restriction)" do
+  describe "allow_withdrawal - :false_is_stricter" do
     setup do
       org = organization_fixture()
       mission = mission_fixture(organization: org)
       %{org: org, mission: mission}
     end
 
-    test "allows any valid value regardless of org setting", %{org: org, mission: mission} do
-      {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, false)
-
-      # Mission can set true even when org is false (because restrictiveness is :none)
-      assert {:ok, _} = Settings.set_mission(mission, :procedures, :allow_withdrawal, true)
-    end
-
-    test "allows setting false when org is true", %{org: org, mission: mission} do
+    test "allows mission to set false when org is true", %{org: org, mission: mission} do
       {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, true)
 
       assert {:ok, _} = Settings.set_mission(mission, :procedures, :allow_withdrawal, false)
+    end
+
+    test "rejects mission setting true when org is false", %{org: org, mission: mission} do
+      {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, false)
+
+      assert {:error, :less_restrictive_than_org, details} =
+               Settings.set_mission(mission, :procedures, :allow_withdrawal, true)
+
+      assert details.org_value == false
+      assert details.reason == "cannot enable when disabled at org level"
+    end
+
+    test "allows mission to set true when org is true", %{org: org, mission: mission} do
+      {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, true)
+
+      assert {:ok, _} = Settings.set_mission(mission, :procedures, :allow_withdrawal, true)
     end
   end
 

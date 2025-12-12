@@ -5,101 +5,6 @@ defmodule CadenceWeb.SettingsComponentsTest do
   import Phoenix.LiveViewTest
   import CadenceWeb.SettingsComponents
 
-  describe "settings_layout/1" do
-    test "renders tabs and content slots" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.settings_layout>
-          <:tabs>
-            <.settings_tab patch="/settings" active={true} icon="hero-cog-6-tooth">
-              General
-            </.settings_tab>
-          </:tabs>
-          <:content>
-            <p>Content here</p>
-          </:content>
-        </.settings_layout>
-        """)
-
-      assert html =~ "General"
-      assert html =~ "Content here"
-      assert html =~ "hero-cog-6-tooth"
-    end
-
-    test "renders multiple tabs" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.settings_layout>
-          <:tabs>
-            <.settings_tab patch="/settings" active={true} icon="hero-cog-6-tooth">
-              General
-            </.settings_tab>
-            <.settings_tab patch="/settings/procedures" active={false} icon="hero-clipboard-document-list">
-              Procedures
-            </.settings_tab>
-          </:tabs>
-          <:content>
-            <p>Tab content</p>
-          </:content>
-        </.settings_layout>
-        """)
-
-      assert html =~ "General"
-      assert html =~ "Procedures"
-      assert html =~ "hero-clipboard-document-list"
-    end
-  end
-
-  describe "settings_tab/1" do
-    test "renders active state correctly" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.settings_tab patch="/settings" active={true} icon="hero-cog-6-tooth">
-          Active Tab
-        </.settings_tab>
-        """)
-
-      # Active state uses bg-primary/10 in resolved implementation
-      assert html =~ "bg-primary"
-      assert html =~ "Active Tab"
-      assert html =~ ~s(href="/settings")
-    end
-
-    test "renders inactive state correctly" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.settings_tab patch="/settings" active={false} icon="hero-cog-6-tooth">
-          Inactive Tab
-        </.settings_tab>
-        """)
-
-      # Inactive state should not have bg-primary/10
-      assert html =~ "Inactive Tab"
-      assert html =~ "hover:bg-base-300"
-    end
-
-    test "renders icon" do
-      assigns = %{}
-
-      html =
-        rendered_to_string(~H"""
-        <.settings_tab patch="/settings" active={false} icon="hero-cog-6-tooth">
-          Tab
-        </.settings_tab>
-        """)
-
-      assert html =~ "hero-cog-6-tooth"
-    end
-  end
-
   describe "setting_card/1" do
     test "renders label, description, and hint" do
       assigns = %{}
@@ -259,7 +164,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
   end
 
   describe "setting_override_card/1" do
-    test "shows org default" do
+    test "shows org default and input" do
       assigns = %{}
 
       html =
@@ -269,21 +174,22 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:integer}
           org_value={1}
-          mission_override={nil}
-          has_override={false}
+          effective_value={1}
           min_value={1}
           max_value={10}
           restrictiveness={:higher}
           name="test"
+          can_override={true}
         />
         """)
 
       assert html =~ "Organization default"
       assert html =~ "1"
-      assert html =~ "Override for this mission"
+      # Input should always be visible now
+      assert html =~ ~s(type="number")
     end
 
-    test "shows input when override enabled" do
+    test "shows effective value in input" do
       assigns = %{}
 
       html =
@@ -293,12 +199,12 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:integer}
           org_value={1}
-          mission_override={3}
-          has_override={true}
+          effective_value={3}
           min_value={1}
           max_value={10}
           restrictiveness={:higher}
           name="test"
+          can_override={true}
         />
         """)
 
@@ -316,12 +222,12 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:integer}
           org_value={2}
-          mission_override={3}
-          has_override={true}
+          effective_value={3}
           min_value={1}
           max_value={10}
           restrictiveness={:higher}
           name="test"
+          can_override={true}
         />
         """)
 
@@ -338,12 +244,12 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:integer}
           org_value={5}
-          mission_override={3}
-          has_override={true}
+          effective_value={3}
           min_value={1}
           max_value={10}
           restrictiveness={:lower}
           name="test"
+          can_override={true}
         />
         """)
 
@@ -360,10 +266,10 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:boolean}
           org_value={true}
-          mission_override={false}
-          has_override={true}
+          effective_value={false}
           restrictiveness={:false_is_stricter}
           name="test"
+          can_override={true}
         />
         """)
 
@@ -382,13 +288,13 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:integer}
           org_value={2}
-          mission_override={1}
-          has_override={true}
+          effective_value={1}
           min_value={1}
           max_value={10}
           restrictiveness={:higher}
           name="test"
           error="Must be at least 2"
+          can_override={true}
         />
         """)
 
@@ -396,7 +302,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
       assert html =~ "text-error"
     end
 
-    test "disables override when org has false for :false_is_stricter" do
+    test "disables toggle when can_override is false" do
       assigns = %{}
 
       html =
@@ -406,15 +312,36 @@ defmodule CadenceWeb.SettingsComponentsTest do
           description="Desc"
           type={:boolean}
           org_value={false}
-          mission_override={nil}
-          has_override={false}
+          effective_value={false}
           restrictiveness={:false_is_stricter}
           name="test"
+          can_override={false}
         />
         """)
 
-      # Should show that override cannot be enabled
-      assert html =~ "disabled" or html =~ "Disabled at organization level"
+      # Toggle should be disabled when can_override is false
+      assert html =~ "disabled"
+    end
+
+    test "shows locked message when org disables a :false_is_stricter boolean" do
+      assigns = %{}
+
+      html =
+        rendered_to_string(~H"""
+        <.setting_override_card
+          label="Test"
+          description="Desc"
+          type={:boolean}
+          org_value={false}
+          effective_value={false}
+          restrictiveness={:false_is_stricter}
+          name="test"
+          can_override={false}
+        />
+        """)
+
+      # Should show locked indicator
+      assert html =~ "Locked by organization policy"
     end
   end
 

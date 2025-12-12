@@ -43,6 +43,9 @@ defmodule Cadence.Application do
       # Outbox Processor - processes transactional outbox events
       Cadence.Outbox.Processor,
 
+      # Notification Dispatcher - subscribes to outbox events and creates notifications
+      Cadence.Notifications.Dispatcher,
+
       # Mission Supervisor - manages all mission supervision trees
       Cadence.Missions.MissionSupervisor,
 

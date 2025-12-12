@@ -32,7 +32,8 @@ defmodule CadenceWeb.Router do
       on_mount: [
         {CadenceWeb.LiveAuth, :require_authenticated},
         {CadenceWeb.LiveAuth, :require_system_admin},
-        {CadenceWeb.LiveAuth, :put_current_path}
+        {CadenceWeb.LiveAuth, :put_current_path},
+        {CadenceWeb.LiveAuth, :subscribe_notifications}
       ],
       session: {CadenceWeb.LiveAuth, :on_session_init, []} do
       live "/", AdminLive.Index, :index
@@ -67,7 +68,8 @@ defmodule CadenceWeb.Router do
       on_mount: [
         {CadenceWeb.LiveAuth, :require_authenticated},
         {CadenceWeb.LiveAuth, :require_organization},
-        {CadenceWeb.LiveAuth, :put_current_path}
+        {CadenceWeb.LiveAuth, :put_current_path},
+        {CadenceWeb.LiveAuth, :subscribe_notifications}
       ],
       session: {CadenceWeb.LiveAuth, :on_session_init, []} do
       live "/missions", MissionLive.Index, :index
@@ -81,6 +83,9 @@ defmodule CadenceWeb.Router do
       # Organization settings
       live "/settings", SettingsLive.Index, :index
       live "/settings/procedures", SettingsLive.Index, :procedures
+
+      # Notifications
+      live "/notifications", NotificationLive.Index, :index
     end
 
     # Mission-specific routes (mission sidebar with mission context)
@@ -175,6 +180,24 @@ defmodule CadenceWeb.Router do
       ],
       session: {CadenceWeb.LiveAuth, :on_session_init, []} do
       live "/missions/:id/ops", OpsConsoleLive.Index, :index
+    end
+  end
+
+  # User Profile routes (authentication required, no organization required)
+  scope "/", CadenceWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :profile,
+      layout: {CadenceWeb.Layouts, :profile_sidebar},
+      on_mount: [
+        {CadenceWeb.LiveAuth, :require_authenticated},
+        {CadenceWeb.LiveAuth, :put_current_path}
+      ],
+      session: {CadenceWeb.LiveAuth, :on_session_init, []} do
+      live "/profile", ProfileLive.Index, :index
+      live "/profile/email", ProfileLive.Email, :index
+      live "/profile/appearance", ProfileLive.Appearance, :index
+      live "/profile/notifications", NotificationLive.Preferences, :index
     end
   end
 

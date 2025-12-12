@@ -59,17 +59,17 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
         />
 
         <div class="space-y-2">
-          <label class="block text-sm font-semibold leading-6 text-zinc-800">
+          <label class="block text-sm font-semibold leading-6 text-base-content">
             Conditions
           </label>
-          <p class="text-sm text-zinc-600">
+          <p class="text-sm text-base-content/60">
             Define which events trigger this rule. All conditions must match.
           </p>
 
-          <div class="bg-zinc-50 rounded-lg p-4 space-y-4">
+          <div class="bg-base-200/50 border border-base-300 rounded-sm p-4 space-y-4">
             <div>
-              <label class="block text-sm font-medium text-zinc-700 mb-1">Limit States</label>
-              <p class="text-xs text-zinc-500 mb-2">Which limit states should trigger this rule?</p>
+              <label class="hud-label block mb-1">Limit States</label>
+              <p class="text-xs text-base-content/50 mb-2">Which limit states should trigger this rule?</p>
               <div class="flex flex-wrap gap-3">
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input
@@ -79,7 +79,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
                     checked={@conditions_limit_states["red"]}
                     class="checkbox checkbox-sm checkbox-error"
                   />
-                  <span class="text-sm">Red (Critical)</span>
+                  <span class="text-sm text-base-content">Red (Critical)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input
@@ -89,7 +89,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
                     checked={@conditions_limit_states["yellow"]}
                     class="checkbox checkbox-sm checkbox-warning"
                   />
-                  <span class="text-sm">Yellow (Warning)</span>
+                  <span class="text-sm text-base-content">Yellow (Warning)</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input
@@ -99,25 +99,25 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
                     checked={@conditions_limit_states["blue"]}
                     class="checkbox checkbox-sm checkbox-info"
                   />
-                  <span class="text-sm">Blue (Stale)</span>
+                  <span class="text-sm text-base-content">Blue (Stale)</span>
                 </label>
               </div>
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-zinc-700 mb-1">
+              <label class="hud-label block mb-1">
                 Item Filter (Optional)
               </label>
-              <p class="text-xs text-zinc-500 mb-2">
+              <p class="text-xs text-base-content/50 mb-2">
                 Leave empty to match all items, or enter a pattern like
-                <code class="bg-zinc-200 px-1 rounded">POWER\..*</code>
+                <code class="bg-base-300 px-1 rounded-sm font-mono">POWER\..*</code>
               </p>
               <input
                 type="text"
                 name="conditions[item_name_pattern]"
                 value={@conditions_item_pattern}
                 placeholder="e.g., POWER\\.battery_.*"
-                class="input input-bordered w-full"
+                class="input input-sm w-full"
               />
             </div>
           </div>
@@ -130,9 +130,9 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
           placeholder="{{item_name}} is {{limit_state}} (value: {{value}})"
           rows="2"
         />
-        <p class="text-xs text-zinc-500 -mt-4">
-          Available variables: <code>{"{{item_name}}"}</code>, <code>{"{{value}}"}</code>, <code>{"{{limit_state}}"}</code>, <code>{"{{previous_state}}"}</code>,
-          <code>{"{{target_id}}"}</code>
+        <p class="text-xs text-base-content/50 -mt-4">
+          Available variables: <code class="bg-base-300 px-1 rounded-sm font-mono">{"{{item_name}}"}</code>, <code class="bg-base-300 px-1 rounded-sm font-mono">{"{{value}}"}</code>, <code class="bg-base-300 px-1 rounded-sm font-mono">{"{{limit_state}}"}</code>, <code class="bg-base-300 px-1 rounded-sm font-mono">{"{{previous_state}}"}</code>,
+          <code class="bg-base-300 px-1 rounded-sm font-mono">{"{{target_id}}"}</code>
         </p>
 
         <div class="grid grid-cols-2 gap-4">
@@ -143,7 +143,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
               label="Auto-Shelve Duration (minutes)"
               placeholder="Leave empty to disable"
             />
-            <p class="text-xs text-zinc-500 mt-1">
+            <p class="text-xs text-base-content/50 mt-1">
               Automatically shelve alarms for this duration when triggered
             </p>
           </div>
@@ -155,7 +155,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
               label="Cooldown (seconds)"
               placeholder="Leave empty for no cooldown"
             />
-            <p class="text-xs text-zinc-500 mt-1">
+            <p class="text-xs text-base-content/50 mt-1">
               Minimum time between re-triggering after clear
             </p>
           </div>
@@ -166,7 +166,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
           type="checkbox"
           label="Enabled"
         />
-        <p class="text-sm text-gray-600 -mt-4 ml-6">
+        <p class="text-sm text-base-content/60 -mt-4 ml-6">
           Disabled rules will not generate alarms.
         </p>
 
@@ -177,7 +177,7 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
         </:actions>
       </.simple_form>
 
-      <div :if={@action == :edit} class="mt-8 pt-6 border-t border-zinc-200">
+      <div :if={@action == :edit} class="mt-8 pt-6 border-t border-base-300">
         <.button
           phx-click="delete"
           phx-target={@myself}

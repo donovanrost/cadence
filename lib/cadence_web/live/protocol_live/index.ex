@@ -211,23 +211,6 @@ defmodule CadenceWeb.ProtocolLive.Index do
     end
   end
 
-  defp format_direction(direction) do
-    case direction do
-      "read" -> "READ"
-      "write" -> "WRITE"
-      "read_write" -> "READ/WRITE"
-      other -> String.upcase(other)
-    end
-  end
-
-  defp direction_badge_class(direction) do
-    case direction do
-      "read" -> "bg-green-50 text-green-700 ring-green-600/20"
-      "write" -> "bg-blue-50 text-blue-700 ring-blue-600/20"
-      "read_write" -> "bg-purple-50 text-purple-700 ring-purple-600/20"
-      _ -> "bg-gray-50 text-gray-700 ring-gray-600/20"
-    end
-  end
 
   defp protocol_config_summary(protocol) do
     case protocol.protocol_type do

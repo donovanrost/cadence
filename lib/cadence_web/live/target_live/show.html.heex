@@ -1,122 +1,92 @@
+<.breadcrumb items={[
+  {"Targets", ~p"/missions/#{@mission}/targets"},
+  {@target.name, nil}
+]} />
+
 <.header>
   {@target.name}
-  <:subtitle>Target: {@target.identifier}</:subtitle>
+  <:subtitle>{@target.identifier}</:subtitle>
   <:actions>
-    <.link navigate={~p"/missions/#{@mission}"}>
-      <.button>View Mission</.button>
-    </.link>
     <.link patch={~p"/missions/#{@mission}/targets/#{@target}/edit"}>
       <.button>Edit Target</.button>
     </.link>
   </:actions>
 </.header>
 
-<.list>
-  <:item title="Identifier">{@target.identifier}</:item>
-  <:item title="Type">
-    <span class="capitalize">{String.replace(@target.type, "_", " ")}</span>
-  </:item>
-  <:item title="Status">
-    <span class={[
-      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-      @target.status == "online" && "bg-green-50 text-green-700 ring-green-600/20",
-      @target.status == "offline" && "bg-gray-50 text-gray-600 ring-gray-500/10",
-      @target.status == "standby" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-      @target.status == "fault" && "bg-red-50 text-red-700 ring-red-600/10"
-    ]}>
-      {@target.status}
-    </span>
-  </:item>
-  <:item title="Circuit Breaker Status">
-    <span class={[
-      "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-      @target.circuit_breaker_status == "closed" &&
-        "bg-green-50 text-green-700 ring-green-600/20",
-      @target.circuit_breaker_status == "open" && "bg-red-50 text-red-700 ring-red-600/10",
-      @target.circuit_breaker_status == "half_open" &&
-        "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
-    ]}>
-      {String.replace(@target.circuit_breaker_status, "_", " ")}
-    </span>
-  </:item>
-  <:item title="Circuit Breaker Failures">{@target.circuit_breaker_failures}</:item>
-  <:item title="Mission">
-    <.link navigate={~p"/missions/#{@mission}"} class="text-blue-600 hover:text-blue-800">
-      {@mission.name}
-    </.link>
-  </:item>
-</.list>
+<!-- Target Details Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+  <div class="hud-panel p-4">
+    <div class="hud-label mb-1">Type</div>
+    <div class="text-base-content font-medium capitalize">
+      {String.replace(@target.type, "_", " ")}
+    </div>
+  </div>
 
-<%= if @target.config != %{} do %>
-  <div class="mt-8">
-    <h2 class="text-lg font-semibold text-gray-900 mb-4">Configuration</h2>
-    <pre class="block w-full rounded-lg text-zinc-900 bg-zinc-50 border border-zinc-300 py-4 px-6 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.config, pretty: true) %></pre>
+  <div class="hud-panel p-4">
+    <div class="hud-label mb-1">Status</div>
+    <div><.status_badge status={@target.status} /></div>
+  </div>
+
+  <div class="hud-panel p-4">
+    <div class="hud-label mb-1">Circuit Breaker</div>
+    <div class="flex items-center gap-2">
+      <.status_badge status={@target.circuit_breaker_status} />
+      <%= if @target.circuit_breaker_failures > 0 do %>
+        <span class="text-xs text-base-content/50">({@target.circuit_breaker_failures} failures)</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="hud-panel p-4">
+    <div class="hud-label mb-1">Mission</div>
+    <div>
+      <.link navigate={~p"/missions/#{@mission}"} class="text-primary hover:text-primary/80 font-medium">
+        {@mission.name}
+      </.link>
+    </div>
+  </div>
+</div>
+
+<!-- Config & Metadata side by side if both exist -->
+<%= if @target.config != %{} or @target.metadata != %{} do %>
+  <div class={["grid gap-4 mt-6", @target.config != %{} && @target.metadata != %{} && "md:grid-cols-2"]}>
+    <%= if @target.config != %{} do %>
+      <div class="hud-panel p-4">
+        <div class="hud-label mb-2">Configuration</div>
+        <pre class="text-base-content bg-base-200/50 rounded-sm p-3 text-xs font-mono overflow-x-auto max-h-48"><%= Jason.encode!(@target.config, pretty: true) %></pre>
+      </div>
+    <% end %>
+
+    <%= if @target.metadata != %{} do %>
+      <div class="hud-panel p-4">
+        <div class="hud-label mb-2">Metadata</div>
+        <pre class="text-base-content bg-base-200/50 rounded-sm p-3 text-xs font-mono overflow-x-auto max-h-48"><%= Jason.encode!(@target.metadata, pretty: true) %></pre>
+      </div>
+    <% end %>
   </div>
 <% end %>
 
-<%= if @target.metadata != %{} do %>
-  <div class="mt-8">
-    <h2 class="text-lg font-semibold text-gray-900 mb-4">Metadata</h2>
-    <pre class="block w-full rounded-lg text-zinc-900 bg-zinc-50 border border-zinc-300 py-4 px-6 text-sm font-mono overflow-x-auto"><%= Jason.encode!(@target.metadata, pretty: true) %></pre>
-  </div>
-<% end %>
-
-<div class="mt-8">
-  <h2 class="text-lg font-semibold text-gray-900 mb-4">Associated Interfaces</h2>
+<!-- Associated Interfaces -->
+<div class="mt-6">
+  <div class="hud-label mb-3">Associated Interfaces</div>
   <%= if Enum.empty?(@interfaces) do %>
-    <p class="text-gray-500 italic">
+    <div class="hud-panel p-4 text-base-content/50 italic text-sm">
       No interfaces associated with this target.
-      <.link navigate={~p"/missions/#{@mission}"} class="text-blue-600 hover:text-blue-800">
+      <.link navigate={~p"/missions/#{@mission}"} class="text-primary hover:text-primary/80">
         Configure interfaces
       </.link>
       in the mission settings.
-    </p>
-  <% else %>
-    <div class="overflow-hidden rounded-lg border border-zinc-200">
-      <table class="min-w-full divide-y divide-zinc-200">
-        <thead class="bg-zinc-50">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              Interface
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              Connection
-            </th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-zinc-200">
-          <%= for interface <- @interfaces do %>
-            <tr>
-              <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-zinc-900">
-                {interface.name}
-              </td>
-              <td class="px-4 py-3 whitespace-nowrap text-sm text-zinc-500">
-                {String.replace(interface.connection_type || "none", "_", " ")
-                |> String.capitalize()}
-              </td>
-              <td class="px-4 py-3 whitespace-nowrap">
-                <span class={[
-                  "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-                  interface.status == "connected" &&
-                    "bg-green-50 text-green-700 ring-green-600/20",
-                  interface.status == "disconnected" &&
-                    "bg-gray-50 text-gray-600 ring-gray-500/10",
-                  interface.status == "connecting" &&
-                    "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-                  interface.status == "error" && "bg-red-50 text-red-700 ring-red-600/10"
-                ]}>
-                  {interface.status}
-                </span>
-              </td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
     </div>
+  <% else %>
+    <.table id="target-interfaces" rows={@interfaces}>
+      <:col :let={interface} label="Interface">{interface.name}</:col>
+      <:col :let={interface} label="Connection">
+        {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
+      </:col>
+      <:col :let={interface} label="Status">
+        <.status_badge status={interface.status} />
+      </:col>
+    </.table>
   <% end %>
 </div>
 
-<.back navigate={~p"/missions/#{@mission}"}>Back to mission</.back>

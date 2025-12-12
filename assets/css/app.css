@@ -56,12 +56,13 @@
   /* Error: Coral-red */
   --color-error: oklch(68% 0.20 10);            /* #f7768e */
   --color-error-content: oklch(15% 0.02 10);
-  --radius-selector: 0.375rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  /* Sharp corners for HUD aesthetic */
+  --radius-selector: 2px;
+  --radius-field: 2px;
+  --radius-box: 2px;
   --size-selector: 0.21875rem;
   --size-field: 0.21875rem;
-  --border: 1.5px;
+  --border: 1px;
   --depth: 1;
   --noise: 0;
 }
@@ -101,12 +102,13 @@
   /* Error: Rose */
   --color-error: oklch(60% 0.22 10);            /* #f43f5e */
   --color-error-content: oklch(98% 0.005 10);
-  --radius-selector: 0.375rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  /* Sharp corners for HUD aesthetic */
+  --radius-selector: 2px;
+  --radius-field: 2px;
+  --radius-box: 2px;
   --size-selector: 0.21875rem;
   --size-field: 0.21875rem;
-  --border: 1.5px;
+  --border: 1px;
   --depth: 1;
   --noise: 0;
 }
@@ -121,6 +123,11 @@
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* ============================================
+   CADENCE HUD DESIGN SYSTEM
+   Mission Control / Space Operations Aesthetic
+   ============================================ */
 
 /* Vaporwave custom utilities */
 @layer utilities {
@@ -178,6 +185,684 @@
   /* Sidebar darker background for dark mode */
   .sidebar-dark-bg {
     background-color: oklch(10% 0.02 265);
+  }
+
+  /* ============================================
+     HUD Typography
+     ============================================ */
+
+  /* Monospace for data displays */
+  .font-mono-data {
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.025em;
+  }
+
+  /* Section labels - uppercase, tracked */
+  .hud-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: oklch(70% 0.08 210);
+  }
+
+  .dark .hud-label {
+    color: oklch(65% 0.10 210);
+  }
+
+  /* ============================================
+     HUD Corner Brackets
+     Decorative corner accents for panels/cards
+     ============================================ */
+
+  .hud-corners {
+    position: relative;
+  }
+
+  .hud-corners::before,
+  .hud-corners::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: oklch(80% 0.12 210 / 0.6);
+    border-style: solid;
+    pointer-events: none;
+  }
+
+  .hud-corners::before {
+    top: 0;
+    left: 0;
+    border-width: 2px 0 0 2px;
+  }
+
+  .hud-corners::after {
+    top: 0;
+    right: 0;
+    border-width: 2px 2px 0 0;
+  }
+
+  /* Additional corners via child pseudo-elements or wrapper */
+  .hud-corners-full {
+    position: relative;
+  }
+
+  .hud-corners-full::before,
+  .hud-corners-full::after,
+  .hud-corners-full > .hud-corner-bl,
+  .hud-corners-full > .hud-corner-br {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: oklch(80% 0.12 210 / 0.6);
+    border-style: solid;
+    pointer-events: none;
+  }
+
+  .hud-corners-full::before {
+    top: 0;
+    left: 0;
+    border-width: 2px 0 0 2px;
+  }
+
+  .hud-corners-full::after {
+    top: 0;
+    right: 0;
+    border-width: 2px 2px 0 0;
+  }
+
+  /* ============================================
+     HUD Borders & Frames
+     ============================================ */
+
+  .hud-border {
+    border: 1px solid oklch(80% 0.12 210 / 0.3);
+  }
+
+  .hud-border-strong {
+    border: 1px solid oklch(80% 0.12 210 / 0.6);
+  }
+
+  .hud-border-glow {
+    border: 1px solid oklch(80% 0.12 210 / 0.5);
+    box-shadow:
+      inset 0 0 20px oklch(80% 0.12 210 / 0.05),
+      0 0 10px oklch(80% 0.12 210 / 0.1);
+  }
+
+  /* Status-colored borders */
+  .hud-border-success {
+    border-color: oklch(78% 0.10 185 / 0.6);
+  }
+
+  .hud-border-warning {
+    border-color: oklch(72% 0.15 50 / 0.6);
+  }
+
+  .hud-border-error {
+    border-color: oklch(68% 0.20 10 / 0.6);
+  }
+
+  /* ============================================
+     HUD Panel / Card Styles
+     ============================================ */
+
+  .hud-panel {
+    background: oklch(15% 0.02 260 / 0.8);
+    border: 1px solid oklch(80% 0.12 210 / 0.2);
+    border-radius: 2px;
+    backdrop-filter: blur(8px);
+  }
+
+  .hud-panel-header {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid oklch(80% 0.12 210 / 0.15);
+    background: oklch(80% 0.12 210 / 0.05);
+  }
+
+  /* Inset panel style - appears recessed */
+  .hud-inset {
+    background: oklch(10% 0.02 265 / 0.5);
+    border: 1px solid oklch(0% 0 0 / 0.3);
+    box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.2);
+  }
+
+  /* ============================================
+     HUD Status Indicators
+     ============================================ */
+
+  .hud-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .hud-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    animation: hud-pulse 2s ease-in-out infinite;
+  }
+
+  .hud-status-nominal .hud-status-dot {
+    background: oklch(78% 0.10 185);
+    box-shadow: 0 0 6px oklch(78% 0.10 185 / 0.8);
+  }
+
+  .hud-status-warning .hud-status-dot {
+    background: oklch(72% 0.15 50);
+    box-shadow: 0 0 6px oklch(72% 0.15 50 / 0.8);
+    animation: hud-pulse-warning 1s ease-in-out infinite;
+  }
+
+  .hud-status-critical .hud-status-dot {
+    background: oklch(68% 0.20 10);
+    box-shadow: 0 0 6px oklch(68% 0.20 10 / 0.8);
+    animation: hud-pulse-critical 0.5s ease-in-out infinite;
+  }
+
+  @keyframes hud-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  @keyframes hud-pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes hud-pulse-critical {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+
+  /* ============================================
+     HUD Grid / Scanline Effects
+     ============================================ */
+
+  .hud-grid {
+    background-image:
+      linear-gradient(oklch(80% 0.12 210 / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(80% 0.12 210 / 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .hud-grid-dense {
+    background-image:
+      linear-gradient(oklch(80% 0.12 210 / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(80% 0.12 210 / 0.05) 1px, transparent 1px);
+    background-size: 10px 10px;
+  }
+
+  /* Subtle scanline overlay */
+  .hud-scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0% 0 0 / 0.03) 2px,
+      oklch(0% 0 0 / 0.03) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* ============================================
+     HUD Data Display
+     ============================================ */
+
+  .hud-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid oklch(80% 0.12 210 / 0.1);
+  }
+
+  .hud-data-row:last-child {
+    border-bottom: none;
+  }
+
+  .hud-data-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: oklch(70% 0.05 250);
+  }
+
+  .hud-data-value {
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    color: oklch(85% 0.08 210);
+  }
+
+  /* ============================================
+     HUD Dividers
+     ============================================ */
+
+  .hud-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(80% 0.12 210 / 0.3) 20%,
+      oklch(80% 0.12 210 / 0.3) 80%,
+      transparent
+    );
+    margin: 1rem 0;
+  }
+
+  .hud-divider-vertical {
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      oklch(80% 0.12 210 / 0.3) 20%,
+      oklch(80% 0.12 210 / 0.3) 80%,
+      transparent
+    );
+    margin: 0 1rem;
+  }
+}
+
+/* ============================================
+   DaisyUI Component Overrides
+   Sharp edges, HUD styling
+   ============================================ */
+
+@layer components {
+  /* Remove roundness globally - sharp mission control look */
+  .btn {
+    border-radius: 2px !important;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+  }
+
+  .btn-primary {
+    border: 1px solid oklch(80% 0.12 210 / 0.5);
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / 0.1),
+      0 0 10px oklch(80% 0.12 210 / 0.2);
+  }
+
+  .btn-primary:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / 0.1),
+      0 0 15px oklch(80% 0.12 210 / 0.4);
+  }
+
+  .btn-ghost {
+    border: 1px solid transparent;
+  }
+
+  .btn-ghost:hover {
+    border-color: oklch(80% 0.12 210 / 0.2);
+    background: oklch(80% 0.12 210 / 0.1);
+  }
+
+  /* Input fields - sharp, technical look */
+  .input,
+  .select,
+  .textarea {
+    border-radius: 2px !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.2);
+    background: oklch(12% 0.02 265 / 0.5);
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.875rem;
+  }
+
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    border-color: oklch(80% 0.12 210 / 0.6);
+    box-shadow:
+      0 0 0 1px oklch(80% 0.12 210 / 0.2),
+      0 0 10px oklch(80% 0.12 210 / 0.1);
+    outline: none;
+  }
+
+  /* Cards - sharp corners, subtle frame */
+  .card {
+    border-radius: 2px !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.15);
+    background: oklch(15% 0.02 260 / 0.6);
+  }
+
+  .card-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: oklch(80% 0.12 210);
+  }
+
+  /* Badges - sharp, status-indicator style */
+  .badge {
+    border-radius: 2px !important;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+    padding: 0.125rem 0.5rem;
+  }
+
+  /* Dark mode badge adjustments - vibrant, high contrast */
+  [data-theme="dark"] .badge-success {
+    background: oklch(75% 0.2 155);
+    border-color: oklch(75% 0.2 155);
+    color: oklch(15% 0.05 155);
+  }
+
+  [data-theme="dark"] .badge-warning {
+    background: oklch(75% 0.2 55);
+    border-color: oklch(75% 0.2 55);
+    color: oklch(15% 0.05 55);
+  }
+
+  [data-theme="dark"] .badge-error {
+    background: oklch(65% 0.25 25);
+    border-color: oklch(65% 0.25 25);
+    color: oklch(98% 0.02 25);
+  }
+
+  [data-theme="dark"] .badge-info {
+    background: oklch(70% 0.18 250);
+    border-color: oklch(70% 0.18 250);
+    color: oklch(15% 0.05 250);
+  }
+
+  [data-theme="dark"] .badge-primary {
+    background: oklch(75% 0.15 210);
+    border-color: oklch(75% 0.15 210);
+    color: oklch(15% 0.05 210);
+  }
+
+  [data-theme="dark"] .badge-secondary {
+    background: oklch(70% 0.2 285);
+    border-color: oklch(70% 0.2 285);
+    color: oklch(15% 0.05 285);
+  }
+
+  /* Dark mode form inputs - technical look with dark backgrounds */
+  [data-theme="dark"] .input,
+  [data-theme="dark"] .select,
+  [data-theme="dark"] .textarea,
+  [data-theme="dark"] input[type="text"],
+  [data-theme="dark"] input[type="email"],
+  [data-theme="dark"] input[type="password"],
+  [data-theme="dark"] input[type="number"],
+  [data-theme="dark"] input[type="url"],
+  [data-theme="dark"] input[type="tel"],
+  [data-theme="dark"] input[type="search"],
+  [data-theme="dark"] select,
+  [data-theme="dark"] textarea {
+    background: oklch(18% 0.02 260) !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.25) !important;
+    color: oklch(90% 0.02 250) !important;
+  }
+
+  [data-theme="dark"] .input:focus,
+  [data-theme="dark"] .select:focus,
+  [data-theme="dark"] .textarea:focus,
+  [data-theme="dark"] input:focus,
+  [data-theme="dark"] select:focus,
+  [data-theme="dark"] textarea:focus {
+    background: oklch(20% 0.02 260) !important;
+    border-color: oklch(80% 0.12 210 / 0.5) !important;
+    box-shadow:
+      0 0 0 1px oklch(80% 0.12 210 / 0.2),
+      0 0 10px oklch(80% 0.12 210 / 0.15) !important;
+    outline: none !important;
+  }
+
+  [data-theme="dark"] .input::placeholder,
+  [data-theme="dark"] .textarea::placeholder,
+  [data-theme="dark"] input::placeholder,
+  [data-theme="dark"] textarea::placeholder {
+    color: oklch(55% 0.02 250) !important;
+  }
+
+  /* Dark mode select dropdown arrow */
+  [data-theme="dark"] .select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%237dcfff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-position: right 0.5rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.5em 1.5em !important;
+    padding-right: 2.5rem !important;
+  }
+
+  /* Dark mode disabled inputs */
+  [data-theme="dark"] .input:disabled,
+  [data-theme="dark"] .select:disabled,
+  [data-theme="dark"] .textarea:disabled,
+  [data-theme="dark"] input:disabled,
+  [data-theme="dark"] select:disabled,
+  [data-theme="dark"] textarea:disabled {
+    background: oklch(15% 0.01 260) !important;
+    border-color: oklch(80% 0.12 210 / 0.1) !important;
+    color: oklch(50% 0.02 250) !important;
+    cursor: not-allowed;
+  }
+
+  /* Dark mode checkboxes */
+  [data-theme="dark"] .checkbox {
+    background: oklch(18% 0.02 260) !important;
+    border-color: oklch(80% 0.12 210 / 0.3) !important;
+  }
+
+  [data-theme="dark"] .checkbox:checked {
+    background: oklch(80% 0.12 210) !important;
+    border-color: oklch(80% 0.12 210) !important;
+  }
+
+  /* Dark mode form labels */
+  [data-theme="dark"] label {
+    color: oklch(85% 0.02 250);
+  }
+
+  /* Dark mode fieldset and form sections */
+  [data-theme="dark"] fieldset {
+    border-color: oklch(80% 0.12 210 / 0.2);
+  }
+
+  /* Alerts - mission control style */
+  .alert {
+    border-radius: 2px !important;
+    border-left: 3px solid;
+    background: oklch(15% 0.02 260 / 0.8);
+  }
+
+  .alert-info {
+    border-left-color: oklch(70% 0.14 250);
+  }
+
+  .alert-success {
+    border-left-color: oklch(78% 0.10 185);
+  }
+
+  .alert-warning {
+    border-left-color: oklch(72% 0.15 50);
+  }
+
+  .alert-error {
+    border-left-color: oklch(68% 0.20 10);
+  }
+
+  /* Dropdowns - sharp, panel style */
+  .dropdown-content {
+    border-radius: 2px !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.2);
+    background: oklch(15% 0.02 260 / 0.95);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Menu items */
+  .menu li > a,
+  .menu li > button {
+    border-radius: 2px !important;
+  }
+
+  /* Hide default details marker in menu */
+  .menu details > summary::after {
+    display: none !important;
+  }
+
+  .menu details > summary::marker,
+  .menu details > summary::-webkit-details-marker {
+    display: none !important;
+  }
+
+  /* Tables - data display style */
+  .table {
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8125rem;
+  }
+
+  .table th {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: oklch(70% 0.08 210);
+    border-bottom: 1px solid oklch(80% 0.12 210 / 0.2);
+  }
+
+  .table td {
+    border-bottom: 1px solid oklch(80% 0.12 210 / 0.1);
+  }
+
+  .table-zebra tbody tr:nth-child(odd) {
+    background: oklch(80% 0.12 210 / 0.02);
+  }
+
+  /* Modal - HUD frame */
+  .modal-box {
+    border-radius: 2px !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.3);
+    background: oklch(15% 0.02 260 / 0.95);
+    backdrop-filter: blur(12px);
+  }
+
+  /* Tabs - sharp, segmented control style */
+  .tabs-boxed {
+    border-radius: 2px !important;
+    background: oklch(10% 0.02 265 / 0.5);
+    padding: 2px;
+  }
+
+  .tab {
+    border-radius: 2px !important;
+  }
+
+  /* Checkbox - sharp */
+  .checkbox {
+    border-radius: 2px !important;
+    border: 1px solid oklch(80% 0.12 210 / 0.3);
+  }
+
+  .checkbox:checked {
+    border-color: oklch(80% 0.12 210);
+  }
+
+  /* Toggle - rectangular style */
+  .toggle {
+    border-radius: 2px !important;
+  }
+
+  /* Progress - sharp */
+  .progress {
+    border-radius: 1px !important;
+    height: 4px;
+    background: oklch(20% 0.02 260);
+  }
+
+  /* Tooltip - sharp */
+  .tooltip::before {
+    border-radius: 2px !important;
+  }
+}
+
+/* ============================================
+   Light Theme Adjustments
+   ============================================ */
+
+[data-theme="light"] {
+  .hud-panel {
+    background: oklch(98% 0.005 250 / 0.9);
+    border-color: oklch(55% 0.12 210 / 0.2);
+  }
+
+  .hud-panel-header {
+    background: oklch(55% 0.12 210 / 0.05);
+    border-bottom-color: oklch(55% 0.12 210 / 0.15);
+  }
+
+  .hud-inset {
+    background: oklch(94% 0.005 250 / 0.8);
+    border-color: oklch(70% 0.01 250 / 0.3);
+  }
+
+  .hud-border,
+  .hud-corners::before,
+  .hud-corners::after {
+    border-color: oklch(55% 0.12 210 / 0.3);
+  }
+
+  .hud-data-label {
+    color: oklch(45% 0.05 250);
+  }
+
+  .hud-data-value {
+    color: oklch(30% 0.08 210);
+  }
+
+  .hud-label {
+    color: oklch(45% 0.10 210);
+  }
+
+  .input,
+  .select,
+  .textarea {
+    background: oklch(100% 0 0 / 0.8);
+    border-color: oklch(55% 0.12 210 / 0.2);
+  }
+
+  .card {
+    background: oklch(100% 0 0 / 0.8);
+    border-color: oklch(55% 0.12 210 / 0.15);
+  }
+
+  .btn-primary {
+    border-color: oklch(55% 0.12 210 / 0.5);
+    box-shadow:
+      inset 0 1px 0 oklch(100% 0 0 / 0.2),
+      0 0 10px oklch(55% 0.12 210 / 0.15);
+  }
+
+  .table th {
+    color: oklch(45% 0.08 210);
+    border-bottom-color: oklch(55% 0.12 210 / 0.2);
+  }
+
+  .table td {
+    border-bottom-color: oklch(55% 0.12 210 / 0.1);
+  }
+
+  .table-zebra tbody tr:nth-child(odd) {
+    background: oklch(55% 0.12 210 / 0.03);
   }
 }
 

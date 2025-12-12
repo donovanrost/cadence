@@ -1,3 +1,8 @@
+<.breadcrumb items={[
+  {"Interfaces", ~p"/missions/#{@mission}/interfaces"},
+  {@interface.name, nil}
+]} />
+
 <.header>
   Protocol Chain for {@interface.name}
   <:subtitle>
@@ -21,93 +26,63 @@
 </div>
 
 <%= if Enum.empty?(@protocols) do %>
-  <div class="rounded-lg bg-gray-50 p-8 text-center border-2 border-dashed border-gray-300">
-    <svg
-      class="mx-auto h-12 w-12 text-gray-400"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
-    </svg>
-    <h3 class="mt-2 text-sm font-semibold text-gray-900">No protocols configured</h3>
-    <p class="mt-1 text-sm text-gray-500">
+  <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
+    <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-base-content/30" />
+    <h3 class="mt-2 text-sm font-semibold text-base-content">No protocols configured</h3>
+    <p class="mt-1 text-sm text-base-content/60">
       Get started by adding your first protocol to the chain.
     </p>
     <div class="mt-6">
       <.link patch={~p"/missions/#{@mission}/interfaces/#{@interface}/protocols/new"}>
-        <.button>Add Protocol</.button>
+        <.button>
+          <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> Add Protocol
+        </.button>
       </.link>
     </div>
   </div>
 <% else %>
   <div class="space-y-2">
     <%= for {protocol, index} <- Enum.with_index(@protocols) do %>
-      <div class="flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div class="hud-panel flex items-center gap-4 p-4">
         <div class="flex flex-col gap-1">
           <button
             phx-click="move_up"
             phx-value-id={protocol.id}
             disabled={index == 0}
             class={[
-              "rounded p-1 hover:bg-gray-100",
+              "rounded-sm p-1 hover:bg-base-300 transition-colors",
               index == 0 && "cursor-not-allowed opacity-30"
             ]}
           >
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M5 15l7-7 7 7"
-              />
-            </svg>
+            <.icon name="hero-chevron-up" class="h-4 w-4" />
           </button>
           <button
             phx-click="move_down"
             phx-value-id={protocol.id}
             disabled={index == length(@protocols) - 1}
             class={[
-              "rounded p-1 hover:bg-gray-100",
+              "rounded-sm p-1 hover:bg-base-300 transition-colors",
               index == length(@protocols) - 1 && "cursor-not-allowed opacity-30"
             ]}
           >
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            <.icon name="hero-chevron-down" class="h-4 w-4" />
           </button>
         </div>
 
         <div class="flex-shrink-0">
-          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold">
+          <div class="flex h-10 w-10 items-center justify-center rounded-sm bg-primary/20 text-primary font-semibold">
             {protocol.order}
           </div>
         </div>
 
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <h3 class="text-lg font-semibold text-gray-900">
+            <h3 class="text-lg font-semibold text-base-content">
               {format_protocol_type(protocol.protocol_type)}
             </h3>
-            <span class={[
-              "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-              direction_badge_class(protocol.protocol_direction)
-            ]}>
-              {format_direction(protocol.protocol_direction)}
-            </span>
+            <.status_badge status={protocol.protocol_direction} />
           </div>
-          <div class="mt-1 text-sm text-gray-600">
+          <div class="mt-1 text-sm text-base-content/60">
             {protocol_config_summary(protocol)}
           </div>
         </div>
@@ -116,13 +91,13 @@
           <.link patch={
             ~p"/missions/#{@mission}/interfaces/#{@interface}/protocols/#{protocol}/edit"
           }>
-            <.button>Edit</.button>
+            <.button variant="secondary">Edit</.button>
           </.link>
           <.button
             phx-click="delete"
             phx-value-id={protocol.id}
             data-confirm="Are you sure you want to delete this protocol? This will affect the protocol chain."
-            class="bg-red-600 hover:bg-red-700"
+            variant="danger"
           >
             Delete
           </.button>
@@ -131,10 +106,6 @@
     <% end %>
   </div>
 <% end %>
-
-<div class="mt-8">
-  <.back navigate={~p"/missions/#{@mission}"}>Back to mission</.back>
-</div>
 
 <.modal
   :if={@live_action in [:new, :edit]}

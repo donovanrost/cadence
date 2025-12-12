@@ -26,43 +26,39 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
 
       <%= if @loading do %>
         <div class="flex items-center justify-center py-8">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       <% else %>
         <%= if @error do %>
-          <div class="rounded-md bg-red-50 p-4 mt-4">
-            <div class="flex">
-              <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fill-rule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-red-800">Error Loading Suggestions</h3>
-                <p class="mt-1 text-sm text-red-700">
-                  {@error}
-                </p>
-              </div>
+          <div class="alert alert-error rounded-sm mt-4">
+            <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            <div>
+              <h3 class="font-medium">Error Loading Suggestions</h3>
+              <p class="text-sm opacity-80">
+                {@error}
+              </p>
             </div>
           </div>
         <% else %>
           <div class="mt-6 space-y-4">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-4">
-                <label class="text-sm font-medium text-zinc-700">Filter by severity:</label>
-                <div class="flex gap-2">
+                <label class="text-sm font-medium text-base-content">Filter by severity:</label>
+                <div class="flex gap-1">
                   <button
                     phx-click="filter_severity"
                     phx-target={@myself}
                     phx-value-filter="both"
                     class={[
-                      "px-3 py-1 text-sm rounded-full transition-colors",
-                      @severity_filter == :both && "bg-zinc-900 text-white",
-                      @severity_filter != :both && "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      "px-3 py-1 text-sm rounded-sm transition-colors",
+                      @severity_filter == :both && "bg-primary text-primary-content",
+                      @severity_filter != :both && "bg-base-200 text-base-content hover:bg-base-300"
                     ]}
                   >
                     Both
@@ -72,9 +68,9 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                     phx-target={@myself}
                     phx-value-filter="critical"
                     class={[
-                      "px-3 py-1 text-sm rounded-full transition-colors",
-                      @severity_filter == :critical && "bg-red-600 text-white",
-                      @severity_filter != :critical && "bg-red-50 text-red-700 hover:bg-red-100"
+                      "px-3 py-1 text-sm rounded-sm transition-colors",
+                      @severity_filter == :critical && "bg-error text-error-content",
+                      @severity_filter != :critical && "bg-base-200 text-error hover:bg-base-300"
                     ]}
                   >
                     Critical Only
@@ -84,10 +80,9 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                     phx-target={@myself}
                     phx-value-filter="warning"
                     class={[
-                      "px-3 py-1 text-sm rounded-full transition-colors",
-                      @severity_filter == :warning && "bg-yellow-600 text-white",
-                      @severity_filter != :warning &&
-                        "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                      "px-3 py-1 text-sm rounded-sm transition-colors",
+                      @severity_filter == :warning && "bg-warning text-warning-content",
+                      @severity_filter != :warning && "bg-base-200 text-warning hover:bg-base-300"
                     ]}
                   >
                     Warning Only
@@ -99,15 +94,15 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                 <button
                   phx-click="select_all"
                   phx-target={@myself}
-                  class="text-sm text-blue-600 hover:text-blue-800"
+                  class="text-sm text-primary hover:text-primary/80"
                 >
                   Select All
                 </button>
-                <span class="text-zinc-300">|</span>
+                <span class="text-base-content/30">|</span>
                 <button
                   phx-click="select_none"
                   phx-target={@myself}
-                  class="text-sm text-blue-600 hover:text-blue-800"
+                  class="text-sm text-primary hover:text-primary/80"
                 >
                   Select None
                 </button>
@@ -115,8 +110,8 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
             </div>
             
     <!-- Rule Scope Selection -->
-            <div class="flex items-center gap-4 p-3 bg-zinc-50 rounded-lg border border-zinc-200">
-              <span class="text-sm font-medium text-zinc-700">Rule Scope:</span>
+            <div class="flex items-center gap-4 p-3 bg-base-200/50 rounded-sm border border-base-300">
+              <span class="text-sm font-medium text-base-content">Rule Scope:</span>
               <div class="flex items-center gap-4">
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input
@@ -127,10 +122,10 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                     phx-click="set_rule_scope"
                     phx-target={@myself}
                     phx-value-scope="mission"
-                    class="text-blue-600 focus:ring-blue-500"
+                    class="radio radio-sm radio-primary"
                   />
-                  <span class="text-sm text-zinc-700">Mission-wide</span>
-                  <span class="text-xs text-zinc-500">(applies to all targets)</span>
+                  <span class="text-sm text-base-content">Mission-wide</span>
+                  <span class="text-xs text-base-content/50">(applies to all targets)</span>
                 </label>
                 <%= if @target_id do %>
                   <label class="flex items-center gap-2 cursor-pointer">
@@ -142,45 +137,45 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                       phx-click="set_rule_scope"
                       phx-target={@myself}
                       phx-value-scope="target"
-                      class="text-blue-600 focus:ring-blue-500"
+                      class="radio radio-sm radio-primary"
                     />
-                    <span class="text-sm text-zinc-700">Target-specific</span>
-                    <span class="text-xs text-zinc-500">({@target_identifier})</span>
+                    <span class="text-sm text-base-content">Target-specific</span>
+                    <span class="text-xs text-base-content/50">({@target_identifier})</span>
                   </label>
                 <% end %>
               </div>
             </div>
 
-            <div class="overflow-hidden rounded-lg border border-zinc-200 max-h-96 overflow-y-auto">
-              <table class="min-w-full divide-y divide-zinc-200">
-                <thead class="bg-zinc-50 sticky top-0">
+            <div class="overflow-hidden rounded-sm border border-base-300 max-h-96 overflow-y-auto">
+              <table class="min-w-full divide-y divide-base-300">
+                <thead class="bg-base-200 sticky top-0">
                   <tr>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                    <th class="px-4 py-2 text-left hud-label w-10">
                       <input
                         type="checkbox"
                         checked={all_visible_selected?(@filtered_suggestions, @selected)}
                         phx-click="toggle_all"
                         phx-target={@myself}
-                        class="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                        class="checkbox checkbox-sm checkbox-primary"
                       />
                     </th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    <th class="px-4 py-2 text-left hud-label">
                       Rule Name
                     </th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    <th class="px-4 py-2 text-left hud-label">
                       Severity
                     </th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    <th class="px-4 py-2 text-left hud-label">
                       Message Preview
                     </th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                    <th class="px-4 py-2 text-left hud-label">
                       Rationale
                     </th>
                   </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-zinc-100">
+                <tbody class="bg-base-100 divide-y divide-base-200">
                   <%= for suggestion <- @filtered_suggestions do %>
-                    <tr class="hover:bg-zinc-50">
+                    <tr class="hover:bg-base-200/50">
                       <td class="px-4 py-2">
                         <input
                           type="checkbox"
@@ -188,31 +183,29 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                           phx-click="toggle_selection"
                           phx-target={@myself}
                           phx-value-name={suggestion.name}
-                          class="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                          class="checkbox checkbox-sm checkbox-primary"
                         />
                       </td>
-                      <td class="px-4 py-2 text-sm font-medium text-zinc-900">
+                      <td class="px-4 py-2 text-sm font-medium text-base-content">
                         {suggestion.name}
                       </td>
                       <td class="px-4 py-2">
                         <span class={[
-                          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-                          suggestion.severity == :critical &&
-                            "bg-red-50 text-red-700 ring-red-600/20",
-                          suggestion.severity == :warning &&
-                            "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-                          suggestion.severity == :info && "bg-blue-50 text-blue-700 ring-blue-600/20"
+                          "badge badge-sm",
+                          suggestion.severity == :critical && "badge-error",
+                          suggestion.severity == :warning && "badge-warning",
+                          suggestion.severity == :info && "badge-info"
                         ]}>
                           {suggestion.severity}
                         </span>
                       </td>
                       <td
-                        class="px-4 py-2 text-sm text-zinc-600 truncate max-w-xs"
+                        class="px-4 py-2 text-sm text-base-content/60 truncate max-w-xs"
                         title={suggestion.message_template}
                       >
                         {truncate(suggestion.message_template, 50)}
                       </td>
-                      <td class="px-4 py-2 text-xs text-zinc-500 italic">
+                      <td class="px-4 py-2 text-xs text-base-content/50 italic">
                         {suggestion[:rationale] || "-"}
                       </td>
                     </tr>
@@ -222,13 +215,13 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
             </div>
 
             <%= if Enum.empty?(@filtered_suggestions) do %>
-              <div class="text-center py-8 text-zinc-500">
+              <div class="text-center py-8 text-base-content/50">
                 No suggestions match the current filter.
               </div>
             <% end %>
 
-            <div class="flex items-center justify-between pt-4 border-t border-zinc-200">
-              <span class="text-sm text-zinc-600">
+            <div class="flex items-center justify-between pt-4 border-t border-base-300">
+              <span class="text-sm text-base-content/60">
                 {MapSet.size(@selected)} of {length(@filtered_suggestions)} rules selected
               </span>
               <div class="flex gap-3">
@@ -236,7 +229,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
                   phx-click="cancel"
                   phx-target={@myself}
                   type="button"
-                  class="bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-50"
+                  variant="ghost"
                 >
                   Cancel
                 </.button>

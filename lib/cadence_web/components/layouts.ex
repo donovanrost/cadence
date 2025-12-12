@@ -83,6 +83,8 @@ defmodule CadenceWeb.Layouts do
   attr :flash, :map, required: true
   attr :current_scope, :map, required: true
   attr :current_path, :string, default: ""
+  attr :notifications, :list, default: []
+  attr :notification_unread_count, :integer, default: 0
   attr :inner_content, :any, required: true
 
   def sidebar(assigns) do
@@ -99,16 +101,28 @@ defmodule CadenceWeb.Layouts do
               <.icon name="hero-bars-3" class="h-6 w-6" />
             </label>
             <div class="flex-1 text-center font-semibold text-lg">CADENCE</div>
-            <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
+            <div class="flex items-center gap-2">
+              <CadenceWeb.NotificationComponents.notification_bell
+                id="notification-bell-mobile"
+                unread_count={@notification_unread_count}
+                notifications={@notifications}
+              />
+              <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
+            </div>
           </div>
           
     <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: User menu in top-right -->
-            <div class="hidden lg:flex justify-end p-4 border-b border-base-300">
+            <div class="hidden lg:flex items-center justify-end gap-4 p-4 border-b border-base-300">
+              <CadenceWeb.NotificationComponents.notification_bell
+                id="notification-bell-desktop"
+                unread_count={@notification_unread_count}
+                notifications={@notifications}
+              />
               <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
             </div>
-            
+
     <!-- Page content -->
             <div class="p-6">
               {@inner_content}
@@ -116,32 +130,38 @@ defmodule CadenceWeb.Layouts do
           </main>
         </div>
       </div>
-      
-    <!-- Sidebar -->
+
+    <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-        <div class="min-h-full w-72 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-base-300">
+        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
           <!-- Logo/Brand -->
-          <div class="p-6 border-b border-base-300">
+          <div class="p-5 border-b border-primary/20">
             <.link navigate={~p"/"} class="flex items-center gap-3">
-              <img src={~p"/images/logo.svg"} width="32" class="glow-cyan" />
-              <span class="text-xl font-bold tracking-wide gradient-vaporwave bg-clip-text text-transparent">
-                CADENCE
-              </span>
+              <div class="relative">
+                <img src={~p"/images/logo.svg"} width="28" class="relative z-10" />
+                <div class="absolute inset-0 blur-md bg-primary/30"></div>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-sm font-bold tracking-[0.2em] text-primary">
+                  CADENCE
+                </span>
+                <span class="text-[0.6rem] tracking-[0.15em] text-base-content/40 uppercase">
+                  Mission Control
+                </span>
+              </div>
             </.link>
           </div>
-          
+
     <!-- Navigation -->
-          <nav class="flex-1 overflow-y-auto p-4">
-            <ul class="menu space-y-1">
+          <nav class="flex-1 overflow-y-auto py-4">
+            <div class="px-4 mb-3">
+              <span class="hud-label text-base-content/30">Navigation</span>
+            </div>
+            <ul class="menu space-y-0.5">
               <.sidebar_navigation current_scope={@current_scope} current_path={@current_path} />
             </ul>
           </nav>
-          
-    <!-- Theme toggle at bottom -->
-          <div class="p-4 border-t border-base-300">
-            <.theme_toggle />
-          </div>
         </div>
       </div>
     </div>
@@ -159,7 +179,17 @@ defmodule CadenceWeb.Layouts do
   def sidebar_navigation(assigns) do
     is_admin_context = String.starts_with?(assigns.current_path, "/admin")
 
-    assigns = assign(assigns, :is_admin_context, is_admin_context)
+    # Check for settings sub-routes
+    is_settings = String.contains?(assigns.current_path, "/settings")
+    is_settings_general = assigns.current_path == "/settings"
+    is_settings_procedures = assigns.current_path == "/settings/procedures"
+
+    assigns =
+      assigns
+      |> assign(:is_admin_context, is_admin_context)
+      |> assign(:is_settings, is_settings)
+      |> assign(:is_settings_general, is_settings_general)
+      |> assign(:is_settings_procedures, is_settings_procedures)
 
     ~H"""
     <%= if @is_admin_context do %>
@@ -230,13 +260,18 @@ defmodule CadenceWeb.Layouts do
         Team
       </.sidebar_nav_item>
 
-      <.sidebar_nav_item
-        navigate={~p"/settings"}
-        active={String.contains?(@current_path, "/settings")}
+      <.sidebar_nav_group
+        label="Settings"
+        icon="hero-cog-6-tooth"
+        expanded={@is_settings}
       >
-        <:icon><.icon name="hero-cog-6-tooth" class="h-5 w-5" /></:icon>
-        Settings
-      </.sidebar_nav_item>
+        <.sidebar_nav_child navigate={~p"/settings"} active={@is_settings_general}>
+          General
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/settings/procedures"} active={@is_settings_procedures}>
+          Procedures
+        </.sidebar_nav_child>
+      </.sidebar_nav_group>
     <% end %>
     """
   end
@@ -303,14 +338,14 @@ defmodule CadenceWeb.Layouts do
       
     <!-- User Actions -->
       <li>
-        <.link navigate={~p"/settings/account"} class="hover-glow-cyan transition-glow">
-          <.icon name="hero-user" class="h-4 w-4" /> Your Profile
+        <.link navigate={~p"/profile"} class="hover-glow-cyan transition-glow">
+          <.icon name="hero-user" class="h-4 w-4" /> Profile Settings
         </.link>
       </li>
 
       <li>
         <.link navigate={~p"/settings"} class="hover-glow-cyan transition-glow">
-          <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Account Settings
+          <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Organization Settings
         </.link>
       </li>
       
@@ -406,6 +441,8 @@ defmodule CadenceWeb.Layouts do
   attr :current_scope, :map, required: true
   attr :current_path, :string, default: ""
   attr :mission, :map, default: nil
+  attr :notifications, :list, default: []
+  attr :notification_unread_count, :integer, default: 0
   attr :inner_content, :any, required: true
 
   def mission_sidebar(assigns) do
@@ -424,13 +461,25 @@ defmodule CadenceWeb.Layouts do
             <div class="flex-1 text-center font-semibold text-lg">
               {if @mission, do: @mission.name, else: "CADENCE"}
             </div>
-            <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
+            <div class="flex items-center gap-2">
+              <CadenceWeb.NotificationComponents.notification_bell
+                id="mission-notification-bell-mobile"
+                unread_count={@notification_unread_count}
+                notifications={@notifications}
+              />
+              <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
+            </div>
           </div>
-          
+
     <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: User menu in top-right -->
-            <div class="hidden lg:flex justify-end p-4 border-b border-base-300">
+            <div class="hidden lg:flex items-center justify-end gap-4 p-4 border-b border-base-300">
+              <CadenceWeb.NotificationComponents.notification_bell
+                id="mission-notification-bell-desktop"
+                unread_count={@notification_unread_count}
+                notifications={@notifications}
+              />
               <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
             </div>
             
@@ -442,63 +491,51 @@ defmodule CadenceWeb.Layouts do
         </div>
       </div>
       
-    <!-- Sidebar -->
+    <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-        <div class="min-h-full w-72 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-base-300">
+        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
           <!-- Logo/Brand -->
-          <div class="p-6 border-b border-base-300">
-            <.link navigate={~p"/"} class="flex items-center gap-3">
-              <img src={~p"/images/logo.svg"} width="32" class="glow-cyan" />
-              <span class="text-xl font-bold tracking-wide gradient-vaporwave bg-clip-text text-transparent">
+          <div class="p-4 border-b border-primary/20">
+            <.link navigate={~p"/"} class="flex items-center gap-2">
+              <div class="relative">
+                <img src={~p"/images/logo.svg"} width="24" class="relative z-10" />
+                <div class="absolute inset-0 blur-md bg-primary/30"></div>
+              </div>
+              <span class="text-xs font-bold tracking-[0.15em] text-primary">
                 CADENCE
               </span>
             </.link>
           </div>
-          
+
     <!-- Back to missions link -->
-          <div class="px-4 py-3 border-b border-base-300">
+          <div class="px-3 py-2 border-b border-primary/20">
             <.link
               navigate={~p"/missions"}
-              class="flex items-center gap-2 text-sm text-base-content/60 hover:text-base-content transition-colors"
+              class="flex items-center gap-2 text-xs text-base-content/50 hover:text-primary transition-colors uppercase tracking-wide"
             >
-              <.icon name="hero-arrow-left" class="h-4 w-4" />
+              <.icon name="hero-arrow-left" class="h-3 w-3" />
               <span>All Missions</span>
             </.link>
           </div>
-          
+
     <!-- Mission Header -->
           <%= if @mission do %>
-            <div class="px-4 py-4 border-b border-base-300">
-              <div class="flex items-center gap-3">
-                <div class="flex-1 min-w-0">
-                  <h2 class="font-semibold text-base truncate">{@mission.name}</h2>
-                  <div class="flex items-center gap-2 mt-1">
-                    <span class={[
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                      @mission.status == "active" && "bg-success/20 text-success",
-                      @mission.status == "inactive" && "bg-base-300 text-base-content/60",
-                      @mission.status == "suspended" && "bg-error/20 text-error"
-                    ]}>
-                      {@mission.status}
-                    </span>
-                  </div>
-                </div>
+            <div class="px-3 py-3 border-b border-primary/20">
+              <div class="flex flex-col gap-1">
+                <span class="hud-label text-base-content/40">Mission</span>
+                <h2 class="font-medium text-sm truncate">{@mission.name}</h2>
+                <.status_badge status={@mission.status} />
               </div>
             </div>
           <% end %>
-          
+
     <!-- Mission Navigation -->
-          <nav class="flex-1 overflow-y-auto p-4">
-            <ul class="menu space-y-1">
+          <nav class="flex-1 overflow-y-auto py-3">
+            <ul class="menu space-y-0.5">
               <.mission_navigation mission={@mission} current_path={@current_path} />
             </ul>
           </nav>
-          
-    <!-- Theme toggle at bottom -->
-          <div class="p-4 border-t border-base-300">
-            <.theme_toggle />
-          </div>
         </div>
       </div>
     </div>
@@ -540,6 +577,11 @@ defmodule CadenceWeb.Layouts do
       )
       |> assign(:is_schedules, String.contains?(assigns.current_path, "#{base_path}/schedules"))
       |> assign(:is_settings, String.contains?(assigns.current_path, "#{base_path}/settings"))
+      |> assign(:is_settings_general, assigns.current_path == "#{base_path}/settings")
+      |> assign(
+        :is_settings_procedures,
+        assigns.current_path == "#{base_path}/settings/procedures"
+      )
 
     ~H"""
     <%= if @mission do %>
@@ -597,10 +639,24 @@ defmodule CadenceWeb.Layouts do
         </.sidebar_nav_child>
       </.sidebar_nav_group>
 
-      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/settings"} active={@is_settings}>
-        <:icon><.icon name="hero-cog-6-tooth" class="h-5 w-5" /></:icon>
-        Settings
-      </.sidebar_nav_item>
+      <.sidebar_nav_group
+        label="Settings"
+        icon="hero-cog-6-tooth"
+        expanded={@is_settings}
+      >
+        <.sidebar_nav_child
+          navigate={~p"/missions/#{@mission}/settings"}
+          active={@is_settings_general}
+        >
+          General
+        </.sidebar_nav_child>
+        <.sidebar_nav_child
+          navigate={~p"/missions/#{@mission}/settings/procedures"}
+          active={@is_settings_procedures}
+        >
+          Procedures
+        </.sidebar_nav_child>
+      </.sidebar_nav_group>
 
       <li class="my-3 border-t border-base-300"></li>
 
@@ -648,6 +704,128 @@ defmodule CadenceWeb.Layouts do
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
     </div>
+    """
+  end
+
+  @doc """
+  Renders a sidebar layout for user profile settings.
+
+  This layout is used for profile-related pages like account settings,
+  email management, and notification preferences.
+  """
+  attr :flash, :map, required: true
+  attr :current_scope, :map, required: true
+  attr :current_path, :string, default: ""
+  attr :inner_content, :any, required: true
+
+  def profile_sidebar(assigns) do
+    ~H"""
+    <div class="drawer lg:drawer-open">
+      <input id="profile-drawer" type="checkbox" class="drawer-toggle" />
+
+      <div class="drawer-content flex flex-col">
+        <!-- Page content -->
+        <div class="flex flex-col h-screen">
+          <!-- Top bar (mobile) -->
+          <div class="lg:hidden flex items-center justify-between p-4 border-b border-base-300">
+            <label for="profile-drawer" class="btn btn-ghost drawer-button">
+              <.icon name="hero-bars-3" class="h-6 w-6" />
+            </label>
+            <div class="flex-1 text-center font-semibold text-lg">Profile Settings</div>
+            <div class="w-10"></div>
+          </div>
+
+          <!-- Main content area -->
+          <main class="flex-1 overflow-y-auto bg-base-100">
+            <!-- Desktop: Back link in top-right -->
+            <div class="hidden lg:flex items-center justify-end p-4 border-b border-base-300">
+              <.link navigate={~p"/missions"} class="btn btn-ghost btn-sm gap-2">
+                <.icon name="hero-arrow-left" class="h-4 w-4" />
+                Back to Cadence
+              </.link>
+            </div>
+
+            <!-- Page content -->
+            <div class="p-6">
+              {@inner_content}
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- Sidebar - HUD Mission Control Style -->
+      <div class="drawer-side">
+        <label for="profile-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+        <div class="min-h-full w-48 bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid">
+          <!-- Back link -->
+          <div class="px-3 py-2 border-b border-primary/20">
+            <.link
+              navigate={~p"/missions"}
+              class="flex items-center gap-2 text-xs text-base-content/50 hover:text-primary transition-colors uppercase tracking-wide"
+            >
+              <.icon name="hero-arrow-left" class="h-3 w-3" />
+              <span>Back to Cadence</span>
+            </.link>
+          </div>
+
+          <!-- User header -->
+          <div class="p-3 border-b border-primary/20">
+            <div class="flex items-center gap-2">
+              <.avatar email={@current_scope.user.email} size="sm" />
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-sm truncate">{@current_scope.user.email}</p>
+                <p class="text-[0.65rem] text-base-content/40 uppercase tracking-wide">Profile</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigation -->
+          <nav class="flex-1 overflow-y-auto py-3">
+            <ul class="menu space-y-0.5">
+              <.profile_navigation current_path={@current_path} />
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
+  Renders navigation items for profile settings.
+  """
+  attr :current_path, :string, default: ""
+
+  def profile_navigation(assigns) do
+    assigns =
+      assigns
+      |> assign(:is_profile, assigns.current_path == "/profile")
+      |> assign(:is_email, assigns.current_path == "/profile/email")
+      |> assign(:is_appearance, assigns.current_path == "/profile/appearance")
+      |> assign(:is_notifications, assigns.current_path == "/profile/notifications")
+
+    ~H"""
+    <.sidebar_nav_item navigate={~p"/profile"} active={@is_profile}>
+      <:icon><.icon name="hero-user" class="h-5 w-5" /></:icon>
+      Profile
+    </.sidebar_nav_item>
+
+    <.sidebar_nav_item navigate={~p"/profile/email"} active={@is_email}>
+      <:icon><.icon name="hero-envelope" class="h-5 w-5" /></:icon>
+      Email
+    </.sidebar_nav_item>
+
+    <.sidebar_nav_item navigate={~p"/profile/appearance"} active={@is_appearance}>
+      <:icon><.icon name="hero-paint-brush" class="h-5 w-5" /></:icon>
+      Appearance
+    </.sidebar_nav_item>
+
+    <.sidebar_nav_item navigate={~p"/profile/notifications"} active={@is_notifications}>
+      <:icon><.icon name="hero-bell" class="h-5 w-5" /></:icon>
+      Notifications
+    </.sidebar_nav_item>
     """
   end
 end

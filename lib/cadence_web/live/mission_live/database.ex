@@ -188,6 +188,13 @@ defmodule CadenceWeb.MissionLive.Database do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
+      <%= if @selected_database do %>
+        <.breadcrumb items={[
+          {"Database Catalog", ~p"/missions/#{@mission}/database"},
+          {@selected_database.name, nil}
+        ]} />
+      <% end %>
+
       <!-- Header -->
       <.header>
         Database Catalog
@@ -341,11 +348,8 @@ defmodule CadenceWeb.MissionLive.Database do
   defp database_detail_view(assigns) do
     ~H"""
     <div class="space-y-6">
-      <!-- Back link and header -->
+      <!-- Header -->
       <div class="flex items-center gap-4">
-        <.link patch={~p"/missions/#{@mission}/database"} class="btn btn-ghost btn-sm">
-          <.icon name="hero-arrow-left" class="h-4 w-4" /> Back
-        </.link>
         <div class="flex-1">
           <h2 class="text-xl font-bold">{@database.name}</h2>
           <p class="text-sm text-base-content/60 font-mono">{@database.slug}</p>

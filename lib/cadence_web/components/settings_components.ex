@@ -2,9 +2,9 @@ defmodule CadenceWeb.SettingsComponents do
   @moduledoc """
   UI components for settings pages.
 
-  Provides layout components (settings_layout, settings_tab, settings_section) for
-  organizing settings pages, plus card components (setting_card, setting_toggle,
-  setting_number_input, setting_override_card) for displaying and editing settings.
+  Provides layout components (settings_section) for organizing settings pages,
+  plus card components (setting_card, setting_toggle, setting_number_input,
+  setting_override_card) for displaying and editing settings.
 
   These components support hierarchical settings with organization defaults
   and mission-level overrides, including restrictiveness hints.
@@ -15,95 +15,6 @@ defmodule CadenceWeb.SettingsComponents do
   import CadenceWeb.CoreComponents, only: [icon: 1]
 
   ## Layout Components
-
-  @doc """
-  Renders a two-column settings layout with tab navigation.
-
-  On desktop, displays tabs in a left sidebar (25% width) with content on the right.
-  On mobile, tabs render as a horizontal scrollable row above the content.
-
-  ## Examples
-
-      <.settings_layout>
-        <:tabs>
-          <.settings_tab patch={~p"/settings"} active={@live_action == :general} icon="hero-cog-6-tooth">
-            General
-          </.settings_tab>
-        </:tabs>
-        <:content>
-          <.settings_section title="Approval Workflow">
-            <!-- Settings cards here -->
-          </.settings_section>
-        </:content>
-      </.settings_layout>
-  """
-  slot :tabs, required: true, doc: "Tab navigation items"
-  slot :content, required: true, doc: "Main content area"
-
-  def settings_layout(assigns) do
-    ~H"""
-    <div class="flex flex-col lg:flex-row min-h-[calc(100vh-12rem)]">
-      <!-- Tab Navigation - Horizontal on mobile, Vertical sidebar on desktop -->
-      <nav class="lg:w-1/4 lg:min-w-[200px] lg:max-w-[280px] bg-base-200 lg:border-r border-base-300">
-        <!-- Mobile: Horizontal scrollable tabs -->
-        <ul class="flex lg:hidden flex-row overflow-x-auto gap-1 p-2 border-b border-base-300">
-          {render_slot(@tabs)}
-        </ul>
-        <!-- Desktop: Vertical tab list -->
-        <ul class="hidden lg:flex flex-col gap-1 p-4">
-          {render_slot(@tabs)}
-        </ul>
-      </nav>
-
-      <!-- Content Area -->
-      <div class="flex-1 p-4 lg:p-6 overflow-y-auto">
-        {render_slot(@content)}
-      </div>
-    </div>
-    """
-  end
-
-  @doc """
-  Renders a tab navigation item for settings pages.
-
-  Styled to match the existing `sidebar_nav_item` component patterns from layouts.ex.
-  Supports both `patch` (same LiveView) and `navigate` (different LiveView) modes.
-
-  ## Examples
-
-      <.settings_tab patch={~p"/settings"} active={true} icon="hero-cog-6-tooth">
-        General
-      </.settings_tab>
-
-      <.settings_tab navigate={~p"/settings/procedures"} active={false} icon="hero-document-text">
-        Procedures
-      </.settings_tab>
-  """
-  attr :patch, :string, default: nil, doc: "URL path to patch to (stays on same LiveView)"
-  attr :navigate, :string, default: nil, doc: "URL path to navigate to (different LiveView)"
-  attr :active, :boolean, default: false, doc: "Whether this tab is currently active"
-  attr :icon, :string, required: true, doc: "Hero icon name (e.g., \"hero-cog-6-tooth\")"
-
-  slot :inner_block, required: true, doc: "Tab label text"
-
-  def settings_tab(assigns) do
-    ~H"""
-    <li class="flex-shrink-0 lg:flex-shrink">
-      <.link
-        patch={@patch}
-        navigate={@navigate}
-        class={[
-          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap",
-          @active && "bg-primary/10 text-primary font-semibold glow-cyan",
-          !@active && "text-base-content/70 hover:bg-base-300 hover-glow-purple"
-        ]}
-      >
-        <.icon name={@icon} class="h-5 w-5" />
-        <span>{render_slot(@inner_block)}</span>
-      </.link>
-    </li>
-    """
-  end
 
   @doc """
   Renders a settings section with a header and grouped content.
@@ -296,29 +207,30 @@ defmodule CadenceWeb.SettingsComponents do
 
   def setting_toggle(assigns) do
     ~H"""
-    <div class="flex items-center gap-3">
-      <input type="hidden" name={@name} value="false" />
-      <input
-        type="checkbox"
-        name={@name}
-        value="true"
-        checked={@value}
-        disabled={@disabled}
-        class={["toggle toggle-primary", @disabled && "toggle-disabled"]}
-        {@rest}
-      />
-      <span class="text-sm">
-        {if @value, do: @enabled_label, else: @disabled_label}
-      </span>
-    </div>
+    <form phx-change={@rest[:"phx-change"]} phx-target={@rest[:"phx-target"]}>
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="hidden" name={@name} value="false" />
+        <input
+          type="checkbox"
+          name={@name}
+          value="true"
+          checked={@value}
+          disabled={@disabled}
+          class={["toggle toggle-primary", @disabled && "toggle-disabled"]}
+        />
+        <span class="text-sm">
+          {if @value, do: @enabled_label, else: @disabled_label}
+        </span>
+      </label>
+    </form>
     """
   end
 
   @doc """
-  Renders a mission-level setting card showing org default with override option.
+  Renders a mission-level setting card with org default context.
 
-  This is the main component for mission settings pages, showing the organization
-  default value with an option to override it at the mission level.
+  Always shows the control, but constrains or locks it based on the
+  organization's restrictiveness rules.
 
   ## Examples
 
@@ -327,8 +239,7 @@ defmodule CadenceWeb.SettingsComponents do
         description="Number of approvals needed..."
         type={:integer}
         org_value={1}
-        mission_override={3}
-        has_override={true}
+        effective_value={3}
         min_value={1}
         max_value={10}
         restrictiveness={:higher}
@@ -339,49 +250,33 @@ defmodule CadenceWeb.SettingsComponents do
   attr :description, :string, required: true, doc: "Setting description from definition"
   attr :type, :atom, required: true, values: [:integer, :boolean], doc: "Setting value type"
   attr :org_value, :any, required: true, doc: "Organization default value"
-
-  attr :mission_override, :any,
-    default: nil,
-    doc: "Current override value (nil if not overridden)"
-
-  attr :has_override, :boolean, required: true, doc: "Whether override is enabled"
+  attr :effective_value, :any, required: true, doc: "Current effective value for this mission"
   attr :min_value, :integer, default: nil, doc: "Minimum allowed value (for integers)"
   attr :max_value, :integer, default: nil, doc: "Maximum allowed value (for integers)"
   attr :restrictiveness, :atom, default: :none, doc: "Restrictiveness rule for generating hint"
   attr :name, :any, required: true, doc: "Form field name (string or atom)"
   attr :error, :string, default: nil, doc: "Error message"
-  attr :saved, :boolean, default: false, doc: "Whether to show saved indicator"
   attr :can_override, :boolean, default: true, doc: "Whether override is allowed"
-  attr :disabled, :boolean, default: false, doc: "Whether the setting is fully disabled"
   attr :rest, :global, include: ~w(phx-change phx-target)
 
   def setting_override_card(assigns) do
-    # Compute the effective value for input
-    effective_value =
-      if assigns.has_override do
-        assigns.mission_override || assigns.org_value
-      else
-        assigns.org_value
-      end
-
-    # Generate constraint hint based on restrictiveness
-    constraint_hint = build_constraint_hint(assigns.restrictiveness, assigns.org_value)
-
-    # Determine if override is disabled (for boolean with false_is_stricter when org is false)
-    override_disabled =
-      assigns.disabled or not assigns.can_override or
+    # Determine if control is locked (for boolean with false_is_stricter when org is false)
+    is_locked =
+      not assigns.can_override or
         (assigns.type == :boolean and
            assigns.restrictiveness == :false_is_stricter and
            assigns.org_value == false)
+
+    # Generate constraint hint based on restrictiveness
+    constraint_hint = build_constraint_hint(assigns.restrictiveness, assigns.org_value)
 
     # Ensure name is a string for the form
     name_str = to_string(assigns.name)
 
     assigns =
       assigns
-      |> assign(:effective_value, effective_value)
+      |> assign(:is_locked, is_locked)
       |> assign(:constraint_hint, constraint_hint)
-      |> assign(:override_disabled, override_disabled)
       |> assign(:name_str, name_str)
 
     ~H"""
@@ -394,42 +289,33 @@ defmodule CadenceWeb.SettingsComponents do
         <span class="font-medium">{format_value(@org_value)}</span>
       </div>
 
-      <label class="flex items-center gap-2 cursor-pointer mb-4">
-        <input
-          type="checkbox"
-          class="checkbox checkbox-sm"
-          checked={@has_override}
-          disabled={@override_disabled}
-          phx-click="toggle_override"
-          phx-value-key={@name}
-        />
-        <span class="text-sm">Override for this mission</span>
-      </label>
-
-      <div :if={@override_disabled and not @has_override} class="text-xs text-warning mt-2">
-        Disabled at organization level
-      </div>
-
-      <div :if={@has_override} class="flex items-center gap-3">
+      <div class="flex items-center gap-3">
         <%= if @type == :integer do %>
           <.setting_number_input
             value={@effective_value}
             min={@min_value}
             max={@max_value}
             name={@name_str}
+            disabled={@is_locked}
             {@rest}
           />
         <% else %>
-          <.setting_toggle value={@effective_value} name={@name_str} {@rest} />
+          <.setting_toggle
+            value={@effective_value}
+            name={@name_str}
+            disabled={@is_locked}
+            {@rest}
+          />
         <% end %>
+      </div>
 
-        <span :if={@saved} class="text-xs text-success flex items-center gap-1">
-          <.icon name="hero-check" class="size-4" /> Saved
-        </span>
+      <div :if={@is_locked} class="text-xs text-warning mt-2 flex items-center gap-1">
+        <.icon name="hero-lock-closed" class="size-4" />
+        <span>Locked by organization policy</span>
       </div>
 
       <div
-        :if={@constraint_hint && @has_override}
+        :if={@constraint_hint && not @is_locked}
         class="text-xs text-info mt-2 flex items-center gap-1"
       >
         <.icon name="hero-information-circle" class="size-4" />

@@ -19,27 +19,23 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
     <div class="space-y-6">
       <%= if @loading do %>
         <div class="flex items-center justify-center py-8">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       <% else %>
         <%= if @error do %>
-          <div class="rounded-md bg-yellow-50 p-4">
-            <div class="flex">
-              <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fill-rule="evenodd"
-                    d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-yellow-800">No Active Database</h3>
-                <p class="mt-1 text-sm text-yellow-700">
-                  Publish a telemetry database to see alarm coverage analysis.
-                </p>
-              </div>
+          <div class="alert alert-warning rounded-sm">
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fill-rule="evenodd"
+                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            <div>
+              <h3 class="font-medium">No Active Database</h3>
+              <p class="text-sm opacity-80">
+                Publish a telemetry database to see alarm coverage analysis.
+              </p>
             </div>
           </div>
         <% else %>
@@ -52,72 +48,68 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
           />
           <div class="space-y-4">
             <div class="flex items-center justify-between">
-              <h4 class="text-sm font-medium text-zinc-900">Coverage Summary</h4>
+              <h4 class="text-sm font-medium text-base-content">Coverage Summary</h4>
               <%= if @summary.total_parameters_with_limits > 0 do %>
-                <span class="text-sm text-zinc-600">
+                <span class="text-sm text-base-content/60">
                   {@summary.covered_count} of {@summary.total_parameters_with_limits} parameters covered
                 </span>
               <% end %>
             </div>
 
             <%= if @summary.total_parameters_with_limits > 0 do %>
-              <div class="w-full bg-zinc-200 rounded-full h-4 overflow-hidden">
+              <div class="w-full bg-base-300 rounded-sm h-4 overflow-hidden">
                 <div
                   class={[
-                    "h-full rounded-full transition-all duration-500",
-                    @summary.coverage_percentage >= 80 && "bg-green-500",
+                    "h-full rounded-sm transition-all duration-500",
+                    @summary.coverage_percentage >= 80 && "bg-success",
                     @summary.coverage_percentage >= 50 && @summary.coverage_percentage < 80 &&
-                      "bg-yellow-500",
-                    @summary.coverage_percentage < 50 && "bg-red-500"
+                      "bg-warning",
+                    @summary.coverage_percentage < 50 && "bg-error"
                   ]}
                   style={"width: #{@summary.coverage_percentage}%"}
                 >
                 </div>
               </div>
-              <div class="flex justify-between text-xs text-zinc-500">
+              <div class="flex justify-between text-xs text-base-content/50">
                 <span>{Float.round(@summary.coverage_percentage, 1)}% covered</span>
                 <span>{@summary.uncovered_count} uncovered</span>
               </div>
             <% else %>
-              <p class="text-sm text-zinc-500 italic">
+              <p class="text-sm text-base-content/50 italic">
                 No parameters with limits defined in the database.
               </p>
             <% end %>
           </div>
 
           <%= if @summary.orphaned_rules_count > 0 do %>
-            <div class="rounded-md bg-amber-50 p-4 border border-amber-200">
-              <div class="flex">
-                <div class="flex-shrink-0">
-                  <svg class="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fill-rule="evenodd"
-                      d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div class="ml-3">
-                  <h3 class="text-sm font-medium text-amber-800">
-                    {@summary.orphaned_rules_count} Orphaned {ngettext(
-                      "Rule",
-                      "Rules",
-                      @summary.orphaned_rules_count
-                    )}
-                  </h3>
-                  <div class="mt-2 text-sm text-amber-700">
-                    <p>These rules don't match any parameters in the current database:</p>
-                    <ul class="mt-2 list-disc list-inside space-y-1">
-                      <%= for %{rule: rule, reason: reason} <- @analysis.orphaned_rules do %>
-                        <li>
-                          <span class="font-medium">{rule.name}</span>
-                          <span class="text-amber-600">
-                            ({format_orphan_reason(reason)})
-                          </span>
-                        </li>
-                      <% end %>
-                    </ul>
-                  </div>
+            <div class="alert alert-warning rounded-sm">
+              <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              <div>
+                <h3 class="font-medium">
+                  {@summary.orphaned_rules_count} Orphaned {ngettext(
+                    "Rule",
+                    "Rules",
+                    @summary.orphaned_rules_count
+                  )}
+                </h3>
+                <div class="mt-2 text-sm opacity-80">
+                  <p>These rules don't match any parameters in the current database:</p>
+                  <ul class="mt-2 list-disc list-inside space-y-1">
+                    <%= for %{rule: rule, reason: reason} <- @analysis.orphaned_rules do %>
+                      <li>
+                        <span class="font-medium">{rule.name}</span>
+                        <span class="opacity-70">
+                          ({format_orphan_reason(reason)})
+                        </span>
+                      </li>
+                    <% end %>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -126,7 +118,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
           <%= if @summary.uncovered_count > 0 do %>
             <div class="space-y-3">
               <div class="flex items-center justify-between">
-                <h4 class="text-sm font-medium text-zinc-900">Uncovered Parameters</h4>
+                <h4 class="text-sm font-medium text-base-content">Uncovered Parameters</h4>
                 <.button
                   phx-click="open_bulk_create"
                   phx-target={@myself}
@@ -136,28 +128,28 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                 </.button>
               </div>
 
-              <div class="overflow-hidden rounded-lg border border-zinc-200">
-                <table class="min-w-full divide-y divide-zinc-200">
-                  <thead class="bg-zinc-50">
+              <div class="overflow-hidden rounded-sm border border-base-300">
+                <table class="min-w-full divide-y divide-base-300">
+                  <thead class="bg-base-200">
                     <tr>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      <th class="px-4 py-2 text-left hud-label">
                         Parameter
                       </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      <th class="px-4 py-2 text-left hud-label">
                         Container
                       </th>
-                      <th class="px-4 py-2 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                      <th class="px-4 py-2 text-right hud-label">
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody class="bg-white divide-y divide-zinc-100">
+                  <tbody class="bg-base-100 divide-y divide-base-200">
                     <%= for param <- @analysis.uncovered do %>
-                      <tr class="hover:bg-zinc-50">
-                        <td class="px-4 py-2 text-sm font-mono text-zinc-900">
+                      <tr class="hover:bg-base-200/50">
+                        <td class="px-4 py-2 text-sm font-mono text-base-content">
                           {param.parameter.name}
                         </td>
-                        <td class="px-4 py-2 text-sm text-zinc-600">
+                        <td class="px-4 py-2 text-sm text-base-content/60">
                           {param.container_name}
                         </td>
                         <td class="px-4 py-2 text-right">
@@ -165,7 +157,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
                             phx-click="create_single_rule"
                             phx-target={@myself}
                             phx-value-param={param.qualified_name}
-                            class="text-sm text-blue-600 hover:text-blue-800"
+                            class="text-sm text-primary hover:text-primary/80"
                           >
                             Create Rule
                           </button>
@@ -178,23 +170,19 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
             </div>
           <% else %>
             <%= if @summary.total_parameters_with_limits > 0 do %>
-              <div class="rounded-md bg-green-50 p-4 border border-green-200">
-                <div class="flex">
-                  <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path
-                        fill-rule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div class="ml-3">
-                    <h3 class="text-sm font-medium text-green-800">Full Coverage</h3>
-                    <p class="mt-1 text-sm text-green-700">
-                      All parameters with limits have corresponding alarm rules.
-                    </p>
-                  </div>
+              <div class="alert alert-success rounded-sm">
+                <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fill-rule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+                <div>
+                  <h3 class="font-medium">Full Coverage</h3>
+                  <p class="text-sm opacity-80">
+                    All parameters with limits have corresponding alarm rules.
+                  </p>
                 </div>
               </div>
             <% end %>
@@ -435,16 +423,16 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
   # View Mode Toggle Component
   defp render_view_mode_toggle(assigns) do
     ~H"""
-    <div class="flex items-center gap-4 pb-4 border-b border-zinc-200">
-      <div class="flex items-center gap-2">
+    <div class="flex items-center gap-4 pb-4 border-b border-base-300">
+      <div class="flex items-center gap-1">
         <button
           phx-click="set_view_mode"
           phx-target={@myself}
           phx-value-mode="database"
           class={[
-            "px-3 py-1.5 text-sm rounded-md transition-colors",
-            @view_mode == :database && "bg-zinc-900 text-white",
-            @view_mode != :database && "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+            "px-3 py-1.5 text-sm rounded-sm transition-colors",
+            @view_mode == :database && "bg-primary text-primary-content",
+            @view_mode != :database && "bg-base-200 text-base-content hover:bg-base-300"
           ]}
         >
           All Targets ({length(@targets_using_database)})
@@ -455,9 +443,9 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
           phx-value-mode="target"
           disabled={Enum.empty?(@targets_using_database)}
           class={[
-            "px-3 py-1.5 text-sm rounded-md transition-colors",
-            @view_mode == :target && "bg-zinc-900 text-white",
-            @view_mode != :target && "bg-zinc-100 text-zinc-700 hover:bg-zinc-200",
+            "px-3 py-1.5 text-sm rounded-sm transition-colors",
+            @view_mode == :target && "bg-primary text-primary-content",
+            @view_mode != :target && "bg-base-200 text-base-content hover:bg-base-300",
             Enum.empty?(@targets_using_database) && "opacity-50 cursor-not-allowed"
           ]}
         >
@@ -469,7 +457,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
         <select
           phx-change="select_target"
           phx-target={@myself}
-          class="block w-48 rounded-md border-zinc-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+          class="select select-sm w-48"
         >
           <%= for target <- @targets_using_database do %>
             <option value={target.id} selected={target.id == @selected_target_id}>
@@ -480,7 +468,7 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
       <% end %>
 
       <%= if Enum.empty?(@targets_using_database) do %>
-        <span class="text-sm text-amber-600 italic">
+        <span class="text-sm text-warning italic">
           No targets assigned to this database
         </span>
       <% end %>

@@ -45,44 +45,6 @@ defmodule CadenceWeb.MissionLive.Settings do
   end
 
   @impl true
-  def handle_event("toggle_override", %{"key" => key}, socket) do
-    mission = socket.assigns.mission
-    key_atom = String.to_existing_atom(key)
-    setting = Enum.find(socket.assigns.settings, &(&1.key == key_atom))
-
-    result =
-      if setting.has_override do
-        # Disable override - clear it
-        Settings.clear_mission_override(mission, :procedures, key_atom)
-      else
-        # Enable override - set to org value initially
-        Settings.set_mission(mission, :procedures, key_atom, setting.org_value)
-      end
-
-    case result do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
-         |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
-         |> put_flash(
-           :info,
-           "Override #{if setting.has_override, do: "removed", else: "enabled"}"
-         )}
-
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(:settings, Settings.get_all_mission_settings(mission, :procedures))
-         |> assign(:errors, Map.delete(socket.assigns.errors, key_atom))
-         |> put_flash(:info, "Override removed")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to update override")}
-    end
-  end
-
-  @impl true
   def handle_event("increment_setting", %{"name" => name}, socket) do
     mission = socket.assigns.mission
     key_atom = String.to_existing_atom(name)
@@ -105,20 +67,21 @@ defmodule CadenceWeb.MissionLive.Settings do
   end
 
   @impl true
-  def handle_event("save_setting", %{"key" => key, "value" => value}, socket) do
-    mission = socket.assigns.mission
-    key_atom = String.to_existing_atom(key)
-    parsed_value = parse_value(key_atom, value)
-
-    save_setting_value(socket, mission, key_atom, parsed_value)
-  end
-
-  @impl true
   def handle_event("save_setting", params, socket) do
     mission = socket.assigns.mission
 
-    # Handle form params from number input (e.g., %{"required_approvals" => "2"})
-    key = Map.keys(params) |> Enum.find(&is_binary/1) || ""
+    # Extract key from _target (the field that triggered the change) or find non-internal key
+    key =
+      cond do
+        Map.has_key?(params, "_target") ->
+          List.first(params["_target"])
+
+        true ->
+          params
+          |> Map.keys()
+          |> Enum.find(fn k -> is_binary(k) and not String.starts_with?(k, "_") end) || ""
+      end
+
     value = Map.get(params, key, "")
 
     key_atom = String.to_existing_atom(key)
@@ -176,70 +139,55 @@ defmodule CadenceWeb.MissionLive.Settings do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Mission Settings
-      <:subtitle>Override organization defaults for this mission</:subtitle>
-    </.header>
+    <%= if @active_tab == :general do %>
+      <.header>
+        General Settings
+        <:subtitle>Mission information</:subtitle>
+      </.header>
 
-    <.settings_layout>
-      <:tabs>
-        <.settings_tab
-          patch={~p"/missions/#{@mission}/settings"}
-          active={@active_tab == :general}
-          icon="hero-squares-2x2"
-        >
-          General
-        </.settings_tab>
-        <.settings_tab
-          patch={~p"/missions/#{@mission}/settings/procedures"}
-          active={@active_tab == :procedures}
-          icon="hero-document-text"
-        >
-          Procedures
-        </.settings_tab>
-      </:tabs>
-      <:content>
-        <%= if @active_tab == :general do %>
-          <.settings_section title="Mission Information">
-            <div class="card bg-base-100 border border-base-300 p-4">
-              <dl class="space-y-2">
-                <div>
-                  <dt class="text-sm text-base-content/60">Name</dt>
-                  <dd class="font-medium">{@mission.name}</dd>
-                </div>
-                <div>
-                  <dt class="text-sm text-base-content/60">Status</dt>
-                  <dd class="font-medium">{@mission.status}</dd>
-                </div>
-              </dl>
-            </div>
-          </.settings_section>
-        <% else %>
-          <.settings_section
-            title="Approval Workflow"
-            description="Override organization defaults for procedure approvals"
-          >
-            <%= for setting <- @settings do %>
-              <.setting_override_card
-                label={setting.label}
-                description={setting.description}
-                type={setting.type}
-                org_value={setting.org_value}
-                mission_override={setting.mission_override}
-                has_override={setting.has_override}
-                min_value={setting.min_value}
-                max_value={setting.max_value}
-                restrictiveness={setting.restrictiveness}
-                name={setting.key}
-                error={Map.get(@errors, setting.key)}
-                can_override={setting.can_override}
-                phx-change="save_setting"
-              />
-            <% end %>
-          </.settings_section>
-        <% end %>
-      </:content>
-    </.settings_layout>
+      <div class="mt-6">
+        <.settings_section title="Mission Information">
+          <div class="card bg-base-100 border border-base-300 p-4">
+            <dl class="space-y-2">
+              <div>
+                <dt class="text-sm text-base-content/60">Name</dt>
+                <dd class="font-medium">{@mission.name}</dd>
+              </div>
+              <div>
+                <dt class="text-sm text-base-content/60">Status</dt>
+                <dd class="font-medium">{@mission.status}</dd>
+              </div>
+            </dl>
+          </div>
+        </.settings_section>
+      </div>
+    <% else %>
+      <.header>
+        Procedures Settings
+        <:subtitle>Override organization defaults for procedure approvals</:subtitle>
+      </.header>
+
+      <div class="mt-6">
+        <.settings_section title="Approval Workflow">
+          <%= for setting <- @settings do %>
+            <.setting_override_card
+              label={setting.label}
+              description={setting.description}
+              type={setting.type}
+              org_value={setting.org_value}
+              effective_value={setting.effective_value}
+              min_value={setting.min_value}
+              max_value={setting.max_value}
+              restrictiveness={setting.restrictiveness}
+              name={setting.key}
+              error={Map.get(@errors, setting.key)}
+              can_override={setting.can_override}
+              phx-change="save_setting"
+            />
+          <% end %>
+        </.settings_section>
+      </div>
+    <% end %>
     """
   end
 end

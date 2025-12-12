@@ -19,6 +19,8 @@ defmodule Cadence.Procedures do
 
   alias Cadence.Repo
   alias Cadence.Settings
+  alias Cadence.Outbox
+  alias Ecto.Multi
 
   # ============================================================================
   # Procedures
@@ -264,20 +266,44 @@ defmodule Cadence.Procedures do
   """
   def submit_for_review(%ProcedureVersion{} = version, user_id) do
     with :ok <- validate_status(version, :draft) do
-      Repo.transaction(fn ->
-        updated =
-          version
-          |> ProcedureVersion.submit_changeset(%{
-            status: :in_review,
-            submitted_at: DateTime.utc_now(),
-            submitted_by_id: user_id
-          })
-          |> Repo.update!()
+      version = Repo.preload(version, :procedure)
 
-        create_version_event!(ProcedureVersionEvent.submitted(updated, user_id))
-
-        updated
+      Multi.new()
+      |> Multi.update(
+        :version,
+        ProcedureVersion.submit_changeset(version, %{
+          status: :in_review,
+          submitted_at: DateTime.utc_now(),
+          submitted_by_id: user_id
+        })
+      )
+      |> Multi.insert(:event, fn %{version: v} ->
+        ProcedureVersionEvent.changeset(
+          %ProcedureVersionEvent{},
+          ProcedureVersionEvent.submitted(v, user_id)
+        )
       end)
+      |> Outbox.append(:outbox, fn %{version: v} ->
+        %{
+          organization_id: version.procedure.organization_id,
+          mission_id: version.procedure.mission_id,
+          event_type: "procedure_submitted",
+          aggregate_type: "procedure_version",
+          aggregate_id: v.id,
+          actor_id: user_id,
+          actor_type: "user",
+          payload: %{
+            procedure_id: version.procedure_id,
+            procedure_name: version.procedure.name,
+            version_number: version.version_number
+          }
+        }
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{version: updated}} -> {:ok, updated}
+        {:error, _step, changeset, _} -> {:error, changeset}
+      end
     end
   end
 
@@ -323,6 +349,7 @@ defmodule Cadence.Procedures do
   """
   def add_approval(%ProcedureVersion{} = version, user_id, decision, opts \\ []) do
     comment = Keyword.get(opts, :comment)
+    version = Repo.preload(version, :procedure)
 
     with :ok <- validate_status(version, :in_review),
          :ok <- validate_can_approve(version, user_id),
@@ -344,8 +371,28 @@ defmodule Cadence.Procedures do
           ProcedureVersionEvent.approval_added(version, user_id, decision, comment)
         )
 
-        # Handle decision consequences
+        # Handle decision consequences and emit outbox event
         updated_version = handle_approval_decision(version, user_id, decision, comment)
+
+        # Emit outbox event for the approval/rejection
+        event_type = if decision == :approved, do: "procedure_approved", else: "procedure_rejected"
+
+        {:ok, _} =
+          Outbox.insert(%{
+            organization_id: version.procedure.organization_id,
+            mission_id: version.procedure.mission_id,
+            event_type: event_type,
+            aggregate_type: "procedure_version",
+            aggregate_id: version.id,
+            actor_id: user_id,
+            actor_type: "user",
+            payload: %{
+              procedure_id: version.procedure_id,
+              procedure_name: version.procedure.name,
+              version_number: version.version_number,
+              reason: comment
+            }
+          })
 
         %{approval: approval, version: updated_version}
       end)
@@ -487,6 +534,23 @@ defmodule Cadence.Procedures do
       |> Repo.update_all(set: [current_version_id: version.id])
 
       create_version_event!(ProcedureVersionEvent.approved(updated, user_id))
+
+      # Emit outbox event for finalization
+      {:ok, _} =
+        Outbox.insert(%{
+          organization_id: version.procedure.organization_id,
+          mission_id: version.procedure.mission_id,
+          event_type: "procedure_finalized",
+          aggregate_type: "procedure_version",
+          aggregate_id: version.id,
+          actor_id: user_id,
+          actor_type: "user",
+          payload: %{
+            procedure_id: version.procedure_id,
+            procedure_name: version.procedure.name,
+            version_number: version.version_number
+          }
+        })
 
       updated
     else

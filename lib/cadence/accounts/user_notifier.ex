@@ -3,6 +3,8 @@ defmodule Cadence.Accounts.UserNotifier do
 
   alias Cadence.Mailer
   alias Cadence.Accounts.User
+  alias Cadence.Notifications.Notification
+  alias Cadence.Repo
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do
@@ -80,5 +82,100 @@ defmodule Cadence.Accounts.UserNotifier do
 
     ==============================
     """)
+  end
+
+  # ============================================================================
+  # Notification Emails
+  # ============================================================================
+
+  @doc """
+  Delivers a notification email immediately.
+  """
+  def deliver_notification(%Notification{} = notification) do
+    notification = Repo.preload(notification, :user)
+    user = notification.user
+
+    subject = notification_subject(notification)
+    body = notification_email_body(notification)
+
+    deliver(user.email, subject, body)
+  end
+
+  @doc """
+  Delivers a digest email with multiple notifications.
+  """
+  def deliver_notification_digest(user, notifications, period) do
+    period_text =
+      case period do
+        :daily -> "Daily"
+        :weekly -> "Weekly"
+      end
+
+    subject = "#{period_text} Notification Digest - Cadence"
+    body = build_digest_body(notifications, period_text)
+
+    deliver(user.email, subject, body)
+  end
+
+  defp notification_subject(%Notification{type: type, metadata: metadata}) do
+    procedure_name = metadata["procedure_name"] || metadata[:procedure_name] || "Procedure"
+
+    case type do
+      "procedure_submitted" ->
+        "[Cadence] New procedure awaiting review: #{procedure_name}"
+
+      "procedure_approved" ->
+        "[Cadence] Your procedure was approved: #{procedure_name}"
+
+      "procedure_rejected" ->
+        "[Cadence] Your procedure was rejected: #{procedure_name}"
+
+      "procedure_finalized" ->
+        "[Cadence] Procedure finalized: #{procedure_name}"
+
+      _ ->
+        "[Cadence] Notification"
+    end
+  end
+
+  defp notification_email_body(notification) do
+    base_url = CadenceWeb.Endpoint.url()
+
+    """
+
+    ==============================
+
+    #{notification.title}
+
+    #{notification.body}
+
+    View in Cadence: #{base_url}#{notification.action_url}
+
+    ==============================
+    """
+  end
+
+  defp build_digest_body(notifications, period_text) do
+    base_url = CadenceWeb.Endpoint.url()
+
+    notification_list =
+      notifications
+      |> Enum.map(fn n -> "- #{n.title}" end)
+      |> Enum.join("\n")
+
+    """
+
+    ==============================
+
+    #{period_text} Notification Summary
+
+    You have #{length(notifications)} new notification(s):
+
+    #{notification_list}
+
+    View all in Cadence: #{base_url}/notifications
+
+    ==============================
+    """
   end
 end

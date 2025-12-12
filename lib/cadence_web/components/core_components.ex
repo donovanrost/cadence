@@ -82,19 +82,35 @@ defmodule CadenceWeb.CoreComponents do
   @doc """
   Renders a button with navigation support.
 
+  Uses HUD/Mission Control styling with sharp corners and uppercase text.
+
+  ## Variants
+
+    * `"primary"` - Main action button with glow effect
+    * `"secondary"` - Secondary actions
+    * `"ghost"` - Minimal button for tertiary actions
+    * `"danger"` - Destructive actions
+
   ## Examples
 
       <.button>Send!</.button>
       <.button phx-click="go" variant="primary">Send!</.button>
       <.button navigate={~p"/"}>Home</.button>
+      <.button variant="danger" phx-click="delete">Delete</.button>
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :string
-  attr :variant, :string, values: ~w(primary)
+  attr :variant, :string, values: ~w(primary secondary ghost danger soft), default: "soft"
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
+    variants = %{
+      "primary" => "btn-primary",
+      "secondary" => "btn-secondary",
+      "ghost" => "btn-ghost",
+      "danger" => "btn-error",
+      "soft" => "btn-primary btn-soft"
+    }
 
     assigns =
       assign_new(assigns, :class, fn ->
@@ -185,20 +201,19 @@ defmodule CadenceWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
-      <label>
+    <div class="fieldset mb-3">
+      <label class="flex items-center gap-3 cursor-pointer">
         <input type="hidden" name={@name} value="false" disabled={@rest[:disabled]} />
-        <span class="label">
-          <input
-            type="checkbox"
-            id={@id}
-            name={@name}
-            value="true"
-            checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
-            {@rest}
-          />{@label}
-        </span>
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={@class || "checkbox checkbox-sm checkbox-primary"}
+          {@rest}
+        />
+        <span class="text-sm">{@label}</span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
@@ -207,9 +222,9 @@ defmodule CadenceWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="fieldset mb-3">
       <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
         <select
           id={@id}
           name={@name}
@@ -228,9 +243,9 @@ defmodule CadenceWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="fieldset mb-3">
       <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
         <textarea
           id={@id}
           name={@name}
@@ -249,9 +264,9 @@ defmodule CadenceWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class="fieldset mb-3">
       <label>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
         <input
           type={@type}
           name={@name}
@@ -280,20 +295,23 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
-  Renders a header with title.
+  Renders a header with title in HUD/Mission Control style.
+
+  Features uppercase tracking and subtle underline accent.
   """
+  attr :class, :string, default: nil
   slot :inner_block, required: true
   slot :subtitle
   slot :actions
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4 mb-6 border-b border-primary/20"]}>
       <div>
-        <h1 class="text-lg font-semibold leading-8">
+        <h1 class="text-base font-semibold leading-8 tracking-wide uppercase text-base-content">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
+        <p :if={@subtitle != []} class="text-xs text-base-content/50 tracking-wide mt-0.5">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -303,7 +321,106 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
+  Renders a HUD-style panel with optional corner brackets and header.
+
+  ## Examples
+
+      <.hud_panel>
+        Content here
+      </.hud_panel>
+
+      <.hud_panel title="SYSTEM STATUS" corners={true}>
+        <:header_actions>
+          <.button variant="ghost">Refresh</.button>
+        </:header_actions>
+        Panel content
+      </.hud_panel>
+  """
+  attr :title, :string, default: nil
+  attr :corners, :boolean, default: false, doc: "show decorative corner brackets"
+  attr :class, :string, default: nil
+  slot :header_actions
+  slot :inner_block, required: true
+
+  def hud_panel(assigns) do
+    ~H"""
+    <div class={[
+      "hud-panel",
+      @corners && "hud-corners",
+      @class
+    ]}>
+      <div :if={@title} class="hud-panel-header flex items-center justify-between">
+        <span class="hud-label">{@title}</span>
+        <div :if={@header_actions != []} class="flex items-center gap-2">
+          {render_slot(@header_actions)}
+        </div>
+      </div>
+      <div class="p-4">
+        {render_slot(@inner_block)}
+      </div>
+      <!-- Bottom corners (CSS handles top corners) -->
+      <div :if={@corners} class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60"></div>
+      <div :if={@corners} class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60"></div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a HUD-style data display row.
+
+  ## Examples
+
+      <.hud_data label="ALTITUDE" value="408.2 km" />
+      <.hud_data label="VELOCITY" value="7.66 km/s" status="nominal" />
+  """
+  attr :label, :string, required: true
+  attr :value, :string, required: true
+  attr :status, :string, default: nil, values: [nil, "nominal", "warning", "critical"]
+
+  def hud_data(assigns) do
+    status_class =
+      case assigns.status do
+        "nominal" -> "text-success"
+        "warning" -> "text-warning"
+        "critical" -> "text-error"
+        _ -> ""
+      end
+
+    assigns = assign(assigns, :status_class, status_class)
+
+    ~H"""
+    <div class="hud-data-row">
+      <span class="hud-data-label">{@label}</span>
+      <span class={["hud-data-value font-mono-data", @status_class]}>{@value}</span>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a HUD-style status indicator.
+
+  ## Examples
+
+      <.hud_status status="nominal">Systems Online</.hud_status>
+      <.hud_status status="warning">Low Fuel</.hud_status>
+      <.hud_status status="critical">Hull Breach</.hud_status>
+  """
+  attr :status, :string, default: "nominal", values: ["nominal", "warning", "critical"]
+  slot :inner_block, required: true
+
+  def hud_status(assigns) do
+    ~H"""
+    <div class={["hud-status", "hud-status-#{@status}"]}>
+      <span class="hud-status-dot"></span>
+      <span>{render_slot(@inner_block)}</span>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a table with generic styling.
+
+  Uses HUD/Mission Control styling with monospace fonts and uppercase headers.
 
   ## Examples
 
@@ -334,42 +451,46 @@ defmodule CadenceWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
-      <thead>
-        <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
-          <th :if={@action != []} class="text-right">
-            <span class="sr-only">{gettext("Actions")}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
-          <td
-            :for={col <- @col}
-            phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
-          >
-            {render_slot(col, @row_item.(row))}
-          </td>
-          <td :if={@action != []} class="text-right">
-            <div class="dropdown dropdown-end">
-              <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
-                <.icon name="hero-ellipsis-vertical" class="h-5 w-5" />
-              </div>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu bg-base-200 rounded-box z-[100] w-52 p-2 shadow-lg border border-base-300"
+    <div class="hud-panel overflow-visible">
+      <div class="overflow-x-auto">
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th :for={col <- @col}>{col[:label]}</th>
+              <th :if={@action != []} class="text-right">
+                <span class="sr-only">{gettext("Actions")}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
+            <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover:bg-primary/5 transition-colors">
+              <td
+                :for={col <- @col}
+                phx-click={@row_click && @row_click.(row)}
+                class={@row_click && "hover:cursor-pointer"}
               >
-                <%= for action <- @action do %>
-                  <li>{render_slot(action, @row_item.(row))}</li>
-                <% end %>
-              </ul>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+                {render_slot(col, @row_item.(row))}
+              </td>
+              <td :if={@action != []} class="text-right overflow-visible">
+                <div class="dropdown dropdown-end dropdown-left">
+                  <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
+                    <.icon name="hero-ellipsis-vertical" class="h-5 w-5" />
+                  </div>
+                  <ul
+                    tabindex="0"
+                    class="dropdown-content menu bg-base-200 z-[100] w-52 p-2 shadow-lg border border-primary/20"
+                  >
+                    <%= for action <- @action do %>
+                      <li>{render_slot(action, @row_item.(row))}</li>
+                    <% end %>
+                  </ul>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     """
   end
 
@@ -481,11 +602,14 @@ defmodule CadenceWeb.CoreComponents do
   ## Additional Components
 
   @doc """
-  Renders a modal.
+  Renders a modal with HUD/Mission Control styling.
+
+  Features sharp corners, subtle glow effects, and a technical appearance.
   """
   attr :id, :string, required: true
   attr :show, :boolean, default: false
   attr :on_cancel, JS, default: %JS{}
+  attr :title, :string, default: nil, doc: "optional header title for the modal"
   slot :inner_block, required: true
 
   def modal(assigns) do
@@ -497,7 +621,11 @@ defmodule CadenceWeb.CoreComponents do
       data-cancel={JS.exec(@on_cancel, "phx-remove")}
       class="relative z-50 hidden"
     >
-      <div id={"#{@id}-bg"} class="bg-zinc-50/90 fixed inset-0 transition-opacity" aria-hidden="true" />
+      <div
+        id={"#{@id}-bg"}
+        class="fixed inset-0 bg-base-300/80 dark:bg-black/80 backdrop-blur-sm transition-opacity"
+        aria-hidden="true"
+      />
       <div
         class="fixed inset-0 overflow-y-auto"
         aria-labelledby={"#{@id}-title"}
@@ -506,28 +634,35 @@ defmodule CadenceWeb.CoreComponents do
         aria-modal="true"
         tabindex="0"
       >
-        <div class="flex min-h-full items-center justify-center">
-          <div class="w-full max-w-3xl p-4 sm:p-6 lg:py-8">
+        <div class="flex min-h-full items-center justify-center p-4">
+          <div class="w-full max-w-2xl">
             <.focus_wrap
               id={"#{@id}-container"}
               phx-window-keydown={JS.exec("data-cancel", to: "##{@id}")}
               phx-key="escape"
               phx-click-away={JS.exec("data-cancel", to: "##{@id}")}
-              class="shadow-zinc-700/10 ring-zinc-700/10 relative hidden rounded-2xl bg-white p-14 shadow-lg ring-1 transition"
+              class="relative hidden hud-panel hud-corners hud-border-glow transition"
             >
-              <div class="absolute top-6 right-5">
+              <!-- Header bar -->
+              <div class="flex items-center justify-between px-4 py-3 border-b border-primary/20 bg-primary/5">
+                <span :if={@title} class="hud-label">{@title}</span>
+                <span :if={!@title} class="hud-label text-base-content/40">MODAL</span>
                 <button
                   phx-click={JS.exec("data-cancel", to: "##{@id}")}
                   type="button"
-                  class="-m-3 flex-none p-3 opacity-20 hover:opacity-40"
+                  class="btn btn-ghost btn-sm btn-square"
                   aria-label="close"
                 >
-                  <.icon name="hero-x-mark-solid" class="h-5 w-5" />
+                  <.icon name="hero-x-mark" class="h-4 w-4" />
                 </button>
               </div>
-              <div id={"#{@id}-content"}>
+              <!-- Content -->
+              <div id={"#{@id}-content"} class="p-6">
                 {render_slot(@inner_block)}
               </div>
+              <!-- Bottom corners -->
+              <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60"></div>
+              <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60"></div>
             </.focus_wrap>
           </div>
         </div>
@@ -581,6 +716,37 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
+  Renders breadcrumb navigation.
+
+  ## Examples
+
+      <.breadcrumb items={[
+        {"Database Catalog", ~p"/missions/\#{@mission}/database"},
+        {@database.name, nil}
+      ]} />
+  """
+  attr :items, :list, required: true, doc: "List of {label, path} tuples. Last item path should be nil."
+
+  def breadcrumb(assigns) do
+    ~H"""
+    <nav class="flex items-center gap-2 text-sm mb-4">
+      <%= for {{label, path}, index} <- Enum.with_index(@items) do %>
+        <%= if index > 0 do %>
+          <span class="text-base-content/30">/</span>
+        <% end %>
+        <%= if path do %>
+          <.link navigate={path} class="hud-label hover:text-primary transition-colors">
+            {label}
+          </.link>
+        <% else %>
+          <span class="text-base-content font-medium">{label}</span>
+        <% end %>
+      <% end %>
+    </nav>
+    """
+  end
+
+  @doc """
   Renders a simple form.
   """
   attr :for, :any, required: true, doc: "the datastructure for the form"
@@ -596,7 +762,7 @@ defmodule CadenceWeb.CoreComponents do
   def simple_form(assigns) do
     ~H"""
     <.form :let={f} for={@for} as={@as} {@rest}>
-      <div class="mt-10 space-y-8 bg-white">
+      <div class="mt-10 space-y-8">
         {render_slot(@inner_block, f)}
         <div :for={action <- @actions} class="mt-2 flex items-center justify-between gap-6">
           {render_slot(action, f)}
@@ -717,7 +883,9 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
-  Renders a sidebar navigation item.
+  Renders a sidebar navigation item with HUD/Mission Control styling.
+
+  Features sharp corners, uppercase labels, and active state indicators.
 
   ## Examples
 
@@ -740,17 +908,23 @@ defmodule CadenceWeb.CoreComponents do
         navigate={@navigate}
         patch={@patch}
         class={[
-          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
-          @active &&
-            "bg-primary/10 text-primary border-l-4 border-primary glow-cyan font-semibold",
-          !@active && "text-base-content/70 hover:bg-base-300 hover-glow-purple",
+          "flex items-center gap-3 px-4 py-2.5 transition-all text-sm tracking-wide",
+          @active && [
+            "bg-primary/10 text-primary border-l-2 border-primary",
+            "shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+          ],
+          !@active && [
+            "text-base-content/60 border-l-2 border-transparent",
+            "hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+          ],
           @class
         ]}
       >
-        <span :if={@icon != []} class="text-xl">
+        <span :if={@icon != []} class="opacity-80">
           {render_slot(@icon)}
         </span>
-        <span class="flex-1">{render_slot(@inner_block)}</span>
+        <span class="flex-1 uppercase font-medium">{render_slot(@inner_block)}</span>
+        <span :if={@active} class="w-1.5 h-1.5 bg-primary rounded-sm shadow-[0_0_6px_rgba(125,207,255,0.8)]"></span>
       </.link>
     </li>
     """
@@ -789,20 +963,22 @@ defmodule CadenceWeb.CoreComponents do
     <li>
       <details open={@expanded} class="group">
         <summary class={[
-          "flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer list-none",
-          "text-base-content/70 hover:bg-base-300 hover-glow-purple",
+          "flex items-center gap-3 px-4 py-2.5 transition-all cursor-pointer text-sm tracking-wide",
+          "text-base-content/60 border-l-2 border-transparent",
+          "hover:bg-primary/5 hover:text-base-content hover:border-primary/30",
+          "[&::-webkit-details-marker]:hidden [&::marker]:hidden",
           @expanded && "text-base-content"
         ]}>
-          <span class="text-xl">
+          <span class="opacity-80">
             <.icon name={@icon} class="h-5 w-5" />
           </span>
-          <span class="flex-1">{@label}</span>
+          <span class="flex-1 uppercase font-medium">{@label}</span>
           <.icon
-            name="hero-chevron-right"
-            class="h-4 w-4 transition-transform group-open:rotate-90"
+            name="hero-chevron-down"
+            class="h-3 w-3 transition-transform group-open:rotate-180 opacity-50"
           />
         </summary>
-        <ul class="ml-4 mt-1 space-y-1 border-l border-base-300 pl-4">
+        <ul class="ml-6 mt-1 space-y-0.5 border-l border-primary/20 pl-3">
           {render_slot(@inner_block)}
         </ul>
       </details>
@@ -831,11 +1007,12 @@ defmodule CadenceWeb.CoreComponents do
         navigate={@navigate}
         patch={@patch}
         class={[
-          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
-          @active && "bg-primary/10 text-primary font-medium",
-          !@active && "text-base-content/60 hover:bg-base-300 hover:text-base-content"
+          "flex items-center gap-2 px-3 py-1.5 text-xs tracking-wide transition-all uppercase",
+          @active && "text-primary font-medium",
+          !@active && "text-base-content/50 hover:text-base-content"
         ]}
       >
+        <span class="w-1 h-1 rounded-sm bg-current opacity-40"></span>
         {render_slot(@inner_block)}
       </.link>
     </li>
@@ -878,4 +1055,67 @@ defmodule CadenceWeb.CoreComponents do
     </span>
     """
   end
+
+  @doc """
+  Renders a status badge with automatic variant mapping.
+
+  Automatically maps common status strings to appropriate badge variants.
+
+  ## Examples
+
+      <.status_badge status="active" />
+      <.status_badge status="online" />
+      <.status_badge status={@user.status} />
+      <.status_badge status={true} true_label="Enabled" false_label="Disabled" />
+  """
+  attr :status, :any, required: true, doc: "status value (string or boolean)"
+  attr :true_label, :string, default: "Yes", doc: "label for boolean true"
+  attr :false_label, :string, default: "No", doc: "label for boolean false"
+  attr :class, :string, default: nil
+
+  def status_badge(assigns) do
+    {variant, label} = status_to_variant(assigns.status, assigns.true_label, assigns.false_label)
+    assigns = assign(assigns, variant: variant, label: label)
+
+    ~H"""
+    <.badge variant={@variant} class={@class}>{@label}</.badge>
+    """
+  end
+
+  defp status_to_variant(true, true_label, _false_label), do: {"success", true_label}
+  defp status_to_variant(false, _true_label, false_label), do: {"neutral", false_label}
+
+  defp status_to_variant(status, _true_label, _false_label) when is_binary(status) do
+    case status do
+      # Success states
+      s when s in ~w(active online enabled connected closed nominal yes on running) ->
+        {"success", status}
+
+      # Warning states
+      s when s in ~w(standby connecting half_open pending warning degraded) ->
+        {"warning", status}
+
+      # Error states
+      s when s in ~w(error failed suspended offline disconnected open critical) ->
+        {"error", status}
+
+      # Info states
+      s when s in ~w(read info) ->
+        {"info", status}
+
+      # Accent states
+      s when s in ~w(write) ->
+        {"accent", status}
+
+      # Secondary states
+      s when s in ~w(read_write) ->
+        {"secondary", status}
+
+      # Default neutral
+      _ ->
+        {"neutral", status}
+    end
+  end
+
+  defp status_to_variant(status, _true_label, _false_label), do: {"neutral", to_string(status)}
 end

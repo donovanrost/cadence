@@ -279,7 +279,7 @@ defmodule CadenceWeb.MissionLive.Alarms do
       <:actions>
         <.button
           phx-click="show_coverage_analysis"
-          class="bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+          variant="secondary"
         >
           Coverage Analysis
         </.button>
@@ -294,7 +294,7 @@ defmodule CadenceWeb.MissionLive.Alarms do
       <:col :let={rule} label="Event Type">
         <%= case rule.event_type do %>
           <% "telemetry_limit" -> %>
-            <span class="text-blue-600">Telemetry Limit</span>
+            <span class="text-info">Telemetry Limit</span>
           <% other -> %>
             {other}
         <% end %>
@@ -304,43 +304,30 @@ defmodule CadenceWeb.MissionLive.Alarms do
           <%= if rule.conditions["limit_state"] do %>
             <%= for state <- rule.conditions["limit_state"] do %>
               <span class={[
-                "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-                state == "red" && "bg-red-50 text-red-700 ring-red-600/20",
-                state == "yellow" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-                state == "blue" && "bg-blue-50 text-blue-700 ring-blue-600/20"
+                "badge badge-sm",
+                state == "red" && "badge-error",
+                state == "yellow" && "badge-warning",
+                state == "blue" && "badge-info"
               ]}>
                 {state}
               </span>
             <% end %>
           <% end %>
           <%= if rule.conditions["item_name_pattern"] do %>
-            <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+            <span class="badge badge-sm badge-neutral font-mono">
               {rule.conditions["item_name_pattern"]}
             </span>
           <% end %>
           <%= if rule.conditions == %{} do %>
-            <span class="text-gray-400 italic text-xs">All events</span>
+            <span class="text-base-content/40 italic text-xs">All events</span>
           <% end %>
         </div>
       </:col>
       <:col :let={rule} label="Severity">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          rule.severity == :critical && "bg-red-50 text-red-700 ring-red-600/20",
-          rule.severity == :warning && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-          rule.severity == :info && "bg-blue-50 text-blue-700 ring-blue-600/20"
-        ]}>
-          {rule.severity}
-        </span>
+        <.status_badge status={to_string(rule.severity)} />
       </:col>
       <:col :let={rule} label="Status">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          rule.enabled && "bg-green-50 text-green-700 ring-green-600/20",
-          !rule.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
-        ]}>
-          {if rule.enabled, do: "Enabled", else: "Disabled"}
-        </span>
+        <.status_badge status={rule.enabled} true_label="Enabled" false_label="Disabled" />
       </:col>
       <:action :let={rule}>
         <.link phx-click={JS.push("toggle", value: %{id: rule.id})}>
@@ -357,10 +344,10 @@ defmodule CadenceWeb.MissionLive.Alarms do
     </.table>
 
     <%= if Enum.empty?(@alarm_rules) do %>
-      <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
-        <.icon name="hero-bell-alert" class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No alarm rules</h3>
-        <p class="mt-1 text-sm text-gray-500">
+      <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
+        <.icon name="hero-bell-alert" class="mx-auto h-12 w-12 text-base-content/30" />
+        <h3 class="mt-2 text-sm font-semibold text-base-content">No alarm rules</h3>
+        <p class="mt-1 text-sm text-base-content/60">
           Create rules to generate alarms when telemetry exceeds limits.
         </p>
         <div class="mt-6">

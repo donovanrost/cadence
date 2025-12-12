@@ -154,4 +154,44 @@ defmodule CadenceWeb.LiveAuth do
       {:cont, assign(socket, :mission, nil)}
     end
   end
+
+  @doc """
+  Subscribes to user notifications and loads initial notification data.
+
+  This hook:
+  - Subscribes to the user's notification PubSub topic
+  - Loads initial unread notifications
+  - Assigns notification data to socket for use in layouts
+  """
+  def on_mount(:subscribe_notifications, _params, _session, socket) do
+    alias Cadence.Notifications
+
+    current_scope = socket.assigns[:current_scope]
+
+    if current_scope && current_scope.user do
+      user_id = current_scope.user.id
+
+      if connected?(socket) do
+        Notifications.subscribe(user_id)
+      end
+
+      # Load initial notifications
+      notifications = Notifications.list_unread(user_id, limit: 7)
+      unread_count = Notifications.unread_count(user_id)
+
+      socket =
+        socket
+        |> assign(:notifications, notifications)
+        |> assign(:notification_unread_count, unread_count)
+
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> assign(:notifications, [])
+        |> assign(:notification_unread_count, 0)
+
+      {:cont, socket}
+    end
+  end
 end

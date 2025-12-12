@@ -128,33 +128,17 @@ defmodule CadenceWeb.MissionLive.Targets do
         <%= if target.definition_set do %>
           <span class="text-sm">
             {target.definition_set.database.name}
-            <span class="text-zinc-400 text-xs ml-1">v{target.definition_set.version}</span>
+            <span class="text-base-content/40 text-xs ml-1">v{target.definition_set.version}</span>
           </span>
         <% else %>
-          <span class="text-zinc-500 text-sm italic">Not assigned</span>
+          <span class="text-base-content/50 text-sm italic">Not assigned</span>
         <% end %>
       </:col>
       <:col :let={target} label="Status">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          target.status == "online" && "bg-green-50 text-green-700 ring-green-600/20",
-          target.status == "offline" && "bg-gray-50 text-gray-600 ring-gray-500/10",
-          target.status == "standby" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-          target.status == "fault" && "bg-red-50 text-red-700 ring-red-600/10"
-        ]}>
-          {target.status}
-        </span>
+        <.status_badge status={target.status} />
       </:col>
       <:col :let={target} label="Circuit Breaker">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          target.circuit_breaker_status == "closed" && "bg-green-50 text-green-700 ring-green-600/20",
-          target.circuit_breaker_status == "open" && "bg-red-50 text-red-700 ring-red-600/10",
-          target.circuit_breaker_status == "half_open" &&
-            "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
-        ]}>
-          {target.circuit_breaker_status}
-        </span>
+        <.status_badge status={target.circuit_breaker_status} />
       </:col>
       <:action :let={target}>
         <.link patch={~p"/missions/#{@mission}/targets/#{target}/edit"}>Edit</.link>
@@ -168,10 +152,10 @@ defmodule CadenceWeb.MissionLive.Targets do
     </.table>
 
     <%= if Enum.empty?(@targets) do %>
-      <div class="text-center py-12">
-        <.icon name="hero-cpu-chip" class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No targets</h3>
-        <p class="mt-1 text-sm text-gray-500">Get started by creating a new target.</p>
+      <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
+        <.icon name="hero-cpu-chip" class="mx-auto h-12 w-12 text-base-content/30" />
+        <h3 class="mt-2 text-sm font-semibold text-base-content">No targets</h3>
+        <p class="mt-1 text-sm text-base-content/60">Get started by creating a new target.</p>
         <div class="mt-6">
           <.link patch={~p"/missions/#{@mission}/targets/new"}>
             <.button>

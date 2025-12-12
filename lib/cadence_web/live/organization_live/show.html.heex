@@ -1,3 +1,8 @@
+<.breadcrumb items={[
+  {"Organizations", ~p"/admin/organizations"},
+  {@organization.name, nil}
+]} />
+
 <.header>
   {@organization.name}
   <:subtitle>Organization details and missions</:subtitle>
@@ -42,8 +47,6 @@
     <.link navigate={~p"/missions/#{mission}"}>Show</.link>
   </:action>
 </.table>
-
-<.back navigate={~p"/admin/organizations"}>Back to organizations</.back>
 
 <.modal
   :if={@live_action == :edit}

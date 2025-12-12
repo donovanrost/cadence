@@ -33,7 +33,7 @@ defmodule Cadence.Settings.Definitions.Procedures do
     type: :boolean,
     default: true,
     scope: :both,
-    restrictiveness: :none,
+    restrictiveness: :false_is_stricter,
     label: "Allow Withdrawal",
     description: "Whether authors can withdraw submissions before approval"
   )

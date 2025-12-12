@@ -236,13 +236,7 @@ defmodule CadenceWeb.MissionLive.Schedules do
         <span class="text-gray-500">{schedule.run_count}</span>
       </:col>
       <:col :let={schedule} label="Status">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          schedule.enabled && "bg-green-50 text-green-700 ring-green-600/20",
-          !schedule.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
-        ]}>
-          {if schedule.enabled, do: "Enabled", else: "Disabled"}
-        </span>
+        <.status_badge status={schedule.enabled} true_label="Enabled" false_label="Disabled" />
       </:col>
       <:action :let={schedule}>
         <.link phx-click={JS.push("run_now", value: %{id: schedule.id})}>Run Now</.link>

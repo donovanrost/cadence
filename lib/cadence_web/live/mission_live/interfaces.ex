@@ -204,24 +204,10 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         <% end %>
       </:col>
       <:col :let={interface} label="Status">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          interface.status == "connected" && "bg-green-50 text-green-700 ring-green-600/20",
-          interface.status == "disconnected" && "bg-gray-50 text-gray-600 ring-gray-500/10",
-          interface.status == "connecting" && "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-          interface.status == "error" && "bg-red-50 text-red-700 ring-red-600/10"
-        ]}>
-          {interface.status}
-        </span>
+        <.status_badge status={interface.status} />
       </:col>
       <:col :let={interface} label="Auto Reconnect">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          interface.auto_reconnect && "bg-green-50 text-green-700 ring-green-600/20",
-          !interface.auto_reconnect && "bg-gray-50 text-gray-600 ring-gray-500/10"
-        ]}>
-          {if interface.auto_reconnect, do: "Enabled", else: "Disabled"}
-        </span>
+        <.status_badge status={interface.auto_reconnect} true_label="Enabled" false_label="Disabled" />
       </:col>
       <:action :let={interface}>
         <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>

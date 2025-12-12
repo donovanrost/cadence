@@ -187,13 +187,7 @@ defmodule CadenceWeb.MissionLive.Automations do
         <span class="text-gray-500">{automation.trigger_count}</span>
       </:col>
       <:col :let={automation} label="Status">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          automation.enabled && "bg-green-50 text-green-700 ring-green-600/20",
-          !automation.enabled && "bg-gray-50 text-gray-600 ring-gray-500/10"
-        ]}>
-          {if automation.enabled, do: "Enabled", else: "Disabled"}
-        </span>
+        <.status_badge status={automation.enabled} true_label="Enabled" false_label="Disabled" />
       </:col>
       <:action :let={automation}>
         <.link phx-click={JS.push("toggle", value: %{id: automation.id})}>

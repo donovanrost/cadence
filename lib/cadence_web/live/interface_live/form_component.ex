@@ -64,26 +64,26 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
           />
         <% end %>
 
-        <hr class="my-6 border-zinc-300" />
+        <hr class="my-6 border-base-300" />
 
         <div>
-          <label class="block text-sm font-semibold leading-6 text-zinc-800 mb-2">
+          <label class="block text-sm font-semibold leading-6 text-base-content mb-2">
             Associated Targets
           </label>
-          <p class="text-sm text-gray-600 mb-3">
+          <p class="text-sm text-base-content/60 mb-3">
             Select targets that communicate through this interface. This determines how telemetry is routed.
           </p>
 
           <%= if Enum.empty?(@available_targets) do %>
-            <p class="text-sm text-gray-500 italic">
+            <p class="text-sm text-base-content/50 italic">
               No targets defined for this mission. Create targets first.
             </p>
           <% else %>
-            <div class="space-y-2 max-h-48 overflow-y-auto border border-zinc-200 rounded-lg p-3">
+            <div class="space-y-2 max-h-48 overflow-y-auto border border-base-300 rounded-sm p-3 bg-base-200/50">
               <%= for target <- @available_targets do %>
                 <% is_selected = Map.has_key?(@selected_targets, target.id) %>
                 <% current_direction = Map.get(@selected_targets, target.id, "read_write") %>
-                <div class="flex items-center justify-between py-2 px-3 rounded-md hover:bg-zinc-50">
+                <div class="flex items-center justify-between py-2 px-3 rounded-sm hover:bg-base-300/50">
                   <label class="flex items-center gap-3 cursor-pointer flex-1">
                     <input
                       type="checkbox"
@@ -93,11 +93,11 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
                       phx-click="toggle_target"
                       phx-value-target-id={target.id}
                       phx-target={@myself}
-                      class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      class="checkbox checkbox-sm"
                     />
-                    <span class="text-sm font-medium text-zinc-700">
+                    <span class="text-sm font-medium text-base-content">
                       {target.name}
-                      <span class="text-zinc-500">({target.identifier})</span>
+                      <span class="text-base-content/50">({target.identifier})</span>
                     </span>
                   </label>
                   <%= if is_selected do %>
@@ -106,7 +106,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
                       phx-change="update_direction"
                       phx-value-target-id={target.id}
                       phx-target={@myself}
-                      class="text-sm rounded-md border-zinc-300 py-1 pl-2 pr-8 focus:border-zinc-400 focus:ring-zinc-400"
+                      class="select select-sm"
                     >
                       <option value="read" selected={current_direction == "read"}>
                         Read (Telemetry)
@@ -125,13 +125,13 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
           <% end %>
         </div>
 
-        <hr class="my-6 border-zinc-300" />
+        <hr class="my-6 border-base-300" />
 
-        <p class="text-sm text-gray-600">
+        <p class="text-sm text-base-content/60">
           Protocols can be configured after creating the interface.
         </p>
 
-        <hr class="my-6 border-zinc-300" />
+        <hr class="my-6 border-base-300" />
 
         <div class="grid grid-cols-2 gap-4">
           <.input

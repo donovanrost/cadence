@@ -64,47 +64,43 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     end
   end
 
-  describe "toggle_override" do
-    test "enables override with org default value", %{conn: conn, mission: mission, org: org} do
+  describe "direct editing" do
+    test "controls are always visible", %{conn: conn, mission: mission, org: org} do
+      {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
+
+      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+
+      # Number input should be visible without needing to enable override
+      assert html =~ "input"
+      assert html =~ "name=\"required_approvals\""
+    end
+
+    test "changing value creates override automatically", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
-      # Click to enable override
+      # Change the value - should create override
       view
-      |> element("[phx-click=\"toggle_override\"][phx-value-key=\"required_approvals\"]")
-      |> render_click()
+      |> element("input[name=\"required_approvals\"]")
+      |> render_change(%{required_approvals: "5"})
 
-      # Should now have an override set to org value
-      assert Settings.get_mission_override(mission, :procedures, :required_approvals) == 2
+      # Should now have an override
+      assert Settings.get_mission_override(mission, :procedures, :required_approvals) == 5
     end
 
-    test "disables override and clears value", %{conn: conn, mission: mission} do
-      mission = Cadence.Repo.preload(mission, :organization)
-      {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 5)
-
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
-
-      # Click to disable override
-      view
-      |> element("[phx-click=\"toggle_override\"][phx-value-key=\"required_approvals\"]")
-      |> render_click()
-
-      assert Settings.get_mission_override(mission, :procedures, :required_approvals) == nil
-    end
-
-    test "can toggle boolean setting override", %{conn: conn, mission: mission, org: org} do
+    test "boolean settings can be toggled directly", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :allow_self_approval, true)
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
-      # Enable override
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("[phx-click=\"toggle_override\"][phx-value-key=\"allow_self_approval\"]")
-      |> render_click()
+      |> form("form:has(input[name=allow_self_approval])", %{allow_self_approval: "false"})
+      |> render_change()
 
-      # Should have override set
-      assert Settings.get_mission_override(mission, :procedures, :allow_self_approval) == true
+      # Should have override set to false
+      assert Settings.get_mission_override(mission, :procedures, :allow_self_approval) == false
     end
   end
 
@@ -166,9 +162,10 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("input[name=\"allow_self_approval\"][type=\"checkbox\"]")
-      |> render_change(%{allow_self_approval: "false"})
+      |> form("form:has(input[name=allow_self_approval])", %{allow_self_approval: "false"})
+      |> render_change()
 
       assert Settings.get_mission_override(mission, :procedures, :allow_self_approval) == false
     end
@@ -184,22 +181,7 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     end
   end
 
-  describe "restrictiveness validation - :none" do
-    test "allows any value regardless of org setting", %{conn: conn, mission: mission, org: org} do
-      {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, false)
-      mission = Cadence.Repo.preload(mission, :organization)
-      {:ok, _} = Settings.set_mission(mission, :procedures, :allow_withdrawal, false)
-
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
-
-      # Should be able to set to true even when org is false
-      view
-      |> element("input[name=\"allow_withdrawal\"][type=\"checkbox\"]")
-      |> render_change(%{allow_withdrawal: "true"})
-
-      assert Settings.get_mission_override(mission, :procedures, :allow_withdrawal) == true
-    end
-
+  describe "allow_withdrawal - :false_is_stricter" do
     test "allows setting false when org is true", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, true)
       mission = Cadence.Repo.preload(mission, :organization)
@@ -207,35 +189,49 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
+      # Toggle is wrapped in a form with phx-change - select by input name
       view
-      |> element("input[name=\"allow_withdrawal\"][type=\"checkbox\"]")
-      |> render_change(%{allow_withdrawal: "false"})
+      |> form("form:has(input[name=allow_withdrawal])", %{allow_withdrawal: "false"})
+      |> render_change()
 
       assert Settings.get_mission_override(mission, :procedures, :allow_withdrawal) == false
+    end
+
+    test "cannot override when org has false", %{conn: conn, mission: mission, org: org} do
+      {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, false)
+
+      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+
+      # The toggle should be disabled or indicate cannot be overridden
+      assert html =~ "disabled" or html =~ "Cannot"
     end
   end
 
   describe "navigation" do
-    test "can navigate from general to procedures tab", %{conn: conn, mission: mission} do
+    test "can navigate from general to procedures via sidebar", %{conn: conn, mission: mission} do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings")
 
-      # Click procedures tab in desktop navigation (hidden lg:flex)
-      view
-      |> element("ul.hidden.lg\\:flex a[href=\"/missions/#{mission.id}/settings/procedures\"]")
-      |> render_click()
+      # Settings dropdown in sidebar should show both General and Procedures links
+      html = render(view)
+      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings"[^>]*>.*General/s
+      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings\/procedures"[^>]*>.*Procedures/s
 
-      assert_patched(view, ~p"/missions/#{mission}/settings/procedures")
+      # Navigate to procedures via direct URL (sidebar uses navigate, not patch)
+      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      assert html =~ "Procedures Settings"
     end
 
-    test "can navigate from procedures to general tab", %{conn: conn, mission: mission} do
+    test "can navigate from procedures to general via sidebar", %{conn: conn, mission: mission} do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
-      # Click general tab in desktop navigation (hidden lg:flex)
-      view
-      |> element("ul.hidden.lg\\:flex a[href=\"/missions/#{mission.id}/settings\"]")
-      |> render_click()
+      # Settings dropdown in sidebar should show both General and Procedures links
+      html = render(view)
+      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings"[^>]*>.*General/s
+      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings\/procedures"[^>]*>.*Procedures/s
 
-      assert_patched(view, ~p"/missions/#{mission}/settings")
+      # Navigate to general via direct URL (sidebar uses navigate, not patch)
+      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings")
+      assert html =~ "General Settings"
     end
   end
 
@@ -255,20 +251,21 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
       assert Settings.get(mission, :procedures, :required_approvals) == 5
     end
 
-    test "clearing override reverts to org default", %{conn: conn, mission: mission, org: org} do
+    test "setting value equal to org default still works", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 3)
       mission = Cadence.Repo.preload(mission, :organization)
       {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 5)
 
-      # Clear the override
+      # Set value back to org default
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       view
-      |> element("[phx-click=\"toggle_override\"][phx-value-key=\"required_approvals\"]")
-      |> render_click()
+      |> element("input[name=\"required_approvals\"]")
+      |> render_change(%{required_approvals: "3"})
 
-      # Should now use org default
-      mission = Cadence.Repo.preload(mission, :organization)
+      # Should have override set to 3 (same as org)
+      assert Settings.get_mission_override(mission, :procedures, :required_approvals) == 3
+      # Effective value is 3
       assert Settings.get(mission, :procedures, :required_approvals) == 3
     end
   end

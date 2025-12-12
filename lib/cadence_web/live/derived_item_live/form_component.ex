@@ -80,13 +80,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
             <span class="text-sm font-medium text-zinc-700">Source items: </span>
             <div class="flex flex-wrap gap-1 mt-1">
               <%= for item <- @source_items do %>
-                <span class={[
-                  "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-                  item_exists?(item, @available_items) &&
-                    "bg-green-50 text-green-700 ring-green-600/20",
-                  !item_exists?(item, @available_items) &&
-                    "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
-                ]}>
+                <.badge variant={if item_exists?(item, @available_items), do: "success", else: "warning"}>
                   {item}
                   <span
                     :if={!item_exists?(item, @available_items)}
@@ -95,7 +89,7 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
                   >
                     ?
                   </span>
-                </span>
+                </.badge>
               <% end %>
             </div>
           </div>
