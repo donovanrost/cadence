@@ -49,7 +49,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
           <span class="mc-label-subsystem text-base-content/40">FLEET</span>
           <div class="flex items-center gap-1.5">
             <span class={[
-              "font-mono font-bold text-sm",
+              "font-mono font-medium text-sm",
               fleet_health_color(@fleet_health.percentage)
             ]}>
               {@fleet_health.percentage}%
@@ -71,7 +71,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
           <div class="flex items-center gap-2">
             <!-- Critical -->
             <div class={[
-              "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold",
+              "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium",
               if(@alarm_counts.critical > 0,
                 do: "bg-error/20 text-error status-critical-pulse",
                 else: "bg-base-300 text-base-content/40"
@@ -83,7 +83,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
             </div>
             <!-- Warning -->
             <div class={[
-              "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold",
+              "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium",
               if(@alarm_counts.warning > 0,
                 do: "bg-warning/20 text-warning",
                 else: "bg-base-300 text-base-content/40"
@@ -112,7 +112,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
           <span class="mc-label-subsystem text-base-content/40">PROCS</span>
           <span class={[
             "font-mono text-sm",
-            if(length(@running_procedures) > 0, do: "text-accent font-bold", else: "text-base-content/50")
+            if(length(@running_procedures) > 0, do: "text-accent font-medium", else: "text-base-content/50")
           ]}>
             {length(@running_procedures)}
           </span>

@@ -31,6 +31,8 @@ export const OpsConsoleV2Hook = {
     this.dashboards = JSON.parse(this.el.dataset.dashboards || "[]")
     this.alarms = JSON.parse(this.el.dataset.alarms || "[]")
     this.commands = JSON.parse(this.el.dataset.commands || "[]")
+    this.commandDefinitions = JSON.parse(this.el.dataset.commandDefinitions || "[]")
+    this.targetGroups = JSON.parse(this.el.dataset.targetGroups || "[]")
     this.currentDashboardId = this.el.dataset.currentDashboardId
     this.token = this.el.dataset.token
 
@@ -49,6 +51,15 @@ export const OpsConsoleV2Hook = {
     this._fullscreenWidget = null
     this.currentMode = "overview"
     this.selectedTargetId = null
+
+    // Commands mode state
+    this.cmdSelectedTargets = new Set()
+    this.cmdSelectedCommand = null
+    this.cmdTargetFilter = ""
+    this.cmdCommandFilter = ""
+    this.cmdQueuePaused = false
+    this.cmdPriority = 3 // Normal priority by default
+    this.cmdTargetViewMode = "compact" // "compact" or "detailed"
 
     // Register LiveView event handlers immediately
     this._setupEventHandlers()
@@ -254,6 +265,12 @@ export const OpsConsoleV2Hook = {
                 </svg>
                 <span class="nav-label">Procedure</span>
               </button>
+              <button class="mode-btn" data-mode="commands">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <span class="nav-label">Commands</span>
+              </button>
             </div>
           </div>
 
@@ -302,6 +319,11 @@ export const OpsConsoleV2Hook = {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
               </svg>
             </button>
+            <button class="rail-btn" data-mode="commands" title="Commands Mode">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </button>
           </div>
 
           <div class="rail-divider"></div>
@@ -344,7 +366,7 @@ export const OpsConsoleV2Hook = {
         navContent.querySelectorAll(".mode-btn, .rail-btn[data-mode]").forEach(b => b.classList.remove("active"))
         navContent.querySelectorAll(`[data-mode="${btn.dataset.mode}"]`).forEach(b => b.classList.add("active"))
         this.currentMode = btn.dataset.mode
-        console.log("[OpsConsoleV2] Mode changed:", this.currentMode)
+        this._onModeChange()
       })
     })
 
@@ -354,7 +376,7 @@ export const OpsConsoleV2Hook = {
         navContent.querySelectorAll(".mode-btn, .rail-btn[data-mode]").forEach(b => b.classList.remove("active"))
         navContent.querySelectorAll(`[data-mode="${btn.dataset.mode}"]`).forEach(b => b.classList.add("active"))
         this.currentMode = btn.dataset.mode
-        console.log("[OpsConsoleV2] Mode changed:", this.currentMode)
+        this._onModeChange()
       })
     })
 
@@ -407,6 +429,12 @@ export const OpsConsoleV2Hook = {
   _populateContextPanel() {
     const contextContent = this.panelLayout.getPanelContent("context")
     if (!contextContent) return
+
+    // In commands mode, show queue manager and parameter form
+    if (this.currentMode === "commands") {
+      this._populateCommandsContextPanel(contextContent)
+      return
+    }
 
     // Group alarms by severity
     const critical = this.alarms.filter(a => a.severity === "critical")
@@ -714,8 +742,17 @@ export const OpsConsoleV2Hook = {
         return
       }
 
-      // Escape - exit fullscreen or close modals
+      // Escape - close slideout, exit fullscreen, or close modals
       if (e.key === "Escape") {
+        if (this._slideoutOpen) {
+          if (this._slideoutType === 'queue-entry') {
+            this._closeQueueEntrySlideout()
+          } else {
+            this._closeCommandSlideout()
+          }
+          e.preventDefault()
+          return
+        }
         if (this._fullscreenWidget) {
           this._exitFullscreen()
           e.preventDefault()
@@ -977,6 +1014,1260 @@ export const OpsConsoleV2Hook = {
     })
   },
 
+  // ============================================================================
+  // Mode Switching
+  // ============================================================================
+
+  _onModeChange() {
+    console.log("[OpsConsoleV2] Mode changed to:", this.currentMode)
+
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    if (this.currentMode === "commands") {
+      // Hide GridStack dashboard, show Commands mode
+      dashboard.classList.add("commands-mode-active")
+      this._renderCommandsMode()
+    } else {
+      // Show GridStack dashboard, hide Commands mode
+      dashboard.classList.remove("commands-mode-active")
+      this._hideCommandsMode()
+    }
+
+    // Update context panel based on mode
+    this._populateContextPanel()
+  },
+
+  _renderCommandsMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    // Check if commands container already exists
+    let commandsContainer = dashboard.querySelector(".commands-mode-container")
+    if (!commandsContainer) {
+      commandsContainer = document.createElement("div")
+      commandsContainer.className = "commands-mode-container"
+      dashboard.appendChild(commandsContainer)
+    }
+
+    commandsContainer.innerHTML = `
+      <div class="commands-mode-layout">
+        <!-- Left: Target Selection -->
+        <div class="cmd-target-panel">
+          <div class="cmd-panel-header">
+            <div class="cmd-panel-title">
+              <span class="mc-label-subsystem">TARGET SELECTION</span>
+              <span class="cmd-selection-count">${this.cmdSelectedTargets.size} of ${this.targets.length}</span>
+            </div>
+            <div class="cmd-view-toggle">
+              <button class="cmd-view-btn ${this.cmdTargetViewMode === 'compact' ? 'active' : ''}"
+                      data-view="compact" title="Compact view">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+              </button>
+              <button class="cmd-view-btn ${this.cmdTargetViewMode === 'detailed' ? 'active' : ''}"
+                      data-view="detailed" title="Detailed view">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="cmd-target-filters">
+            <input type="text"
+                   class="cmd-target-search"
+                   placeholder="Filter targets..."
+                   value="${this.cmdTargetFilter}">
+            <select class="cmd-group-filter">
+              <option value="">All Groups</option>
+              ${this.targetGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join("")}
+            </select>
+          </div>
+          <div class="cmd-target-grid ${this.cmdTargetViewMode === 'detailed' ? 'detailed-view' : ''}">
+            ${this._renderTargetGrid()}
+          </div>
+          <div class="cmd-selection-actions">
+            <button class="btn btn-ghost btn-xs" id="cmd-select-all">Select All</button>
+            <button class="btn btn-ghost btn-xs" id="cmd-clear-selection">Clear</button>
+          </div>
+        </div>
+
+        <!-- Right: Command Browser -->
+        <div class="cmd-command-panel">
+          <div class="cmd-panel-header">
+            <span class="mc-label-subsystem">COMMANDS</span>
+            <span class="cmd-command-count">${this.commandDefinitions.length} available</span>
+          </div>
+          <div class="cmd-command-filters">
+            <input type="text"
+                   class="cmd-command-search"
+                   placeholder="Search commands..."
+                   value="${this.cmdCommandFilter}">
+          </div>
+          <div class="cmd-command-list">
+            ${this._renderCommandList()}
+          </div>
+        </div>
+      </div>
+    `
+
+    // Bind event handlers
+    this._bindCommandsModeEvents(commandsContainer)
+  },
+
+  _hideCommandsMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    const commandsContainer = dashboard.querySelector(".commands-mode-container")
+    if (commandsContainer) {
+      commandsContainer.innerHTML = ""
+    }
+  },
+
+  _renderTargetGrid() {
+    const filteredTargets = this.targets.filter(t => {
+      if (!this.cmdTargetFilter) return true
+      const search = this.cmdTargetFilter.toLowerCase()
+      return t.name?.toLowerCase().includes(search) ||
+             t.identifier?.toLowerCase().includes(search)
+    })
+
+    if (filteredTargets.length === 0) {
+      return '<div class="cmd-empty-state">No targets match filter</div>'
+    }
+
+    const isDetailed = this.cmdTargetViewMode === "detailed"
+
+    return filteredTargets.map(target => {
+      const isSelected = this.cmdSelectedTargets.has(target.id)
+      const statusClass = target.status || "offline"
+
+      // Get additional target data for detailed view and tooltip
+      const mode = target.mode || "NOMINAL"
+      const lastContact = this._formatLastContact(target.last_contact_at)
+      const pendingCmds = target.pending_commands || 0
+      const hasAlarms = target.alarm_count > 0
+      const alarmCount = target.alarm_count || 0
+
+      // Build tooltip content
+      const tooltipLines = [
+        `${target.name || target.identifier}`,
+        `Status: ${statusClass.toUpperCase()}`,
+        `Mode: ${mode}`,
+        `Last Contact: ${lastContact}`,
+        pendingCmds > 0 ? `Pending Commands: ${pendingCmds}` : null,
+        alarmCount > 0 ? `Active Alarms: ${alarmCount}` : null
+      ].filter(Boolean).join("\\n")
+
+      if (isDetailed) {
+        return `
+          <div class="cmd-target-cell ${isSelected ? "selected" : ""} status-${statusClass} ${hasAlarms ? "has-alarms" : ""}"
+               data-target-id="${target.id}"
+               data-tooltip="${tooltipLines}">
+            <div class="cmd-target-main">
+              <span class="cmd-target-name">${target.name || target.identifier}</span>
+              <span class="cmd-target-mode">${mode}</span>
+            </div>
+            <div class="cmd-target-meta">
+              <span class="cmd-target-contact">${lastContact}</span>
+              ${pendingCmds > 0 ? `<span class="cmd-target-pending">${pendingCmds}</span>` : ''}
+              ${hasAlarms ? `<span class="cmd-target-alarm-badge">${alarmCount}</span>` : ''}
+            </div>
+          </div>
+        `
+      } else {
+        // Compact view
+        return `
+          <div class="cmd-target-cell ${isSelected ? "selected" : ""} status-${statusClass} ${hasAlarms ? "has-alarms" : ""}"
+               data-target-id="${target.id}"
+               data-tooltip="${tooltipLines}">
+            <span class="cmd-target-name">${target.name || target.identifier}</span>
+            ${hasAlarms ? `<span class="cmd-target-alarm-dot"></span>` : ''}
+          </div>
+        `
+      }
+    }).join("")
+  },
+
+  _formatLastContact(timestamp) {
+    if (!timestamp) return "Unknown"
+
+    const now = new Date()
+    const contact = new Date(timestamp)
+    const diffMs = now - contact
+    const diffSecs = Math.floor(diffMs / 1000)
+    const diffMins = Math.floor(diffSecs / 60)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffSecs < 60) return `${diffSecs}s ago`
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    return `${diffDays}d ago`
+  },
+
+  _initTargetTooltip(container) {
+    // Create tooltip element if it doesn't exist
+    let tooltip = document.getElementById("cmd-target-tooltip")
+    if (!tooltip) {
+      tooltip = document.createElement("div")
+      tooltip.id = "cmd-target-tooltip"
+      tooltip.className = "cmd-tooltip"
+      document.body.appendChild(tooltip)
+    }
+
+    const grid = container.querySelector(".cmd-target-grid")
+    if (!grid) return
+
+    // Show tooltip on hover
+    grid.addEventListener("mouseenter", (e) => {
+      const cell = e.target.closest(".cmd-target-cell")
+      if (cell && cell.dataset.tooltip) {
+        const content = cell.dataset.tooltip.replace(/\\n/g, "<br>")
+        tooltip.innerHTML = content
+        tooltip.classList.add("visible")
+        this._positionTooltip(tooltip, cell)
+      }
+    }, true)
+
+    grid.addEventListener("mousemove", (e) => {
+      const cell = e.target.closest(".cmd-target-cell")
+      if (cell && tooltip.classList.contains("visible")) {
+        this._positionTooltip(tooltip, cell)
+      }
+    }, true)
+
+    grid.addEventListener("mouseleave", (e) => {
+      const cell = e.target.closest(".cmd-target-cell")
+      if (cell) {
+        tooltip.classList.remove("visible")
+      }
+    }, true)
+  },
+
+  _positionTooltip(tooltip, cell) {
+    const rect = cell.getBoundingClientRect()
+    const tooltipRect = tooltip.getBoundingClientRect()
+
+    // Position above the cell by default
+    let top = rect.top - tooltipRect.height - 8
+    let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2)
+
+    // If tooltip would go off top of screen, show below
+    if (top < 8) {
+      top = rect.bottom + 8
+      tooltip.classList.add("below")
+    } else {
+      tooltip.classList.remove("below")
+    }
+
+    // Keep tooltip within horizontal bounds
+    if (left < 8) left = 8
+    if (left + tooltipRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - tooltipRect.width - 8
+    }
+
+    tooltip.style.top = `${top}px`
+    tooltip.style.left = `${left}px`
+  },
+
+  _getFilteredCommands() {
+    return this.commandDefinitions.filter(cmd => {
+      if (!this.cmdCommandFilter) return true
+      const search = this.cmdCommandFilter.toLowerCase()
+      return cmd.name?.toLowerCase().includes(search) ||
+             cmd.description?.toLowerCase().includes(search)
+    })
+  },
+
+  _getFilteredCommandCount() {
+    return this._getFilteredCommands().length
+  },
+
+  _renderCommandList() {
+    const filteredCommands = this._getFilteredCommands()
+
+    if (filteredCommands.length === 0) {
+      return '<div class="cmd-empty-state">No commands match filter</div>'
+    }
+
+    return filteredCommands.map(cmd => {
+      const isSelected = this.cmdSelectedCommand?.id === cmd.id
+      const opcodeHex = cmd.opcode ? `0x${cmd.opcode.toString(16).toUpperCase().padStart(4, "0")}` : ""
+      return `
+        <div class="cmd-command-item ${isSelected ? "selected" : ""} ${cmd.is_hazardous ? "hazardous" : ""}"
+             data-command-id="${cmd.id}">
+          <div class="cmd-command-header">
+            <span class="cmd-command-name">${cmd.name}</span>
+            ${cmd.is_hazardous ? '<span class="cmd-hazard-badge">HAZARD</span>' : ""}
+          </div>
+          <div class="cmd-command-meta">
+            ${opcodeHex ? `<span class="cmd-opcode">${opcodeHex}</span>` : ""}
+            ${cmd.description ? `<span class="cmd-description">${cmd.description}</span>` : ""}
+          </div>
+        </div>
+      `
+    }).join("")
+  },
+
+  _bindCommandsModeEvents(container) {
+    // Bind target cell events
+    this._bindTargetCellEvents(container)
+
+    // Bind command item events
+    this._bindCommandItemEvents(container)
+
+    // Initialize tooltip
+    this._initTargetTooltip(container)
+
+    // View toggle buttons
+    container.querySelectorAll(".cmd-view-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const newView = btn.dataset.view
+        if (newView !== this.cmdTargetViewMode) {
+          this.cmdTargetViewMode = newView
+
+          // Update button states
+          container.querySelectorAll(".cmd-view-btn").forEach(b => {
+            b.classList.toggle("active", b.dataset.view === newView)
+          })
+
+          // Update grid class and re-render
+          const grid = container.querySelector(".cmd-target-grid")
+          if (grid) {
+            grid.classList.toggle("detailed-view", newView === "detailed")
+            grid.innerHTML = this._renderTargetGrid()
+            this._bindTargetCellEvents(container)
+          }
+        }
+      })
+    })
+
+    // Target search filter
+    container.querySelector(".cmd-target-search")?.addEventListener("input", (e) => {
+      this.cmdTargetFilter = e.target.value
+      this._debounce("targetFilter", () => {
+        // Only update the grid, not the whole container
+        const grid = container.querySelector(".cmd-target-grid")
+        if (grid) {
+          grid.innerHTML = this._renderTargetGrid()
+          this._bindTargetCellEvents(container)
+        }
+        // Update count
+        const count = container.querySelector(".cmd-selection-count")
+        if (count) count.textContent = `${this.cmdSelectedTargets.size} of ${this.targets.length}`
+      }, 150)
+    })
+
+    // Group filter
+    container.querySelector(".cmd-group-filter")?.addEventListener("change", (e) => {
+      // TODO: Filter by group
+      this._renderCommandsMode()
+    })
+
+    // Select all / Clear
+    container.querySelector("#cmd-select-all")?.addEventListener("click", () => {
+      this.targets.forEach(t => this.cmdSelectedTargets.add(t.id))
+      // Update all visible cells
+      container.querySelectorAll(".cmd-target-cell").forEach(cell => cell.classList.add("selected"))
+      // Update count
+      const count = container.querySelector(".cmd-selection-count")
+      if (count) count.textContent = `${this.cmdSelectedTargets.size} of ${this.targets.length}`
+      this._populateContextPanel()
+    })
+
+    container.querySelector("#cmd-clear-selection")?.addEventListener("click", () => {
+      this.cmdSelectedTargets.clear()
+      // Update all visible cells
+      container.querySelectorAll(".cmd-target-cell").forEach(cell => cell.classList.remove("selected"))
+      // Update count
+      const count = container.querySelector(".cmd-selection-count")
+      if (count) count.textContent = `0 of ${this.targets.length}`
+      this._populateContextPanel()
+    })
+
+    // Command search filter
+    container.querySelector(".cmd-command-search")?.addEventListener("input", (e) => {
+      this.cmdCommandFilter = e.target.value
+      this._debounce("commandFilter", () => {
+        // Only update the list, not the whole container
+        const list = container.querySelector(".cmd-command-list")
+        if (list) {
+          list.innerHTML = this._renderCommandList()
+          this._bindCommandItemEvents(container)
+        }
+        // Update count with filtered results
+        const filteredCount = this._getFilteredCommandCount()
+        const count = container.querySelector(".cmd-command-count")
+        if (count) count.textContent = `${filteredCount} of ${this.commandDefinitions.length} available`
+      }, 150)
+    })
+
+  },
+
+  _bindTargetCellEvents(container) {
+    container.querySelectorAll(".cmd-target-cell").forEach(cell => {
+      cell.addEventListener("click", (e) => {
+        const targetId = cell.dataset.targetId
+        if (this.cmdSelectedTargets.has(targetId)) {
+          this.cmdSelectedTargets.delete(targetId)
+        } else {
+          this.cmdSelectedTargets.add(targetId)
+        }
+        // Update just the cell and count, not the whole UI
+        cell.classList.toggle("selected")
+        const count = container.querySelector(".cmd-selection-count")
+        if (count) count.textContent = `${this.cmdSelectedTargets.size} of ${this.targets.length} selected`
+        // Update context panel to reflect selection
+        this._populateContextPanel()
+      })
+    })
+  },
+
+  _bindCommandItemEvents(container) {
+    container.querySelectorAll(".cmd-command-item").forEach(item => {
+      item.addEventListener("click", () => {
+        // Remove selected from all items
+        container.querySelectorAll(".cmd-command-item").forEach(i => i.classList.remove("selected"))
+        // Add selected to clicked item
+        item.classList.add("selected")
+        // Update state
+        const commandId = item.dataset.commandId
+        this.cmdSelectedCommand = this.commandDefinitions.find(c => c.id === commandId)
+        // Open slideout panel with the selected command
+        this._openCommandSlideout()
+      })
+    })
+  },
+
+  _populateCommandsContextPanel(contextContent) {
+    const queuePaused = this.cmdQueuePaused
+    const selectedTargetCount = this.cmdSelectedTargets.size
+
+    contextContent.innerHTML = `
+      <div class="cmd-context-panel">
+        <!-- Queue Manager Section - Now takes full height -->
+        <div class="cmd-queue-section cmd-queue-full">
+          <div class="cmd-section-header">
+            <div class="flex items-center gap-2">
+              <span class="mc-label-subsystem">COMMAND QUEUE</span>
+              <span class="text-xs text-base-content/50">(${this.commands.length})</span>
+            </div>
+            <div class="cmd-queue-controls">
+              <button class="btn btn-ghost btn-xs ${queuePaused ? 'text-warning' : ''}" id="cmd-queue-pause">
+                ${queuePaused ? 'Resume' : 'Pause'}
+              </button>
+            </div>
+          </div>
+          <div class="cmd-queue-list">
+            ${this.commands.length > 0
+              ? this.commands.map(cmd => this._renderQueueItem(cmd)).join("")
+              : `<div class="cmd-empty-state">
+                  <svg class="w-8 h-8 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                  </svg>
+                  Queue empty
+                </div>`
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Rail content (visible when collapsed) -->
+      <div class="context-rail">
+        <!-- Queue count -->
+        <div class="rail-command-badge ${this.commands.length > 0 ? 'has-commands' : ''}" id="rail-cmd-queue" title="Command Queue">
+          <span class="rail-command-count">${this.commands.length}</span>
+          <span class="rail-command-label">QUEUE</span>
+        </div>
+
+        <div class="rail-divider"></div>
+
+        <!-- Selected count -->
+        <div class="rail-command-badge ${selectedTargetCount > 0 ? 'has-commands' : ''}" id="rail-cmd-targets" title="Selected Targets">
+          <span class="rail-command-count">${selectedTargetCount}</span>
+          <span class="rail-command-label">TGTS</span>
+        </div>
+
+        <div class="rail-divider"></div>
+
+        <!-- Expand button -->
+        <button class="rail-btn" id="rail-expand-context" title="Expand Panel">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+          </svg>
+        </button>
+      </div>
+    `
+
+    // Bind event handlers
+    this._bindCommandsContextEvents(contextContent)
+
+    // Rail expand button
+    contextContent.querySelector("#rail-expand-context")?.addEventListener("click", () => {
+      this.panelLayout._openPanel("context")
+    })
+
+    // Rail badges click to expand
+    contextContent.querySelectorAll(".rail-command-badge").forEach(badge => {
+      badge.addEventListener("click", () => {
+        this.panelLayout._openPanel("context")
+      })
+    })
+  },
+
+  _renderQueueItem(cmd) {
+    const statusClass = cmd.status === 'executing' ? 'executing' :
+                        cmd.status === 'held' ? 'held' :
+                        cmd.status === 'failed' ? 'failed' : 'pending'
+    const isExecuting = cmd.status === 'executing'
+    const isFailed = cmd.status === 'failed'
+
+    // Priority indicator (0=highest, 5=lowest)
+    const priority = cmd.priority ?? 3
+    const priorityClass = priority <= 1 ? 'priority-high' : priority >= 4 ? 'priority-low' : ''
+
+    // Compact status label
+    const statusLabel = {
+      'pending': 'PEND',
+      'held': 'HOLD',
+      'executing': 'EXEC',
+      'completed': 'DONE',
+      'failed': 'FAIL'
+    }[cmd.status] || cmd.status.toUpperCase().slice(0, 4)
+
+    // Format parameters as compact string
+    const params = cmd.parameters || {}
+    const paramEntries = Object.entries(params)
+    const paramsPreview = paramEntries
+      .map(([k, v]) => `<span class="qe-param-item"><span class="qe-param-key">${k}</span><span class="qe-param-val">${this._formatParamValue(v)}</span></span>`)
+      .join('')
+
+    return `
+      <div class="qe ${statusClass}" data-id="${cmd.id}">
+        <div class="qe-meta-row">
+          <span class="qe-target">${cmd.target_name || '?'}</span>
+          <div class="qe-badges">
+            <span class="qe-priority ${priorityClass}">P${priority}</span>
+            <span class="qe-status">${statusLabel}</span>
+          </div>
+        </div>
+        <div class="qe-command-row">
+          ${isExecuting ? '<span class="qe-pulse-inline"></span>' : ''}
+          ${isFailed ? `
+            <svg class="qe-error-inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+          ` : ''}
+          <span class="qe-command">${cmd.command_name}</span>
+        </div>
+        ${paramEntries.length > 0 ? `
+          <div class="qe-params-row">${paramsPreview}</div>
+        ` : ''}
+      </div>
+    `
+  },
+
+  _getStatusLabel(status) {
+    const labels = {
+      'pending': 'PENDING',
+      'held': 'HELD',
+      'executing': 'EXECUTING',
+      'completed': 'COMPLETED',
+      'failed': 'FAILED'
+    }
+    return labels[status] || status.toUpperCase()
+  },
+
+  _formatQueueAge(timestamp) {
+    if (!timestamp) return '--'
+    const now = new Date()
+    const created = new Date(timestamp)
+    const diffMs = now - created
+    const diffSecs = Math.floor(diffMs / 1000)
+    const diffMins = Math.floor(diffSecs / 60)
+    const diffHours = Math.floor(diffMins / 60)
+
+    if (diffSecs < 60) return `${diffSecs}s`
+    if (diffMins < 60) return `${diffMins}m`
+    if (diffHours < 24) return `${diffHours}h ${diffMins % 60}m`
+    return `${Math.floor(diffHours / 24)}d`
+  },
+
+  _formatScheduledTime(timestamp) {
+    if (!timestamp) return '--'
+    const date = new Date(timestamp)
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  },
+
+  _formatParamValue(value) {
+    if (typeof value === 'boolean') return value ? 'true' : 'false'
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+  },
+
+  _renderParameterForm(cmd) {
+    const params = cmd.parameters || []
+    if (params.length === 0) {
+      return '<div class="text-xs text-base-content/60">No parameters required</div>'
+    }
+
+    return params.map(param => {
+      const required = param.required ? '<span class="text-error">*</span>' : ''
+      const defaultVal = param.default_value ?? ''
+      const hasValidValues = param.valid_values && param.valid_values.length > 0
+      const hasRange = param.min_value != null || param.max_value != null
+      const isNumeric = ['int', 'uint', 'float', 'double', 'integer', 'number'].includes(param.data_type?.toLowerCase())
+      const isBool = ['boolean', 'bool'].includes(param.data_type?.toLowerCase())
+
+      // Description tooltip
+      const descTooltip = param.description
+        ? `title="${param.description.replace(/"/g, '&quot;')}"`
+        : ''
+
+      // Build range hint text
+      let rangeHint = ''
+      if (hasRange) {
+        if (param.min_value != null && param.max_value != null) {
+          rangeHint = `Range: ${param.min_value} - ${param.max_value}`
+        } else if (param.min_value != null) {
+          rangeHint = `Min: ${param.min_value}`
+        } else if (param.max_value != null) {
+          rangeHint = `Max: ${param.max_value}`
+        }
+      }
+
+      // Boolean type - toggle switch
+      if (isBool) {
+        return `
+          <div class="form-control cmd-param-group">
+            <label class="label cursor-pointer py-1" ${descTooltip}>
+              <span class="label-text text-xs">${param.name}${required}</span>
+              <input type="checkbox" class="toggle toggle-xs toggle-primary cmd-param" data-param="${param.name}"
+                     ${defaultVal === 'true' || defaultVal === true ? 'checked' : ''}>
+            </label>
+            ${param.description ? `<span class="cmd-param-desc">${param.description}</span>` : ''}
+          </div>
+        `
+      }
+
+      // Has valid values - parse labels from description and render appropriately
+      if (hasValidValues) {
+        // Parse value->label mappings from description (e.g., "Mode (0=BOOT, 1=SAFE, ...)")
+        const valueLabels = this._parseValueLabels(param.description, param.valid_values)
+        const optionCount = param.valid_values.length
+
+        // For small number of options (2-4), use button group
+        if (optionCount <= 4) {
+          return `
+            <div class="form-control cmd-param-group">
+              <label class="label py-1">
+                <span class="label-text text-xs">${param.name}${required}</span>
+              </label>
+              <div class="cmd-value-buttons" data-param="${param.name}">
+                ${param.valid_values.map(v => {
+                  const label = valueLabels[v] || v
+                  const isSelected = String(v) === String(defaultVal)
+                  return `
+                    <button type="button"
+                            class="cmd-value-btn ${isSelected ? 'selected' : ''}"
+                            data-value="${v}"
+                            title="${param.description || ''}">
+                      <span class="cmd-value-label">${label}</span>
+                      <span class="cmd-value-raw">${v}</span>
+                    </button>
+                  `
+                }).join('')}
+              </div>
+              <input type="hidden" class="cmd-param" data-param="${param.name}" value="${defaultVal}">
+            </div>
+          `
+        }
+
+        // For more options, use enhanced dropdown with labels
+        return `
+          <div class="form-control cmd-param-group">
+            <label class="label py-1">
+              <span class="label-text text-xs">${param.name}${required}</span>
+              ${param.units ? `<span class="label-text-alt text-xs text-base-content/50">${param.units}</span>` : ''}
+            </label>
+            <select class="select select-bordered select-xs w-full cmd-param cmd-param-labeled" data-param="${param.name}">
+              ${!param.required ? '<option value="">-- Select --</option>' : ''}
+              ${param.valid_values.map(v => {
+                const label = valueLabels[v]
+                const displayText = label ? `${label} (${v})` : v
+                return `<option value="${v}" ${String(v) === String(defaultVal) ? 'selected' : ''}>${displayText}</option>`
+              }).join('')}
+            </select>
+            <div class="cmd-value-preview" data-for="${param.name}">
+              ${defaultVal && valueLabels[defaultVal] ? `<span class="cmd-value-preview-label">${valueLabels[defaultVal]}</span>` : ''}
+            </div>
+          </div>
+        `
+      }
+
+      // Numeric type with range
+      if (isNumeric) {
+        const step = ['float', 'double'].includes(param.data_type?.toLowerCase()) ? 'any' : '1'
+        return `
+          <div class="form-control cmd-param-group">
+            <label class="label py-1" ${descTooltip}>
+              <span class="label-text text-xs">${param.name}${required}</span>
+              ${param.units ? `<span class="label-text-alt text-xs text-base-content/50">${param.units}</span>` : ''}
+            </label>
+            <input type="number"
+                   class="input input-bordered input-xs w-full cmd-param"
+                   data-param="${param.name}"
+                   value="${defaultVal}"
+                   step="${step}"
+                   ${param.min_value != null ? `min="${param.min_value}"` : ''}
+                   ${param.max_value != null ? `max="${param.max_value}"` : ''}
+                   placeholder="${rangeHint || ''}">
+            ${rangeHint ? `<span class="cmd-param-hint">${rangeHint}</span>` : ''}
+            ${param.description ? `<span class="cmd-param-desc">${param.description}</span>` : ''}
+          </div>
+        `
+      }
+
+      // Default: text input
+      return `
+        <div class="form-control cmd-param-group">
+          <label class="label py-1" ${descTooltip}>
+            <span class="label-text text-xs">${param.name}${required}</span>
+            ${param.units ? `<span class="label-text-alt text-xs text-base-content/50">${param.units}</span>` : ''}
+          </label>
+          <input type="text"
+                 class="input input-bordered input-xs w-full cmd-param"
+                 data-param="${param.name}"
+                 value="${defaultVal}"
+                 placeholder="${param.description || ''}">
+          ${param.description ? `<span class="cmd-param-desc">${param.description}</span>` : ''}
+        </div>
+      `
+    }).join('')
+  },
+
+  // Parse value->label mappings from description string
+  // Handles patterns like: "Mode (0=BOOT, 1=SAFE, 2=IDLE)" or "State: 0=OFF, 1=ON"
+  _parseValueLabels(description, validValues) {
+    const labels = {}
+    if (!description) return labels
+
+    // Try to extract mappings with various patterns
+    // Pattern 1: "0=BOOT" or "0: BOOT"
+    const patterns = [
+      /(\d+)\s*[=:]\s*([A-Z_][A-Z0-9_]*)/gi,  // 0=BOOT, 1=SAFE
+      /([A-Z_][A-Z0-9_]*)\s*[=:]\s*(\d+)/gi,  // BOOT=0, SAFE=1
+    ]
+
+    for (const pattern of patterns) {
+      let match
+      while ((match = pattern.exec(description)) !== null) {
+        // Check if first group is numeric
+        if (/^\d+$/.test(match[1])) {
+          labels[match[1]] = match[2]
+        } else if (/^\d+$/.test(match[2])) {
+          labels[match[2]] = match[1]
+        }
+      }
+    }
+
+    return labels
+  },
+
+  _bindCommandsContextEvents(contextContent) {
+    // Queue pause/resume
+    contextContent.querySelector("#cmd-queue-pause")?.addEventListener("click", () => {
+      this.cmdQueuePaused = !this.cmdQueuePaused
+      this.pushEvent(this.cmdQueuePaused ? "cmd_pause_queue" : "cmd_resume_queue", {})
+      this._populateContextPanel()
+    })
+
+    // Queue entry click to open detail slideout
+    contextContent.querySelectorAll(".qe").forEach(entry => {
+      entry.addEventListener("click", () => {
+        const entryId = entry.dataset.id
+        this._openQueueEntrySlideout(entryId)
+      })
+    })
+  },
+
+  _dispatchCommand(mode) {
+    if (!this.cmdSelectedCommand || this.cmdSelectedTargets.size === 0) return
+
+    // Collect parameter values from slideout
+    const params = {}
+    const slideout = document.getElementById("cmd-slideout")
+    if (slideout) {
+      slideout.querySelectorAll(".cmd-param").forEach(input => {
+        const paramName = input.dataset.param
+        if (input.type === "checkbox") {
+          params[paramName] = input.checked
+        } else {
+          params[paramName] = input.value
+        }
+      })
+    }
+
+    // Send dispatch event to LiveView
+    this.pushEvent("cmd_dispatch", {
+      command_id: this.cmdSelectedCommand.id,
+      target_ids: Array.from(this.cmdSelectedTargets),
+      params: params,
+      mode: mode,
+      priority: this.cmdPriority
+    })
+
+    // Close the slideout after dispatching
+    this._closeCommandSlideout()
+
+    // Clear command selection
+    this.cmdSelectedCommand = null
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (dashboard) {
+      dashboard.querySelectorAll(".cmd-command-item").forEach(i => i.classList.remove("selected"))
+    }
+  },
+
+  // ============================================================================
+  // Command Config Slideout Panel
+  // ============================================================================
+
+  _openCommandSlideout() {
+    if (!this.cmdSelectedCommand) return
+
+    // Create slideout elements if they don't exist
+    let backdrop = document.getElementById("cmd-slideout-backdrop")
+    let slideout = document.getElementById("cmd-slideout")
+
+    if (!backdrop) {
+      backdrop = document.createElement("div")
+      backdrop.id = "cmd-slideout-backdrop"
+      backdrop.className = "cmd-slideout-backdrop"
+      document.body.appendChild(backdrop)
+
+      // Close on backdrop click
+      backdrop.addEventListener("click", () => this._closeCommandSlideout())
+    }
+
+    if (!slideout) {
+      slideout = document.createElement("div")
+      slideout.id = "cmd-slideout"
+      slideout.className = "cmd-slideout"
+      document.body.appendChild(slideout)
+    }
+
+    // Render slideout content
+    this._renderSlideoutContent(slideout)
+
+    // Show with animation
+    requestAnimationFrame(() => {
+      backdrop.classList.add("visible")
+      slideout.classList.add("visible")
+    })
+
+    // Track that slideout is open
+    this._slideoutOpen = true
+  },
+
+  _closeCommandSlideout() {
+    const backdrop = document.getElementById("cmd-slideout-backdrop")
+    const slideout = document.getElementById("cmd-slideout")
+
+    if (backdrop) backdrop.classList.remove("visible")
+    if (slideout) slideout.classList.remove("visible")
+
+    this._slideoutOpen = false
+  },
+
+  _renderSlideoutContent(slideout) {
+    const cmd = this.cmdSelectedCommand
+    if (!cmd) return
+
+    const selectedTargetCount = this.cmdSelectedTargets.size
+    const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+
+    slideout.innerHTML = `
+      <div class="cmd-slideout-header">
+        <div class="cmd-slideout-title">
+          <div class="command-name">${cmd.name}</div>
+          <div class="target-count">
+            <strong>${selectedTargetCount}</strong> target${selectedTargetCount !== 1 ? 's' : ''} selected
+          </div>
+        </div>
+        <button class="cmd-slideout-close" id="slideout-close-btn" title="Close (Esc)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="cmd-slideout-body">
+        ${cmd.is_hazardous ? `
+          <div class="cmd-slideout-hazard-warning">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <div class="warning-text">
+              <strong>Hazardous Command</strong>
+              ${cmd.hazard_description || 'This command may cause irreversible changes.'}
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="cmd-slideout-section">
+          <div class="cmd-slideout-section-title">Targets</div>
+          <div class="cmd-slideout-targets">
+            ${selectedTargets.length > 0
+              ? selectedTargets.slice(0, 10).map(t => `
+                  <span class="cmd-slideout-target-chip">
+                    <span class="status-dot ${t.status || 'online'}"></span>
+                    ${t.name || t.identifier}
+                  </span>
+                `).join('')
+              : '<span class="text-xs text-base-content/50">No targets selected</span>'
+            }
+            ${selectedTargets.length > 10 ? `
+              <span class="cmd-slideout-target-chip">+${selectedTargets.length - 10} more</span>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="cmd-slideout-section">
+          <div class="cmd-slideout-section-title">Parameters</div>
+          <div class="cmd-param-form">
+            ${this._renderParameterForm(cmd)}
+          </div>
+        </div>
+      </div>
+
+      <div class="cmd-slideout-footer">
+        <div class="cmd-slideout-priority">
+          <label>Priority</label>
+          <select id="slideout-priority">
+            <option value="0" ${this.cmdPriority === 0 ? 'selected' : ''}>0 - Emergency</option>
+            <option value="1" ${this.cmdPriority === 1 ? 'selected' : ''}>1 - Critical</option>
+            <option value="2" ${this.cmdPriority === 2 ? 'selected' : ''}>2 - High</option>
+            <option value="3" ${this.cmdPriority === 3 ? 'selected' : ''}>3 - Normal</option>
+            <option value="4" ${this.cmdPriority === 4 ? 'selected' : ''}>4 - Low</option>
+            <option value="5" ${this.cmdPriority === 5 ? 'selected' : ''}>5 - Background</option>
+          </select>
+        </div>
+
+        <div class="cmd-dispatch-actions">
+          <button class="cmd-dispatch-btn queue ${cmd.is_hazardous ? 'hazardous' : ''}"
+                  id="slideout-queue-btn"
+                  ${selectedTargetCount === 0 ? 'disabled' : ''}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
+            Queue
+          </button>
+          <button class="cmd-dispatch-btn send-now ${cmd.is_hazardous ? 'hazardous' : ''}"
+                  id="slideout-send-btn"
+                  ${selectedTargetCount === 0 ? 'disabled' : ''}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            Send
+          </button>
+        </div>
+      </div>
+    `
+
+    // Bind slideout events
+    this._bindSlideoutEvents(slideout)
+  },
+
+  _bindSlideoutEvents(slideout) {
+    // Close button
+    slideout.querySelector("#slideout-close-btn")?.addEventListener("click", () => {
+      this._closeCommandSlideout()
+    })
+
+    // Priority selector
+    slideout.querySelector("#slideout-priority")?.addEventListener("change", (e) => {
+      this.cmdPriority = parseInt(e.target.value, 10)
+    })
+
+    // Queue button
+    slideout.querySelector("#slideout-queue-btn")?.addEventListener("click", () => {
+      this._dispatchCommand("queue")
+    })
+
+    // Send now button
+    slideout.querySelector("#slideout-send-btn")?.addEventListener("click", () => {
+      this._dispatchCommand("immediate")
+    })
+
+    // Value button groups (for params with valid_values)
+    slideout.querySelectorAll(".cmd-value-buttons").forEach(group => {
+      const paramName = group.dataset.param
+      const hiddenInput = group.parentElement.querySelector(`input[data-param="${paramName}"]`)
+
+      group.querySelectorAll(".cmd-value-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          group.querySelectorAll(".cmd-value-btn").forEach(b => b.classList.remove("selected"))
+          btn.classList.add("selected")
+          if (hiddenInput) {
+            hiddenInput.value = btn.dataset.value
+          }
+        })
+      })
+    })
+  },
+
+  // ============================================================================
+  // Queue Entry Detail Slideout
+  // ============================================================================
+
+  _openQueueEntrySlideout(entryId) {
+    const entry = this.commands.find(c => c.id === entryId)
+    if (!entry) return
+
+    // Store the selected entry
+    this._selectedQueueEntry = entry
+
+    // Reuse the same slideout infrastructure
+    let backdrop = document.getElementById("cmd-slideout-backdrop")
+    let slideout = document.getElementById("cmd-slideout")
+
+    if (!backdrop) {
+      backdrop = document.createElement("div")
+      backdrop.id = "cmd-slideout-backdrop"
+      backdrop.className = "cmd-slideout-backdrop"
+      document.body.appendChild(backdrop)
+      backdrop.addEventListener("click", () => this._closeQueueEntrySlideout())
+    }
+
+    if (!slideout) {
+      slideout = document.createElement("div")
+      slideout.id = "cmd-slideout"
+      slideout.className = "cmd-slideout"
+      document.body.appendChild(slideout)
+    }
+
+    // Render queue entry detail content
+    this._renderQueueEntrySlideout(slideout, entry)
+
+    // Show with animation
+    requestAnimationFrame(() => {
+      backdrop.classList.add("visible")
+      slideout.classList.add("visible")
+    })
+
+    this._slideoutOpen = true
+    this._slideoutType = 'queue-entry'
+  },
+
+  _closeQueueEntrySlideout() {
+    const backdrop = document.getElementById("cmd-slideout-backdrop")
+    const slideout = document.getElementById("cmd-slideout")
+
+    if (backdrop) backdrop.classList.remove("visible")
+    if (slideout) slideout.classList.remove("visible")
+
+    this._slideoutOpen = false
+    this._slideoutType = null
+    this._selectedQueueEntry = null
+  },
+
+  _renderQueueEntrySlideout(slideout, entry) {
+    const isHeld = entry.status === 'held'
+    const isPending = entry.status === 'pending'
+    const isExecuting = entry.status === 'executing'
+    const isFailed = entry.status === 'failed'
+    const canModify = isPending || isHeld
+
+    const params = entry.parameters || {}
+    const paramEntries = Object.entries(params)
+    const hasParams = paramEntries.length > 0
+
+    const priority = entry.priority ?? 3
+    const priorityLabels = ['Emergency', 'Critical', 'High', 'Normal', 'Low', 'Background']
+    const priorityLabel = priorityLabels[priority] || 'Normal'
+
+    const queueAge = this._formatQueueAge(entry.created_at)
+    const isScheduled = entry.scheduled_at && new Date(entry.scheduled_at) > new Date()
+    const scheduledTime = isScheduled ? this._formatScheduledTime(entry.scheduled_at) : null
+
+    const statusClass = isExecuting ? 'executing' : isHeld ? 'held' : isFailed ? 'failed' : 'pending'
+
+    slideout.innerHTML = `
+      <div class="cmd-slideout-header">
+        <div class="cmd-slideout-title">
+          <div class="command-name">${entry.command_name}</div>
+          <div class="target-count">
+            Target: <strong>${entry.target_name || 'Unknown'}</strong>
+          </div>
+        </div>
+        <button class="cmd-slideout-close" id="qe-slideout-close" title="Close (Esc)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="cmd-slideout-body">
+        <!-- Status Section -->
+        <div class="qe-detail-status ${statusClass}">
+          <div class="qe-detail-status-badge">${this._getStatusLabel(entry.status)}</div>
+          ${isExecuting ? '<div class="qe-detail-status-text">Command is currently being executed</div>' : ''}
+          ${isHeld ? '<div class="qe-detail-status-text">Command is on hold</div>' : ''}
+          ${isPending ? '<div class="qe-detail-status-text">Waiting in queue for execution</div>' : ''}
+          ${isFailed ? '<div class="qe-detail-status-text">Command execution failed</div>' : ''}
+        </div>
+
+        ${isFailed && entry.last_error ? `
+          <div class="qe-detail-error">
+            <div class="qe-detail-error-label">Error Details</div>
+            <div class="qe-detail-error-message">${entry.last_error}</div>
+          </div>
+        ` : ''}
+
+        <!-- Info Grid -->
+        <div class="qe-detail-grid">
+          <div class="qe-detail-item">
+            <span class="qe-detail-label">Priority</span>
+            <span class="qe-detail-value">${priority} - ${priorityLabel}</span>
+          </div>
+          <div class="qe-detail-item">
+            <span class="qe-detail-label">Queued</span>
+            <span class="qe-detail-value">${queueAge} ago</span>
+          </div>
+          ${entry.attempts > 0 ? `
+            <div class="qe-detail-item">
+              <span class="qe-detail-label">Attempts</span>
+              <span class="qe-detail-value">${entry.attempts}</span>
+            </div>
+          ` : ''}
+          ${isScheduled ? `
+            <div class="qe-detail-item">
+              <span class="qe-detail-label">Scheduled</span>
+              <span class="qe-detail-value">${scheduledTime}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Parameters -->
+        ${hasParams ? `
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-title">Parameters</div>
+            <div class="qe-detail-params">
+              ${paramEntries.map(([key, value]) => `
+                <div class="qe-detail-param">
+                  <span class="qe-detail-param-key">${key}</span>
+                  <span class="qe-detail-param-value">${this._formatParamValue(value)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : `
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-title">Parameters</div>
+            <div class="qe-detail-no-params">No parameters</div>
+          </div>
+        `}
+      </div>
+
+      <div class="cmd-slideout-footer">
+        <div class="qe-detail-actions">
+          ${isExecuting ? `
+            <div class="qe-detail-executing">
+              <span class="qe-pulse"></span>
+              Executing...
+            </div>
+          ` : ''}
+
+          ${canModify ? `
+            ${isHeld ? `
+              <button class="qe-detail-btn qe-detail-btn-release" data-id="${entry.id}">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                </svg>
+                Release
+              </button>
+            ` : `
+              <button class="qe-detail-btn qe-detail-btn-hold" data-id="${entry.id}">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6"/>
+                </svg>
+                Hold
+              </button>
+            `}
+
+            ${priority > 0 ? `
+              <button class="qe-detail-btn qe-detail-btn-promote" data-id="${entry.id}" data-priority="${priority - 1}">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                </svg>
+                Promote
+              </button>
+            ` : ''}
+
+            <button class="qe-detail-btn qe-detail-btn-cancel" data-id="${entry.id}">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Cancel
+            </button>
+          ` : ''}
+
+          ${isFailed ? `
+            <button class="qe-detail-btn qe-detail-btn-retry" data-id="${entry.id}">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Retry
+            </button>
+            <button class="qe-detail-btn qe-detail-btn-dismiss" data-id="${entry.id}">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Dismiss
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `
+
+    this._bindQueueEntrySlideoutEvents(slideout)
+  },
+
+  _bindQueueEntrySlideoutEvents(slideout) {
+    // Close button
+    slideout.querySelector("#qe-slideout-close")?.addEventListener("click", () => {
+      this._closeQueueEntrySlideout()
+    })
+
+    // Action buttons
+    slideout.querySelectorAll(".qe-detail-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const entryId = btn.dataset.id
+
+        if (btn.classList.contains("qe-detail-btn-cancel") || btn.classList.contains("qe-detail-btn-dismiss")) {
+          this.pushEvent("cancel_command", { id: entryId })
+          this._closeQueueEntrySlideout()
+        } else if (btn.classList.contains("qe-detail-btn-hold")) {
+          this.pushEvent("hold_command", { id: entryId })
+        } else if (btn.classList.contains("qe-detail-btn-release")) {
+          this.pushEvent("release_command", { id: entryId })
+        } else if (btn.classList.contains("qe-detail-btn-promote")) {
+          const newPriority = parseInt(btn.dataset.priority, 10)
+          this.pushEvent("promote_command", { id: entryId, priority: newPriority })
+        } else if (btn.classList.contains("qe-detail-btn-retry")) {
+          this.pushEvent("retry_command", { id: entryId })
+        }
+      })
+    })
+  },
+
   _debounce(key, fn, delay) {
     if (!this._debounceTimers) {
       this._debounceTimers = {}
@@ -1003,6 +2294,12 @@ export const OpsConsoleV2Hook = {
 
     // Exit fullscreen if active
     this._exitFullscreen()
+
+    // Close and remove slideout elements
+    const backdrop = document.getElementById("cmd-slideout-backdrop")
+    const slideout = document.getElementById("cmd-slideout")
+    if (backdrop) backdrop.remove()
+    if (slideout) slideout.remove()
 
     // Clean up window resize handler
     if (this._windowResizeHandler) {

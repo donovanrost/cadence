@@ -14,6 +14,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts, Procedures, Commands, Outbox}
   alias Cadence.DashboardLayouts.DashboardLayout
+  alias Cadence.MissionDatabase.{Database, MetaCommand}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -71,6 +72,13 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         limit: 50
       )
 
+    # Load command definitions for Commands mode
+    # Commands (MetaCommands) belong to MDB DefinitionSets, which belong to Databases
+    command_definitions = load_command_definitions(mission_id)
+
+    # Load target groups for filtering
+    target_groups = Targets.list_target_groups(mission)
+
     # Subscribe to updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
@@ -94,9 +102,19 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       |> assign(:fleet_health, fleet_health)
       |> assign(:running_procedures, running_procedures)
       |> assign(:queue_entries, queue_entries)
+      |> assign(:command_definitions, command_definitions)
+      |> assign(:target_groups, target_groups)
       |> assign(:current_time, DateTime.utc_now())
       |> assign(:page_title, "Ops Console V2 - #{mission.name}")
       |> assign(:show_widget_palette, false)
+      # Commands mode state
+      |> assign(:cmd_selected_targets, MapSet.new())
+      |> assign(:cmd_selected_command, nil)
+      |> assign(:cmd_param_form, nil)
+      |> assign(:cmd_dispatch_mode, :queue)
+      |> assign(:cmd_priority, 3)
+      |> assign(:cmd_scheduled_at, nil)
+      |> assign(:cmd_batch_confirm, nil)
       |> assign(:configuring_widget, nil)
       |> assign(:show_create_dashboard, false)
       |> assign(:show_rename_dashboard, nil)
@@ -123,6 +141,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
       data-alarms={Jason.encode!(Enum.map(@active_alarms, &alarm_json/1))}
       data-commands={Jason.encode!(Enum.map(@queue_entries, &queue_entry_json/1))}
+      data-command-definitions={Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))}
+      data-target-groups={Jason.encode!(Enum.map(@target_groups, &target_group_json/1))}
       data-current-dashboard-id={@current_layout.id}
       data-token={@token}
       class="h-screen w-screen overflow-hidden bg-base-100 flex flex-col"
@@ -708,6 +728,81 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
+  # Command dispatch from Commands mode
+  def handle_event(
+        "cmd_dispatch",
+        %{"command_id" => command_id, "target_ids" => target_ids, "params" => params} = payload,
+        socket
+      ) do
+    mission_id = socket.assigns.mission.id
+    mode = Map.get(payload, "mode", "queue")
+    priority = Map.get(payload, "priority", 3)
+
+    # Get command definition
+    command = Enum.find(socket.assigns.command_definitions, &(&1.id == command_id))
+
+    if command do
+      results =
+        Enum.map(target_ids, fn target_id ->
+          opts = [target_id: target_id, priority: priority]
+
+          if mode == "immediate" do
+            Commands.dispatch(mission_id, command.name, params, opts)
+          else
+            Commands.enqueue(mission_id, command.name, params, opts)
+          end
+        end)
+
+      # Check results
+      successes = Enum.count(results, &match?({:ok, _}, &1))
+      failures = Enum.count(results, &match?({:error, _}, &1))
+
+      # Refresh queue
+      queue_entries =
+        Commands.list_queue_entries(mission_id,
+          status: [:pending, :executing],
+          preload: [:target],
+          limit: 50
+        )
+
+      socket =
+        socket
+        |> assign(:queue_entries, queue_entries)
+        |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+
+      cond do
+        failures == 0 ->
+          {:noreply,
+           put_flash(
+             socket,
+             :info,
+             "#{successes} command(s) #{if mode == "immediate", do: "sent", else: "queued"}"
+           )}
+
+        successes == 0 ->
+          {:noreply, put_flash(socket, :error, "Failed to dispatch commands")}
+
+        true ->
+          {:noreply,
+           put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Command not found")}
+    end
+  end
+
+  def handle_event("cmd_pause_queue", _, socket) do
+    mission_id = socket.assigns.mission.id
+    Commands.pause_queue(mission_id)
+    {:noreply, put_flash(socket, :info, "Command queue paused")}
+  end
+
+  def handle_event("cmd_resume_queue", _, socket) do
+    mission_id = socket.assigns.mission.id
+    Commands.resume_queue(mission_id)
+    {:noreply, put_flash(socket, :info, "Command queue resumed")}
+  end
+
   # PubSub handlers for alarms
   def handle_info({:alarm_triggered, alarm}, socket) do
     active_alarms = [alarm | socket.assigns.active_alarms]
@@ -935,7 +1030,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     %{
       id: target.id,
       identifier: target.identifier,
-      name: target.name
+      name: target.name,
+      status: target.status,
+      type: target.type
     }
   end
 
@@ -978,6 +1075,73 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       created_at: entry.inserted_at && DateTime.to_iso8601(entry.inserted_at),
       attempts: entry.attempts,
       last_error: entry.last_error
+    }
+  end
+
+  # Load command definitions (MetaCommands) for the mission
+  # Gets the first published definition set from any database
+  defp load_command_definitions(mission_id) do
+    import Ecto.Query
+
+    # Find first published definition set for this mission
+    definition_set =
+      from(ds in Cadence.MissionDatabase.DefinitionSet,
+        join: db in Database, on: ds.database_id == db.id,
+        where: db.mission_id == ^mission_id,
+        where: not is_nil(ds.published_at),
+        where: is_nil(ds.superseded_at),
+        order_by: [desc: ds.published_at],
+        limit: 1
+      )
+      |> Cadence.Repo.one()
+
+    case definition_set do
+      nil ->
+        []
+
+      ds ->
+        from(c in MetaCommand,
+          where: c.definition_set_id == ^ds.id,
+          where: c.abstract == false or is_nil(c.abstract),
+          order_by: [asc: c.name],
+          preload: [:arguments]
+        )
+        |> Cadence.Repo.all()
+    end
+  end
+
+  defp command_definition_json(cmd) do
+    %{
+      id: cmd.id,
+      name: cmd.name,
+      opcode: cmd.opcode,
+      description: cmd.description || cmd.short_description,
+      is_hazardous: cmd.is_hazardous || false,
+      hazard_description: cmd.hazard_description,
+      parameters:
+        Enum.map(cmd.arguments || [], fn arg ->
+          %{
+            id: arg.id,
+            name: arg.name,
+            data_type: arg.data_type_ref || arg.data_type,
+            description: arg.description,
+            required: arg.required || false,
+            default_value: arg.default_value,
+            min_value: arg.min_value,
+            max_value: arg.max_value,
+            valid_values: arg.valid_values,
+            units: nil
+          }
+        end)
+    }
+  end
+
+  defp target_group_json(group) do
+    %{
+      id: group.id,
+      name: group.name,
+      group_type: group.group_type,
+      description: group.description
     }
   end
 

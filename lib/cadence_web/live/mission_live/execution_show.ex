@@ -496,27 +496,19 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
   defp normalize_level("error"), do: :error
   defp normalize_level(_), do: :info
 
-  defp status_color(:pending), do: "bg-gray-100 text-gray-700"
-  defp status_color(:running), do: "bg-blue-100 text-blue-700"
-  defp status_color(:completed), do: "bg-green-100 text-green-700"
-  defp status_color(:failed), do: "bg-red-100 text-red-700"
-  defp status_color(:pausing), do: "bg-orange-100 text-orange-700"
-  defp status_color(:paused), do: "bg-yellow-100 text-yellow-700"
-  defp status_color(:cancelled), do: "bg-gray-100 text-gray-700"
-  defp status_color(_), do: "bg-gray-100 text-gray-700"
+  # Log level colors - using theme semantic colors
+  defp log_level_color(:debug), do: "text-base-content/40"
+  defp log_level_color(:info), do: "text-info"
+  defp log_level_color(:warn), do: "text-warning"
+  defp log_level_color(:error), do: "text-error"
+  defp log_level_color(_), do: "text-base-content/50"
 
-  defp log_level_color(:debug), do: "text-gray-500"
-  defp log_level_color(:info), do: "text-blue-600"
-  defp log_level_color(:warn), do: "text-amber-600"
-  defp log_level_color(:error), do: "text-red-600"
-  defp log_level_color(_), do: "text-gray-600"
-
-  # Row classes with subtle background and visible border for separation
-  defp log_row_classes(:debug), do: "bg-white border-gray-200"
-  defp log_row_classes(:info), do: "bg-blue-50/50 border-blue-100"
-  defp log_row_classes(:warn), do: "bg-amber-50/50 border-amber-200"
-  defp log_row_classes(:error), do: "bg-red-50/50 border-red-200"
-  defp log_row_classes(_), do: "bg-white border-gray-200"
+  # Row classes with subtle background for dark theme
+  defp log_row_classes(:debug), do: "border-base-300/20"
+  defp log_row_classes(:info), do: "bg-info/5 border-info/20"
+  defp log_row_classes(:warn), do: "bg-warning/5 border-warning/20"
+  defp log_row_classes(:error), do: "bg-error/5 border-error/20"
+  defp log_row_classes(_), do: "border-base-300/20"
 
   defp format_level(:debug), do: "DEBUG"
   defp format_level(:info), do: "INFO"
@@ -600,52 +592,52 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
       class="hidden"
     />
 
-    <div class="space-y-6">
+    <div class="space-y-4">
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
           <.link
             navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
-            class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            class="text-sm text-base-content/50 hover:text-primary flex items-center gap-1 transition-colors"
           >
             <.icon name="hero-arrow-left" class="h-4 w-4" /> Back to {@procedure.name}
           </.link>
-          <h1 class="mt-2 text-2xl font-bold text-gray-900">Execution Details</h1>
-          <p class="text-sm text-gray-500 font-mono">{@execution.id}</p>
+          <h1 class="mt-2 text-xl font-semibold text-base-content">Execution Details</h1>
+          <p class="text-xs text-base-content/40 font-mono">{@execution.id}</p>
         </div>
 
         <div class="flex items-center gap-2">
           <%= if @execution.status == :running do %>
-            <.button phx-click="pause" class="btn-secondary">
+            <.button phx-click="pause" variant="secondary">
               <.icon name="hero-pause" class="h-4 w-4 mr-1" /> Pause
             </.button>
             <.button
               phx-click="abort"
-              class="btn-danger"
+              variant="danger"
               data-confirm="Are you sure you want to abort this execution?"
             >
               <.icon name="hero-stop" class="h-4 w-4 mr-1" /> Abort
             </.button>
           <% end %>
           <%= if @execution.status == :pausing do %>
-            <span class="inline-flex items-center px-3 py-2 text-sm text-orange-700 bg-orange-100 rounded animate-pulse">
+            <span class="inline-flex items-center px-3 py-1.5 text-xs text-warning bg-warning/10 rounded border border-warning/30 animate-pulse">
               <.icon name="hero-pause" class="h-4 w-4 mr-1" /> Pausing...
             </span>
             <.button
               phx-click="abort"
-              class="btn-danger"
+              variant="danger"
               data-confirm="Are you sure you want to abort this execution?"
             >
               <.icon name="hero-stop" class="h-4 w-4 mr-1" /> Abort
             </.button>
           <% end %>
           <%= if @execution.status == :paused do %>
-            <.button phx-click="resume" class="btn-primary">
+            <.button phx-click="resume" variant="primary">
               <.icon name="hero-play" class="h-4 w-4 mr-1" /> Resume
             </.button>
             <.button
               phx-click="abort"
-              class="btn-danger"
+              variant="danger"
               data-confirm="Are you sure you want to abort this execution?"
             >
               <.icon name="hero-stop" class="h-4 w-4 mr-1" /> Abort
@@ -655,7 +647,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             <%= if @execution.status == :failed and has_completed_steps?(@execution) do %>
               <.button
                 phx-click="retry_from_failure"
-                class="btn-warning"
+                variant="secondary"
                 title="Resume from where the previous execution failed, skipping already completed steps"
               >
                 <.icon name="hero-forward" class="h-4 w-4 mr-1" /> Retry from failure
@@ -663,7 +655,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             <% end %>
             <.button
               phx-click="rerun"
-              class={if @execution.status == :failed, do: "btn-secondary", else: "btn-primary"}
+              variant={if @execution.status == :failed, do: "secondary", else: "primary"}
             >
               <.icon name="hero-arrow-path" class="h-4 w-4 mr-1" />
               {if @execution.status == :failed, do: "Re-run from start", else: "Re-run"}
@@ -673,113 +665,114 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
       </div>
       
     <!-- Status Card -->
-      <div class="bg-white shadow rounded-lg p-6">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Status</dt>
-            <dd class="mt-1">
-              <span class={[
-                "inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium",
-                status_color(@execution.status),
-                @execution.status == :pausing && "animate-pulse"
-              ]}>
-                {Phoenix.Naming.humanize(@execution.status)}
-              </span>
-            </dd>
+      <div class="hud-panel">
+        <div class="hud-panel-header">
+          <span class="hud-label">EXECUTION STATUS</span>
+        </div>
+        <div class="p-4">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div class="hud-data-label">STATUS</div>
+              <div class="mt-1">
+                <.status_badge status={@execution.status} class={@execution.status == :pausing && "animate-pulse"} />
+              </div>
+            </div>
+            <div>
+              <div class="hud-data-label">PROCEDURE</div>
+              <div class="mt-1 text-sm text-base-content">{@procedure.name}</div>
+            </div>
+            <div>
+              <div class="hud-data-label">TRIGGERED BY</div>
+              <div class="mt-1 text-sm text-base-content">
+                {Phoenix.Naming.humanize(@execution.triggered_by)}
+              </div>
+            </div>
+            <div>
+              <div class="hud-data-label">CURRENT STEP</div>
+              <div class="mt-1 text-sm font-mono text-base-content">{@execution.current_step_index || 0}</div>
+            </div>
+            <div>
+              <div class="hud-data-label">STARTED AT</div>
+              <div class="mt-1 text-sm font-mono text-base-content">{format_datetime(@execution.started_at)}</div>
+            </div>
+            <div>
+              <div class="hud-data-label">COMPLETED AT</div>
+              <div class="mt-1 text-sm font-mono text-base-content">{format_datetime(@execution.completed_at)}</div>
+            </div>
+            <%= if @execution.error_message do %>
+              <div class="col-span-2">
+                <div class="hud-data-label">ERROR</div>
+                <div class="mt-1 text-sm text-error">{@execution.error_message}</div>
+              </div>
+            <% end %>
           </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Procedure</dt>
-            <dd class="mt-1 text-sm text-gray-900">{@procedure.name}</dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Triggered By</dt>
-            <dd class="mt-1 text-sm text-gray-900">
-              {Phoenix.Naming.humanize(@execution.triggered_by)}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Current Step</dt>
-            <dd class="mt-1 text-sm text-gray-900">{@execution.current_step_index || 0}</dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Started At</dt>
-            <dd class="mt-1 text-sm text-gray-900">{format_datetime(@execution.started_at)}</dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Completed At</dt>
-            <dd class="mt-1 text-sm text-gray-900">{format_datetime(@execution.completed_at)}</dd>
-          </div>
-          <%= if @execution.error_message do %>
-            <div class="col-span-2">
-              <dt class="text-sm font-medium text-gray-500">Error</dt>
-              <dd class="mt-1 text-sm text-red-600">{@execution.error_message}</dd>
+
+          <%= if @execution.parameters && map_size(@execution.parameters) > 0 do %>
+            <div class="mt-4 pt-4 border-t border-base-300">
+              <div class="hud-data-label mb-2">PARAMETERS</div>
+              <div class="text-sm text-base-content font-mono bg-base-300/50 p-3 rounded border border-base-300">
+                {Jason.encode!(@execution.parameters, pretty: true)}
+              </div>
             </div>
           <% end %>
         </div>
-
-        <%= if @execution.parameters && map_size(@execution.parameters) > 0 do %>
-          <div class="mt-4 pt-4 border-t">
-            <dt class="text-sm font-medium text-gray-500 mb-2">Parameters</dt>
-            <dd class="text-sm text-gray-900 font-mono bg-gray-50 p-2 rounded">
-              {Jason.encode!(@execution.parameters, pretty: true)}
-            </dd>
-          </div>
-        <% end %>
       </div>
       
     <!-- Failure Summary (for failed DAG executions) -->
       <%= if @execution.status == :failed and @is_dag and (length(@failed_steps) > 0 or length(@timed_out_steps) > 0) do %>
-        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div class="flex items-start gap-3">
-            <div class="flex-shrink-0">
-              <.icon name="hero-exclamation-triangle" class="h-6 w-6 text-red-600" />
-            </div>
-            <div class="flex-1">
-              <h3 class="text-sm font-medium text-red-800">Execution Failed</h3>
-              <div class="mt-2 text-sm text-red-700">
-                <%= if length(@failed_steps) > 0 do %>
-                  <div class="mb-2">
-                    <span class="font-medium">Failed steps:</span>
-                    <div class="flex flex-wrap gap-1 mt-1">
-                      <%= for step <- @failed_steps do %>
-                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                          {step}
-                          <%= if error = get_step_error(@step_results, step) do %>
-                            <span class="ml-1 text-red-600" title={error}>
-                              <.icon name="hero-information-circle" class="h-3 w-3" />
-                            </span>
-                          <% end %>
-                        </span>
-                      <% end %>
+        <div class="hud-panel hud-border-error bg-error/5">
+          <div class="p-4">
+            <div class="flex items-start gap-3">
+              <div class="flex-shrink-0">
+                <.icon name="hero-exclamation-triangle" class="h-6 w-6 text-error" />
+              </div>
+              <div class="flex-1">
+                <h3 class="text-sm font-medium text-error">Execution Failed</h3>
+                <div class="mt-2 text-sm text-base-content/70">
+                  <%= if length(@failed_steps) > 0 do %>
+                    <div class="mb-2">
+                      <span class="font-medium text-error">Failed steps:</span>
+                      <div class="flex flex-wrap gap-1 mt-1">
+                        <%= for step <- @failed_steps do %>
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-error/20 text-error">
+                            {step}
+                            <%= if error = get_step_error(@step_results, step) do %>
+                              <span class="ml-1 text-error/70" title={error}>
+                                <.icon name="hero-information-circle" class="h-3 w-3" />
+                              </span>
+                            <% end %>
+                          </span>
+                        <% end %>
+                      </div>
                     </div>
-                  </div>
-                <% end %>
-                <%= if length(@timed_out_steps) > 0 do %>
-                  <div class="mb-2">
-                    <span class="font-medium">Timed out steps:</span>
-                    <div class="flex flex-wrap gap-1 mt-1">
-                      <%= for step <- @timed_out_steps do %>
-                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                          <.icon name="hero-clock" class="h-3 w-3 mr-1" />
-                          {step}
-                        </span>
-                      <% end %>
+                  <% end %>
+                  <%= if length(@timed_out_steps) > 0 do %>
+                    <div class="mb-2">
+                      <span class="font-medium text-warning">Timed out steps:</span>
+                      <div class="flex flex-wrap gap-1 mt-1">
+                        <%= for step <- @timed_out_steps do %>
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warning/20 text-warning">
+                            <.icon name="hero-clock" class="h-3 w-3 mr-1" />
+                            {step}
+                          </span>
+                        <% end %>
+                      </div>
                     </div>
-                  </div>
-                <% end %>
-                <%= if length(@blocked_steps) > 0 do %>
-                  <div class="text-gray-600">
-                    <span class="font-medium">{length(@blocked_steps)} steps blocked</span>
-                    due to dependency failures
+                  <% end %>
+                  <%= if length(@blocked_steps) > 0 do %>
+                    <div class="text-base-content/50">
+                      <span class="font-medium">{length(@blocked_steps)} steps blocked</span>
+                      due to dependency failures
+                    </div>
+                  <% end %>
+                </div>
+                <%= if has_completed_steps?(@execution) do %>
+                  <div class="mt-3 text-sm text-success">
+                    <.icon name="hero-check-circle" class="h-4 w-4 inline" />
+                    {length(@completed_steps)} steps completed successfully and can be skipped on retry.
                   </div>
                 <% end %>
               </div>
-              <%= if has_completed_steps?(@execution) do %>
-                <div class="mt-3 text-sm text-green-700">
-                  <.icon name="hero-check-circle" class="h-4 w-4 inline" />
-                  {length(@completed_steps)} steps completed successfully and can be skipped on retry.
-                </div>
-              <% end %>
             </div>
           </div>
         </div>
@@ -787,7 +780,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
       
     <!-- DAG Visualization (for DAG procedures) -->
       <%= if @is_dag do %>
-        <div class="bg-white shadow rounded-lg overflow-hidden" style="height: 500px;">
+        <div class="hud-panel overflow-hidden" style="height: 500px;">
           <%!-- Outer wrapper updates data attributes, inner div is phx-update="ignore" for hook content --%>
           <div
             id="dag-viewer-data"
@@ -810,17 +803,17 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
       <% end %>
       
     <!-- Logs Section -->
-      <div id="log-section" class="bg-white shadow rounded-lg" phx-hook="LogFilter">
-        <div class="px-6 py-4 border-b flex items-center justify-between">
-          <h2 class="text-lg font-medium text-gray-900">Execution Logs</h2>
+      <div id="log-section" class="hud-panel" phx-hook="LogFilter">
+        <div class="hud-panel-header flex items-center justify-between">
+          <span class="hud-label">EXECUTION LOGS</span>
 
           <div class="flex items-center gap-4">
             <!-- Log Level Filter -->
             <div class="flex items-center gap-2">
-              <label class="text-sm text-gray-500">Filter:</label>
+              <label class="text-xs text-base-content/50">Filter:</label>
               <select
                 data-log-filter-select
-                class="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                class="select select-xs select-bordered bg-base-200 border-base-300"
               >
                 <option value="all">All Levels</option>
                 <option value="debug">Debug</option>
@@ -829,66 +822,66 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
                 <option value="error">Error</option>
               </select>
             </div>
-            
-    <!-- Auto-scroll toggle -->
+
+            <!-- Auto-scroll toggle -->
             <button
               type="button"
               phx-click="toggle_auto_scroll"
               class={[
-                "text-sm px-2 py-1 rounded",
-                @auto_scroll && "bg-indigo-100 text-indigo-700",
-                !@auto_scroll && "bg-gray-100 text-gray-600"
+                "text-xs px-2 py-1 rounded transition-colors",
+                @auto_scroll && "bg-primary/20 text-primary",
+                !@auto_scroll && "bg-base-300 text-base-content/60"
               ]}
             >
               Auto-scroll: {if @auto_scroll, do: "On", else: "Off"}
             </button>
-            
-    <!-- Refresh button for terminal states -->
+
+            <!-- Refresh button for terminal states -->
             <%= if terminal_status?(@execution.status) do %>
               <button
                 type="button"
                 phx-click="refresh_logs"
-                class="text-sm px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                class="text-xs px-2 py-1 rounded bg-base-300 text-base-content/60 hover:bg-base-200 transition-colors"
               >
                 <.icon name="hero-arrow-path" class="h-4 w-4" />
               </button>
             <% end %>
           </div>
         </div>
-        
-    <!-- Log entries -->
+
+        <!-- Log entries -->
         <div
           id="log-container"
           data-log-container
-          class="max-h-[600px] overflow-y-auto font-mono text-xs"
+          class="hud-inset max-h-[600px] overflow-y-auto font-mono text-xs"
           phx-hook="AutoScroll"
           data-auto-scroll={to_string(@auto_scroll)}
         >
           <%= if Enum.empty?(@logs) do %>
-            <div class="p-8 text-center text-gray-500">
-              <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-gray-400" />
+            <div class="p-8 text-center text-base-content/40">
+              <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-base-content/20" />
               <p class="mt-2">No logs yet</p>
               <%= if not terminal_status?(@execution.status) do %>
-                <p class="text-sm">Logs will appear here as the procedure executes.</p>
+                <p class="text-sm text-base-content/30">Logs will appear here as the procedure executes.</p>
               <% end %>
             </div>
           <% else %>
-            <div class="divide-y divide-gray-200">
+            <div>
               <%= for log <- @logs do %>
                 <% level = normalize_level(log.level) %>
-                <div data-log-level={level} class={["flex gap-3 px-2 py-1.5", log_row_classes(level)]}>
-                  <div class="flex-shrink-0 w-20 text-gray-400">
+                <div data-log-level={level} class={["flex gap-3 px-3 py-1.5 border-b", log_row_classes(level)]}>
+                  <div class="flex-shrink-0 w-20 text-base-content/40">
                     <div class="text-[11px] tabular-nums">{format_timestamp(log.timestamp)}</div>
                     <div class="flex items-center gap-1.5 mt-0.5">
-                      <span class={["font-semibold text-[10px]", log_level_color(level)]}>
+                      <span class={["font-medium text-[10px] uppercase tracking-wide", log_level_color(level)]}>
                         {format_level(level)}
                       </span>
                       <%= if log.step_index do %>
-                        <span class="text-[10px] text-gray-400">Step {log.step_index}</span>
+                        <span class="text-[10px] text-base-content/30">Step {log.step_index}</span>
                       <% end %>
                     </div>
                   </div>
-                  <div class="flex-1 text-gray-900 whitespace-pre-wrap break-words min-w-0">
+                  <div class="flex-1 text-base-content whitespace-pre-wrap break-words min-w-0">
                     {log.message}
                   </div>
                 </div>
@@ -897,7 +890,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
           <% end %>
         </div>
 
-        <div class="px-6 py-3 border-t bg-gray-50 text-sm text-gray-500" data-log-count>
+        <div class="px-4 py-2 border-t border-base-300 text-xs text-base-content/50" data-log-count>
           {length(@logs)} log entries
         </div>
       </div>

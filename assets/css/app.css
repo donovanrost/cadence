@@ -2149,7 +2149,7 @@
 
 .rail-alarm-count {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 500;
   font-family: ui-monospace, monospace;
   line-height: 1;
 }
@@ -2284,7 +2284,7 @@
 
 .rail-command-count {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 500;
   font-family: ui-monospace, monospace;
   line-height: 1;
 }
@@ -2501,4 +2501,1728 @@
 
 [data-theme="light"] .alarm-widget .alarm-item-info {
   background: oklch(66% 0.14 230 / 0.05);
+}
+
+/* =============================================================================
+   Commands Mode Styles - HUD Mission Control Theme
+   ============================================================================= */
+
+/* Hide GridStack when Commands mode is active */
+.panel-dashboard.commands-mode-active .dashboard-toolbar,
+.panel-dashboard.commands-mode-active .dashboard-grid-wrapper {
+  display: none;
+}
+
+.panel-dashboard.commands-mode-active .commands-mode-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Commands Mode Container - uses flex, not absolute positioning */
+.commands-mode-container {
+  display: none;
+  flex-direction: column;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.commands-mode-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  gap: 2px;
+  background: oklch(8% 0.02 265);
+  position: relative;
+  padding: 0.5rem;
+}
+
+/* Center divider with accent glow */
+.commands-mode-layout::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 1rem;
+  bottom: 1rem;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    oklch(80% 0.12 210 / 0.15) 5%,
+    oklch(80% 0.12 210 / 0.4) 20%,
+    oklch(80% 0.12 210 / 0.6) 50%,
+    oklch(80% 0.12 210 / 0.4) 80%,
+    oklch(80% 0.12 210 / 0.15) 95%,
+    transparent 100%
+  );
+  z-index: 2;
+  box-shadow: 0 0 12px oklch(80% 0.12 210 / 0.3),
+              0 0 24px oklch(80% 0.12 210 / 0.15);
+  transform: translateX(-50%);
+}
+
+/* ----------------------------------------
+   HUD Panel Base Styles
+   ---------------------------------------- */
+.cmd-target-panel,
+.cmd-command-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: oklch(12% 0.015 265);
+  overflow: hidden;
+  position: relative;
+  border: 1px solid oklch(25% 0.02 265);
+}
+
+/* Target Selection Panel (Left Half) */
+.cmd-target-panel {
+  margin-right: 0.5rem;
+  border-radius: 4px 0 0 4px;
+}
+
+/* Command Browser Panel (Right Half) */
+.cmd-command-panel {
+  margin-left: 0.5rem;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Corner accent brackets - HUD style */
+.cmd-target-panel::before,
+.cmd-target-panel::after,
+.cmd-command-panel::before,
+.cmd-command-panel::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.cmd-target-panel::before {
+  top: 0;
+  left: 0;
+  border-top: 2px solid oklch(80% 0.12 210 / 0.6);
+  border-left: 2px solid oklch(80% 0.12 210 / 0.6);
+}
+
+.cmd-target-panel::after {
+  bottom: 0;
+  left: 0;
+  border-bottom: 2px solid oklch(80% 0.12 210 / 0.4);
+  border-left: 2px solid oklch(80% 0.12 210 / 0.4);
+}
+
+.cmd-command-panel::before {
+  top: 0;
+  right: 0;
+  border-top: 2px solid oklch(72% 0.15 285 / 0.6);
+  border-right: 2px solid oklch(72% 0.15 285 / 0.6);
+}
+
+.cmd-command-panel::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 2px solid oklch(72% 0.15 285 / 0.4);
+  border-right: 2px solid oklch(72% 0.15 285 / 0.4);
+}
+
+/* ----------------------------------------
+   Panel Headers - HUD Style
+   ---------------------------------------- */
+.cmd-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+  background: linear-gradient(
+    180deg,
+    oklch(18% 0.02 265 / 0.8) 0%,
+    oklch(14% 0.02 265 / 0.6) 100%
+  );
+  border-bottom: 1px solid oklch(25% 0.02 265);
+  position: relative;
+}
+
+/* Header glow line */
+.cmd-panel-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(80% 0.12 210 / 0.4) 50%,
+    transparent 100%
+  );
+}
+
+.cmd-target-panel .cmd-panel-header .mc-label-subsystem {
+  color: oklch(80% 0.12 210);
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+}
+
+.cmd-command-panel .cmd-panel-header .mc-label-subsystem {
+  color: oklch(72% 0.15 285);
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+}
+
+.cmd-selection-count,
+.cmd-command-count {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(65% 0.02 250);
+  background: oklch(20% 0.02 265);
+  padding: 0.125rem 0.5rem;
+  border-radius: 2px;
+}
+
+/* Panel title with count */
+.cmd-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* View Toggle Buttons */
+.cmd-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: oklch(10% 0.015 265);
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.cmd-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: oklch(50% 0.02 250);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.12s ease;
+}
+
+.cmd-view-btn:hover {
+  color: oklch(70% 0.02 250);
+  background: oklch(18% 0.02 265);
+}
+
+.cmd-view-btn.active {
+  color: oklch(80% 0.12 210);
+  background: oklch(22% 0.04 210);
+}
+
+/* ----------------------------------------
+   Target Tooltip
+   ---------------------------------------- */
+.cmd-tooltip {
+  position: fixed;
+  z-index: 10000;
+  padding: 8px 12px;
+  background: oklch(18% 0.02 265);
+  border: 1px solid oklch(30% 0.02 265);
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(85% 0.02 250);
+  line-height: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 12px oklch(0% 0 0 / 0.4),
+              0 0 0 1px oklch(80% 0.12 210 / 0.1);
+  max-width: 200px;
+  white-space: nowrap;
+}
+
+.cmd-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cmd-tooltip.below {
+  transform: translateY(-4px);
+}
+
+.cmd-tooltip.below.visible {
+  transform: translateY(0);
+}
+
+/* Tooltip arrow */
+.cmd-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid oklch(30% 0.02 265);
+}
+
+.cmd-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid oklch(18% 0.02 265);
+}
+
+.cmd-tooltip.below::before {
+  bottom: auto;
+  top: -5px;
+  border-top: none;
+  border-bottom: 5px solid oklch(30% 0.02 265);
+}
+
+.cmd-tooltip.below::after {
+  bottom: auto;
+  top: -4px;
+  border-top: none;
+  border-bottom: 4px solid oklch(18% 0.02 265);
+}
+
+/* ----------------------------------------
+   Filters - Search and Dropdowns
+   ---------------------------------------- */
+.cmd-target-filters,
+.cmd-command-filters {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: oklch(10% 0.015 265);
+}
+
+.cmd-target-search,
+.cmd-command-search {
+  flex: 1;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid oklch(28% 0.02 265);
+  background: oklch(14% 0.015 265);
+  color: oklch(85% 0.02 250);
+  transition: all 0.15s ease;
+}
+
+.cmd-target-search::placeholder,
+.cmd-command-search::placeholder {
+  color: oklch(50% 0.02 250);
+}
+
+.cmd-target-search:focus {
+  outline: none;
+  border-color: oklch(80% 0.12 210 / 0.6);
+  box-shadow: 0 0 0 1px oklch(80% 0.12 210 / 0.2),
+              inset 0 0 8px oklch(80% 0.12 210 / 0.05);
+}
+
+.cmd-command-search:focus {
+  outline: none;
+  border-color: oklch(72% 0.15 285 / 0.6);
+  box-shadow: 0 0 0 1px oklch(72% 0.15 285 / 0.2),
+              inset 0 0 8px oklch(72% 0.15 285 / 0.05);
+}
+
+.cmd-group-filter {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid oklch(28% 0.02 265);
+  background: oklch(14% 0.015 265);
+  color: oklch(85% 0.02 250);
+  cursor: pointer;
+}
+
+/* ----------------------------------------
+   Target Grid - Tactical Constellation View
+   ---------------------------------------- */
+.cmd-target-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: oklch(9% 0.015 265);
+}
+
+.cmd-target-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: oklch(14% 0.015 265);
+  border: 1px solid oklch(20% 0.02 265);
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.cmd-target-cell:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(28% 0.02 265);
+}
+
+.cmd-target-cell.selected {
+  background: oklch(20% 0.05 210);
+  border-color: oklch(80% 0.12 210 / 0.6);
+  box-shadow: 0 0 6px oklch(80% 0.12 210 / 0.2),
+              inset 0 0 8px oklch(80% 0.12 210 / 0.1);
+}
+
+/* Status indicator dot */
+.cmd-target-cell::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(45% 0.02 250);
+}
+
+.cmd-target-cell.status-online::before {
+  background: oklch(78% 0.10 185);
+  box-shadow: 0 0 4px oklch(78% 0.10 185 / 0.6);
+}
+
+.cmd-target-cell.status-offline::before {
+  background: oklch(40% 0.02 250);
+}
+
+.cmd-target-cell.status-standby::before {
+  background: oklch(72% 0.15 50);
+  box-shadow: 0 0 4px oklch(72% 0.15 50 / 0.4);
+}
+
+.cmd-target-cell.status-fault::before {
+  background: oklch(68% 0.20 10);
+  box-shadow: 0 0 4px oklch(68% 0.20 10 / 0.6);
+  animation: status-dot-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes status-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Selection checkmark */
+.cmd-target-cell.selected::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  background: oklch(80% 0.12 210);
+  border-radius: 1px;
+}
+
+.cmd-target-name {
+  flex: 1;
+  font-size: 0.6rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(80% 0.02 250);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.cmd-target-cell.selected .cmd-target-name {
+  color: oklch(88% 0.06 210);
+}
+
+.cmd-target-cell.status-offline .cmd-target-name {
+  color: oklch(55% 0.02 250);
+}
+
+/* Hide status text - shown via dot now */
+.cmd-target-status {
+  display: none;
+}
+
+/* Alarm indicator - small red dot */
+.cmd-target-cell.has-alarms::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  background: oklch(68% 0.20 10);
+  border-radius: 50%;
+  animation: alarm-blink 1s ease-in-out infinite;
+}
+
+.cmd-target-cell.selected.has-alarms::after {
+  right: 10px; /* Move left to not overlap selection indicator */
+}
+
+@keyframes alarm-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Compact view alarm dot (inline) */
+.cmd-target-alarm-dot {
+  width: 4px;
+  height: 4px;
+  background: oklch(68% 0.20 10);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: alarm-blink 1s ease-in-out infinite;
+}
+
+/* ----------------------------------------
+   Detailed View Mode
+   ---------------------------------------- */
+.cmd-target-grid.detailed-view {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-cell {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-cell::before {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 14px; /* Space for status dot */
+}
+
+.cmd-target-grid.detailed-view .cmd-target-name {
+  font-size: 0.65rem;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-mode {
+  font-size: 0.5rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: oklch(65% 0.08 210);
+  background: oklch(20% 0.03 210 / 0.4);
+  padding: 1px 4px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 14px;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-contact {
+  font-size: 0.5rem;
+  font-family: var(--font-mono);
+  color: oklch(55% 0.02 250);
+}
+
+.cmd-target-grid.detailed-view .cmd-target-pending {
+  font-size: 0.45rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: oklch(80% 0.12 210);
+  background: oklch(25% 0.05 210 / 0.5);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.cmd-target-grid.detailed-view .cmd-target-alarm-badge {
+  font-size: 0.45rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: oklch(95% 0.02 10);
+  background: oklch(68% 0.20 10);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* ----------------------------------------
+   Selection Actions Footer
+   ---------------------------------------- */
+.cmd-selection-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: oklch(10% 0.015 265);
+  border-top: 1px solid oklch(22% 0.02 265);
+}
+
+.cmd-selection-actions .btn {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+}
+
+/* ----------------------------------------
+   Command List - Command Browser
+   ---------------------------------------- */
+.cmd-command-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: linear-gradient(
+    180deg,
+    oklch(10% 0.015 265) 0%,
+    oklch(11% 0.015 265) 100%
+  );
+}
+
+.cmd-command-item {
+  padding: 0.5rem 0.625rem;
+  margin-bottom: 0.25rem;
+  border-radius: 2px;
+  cursor: pointer;
+  background: oklch(15% 0.015 265);
+  border: 1px solid oklch(22% 0.02 265);
+  border-left: 2px solid oklch(72% 0.15 285 / 0.4);
+  transition: all 0.12s ease;
+  position: relative;
+}
+
+.cmd-command-item:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(28% 0.02 265);
+  border-left-color: oklch(72% 0.15 285 / 0.7);
+}
+
+.cmd-command-item.selected {
+  background: oklch(20% 0.05 285);
+  border-color: oklch(72% 0.15 285 / 0.7);
+  border-left-color: oklch(72% 0.15 285);
+  box-shadow: 0 0 8px oklch(72% 0.15 285 / 0.2),
+              inset 0 0 12px oklch(72% 0.15 285 / 0.05);
+}
+
+.cmd-command-item.selected::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 4px;
+  height: 4px;
+  transform: translateY(-50%);
+  background: oklch(72% 0.15 285);
+  border-radius: 1px;
+  box-shadow: 0 0 6px oklch(72% 0.15 285 / 0.6);
+}
+
+.cmd-command-item.hazardous {
+  border-left: 2px solid oklch(72% 0.15 50 / 0.8);
+}
+
+.cmd-command-item.hazardous:hover {
+  border-left-color: oklch(72% 0.15 50);
+}
+
+.cmd-command-item.hazardous.selected {
+  border-left-color: oklch(72% 0.15 50);
+  background: oklch(20% 0.04 50);
+  box-shadow: 0 0 8px oklch(72% 0.15 50 / 0.15);
+}
+
+.cmd-command-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.cmd-command-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(85% 0.02 250);
+  letter-spacing: 0.02em;
+}
+
+.cmd-command-item.selected .cmd-command-name {
+  color: oklch(90% 0.08 285);
+}
+
+.cmd-hazard-badge {
+  font-size: 0.5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 0.0625rem 0.375rem;
+  border-radius: 1px;
+  background: oklch(72% 0.15 50);
+  color: oklch(12% 0.01 50);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cmd-command-meta {
+  display: flex;
+  gap: 0.625rem;
+  font-size: 0.6rem;
+  color: oklch(55% 0.02 250);
+}
+
+.cmd-opcode {
+  font-family: var(--font-mono);
+  color: oklch(60% 0.08 285);
+  background: oklch(18% 0.02 285 / 0.3);
+  padding: 0 0.25rem;
+  border-radius: 1px;
+}
+
+.cmd-description {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----------------------------------------
+   Empty State
+   ---------------------------------------- */
+.cmd-empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: oklch(45% 0.02 250);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+/* ----------------------------------------
+   Context Panel - Commands Mode
+   ---------------------------------------- */
+.cmd-context-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0.375rem;
+}
+
+.cmd-queue-section {
+  flex: 1; /* 1/3 of panel (queue:1, params:2) */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.375rem;
+  background: oklch(10% 0.015 265);
+  border-bottom: 1px solid oklch(22% 0.02 265);
+  overflow: hidden;
+}
+
+/* Full height queue - when slideout handles params */
+.cmd-queue-section.cmd-queue-full {
+  flex: 1;
+  border-bottom: none;
+  background: transparent;
+  padding: 0.125rem;
+}
+
+.cmd-params-section {
+  flex: 2; /* 2/3 of panel */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.cmd-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.375rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid oklch(22% 0.02 265 / 0.5);
+}
+
+.cmd-section-header .mc-label-subsystem {
+  color: oklch(80% 0.12 210);
+}
+
+.cmd-queue-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0;
+}
+
+/* ----------------------------------------
+   Queue Entry (QE) - Three Row Layout
+   ---------------------------------------- */
+.qe {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 3px;
+  background: oklch(13% 0.015 265);
+  border: 1px solid oklch(22% 0.02 265);
+  border-left: 3px solid oklch(80% 0.12 210);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.qe:hover {
+  background: oklch(16% 0.02 265);
+  border-color: oklch(30% 0.02 265);
+}
+
+/* Status-based left border */
+.qe.pending { border-left-color: oklch(80% 0.12 210); }
+.qe.executing { border-left-color: oklch(75% 0.18 70); background: oklch(14% 0.02 70 / 0.4); }
+.qe.held { border-left-color: oklch(70% 0.15 285); background: oklch(14% 0.02 285 / 0.3); opacity: 0.85; }
+.qe.failed { border-left-color: oklch(65% 0.22 25); background: oklch(14% 0.02 25 / 0.3); }
+
+/* Row 1: Target + Badges */
+.qe-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Row 2: Command name */
+.qe-command-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.qe-command {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(85% 0.02 250);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.qe-target {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(65% 0.08 210);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.qe-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.qe-status {
+  font-size: 0.5rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 0.125rem 0.375rem;
+  border-radius: 2px;
+  background: oklch(80% 0.12 210);
+  color: oklch(12% 0.01 210);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.qe.executing .qe-status {
+  background: oklch(75% 0.18 70);
+  color: oklch(15% 0.02 70);
+}
+
+.qe.held .qe-status {
+  background: oklch(70% 0.15 285);
+  color: oklch(15% 0.02 285);
+}
+
+.qe.failed .qe-status {
+  background: oklch(65% 0.22 25);
+  color: oklch(98% 0.01 25);
+}
+
+.qe-priority {
+  font-size: 0.55rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 0.125rem 0.25rem;
+  border-radius: 2px;
+  background: oklch(20% 0.02 265);
+  color: oklch(55% 0.02 250);
+  line-height: 1;
+}
+
+.qe-priority.priority-high {
+  background: oklch(22% 0.04 25);
+  color: oklch(75% 0.15 25);
+}
+
+.qe-priority.priority-low {
+  opacity: 0.5;
+}
+
+/* Row 3: Parameters */
+.qe-params-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.5rem;
+  padding-top: 0.125rem;
+  border-top: 1px solid oklch(20% 0.02 265 / 0.5);
+}
+
+.qe-param-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.qe-param-key {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: oklch(50% 0.02 250);
+  line-height: 1;
+}
+
+.qe-param-val {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: oklch(75% 0.06 200);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* Inline indicators */
+.qe-pulse-inline {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(75% 0.18 70);
+  flex-shrink: 0;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.qe-error-inline {
+  width: 14px;
+  height: 14px;
+  color: oklch(68% 0.18 25);
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------
+   Queue Entry Detail Slideout Styles
+   ---------------------------------------- */
+.qe-detail-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  border-radius: 3px;
+  margin-bottom: 1rem;
+  border-left: 3px solid oklch(80% 0.12 210);
+  background: oklch(15% 0.015 265);
+}
+
+.qe-detail-status.pending { border-left-color: oklch(80% 0.12 210); }
+.qe-detail-status.executing { border-left-color: oklch(75% 0.18 70); background: oklch(16% 0.025 70 / 0.5); }
+.qe-detail-status.held { border-left-color: oklch(70% 0.15 285); background: oklch(16% 0.02 285 / 0.5); }
+.qe-detail-status.failed { border-left-color: oklch(65% 0.22 25); background: oklch(16% 0.03 25 / 0.4); }
+
+.qe-detail-status-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 0.25rem 0.5rem;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  width: fit-content;
+}
+
+.qe-detail-status.pending .qe-detail-status-badge { background: oklch(80% 0.12 210); color: oklch(12% 0.01 210); }
+.qe-detail-status.executing .qe-detail-status-badge { background: oklch(75% 0.18 70); color: oklch(15% 0.02 70); }
+.qe-detail-status.held .qe-detail-status-badge { background: oklch(70% 0.15 285); color: oklch(15% 0.02 285); }
+.qe-detail-status.failed .qe-detail-status-badge { background: oklch(65% 0.22 25); color: oklch(98% 0.01 25); }
+
+.qe-detail-status-text {
+  font-size: 0.7rem;
+  color: oklch(65% 0.02 250);
+}
+
+/* Error display in slideout */
+.qe-detail-error {
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: oklch(18% 0.04 25 / 0.4);
+  border: 1px solid oklch(65% 0.18 25 / 0.4);
+  border-radius: 3px;
+}
+
+.qe-detail-error-label {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: oklch(68% 0.15 25);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.375rem;
+}
+
+.qe-detail-error-message {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: oklch(75% 0.10 25);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Info grid */
+.qe-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.qe-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.qe-detail-label {
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  color: oklch(55% 0.02 250);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.qe-detail-value {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: oklch(85% 0.02 250);
+  font-weight: 500;
+}
+
+/* Parameters in slideout */
+.qe-detail-params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  background: oklch(10% 0.01 265);
+  border: 1px solid oklch(20% 0.02 265);
+  border-radius: 2px;
+}
+
+.qe-detail-param {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.qe-detail-param-key {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(55% 0.02 250);
+  min-width: 6rem;
+}
+
+.qe-detail-param-value {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: oklch(80% 0.08 200);
+  font-weight: 500;
+}
+
+.qe-detail-no-params {
+  font-size: 0.7rem;
+  color: oklch(50% 0.02 250);
+  font-style: italic;
+}
+
+/* Actions in slideout */
+.qe-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.qe-detail-executing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: oklch(75% 0.15 70);
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.qe-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  background: oklch(16% 0.015 265);
+  color: oklch(70% 0.02 250);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.qe-detail-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.qe-detail-btn:hover {
+  background: oklch(20% 0.02 265);
+  color: oklch(85% 0.02 250);
+}
+
+.qe-detail-btn-hold:hover {
+  border-color: oklch(70% 0.15 285 / 0.6);
+  background: oklch(25% 0.05 285 / 0.4);
+  color: oklch(75% 0.12 285);
+}
+
+.qe-detail-btn-release {
+  border-color: oklch(70% 0.12 145 / 0.4);
+  color: oklch(70% 0.12 145);
+}
+
+.qe-detail-btn-release:hover {
+  border-color: oklch(75% 0.15 145);
+  background: oklch(25% 0.05 145 / 0.3);
+  color: oklch(80% 0.12 145);
+}
+
+.qe-detail-btn-promote:hover {
+  border-color: oklch(70% 0.12 200 / 0.5);
+  background: oklch(22% 0.04 200 / 0.4);
+  color: oklch(75% 0.12 200);
+}
+
+.qe-detail-btn-cancel:hover,
+.qe-detail-btn-dismiss:hover {
+  border-color: oklch(65% 0.18 25 / 0.5);
+  background: oklch(22% 0.04 25 / 0.4);
+  color: oklch(70% 0.15 25);
+}
+
+.qe-detail-btn-retry {
+  border-color: oklch(70% 0.12 145 / 0.4);
+  color: oklch(70% 0.12 145);
+}
+
+.qe-detail-btn-retry:hover {
+  border-color: oklch(75% 0.15 145);
+  background: oklch(25% 0.05 145 / 0.3);
+  color: oklch(80% 0.12 145);
+}
+
+/* Reuse pulse animation */
+.qe-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(75% 0.18 70);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+/* ----------------------------------------
+   Selected Command Info
+   ---------------------------------------- */
+.cmd-selected-info {
+  padding: 0.625rem;
+  background: oklch(15% 0.015 265);
+  border: 1px solid oklch(22% 0.02 265);
+  border-radius: 2px;
+  margin-bottom: 0.5rem;
+}
+
+.cmd-selected-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(72% 0.15 285);
+  margin-bottom: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.cmd-selected-targets {
+  margin-top: 0.375rem;
+}
+
+.cmd-selected-targets .mc-label-subsystem {
+  color: oklch(80% 0.12 210 / 0.8);
+}
+
+/* ----------------------------------------
+   Parameter Form Styles
+   ---------------------------------------- */
+.cmd-param-group {
+  margin-bottom: 0.625rem;
+}
+
+.cmd-param-group label {
+  display: block;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(65% 0.02 250);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmd-param-hint {
+  display: block;
+  font-size: 0.55rem;
+  color: oklch(65% 0.10 210);
+  margin-top: 0.125rem;
+  font-family: var(--font-mono);
+}
+
+.cmd-param-desc {
+  display: block;
+  font-size: 0.55rem;
+  color: oklch(55% 0.02 250);
+  margin-top: 0.125rem;
+  line-height: 1.3;
+}
+
+.cmd-param-group .select,
+.cmd-param-group .input {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: oklch(14% 0.015 265);
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  color: oklch(85% 0.02 250);
+}
+
+/* Invalid input state */
+.cmd-param-group .input:invalid {
+  border-color: oklch(68% 0.20 10);
+  background: oklch(18% 0.02 10 / 0.3);
+}
+
+/* Focus state */
+.cmd-param-group .input:focus,
+.cmd-param-group .select:focus {
+  outline: none;
+  border-color: oklch(72% 0.15 285 / 0.6);
+  box-shadow: 0 0 0 2px oklch(72% 0.15 285 / 0.15);
+}
+
+/* ----------------------------------------
+   Value Button Group - Mode/State Selection
+   ---------------------------------------- */
+.cmd-value-buttons {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.cmd-value-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0.625rem;
+  min-width: 3.5rem;
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  background: oklch(14% 0.015 265);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  position: relative;
+}
+
+.cmd-value-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.cmd-value-btn:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(35% 0.02 265);
+}
+
+.cmd-value-btn:hover::before {
+  background: oklch(72% 0.15 285 / 0.3);
+}
+
+.cmd-value-btn.selected {
+  background: oklch(20% 0.05 285);
+  border-color: oklch(72% 0.15 285 / 0.6);
+  box-shadow: 0 0 8px oklch(72% 0.15 285 / 0.2),
+              inset 0 0 10px oklch(72% 0.15 285 / 0.05);
+}
+
+.cmd-value-btn.selected::before {
+  background: oklch(72% 0.15 285);
+  box-shadow: 0 0 6px oklch(72% 0.15 285 / 0.5);
+}
+
+.cmd-value-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(80% 0.02 250);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmd-value-btn.selected .cmd-value-label {
+  color: oklch(88% 0.08 285);
+}
+
+.cmd-value-raw {
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  color: oklch(50% 0.02 250);
+  margin-top: 0.125rem;
+}
+
+.cmd-value-btn.selected .cmd-value-raw {
+  color: oklch(65% 0.10 285);
+}
+
+/* Enhanced dropdown preview */
+.cmd-value-preview {
+  min-height: 1rem;
+  margin-top: 0.25rem;
+}
+
+.cmd-value-preview-label {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: oklch(72% 0.15 285);
+  padding: 0.125rem 0.375rem;
+  background: oklch(20% 0.05 285 / 0.3);
+  border: 1px solid oklch(72% 0.15 285 / 0.2);
+  border-radius: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ----------------------------------------
+   Dispatch Buttons - Action CTAs
+   ---------------------------------------- */
+.cmd-dispatch-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid oklch(22% 0.02 265 / 0.5);
+}
+
+.cmd-dispatch-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cmd-dispatch-btn.queue {
+  background: oklch(15% 0.015 265);
+  border: 1px solid oklch(80% 0.12 210 / 0.5);
+  color: oklch(80% 0.12 210);
+}
+
+.cmd-dispatch-btn.queue:hover {
+  background: oklch(18% 0.03 210);
+  border-color: oklch(80% 0.12 210);
+  box-shadow: 0 0 12px oklch(80% 0.12 210 / 0.2);
+}
+
+.cmd-dispatch-btn.send-now {
+  background: oklch(72% 0.15 285 / 0.15);
+  border: 1px solid oklch(72% 0.15 285);
+  color: oklch(90% 0.08 285);
+}
+
+.cmd-dispatch-btn.send-now:hover {
+  background: oklch(72% 0.15 285 / 0.25);
+  box-shadow: 0 0 12px oklch(72% 0.15 285 / 0.3);
+}
+
+.cmd-dispatch-btn.hazardous {
+  background: oklch(72% 0.15 50 / 0.1);
+  border: 1px solid oklch(72% 0.15 50 / 0.8);
+  color: oklch(72% 0.15 50);
+}
+
+.cmd-dispatch-btn.hazardous:hover {
+  background: oklch(72% 0.15 50 / 0.2);
+  border-color: oklch(72% 0.15 50);
+  box-shadow: 0 0 12px oklch(72% 0.15 50 / 0.25);
+}
+
+.cmd-dispatch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ----------------------------------------
+   Command Config Slideout Panel
+   ---------------------------------------- */
+.cmd-slideout-backdrop {
+  position: fixed;
+  inset: 0;
+  background: oklch(5% 0.01 265 / 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.cmd-slideout-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cmd-slideout {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  max-width: 90vw;
+  background: oklch(11% 0.015 265);
+  border-left: 1px solid oklch(25% 0.02 265);
+  box-shadow: -8px 0 32px oklch(5% 0.01 265 / 0.5);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cmd-slideout.visible {
+  transform: translateX(0);
+}
+
+.cmd-slideout-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid oklch(22% 0.02 265);
+  background: oklch(13% 0.015 265);
+}
+
+.cmd-slideout-title {
+  flex: 1;
+}
+
+.cmd-slideout-title .command-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(72% 0.15 285);
+  letter-spacing: 0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.cmd-slideout-title .target-count {
+  font-size: 0.7rem;
+  color: oklch(65% 0.02 250);
+}
+
+.cmd-slideout-title .target-count strong {
+  color: oklch(80% 0.12 210);
+  font-weight: 600;
+}
+
+.cmd-slideout-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  background: transparent;
+  color: oklch(60% 0.02 250);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.cmd-slideout-close:hover {
+  background: oklch(20% 0.02 265);
+  border-color: oklch(35% 0.02 265);
+  color: oklch(80% 0.02 250);
+}
+
+.cmd-slideout-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.cmd-slideout-section {
+  margin-bottom: 1.25rem;
+}
+
+.cmd-slideout-section-title {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: oklch(80% 0.12 210);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid oklch(22% 0.02 265 / 0.5);
+}
+
+/* Hazardous command warning in slideout */
+.cmd-slideout-hazard-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background: oklch(18% 0.05 50 / 0.3);
+  border: 1px solid oklch(72% 0.15 50 / 0.5);
+  border-radius: 2px;
+  margin-bottom: 1rem;
+}
+
+.cmd-slideout-hazard-warning svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: oklch(72% 0.15 50);
+}
+
+.cmd-slideout-hazard-warning .warning-text {
+  font-size: 0.7rem;
+  color: oklch(72% 0.15 50);
+  line-height: 1.4;
+}
+
+.cmd-slideout-hazard-warning .warning-text strong {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+/* Target summary in slideout */
+.cmd-slideout-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+.cmd-slideout-target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: oklch(75% 0.02 250);
+  background: oklch(18% 0.015 265);
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+}
+
+.cmd-slideout-target-chip .status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: oklch(75% 0.15 145);
+}
+
+.cmd-slideout-target-chip .status-dot.offline {
+  background: oklch(50% 0.02 250);
+}
+
+/* Slideout footer with dispatch buttons */
+.cmd-slideout-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid oklch(22% 0.02 265);
+  background: oklch(13% 0.015 265);
+}
+
+.cmd-slideout-footer .cmd-dispatch-actions {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+/* Priority selector in slideout */
+.cmd-slideout-priority {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cmd-slideout-priority label {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: oklch(65% 0.02 250);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmd-slideout-priority select {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: oklch(14% 0.015 265);
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  color: oklch(85% 0.02 250);
+  padding: 0.375rem 0.5rem;
+}
+
+/* Slideout scrollbar */
+.cmd-slideout-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cmd-slideout-body::-webkit-scrollbar-track {
+  background: oklch(10% 0.015 265);
+}
+
+.cmd-slideout-body::-webkit-scrollbar-thumb {
+  background: oklch(50% 0.02 265 / 0.4);
+  border-radius: 2px;
+}
+
+.cmd-slideout-body::-webkit-scrollbar-thumb:hover {
+  background: oklch(60% 0.02 265 / 0.5);
+}
+
+/* ----------------------------------------
+   Custom Scrollbars - Commands Mode
+   ---------------------------------------- */
+.cmd-target-grid::-webkit-scrollbar,
+.cmd-command-list::-webkit-scrollbar,
+.cmd-queue-list::-webkit-scrollbar,
+.cmd-params-section::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cmd-target-grid::-webkit-scrollbar-track,
+.cmd-command-list::-webkit-scrollbar-track,
+.cmd-queue-list::-webkit-scrollbar-track,
+.cmd-params-section::-webkit-scrollbar-track {
+  background: oklch(10% 0.015 265);
+}
+
+.cmd-target-grid::-webkit-scrollbar-thumb {
+  background: oklch(80% 0.12 210 / 0.3);
+  border-radius: 2px;
+}
+
+.cmd-target-grid::-webkit-scrollbar-thumb:hover {
+  background: oklch(80% 0.12 210 / 0.5);
+}
+
+.cmd-command-list::-webkit-scrollbar-thumb {
+  background: oklch(72% 0.15 285 / 0.3);
+  border-radius: 2px;
+}
+
+.cmd-command-list::-webkit-scrollbar-thumb:hover {
+  background: oklch(72% 0.15 285 / 0.5);
+}
+
+.cmd-queue-list::-webkit-scrollbar-thumb,
+.cmd-params-section::-webkit-scrollbar-thumb {
+  background: oklch(50% 0.02 265 / 0.4);
+  border-radius: 2px;
+}
+
+/* ----------------------------------------
+   Responsive Tweaks
+   ---------------------------------------- */
+@media (max-width: 1200px) {
+  .cmd-target-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+
+  .cmd-target-name {
+    font-size: 0.6rem;
+  }
+
+  .cmd-target-status {
+    font-size: 0.45rem;
+  }
 }
