@@ -1120,6 +1120,7 @@
   width: 3.5rem;
   min-width: 3.5rem;
   max-width: 3.5rem;
+  overflow-x: hidden;
 }
 
 /* Text labels - use opacity only, no layout changes */
@@ -1455,10 +1456,23 @@
   font-weight: 500;
 }
 
-/* V2 navigation panel marker */
+/* V2 navigation panel - remove horizontal padding so items extend edge-to-edge */
+.navigation-panel.v2 .nav-section {
+  padding: 8px 0;
+}
+
+.navigation-panel.v2 .nav-section-title {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .navigation-panel.v2 .mode-section {
   padding: 8px 0;
   border-bottom: 1px solid oklch(80% 0.12 210 / 0.15);
+}
+
+.navigation-panel.v2 .mode-selector {
+  padding: 0;
 }
 
 /* V2 Context Panel - Enhanced alarm display */
@@ -1898,6 +1912,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 8px 12px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -1905,21 +1920,37 @@
   letter-spacing: 0.05em;
   color: oklch(70% 0.05 250);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.15s ease;
+  position: relative;
 }
 
 .mode-btn:hover {
-  background: oklch(80% 0.12 210 / 0.1);
-  color: oklch(80% 0.12 210);
+  background: oklch(80% 0.12 210 / 0.05);
+  color: oklch(85% 0.08 250);
+  border-left-color: oklch(80% 0.12 210 / 0.3);
 }
 
 .mode-btn.active {
-  background: oklch(80% 0.12 210 / 0.15);
-  border-color: oklch(80% 0.12 210 / 0.3);
+  background: oklch(80% 0.12 210 / 0.1);
+  border-left-color: oklch(80% 0.12 210);
   color: oklch(80% 0.12 210);
+  box-shadow: inset 0 0 20px rgba(125, 207, 255, 0.1);
+}
+
+/* Active indicator dot for mode buttons */
+.mode-btn.active::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  background: oklch(80% 0.12 210);
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(125, 207, 255, 0.8);
 }
 
 .dashboard-item {
@@ -1927,28 +1958,34 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.75rem;
   color: oklch(70% 0.05 250);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: left;
   width: 100%;
+  position: relative;
 }
 
 .dashboard-item:hover {
-  background: oklch(80% 0.12 210 / 0.1);
-  color: oklch(80% 0.12 210);
+  background: oklch(80% 0.12 210 / 0.05);
+  color: oklch(85% 0.08 250);
+  border-left-color: oklch(80% 0.12 210 / 0.3);
 }
 
 .dashboard-item.active {
-  background: oklch(80% 0.12 210 / 0.15);
-  border-color: oklch(80% 0.12 210 / 0.3);
+  background: oklch(80% 0.12 210 / 0.1);
+  border-left-color: oklch(80% 0.12 210);
   color: oklch(80% 0.12 210);
+  box-shadow: inset 0 0 20px rgba(125, 207, 255, 0.1);
 }
+
+/* Note: No ::after dot for dashboard items since they have action buttons on the right */
 
 /* Context panel V2 styles */
 .context-panel-v2 {
@@ -2019,6 +2056,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-x: hidden;
 }
 
 /* Rail content - visible when panel is collapsed */
@@ -2175,88 +2213,6 @@
 
 .rail-alarm-badge.info {
   color: oklch(70% 0.14 250);
-}
-
-/* Command Queue in Context Panel */
-.command-queue-item {
-  padding: 0.5rem;
-  margin-bottom: 0.375rem;
-  border-radius: var(--radius-field, 4px);
-  background-color: oklch(18% 0.02 260);
-  border-left: 3px solid oklch(70% 0.14 250);
-  transition: all 0.2s ease;
-}
-
-.command-queue-item:hover {
-  background-color: oklch(20% 0.02 220);
-}
-
-.command-queue-item.command-executing {
-  border-left-color: oklch(70% 0.20 50);
-  background-color: oklch(22% 0.03 85 / 0.3);
-}
-
-.command-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
-}
-
-.command-target {
-  font-size: 0.625rem;
-  font-family: ui-monospace, monospace;
-  text-transform: uppercase;
-  color: var(--color-base-content, oklch(98% 0.01 250));
-  opacity: 0.6;
-}
-
-.command-status {
-  font-size: 0.5rem;
-  font-weight: 600;
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  background-color: oklch(70% 0.14 250);
-  color: oklch(98% 0.01 250);
-}
-
-.command-executing .command-status {
-  background-color: oklch(70% 0.20 50);
-  color: oklch(15% 0.02 85);
-  animation: mc-pulse-warning 2s ease-in-out infinite;
-}
-
-.command-name {
-  font-size: 0.75rem;
-  font-weight: 500;
-  font-family: ui-monospace, monospace;
-}
-
-.command-actions {
-  display: flex;
-  gap: 0.25rem;
-  margin-top: 0.375rem;
-}
-
-.command-btn {
-  padding: 0.125rem 0.5rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  border-radius: 0.25rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.command-btn-cancel {
-  background-color: transparent;
-  border: 1px solid oklch(62% 0.25 25);
-  color: oklch(62% 0.25 25);
-}
-
-.command-btn-cancel:hover {
-  background-color: oklch(62% 0.25 25);
-  color: oklch(98% 0.01 25);
 }
 
 /* Rail badge for commands */
@@ -3226,56 +3182,8 @@
 }
 
 /* ----------------------------------------
-   Context Panel - Commands Mode
+   Command Queue List (used in context panel)
    ---------------------------------------- */
-.cmd-context-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 0.375rem;
-}
-
-.cmd-queue-section {
-  flex: 1; /* 1/3 of panel (queue:1, params:2) */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 0.375rem;
-  background: oklch(10% 0.015 265);
-  border-bottom: 1px solid oklch(22% 0.02 265);
-  overflow: hidden;
-}
-
-/* Full height queue - when slideout handles params */
-.cmd-queue-section.cmd-queue-full {
-  flex: 1;
-  border-bottom: none;
-  background: transparent;
-  padding: 0.125rem;
-}
-
-.cmd-params-section {
-  flex: 2; /* 2/3 of panel */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 0.5rem;
-}
-
-.cmd-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.375rem;
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid oklch(22% 0.02 265 / 0.5);
-}
-
-.cmd-section-header .mc-label-subsystem {
-  color: oklch(80% 0.12 210);
-}
-
 .cmd-queue-list {
   flex: 1;
   overflow-y: auto;

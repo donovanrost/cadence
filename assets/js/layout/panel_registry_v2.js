@@ -35,7 +35,7 @@ class NavigationPanelV2 {
 
   _render() {
     this.element = document.createElement("div")
-    this.element.className = "navigation-panel v2 h-full flex flex-col bg-base-200 overflow-hidden"
+    this.element.className = "navigation-panel v2 h-full flex flex-col bg-base-200 dark:sidebar-dark-bg hud-grid overflow-hidden"
     this.element.innerHTML = `
       <div class="nav-header border-b border-base-300">
         <h2 class="nav-title text-lg font-bold text-primary">Mission</h2>

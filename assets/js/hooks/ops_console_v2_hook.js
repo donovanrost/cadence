@@ -236,17 +236,17 @@ export const OpsConsoleV2Hook = {
     navContent.innerHTML = `
       <div class="nav-panel-v2">
         <!-- Expanded content -->
-        <div class="nav-expanded p-3">
+        <div class="nav-expanded py-3">
           <!-- Mission header -->
-          <div class="mb-4">
+          <div class="mb-4 px-3">
             <span class="mc-label-subsystem text-base-content/40 block mb-1">MISSION</span>
             <span class="font-semibold text-sm text-primary">${missionName}</span>
           </div>
 
           <!-- Mode selector -->
           <div class="mb-4">
-            <span class="mc-label-subsystem text-base-content/40 block mb-2">MODE</span>
-            <div class="flex flex-col gap-1">
+            <span class="mc-label-subsystem text-base-content/40 block mb-2 px-3">MODE</span>
+            <div class="flex flex-col">
               <button class="mode-btn active" data-mode="overview">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
@@ -276,7 +276,7 @@ export const OpsConsoleV2Hook = {
 
           <!-- Dashboards list -->
           <div class="mb-4">
-            <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center justify-between mb-2 px-3">
               <span class="mc-label-subsystem text-base-content/40">DASHBOARDS</span>
               <button class="btn btn-ghost btn-xs" id="nav-create-dashboard" title="Create Dashboard">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -290,7 +290,7 @@ export const OpsConsoleV2Hook = {
           </div>
 
           <!-- Actions -->
-          <div class="mt-auto pt-4 border-t border-base-300">
+          <div class="mt-auto pt-4 border-t border-base-300 px-3">
             <button class="btn btn-ghost btn-xs w-full justify-start gap-2" id="nav-add-widget">
               <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -430,12 +430,6 @@ export const OpsConsoleV2Hook = {
     const contextContent = this.panelLayout.getPanelContent("context")
     if (!contextContent) return
 
-    // In commands mode, show queue manager and parameter form
-    if (this.currentMode === "commands") {
-      this._populateCommandsContextPanel(contextContent)
-      return
-    }
-
     // Group alarms by severity
     const critical = this.alarms.filter(a => a.severity === "critical")
     const warning = this.alarms.filter(a => a.severity === "warning")
@@ -524,9 +518,9 @@ export const OpsConsoleV2Hook = {
               <span class="w-2 h-2 rounded-full bg-warning animate-pulse"></span>
             ` : ''}
           </button>
-          <div class="context-section-content">
+          <div class="context-section-content cmd-queue-list">
             ${this.commands.length > 0 ?
-              this.commands.map(cmd => this._renderCommandQueueItem(cmd)).join("") :
+              this.commands.map(cmd => this._renderQueueItem(cmd)).join("") :
               '<p class="text-xs text-base-content/40 text-center py-4">No pending commands</p>'
             }
           </div>
@@ -587,12 +581,11 @@ export const OpsConsoleV2Hook = {
       })
     })
 
-    // Command cancel handlers
-    contextContent.querySelectorAll(".command-btn-cancel").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation()
-        const commandId = btn.closest(".command-queue-item").dataset.id
-        this.pushEvent("cancel_command", { id: commandId })
+    // Queue entry click handlers - click to open detail slideout
+    contextContent.querySelectorAll(".qe").forEach(entry => {
+      entry.addEventListener("click", () => {
+        const entryId = entry.dataset.id
+        this._openQueueEntrySlideout(entryId)
       })
     })
 
@@ -638,23 +631,6 @@ export const OpsConsoleV2Hook = {
         <div class="alarm-actions">
           <button class="alarm-btn alarm-btn-ack">ACK</button>
           <button class="alarm-btn alarm-btn-clear">CLEAR</button>
-        </div>
-      </div>
-    `
-  },
-
-  _renderCommandQueueItem(cmd) {
-    const statusClass = cmd.status === "executing" ? "command-executing" : "command-pending"
-
-    return `
-      <div class="command-queue-item ${statusClass}" data-id="${cmd.id}">
-        <div class="command-header">
-          <span class="command-target">${cmd.target_name || "Unknown"}</span>
-          <span class="command-status">${cmd.status.toUpperCase()}</span>
-        </div>
-        <div class="command-name">${cmd.command_name}</div>
-        <div class="command-actions">
-          ${cmd.status === "pending" ? '<button class="command-btn command-btn-cancel">CANCEL</button>' : ''}
         </div>
       </div>
     `
@@ -1442,82 +1418,6 @@ export const OpsConsoleV2Hook = {
     })
   },
 
-  _populateCommandsContextPanel(contextContent) {
-    const queuePaused = this.cmdQueuePaused
-    const selectedTargetCount = this.cmdSelectedTargets.size
-
-    contextContent.innerHTML = `
-      <div class="cmd-context-panel">
-        <!-- Queue Manager Section - Now takes full height -->
-        <div class="cmd-queue-section cmd-queue-full">
-          <div class="cmd-section-header">
-            <div class="flex items-center gap-2">
-              <span class="mc-label-subsystem">COMMAND QUEUE</span>
-              <span class="text-xs text-base-content/50">(${this.commands.length})</span>
-            </div>
-            <div class="cmd-queue-controls">
-              <button class="btn btn-ghost btn-xs ${queuePaused ? 'text-warning' : ''}" id="cmd-queue-pause">
-                ${queuePaused ? 'Resume' : 'Pause'}
-              </button>
-            </div>
-          </div>
-          <div class="cmd-queue-list">
-            ${this.commands.length > 0
-              ? this.commands.map(cmd => this._renderQueueItem(cmd)).join("")
-              : `<div class="cmd-empty-state">
-                  <svg class="w-8 h-8 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                  </svg>
-                  Queue empty
-                </div>`
-            }
-          </div>
-        </div>
-      </div>
-
-      <!-- Rail content (visible when collapsed) -->
-      <div class="context-rail">
-        <!-- Queue count -->
-        <div class="rail-command-badge ${this.commands.length > 0 ? 'has-commands' : ''}" id="rail-cmd-queue" title="Command Queue">
-          <span class="rail-command-count">${this.commands.length}</span>
-          <span class="rail-command-label">QUEUE</span>
-        </div>
-
-        <div class="rail-divider"></div>
-
-        <!-- Selected count -->
-        <div class="rail-command-badge ${selectedTargetCount > 0 ? 'has-commands' : ''}" id="rail-cmd-targets" title="Selected Targets">
-          <span class="rail-command-count">${selectedTargetCount}</span>
-          <span class="rail-command-label">TGTS</span>
-        </div>
-
-        <div class="rail-divider"></div>
-
-        <!-- Expand button -->
-        <button class="rail-btn" id="rail-expand-context" title="Expand Panel">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
-          </svg>
-        </button>
-      </div>
-    `
-
-    // Bind event handlers
-    this._bindCommandsContextEvents(contextContent)
-
-    // Rail expand button
-    contextContent.querySelector("#rail-expand-context")?.addEventListener("click", () => {
-      this.panelLayout._openPanel("context")
-    })
-
-    // Rail badges click to expand
-    contextContent.querySelectorAll(".rail-command-badge").forEach(badge => {
-      badge.addEventListener("click", () => {
-        this.panelLayout._openPanel("context")
-      })
-    })
-  },
-
   _renderQueueItem(cmd) {
     const statusClass = cmd.status === 'executing' ? 'executing' :
                         cmd.status === 'held' ? 'held' :
@@ -1779,23 +1679,6 @@ export const OpsConsoleV2Hook = {
     }
 
     return labels
-  },
-
-  _bindCommandsContextEvents(contextContent) {
-    // Queue pause/resume
-    contextContent.querySelector("#cmd-queue-pause")?.addEventListener("click", () => {
-      this.cmdQueuePaused = !this.cmdQueuePaused
-      this.pushEvent(this.cmdQueuePaused ? "cmd_pause_queue" : "cmd_resume_queue", {})
-      this._populateContextPanel()
-    })
-
-    // Queue entry click to open detail slideout
-    contextContent.querySelectorAll(".qe").forEach(entry => {
-      entry.addEventListener("click", () => {
-        const entryId = entry.dataset.id
-        this._openQueueEntrySlideout(entryId)
-      })
-    })
   },
 
   _dispatchCommand(mode) {
