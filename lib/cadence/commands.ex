@@ -731,6 +731,232 @@ defmodule Cadence.Commands do
   end
 
   @doc """
+  Dispatches a command to multiple targets with per-target parameters.
+
+  Each target can have unique parameter values, enabling operations like
+  orbit adjustments where each satellite needs different values.
+
+  ## Arguments
+
+  - `mission_id` - The mission ID
+  - `command_name` - Command to dispatch
+  - `target_params` - List of `{target_id, params}` tuples
+  - `opts` - Options applied to all dispatches
+
+  ## Options
+
+  - `:parallel` - Execute dispatches concurrently (default: false)
+  - `:max_concurrency` - Max concurrent dispatches when parallel (default: 50)
+  - `:timeout` - Timeout per dispatch in ms when parallel (default: 30_000)
+  - Other options are passed through to each dispatch (e.g., `:user_id`)
+
+  ## Returns
+
+  Returns a list of `{target_id, result}` tuples in the same order as input.
+
+  ## Examples
+
+      # Sequential dispatch (default)
+      results = Commands.fleet_dispatch_parameterized(
+        mission_id,
+        "SET_ORBIT",
+        [
+          {sat_001, %{altitude: 550.2, inclination: 53.01}},
+          {sat_002, %{altitude: 550.5, inclination: 53.02}},
+          {sat_003, %{altitude: 550.8, inclination: 53.03}}
+        ],
+        user_id: operator_id
+      )
+
+      # Parallel dispatch for large fleets
+      results = Commands.fleet_dispatch_parameterized(
+        mission_id,
+        "POINTING_UPDATE",
+        target_pointing_list,
+        parallel: true,
+        max_concurrency: 100
+      )
+
+      # Handle results
+      Enum.each(results, fn
+        {target_id, {:ok, cmd_id}} ->
+          Logger.info("Command sent to \#{target_id}: \#{cmd_id}")
+        {target_id, {:error, reason}} ->
+          Logger.error("Failed for \#{target_id}: \#{inspect(reason)}")
+      end)
+  """
+  @spec fleet_dispatch_parameterized(
+          String.t(),
+          String.t(),
+          [{String.t(), map()}],
+          keyword()
+        ) :: [{String.t(), {:ok, String.t()} | {:error, term()}}]
+  def fleet_dispatch_parameterized(mission_id, command_name, target_params, opts \\ [])
+
+  def fleet_dispatch_parameterized(_mission_id, _command_name, [], _opts), do: []
+
+  def fleet_dispatch_parameterized(mission_id, command_name, target_params, opts) do
+    {parallel, dispatch_opts} = Keyword.pop(opts, :parallel, false)
+    {max_concurrency, dispatch_opts} = Keyword.pop(dispatch_opts, :max_concurrency, 50)
+    {timeout, dispatch_opts} = Keyword.pop(dispatch_opts, :timeout, 30_000)
+
+    if parallel do
+      dispatch_parameterized_parallel(
+        mission_id,
+        command_name,
+        target_params,
+        dispatch_opts,
+        max_concurrency,
+        timeout
+      )
+    else
+      dispatch_parameterized_sequential(mission_id, command_name, target_params, dispatch_opts)
+    end
+  end
+
+  defp dispatch_parameterized_sequential(mission_id, command_name, target_params, opts) do
+    Enum.map(target_params, fn {target_id, params} ->
+      result = TargetDispatcher.dispatch(mission_id, target_id, command_name, params, opts)
+      {target_id, result}
+    end)
+  end
+
+  defp dispatch_parameterized_parallel(
+         mission_id,
+         command_name,
+         target_params,
+         opts,
+         max_concurrency,
+         timeout
+       ) do
+    target_params
+    |> Task.async_stream(
+      fn {target_id, params} ->
+        result = TargetDispatcher.dispatch(mission_id, target_id, command_name, params, opts)
+        {target_id, result}
+      end,
+      max_concurrency: max_concurrency,
+      timeout: timeout,
+      on_timeout: :kill_task
+    )
+    |> Enum.map(fn
+      {:ok, result} -> result
+      {:exit, :timeout} -> {nil, {:error, :timeout}}
+    end)
+  end
+
+  @doc """
+  Enqueues a command to multiple targets with per-target parameters.
+
+  Each target can have unique parameter values. Commands are queued
+  for ordered execution according to priority and scheduling options.
+
+  ## Arguments
+
+  - `mission_id` - The mission ID
+  - `command_name` - Command to enqueue
+  - `target_params` - List of `{target_id, params}` tuples
+  - `opts` - Options applied to all enqueues
+
+  ## Options
+
+  - `:parallel` - Execute enqueues concurrently (default: false)
+  - `:max_concurrency` - Max concurrent enqueues when parallel (default: 50)
+  - `:timeout` - Timeout per enqueue in ms when parallel (default: 30_000)
+  - `:priority` - Priority level 0-5 for all commands (default: 3)
+  - `:scheduled_at` - Execute at or after this time
+  - `:expires_at` - Cancel if not executed by this time
+  - Other options are passed through (e.g., `:user_id`)
+
+  ## Returns
+
+  Returns a list of `{target_id, result}` tuples in the same order as input.
+
+  ## Examples
+
+      # Enqueue firmware updates with per-satellite versions
+      results = Commands.fleet_enqueue_parameterized(
+        mission_id,
+        "FIRMWARE_UPDATE",
+        [
+          {sat_001, %{version: "2.1.0", partition: "A"}},
+          {sat_002, %{version: "2.1.0", partition: "B"}},
+          {sat_003, %{version: "2.0.5", partition: "A"}}
+        ],
+        priority: 4,
+        user_id: operator_id
+      )
+
+      # Parallel enqueue for large fleets
+      results = Commands.fleet_enqueue_parameterized(
+        mission_id,
+        "CONFIG_UPDATE",
+        target_config_list,
+        parallel: true,
+        priority: 3
+      )
+  """
+  @spec fleet_enqueue_parameterized(
+          String.t(),
+          String.t(),
+          [{String.t(), map()}],
+          keyword()
+        ) :: [{String.t(), {:ok, QueueEntry.t()} | {:error, term()}}]
+  def fleet_enqueue_parameterized(mission_id, command_name, target_params, opts \\ [])
+
+  def fleet_enqueue_parameterized(_mission_id, _command_name, [], _opts), do: []
+
+  def fleet_enqueue_parameterized(mission_id, command_name, target_params, opts) do
+    {parallel, enqueue_opts} = Keyword.pop(opts, :parallel, false)
+    {max_concurrency, enqueue_opts} = Keyword.pop(enqueue_opts, :max_concurrency, 50)
+    {timeout, enqueue_opts} = Keyword.pop(enqueue_opts, :timeout, 30_000)
+
+    if parallel do
+      enqueue_parameterized_parallel(
+        mission_id,
+        command_name,
+        target_params,
+        enqueue_opts,
+        max_concurrency,
+        timeout
+      )
+    else
+      enqueue_parameterized_sequential(mission_id, command_name, target_params, enqueue_opts)
+    end
+  end
+
+  defp enqueue_parameterized_sequential(mission_id, command_name, target_params, opts) do
+    Enum.map(target_params, fn {target_id, params} ->
+      result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+      {target_id, result}
+    end)
+  end
+
+  defp enqueue_parameterized_parallel(
+         mission_id,
+         command_name,
+         target_params,
+         opts,
+         max_concurrency,
+         timeout
+       ) do
+    target_params
+    |> Task.async_stream(
+      fn {target_id, params} ->
+        result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+        {target_id, result}
+      end,
+      max_concurrency: max_concurrency,
+      timeout: timeout,
+      on_timeout: :kill_task
+    )
+    |> Enum.map(fn
+      {:ok, result} -> result
+      {:exit, :timeout} -> {nil, {:error, :timeout}}
+    end)
+  end
+
+  @doc """
   Starts a target's command pipeline.
 
   Called automatically when a target is created, but can be used to

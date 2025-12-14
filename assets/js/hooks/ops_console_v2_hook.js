@@ -61,6 +61,12 @@ export const OpsConsoleV2Hook = {
     this.cmdPriority = 3 // Normal priority by default
     this.cmdTargetViewMode = "compact" // "compact" or "detailed"
 
+    // Per-target parameterized command state
+    this.cmdStagedParams = new Map()      // targetId -> { params: {...} }
+    this.cmdActiveTargetIndex = 0         // Index of currently active target in selection
+    this.cmdPerTargetMode = false         // Whether we're in per-target configuration mode
+    this.cmdReviewMode = false            // Whether showing review screen before queue
+
     // Register LiveView event handlers immediately
     this._setupEventHandlers()
 
@@ -1725,6 +1731,14 @@ export const OpsConsoleV2Hook = {
   _openCommandSlideout() {
     if (!this.cmdSelectedCommand) return
 
+    // Initialize per-target staging state
+    // Default to per-target mode when multiple targets selected (safer)
+    const hasMultipleTargets = this.cmdSelectedTargets.size > 1
+    this.cmdStagedParams = new Map()
+    this.cmdActiveTargetIndex = 0
+    this.cmdPerTargetMode = hasMultipleTargets
+    this.cmdReviewMode = false
+
     // Create slideout elements if they don't exist
     let backdrop = document.getElementById("cmd-slideout-backdrop")
     let slideout = document.getElementById("cmd-slideout")
@@ -1767,6 +1781,12 @@ export const OpsConsoleV2Hook = {
     if (slideout) slideout.classList.remove("visible")
 
     this._slideoutOpen = false
+
+    // Clear per-target staging state
+    this.cmdStagedParams = new Map()
+    this.cmdActiveTargetIndex = 0
+    this.cmdPerTargetMode = false
+    this.cmdReviewMode = false
   },
 
   _renderSlideoutContent(slideout) {
@@ -1775,14 +1795,51 @@ export const OpsConsoleV2Hook = {
 
     const selectedTargetCount = this.cmdSelectedTargets.size
     const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+    const stagedCount = this.cmdStagedParams.size
+    const activeTarget = selectedTargets[this.cmdActiveTargetIndex]
+    const hasMultipleTargets = selectedTargetCount > 1
+    const hasParameters = cmd.parameters && cmd.parameters.length > 0
+
+    // Header subtitle shows command description if available
+    const headerSubtitle = cmd.description
+      ? `<span class="command-description">${cmd.description}</span>`
+      : ''
+
+    // Mode bar - always present to avoid layout shift
+    // Navigation action always on the right for consistency
+    let modeBarContent
+    if (this.cmdReviewMode) {
+      // Review mode: show count on left, back link on right
+      modeBarContent = `
+        <span class="cmd-mode-label">Review <strong>${stagedCount}</strong> command${stagedCount !== 1 ? 's' : ''}</span>
+        <span class="cmd-mode-switch" id="slideout-back-to-config">← Edit</span>
+      `
+    } else if (this.cmdPerTargetMode && activeTarget) {
+      // Per-target mode: current target on left, back link on right
+      modeBarContent = `
+        <span class="cmd-mode-label">Configuring <strong>${activeTarget.name || activeTarget.identifier}</strong></span>
+        <span class="cmd-mode-switch" id="slideout-back-to-uniform">← Uniform</span>
+      `
+    } else if (hasMultipleTargets && hasParameters) {
+      // Uniform mode with multiple targets: mode label on left, configure each on right
+      modeBarContent = `
+        <span class="cmd-mode-label">Uniform parameters</span>
+        <span class="cmd-mode-switch" id="slideout-configure-each-link">Configure each →</span>
+      `
+    } else {
+      // Single target or no parameters: just show mode label
+      modeBarContent = `
+        <span class="cmd-mode-label">${selectedTargetCount === 1 ? 'Single target' : 'Uniform parameters'}</span>
+      `
+    }
+
+    const modeBar = `<div class="cmd-slideout-breadcrumb-bar">${modeBarContent}</div>`
 
     slideout.innerHTML = `
       <div class="cmd-slideout-header">
         <div class="cmd-slideout-title">
           <div class="command-name">${cmd.name}</div>
-          <div class="target-count">
-            <strong>${selectedTargetCount}</strong> target${selectedTargetCount !== 1 ? 's' : ''} selected
-          </div>
+          <div class="target-count">${headerSubtitle}</div>
         </div>
         <button class="cmd-slideout-close" id="slideout-close-btn" title="Close (Esc)">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1790,6 +1847,8 @@ export const OpsConsoleV2Hook = {
           </svg>
         </button>
       </div>
+
+      ${modeBar}
 
       <div class="cmd-slideout-body">
         ${cmd.is_hazardous ? `
@@ -1804,30 +1863,10 @@ export const OpsConsoleV2Hook = {
           </div>
         ` : ''}
 
-        <div class="cmd-slideout-section">
-          <div class="cmd-slideout-section-title">Targets</div>
-          <div class="cmd-slideout-targets">
-            ${selectedTargets.length > 0
-              ? selectedTargets.slice(0, 10).map(t => `
-                  <span class="cmd-slideout-target-chip">
-                    <span class="status-dot ${t.status || 'online'}"></span>
-                    ${t.name || t.identifier}
-                  </span>
-                `).join('')
-              : '<span class="text-xs text-base-content/50">No targets selected</span>'
-            }
-            ${selectedTargets.length > 10 ? `
-              <span class="cmd-slideout-target-chip">+${selectedTargets.length - 10} more</span>
-            ` : ''}
-          </div>
-        </div>
-
-        <div class="cmd-slideout-section">
-          <div class="cmd-slideout-section-title">Parameters</div>
-          <div class="cmd-param-form">
-            ${this._renderParameterForm(cmd)}
-          </div>
-        </div>
+        ${this.cmdReviewMode
+          ? this._renderReviewTable()
+          : this._renderConfigBody(cmd, selectedTargets, hasMultipleTargets, stagedCount, selectedTargetCount, activeTarget)
+        }
       </div>
 
       <div class="cmd-slideout-footer">
@@ -1843,29 +1882,74 @@ export const OpsConsoleV2Hook = {
           </select>
         </div>
 
-        <div class="cmd-dispatch-actions">
-          <button class="cmd-dispatch-btn queue ${cmd.is_hazardous ? 'hazardous' : ''}"
-                  id="slideout-queue-btn"
-                  ${selectedTargetCount === 0 ? 'disabled' : ''}>
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-            </svg>
-            Queue
-          </button>
-          <button class="cmd-dispatch-btn send-now ${cmd.is_hazardous ? 'hazardous' : ''}"
-                  id="slideout-send-btn"
-                  ${selectedTargetCount === 0 ? 'disabled' : ''}>
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-            Send
-          </button>
-        </div>
+        ${this._renderSlideoutActions(cmd, selectedTargetCount, stagedCount)}
       </div>
     `
 
     // Bind slideout events
     this._bindSlideoutEvents(slideout)
+  },
+
+  _renderSlideoutActions(cmd, selectedTargetCount, stagedCount) {
+    const isHazardous = cmd.is_hazardous
+    const hazClass = isHazardous ? 'hazardous' : ''
+    const disabled = selectedTargetCount === 0 ? 'disabled' : ''
+    const hasMultipleTargets = selectedTargetCount > 1
+
+    if (this.cmdReviewMode) {
+      // Review mode: Queue button
+      return `
+        <div class="cmd-dispatch-actions review-mode">
+          <button class="cmd-dispatch-btn queue ${hazClass}"
+                  id="slideout-queue-btn"
+                  ${disabled}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
+            Queue ${stagedCount} Command${stagedCount !== 1 ? 's' : ''}
+          </button>
+        </div>
+      `
+    } else if (this.cmdPerTargetMode) {
+      // Per-target mode: Stage current + Review Staged
+      const allStaged = stagedCount === selectedTargetCount
+      const canReview = stagedCount > 0
+
+      return `
+        <div class="cmd-dispatch-actions per-target-mode">
+          <button class="cmd-dispatch-btn stage ${hazClass}"
+                  id="slideout-stage-btn"
+                  ${disabled}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            Stage${!allStaged ? ` (${this.cmdActiveTargetIndex + 1}/${selectedTargetCount})` : ''}
+          </button>
+          <button class="cmd-dispatch-btn review ${canReview ? '' : 'disabled'}"
+                  id="slideout-review-btn"
+                  ${!canReview ? 'disabled' : ''}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+            Review ${stagedCount} Staged
+          </button>
+        </div>
+      `
+    } else {
+      // Uniform mode: Stage All
+      return `
+        <div class="cmd-dispatch-actions">
+          <button class="cmd-dispatch-btn stage-all ${hazClass}"
+                  id="slideout-stage-all-btn"
+                  ${disabled}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+            Stage${hasMultipleTargets ? ' All' : ''} →
+          </button>
+        </div>
+      `
+    }
   },
 
   _bindSlideoutEvents(slideout) {
@@ -1879,14 +1963,58 @@ export const OpsConsoleV2Hook = {
       this.cmdPriority = parseInt(e.target.value, 10)
     })
 
-    // Queue button
+    // Queue button (in review mode, dispatches parameterized)
     slideout.querySelector("#slideout-queue-btn")?.addEventListener("click", () => {
-      this._dispatchCommand("queue")
+      if (this.cmdReviewMode) {
+        this._dispatchParameterized("queue")
+      } else {
+        this._dispatchCommand("queue")
+      }
     })
 
-    // Send now button
-    slideout.querySelector("#slideout-send-btn")?.addEventListener("click", () => {
-      this._dispatchCommand("immediate")
+    // Stage All button (uniform mode -> review)
+    slideout.querySelector("#slideout-stage-all-btn")?.addEventListener("click", () => {
+      this._stageAllTargets()
+    })
+
+    // Configure Each link in mode bar (enters per-target mode)
+    slideout.querySelector("#slideout-configure-each-link")?.addEventListener("click", () => {
+      this._enterPerTargetMode()
+    })
+
+    // Back to Uniform link (exits per-target mode)
+    slideout.querySelector("#slideout-back-to-uniform")?.addEventListener("click", () => {
+      this._exitPerTargetMode()
+    })
+
+    // Back to Config link (exits review mode)
+    slideout.querySelector("#slideout-back-to-config")?.addEventListener("click", () => {
+      this._exitReviewMode()
+    })
+
+    // Stage button (per-target mode)
+    slideout.querySelector("#slideout-stage-btn")?.addEventListener("click", () => {
+      this._stageCurrentTarget(slideout)
+    })
+
+    // Review button (per-target mode -> review)
+    slideout.querySelector("#slideout-review-btn")?.addEventListener("click", () => {
+      this._enterReviewMode()
+    })
+
+    // Target chip clicks (jump to target in per-target mode, or enter per-target mode)
+    slideout.querySelectorAll(".cmd-slideout-target-chip[data-target-idx]").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const idx = parseInt(chip.dataset.targetIdx, 10)
+        if (this.cmdPerTargetMode) {
+          // Already in per-target mode, just navigate
+          this._goToTarget(idx, slideout)
+        } else if (this.cmdSelectedTargets.size > 1) {
+          // Enter per-target mode and go to clicked target
+          this.cmdActiveTargetIndex = idx
+          this._enterPerTargetMode()
+        }
+      })
     })
 
     // Value button groups (for params with valid_values)
@@ -1904,6 +2032,286 @@ export const OpsConsoleV2Hook = {
         })
       })
     })
+
+    // Keyboard shortcut: Enter to stage in per-target mode
+    if (this.cmdPerTargetMode) {
+      this._slideoutKeyHandler = (e) => {
+        if (e.key === 'Enter' && !e.target.matches('input, select, button')) {
+          e.preventDefault()
+          this._stageCurrentTarget(slideout)
+        }
+      }
+      document.addEventListener('keydown', this._slideoutKeyHandler)
+    }
+  },
+
+  // Per-target mode navigation helpers
+
+  _enterPerTargetMode() {
+    this.cmdPerTargetMode = true
+    const slideout = document.getElementById("cmd-slideout")
+    if (slideout) {
+      this._renderSlideoutContent(slideout)
+    }
+  },
+
+  _exitPerTargetMode() {
+    this.cmdPerTargetMode = false
+    this.cmdStagedParams = new Map()
+    this.cmdActiveTargetIndex = 0
+    const slideout = document.getElementById("cmd-slideout")
+    if (slideout) {
+      this._renderSlideoutContent(slideout)
+    }
+  },
+
+  // Review mode helpers
+
+  _enterReviewMode() {
+    this.cmdReviewMode = true
+    const slideout = document.getElementById("cmd-slideout")
+    if (slideout) {
+      this._renderSlideoutContent(slideout)
+    }
+  },
+
+  _exitReviewMode() {
+    this.cmdReviewMode = false
+    const slideout = document.getElementById("cmd-slideout")
+    if (slideout) {
+      this._renderSlideoutContent(slideout)
+    }
+  },
+
+  _stageAllTargets() {
+    const slideout = document.getElementById("cmd-slideout")
+    if (!slideout) return
+
+    const params = this._collectFormParams(slideout)
+    const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+
+    // Stage all targets with the same params
+    selectedTargets.forEach(target => {
+      this.cmdStagedParams.set(target.id, { params: {...params} })
+    })
+
+    // Enter review mode
+    this._enterReviewMode()
+  },
+
+  _renderReviewTable() {
+    const cmd = this.cmdSelectedCommand
+    if (!cmd) return ''
+
+    const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+    const params = cmd.parameters || []
+
+    // Build table header with param names
+    const headerCells = params.slice(0, 4).map(p =>
+      `<th class="cmd-review-th">${p.name}</th>`
+    ).join('')
+
+    // Build table rows
+    const rows = selectedTargets.map(target => {
+      const staged = this.cmdStagedParams.get(target.id)
+      const targetParams = staged?.params || {}
+
+      const cells = params.slice(0, 4).map(p => {
+        const value = targetParams[p.name]
+        const displayValue = value !== undefined ? value : '—'
+        return `<td class="cmd-review-td">${displayValue}</td>`
+      }).join('')
+
+      return `
+        <tr class="cmd-review-row" data-target-id="${target.id}">
+          <td class="cmd-review-td cmd-review-target">${target.name || target.identifier}</td>
+          ${cells}
+        </tr>
+      `
+    }).join('')
+
+    return `
+      <div class="cmd-review-section">
+        <div class="cmd-slideout-section-title">Staged Commands</div>
+        <div class="cmd-review-table-wrapper">
+          <table class="cmd-review-table">
+            <thead>
+              <tr>
+                <th class="cmd-review-th">Target</th>
+                ${headerCells}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `
+  },
+
+  _renderConfigBody(cmd, selectedTargets, hasMultipleTargets, stagedCount, selectedTargetCount, activeTarget) {
+    const targetChips = selectedTargets.length > 0
+      ? selectedTargets.map((t, idx) => {
+          // In per-target mode: highlight only active target
+          // In Queue All mode: highlight all targets
+          const isActive = this.cmdPerTargetMode
+            ? idx === this.cmdActiveTargetIndex
+            : true
+          const isStaged = this.cmdStagedParams.has(t.id)
+          const chipClasses = [
+            'cmd-slideout-target-chip',
+            isActive ? 'active' : '',
+            isStaged ? 'staged' : ''
+          ].filter(Boolean).join(' ')
+
+          const statusIcon = isStaged
+            ? `<svg class="staged-check w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>`
+            : `<span class="status-dot ${t.status || 'online'}"></span>`
+
+          return `
+            <span class="${chipClasses}" data-target-idx="${idx}" data-target-id="${t.id}">
+              ${statusIcon}
+              ${t.name || t.identifier}
+            </span>
+          `
+        }).join('')
+      : '<span class="text-xs text-base-content/50">No targets selected</span>'
+
+    const progressIndicator = hasMultipleTargets && this.cmdPerTargetMode
+      ? `<div class="cmd-slideout-progress">${stagedCount} of ${selectedTargetCount} staged</div>`
+      : ''
+
+    const paramLabel = this.cmdPerTargetMode && activeTarget
+      ? `<span class="param-target-label">for ${activeTarget.name || activeTarget.identifier}</span>`
+      : ''
+
+    return `
+      <div class="cmd-slideout-section">
+        <div class="cmd-slideout-section-header">
+          <div class="cmd-slideout-section-title">Targets</div>
+          ${progressIndicator}
+        </div>
+        <div class="cmd-slideout-targets">
+          ${targetChips}
+        </div>
+      </div>
+
+      <div class="cmd-slideout-section">
+        <div class="cmd-slideout-section-title">
+          Parameters
+          ${paramLabel}
+        </div>
+        <div class="cmd-param-form">
+          ${this._renderParameterForm(cmd, activeTarget?.id)}
+        </div>
+      </div>
+    `
+  },
+
+  _goToTarget(index, slideout) {
+    const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+    const maxIndex = selectedTargets.length - 1
+
+    // Clamp index to valid range
+    if (index < 0) index = 0
+    if (index > maxIndex) index = maxIndex
+
+    if (index !== this.cmdActiveTargetIndex) {
+      this.cmdActiveTargetIndex = index
+      this._renderSlideoutContent(slideout)
+    }
+  },
+
+  _stageCurrentTarget(slideout) {
+    const selectedTargets = this.targets.filter(t => this.cmdSelectedTargets.has(t.id))
+    const activeTarget = selectedTargets[this.cmdActiveTargetIndex]
+    if (!activeTarget) return
+
+    // Collect current form parameters
+    const params = this._collectFormParams(slideout)
+
+    // Stage the params for this target
+    this.cmdStagedParams.set(activeTarget.id, {
+      params: params,
+      staged: true
+    })
+
+    // Find next unstaged target, or stay on current if all staged
+    const nextUnstagedIdx = selectedTargets.findIndex((t, idx) =>
+      idx > this.cmdActiveTargetIndex && !this.cmdStagedParams.has(t.id)
+    )
+
+    if (nextUnstagedIdx !== -1) {
+      this.cmdActiveTargetIndex = nextUnstagedIdx
+    } else {
+      // Check for any unstaged before current position
+      const prevUnstagedIdx = selectedTargets.findIndex(t => !this.cmdStagedParams.has(t.id))
+      if (prevUnstagedIdx !== -1 && prevUnstagedIdx !== this.cmdActiveTargetIndex) {
+        this.cmdActiveTargetIndex = prevUnstagedIdx
+      }
+      // Otherwise stay on current (all staged)
+    }
+
+    // Re-render to show updated state
+    this._renderSlideoutContent(slideout)
+  },
+
+  _collectFormParams(slideout) {
+    const params = {}
+    const form = slideout.querySelector(".cmd-param-form")
+    if (!form) return params
+
+    // Collect from input fields
+    form.querySelectorAll("input[data-param], select[data-param]").forEach(input => {
+      const name = input.dataset.param
+      let value = input.value
+
+      // Convert to appropriate type based on input type
+      if (input.type === 'number') {
+        value = input.value === '' ? null : parseFloat(input.value)
+      } else if (input.type === 'checkbox') {
+        value = input.checked
+      }
+
+      if (value !== null && value !== '') {
+        params[name] = value
+      }
+    })
+
+    return params
+  },
+
+  _dispatchParameterized(mode) {
+    const cmd = this.cmdSelectedCommand
+    if (!cmd) return
+
+    // Build target_params array from staged params
+    const targetParams = []
+    this.cmdStagedParams.forEach((entry, targetId) => {
+      targetParams.push({
+        target_id: targetId,
+        params: entry.params
+      })
+    })
+
+    if (targetParams.length === 0) {
+      console.warn("[OpsConsoleV2] No staged params to dispatch")
+      return
+    }
+
+    // Push event to LiveView
+    this.pushEvent("cmd_dispatch_parameterized", {
+      command_id: cmd.id,
+      target_params: targetParams,
+      mode: mode,
+      priority: this.cmdPriority
+    })
+
+    // Close slideout after dispatch
+    this._closeCommandSlideout()
   },
 
   // ============================================================================

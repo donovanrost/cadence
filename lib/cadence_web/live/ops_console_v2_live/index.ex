@@ -798,6 +798,84 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
+  # Command dispatch with per-target parameters
+  def handle_event(
+        "cmd_dispatch_parameterized",
+        %{"command_id" => command_id, "target_params" => target_params} = payload,
+        socket
+      ) do
+    mission_id = socket.assigns.mission.id
+    mode = Map.get(payload, "mode", "queue")
+    priority = Map.get(payload, "priority", 3)
+
+    # Get command definition
+    command = Enum.find(socket.assigns.command_definitions, &(&1.id == command_id))
+
+    if command do
+      # Build the target_params list in the format expected by fleet_*_parameterized
+      # Each entry is {target_id, params_map}
+      formatted_params =
+        Enum.map(target_params, fn entry ->
+          target_id = entry["target_id"]
+          params = entry["params"] || %{}
+          {target_id, params}
+        end)
+
+      results =
+        if mode == "immediate" do
+          Commands.fleet_dispatch_parameterized(
+            mission_id,
+            command.name,
+            formatted_params,
+            priority: priority
+          )
+        else
+          Commands.fleet_enqueue_parameterized(
+            mission_id,
+            command.name,
+            formatted_params,
+            priority: priority
+          )
+        end
+
+      # Count successes/failures from results
+      successes = Enum.count(results, fn {_target_id, result} -> match?({:ok, _}, result) end)
+      failures = Enum.count(results, fn {_target_id, result} -> match?({:error, _}, result) end)
+
+      # Refresh queue
+      queue_entries =
+        Commands.list_queue_entries(mission_id,
+          status: [:pending, :executing],
+          preload: [:target],
+          limit: 50
+        )
+
+      socket =
+        socket
+        |> assign(:queue_entries, queue_entries)
+        |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+
+      cond do
+        failures == 0 ->
+          {:noreply,
+           put_flash(
+             socket,
+             :info,
+             "#{successes} command(s) #{if mode == "immediate", do: "sent", else: "queued"} with per-target params"
+           )}
+
+        successes == 0 ->
+          {:noreply, put_flash(socket, :error, "Failed to dispatch parameterized commands")}
+
+        true ->
+          {:noreply,
+           put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Command not found")}
+    end
+  end
+
   def handle_event("cmd_pause_queue", _, socket) do
     mission_id = socket.assigns.mission.id
     Commands.pause_all_targets(mission_id)
