@@ -73,6 +73,7 @@ export const OpsConsoleV2Hook = {
     this.cmdStagePanelHeight = null       // Custom height when resized (null = auto)
     this.cmdStageFilter = ''              // Filter text for staging table
     this.cmdEditingStaged = null          // { cmdIndex, targetIndex } when editing a staged entry
+    this.cmdStageViewMode = 'table'       // 'table' or 'cards' view mode
 
     // Register LiveView event handlers immediately
     this._setupEventHandlers()
@@ -1323,9 +1324,6 @@ export const OpsConsoleV2Hook = {
         <div class="cmd-staging-panel empty">
           <div class="cmd-staging-header">
             <div class="cmd-staging-title">
-              <svg class="cmd-staging-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-              </svg>
               <span class="mc-label-subsystem">STAGED</span>
               <span class="cmd-staging-count">empty</span>
             </div>
@@ -1346,14 +1344,11 @@ export const OpsConsoleV2Hook = {
           <div class="cmd-staging-resize-handle" id="staging-resize-handle"></div>
           <div class="cmd-staging-header" id="staging-panel-toggle">
             <div class="cmd-staging-title">
-              <svg class="cmd-staging-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-              </svg>
               <span class="mc-label-subsystem">STAGED</span>
               <span class="cmd-staging-count">${count} cmd${count !== 1 ? 's' : ''} / ${totalTargets} target${totalTargets !== 1 ? 's' : ''}</span>
             </div>
             <div class="cmd-staging-actions">
-              <button class="cmd-staging-btn queue-all" id="staging-queue-all">Queue All</button>
+              <button class="cmd-staging-btn queue-all" id="staging-queue-all">Queue All (${totalTargets})</button>
               <button class="cmd-staging-btn clear" id="staging-clear">Clear</button>
             </div>
           </div>
@@ -1364,20 +1359,58 @@ export const OpsConsoleV2Hook = {
 
     // Expanded state
     const { rows: filteredRows, filteredCount } = this._getFilteredStagedRows()
+    const isCardView = this.cmdStageViewMode === 'cards'
+
+    // View toggle buttons
+    const viewToggle = `
+      <div class="cmd-staging-view-toggle">
+        <button class="cmd-view-btn ${!isCardView ? 'active' : ''}" data-view="table" title="Table view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M3 12h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="cmd-view-btn ${isCardView ? 'active' : ''}" data-view="cards" title="Card view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    `
+
+    // Render content based on view mode
+    const bodyContent = isCardView
+      ? this._renderStagedCards(filteredCount)
+      : `
+        <table class="cmd-staging-table">
+          <thead>
+            <tr>
+              <th>Target</th>
+              <th>Command</th>
+              <th>Parameters</th>
+              <th>Pri</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredRows.length > 0 ? filteredRows : '<tr><td colspan="5" class="cmd-staging-empty">No matches</td></tr>'}
+          </tbody>
+        </table>
+      `
 
     return `
-      <div class="cmd-staging-panel expanded" style="${heightStyle}">
+      <div class="cmd-staging-panel expanded ${isCardView ? 'card-view' : 'table-view'}" style="${heightStyle}">
         <div class="cmd-staging-resize-handle" id="staging-resize-handle"></div>
         <div class="cmd-staging-header" id="staging-panel-toggle">
           <div class="cmd-staging-title">
-            <svg class="cmd-staging-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
             <span class="mc-label-subsystem">STAGED</span>
-            <span class="cmd-staging-count">${this.cmdStageFilter ? `${filteredCount} of ` : ''}${totalTargets} row${totalTargets !== 1 ? 's' : ''}</span>
+            <span class="cmd-staging-count">${this.cmdStageFilter ? `${filteredCount} of ` : ''}${totalTargets} item${totalTargets !== 1 ? 's' : ''}</span>
           </div>
           <div class="cmd-staging-actions">
-            <button class="cmd-staging-btn queue-all" id="staging-queue-all">Queue All</button>
+            ${viewToggle}
+            <button class="cmd-staging-btn queue-all" id="staging-queue-all">${this.cmdStageFilter ? `Queue (${filteredCount})` : `Queue All (${totalTargets})`}</button>
             <button class="cmd-staging-btn clear" id="staging-clear">Clear</button>
           </div>
         </div>
@@ -1390,20 +1423,7 @@ export const OpsConsoleV2Hook = {
           ${this.cmdStageFilter ? `<button class="cmd-staging-filter-clear" id="staging-filter-clear" title="Clear filter">&times;</button>` : ''}
         </div>
         <div class="cmd-staging-body">
-          <table class="cmd-staging-table">
-            <thead>
-              <tr>
-                <th>Target</th>
-                <th>Command</th>
-                <th>Parameters</th>
-                <th>Pri</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filteredRows.length > 0 ? filteredRows : '<tr><td colspan="5" class="cmd-staging-empty">No matches</td></tr>'}
-            </tbody>
-          </table>
+          ${bodyContent}
         </div>
         <div class="cmd-staging-panel-corners"></div>
       </div>
@@ -1466,6 +1486,79 @@ export const OpsConsoleV2Hook = {
     })
 
     return { rows: rows.join(''), filteredCount: rows.length }
+  },
+
+  _renderStagedCards(filteredCount) {
+    const filter = this.cmdStageFilter.toLowerCase()
+    const cards = []
+
+    this.cmdStagedCommands.forEach((staged, cmdIndex) => {
+      const commandName = staged.command.name
+
+      staged.targets.forEach((targetEntry, targetIndex) => {
+        // Look up target name (with fallback to stored name or ID)
+        const target = this.targets?.find(t => t.id === targetEntry.target_id)
+        const targetName = target?.name || targetEntry.target_name || targetEntry.target_id
+
+        // Apply filter
+        if (filter) {
+          const matchesTarget = targetName.toLowerCase().includes(filter)
+          const matchesCommand = commandName.toLowerCase().includes(filter)
+          if (!matchesTarget && !matchesCommand) return
+        }
+
+        // Build params display
+        const params = Object.entries(targetEntry.params || {})
+        const paramsHtml = params.length > 0
+          ? params.slice(0, 4).map(([k, v]) => `
+              <div class="cmd-card-param">
+                <span class="cmd-card-param-key">${k}</span>
+                <span class="cmd-card-param-val">${v}</span>
+              </div>
+            `).join('') + (params.length > 4 ? `<div class="cmd-card-param-more">+${params.length - 4} more</div>` : '')
+          : '<div class="cmd-card-no-params">No parameters</div>'
+
+        cards.push(`
+          <div class="cmd-staged-card ${staged.command.is_hazardous ? 'hazardous' : ''}"
+               data-staged-idx="${cmdIndex}" data-target-idx="${targetIndex}">
+            <div class="cmd-card-header">
+              <div class="cmd-card-target">
+                <span class="cmd-card-target-dot"></span>
+                ${targetName}
+              </div>
+              <div class="cmd-card-priority">P${staged.priority}</div>
+            </div>
+            <div class="cmd-card-command">
+              ${commandName}
+              ${staged.command.is_hazardous ? '<span class="cmd-card-hazard">HAZ</span>' : ''}
+            </div>
+            <div class="cmd-card-params">
+              ${paramsHtml}
+            </div>
+            <div class="cmd-card-actions">
+              <button class="cmd-staged-queue" data-staged-idx="${cmdIndex}" data-target-idx="${targetIndex}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                <span class="cmd-action-label">Queue</span>
+              </button>
+              <button class="cmd-staged-remove" data-staged-idx="${cmdIndex}" data-target-idx="${targetIndex}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+                <span class="cmd-action-label">Remove</span>
+              </button>
+            </div>
+          </div>
+        `)
+      })
+    })
+
+    if (cards.length === 0) {
+      return '<div class="cmd-staging-empty-cards">No matches</div>'
+    }
+
+    return `<div class="cmd-staged-cards-grid">${cards.join('')}</div>`
   },
 
   _bindCommandsModeEvents(container) {
@@ -1587,6 +1680,18 @@ export const OpsConsoleV2Hook = {
       this._updateStagingPanel()
     })
 
+    // View toggle (table/cards)
+    container.querySelectorAll(".cmd-staging-view-toggle .cmd-view-btn")?.forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation()
+        const newView = btn.dataset.view
+        if (newView !== this.cmdStageViewMode) {
+          this.cmdStageViewMode = newView
+          this._updateStagingPanel()
+        }
+      })
+    })
+
     // Click on staging table row to edit
     container.querySelectorAll(".cmd-staged-row")?.forEach(row => {
       row.addEventListener("click", (e) => {
@@ -1595,6 +1700,19 @@ export const OpsConsoleV2Hook = {
 
         const cmdIdx = parseInt(row.dataset.stagedIdx, 10)
         const targetIdx = parseInt(row.dataset.targetIdx, 10)
+
+        this._editStagedEntry(cmdIdx, targetIdx)
+      })
+    })
+
+    // Click on staging card to edit
+    container.querySelectorAll(".cmd-staged-card")?.forEach(card => {
+      card.addEventListener("click", (e) => {
+        // Don't trigger edit if clicking action buttons
+        if (e.target.closest('.cmd-staged-remove') || e.target.closest('.cmd-staged-queue')) return
+
+        const cmdIdx = parseInt(card.dataset.stagedIdx, 10)
+        const targetIdx = parseInt(card.dataset.targetIdx, 10)
 
         this._editStagedEntry(cmdIdx, targetIdx)
       })
@@ -1637,7 +1755,7 @@ export const OpsConsoleV2Hook = {
     if (filterInput) {
       filterInput.addEventListener("input", (e) => {
         this.cmdStageFilter = e.target.value
-        this._updateStagingTableBody()
+        this._updateStagingContent()
       })
       // Focus retention - keep focus after re-render
       filterInput.addEventListener("keydown", (e) => {
@@ -1774,40 +1892,87 @@ export const OpsConsoleV2Hook = {
     }
   },
 
-  _updateStagingTableBody() {
-    // Update just the table body and count without re-rendering the whole panel
+  _updateStagingContent() {
+    // Update just the content (table body or cards) without re-rendering the whole panel
     // This keeps the filter input focused
     const container = document.querySelector(".commands-mode-container")
     if (!container) return
 
-    const tbody = container.querySelector(".cmd-staging-table tbody")
     const countSpan = container.querySelector(".cmd-staging-count")
-    if (!tbody) return
-
-    const { rows, filteredCount } = this._getFilteredStagedRows()
+    const queueAllBtn = container.querySelector("#staging-queue-all")
     const totalTargets = this.cmdStagedCommands.reduce((acc, cmd) => acc + cmd.targets.length, 0)
 
-    // Update table body
-    tbody.innerHTML = rows.length > 0 ? rows : '<tr><td colspan="5" class="cmd-staging-empty">No matches</td></tr>'
+    if (this.cmdStageViewMode === 'cards') {
+      // Update cards view
+      const cardsGrid = container.querySelector(".cmd-staged-cards-grid")
+      const stagingBody = container.querySelector(".cmd-staging-body")
+      if (!stagingBody) return
 
-    // Update count
-    if (countSpan) {
-      countSpan.textContent = this.cmdStageFilter
-        ? `${filteredCount} of ${totalTargets} row${totalTargets !== 1 ? 's' : ''}`
-        : `${totalTargets} row${totalTargets !== 1 ? 's' : ''}`
+      const cardsHtml = this._renderStagedCards()
+      stagingBody.innerHTML = cardsHtml
+
+      // Count filtered cards
+      const filteredCount = container.querySelectorAll(".cmd-staged-card").length
+
+      // Update count
+      if (countSpan) {
+        countSpan.textContent = this.cmdStageFilter
+          ? `${filteredCount} of ${totalTargets} item${totalTargets !== 1 ? 's' : ''}`
+          : `${totalTargets} item${totalTargets !== 1 ? 's' : ''}`
+      }
+
+      // Update queue button label
+      if (queueAllBtn) {
+        queueAllBtn.textContent = this.cmdStageFilter
+          ? `Queue (${filteredCount})`
+          : `Queue All (${totalTargets})`
+      }
+
+      // Re-bind card click to edit
+      container.querySelectorAll(".cmd-staged-card")?.forEach(card => {
+        card.addEventListener("click", (e) => {
+          if (e.target.closest('.cmd-staged-remove') || e.target.closest('.cmd-staged-queue')) return
+          const cmdIdx = parseInt(card.dataset.stagedIdx, 10)
+          const targetIdx = parseInt(card.dataset.targetIdx, 10)
+          this._editStagedEntry(cmdIdx, targetIdx)
+        })
+      })
+    } else {
+      // Update table view
+      const tbody = container.querySelector(".cmd-staging-table tbody")
+      if (!tbody) return
+
+      const { rows, filteredCount } = this._getFilteredStagedRows()
+
+      // Update table body
+      tbody.innerHTML = rows.length > 0 ? rows : '<tr><td colspan="5" class="cmd-staging-empty">No matches</td></tr>'
+
+      // Update count
+      if (countSpan) {
+        countSpan.textContent = this.cmdStageFilter
+          ? `${filteredCount} of ${totalTargets} item${totalTargets !== 1 ? 's' : ''}`
+          : `${totalTargets} item${totalTargets !== 1 ? 's' : ''}`
+      }
+
+      // Update queue button label
+      if (queueAllBtn) {
+        queueAllBtn.textContent = this.cmdStageFilter
+          ? `Queue (${filteredCount})`
+          : `Queue All (${totalTargets})`
+      }
+
+      // Re-bind row click to edit
+      container.querySelectorAll(".cmd-staged-row")?.forEach(row => {
+        row.addEventListener("click", (e) => {
+          if (e.target.closest('.cmd-staged-remove') || e.target.closest('.cmd-staged-queue')) return
+          const cmdIdx = parseInt(row.dataset.stagedIdx, 10)
+          const targetIdx = parseInt(row.dataset.targetIdx, 10)
+          this._editStagedEntry(cmdIdx, targetIdx)
+        })
+      })
     }
 
-    // Re-bind row click to edit
-    container.querySelectorAll(".cmd-staged-row")?.forEach(row => {
-      row.addEventListener("click", (e) => {
-        if (e.target.closest('.cmd-staged-remove') || e.target.closest('.cmd-staged-queue')) return
-        const cmdIdx = parseInt(row.dataset.stagedIdx, 10)
-        const targetIdx = parseInt(row.dataset.targetIdx, 10)
-        this._editStagedEntry(cmdIdx, targetIdx)
-      })
-    })
-
-    // Re-bind queue buttons
+    // Re-bind queue buttons (works for both views)
     container.querySelectorAll(".cmd-staged-queue")?.forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation()
@@ -1817,7 +1982,7 @@ export const OpsConsoleV2Hook = {
       })
     })
 
-    // Re-bind remove buttons
+    // Re-bind remove buttons (works for both views)
     container.querySelectorAll(".cmd-staged-remove")?.forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation()
@@ -1838,23 +2003,54 @@ export const OpsConsoleV2Hook = {
   },
 
   _queueAllStaged() {
-    // Queue each staged command group
-    this.cmdStagedCommands.forEach(staged => {
-      const targetParams = staged.targets.map(t => ({
-        target_id: t.target_id,
-        params: t.params
-      }))
+    const filter = this.cmdStageFilter.toLowerCase()
 
-      this.pushEvent("cmd_dispatch_parameterized", {
-        command_id: staged.command.id,
-        target_params: targetParams,
-        mode: "queue",
-        priority: staged.priority
+    // Track which entries to remove after queueing
+    const toRemove = [] // Array of { cmdIdx, targetIdx }
+
+    // Queue each staged command (respecting filter)
+    this.cmdStagedCommands.forEach((staged, cmdIndex) => {
+      const commandName = staged.command.name
+
+      staged.targets.forEach((targetEntry, targetIndex) => {
+        // Apply filter if active
+        if (filter) {
+          const target = this.targets?.find(t => t.id === targetEntry.target_id)
+          const targetName = target?.name || targetEntry.target_name || targetEntry.target_id
+          const matchesTarget = targetName.toLowerCase().includes(filter)
+          const matchesCommand = commandName.toLowerCase().includes(filter)
+          if (!matchesTarget && !matchesCommand) return
+        }
+
+        // Queue this target
+        this.pushEvent("cmd_dispatch_parameterized", {
+          command_id: staged.command.id,
+          target_params: [{
+            target_id: targetEntry.target_id,
+            params: targetEntry.params
+          }],
+          mode: "queue",
+          priority: staged.priority
+        })
+
+        toRemove.push({ cmdIdx: cmdIndex, targetIdx: targetIndex })
       })
     })
 
-    // Clear the staging area
-    this.cmdStagedCommands = []
+    // Remove queued entries (in reverse order to preserve indices)
+    toRemove.sort((a, b) => b.cmdIdx - a.cmdIdx || b.targetIdx - a.targetIdx)
+    toRemove.forEach(({ cmdIdx, targetIdx }) => {
+      const staged = this.cmdStagedCommands[cmdIdx]
+      if (staged) {
+        staged.targets.splice(targetIdx, 1)
+        if (staged.targets.length === 0) {
+          this.cmdStagedCommands.splice(cmdIdx, 1)
+        }
+      }
+    })
+
+    // Clear filter after queueing
+    this.cmdStageFilter = ''
     this._updateStagingPanel()
   },
 
@@ -1894,8 +2090,11 @@ export const OpsConsoleV2Hook = {
     // Build targets array from staged params
     const targets = []
     this.cmdStagedParams.forEach((entry, targetId) => {
+      // Look up target name
+      const target = this.targets?.find(t => t.id === targetId)
       targets.push({
         target_id: targetId,
+        target_name: target?.name || `Target ${targetId}`,
         params: entry.params
       })
     })

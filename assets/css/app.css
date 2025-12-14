@@ -4696,8 +4696,13 @@
   z-index: 1;
 }
 
+.cmd-staging-table th:nth-child(4) {
+  text-align: center;
+  width: 50px;
+}
+
 .cmd-staging-table th:last-child {
-  width: 70px;
+  width: 110px;
   text-align: right;
   padding-right: 0.375rem;
 }
@@ -4749,12 +4754,13 @@
 .cmd-staged-priority {
   color: oklch(70% 0.08 285);
   text-align: center;
+  width: 50px;
 }
 
 /* Staged row actions */
 .cmd-staged-actions {
   position: relative;
-  width: 70px;
+  width: 110px;
 }
 
 .cmd-staged-actions-inner {
@@ -4866,6 +4872,292 @@
   border-radius: 2px;
   margin-left: 0.375rem;
   vertical-align: middle;
+}
+
+/* ----------------------------------------
+   Staging Panel - View Toggle
+   ---------------------------------------- */
+.cmd-staging-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 0.75rem;
+  padding: 2px;
+  background: oklch(10% 0.01 265);
+  border-radius: 3px;
+  border: 1px solid oklch(22% 0.02 265);
+}
+
+.cmd-staging-view-toggle .cmd-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: oklch(45% 0.02 250);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+
+.cmd-staging-view-toggle .cmd-view-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cmd-staging-view-toggle .cmd-view-btn:hover {
+  color: oklch(65% 0.02 250);
+  background: oklch(18% 0.02 265);
+}
+
+.cmd-staging-view-toggle .cmd-view-btn.active {
+  color: oklch(75% 0.1 145);
+  background: oklch(20% 0.04 145 / 0.4);
+}
+
+/* ----------------------------------------
+   Staging Panel - Card View
+   ---------------------------------------- */
+.cmd-staged-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.cmd-staging-empty-cards {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: oklch(45% 0.02 250);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+}
+
+/* Individual staged command card */
+.cmd-staged-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.625rem;
+  background: linear-gradient(
+    135deg,
+    oklch(14% 0.015 265) 0%,
+    oklch(12% 0.01 265) 100%
+  );
+  border: 1px solid oklch(24% 0.02 265);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* HUD corner accents on cards */
+.cmd-staged-card::before,
+.cmd-staged-card::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+  transition: all 0.15s ease;
+}
+
+.cmd-staged-card::before {
+  top: 0;
+  left: 0;
+  border-top: 1px solid oklch(50% 0.08 210 / 0.5);
+  border-left: 1px solid oklch(50% 0.08 210 / 0.5);
+}
+
+.cmd-staged-card::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1px solid oklch(50% 0.08 210 / 0.3);
+  border-right: 1px solid oklch(50% 0.08 210 / 0.3);
+}
+
+.cmd-staged-card:hover {
+  background: linear-gradient(
+    135deg,
+    oklch(16% 0.02 265) 0%,
+    oklch(14% 0.015 265) 100%
+  );
+  border-color: oklch(30% 0.03 265);
+  transform: translateY(-1px);
+}
+
+.cmd-staged-card:hover::before {
+  border-color: oklch(70% 0.1 210 / 0.6);
+}
+
+.cmd-staged-card:hover::after {
+  border-color: oklch(70% 0.1 210 / 0.4);
+}
+
+.cmd-staged-card:active {
+  transform: translateY(0);
+}
+
+/* Hazardous card styling */
+.cmd-staged-card.hazardous {
+  background: linear-gradient(
+    135deg,
+    oklch(14% 0.03 25 / 0.4) 0%,
+    oklch(12% 0.02 25 / 0.3) 100%
+  );
+  border-color: oklch(35% 0.08 25 / 0.5);
+}
+
+.cmd-staged-card.hazardous::before {
+  border-color: oklch(60% 0.15 25 / 0.5);
+}
+
+.cmd-staged-card.hazardous::after {
+  border-color: oklch(60% 0.15 25 / 0.3);
+}
+
+.cmd-staged-card.hazardous:hover {
+  background: linear-gradient(
+    135deg,
+    oklch(16% 0.04 25 / 0.5) 0%,
+    oklch(14% 0.03 25 / 0.4) 100%
+  );
+  border-color: oklch(45% 0.1 25 / 0.6);
+}
+
+/* Card header - target and priority */
+.cmd-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cmd-card-target {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: oklch(80% 0.1 210);
+  letter-spacing: 0.02em;
+}
+
+.cmd-card-target-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: oklch(70% 0.1 185);
+  box-shadow: 0 0 4px oklch(70% 0.1 185 / 0.5);
+}
+
+.cmd-card-priority {
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: oklch(65% 0.08 285);
+  padding: 0.125rem 0.375rem;
+  background: oklch(20% 0.04 285 / 0.3);
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+
+/* Command name */
+.cmd-card-command {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: oklch(88% 0.02 250);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid oklch(22% 0.015 265);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.cmd-card-hazard {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: oklch(75% 0.15 25);
+  padding: 0.1rem 0.25rem;
+  background: oklch(30% 0.1 25 / 0.4);
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+
+/* Parameters section */
+.cmd-card-params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-top: 0.25rem;
+}
+
+.cmd-card-param {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+}
+
+.cmd-card-param-key {
+  color: oklch(55% 0.02 250);
+  flex-shrink: 0;
+}
+
+.cmd-card-param-key::after {
+  content: ':';
+}
+
+.cmd-card-param-val {
+  color: oklch(75% 0.06 145);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-card-param-more {
+  font-size: 0.5rem;
+  color: oklch(50% 0.02 250);
+  font-style: italic;
+}
+
+.cmd-card-no-params {
+  font-size: 0.55rem;
+  color: oklch(45% 0.02 250);
+  font-style: italic;
+}
+
+/* Card actions - appear on hover */
+.cmd-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+  padding-top: 0.375rem;
+  border-top: 1px solid oklch(20% 0.015 265);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 0.15s ease;
+}
+
+.cmd-staged-card:hover .cmd-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Card action buttons inherit the expanding style from table */
+.cmd-card-actions .cmd-staged-queue,
+.cmd-card-actions .cmd-staged-remove {
+  opacity: 1; /* Always visible within the actions bar */
 }
 
 /* Add to Stage button */
