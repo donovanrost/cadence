@@ -1,10 +1,17 @@
 defmodule Cadence.Commands do
   @moduledoc """
-  Context module for managing spacecraft command definitions.
+  Context module for spacecraft command operations.
 
-  Commands are part of the unified C&T database (DefinitionSet), versioned
-  alongside telemetry packets. This context provides CRUD operations for
-  command definitions and parameters.
+  Commands are defined in the MissionDatabase as MetaCommands within a DefinitionSet.
+  Each Target references a specific DefinitionSet version, which determines
+  which command dictionary is used for that target.
+
+  ## Command Lookup
+
+  Commands are looked up via the target's definition_set_id:
+
+      # Get command for a target's definition set
+      command = Commands.get_meta_command(definition_set_id, "SAFE_MODE")
 
   ## Safety Features
 
@@ -16,193 +23,127 @@ defmodule Cadence.Commands do
 
   ## Example
 
-      # List commands for a definition set
-      commands = Commands.list_commands_for_definition_set(definition_set_id)
+      # List commands for a target's definition set
+      commands = Commands.list_meta_commands(definition_set_id)
 
       # Get a specific command by name
-      cmd = Commands.get_command_by_name(definition_set_id, "SAFE_MODE")
+      cmd = Commands.get_meta_command(definition_set_id, "SAFE_MODE")
 
       # Validate command arguments
-      :ok = Commands.validate_parameters(cmd, %{"target_temp" => 25.0})
+      :ok = Commands.validate_arguments(cmd, %{"target_temp" => 25.0})
   """
 
   import Ecto.Query
 
   alias Cadence.Repo
 
+  alias Cadence.MissionDatabase.{MetaCommand, Argument}
+
   alias Cadence.Commands.{
-    CommandDefinition,
-    CommandParameter,
     CommandLog,
-    Dispatcher,
-    Queue,
+    TargetDispatcher,
+    TargetQueue,
+    TargetPipelineSupervisor,
     QueueEntry
   }
+
+  alias Cadence.{Missions, Targets}
 
   alias Cadence.Telemetry.CurrentValueTable
 
   # ============================================================================
-  # Command Definition Operations
+  # MetaCommand Lookup Operations
   # ============================================================================
 
   @doc """
-  Creates a command definition.
-  """
-  def create_command(attrs) do
-    %CommandDefinition{}
-    |> CommandDefinition.changeset(attrs)
-    |> Repo.insert()
-  end
+  Gets a MetaCommand by name for a DefinitionSet.
 
-  @doc """
-  Updates a command definition.
-
-  Note: Commands within a published DefinitionSet should be treated as immutable.
-  Use this only for draft/unpublished definition sets.
+  This is the primary lookup method for command dispatch.
   """
-  def update_command(%CommandDefinition{} = command, attrs) do
-    command
-    |> CommandDefinition.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a command definition and its parameters.
-  """
-  def delete_command(%CommandDefinition{} = command) do
-    Repo.delete(command)
-  end
-
-  @doc """
-  Gets a command definition by ID.
-  """
-  def get_command(id) do
-    CommandDefinition
-    |> Repo.get(id)
-    |> Repo.preload(:command_parameters)
-  end
-
-  @doc """
-  Gets a command definition by ID, raising if not found.
-  """
-  def get_command!(id) do
-    CommandDefinition
-    |> Repo.get!(id)
-    |> Repo.preload(:command_parameters)
-  end
-
-  @doc """
-  Gets a command definition by name for a DefinitionSet.
-  """
-  def get_command_by_name(definition_set_id, name) do
-    from(c in CommandDefinition,
+  def get_meta_command(definition_set_id, name) do
+    from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
       where: c.name == ^name,
-      preload: :command_parameters,
+      preload: :arguments,
       limit: 1
     )
     |> Repo.one()
   end
 
   @doc """
-  Gets a command definition by opcode for a DefinitionSet.
+  Gets a MetaCommand by ID.
   """
-  def get_command_by_opcode(definition_set_id, opcode) do
-    from(c in CommandDefinition,
+  def get_meta_command_by_id(id) do
+    MetaCommand
+    |> Repo.get(id)
+    |> Repo.preload(:arguments)
+  end
+
+  @doc """
+  Gets a MetaCommand by ID, raising if not found.
+  """
+  def get_meta_command_by_id!(id) do
+    MetaCommand
+    |> Repo.get!(id)
+    |> Repo.preload(:arguments)
+  end
+
+  @doc """
+  Gets a MetaCommand by opcode for a DefinitionSet.
+  """
+  def get_meta_command_by_opcode(definition_set_id, opcode) do
+    from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
       where: c.opcode == ^opcode,
-      preload: :command_parameters,
+      preload: :arguments,
       limit: 1
     )
     |> Repo.one()
   end
 
   @doc """
-  Lists all commands for a DefinitionSet.
+  Lists all MetaCommands for a DefinitionSet.
   """
-  def list_commands(definition_set_id) do
-    from(c in CommandDefinition,
+  def list_meta_commands(definition_set_id) do
+    from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
+      where: c.abstract == false or is_nil(c.abstract),
       order_by: [asc: c.name],
-      preload: :command_parameters
+      preload: :arguments
     )
     |> Repo.all()
   end
 
   @doc """
-  Lists all commands for a specific DefinitionSet.
-  Alias for list_commands/1.
+  Lists hazardous MetaCommands for a DefinitionSet.
   """
-  def list_commands_for_definition_set(definition_set_id) do
-    list_commands(definition_set_id)
-  end
-
-  @doc """
-  Lists hazardous commands for a DefinitionSet.
-  """
-  def list_hazardous_commands(definition_set_id) do
-    from(c in CommandDefinition,
+  def list_hazardous_meta_commands(definition_set_id) do
+    from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
       where: c.is_hazardous == true,
       order_by: [asc: c.name],
-      preload: :command_parameters
+      preload: :arguments
     )
     |> Repo.all()
   end
 
   @doc """
-  Lists commands allowed in a specific mission phase.
+  Lists MetaCommands allowed in a specific mission phase.
   """
-  def list_commands_for_phase(definition_set_id, phase) do
-    list_commands(definition_set_id)
-    |> Enum.filter(&CommandDefinition.allowed_in_phase?(&1, phase))
-  end
-
-  # ============================================================================
-  # Command Parameter Operations
-  # ============================================================================
-
-  @doc """
-  Creates a command parameter.
-  """
-  def create_parameter(attrs) do
-    %CommandParameter{}
-    |> CommandParameter.changeset(attrs)
-    |> Repo.insert()
+  def list_meta_commands_for_phase(definition_set_id, phase) do
+    list_meta_commands(definition_set_id)
+    |> Enum.filter(&MetaCommand.allowed_in_phase?(&1, phase))
   end
 
   @doc """
-  Updates a command parameter.
+  Counts MetaCommands in a DefinitionSet.
   """
-  def update_parameter(%CommandParameter{} = parameter, attrs) do
-    parameter
-    |> CommandParameter.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a command parameter.
-  """
-  def delete_parameter(%CommandParameter{} = parameter) do
-    Repo.delete(parameter)
-  end
-
-  @doc """
-  Gets a command parameter by ID.
-  """
-  def get_parameter(id) do
-    Repo.get(CommandParameter, id)
-  end
-
-  @doc """
-  Lists parameters for a command, ordered by display_order.
-  """
-  def list_parameters(command_definition_id) do
-    from(p in CommandParameter,
-      where: p.command_definition_id == ^command_definition_id,
-      order_by: [asc: p.display_order, asc: p.name]
+  def count_meta_commands(definition_set_id) do
+    from(c in MetaCommand,
+      where: c.definition_set_id == ^definition_set_id,
+      select: count(c.id)
     )
-    |> Repo.all()
+    |> Repo.one()
   end
 
   # ============================================================================
@@ -210,35 +151,35 @@ defmodule Cadence.Commands do
   # ============================================================================
 
   @doc """
-  Validates command arguments against parameter definitions.
+  Validates command arguments against argument definitions.
 
   Returns `:ok` if all validations pass, or `{:error, errors}` with a list
   of validation errors.
 
   ## Example
 
-      case Commands.validate_parameters(command, %{"target_temp" => 25.0}) do
+      case Commands.validate_arguments(command, %{"target_temp" => 25.0}) do
         :ok -> send_command(command, args)
         {:error, errors} -> handle_validation_errors(errors)
       end
   """
-  def validate_parameters(%CommandDefinition{} = command, args) when is_map(args) do
-    command = Repo.preload(command, :command_parameters)
+  def validate_arguments(%MetaCommand{} = command, args) when is_map(args) do
+    command = Repo.preload(command, :arguments)
 
     errors =
-      command.command_parameters
-      |> Enum.flat_map(fn param ->
-        validate_single_parameter(param, args)
+      command.arguments
+      |> Enum.flat_map(fn arg ->
+        validate_single_argument(arg, args)
       end)
 
-    # Check for unknown parameters
-    known_names = MapSet.new(command.command_parameters, & &1.name)
+    # Check for unknown arguments
+    known_names = MapSet.new(command.arguments, & &1.name)
 
     unknown_errors =
       args
       |> Map.keys()
       |> Enum.reject(&MapSet.member?(known_names, to_string(&1)))
-      |> Enum.map(fn name -> {name, "unknown parameter"} end)
+      |> Enum.map(fn name -> {name, "unknown argument"} end)
 
     all_errors = errors ++ unknown_errors
 
@@ -249,66 +190,86 @@ defmodule Cadence.Commands do
     end
   end
 
-  defp validate_single_parameter(%CommandParameter{} = param, args) do
-    value = Map.get(args, param.name) || Map.get(args, String.to_atom(param.name))
+  defp validate_single_argument(%Argument{} = arg, args) do
+    value = Map.get(args, arg.name) || Map.get(args, String.to_atom(arg.name))
 
     cond do
-      # Required parameter missing
-      CommandParameter.required?(param) && is_nil(value) ->
-        [{param.name, "is required"}]
+      # Required argument missing
+      arg.required && is_nil(value) ->
+        [{arg.name, "is required"}]
 
-      # Optional parameter not provided - OK
+      # Optional argument not provided - OK
       is_nil(value) ->
         []
 
       # Validate the provided value
       true ->
-        case CommandParameter.validate_value(param, value) do
-          :ok -> []
-          {:error, reason} -> [{param.name, reason}]
-        end
+        validate_argument_value(arg, value)
     end
   end
 
-  # ============================================================================
-  # Bulk Operations (for importers)
-  # ============================================================================
+  defp validate_argument_value(%Argument{} = arg, value) do
+    errors = []
 
-  @doc """
-  Creates a command definition with parameters in a single transaction.
-  """
-  def create_command_with_parameters(command_attrs, parameters_attrs) do
-    Repo.transaction(fn ->
-      case create_command(command_attrs) do
-        {:ok, command} ->
-          parameters =
-            Enum.map(parameters_attrs, fn param_attrs ->
-              param_attrs = Map.put(param_attrs, :command_definition_id, command.id)
-
-              case create_parameter(param_attrs) do
-                {:ok, param} -> param
-                {:error, changeset} -> Repo.rollback({:parameter_error, changeset})
-              end
-            end)
-
-          %{command | command_parameters: parameters}
-
-        {:error, changeset} ->
-          Repo.rollback({:command_error, changeset})
+    # Type validation based on data_type_ref
+    errors =
+      case validate_type(arg.data_type_ref, value) do
+        :ok -> errors
+        {:error, reason} -> [{arg.name, reason} | errors]
       end
-    end)
+
+    # Range validation
+    errors =
+      case validate_range(arg, value) do
+        :ok -> errors
+        {:error, reason} -> [{arg.name, reason} | errors]
+      end
+
+    # Valid values validation (for enums)
+    errors =
+      case validate_valid_values(arg, value) do
+        :ok -> errors
+        {:error, reason} -> [{arg.name, reason} | errors]
+      end
+
+    errors
   end
 
-  @doc """
-  Counts commands in a DefinitionSet.
-  """
-  def count_commands(definition_set_id) do
-    from(c in CommandDefinition,
-      where: c.definition_set_id == ^definition_set_id,
-      select: count(c.id)
-    )
-    |> Repo.one()
+  defp validate_type("uint", value) when is_integer(value) and value >= 0, do: :ok
+  defp validate_type("int", value) when is_integer(value), do: :ok
+  defp validate_type("float", value) when is_number(value), do: :ok
+  defp validate_type("string", value) when is_binary(value), do: :ok
+  defp validate_type("boolean", value) when is_boolean(value), do: :ok
+  defp validate_type("bool", value) when is_boolean(value), do: :ok
+  defp validate_type("enum", value) when is_binary(value), do: :ok
+  defp validate_type(nil, _value), do: :ok
+  defp validate_type(type, _value), do: {:error, "invalid type for #{type}"}
+
+  defp validate_range(%Argument{min_value: nil, max_value: nil}, _value), do: :ok
+
+  defp validate_range(%Argument{min_value: min, max_value: max}, value) when is_number(value) do
+    cond do
+      min && value < min -> {:error, "value must be >= #{min}"}
+      max && value > max -> {:error, "value must be <= #{max}"}
+      true -> :ok
+    end
   end
+
+  defp validate_range(_, _), do: :ok
+
+  defp validate_valid_values(%Argument{valid_values: []}, _value), do: :ok
+  defp validate_valid_values(%Argument{valid_values: nil}, _value), do: :ok
+
+  defp validate_valid_values(%Argument{valid_values: valid_values}, value)
+       when is_binary(value) do
+    if value in valid_values do
+      :ok
+    else
+      {:error, "value must be one of: #{Enum.join(valid_values, ", ")}"}
+    end
+  end
+
+  defp validate_valid_values(_, _), do: :ok
 
   # ============================================================================
   # Command Dispatch Operations
@@ -328,28 +289,37 @@ defmodule Cadence.Commands do
 
   - `{:ok, command_log_id}` - Command sent successfully
   - `{:error, :requires_confirmation, %{token: ..., hazard_description: ...}}` - Hazardous command needs confirmation
-  - `{:error, :validation_failed, errors}` - Parameter validation failed
+  - `{:error, :validation_failed, errors}` - Argument validation failed
   - `{:error, :not_allowed_in_phase, current_phase}` - Phase restriction
   - `{:error, :unknown_command}` - Command not found
   - `{:error, :unknown_target}` - Target not found
   - `{:error, :no_interface}` - No write interface for target
   - `{:error, :encoding_failed, reason}` - Binary encoding failed
   - `{:error, :send_failed, reason}` - Transmission failed
+  - `{:error, :paused}` - Dispatcher is paused for this target
 
   ## Example
 
       {:ok, cmd_id} = Commands.dispatch(mission_id, "SET_MODE", %{mode: 1}, target: target_id)
 
       # Hazardous command
-      {:error, :requires_confirmation, %{token: token}} = Commands.dispatch(mission_id, "SAFE_MODE", %{})
-      {:ok, cmd_id} = Commands.confirm_dispatch(mission_id, token)
+      {:error, :requires_confirmation, %{token: token}} = Commands.dispatch(mission_id, "SAFE_MODE", %{}, target: target_id)
+      {:ok, cmd_id} = Commands.confirm_dispatch(mission_id, target_id, token)
   """
   @spec dispatch(String.t(), String.t(), map(), keyword()) ::
           {:ok, String.t()}
           | {:error, atom()}
           | {:error, atom(), term()}
   def dispatch(mission_id, command_name, params, opts \\ []) do
-    Dispatcher.dispatch(mission_id, command_name, params, opts)
+    target_id = get_target_id!(opts)
+
+    case TargetDispatcher.whereis(mission_id, target_id) do
+      nil ->
+        {:error, :dispatcher_not_running}
+
+      _pid ->
+        TargetDispatcher.dispatch(mission_id, target_id, command_name, params, opts)
+    end
   end
 
   @doc """
@@ -364,10 +334,10 @@ defmodule Cadence.Commands do
   - `{:error, :invalid_token}` - Token not found
   - `{:error, :token_expired}` - Confirmation window expired
   """
-  @spec confirm_dispatch(String.t(), String.t()) ::
+  @spec confirm_dispatch(String.t(), String.t(), String.t()) ::
           {:ok, String.t()} | {:error, atom()}
-  def confirm_dispatch(mission_id, token) do
-    Dispatcher.confirm_dispatch(mission_id, token)
+  def confirm_dispatch(mission_id, target_id, token) do
+    TargetDispatcher.confirm_dispatch(mission_id, target_id, token)
   end
 
   @doc """
@@ -375,7 +345,7 @@ defmodule Cadence.Commands do
 
   Waits for a CVT item to reach an expected value. This is used for explicit
   verification in scripts or procedures, as opposed to the automatic verification
-  configured on CommandDefinition.
+  configured on MetaCommand.
 
   ## Options
 
@@ -567,12 +537,10 @@ defmodule Cadence.Commands do
   - `:expires_at` - Cancel if not executed by this time
   - `:max_attempts` - Max retry attempts (default: 3)
   - `:user_id` - User performing the action
-  - `:immediate` - Skip queue, execute immediately (default: false)
 
   ## Returns
 
   - `{:ok, queue_entry}` - Command queued successfully
-  - `{:ok, command_log_id}` - Command executed immediately (if :immediate)
   - `{:error, reason}` - Enqueue failed
 
   ## Example
@@ -583,28 +551,61 @@ defmodule Cadence.Commands do
       )
   """
   @spec enqueue(String.t(), String.t(), map(), keyword()) ::
-          {:ok, QueueEntry.t()} | {:ok, String.t()} | {:error, term()}
+          {:ok, QueueEntry.t()} | {:error, term()}
   def enqueue(mission_id, command_name, params, opts \\ []) do
-    Queue.enqueue(mission_id, command_name, params, opts)
+    target_id = get_target_id!(opts)
+    TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
   end
 
   @doc """
-  Pauses command queue processing for a mission.
+  Pauses command dispatch for a specific target.
 
   Commands can still be enqueued but won't execute until resumed.
-  Useful during anomaly handling or maintenance.
+  Useful during anomaly handling or maintenance for a specific spacecraft.
   """
-  @spec pause_queue(String.t()) :: :ok
-  def pause_queue(mission_id) do
-    Queue.pause(mission_id)
+  @spec pause_target(String.t(), String.t()) :: :ok
+  def pause_target(mission_id, target_id) do
+    TargetDispatcher.pause(mission_id, target_id)
   end
 
   @doc """
-  Resumes command queue processing after a pause.
+  Resumes command dispatch for a specific target.
   """
-  @spec resume_queue(String.t()) :: :ok
-  def resume_queue(mission_id) do
-    Queue.resume(mission_id)
+  @spec resume_target(String.t(), String.t()) :: :ok
+  def resume_target(mission_id, target_id) do
+    TargetDispatcher.resume(mission_id, target_id)
+  end
+
+  @doc """
+  Pauses command dispatch for all targets in a mission.
+
+  Useful for mission-wide anomaly handling.
+  """
+  @spec pause_all_targets(String.t()) :: :ok
+  def pause_all_targets(mission_id) do
+    mission = Missions.get_mission!(mission_id)
+    targets = Targets.list_targets(mission)
+
+    Enum.each(targets, fn target ->
+      TargetDispatcher.pause(mission_id, target.id)
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Resumes command dispatch for all targets in a mission.
+  """
+  @spec resume_all_targets(String.t()) :: :ok
+  def resume_all_targets(mission_id) do
+    mission = Missions.get_mission!(mission_id)
+    targets = Targets.list_targets(mission)
+
+    Enum.each(targets, fn target ->
+      TargetDispatcher.resume(mission_id, target.id)
+    end)
+
+    :ok
   end
 
   @doc """
@@ -612,10 +613,10 @@ defmodule Cadence.Commands do
 
   Returns error if command is already executing or finished.
   """
-  @spec cancel_queued(String.t(), String.t()) ::
+  @spec cancel_queued(String.t(), String.t(), String.t()) ::
           {:ok, QueueEntry.t()} | {:error, :not_found | :already_finished | :currently_executing}
-  def cancel_queued(mission_id, entry_id) do
-    Queue.cancel(mission_id, entry_id)
+  def cancel_queued(mission_id, target_id, entry_id) do
+    TargetQueue.cancel(mission_id, target_id, entry_id)
   end
 
   @doc """
@@ -625,44 +626,55 @@ defmodule Cadence.Commands do
   """
   @spec cancel_all_queued_for_target(String.t(), String.t()) :: {:ok, non_neg_integer()}
   def cancel_all_queued_for_target(mission_id, target_id) do
-    Queue.cancel_all_for_target(mission_id, target_id)
+    TargetQueue.clear(mission_id, target_id)
   end
 
   @doc """
-  Clears all pending commands from the mission's queue.
+  Clears all pending commands from all targets in a mission.
 
-  Returns the number of cancelled entries.
+  Returns the total number of cancelled entries.
   """
-  @spec clear_queue(String.t()) :: {:ok, non_neg_integer()}
-  def clear_queue(mission_id) do
-    Queue.clear(mission_id)
+  @spec clear_all_queues(String.t()) :: {:ok, non_neg_integer()}
+  def clear_all_queues(mission_id) do
+    mission = Missions.get_mission!(mission_id)
+    targets = Targets.list_targets(mission)
+
+    total =
+      Enum.reduce(targets, 0, fn target, acc ->
+        {:ok, count} = TargetQueue.clear(mission_id, target.id)
+        acc + count
+      end)
+
+    {:ok, total}
   end
 
   @doc """
-  Gets the current status of the command queue.
+  Gets the current status of a target's command queue/dispatcher.
 
   Returns a map with:
-  - `:paused` - Whether the queue is paused
+  - `:paused` - Whether the dispatcher is paused
   - `:pending` - Number of pending commands
   - `:executing` - Number of currently executing commands
   - `:failed` - Number of failed commands
   """
-  @spec queue_status(String.t()) :: map()
-  def queue_status(mission_id) do
-    Queue.status(mission_id)
+  @spec target_queue_status(String.t(), String.t()) :: map()
+  def target_queue_status(mission_id, target_id) do
+    queue_status = TargetQueue.status(mission_id, target_id)
+    dispatcher_status = TargetDispatcher.status(mission_id, target_id)
+
+    Map.merge(queue_status, %{paused: dispatcher_status.paused})
   end
 
   @doc """
-  Lists pending commands in the queue.
+  Lists pending commands in a target's queue.
 
   ## Options
 
   - `:limit` - Max entries to return (default: 100)
-  - `:target_id` - Filter by target
   """
-  @spec list_queued(String.t(), keyword()) :: [QueueEntry.t()]
-  def list_queued(mission_id, opts \\ []) do
-    Queue.list_pending(mission_id, opts)
+  @spec list_target_queued(String.t(), String.t(), keyword()) :: [QueueEntry.t()]
+  def list_target_queued(mission_id, target_id, opts \\ []) do
+    TargetQueue.list_pending(mission_id, target_id, opts)
   end
 
   @doc """
@@ -670,10 +682,74 @@ defmodule Cadence.Commands do
 
   Higher priority commands (lower number) execute first.
   """
-  @spec reorder_queued(String.t(), String.t(), integer()) ::
+  @spec reorder_queued(String.t(), String.t(), String.t(), integer()) ::
           {:ok, QueueEntry.t()} | {:error, :not_found}
-  def reorder_queued(mission_id, entry_id, new_priority) do
-    Queue.reorder(mission_id, entry_id, new_priority)
+  def reorder_queued(mission_id, target_id, entry_id, new_priority) do
+    TargetQueue.reorder(mission_id, target_id, entry_id, new_priority)
+  end
+
+  # ============================================================================
+  # Fleet Operations
+  # ============================================================================
+
+  @doc """
+  Dispatches the same command to multiple targets.
+
+  Returns a list of {target_id, result} tuples.
+
+  ## Example
+
+      results = Commands.fleet_dispatch(mission_id, target_ids, "SAFE_MODE", %{})
+      Enum.each(results, fn {target_id, result} ->
+        case result do
+          {:ok, cmd_id} -> Logger.info("Command sent to \#{target_id}")
+          {:error, reason} -> Logger.error("Failed for \#{target_id}: \#{inspect(reason)}")
+        end
+      end)
+  """
+  @spec fleet_dispatch(String.t(), [String.t()], String.t(), map(), keyword()) ::
+          [{String.t(), {:ok, String.t()} | {:error, term()}}]
+  def fleet_dispatch(mission_id, target_ids, command_name, params, opts \\ []) do
+    Enum.map(target_ids, fn target_id ->
+      result = TargetDispatcher.dispatch(mission_id, target_id, command_name, params, opts)
+      {target_id, result}
+    end)
+  end
+
+  @doc """
+  Enqueues the same command to multiple targets.
+
+  Returns a list of {target_id, result} tuples.
+  """
+  @spec fleet_enqueue(String.t(), [String.t()], String.t(), map(), keyword()) ::
+          [{String.t(), {:ok, QueueEntry.t()} | {:error, term()}}]
+  def fleet_enqueue(mission_id, target_ids, command_name, params, opts \\ []) do
+    Enum.map(target_ids, fn target_id ->
+      result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+      {target_id, result}
+    end)
+  end
+
+  @doc """
+  Starts a target's command pipeline.
+
+  Called automatically when a target is created, but can be used to
+  manually start a pipeline for a target.
+  """
+  @spec start_target_pipeline(String.t(), String.t()) :: {:ok, pid()} | {:error, term()}
+  def start_target_pipeline(mission_id, target_id) do
+    TargetPipelineSupervisor.start_pipeline(mission_id, target_id)
+  end
+
+  @doc """
+  Stops a target's command pipeline.
+
+  Called automatically when a target is deleted, but can be used to
+  manually stop a pipeline for a target.
+  """
+  @spec stop_target_pipeline(String.t(), String.t()) :: :ok | {:error, :not_found}
+  def stop_target_pipeline(mission_id, target_id) do
+    TargetPipelineSupervisor.stop_pipeline(mission_id, target_id)
   end
 
   @doc """
@@ -696,12 +772,13 @@ defmodule Cadence.Commands do
   def list_queue_entries(mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
     status = Keyword.get(opts, :status)
+    target_id = Keyword.get(opts, :target_id)
     preload = Keyword.get(opts, :preload, [])
 
     query =
       from(e in QueueEntry,
         where: e.mission_id == ^mission_id,
-        order_by: [desc: e.inserted_at],
+        order_by: [asc: e.priority, asc: e.sequence_number],
         limit: ^limit
       )
 
@@ -713,8 +790,29 @@ defmodule Cadence.Commands do
         query
       end
 
+    query =
+      if target_id do
+        from(e in query, where: e.target_id == ^target_id)
+      else
+        query
+      end
+
     query
     |> Repo.all()
     |> Repo.preload(preload)
+  end
+
+  # ============================================================================
+  # Private Helpers
+  # ============================================================================
+
+  defp get_target_id!(opts) do
+    case Keyword.get(opts, :target) || Keyword.get(opts, :target_id) do
+      nil ->
+        raise ArgumentError, "target or target_id is required in opts"
+
+      target_id ->
+        target_id
+    end
   end
 end

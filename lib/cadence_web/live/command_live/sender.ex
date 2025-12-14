@@ -2,9 +2,13 @@ defmodule CadenceWeb.CommandLive.Sender do
   @moduledoc """
   LiveView for sending commands to spacecraft targets.
 
+  Commands are loaded from the selected target's definition_set_id, ensuring
+  each target uses its correct command dictionary version.
+
   Provides a UI for:
-  - Selecting commands from the mission's command database
-  - Filling in command parameters
+  - Selecting a target
+  - Selecting commands from the target's command database
+  - Filling in command arguments
   - Reviewing and sending commands
   - Confirming hazardous commands
   - Viewing command status and verification results
@@ -13,20 +17,19 @@ defmodule CadenceWeb.CommandLive.Sender do
   use CadenceWeb, :live_view
 
   alias Cadence.{Commands, Missions, Targets}
-  alias Cadence.Commands.CommandDefinition
+  alias Cadence.MissionDatabase.MetaCommand
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do
     mission = Missions.get_mission!(mission_id)
     targets = Targets.list_targets(mission)
-    commands = Commands.list_commands(mission_id)
 
     {:ok,
      socket
      |> assign(:page_title, "Command Sender")
      |> assign(:mission, mission)
      |> assign(:targets, targets)
-     |> assign(:commands, commands)
+     |> assign(:commands, [])
      |> assign(:selected_command, nil)
      |> assign(:selected_target, nil)
      |> assign(:param_form, nil)
@@ -66,33 +69,39 @@ defmodule CadenceWeb.CommandLive.Sender do
 
             <div class="divider my-2"></div>
 
-            <div class="max-h-96 overflow-y-auto">
-              <ul class="menu menu-sm bg-base-100 rounded-lg">
-                <%= for command <- @commands do %>
-                  <li>
-                    <a
-                      phx-click="select_command"
-                      phx-value-id={command.id}
-                      class={[
-                        @selected_command && @selected_command.id == command.id && "active"
-                      ]}
-                    >
-                      <span class="flex items-center gap-2">
-                        <.icon
-                          :if={command.is_hazardous}
-                          name="hero-exclamation-triangle"
-                          class="size-4 text-warning"
-                        />
-                        {command.name}
-                      </span>
-                      <span class="text-xs text-base-content/50">
-                        0x{Integer.to_string(command.opcode || 0, 16) |> String.pad_leading(4, "0")}
-                      </span>
-                    </a>
-                  </li>
-                <% end %>
-              </ul>
-            </div>
+            <%= if @selected_target do %>
+              <div class="max-h-96 overflow-y-auto">
+                <ul class="menu menu-sm bg-base-100 rounded-lg">
+                  <%= for command <- @commands do %>
+                    <li>
+                      <a
+                        phx-click="select_command"
+                        phx-value-id={command.id}
+                        class={[
+                          @selected_command && @selected_command.id == command.id && "active"
+                        ]}
+                      >
+                        <span class="flex items-center gap-2">
+                          <.icon
+                            :if={command.is_hazardous}
+                            name="hero-exclamation-triangle"
+                            class="size-4 text-warning"
+                          />
+                          {command.name}
+                        </span>
+                        <span class="text-xs text-base-content/50">
+                          0x{Integer.to_string(command.opcode || 0, 16) |> String.pad_leading(4, "0")}
+                        </span>
+                      </a>
+                    </li>
+                  <% end %>
+                </ul>
+              </div>
+            <% else %>
+              <div class="text-sm text-base-content/50 italic text-center py-4">
+                Select a target to see available commands
+              </div>
+            <% end %>
           </div>
         </div>
 
@@ -100,7 +109,7 @@ defmodule CadenceWeb.CommandLive.Sender do
         <div class="card bg-base-200">
           <div class="card-body">
             <h2 class="card-title text-sm uppercase tracking-wide text-base-content/70">
-              Parameters
+              Arguments
             </h2>
 
             <%= if @selected_command do %>
@@ -123,13 +132,13 @@ defmodule CadenceWeb.CommandLive.Sender do
                 phx-change="validate_params"
                 phx-submit="send_command"
               >
-                <%= for param <- @selected_command.command_parameters do %>
-                  <.param_input param={param} form={@param_form} />
+                <%= for arg <- @selected_command.arguments do %>
+                  <.arg_input arg={arg} form={@param_form} />
                 <% end %>
 
-                <%= if Enum.empty?(@selected_command.command_parameters) do %>
+                <%= if Enum.empty?(@selected_command.arguments) do %>
                   <p class="text-sm text-base-content/50 italic">
-                    This command has no parameters.
+                    This command has no arguments.
                   </p>
                 <% end %>
 
@@ -231,6 +240,7 @@ defmodule CadenceWeb.CommandLive.Sender do
           module={CadenceWeb.CommandLive.HazardConfirmationComponent}
           id="hazard-confirmation"
           mission_id={@mission.id}
+          target_id={@pending_confirmation.target_id}
           command_name={@pending_confirmation.command_name}
           hazard_description={@pending_confirmation.hazard_description}
           token={@pending_confirmation.token}
@@ -241,63 +251,88 @@ defmodule CadenceWeb.CommandLive.Sender do
     """
   end
 
-  # Component for rendering parameter inputs based on data type
-  defp param_input(assigns) do
+  # Component for rendering argument inputs based on data type
+  defp arg_input(assigns) do
     ~H"""
     <div class="mb-3">
-      <%= case @param.data_type do %>
+      <%= case @arg.data_type_ref do %>
         <% "boolean" -> %>
           <.input
-            field={@form[@param.name]}
+            field={@form[@arg.name]}
             type="checkbox"
-            label={param_label(@param)}
+            label={arg_label(@arg)}
+          />
+        <% "bool" -> %>
+          <.input
+            field={@form[@arg.name]}
+            type="checkbox"
+            label={arg_label(@arg)}
           />
         <% "enum" -> %>
           <.input
-            field={@form[@param.name]}
+            field={@form[@arg.name]}
             type="select"
-            label={param_label(@param)}
-            options={@param.valid_values || []}
+            label={arg_label(@arg)}
+            options={@arg.valid_values || []}
             prompt="Select..."
           />
         <% type when type in ["int", "uint", "float"] -> %>
           <.input
-            field={@form[@param.name]}
+            field={@form[@arg.name]}
             type="number"
-            label={param_label(@param)}
+            label={arg_label(@arg)}
             step={if type == "float", do: "any", else: "1"}
           />
         <% _ -> %>
           <.input
-            field={@form[@param.name]}
+            field={@form[@arg.name]}
             type="text"
-            label={param_label(@param)}
+            label={arg_label(@arg)}
           />
       <% end %>
-      <p :if={@param.description} class="text-xs text-base-content/50 mt-1">
-        {@param.description}
+      <p :if={@arg.description} class="text-xs text-base-content/50 mt-1">
+        {@arg.description}
       </p>
     </div>
     """
   end
 
-  defp param_label(param) do
-    required_mark = if param.required, do: " *", else: ""
-    "#{param.name}#{required_mark}"
+  defp arg_label(arg) do
+    required_mark = if arg.required, do: " *", else: ""
+    "#{arg.name}#{required_mark}"
   end
 
   @impl true
   def handle_event("select_target", %{"target" => ""}, socket) do
-    {:noreply, assign(socket, :selected_target, nil)}
+    {:noreply,
+     socket
+     |> assign(:selected_target, nil)
+     |> assign(:commands, [])
+     |> assign(:selected_command, nil)
+     |> assign(:param_form, nil)}
   end
 
   def handle_event("select_target", %{"target" => target_id}, socket) do
-    target = Targets.get_target!(target_id)
-    {:noreply, assign(socket, :selected_target, target)}
+    target = Targets.get_target_with_definition_set!(target_id)
+
+    # Load commands from the target's definition set
+    commands =
+      if target.definition_set_id do
+        Commands.list_meta_commands(target.definition_set_id)
+      else
+        []
+      end
+
+    {:noreply,
+     socket
+     |> assign(:selected_target, target)
+     |> assign(:commands, commands)
+     |> assign(:selected_command, nil)
+     |> assign(:param_form, nil)}
   end
 
   def handle_event("select_command", %{"id" => command_id}, socket) do
-    command = Commands.get_command!(command_id)
+    command = Commands.get_meta_command_by_id!(command_id)
     form = build_param_form(command)
 
     {:noreply,
@@ -458,10 +493,10 @@ defmodule CadenceWeb.CommandLive.Sender do
     end
   end
 
-  defp build_param_form(%CommandDefinition{command_parameters: params}) do
+  defp build_param_form(%MetaCommand{arguments: args}) do
     defaults =
-      params
-      |> Enum.map(fn p -> {p.name, p.default_value} end)
+      args
+      |> Enum.map(fn arg -> {arg.name, arg.default_value} end)
       |> Map.new()
 
     to_form(defaults, as: :params)

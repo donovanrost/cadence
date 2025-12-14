@@ -1,8 +1,8 @@
 defmodule Cadence.Commands.Encoder do
   @moduledoc """
-  Binary command encoding based on CommandParameter specifications.
+  Binary command encoding based on Argument specifications.
 
-  Handles bit-level encoding of command parameters into binary payloads, supporting:
+  Handles bit-level encoding of command arguments into binary payloads, supporting:
   - Bit-aligned and byte-aligned fields
   - Multiple data types (uint, int, float, string, boolean, enum)
   - Big-endian and little-endian byte order
@@ -13,14 +13,14 @@ defmodule Cadence.Commands.Encoder do
 
   ## Example
 
-      command = %CommandDefinition{opcode: 0x01, command_parameters: [...]}
+      command = %MetaCommand{opcode: 0x01, arguments: [...]}
       params = %{"mode" => 1, "target_temp" => 25.5}
 
       {:ok, binary} = Encoder.encode(command, params)
       # => <<0x00, 0x01, ...payload...>>
   """
 
-  alias Cadence.Commands.{CommandDefinition, CommandParameter}
+  alias Cadence.MissionDatabase.{MetaCommand, Argument}
 
   # Valid data types that can be safely converted to atoms
   @valid_data_types %{
@@ -33,25 +33,25 @@ defmodule Cadence.Commands.Encoder do
   }
 
   @doc """
-  Encodes a command with its parameters into binary format.
+  Encodes a command with its arguments into binary format.
 
   Returns `{:ok, binary}` where binary is: `<<opcode::16, payload::binary>>`
 
   ## Parameters
 
-  - `command` - CommandDefinition struct with preloaded command_parameters
-  - `params` - Map of parameter name => value
+  - `command` - MetaCommand struct with preloaded arguments
+  - `params` - Map of argument name => value
 
   ## Returns
 
   - `{:ok, binary}` - Successfully encoded command
-  - `{:error, {:validation, errors}}` - Parameter validation failed
-  - `{:error, {:encoding, param_name, reason}}` - Encoding failed for a parameter
+  - `{:error, {:validation, errors}}` - Argument validation failed
+  - `{:error, {:encoding, arg_name, reason}}` - Encoding failed for an argument
   """
-  @spec encode(CommandDefinition.t(), map()) :: {:ok, binary()} | {:error, term()}
-  def encode(%CommandDefinition{} = command, params) when is_map(params) do
-    with :ok <- validate_required_params(command.command_parameters, params),
-         {:ok, payload} <- build_payload(command.command_parameters, params) do
+  @spec encode(MetaCommand.t(), map()) :: {:ok, binary()} | {:error, term()}
+  def encode(%MetaCommand{} = command, params) when is_map(params) do
+    with :ok <- validate_required_args(command.arguments, params),
+         {:ok, payload} <- build_payload(command.arguments, params) do
       # Build command packet: opcode (2 bytes big-endian) + payload
       opcode = command.opcode || 0
       {:ok, <<opcode::big-unsigned-16, payload::binary>>}
@@ -59,11 +59,11 @@ defmodule Cadence.Commands.Encoder do
   end
 
   @doc """
-  Encodes a single parameter value to binary.
+  Encodes a single argument value to binary.
 
   ## Parameters
 
-  - `param` - CommandParameter struct
+  - `arg` - Argument struct
   - `value` - The value to encode
 
   ## Returns
@@ -71,13 +71,13 @@ defmodule Cadence.Commands.Encoder do
   - `{:ok, binary}` - Encoded value
   - `{:error, reason}` - Encoding failed
   """
-  @spec encode_parameter(CommandParameter.t(), term()) :: {:ok, binary()} | {:error, term()}
-  def encode_parameter(%CommandParameter{} = param, value) do
-    data_type = safe_data_type(param.data_type)
-    bit_length = param.bit_length || 0
+  @spec encode_argument(Argument.t(), term()) :: {:ok, binary()} | {:error, term()}
+  def encode_argument(%Argument{} = arg, value) do
+    data_type = safe_data_type(arg.data_type_ref)
+    bit_length = arg.bit_length || 0
 
     # Resolve enum values to their numeric representation
-    resolved_value = resolve_enum_value(param, value)
+    resolved_value = resolve_enum_value(arg, value)
 
     encode_value(resolved_value, data_type, bit_length)
   end
@@ -91,18 +91,18 @@ defmodule Cadence.Commands.Encoder do
   defp safe_data_type(type) when is_atom(type), do: type
 
   @doc """
-  Calculates the total payload size in bytes from parameter definitions.
+  Calculates the total payload size in bytes from argument definitions.
   """
-  @spec payload_size(list(CommandParameter.t())) :: non_neg_integer()
-  def payload_size(parameters) when is_list(parameters) do
-    if Enum.empty?(parameters) do
+  @spec payload_size(list(Argument.t())) :: non_neg_integer()
+  def payload_size(arguments) when is_list(arguments) do
+    if Enum.empty?(arguments) do
       0
     else
       max_extent =
-        parameters
-        |> Enum.map(fn p ->
-          offset = p.bit_offset || 0
-          length = p.bit_length || 0
+        arguments
+        |> Enum.map(fn arg ->
+          offset = arg.bit_offset || 0
+          length = arg.bit_length || 0
           offset + length
         end)
         |> Enum.max()
@@ -114,14 +114,14 @@ defmodule Cadence.Commands.Encoder do
 
   ## Private Functions
 
-  defp validate_required_params(parameters, params) do
+  defp validate_required_args(arguments, params) do
     errors =
-      parameters
-      |> Enum.filter(&CommandParameter.required?/1)
-      |> Enum.reject(fn param ->
-        Map.has_key?(params, param.name) || Map.has_key?(params, String.to_atom(param.name))
+      arguments
+      |> Enum.filter(fn arg -> arg.required end)
+      |> Enum.reject(fn arg ->
+        Map.has_key?(params, arg.name) || Map.has_key?(params, String.to_atom(arg.name))
       end)
-      |> Enum.map(fn param -> {param.name, "is required"} end)
+      |> Enum.map(fn arg -> {arg.name, "is required"} end)
 
     if Enum.empty?(errors) do
       :ok
@@ -130,9 +130,9 @@ defmodule Cadence.Commands.Encoder do
     end
   end
 
-  defp build_payload(parameters, params) do
-    # Sort parameters by bit_offset for proper packing
-    sorted = Enum.sort_by(parameters, fn p -> p.bit_offset || 0 end)
+  defp build_payload(arguments, params) do
+    # Sort arguments by bit_offset for proper packing
+    sorted = Enum.sort_by(arguments, fn arg -> arg.bit_offset || 0 end)
 
     # Calculate total payload size
     total_bytes = payload_size(sorted)
@@ -143,24 +143,24 @@ defmodule Cadence.Commands.Encoder do
       # Start with zero-filled buffer
       initial_buffer = <<0::size(total_bytes * 8)>>
 
-      # Insert each parameter value
-      Enum.reduce_while(sorted, {:ok, initial_buffer}, fn param, {:ok, buffer} ->
-        value = get_param_value(params, param)
+      # Insert each argument value
+      Enum.reduce_while(sorted, {:ok, initial_buffer}, fn arg, {:ok, buffer} ->
+        value = get_arg_value(params, arg)
 
-        case encode_and_insert(buffer, param, value) do
+        case encode_and_insert(buffer, arg, value) do
           {:ok, new_buffer} -> {:cont, {:ok, new_buffer}}
-          {:error, reason} -> {:halt, {:error, {:encoding, param.name, reason}}}
+          {:error, reason} -> {:halt, {:error, {:encoding, arg.name, reason}}}
         end
       end)
     end
   end
 
-  defp get_param_value(params, %CommandParameter{} = param) do
+  defp get_arg_value(params, %Argument{} = arg) do
     # Try string key first, then atom key, then default
-    value = Map.get(params, param.name) || Map.get(params, String.to_atom(param.name))
+    value = Map.get(params, arg.name) || Map.get(params, String.to_atom(arg.name))
 
     if is_nil(value) do
-      parse_default(param.default_value, param.data_type)
+      parse_default(arg.default_value, arg.data_type_ref)
     else
       value
     end
@@ -190,15 +190,15 @@ defmodule Cadence.Commands.Encoder do
   defp parse_default(default, "enum"), do: default
   defp parse_default(default, "string"), do: default
 
-  defp encode_and_insert(buffer, %CommandParameter{} = param, value) do
+  defp encode_and_insert(buffer, %Argument{} = arg, value) do
     if is_nil(value) do
-      # Optional parameter with no value - leave buffer unchanged
+      # Optional argument with no value - leave buffer unchanged
       {:ok, buffer}
     else
-      case encode_parameter(param, value) do
+      case encode_argument(arg, value) do
         {:ok, encoded} ->
-          bit_offset = param.bit_offset || 0
-          bit_length = param.bit_length || 0
+          bit_offset = arg.bit_offset || 0
+          bit_length = arg.bit_length || 0
           {:ok, insert_bits(buffer, bit_offset, bit_length, encoded)}
 
         {:error, _} = error ->
@@ -207,7 +207,7 @@ defmodule Cadence.Commands.Encoder do
     end
   end
 
-  defp resolve_enum_value(%CommandParameter{data_type: "enum", valid_values: valid_values}, value)
+  defp resolve_enum_value(%Argument{data_type_ref: "enum", valid_values: valid_values}, value)
        when is_binary(value) and is_list(valid_values) do
     # Enum values in valid_values are stored as strings
     # Return the index of the value in the list
@@ -217,7 +217,7 @@ defmodule Cadence.Commands.Encoder do
     end
   end
 
-  defp resolve_enum_value(_param, value), do: value
+  defp resolve_enum_value(_arg, value), do: value
 
   # Encode value based on data type
   defp encode_value(value, :uint, bit_length) when is_integer(value) and value >= 0 do

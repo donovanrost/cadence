@@ -32,7 +32,6 @@ defmodule Cadence.Commands.QueueEntry do
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
-  alias Cadence.Commands.CommandDefinition
   alias Cadence.Accounts.User
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -45,7 +44,6 @@ defmodule Cadence.Commands.QueueEntry do
     belongs_to :organization, Organization
     belongs_to :mission, Mission
     belongs_to :target, Target
-    belongs_to :command_definition, CommandDefinition
     belongs_to :user, User
 
     # Command details
@@ -88,7 +86,6 @@ defmodule Cadence.Commands.QueueEntry do
       :organization_id,
       :mission_id,
       :target_id,
-      :command_definition_id,
       :user_id,
       :command_name,
       :parameters,

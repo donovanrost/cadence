@@ -386,7 +386,7 @@ defmodule Cadence.Simulator.Coordinator do
   # Legacy encoding for known packet types
   defp encode_legacy_packet("HEALTH", target_id, data, _step) do
     timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
 
     secondary_header = <<timestamp::48, target_hash::16>>
 
@@ -411,7 +411,7 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp encode_legacy_packet("ATTITUDE", target_id, data, _step) do
     timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
 
     secondary_header = <<timestamp::48, target_hash::16>>
 
@@ -436,7 +436,7 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp encode_legacy_packet("POWER", target_id, data, _step) do
     timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
 
     secondary_header = <<timestamp::48, target_hash::16>>
 

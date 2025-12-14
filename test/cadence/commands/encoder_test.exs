@@ -2,23 +2,23 @@ defmodule Cadence.Commands.EncoderTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Commands.Encoder
-  alias Cadence.Commands.{CommandDefinition, CommandParameter}
+  alias Cadence.MissionDatabase.{MetaCommand, Argument}
 
   describe "encode/2" do
-    test "encodes a simple command with no parameters" do
-      command = %CommandDefinition{
+    test "encodes a simple command with no arguments" do
+      command = %MetaCommand{
         opcode: 0x01,
-        command_parameters: []
+        arguments: []
       }
 
       assert {:ok, binary} = Encoder.encode(command, %{})
       assert binary == <<0x00, 0x01>>
     end
 
-    test "encodes command with single uint parameter" do
+    test "encodes command with single uint argument" do
       command =
         build_command(0x10, [
-          build_param("mode", "uint", bit_offset: 0, bit_length: 8)
+          build_arg("mode", "uint", bit_offset: 0, bit_length: 8)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"mode" => 1})
@@ -26,11 +26,11 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x10, 0x01>>
     end
 
-    test "encodes command with multiple parameters" do
+    test "encodes command with multiple arguments" do
       command =
         build_command(0x20, [
-          build_param("mode", "uint", bit_offset: 0, bit_length: 8),
-          build_param("value", "uint", bit_offset: 8, bit_length: 16)
+          build_arg("mode", "uint", bit_offset: 0, bit_length: 8),
+          build_arg("value", "uint", bit_offset: 8, bit_length: 16)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"mode" => 2, "value" => 1000})
@@ -38,10 +38,10 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x20, 0x02, 0x03, 0xE8>>
     end
 
-    test "encodes signed integer parameter" do
+    test "encodes signed integer argument" do
       command =
         build_command(0x30, [
-          build_param("offset", "int", bit_offset: 0, bit_length: 16)
+          build_arg("offset", "int", bit_offset: 0, bit_length: 16)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"offset" => -100})
@@ -49,10 +49,10 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x30, 0xFF, 0x9C>>
     end
 
-    test "encodes float parameter (32-bit)" do
+    test "encodes float argument (32-bit)" do
       command =
         build_command(0x40, [
-          build_param("temp", "float", bit_offset: 0, bit_length: 32)
+          build_arg("temp", "float", bit_offset: 0, bit_length: 32)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"temp" => 25.5})
@@ -61,30 +61,30 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x40>> <> expected
     end
 
-    test "encodes boolean parameter as true" do
+    test "encodes boolean argument as true" do
       command =
         build_command(0x50, [
-          build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
+          build_arg("enabled", "boolean", bit_offset: 0, bit_length: 8)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"enabled" => true})
       assert binary == <<0x00, 0x50, 0x01>>
     end
 
-    test "encodes boolean parameter as false" do
+    test "encodes boolean argument as false" do
       command =
         build_command(0x50, [
-          build_param("enabled", "boolean", bit_offset: 0, bit_length: 8)
+          build_arg("enabled", "boolean", bit_offset: 0, bit_length: 8)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"enabled" => false})
       assert binary == <<0x00, 0x50, 0x00>>
     end
 
-    test "encodes string parameter with padding" do
+    test "encodes string argument with padding" do
       command =
         build_command(0x60, [
-          build_param("name", "string", bit_offset: 0, bit_length: 40)
+          build_arg("name", "string", bit_offset: 0, bit_length: 40)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{"name" => "ABC"})
@@ -92,10 +92,10 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x60, "ABC", 0x00, 0x00>>
     end
 
-    test "encodes enum parameter by index" do
+    test "encodes enum argument by index" do
       command =
         build_command(0x70, [
-          build_param("state", "enum",
+          build_arg("state", "enum",
             bit_offset: 0,
             bit_length: 8,
             valid_values: ["OFF", "ON", "AUTO"]
@@ -107,10 +107,10 @@ defmodule Cadence.Commands.EncoderTest do
       assert binary == <<0x00, 0x70, 0x01>>
     end
 
-    test "uses default value when parameter not provided" do
+    test "uses default value when argument not provided" do
       command =
         build_command(0x80, [
-          build_param("mode", "uint",
+          build_arg("mode", "uint",
             bit_offset: 0,
             bit_length: 8,
             required: false,
@@ -125,17 +125,17 @@ defmodule Cadence.Commands.EncoderTest do
     test "accepts atom keys in params" do
       command =
         build_command(0x10, [
-          build_param("mode", "uint", bit_offset: 0, bit_length: 8)
+          build_arg("mode", "uint", bit_offset: 0, bit_length: 8)
         ])
 
       assert {:ok, binary} = Encoder.encode(command, %{mode: 1})
       assert binary == <<0x00, 0x10, 0x01>>
     end
 
-    test "returns error for missing required parameter" do
+    test "returns error for missing required argument" do
       command =
         build_command(0x10, [
-          build_param("mode", "uint", bit_offset: 0, bit_length: 8, required: true)
+          build_arg("mode", "uint", bit_offset: 0, bit_length: 8, required: true)
         ])
 
       assert {:error, {:validation, errors}} = Encoder.encode(command, %{})
@@ -143,45 +143,45 @@ defmodule Cadence.Commands.EncoderTest do
     end
   end
 
-  describe "encode_parameter/2" do
+  describe "encode_argument/2" do
     test "encodes uint values" do
-      param = build_param("test", "uint", bit_length: 16)
-      assert {:ok, <<0x01, 0x00>>} = Encoder.encode_parameter(param, 256)
+      arg = build_arg("test", "uint", bit_length: 16)
+      assert {:ok, <<0x01, 0x00>>} = Encoder.encode_argument(arg, 256)
     end
 
     test "returns error for negative uint" do
-      param = build_param("test", "uint", bit_length: 16)
-      assert {:error, :negative_value_for_uint} = Encoder.encode_parameter(param, -1)
+      arg = build_arg("test", "uint", bit_length: 16)
+      assert {:error, :negative_value_for_uint} = Encoder.encode_argument(arg, -1)
     end
 
     test "encodes int values" do
-      param = build_param("test", "int", bit_length: 16)
-      assert {:ok, <<0xFF, 0xFF>>} = Encoder.encode_parameter(param, -1)
+      arg = build_arg("test", "int", bit_length: 16)
+      assert {:ok, <<0xFF, 0xFF>>} = Encoder.encode_argument(arg, -1)
     end
   end
 
   describe "payload_size/1" do
-    test "returns 0 for empty parameters" do
+    test "returns 0 for empty arguments" do
       assert Encoder.payload_size([]) == 0
     end
 
     test "calculates size from max offset + length" do
-      params = [
-        build_param("a", "uint", bit_offset: 0, bit_length: 8),
-        build_param("b", "uint", bit_offset: 8, bit_length: 16)
+      args = [
+        build_arg("a", "uint", bit_offset: 0, bit_length: 8),
+        build_arg("b", "uint", bit_offset: 8, bit_length: 16)
       ]
 
       # (8 + 16) / 8 = 3 bytes
-      assert Encoder.payload_size(params) == 3
+      assert Encoder.payload_size(args) == 3
     end
 
     test "handles non-byte-aligned lengths" do
-      params = [
-        build_param("a", "uint", bit_offset: 0, bit_length: 12)
+      args = [
+        build_arg("a", "uint", bit_offset: 0, bit_length: 12)
       ]
 
       # 12 bits = 2 bytes (rounded up)
-      assert Encoder.payload_size(params) == 2
+      assert Encoder.payload_size(args) == 2
     end
   end
 
@@ -211,26 +211,26 @@ defmodule Cadence.Commands.EncoderTest do
     end
   end
 
-  describe "encode_parameter/2 edge cases" do
+  describe "encode_argument/2 edge cases" do
     test "raises ArgumentError for invalid data type" do
-      param = %CommandParameter{
-        name: "invalid_param",
-        data_type: "invalid_type",
+      arg = %Argument{
+        name: "invalid_arg",
+        data_type_ref: "invalid_type",
         bit_offset: 0,
         bit_length: 8,
         required: true
       }
 
       assert_raise ArgumentError, ~r/Invalid data type/, fn ->
-        Encoder.encode_parameter(param, 42)
+        Encoder.encode_argument(arg, 42)
       end
     end
 
     test "accepts valid data type strings" do
       for data_type <- ["uint", "int", "float", "string", "boolean", "enum"] do
-        param = %CommandParameter{
-          name: "test_param",
-          data_type: data_type,
+        arg = %Argument{
+          name: "test_arg",
+          data_type_ref: data_type,
           bit_offset: 0,
           bit_length: 32,
           required: true
@@ -239,16 +239,16 @@ defmodule Cadence.Commands.EncoderTest do
         # Should not raise - specific encodings tested elsewhere
         case data_type do
           "float" ->
-            assert {:ok, _} = Encoder.encode_parameter(param, 1.0)
+            assert {:ok, _} = Encoder.encode_argument(arg, 1.0)
 
           "string" ->
-            assert {:ok, _} = Encoder.encode_parameter(param, "test")
+            assert {:ok, _} = Encoder.encode_argument(arg, "test")
 
           "boolean" ->
-            assert {:ok, _} = Encoder.encode_parameter(param, true)
+            assert {:ok, _} = Encoder.encode_argument(arg, true)
 
           _ ->
-            assert {:ok, _} = Encoder.encode_parameter(param, 1)
+            assert {:ok, _} = Encoder.encode_argument(arg, 1)
         end
       end
     end
@@ -256,17 +256,17 @@ defmodule Cadence.Commands.EncoderTest do
 
   # Helper functions
 
-  defp build_command(opcode, parameters) do
-    %CommandDefinition{
+  defp build_command(opcode, arguments) do
+    %MetaCommand{
       opcode: opcode,
-      command_parameters: parameters
+      arguments: arguments
     }
   end
 
-  defp build_param(name, data_type, opts \\ []) do
-    %CommandParameter{
+  defp build_arg(name, data_type, opts \\ []) do
+    %Argument{
       name: name,
-      data_type: data_type,
+      data_type_ref: data_type,
       bit_offset: Keyword.get(opts, :bit_offset, 0),
       bit_length: Keyword.get(opts, :bit_length, 8),
       required: Keyword.get(opts, :required, true),

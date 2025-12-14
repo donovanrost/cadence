@@ -1,13 +1,18 @@
-defmodule Cadence.Commands.Dispatcher do
+defmodule Cadence.Commands.TargetDispatcher do
   @moduledoc """
-  Mission-scoped GenServer for command dispatch and verification.
+  Target-scoped GenServer for command dispatch and verification.
 
-  One Dispatcher per mission, managed by MissionInstance supervisor.
-  Handles command validation, encoding, routing, and verification.
+  One TargetDispatcher per target, managed by TargetPipeline supervisor.
+  Handles command validation, encoding, routing, and verification for a single target.
+
+  ## Command Lookup
+
+  Commands are looked up via the target's definition_set_id, ensuring each target
+  uses the correct command dictionary version.
 
   ## Responsibilities
 
-  1. **Validation** - Validate parameters against CommandParameter specs
+  1. **Validation** - Validate arguments against Argument specs
   2. **Phase Checking** - Ensure command is allowed in current mission phase
   3. **Hazard Handling** - Require confirmation for hazardous commands
   4. **Encoding** - Encode command to binary format
@@ -15,17 +20,18 @@ defmodule Cadence.Commands.Dispatcher do
   6. **Transmission** - Send through protocol chain and interface
   7. **Verification** - Monitor CVT for verification (if configured)
   8. **Logging** - Record all activity to command_logs table
+  9. **Pause/Resume** - Control whether commands are sent to this target
 
   ## Example
 
       # Basic command dispatch
-      {:ok, cmd_id} = Dispatcher.dispatch(mission_id, "SET_MODE", %{mode: 1}, target: "SC1")
+      {:ok, cmd_id} = TargetDispatcher.dispatch(mission_id, target_id, "SET_MODE", %{mode: 1})
 
-      # Hazardous command returns confirmation request
-      {:error, :requires_confirmation, info} = Dispatcher.dispatch(mission_id, "SAFE_MODE", %{})
+      # Pause dispatch to target (queue still accepts commands)
+      :ok = TargetDispatcher.pause(mission_id, target_id)
 
-      # Confirm and dispatch
-      {:ok, cmd_id} = Dispatcher.confirm_dispatch(mission_id, info.token)
+      # Resume dispatch
+      :ok = TargetDispatcher.resume(mission_id, target_id)
   """
 
   use GenServer
@@ -33,17 +39,23 @@ defmodule Cadence.Commands.Dispatcher do
 
   alias Cadence.{Repo, Missions, Targets, Interfaces}
   alias Cadence.Commands
-  alias Cadence.Commands.{CommandDefinition, CommandLog, Encoder}
+  alias Cadence.Commands.{CommandLog, Encoder, TargetQueue}
+  alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Telemetry.ProtocolChain
 
   @confirmation_timeout_ms 60_000
   @default_verification_timeout_ms 5_000
+  @queue_check_interval_ms 100
 
   defmodule State do
     @moduledoc false
     defstruct [
       :mission_id,
+      :target_id,
+      :target,
       :mission,
+      paused: false,
+      executing: false,
       pending_confirmations: %{},
       pending_verifications: %{},
       command_counter: 0
@@ -65,36 +77,60 @@ defmodule Cadence.Commands.Dispatcher do
   ## Client API
 
   @doc """
-  Starts dispatcher for a mission.
+  Starts dispatcher for a target.
   """
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
-    GenServer.start_link(__MODULE__, mission_id, name: via_tuple(mission_id))
+    target_id = Keyword.fetch!(opts, :target_id)
+    GenServer.start_link(__MODULE__, {mission_id, target_id}, name: via_tuple(mission_id, target_id))
   end
 
   @doc """
   Returns the via tuple for registry lookup.
   """
-  def via_tuple(mission_id) do
-    {:via, Registry, {Cadence.MissionRegistry, {mission_id, :dispatcher}}}
+  def via_tuple(mission_id, target_id) do
+    {:via, Registry, {Cadence.MissionRegistry, {:target_dispatcher, mission_id, target_id}}}
   end
 
   @doc """
-  Returns the PID of a dispatcher by mission_id.
+  Returns the PID of a dispatcher by mission_id and target_id.
   """
-  def whereis(mission_id) do
-    case Registry.lookup(Cadence.MissionRegistry, {mission_id, :dispatcher}) do
+  def whereis(mission_id, target_id) do
+    case Registry.lookup(Cadence.MissionRegistry, {:target_dispatcher, mission_id, target_id}) do
       [{pid, _}] -> pid
       [] -> nil
     end
   end
 
   @doc """
-  Dispatches a command to a target.
+  Pauses command dispatch to this target.
+
+  When paused, the dispatcher will not send commands. Commands can still be
+  enqueued via TargetQueue, they just won't be dispatched until resumed.
+  """
+  def pause(mission_id, target_id) do
+    GenServer.call(via_tuple(mission_id, target_id), :pause)
+  end
+
+  @doc """
+  Resumes command dispatch to this target.
+  """
+  def resume(mission_id, target_id) do
+    GenServer.call(via_tuple(mission_id, target_id), :resume)
+  end
+
+  @doc """
+  Returns whether this dispatcher is paused.
+  """
+  def paused?(mission_id, target_id) do
+    GenServer.call(via_tuple(mission_id, target_id), :paused?)
+  end
+
+  @doc """
+  Dispatches a command to this target.
 
   ## Options
 
-  - `:target` or `:target_id` - Target ID or identifier (required)
   - `:interface_id` - Specific interface to use (optional)
   - `:user_id` - User performing the action (for audit)
   - `:skip_verification` - Don't auto-verify even if configured
@@ -103,59 +139,64 @@ defmodule Cadence.Commands.Dispatcher do
   ## Returns
 
   - `{:ok, command_log_id}` - Command sent successfully
+  - `{:error, :paused}` - Dispatcher is paused
   - `{:error, :requires_confirmation, %{token: ..., hazard_description: ...}}` - Hazardous command
-  - `{:error, :validation_failed, errors}` - Parameter validation failed
+  - `{:error, :validation_failed, errors}` - Argument validation failed
   - `{:error, :not_allowed_in_phase, current_phase}` - Phase restriction
   - `{:error, :unknown_command}` - Command not found
-  - `{:error, :unknown_target}` - Target not found
   - `{:error, :no_interface}` - No write interface for target
   - `{:error, :interface_disconnected}` - Interface not connected
   - `{:error, :encoding_failed, reason}` - Binary encoding failed
   - `{:error, :send_failed, reason}` - Transmission failed
   """
-  def dispatch(mission_id, command_name, params, opts \\ []) do
-    GenServer.call(via_tuple(mission_id), {:dispatch, command_name, params, opts})
+  def dispatch(mission_id, target_id, command_name, params, opts \\ []) do
+    GenServer.call(via_tuple(mission_id, target_id), {:dispatch, command_name, params, opts})
   end
 
   @doc """
   Confirms and dispatches a hazardous command using a confirmation token.
   """
-  def confirm_dispatch(mission_id, token) do
-    GenServer.call(via_tuple(mission_id), {:confirm_dispatch, token})
+  def confirm_dispatch(mission_id, target_id, token) do
+    GenServer.call(via_tuple(mission_id, target_id), {:confirm_dispatch, token})
   end
 
   @doc """
   Cancels a pending verification.
   """
-  def cancel_verification(mission_id, command_log_id) do
-    GenServer.cast(via_tuple(mission_id), {:cancel_verification, command_log_id})
+  def cancel_verification(mission_id, target_id, command_log_id) do
+    GenServer.cast(via_tuple(mission_id, target_id), {:cancel_verification, command_log_id})
   end
 
   @doc """
   Gets the status of a pending verification.
   """
-  def verification_status(mission_id, command_log_id) do
-    GenServer.call(via_tuple(mission_id), {:verification_status, command_log_id})
+  def verification_status(mission_id, target_id, command_log_id) do
+    GenServer.call(via_tuple(mission_id, target_id), {:verification_status, command_log_id})
   end
 
   @doc """
-  Gets dispatcher statistics.
+  Gets dispatcher status including pause state.
   """
-  def stats(mission_id) do
-    GenServer.call(via_tuple(mission_id), :stats)
+  def status(mission_id, target_id) do
+    GenServer.call(via_tuple(mission_id, target_id), :status)
   end
 
   ## Server Callbacks
 
   @impl true
-  def init(mission_id) do
-    Logger.info("Starting CommandDispatcher for mission_id=#{mission_id}")
+  def init({mission_id, target_id}) do
+    Logger.info(
+      "Starting TargetDispatcher for mission_id=#{mission_id}, target_id=#{target_id}"
+    )
 
-    # Load mission for phase checking
+    # Load mission and target (with definition_set preloaded)
     mission = Missions.get_mission!(mission_id)
+    target = Targets.get_target_with_definition_set!(target_id)
 
     state = %State{
       mission_id: mission_id,
+      target_id: target_id,
+      target: target,
       mission: mission
     }
 
@@ -163,6 +204,36 @@ defmodule Cadence.Commands.Dispatcher do
   end
 
   @impl true
+  def handle_call(:pause, _from, state) do
+    Logger.info(
+      "Pausing TargetDispatcher for mission_id=#{state.mission_id}, target_id=#{state.target_id}"
+    )
+
+    # Notify queue of paused state change (async to avoid deadlock)
+    TargetQueue.set_dispatcher_paused(state.mission_id, state.target_id, true)
+
+    {:reply, :ok, %{state | paused: true}}
+  end
+
+  def handle_call(:resume, _from, state) do
+    Logger.info(
+      "Resuming TargetDispatcher for mission_id=#{state.mission_id}, target_id=#{state.target_id}"
+    )
+
+    # Notify queue of paused state change (async to avoid deadlock)
+    TargetQueue.set_dispatcher_paused(state.mission_id, state.target_id, false)
+
+    {:reply, :ok, %{state | paused: false}}
+  end
+
+  def handle_call(:paused?, _from, state) do
+    {:reply, state.paused, state}
+  end
+
+  def handle_call({:dispatch, _command_name, _params, _opts}, _from, %{paused: true} = state) do
+    {:reply, {:error, :paused}, state}
+  end
+
   def handle_call({:dispatch, command_name, params, opts}, _from, state) do
     case do_dispatch(command_name, params, opts, state) do
       {:ok, command_log_id, new_state} ->
@@ -227,15 +298,17 @@ defmodule Cadence.Commands.Dispatcher do
     {:reply, status, state}
   end
 
-  def handle_call(:stats, _from, state) do
-    stats = %{
+  def handle_call(:status, _from, state) do
+    status = %{
       mission_id: state.mission_id,
+      target_id: state.target_id,
+      paused: state.paused,
       pending_confirmations: map_size(state.pending_confirmations),
       pending_verifications: map_size(state.pending_verifications),
       command_counter: state.command_counter
     }
 
-    {:reply, stats, state}
+    {:reply, status, state}
   end
 
   @impl true
@@ -280,19 +353,56 @@ defmodule Cadence.Commands.Dispatcher do
   end
 
   def handle_info({:telemetry_update, target_id, packet_name, item_name, telemetry_value}, state) do
-    # Check if any pending verification matches this update
-    full_item = "#{packet_name}.#{item_name}"
+    # Only process updates for this target
+    if target_id == state.target_id do
+      full_item = "#{packet_name}.#{item_name}"
 
-    state =
-      Enum.reduce(state.pending_verifications, state, fn {cmd_log_id, verification}, acc ->
-        if verification.target_id == target_id and verification.item == full_item do
-          check_verification(acc, cmd_log_id, verification, telemetry_value.value)
-        else
-          acc
-        end
-      end)
+      state =
+        Enum.reduce(state.pending_verifications, state, fn {cmd_log_id, verification}, acc ->
+          if verification.item == full_item do
+            check_verification(acc, cmd_log_id, verification, telemetry_value.value)
+          else
+            acc
+          end
+        end)
 
+      {:noreply, state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  # Queue processing - triggered by TargetQueue when commands are available
+  def handle_info(:check_queue, %{paused: true} = state) do
     {:noreply, state}
+  end
+
+  def handle_info(:check_queue, %{executing: true} = state) do
+    # Already executing a command, will check again when done
+    {:noreply, state}
+  end
+
+  def handle_info(:check_queue, state) do
+    case TargetQueue.next(state.mission_id, state.target_id) do
+      nil ->
+        # No commands ready
+        {:noreply, state}
+
+      entry ->
+        # Got a command - execute it
+        new_state = process_queue_entry(entry, state)
+        {:noreply, new_state}
+    end
+  end
+
+  def handle_info({:queue_execution_complete, entry_id, result}, state) do
+    # Report result back to queue
+    TargetQueue.complete(state.mission_id, state.target_id, entry_id, result)
+
+    # Check for more work after a brief delay
+    Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+
+    {:noreply, %{state | executing: false}}
   end
 
   def handle_info(_msg, state) do
@@ -301,13 +411,51 @@ defmodule Cadence.Commands.Dispatcher do
 
   ## Private Functions
 
+  defp process_queue_entry(entry, state) do
+    # Mark as executing in queue
+    {:ok, _} = TargetQueue.mark_executing(state.mission_id, state.target_id, entry.id)
+
+    # Execute asynchronously
+    parent = self()
+    entry_id = entry.id
+
+    Task.start(fn ->
+      # Convert stored opts back to keyword list
+      opts =
+        entry.dispatch_opts
+        |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
+        |> Keyword.put(:user_id, entry.user_id)
+
+      result = do_dispatch(entry.command_name, entry.parameters, opts, state)
+
+      # Normalize result for queue
+      normalized_result =
+        case result do
+          {:ok, command_log_id, _new_state} -> {:ok, command_log_id}
+          {:requires_confirmation, info, _new_state} -> {:error, :requires_confirmation, info}
+          error -> error
+        end
+
+      send(parent, {:queue_execution_complete, entry_id, normalized_result})
+    end)
+
+    %{state | executing: true}
+  end
+
   defp do_dispatch(command_name, params, opts, state) do
-    # Get target first - it has the definition_set_id for command lookup
-    with {:ok, target} <- get_target(state.mission_id, opts),
-         {:ok, command} <- get_command(target.definition_set_id, command_name),
+    # Use target from state - already loaded with definition_set
+    target = state.target
+
+    Logger.info(
+      "[DISPATCH] command_name=#{inspect(command_name)}, " <>
+        "mission_id=#{inspect(state.mission_id)}, target_id=#{target.id}, " <>
+        "definition_set_id=#{inspect(target.definition_set_id)}"
+    )
+
+    with {:ok, command} <- get_command(target, command_name),
          :ok <- check_phase_restriction(command, state.mission),
          :ok <- check_hazardous(command, params, opts, state),
-         :ok <- validate_params(command, params),
+         :ok <- validate_args(command, params),
          {:ok, encoded} <- encode_command(command, params),
          {:ok, interface} <- get_interface(target, opts),
          {:ok, framed} <- process_protocol_chain(interface, encoded),
@@ -318,7 +466,7 @@ defmodule Cadence.Commands.Dispatcher do
 
       # Start verification if configured
       new_state =
-        if command.has_verification and not Keyword.get(opts, :skip_verification, false) do
+        if command.verification_item && not Keyword.get(opts, :skip_verification, false) do
           start_verification(state, command_log.id, command, target)
         else
           state
@@ -338,30 +486,32 @@ defmodule Cadence.Commands.Dispatcher do
     end
   end
 
-  defp get_command(definition_set_id, command_name) do
-    case Commands.get_command_by_name(definition_set_id, command_name) do
-      nil -> {:error, :unknown_command}
-      command -> {:ok, command}
+  # Look up command using the target's definition_set_id
+  defp get_command(target, command_name) do
+    definition_set_id = target.definition_set_id
+
+    Logger.debug(
+      "[GET_COMMAND] Looking up command_name=#{inspect(command_name)} " <>
+        "for definition_set_id=#{inspect(definition_set_id)}"
+    )
+
+    case Commands.get_meta_command(definition_set_id, command_name) do
+      nil ->
+        Logger.warning(
+          "[GET_COMMAND] NOT FOUND - definition_set_id=#{inspect(definition_set_id)}, " <>
+            "command_name=#{inspect(command_name)}"
+        )
+
+        {:error, :unknown_command}
+
+      command ->
+        Logger.debug("[GET_COMMAND] FOUND command id=#{command.id}")
+        {:ok, command}
     end
   end
 
-  defp get_target(_mission_id, opts) do
-    target_id = Keyword.get(opts, :target) || Keyword.get(opts, :target_id)
-
-    if is_nil(target_id) do
-      {:error, :target_required}
-    else
-      case Targets.get_target!(target_id) do
-        nil -> {:error, :unknown_target}
-        target -> {:ok, target}
-      end
-    end
-  rescue
-    Ecto.NoResultsError -> {:error, :unknown_target}
-  end
-
-  defp check_phase_restriction(%CommandDefinition{} = command, mission) do
-    if CommandDefinition.allowed_in_phase?(command, mission.phase) do
+  defp check_phase_restriction(%MetaCommand{} = command, mission) do
+    if MetaCommand.allowed_in_phase?(command, mission.phase) do
       :ok
     else
       {:error, :not_allowed_in_phase, mission.phase}
@@ -371,15 +521,15 @@ defmodule Cadence.Commands.Dispatcher do
   defp check_hazardous(command, _params, opts, _state) do
     skip_check = Keyword.get(opts, :skip_hazardous_check, false)
 
-    if not skip_check and CommandDefinition.requires_confirmation?(command) do
+    if not skip_check and MetaCommand.requires_confirmation?(command) do
       {:error, :requires_confirmation, command.hazard_description}
     else
       :ok
     end
   end
 
-  defp validate_params(command, params) do
-    case Commands.validate_parameters(command, params) do
+  defp validate_args(command, params) do
+    case Commands.validate_arguments(command, params) do
       :ok -> :ok
       {:error, errors} -> {:error, :validation_failed, errors}
     end
@@ -445,7 +595,7 @@ defmodule Cadence.Commands.Dispatcher do
       organization_id: state.mission.organization_id,
       mission_id: state.mission_id,
       target_id: target.id,
-      command_definition_id: command.id,
+      meta_command_id: command.id,
       user_id: user_id,
       command_name: command.name,
       opcode: command.opcode,
@@ -476,13 +626,9 @@ defmodule Cadence.Commands.Dispatcher do
   end
 
   defp create_hazardous_confirmation(command_name, params, opts, state) do
-    # Get target for its definition_set_id
-    target_id = Keyword.get(opts, :target) || Keyword.get(opts, :target_id)
-    target = target_id && Targets.get_target!(target_id)
-    definition_set_id = target && target.definition_set_id
+    target = state.target
 
-    # Get command for hazard description
-    case definition_set_id && Commands.get_command_by_name(definition_set_id, command_name) do
+    case Commands.get_meta_command(target.definition_set_id, command_name) do
       nil ->
         {:error, :unknown_command}
 
@@ -508,6 +654,7 @@ defmodule Cadence.Commands.Dispatcher do
         confirmation_info = %{
           token: token,
           command_name: command_name,
+          target_id: state.target_id,
           hazard_description: command.hazard_description,
           expires_at: expires_at
         }

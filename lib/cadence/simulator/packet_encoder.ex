@@ -249,7 +249,7 @@ defmodule Cadence.Simulator.PacketEncoder do
         # Update sequence count
         apid = packet_def.apid || 0
         seq = Map.get(encoder.sequence_counts, apid, 0)
-        new_seq = rem(seq + 1, 16384)
+        new_seq = rem(seq + 1, 16_384)
         encoder = %{encoder | sequence_counts: Map.put(encoder.sequence_counts, apid, new_seq)}
 
         {:ok, binary, encoder}
@@ -432,7 +432,7 @@ defmodule Cadence.Simulator.PacketEncoder do
   defp build_ccsds_packet(apid, sequence, target_id, payload) do
     # Secondary header (8 bytes): timestamp + target hash
     timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
     secondary_header = <<timestamp::48, target_hash::16>>
 
     user_data = secondary_header <> payload

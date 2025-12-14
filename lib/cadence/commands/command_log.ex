@@ -38,7 +38,7 @@ defmodule Cadence.Commands.CommandLog do
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
-  alias Cadence.Commands.CommandDefinition
+  alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Accounts.User
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -50,7 +50,7 @@ defmodule Cadence.Commands.CommandLog do
     belongs_to :organization, Organization
     belongs_to :mission, Mission
     belongs_to :target, Target
-    belongs_to :command_definition, CommandDefinition
+    belongs_to :meta_command, MetaCommand
     belongs_to :user, User
 
     # Command identification
@@ -90,7 +90,7 @@ defmodule Cadence.Commands.CommandLog do
       :organization_id,
       :mission_id,
       :target_id,
-      :command_definition_id,
+      :meta_command_id,
       :user_id,
       :command_name,
       :opcode,
@@ -111,7 +111,7 @@ defmodule Cadence.Commands.CommandLog do
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
     |> foreign_key_constraint(:target_id)
-    |> foreign_key_constraint(:command_definition_id)
+    |> foreign_key_constraint(:meta_command_id)
     |> foreign_key_constraint(:user_id)
   end
 

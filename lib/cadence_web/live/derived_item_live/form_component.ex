@@ -2,8 +2,10 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Telemetry.Database.DerivedItem
-  alias Cadence.Telemetry.Database.DefinitionSet
+  alias Cadence.Telemetry.Packet.PacketDefinition
   alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
+  alias Cadence.Repo
+  import Ecto.Query
 
   @impl true
   def render(assigns) do
@@ -300,19 +302,16 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
   defp format_error(reason), do: "Invalid expression: #{inspect(reason)}"
 
   defp load_available_items(mission_id) do
-    case DefinitionSet.load_active_complete(mission_id) do
-      {:ok, definition_set} ->
-        definition_set.packet_definitions
-        |> Enum.flat_map(fn packet ->
-          Enum.map(packet.packet_items, fn item ->
-            "#{packet.name}.#{item.name}"
-          end)
-        end)
-        |> Enum.sort()
-
-      {:error, _} ->
-        []
-    end
+    PacketDefinition
+    |> where([p], p.mission_id == ^mission_id)
+    |> preload(:packet_items)
+    |> Repo.all()
+    |> Enum.flat_map(fn packet ->
+      Enum.map(packet.packet_items, fn item ->
+        "#{packet.name}.#{item.name}"
+      end)
+    end)
+    |> Enum.sort()
   end
 
   defp item_exists?(item_name, available_items) do

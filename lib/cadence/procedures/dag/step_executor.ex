@@ -14,7 +14,7 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
   require Logger
 
-  alias Cadence.Commands.Dispatcher, as: CommandDispatcher
+  alias Cadence.Commands.TargetDispatcher
   alias Cadence.Procedures.ConditionEvaluator
   alias Cadence.Telemetry.CurrentValueTable, as: CVT
 
@@ -449,7 +449,7 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
     opts = [target_id: target_id, user_id: user_id, skip_hazardous_check: allow_hazardous]
 
-    case CommandDispatcher.dispatch(mission_id, name, args, opts) do
+    case TargetDispatcher.dispatch(mission_id, target_id, name, args, opts) do
       {:ok, _command_log_id} -> {:ok, :sent}
       {:error, reason} -> {:error, reason}
       {:error, reason, _details} -> {:error, reason}

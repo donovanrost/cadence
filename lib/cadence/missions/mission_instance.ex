@@ -21,7 +21,7 @@ defmodule Cadence.Missions.MissionInstance do
   alias Cadence.Telemetry.PipelineV2
   alias Cadence.Telemetry.Limits.StateTracker
   alias Cadence.Telemetry.Limits.StalenessMonitor
-  alias Cadence.Commands.{Dispatcher, Queue}
+  alias Cadence.Commands.TargetPipelineSupervisor
   alias Cadence.Alarms.Engine.AlarmManager
   alias Cadence.Automations.Engine.AutomationManager
   alias Cadence.Procedures.Engine.ExecutionCoordinator
@@ -69,11 +69,8 @@ defmodule Cadence.Missions.MissionInstance do
           # Interface Supervisor - manages TCP/UDP/Serial connections
           {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission.id},
 
-          # Command Dispatcher - handles command dispatch, verification, and logging
-          {Dispatcher, mission_id: mission.id},
-
-          # Command Queue - manages queued commands for ordered execution
-          {Queue, mission_id: mission.id},
+          # Target Pipeline Supervisor - manages per-target command queues and dispatchers
+          {TargetPipelineSupervisor, mission_id: mission.id},
 
           # Procedure Execution Coordinator - manages procedure executions
           {ExecutionCoordinator,

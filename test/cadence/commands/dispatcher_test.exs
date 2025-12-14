@@ -1,12 +1,12 @@
-defmodule Cadence.Commands.DispatcherTest do
+defmodule Cadence.Commands.TargetDispatcherTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commands
-  alias Cadence.Commands.{CommandDefinition, CommandParameter, Dispatcher}
+  alias Cadence.Commands.{TargetDispatcher, TargetQueue}
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
-  alias Cadence.MissionDatabase.{Database, DefinitionSet}
+  alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand, Argument}
 
   # Setup creates an org, mission, target, and commands for testing
   setup do
@@ -67,10 +67,10 @@ defmodule Cadence.Commands.DispatcherTest do
       })
       |> Repo.insert!()
 
-    # Create a simple command (linked to definition_set for lookup)
+    # Create a simple MetaCommand (linked to definition_set for lookup)
     simple_command =
-      %CommandDefinition{}
-      |> CommandDefinition.changeset(%{
+      %MetaCommand{}
+      |> MetaCommand.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
         definition_set_id: definition_set.id,
@@ -81,12 +81,12 @@ defmodule Cadence.Commands.DispatcherTest do
       })
       |> Repo.insert!()
 
-    # Add parameter to simple command
-    %CommandParameter{}
-    |> CommandParameter.changeset(%{
-      command_definition_id: simple_command.id,
+    # Add argument to simple command
+    %Argument{}
+    |> Argument.changeset(%{
+      meta_command_id: simple_command.id,
       name: "mode",
-      data_type: "uint",
+      data_type_ref: "uint",
       bit_offset: 0,
       bit_length: 8,
       required: true
@@ -95,8 +95,8 @@ defmodule Cadence.Commands.DispatcherTest do
 
     # Create a hazardous command
     hazardous_command =
-      %CommandDefinition{}
-      |> CommandDefinition.changeset(%{
+      %MetaCommand{}
+      |> MetaCommand.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
         definition_set_id: definition_set.id,
@@ -110,8 +110,8 @@ defmodule Cadence.Commands.DispatcherTest do
 
     # Create command with phase restriction
     phase_restricted_command =
-      %CommandDefinition{}
-      |> CommandDefinition.changeset(%{
+      %MetaCommand{}
+      |> MetaCommand.changeset(%{
         organization_id: org.id,
         mission_id: mission.id,
         definition_set_id: definition_set.id,
@@ -122,8 +122,18 @@ defmodule Cadence.Commands.DispatcherTest do
       })
       |> Repo.insert!()
 
-    # Start the dispatcher for this mission
-    {:ok, _pid} = start_supervised({Dispatcher, mission_id: mission.id})
+    # Start the target queue and dispatcher for this target
+    {:ok, _queue_pid} =
+      start_supervised(
+        {TargetQueue, mission_id: mission.id, target_id: target.id},
+        id: :target_queue
+      )
+
+    {:ok, _dispatcher_pid} =
+      start_supervised(
+        {TargetDispatcher, mission_id: mission.id, target_id: target.id},
+        id: :target_dispatcher
+      )
 
     %{
       org: org,
@@ -141,17 +151,21 @@ defmodule Cadence.Commands.DispatcherTest do
       assert {:error, :unknown_command} = result
     end
 
-    test "returns error when target not provided", %{mission: mission} do
-      result = Commands.dispatch(mission.id, "SET_MODE", %{mode: 1}, [])
-      assert {:error, :target_required} = result
+    test "raises when target not provided", %{mission: mission} do
+      assert_raise ArgumentError, ~r/target or target_id is required/, fn ->
+        Commands.dispatch(mission.id, "SET_MODE", %{mode: 1}, [])
+      end
     end
 
     test "returns error for unknown target", %{mission: mission} do
-      result = Commands.dispatch(mission.id, "SET_MODE", %{mode: 1}, target: Ecto.UUID.generate())
-      assert {:error, :unknown_target} = result
+      # Dispatch to non-existent target should exit because no dispatcher process
+      fake_target_id = Ecto.UUID.generate()
+
+      assert {:error, :dispatcher_not_running} =
+               Commands.dispatch(mission.id, "SET_MODE", %{mode: 1}, target: fake_target_id)
     end
 
-    test "returns error when required parameter is missing", %{mission: mission, target: target} do
+    test "returns error when required argument is missing", %{mission: mission, target: target} do
       result = Commands.dispatch(mission.id, "SET_MODE", %{}, target: target.id)
       assert {:error, :validation_failed, errors} = result
       assert {"mode", "is required"} in errors
@@ -181,9 +195,9 @@ defmodule Cadence.Commands.DispatcherTest do
     end
   end
 
-  describe "confirm_dispatch/2" do
-    test "returns error for invalid token", %{mission: mission} do
-      result = Commands.confirm_dispatch(mission.id, "invalid-token")
+  describe "confirm_dispatch/3" do
+    test "returns error for invalid token", %{mission: mission, target: target} do
+      result = Commands.confirm_dispatch(mission.id, target.id, "invalid-token")
       assert {:error, :invalid_token} = result
     end
 
@@ -193,7 +207,7 @@ defmodule Cadence.Commands.DispatcherTest do
         Commands.dispatch(mission.id, "SAFE_MODE", %{}, target: target.id)
 
       # Confirm should either succeed or fail due to no interface (which is expected in test)
-      result = Commands.confirm_dispatch(mission.id, info.token)
+      result = Commands.confirm_dispatch(mission.id, target.id, info.token)
 
       # Will fail because we don't have an interface set up, but the confirmation worked
       assert {:error, :no_interface} = result
@@ -204,21 +218,39 @@ defmodule Cadence.Commands.DispatcherTest do
       {:error, :requires_confirmation, info} =
         Commands.dispatch(mission.id, "SAFE_MODE", %{}, target: target.id)
 
-      # Manually expire the token by manipulating state
-      # For this test, we'll just verify the token was created correctly
+      # Verify the token was created correctly with a reasonable expiry
       assert DateTime.diff(info.expires_at, DateTime.utc_now(), :second) > 0
       assert DateTime.diff(info.expires_at, DateTime.utc_now(), :second) <= 60
     end
   end
 
-  describe "stats/1" do
-    test "returns dispatcher statistics", %{mission: mission} do
-      stats = Dispatcher.stats(mission.id)
+  describe "status/2" do
+    test "returns dispatcher statistics for target", %{mission: mission, target: target} do
+      status = TargetDispatcher.status(mission.id, target.id)
 
-      assert stats.mission_id == mission.id
-      assert stats.pending_confirmations >= 0
-      assert stats.pending_verifications >= 0
-      assert stats.command_counter >= 0
+      assert status.mission_id == mission.id
+      assert status.target_id == target.id
+      assert status.pending_confirmations >= 0
+      assert status.pending_verifications >= 0
+      assert status.paused == false
+    end
+  end
+
+  describe "pause/resume" do
+    test "pauses and resumes dispatcher for target", %{mission: mission, target: target} do
+      # Initially not paused
+      status = TargetDispatcher.status(mission.id, target.id)
+      refute status.paused
+
+      # Pause
+      :ok = TargetDispatcher.pause(mission.id, target.id)
+      status = TargetDispatcher.status(mission.id, target.id)
+      assert status.paused
+
+      # Resume
+      :ok = TargetDispatcher.resume(mission.id, target.id)
+      status = TargetDispatcher.status(mission.id, target.id)
+      refute status.paused
     end
   end
 end

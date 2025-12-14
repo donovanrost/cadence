@@ -100,9 +100,10 @@ defmodule CadenceWeb.CommandLive.HazardConfirmationComponent do
   def handle_event("confirm", _params, socket) do
     if socket.assigns.confirmed do
       mission_id = socket.assigns.mission_id
+      target_id = socket.assigns.target_id
       token = socket.assigns.token
 
-      case Commands.confirm_dispatch(mission_id, token) do
+      case Commands.confirm_dispatch(mission_id, target_id, token) do
         {:ok, command_log_id} ->
           send(self(), {:command_confirmed, command_log_id})
           {:noreply, socket}

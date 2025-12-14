@@ -14,6 +14,8 @@ defmodule Cadence.Targets do
 
   alias Cadence.Targets.{Target, TargetGroup}
   alias Cadence.Missions.Mission
+  alias Cadence.Missions.MissionInstance
+  alias Cadence.Commands.TargetPipelineSupervisor
 
   ## Target CRUD
 
@@ -50,11 +52,39 @@ defmodule Cadence.Targets do
 
   @doc """
   Creates a target.
+
+  If the mission is currently running, also starts the target's command pipeline.
   """
   def create_target(attrs \\ %{}) do
+    with {:ok, target} <- do_create_target(attrs) do
+      maybe_start_pipeline(target)
+      {:ok, target}
+    end
+  end
+
+  defp do_create_target(attrs) do
     %Target{}
     |> Target.changeset(attrs)
     |> Repo.insert()
+  end
+
+  defp maybe_start_pipeline(%Target{} = target) do
+    # Only start if mission is running
+    case MissionInstance.whereis(target.mission_id) do
+      nil ->
+        # Mission not running, pipeline will start when mission starts
+        :ok
+
+      _pid ->
+        case TargetPipelineSupervisor.start_pipeline(target.mission_id, target.id) do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          {:error, reason} ->
+            require Logger
+            Logger.warning("Failed to start pipeline for target #{target.id}: #{inspect(reason)}")
+            :ok
+        end
+    end
   end
 
   @doc """
@@ -68,9 +98,54 @@ defmodule Cadence.Targets do
 
   @doc """
   Deletes a target.
+
+  If the mission is running, stops the target's command pipeline and cancels
+  any pending queued commands for this target.
   """
   def delete_target(%Target{} = target) do
+    # Cancel pending commands and stop pipeline before deleting
+    cleanup_target_commands(target)
+    maybe_stop_pipeline(target)
     Repo.delete(target)
+  end
+
+  defp cleanup_target_commands(%Target{} = target) do
+    alias Cadence.Commands.{TargetQueue, QueueEntry}
+    import Ecto.Query
+
+    # Check if queue is running first to avoid exit errors
+    case TargetQueue.whereis(target.mission_id, target.id) do
+      nil ->
+        # Queue not running, cancel via database directly
+        from(e in QueueEntry,
+          where: e.target_id == ^target.id,
+          where: e.status == :pending
+        )
+        |> Repo.update_all(set: [status: :cancelled, updated_at: DateTime.utc_now()])
+
+        :ok
+
+      _pid ->
+        TargetQueue.clear(target.mission_id, target.id)
+    end
+  end
+
+  defp maybe_stop_pipeline(%Target{} = target) do
+    case MissionInstance.whereis(target.mission_id) do
+      nil ->
+        # Mission not running, no pipeline to stop
+        :ok
+
+      _pid ->
+        case TargetPipelineSupervisor.stop_pipeline(target.mission_id, target.id) do
+          :ok -> :ok
+          {:error, :not_found} -> :ok
+          {:error, reason} ->
+            require Logger
+            Logger.warning("Failed to stop pipeline for target #{target.id}: #{inspect(reason)}")
+            :ok
+        end
+    end
   end
 
   @doc """

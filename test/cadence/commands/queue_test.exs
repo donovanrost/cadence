@@ -1,8 +1,8 @@
-defmodule Cadence.Commands.QueueTest do
+defmodule Cadence.Commands.TargetQueueTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commands
-  alias Cadence.Commands.{Queue, QueueEntry}
+  alias Cadence.Commands.{TargetQueue, QueueEntry}
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Targets.Target
@@ -66,8 +66,8 @@ defmodule Cadence.Commands.QueueTest do
       })
       |> Repo.insert!()
 
-    # Start the queue for this mission
-    {:ok, _pid} = start_supervised({Queue, mission_id: mission.id})
+    # Start the queue for this target
+    {:ok, _pid} = start_supervised({TargetQueue, mission_id: mission.id, target_id: target.id})
 
     %{
       org: org,
@@ -125,42 +125,24 @@ defmodule Cadence.Commands.QueueTest do
       assert entry.expires_at == future
     end
 
-    test "returns error when target not provided", %{mission: mission} do
-      result = Commands.enqueue(mission.id, "SET_MODE", %{}, [])
-
-      assert {:error, :target_required} = result
+    test "raises when target not provided", %{mission: mission} do
+      assert_raise ArgumentError, ~r/target or target_id is required/, fn ->
+        Commands.enqueue(mission.id, "SET_MODE", %{}, [])
+      end
     end
   end
 
-  describe "pause_queue/1 and resume_queue/1" do
-    test "pauses and resumes queue", %{mission: mission} do
-      # Initially not paused
-      status = Commands.queue_status(mission.id)
-      refute status.paused
-
-      # Pause
-      :ok = Commands.pause_queue(mission.id)
-      status = Commands.queue_status(mission.id)
-      assert status.paused
-
-      # Resume
-      :ok = Commands.resume_queue(mission.id)
-      status = Commands.queue_status(mission.id)
-      refute status.paused
-    end
-  end
-
-  describe "cancel_queued/2" do
+  describe "cancel_queued/3" do
     test "cancels a pending entry", %{mission: mission, target: target} do
       {:ok, entry} = Commands.enqueue(mission.id, "TO_CANCEL", %{}, target: target.id)
 
-      {:ok, cancelled} = Commands.cancel_queued(mission.id, entry.id)
+      {:ok, cancelled} = Commands.cancel_queued(mission.id, target.id, entry.id)
 
       assert cancelled.status == :cancelled
     end
 
-    test "returns error for non-existent entry", %{mission: mission} do
-      result = Commands.cancel_queued(mission.id, Ecto.UUID.generate())
+    test "returns error for non-existent entry", %{mission: mission, target: target} do
+      result = Commands.cancel_queued(mission.id, target.id, Ecto.UUID.generate())
 
       assert {:error, :not_found} = result
     end
@@ -182,12 +164,12 @@ defmodule Cadence.Commands.QueueTest do
     end
   end
 
-  describe "clear_queue/1" do
+  describe "clear_all_queues/1" do
     test "clears all pending entries", %{mission: mission, target: target} do
       {:ok, _} = Commands.enqueue(mission.id, "CMD_1", %{}, target: target.id)
       {:ok, _} = Commands.enqueue(mission.id, "CMD_2", %{}, target: target.id)
 
-      {:ok, count} = Commands.clear_queue(mission.id)
+      {:ok, count} = Commands.clear_all_queues(mission.id)
 
       assert count == 2
 
@@ -196,27 +178,28 @@ defmodule Cadence.Commands.QueueTest do
     end
   end
 
-  describe "queue_status/1" do
-    test "returns queue statistics", %{mission: mission, target: target} do
+  describe "queue_status/2" do
+    test "returns queue statistics for target", %{mission: mission, target: target} do
       {:ok, _} = Commands.enqueue(mission.id, "CMD_1", %{}, target: target.id)
       {:ok, _} = Commands.enqueue(mission.id, "CMD_2", %{}, target: target.id)
 
-      status = Commands.queue_status(mission.id)
+      status = TargetQueue.status(mission.id, target.id)
 
       assert status.mission_id == mission.id
+      assert status.target_id == target.id
       assert status.pending == 2
+      # executing is 0 when nothing is executing
       assert status.executing == 0
-      assert status.paused == false
     end
   end
 
-  describe "list_queued/2" do
+  describe "list_queue_entries/2" do
     test "lists pending entries in priority order", %{mission: mission, target: target} do
       {:ok, _} = Commands.enqueue(mission.id, "LOW", %{}, target: target.id, priority: 4)
       {:ok, _} = Commands.enqueue(mission.id, "HIGH", %{}, target: target.id, priority: 1)
       {:ok, _} = Commands.enqueue(mission.id, "NORMAL", %{}, target: target.id, priority: 3)
 
-      entries = Commands.list_queued(mission.id)
+      entries = Commands.list_queue_entries(mission.id)
 
       assert length(entries) == 3
       assert Enum.at(entries, 0).command_name == "HIGH"
@@ -242,28 +225,34 @@ defmodule Cadence.Commands.QueueTest do
         })
         |> Repo.insert!()
 
+      # Start queue for second target
+      start_supervised!(
+        {TargetQueue, mission_id: mission.id, target_id: target2.id},
+        id: :target2_queue
+      )
+
       {:ok, _entry1} = Commands.enqueue(mission.id, "CMD_SC1", %{}, target: target.id)
       {:ok, _entry2} = Commands.enqueue(mission.id, "CMD_SC2", %{}, target: target2.id)
 
-      entries = Commands.list_queued(mission.id, target_id: target.id)
+      entries = Commands.list_queue_entries(mission.id, target_id: target.id)
 
       assert length(entries) == 1
       assert Enum.at(entries, 0).command_name == "CMD_SC1"
     end
   end
 
-  describe "reorder_queued/3" do
+  describe "reorder_queued/4" do
     test "changes priority of a queued entry", %{mission: mission, target: target} do
       {:ok, entry} =
         Commands.enqueue(mission.id, "TO_REORDER", %{}, target: target.id, priority: 3)
 
-      {:ok, updated} = Commands.reorder_queued(mission.id, entry.id, 1)
+      {:ok, updated} = Commands.reorder_queued(mission.id, target.id, entry.id, 1)
 
       assert updated.priority == 1
     end
 
-    test "returns error for non-existent entry", %{mission: mission} do
-      result = Commands.reorder_queued(mission.id, Ecto.UUID.generate(), 1)
+    test "returns error for non-existent entry", %{mission: mission, target: target} do
+      result = Commands.reorder_queued(mission.id, target.id, Ecto.UUID.generate(), 1)
 
       assert {:error, :not_found} = result
     end

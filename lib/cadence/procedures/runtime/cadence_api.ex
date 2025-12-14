@@ -29,7 +29,7 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
 
   require Logger
 
-  alias Cadence.Commands.Dispatcher, as: CommandDispatcher
+  alias Cadence.Commands.TargetDispatcher
   alias Cadence.Telemetry.CurrentValueTable
 
   @type context :: %{
@@ -199,7 +199,7 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
       skip_hazardous_check: allow_hazardous
     ]
 
-    case CommandDispatcher.dispatch(context.mission_id, command_name, args, opts) do
+    case TargetDispatcher.dispatch(context.mission_id, context.target_id, command_name, args, opts) do
       {:ok, command_log_id} ->
         send(context.execution_pid, {:command_sent, command_name, command_log_id})
         true

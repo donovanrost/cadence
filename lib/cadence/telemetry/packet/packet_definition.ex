@@ -13,7 +13,7 @@ defmodule Cadence.Telemetry.Packet.PacketDefinition do
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
   alias Cadence.Telemetry.Packet.PacketItem
-  alias Cadence.Telemetry.Database.DefinitionSet
+  alias Cadence.MissionDatabase.DefinitionSet
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

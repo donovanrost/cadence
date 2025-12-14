@@ -707,24 +707,31 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   def handle_event("cancel_command", %{"id" => entry_id}, socket) do
     mission_id = socket.assigns.mission.id
 
-    case Commands.cancel_queued(mission_id, entry_id) do
-      {:ok, _cancelled_entry} ->
-        # Refresh queue entries
-        queue_entries =
-          Commands.list_queue_entries(mission_id,
-            status: [:pending, :executing],
-            preload: [:target],
-            limit: 50
-          )
+    # Get the entry to find its target_id
+    case Commands.get_queue_entry(entry_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Command not found")}
 
-        {:noreply,
-         socket
-         |> assign(:queue_entries, queue_entries)
-         |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
-         |> put_flash(:info, "Command cancelled")}
+      entry ->
+        case Commands.cancel_queued(mission_id, entry.target_id, entry_id) do
+          {:ok, _cancelled_entry} ->
+            # Refresh queue entries
+            queue_entries =
+              Commands.list_queue_entries(mission_id,
+                status: [:pending, :executing],
+                preload: [:target],
+                limit: 50
+              )
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to cancel command: #{inspect(reason)}")}
+            {:noreply,
+             socket
+             |> assign(:queue_entries, queue_entries)
+             |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+             |> put_flash(:info, "Command cancelled")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to cancel command: #{inspect(reason)}")}
+        end
     end
   end
 
@@ -793,14 +800,14 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   def handle_event("cmd_pause_queue", _, socket) do
     mission_id = socket.assigns.mission.id
-    Commands.pause_queue(mission_id)
-    {:noreply, put_flash(socket, :info, "Command queue paused")}
+    Commands.pause_all_targets(mission_id)
+    {:noreply, put_flash(socket, :info, "Command queue paused for all targets")}
   end
 
   def handle_event("cmd_resume_queue", _, socket) do
     mission_id = socket.assigns.mission.id
-    Commands.resume_queue(mission_id)
-    {:noreply, put_flash(socket, :info, "Command queue resumed")}
+    Commands.resume_all_targets(mission_id)
+    {:noreply, put_flash(socket, :info, "Command queue resumed for all targets")}
   end
 
   # PubSub handlers for alarms
