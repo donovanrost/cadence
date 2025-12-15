@@ -44,7 +44,10 @@ defmodule Cadence.Commands do
     TargetDispatcher,
     TargetQueue,
     TargetPipelineSupervisor,
-    QueueEntry
+    QueueEntry,
+    Staging,
+    StagedCommand,
+    StagedCommandTarget
   }
 
   alias Cadence.{Missions, Targets}
@@ -1027,6 +1030,106 @@ defmodule Cadence.Commands do
     |> Repo.all()
     |> Repo.preload(preload)
   end
+
+  # ============================================================================
+  # Command Staging Operations
+  # ============================================================================
+
+  @doc """
+  Lists all staged commands for a mission.
+  See `Cadence.Commands.Staging.list_staged/1`.
+  """
+  defdelegate list_staged(mission_id), to: Staging
+
+  @doc """
+  Gets a staged command by ID.
+  See `Cadence.Commands.Staging.get_staged_command/1`.
+  """
+  defdelegate get_staged_command(id), to: Staging
+
+  @doc """
+  Gets a staged command by ID, raising if not found.
+  See `Cadence.Commands.Staging.get_staged_command!/1`.
+  """
+  defdelegate get_staged_command!(id), to: Staging
+
+  @doc """
+  Gets a staged command target entry by ID.
+  See `Cadence.Commands.Staging.get_target_entry/1`.
+  """
+  defdelegate get_staged_target_entry(id), to: Staging, as: :get_target_entry
+
+  @doc """
+  Adds a command to the staging area.
+  See `Cadence.Commands.Staging.add_to_stage/5`.
+  """
+  defdelegate add_to_stage(user, mission_id, command, targets, opts \\ []), to: Staging
+
+  @doc """
+  Updates the parameters for a specific staged target entry.
+  See `Cadence.Commands.Staging.update_target_params/2`.
+  """
+  defdelegate update_staged_target_params(entry_id, params), to: Staging, as: :update_target_params
+
+  @doc """
+  Updates the priority for a staged command.
+  See `Cadence.Commands.Staging.update_priority/2`.
+  """
+  defdelegate update_staged_priority(id, priority), to: Staging, as: :update_priority
+
+  @doc """
+  Removes a specific target from a staged command.
+  See `Cadence.Commands.Staging.remove_target/1`.
+  """
+  defdelegate remove_staged_target(entry_id), to: Staging, as: :remove_target
+
+  @doc """
+  Removes an entire staged command and all its targets.
+  See `Cadence.Commands.Staging.remove_staged_command/1`.
+  """
+  defdelegate remove_staged_command(id), to: Staging
+
+  @doc """
+  Clears all staged commands for a mission.
+  See `Cadence.Commands.Staging.clear_stage/1`.
+  """
+  defdelegate clear_stage(mission_id), to: Staging
+
+  @doc """
+  Queues a single target entry from staging.
+  See `Cadence.Commands.Staging.queue_target/2`.
+  """
+  defdelegate queue_staged_target(entry_id, opts \\ []), to: Staging, as: :queue_target
+
+  @doc """
+  Queues all target entries from a single staged command.
+  See `Cadence.Commands.Staging.queue_staged_command/2`.
+  """
+  defdelegate queue_staged_command(id, opts \\ []), to: Staging
+
+  @doc """
+  Queues all staged commands for a mission.
+  See `Cadence.Commands.Staging.queue_all/2`.
+  """
+  defdelegate queue_all_staged(mission_id, opts \\ []), to: Staging, as: :queue_all
+
+  @doc """
+  Subscribes to staging changes for a mission.
+  See `Cadence.Commands.Staging.subscribe/1`.
+  """
+  defdelegate subscribe_staging(mission_id), to: Staging, as: :subscribe
+
+  @doc """
+  Counts staged commands for a mission.
+  See `Cadence.Commands.Staging.count_staged/1`.
+  """
+  defdelegate count_staged(mission_id), to: Staging
+
+  @doc """
+  Counts total target entries across all staged commands for a mission.
+  See `Cadence.Commands.Staging.count_staged_targets/1`.
+  """
+  defdelegate count_staged_targets(mission_id), to: Staging
 
   # ============================================================================
   # Private Helpers

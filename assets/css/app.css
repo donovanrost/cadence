@@ -2497,10 +2497,7 @@
   padding: 0.5rem;
 }
 
-/* When staging is expanded, give it a stable fraction of the space */
-.commands-mode-layout:has(.cmd-staging-panel.expanded) {
-  grid-template-rows: 3fr 1fr;
-}
+/* Grid stays 1fr auto always - panel height controls the auto row size */
 
 /* Panels row - contains target selection and command browser */
 .cmd-panels-row {
@@ -4413,13 +4410,15 @@
 
 .cmd-staging-panel.minimized,
 .cmd-staging-panel.empty {
-  /* Fixed height for collapsed states */
+  /* Panel naturally fits content in auto-sized grid row */
 }
 
 .cmd-staging-panel.expanded {
   display: flex;
   flex-direction: column;
-  height: 100%; /* Fill the grid cell */
+  height: var(--staging-height, 300px);
+  min-height: 120px;
+  max-height: 70vh;
 }
 
 /* Corner accent brackets - HUD style (green/teal for staging) */

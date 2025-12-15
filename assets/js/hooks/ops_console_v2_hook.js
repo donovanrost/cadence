@@ -67,8 +67,8 @@ export const OpsConsoleV2Hook = {
     this.cmdPerTargetMode = false         // Whether we're in per-target configuration mode
     this.cmdReviewMode = false            // Whether showing review screen before queue
 
-    // Persistent staging area (in-memory)
-    this.cmdStagedCommands = []           // Array of staged command objects
+    // Persistent staging area (loaded from server)
+    this.cmdStagedCommands = JSON.parse(this.el.dataset.stagedCommands || '[]')
     this.cmdStagePanelExpanded = false    // Whether staging panel is expanded
     this.cmdStagePanelHeight = null       // Custom height when resized (null = auto)
     this.cmdStageFilter = ''              // Filter text for staging table
@@ -994,6 +994,19 @@ export const OpsConsoleV2Hook = {
       this._populateContextPanel()
     })
 
+    // Handle staged commands loaded from server
+    this.handleEvent("load_staged_commands", (payload) => {
+      this.cmdStagedCommands = payload.staged || []
+      this._updateStagingPanel()
+    })
+
+    // Handle staging updates (for multi-tab/multi-operator sync)
+    this.handleEvent("staging_updated", (payload) => {
+      console.log("[OpsConsoleV2] Staging updated:", payload.action)
+      // The server will send load_staged_commands right after this
+      // This event is just a notification that staging changed
+    })
+
     this.el.addEventListener("widget:configure", (e) => {
       const { widgetId, widgetType, config } = e.detail
       this.pushEvent("open_widget_config", {
@@ -1315,8 +1328,8 @@ export const OpsConsoleV2Hook = {
     // Calculate total target count across all staged commands
     const totalTargets = isEmpty ? 0 : this.cmdStagedCommands.reduce((acc, cmd) => acc + cmd.targets.length, 0)
 
-    // Height style for expanded panel (if user has resized)
-    const heightStyle = this.cmdStagePanelHeight ? `height: ${this.cmdStagePanelHeight}px;` : ''
+    // Height style for expanded panel via CSS variable
+    const heightStyle = this.cmdStagePanelHeight ? `--staging-height: ${this.cmdStagePanelHeight}px;` : ''
 
     if (isEmpty) {
       // Empty state: show collapsed bar with disabled buttons
@@ -1435,10 +1448,14 @@ export const OpsConsoleV2Hook = {
     const filter = this.cmdStageFilter.toLowerCase()
 
     this.cmdStagedCommands.forEach((staged, cmdIndex) => {
+      // Look up command definition for hazardous flag
+      const cmdDef = this.commandDefinitions?.find(c => c.id === staged.command_id)
+      const isHazardous = cmdDef?.is_hazardous || false
+
       staged.targets.forEach((targetEntry, targetIndex) => {
         const target = this.targets.find(t => t.id === targetEntry.target_id)
-        const targetName = target?.name || targetEntry.target_id
-        const commandName = staged.command.name
+        const targetName = target?.name || targetEntry.target_name || targetEntry.target_id
+        const commandName = staged.command_name
 
         // Apply filter
         if (filter) {
@@ -1455,12 +1472,12 @@ export const OpsConsoleV2Hook = {
         const hasMoreParams = Object.keys(targetEntry.params || {}).length > 3
 
         rows.push(`
-          <tr class="cmd-staged-row ${staged.command.is_hazardous ? 'hazardous' : ''}"
+          <tr class="cmd-staged-row ${isHazardous ? 'hazardous' : ''}"
               data-staged-idx="${cmdIndex}" data-target-idx="${targetIndex}">
             <td class="cmd-staged-target">${targetName}</td>
             <td class="cmd-staged-command">
               ${commandName}
-              ${staged.command.is_hazardous ? '<span class="cmd-hazard-badge-sm">HAZ</span>' : ''}
+              ${isHazardous ? '<span class="cmd-hazard-badge-sm">HAZ</span>' : ''}
             </td>
             <td class="cmd-staged-params">${paramsPreview}${hasMoreParams ? '...' : ''}</td>
             <td class="cmd-staged-priority">P${staged.priority}</td>
@@ -1493,7 +1510,10 @@ export const OpsConsoleV2Hook = {
     const cards = []
 
     this.cmdStagedCommands.forEach((staged, cmdIndex) => {
-      const commandName = staged.command.name
+      // Look up command definition for hazardous flag
+      const cmdDef = this.commandDefinitions?.find(c => c.id === staged.command_id)
+      const isHazardous = cmdDef?.is_hazardous || false
+      const commandName = staged.command_name
 
       staged.targets.forEach((targetEntry, targetIndex) => {
         // Look up target name (with fallback to stored name or ID)
@@ -1519,7 +1539,7 @@ export const OpsConsoleV2Hook = {
           : '<div class="cmd-card-no-params">No parameters</div>'
 
         cards.push(`
-          <div class="cmd-staged-card ${staged.command.is_hazardous ? 'hazardous' : ''}"
+          <div class="cmd-staged-card ${isHazardous ? 'hazardous' : ''}"
                data-staged-idx="${cmdIndex}" data-target-idx="${targetIndex}">
             <div class="cmd-card-header">
               <div class="cmd-card-target">
@@ -1530,7 +1550,7 @@ export const OpsConsoleV2Hook = {
             </div>
             <div class="cmd-card-command">
               ${commandName}
-              ${staged.command.is_hazardous ? '<span class="cmd-card-hazard">HAZ</span>' : ''}
+              ${isHazardous ? '<span class="cmd-card-hazard">HAZ</span>' : ''}
             </div>
             <div class="cmd-card-params">
               ${paramsHtml}
@@ -1738,15 +1758,12 @@ export const OpsConsoleV2Hook = {
         const staged = this.cmdStagedCommands[cmdIdx]
         if (!staged) return
 
-        // Remove this target from the command
-        staged.targets.splice(targetIdx, 1)
+        const target = staged.targets[targetIdx]
+        if (!target?.id) return
 
-        // If no targets left, remove the whole command entry
-        if (staged.targets.length === 0) {
-          this.cmdStagedCommands.splice(cmdIdx, 1)
-        }
-
-        this._updateStagingPanel()
+        this.pushEvent("remove_staged_target", {
+          target_entry_id: target.id
+        })
       })
     })
 
@@ -1785,65 +1802,61 @@ export const OpsConsoleV2Hook = {
     let startHeight = 0
     let panel = null
     let isMinimized = false
-    const collapseThreshold = 80 // Collapse when dragged below this height
-    const expandThreshold = 40 // Expand when dragged up this much from minimized
+    const collapseThreshold = 80
+    const expandThreshold = 40
+    const minHeight = 120
+    const maxHeight = () => window.innerHeight * 0.7
 
     const onMouseMove = (e) => {
       if (!panel) return
       const deltaY = startY - e.clientY // positive = dragging up
 
       if (isMinimized) {
-        // Dragging from minimized state
+        // Dragging from minimized - preview expansion
         if (deltaY > expandThreshold) {
-          // Show visual feedback - grow the panel
-          const previewHeight = Math.min(120 + deltaY, window.innerHeight * 0.6)
-          panel.style.height = `${previewHeight}px`
-          panel.style.opacity = ''
+          const previewHeight = Math.min(minHeight + deltaY, maxHeight())
+          panel.style.setProperty('--staging-height', `${previewHeight}px`)
+          panel.style.height = 'var(--staging-height)'
         }
       } else {
-        // Dragging from expanded state
-        const newHeight = Math.min(startHeight + deltaY, window.innerHeight * 0.6)
+        // Dragging from expanded - resize via CSS variable
+        const newHeight = Math.max(minHeight, Math.min(startHeight + deltaY, maxHeight()))
 
         if (newHeight < collapseThreshold) {
-          // Visual feedback that it will collapse
-          panel.style.height = `${collapseThreshold}px`
           panel.style.opacity = '0.5'
         } else {
-          panel.style.height = `${newHeight}px`
+          panel.style.setProperty('--staging-height', `${newHeight}px`)
           panel.style.opacity = ''
-          this.cmdStagePanelHeight = newHeight
         }
       }
     }
 
     const onMouseUp = (e) => {
-      if (panel) {
-        const deltaY = startY - e.clientY
+      if (!panel) return
+      const deltaY = startY - e.clientY
+      const finalHeight = isMinimized ? minHeight + deltaY : startHeight + deltaY
 
-        panel.classList.remove('resizing')
-        panel.style.opacity = ''
+      panel.classList.remove('resizing')
+      panel.style.opacity = ''
 
-        if (isMinimized) {
-          // Check if should expand
-          if (deltaY > expandThreshold) {
-            const newHeight = Math.min(120 + deltaY, window.innerHeight * 0.6)
-            this.cmdStagePanelExpanded = true
-            this.cmdStagePanelHeight = newHeight
-            this._updateStagingPanel()
-          } else {
-            // Reset panel style
-            panel.style.height = ''
-          }
+      if (isMinimized) {
+        panel.style.height = ''
+        if (deltaY > expandThreshold) {
+          this.cmdStagePanelExpanded = true
+          this.cmdStagePanelHeight = Math.min(minHeight + deltaY, maxHeight())
+          this._updateStagingPanel()
+        }
+      } else {
+        if (finalHeight < collapseThreshold) {
+          this.cmdStagePanelExpanded = false
+          this.cmdStagePanelHeight = null
+          this._updateStagingPanel()
         } else {
-          // Check if should collapse
-          const finalHeight = startHeight + deltaY
-          if (finalHeight < collapseThreshold) {
-            this.cmdStagePanelExpanded = false
-            this.cmdStagePanelHeight = null
-            this._updateStagingPanel()
-          }
+          // Keep the new height
+          this.cmdStagePanelHeight = Math.max(minHeight, Math.min(finalHeight, maxHeight()))
         }
       }
+
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
       document.body.style.cursor = ''
@@ -1853,7 +1866,6 @@ export const OpsConsoleV2Hook = {
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault()
 
-      // Check if we're in minimized or expanded state
       panel = container.querySelector('.cmd-staging-panel.expanded') ||
               container.querySelector('.cmd-staging-panel.minimized')
       if (!panel) return
@@ -1861,6 +1873,7 @@ export const OpsConsoleV2Hook = {
       isMinimized = panel.classList.contains('minimized')
       startY = e.clientY
       startHeight = panel.offsetHeight
+
       panel.classList.add('resizing')
       document.body.style.cursor = 'ns-resize'
       document.body.style.userSelect = 'none'
@@ -1992,12 +2005,12 @@ export const OpsConsoleV2Hook = {
         const staged = this.cmdStagedCommands[cmdIdx]
         if (!staged) return
 
-        staged.targets.splice(targetIdx, 1)
-        if (staged.targets.length === 0) {
-          this.cmdStagedCommands.splice(cmdIdx, 1)
-        }
+        const target = staged.targets[targetIdx]
+        if (!target?.id) return
 
-        this._updateStagingPanel()
+        this.pushEvent("remove_staged_target", {
+          target_entry_id: target.id
+        })
       })
     })
   },
@@ -2005,53 +2018,36 @@ export const OpsConsoleV2Hook = {
   _queueAllStaged() {
     const filter = this.cmdStageFilter.toLowerCase()
 
-    // Track which entries to remove after queueing
-    const toRemove = [] // Array of { cmdIdx, targetIdx }
+    // If no filter, use the simple server-side queue_all
+    if (!filter) {
+      this.pushEvent("queue_all_staged", {})
+      this.cmdStageFilter = ''
+      return
+    }
 
-    // Queue each staged command (respecting filter)
-    this.cmdStagedCommands.forEach((staged, cmdIndex) => {
-      const commandName = staged.command.name
+    // With filter: queue each matching target individually
+    this.cmdStagedCommands.forEach((staged) => {
+      const commandName = staged.command_name
 
-      staged.targets.forEach((targetEntry, targetIndex) => {
-        // Apply filter if active
-        if (filter) {
-          const target = this.targets?.find(t => t.id === targetEntry.target_id)
-          const targetName = target?.name || targetEntry.target_name || targetEntry.target_id
-          const matchesTarget = targetName.toLowerCase().includes(filter)
-          const matchesCommand = commandName.toLowerCase().includes(filter)
-          if (!matchesTarget && !matchesCommand) return
-        }
+      staged.targets.forEach((targetEntry) => {
+        if (!targetEntry.id) return
 
-        // Queue this target
-        this.pushEvent("cmd_dispatch_parameterized", {
-          command_id: staged.command.id,
-          target_params: [{
-            target_id: targetEntry.target_id,
-            params: targetEntry.params
-          }],
-          mode: "queue",
-          priority: staged.priority
+        // Apply filter
+        const target = this.targets?.find(t => t.id === targetEntry.target_id)
+        const targetName = target?.name || targetEntry.target_name || targetEntry.target_id
+        const matchesTarget = targetName.toLowerCase().includes(filter)
+        const matchesCommand = commandName?.toLowerCase().includes(filter)
+
+        if (!matchesTarget && !matchesCommand) return
+
+        this.pushEvent("queue_staged_target", {
+          target_entry_id: targetEntry.id
         })
-
-        toRemove.push({ cmdIdx: cmdIndex, targetIdx: targetIndex })
       })
-    })
-
-    // Remove queued entries (in reverse order to preserve indices)
-    toRemove.sort((a, b) => b.cmdIdx - a.cmdIdx || b.targetIdx - a.targetIdx)
-    toRemove.forEach(({ cmdIdx, targetIdx }) => {
-      const staged = this.cmdStagedCommands[cmdIdx]
-      if (staged) {
-        staged.targets.splice(targetIdx, 1)
-        if (staged.targets.length === 0) {
-          this.cmdStagedCommands.splice(cmdIdx, 1)
-        }
-      }
     })
 
     // Clear filter after queueing
     this.cmdStageFilter = ''
-    this._updateStagingPanel()
   },
 
   _queueStagedEntry(cmdIdx, targetIdx) {
@@ -2059,28 +2055,12 @@ export const OpsConsoleV2Hook = {
     if (!staged) return
 
     const target = staged.targets[targetIdx]
-    if (!target) return
+    if (!target?.id) return
 
-    // Queue this single target
-    this.pushEvent("cmd_dispatch_parameterized", {
-      command_id: staged.command.id,
-      target_params: [{
-        target_id: target.target_id,
-        params: target.params
-      }],
-      mode: "queue",
-      priority: staged.priority
+    // Queue via server - server handles queue creation and staging cleanup
+    this.pushEvent("queue_staged_target", {
+      target_entry_id: target.id
     })
-
-    // Remove this target from staging
-    staged.targets.splice(targetIdx, 1)
-
-    // If no targets left, remove the whole command entry
-    if (staged.targets.length === 0) {
-      this.cmdStagedCommands.splice(cmdIdx, 1)
-    }
-
-    this._updateStagingPanel()
   },
 
   _addToStagingArea() {
@@ -2104,20 +2084,16 @@ export const OpsConsoleV2Hook = {
       return
     }
 
-    // Create staged command entry
-    const stagedEntry = {
-      id: `staged-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      command: { ...cmd },
+    // Generate client-side ID for optimistic UI (optional)
+    const clientId = `staged-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    // Push to server - server will persist and broadcast to all clients
+    this.pushEvent("stage_command", {
+      command_id: cmd.id,
       targets: targets,
       priority: this.cmdPriority,
-      timestamp: Date.now()
-    }
-
-    // Add to staging array
-    this.cmdStagedCommands.push(stagedEntry)
-
-    // Update the staging panel
-    this._updateStagingPanel()
+      client_id: clientId
+    })
 
     // Close the slideout
     this._closeCommandSlideout()

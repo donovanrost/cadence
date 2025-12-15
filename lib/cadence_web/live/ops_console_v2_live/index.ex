@@ -79,12 +79,17 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     # Load target groups for filtering
     target_groups = Targets.list_target_groups(mission)
 
+    # Load staged commands for the mission
+    staged_commands = Commands.list_staged(mission_id)
+
     # Subscribe to updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:procedures")
       # Subscribe to command queue events via Outbox
       Outbox.subscribe_mission(mission_id)
+      # Subscribe to staging changes
+      Commands.subscribe_staging(mission_id)
       # Start clock ticker
       :timer.send_interval(1000, self(), :tick)
     end
@@ -104,6 +109,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       |> assign(:queue_entries, queue_entries)
       |> assign(:command_definitions, command_definitions)
       |> assign(:target_groups, target_groups)
+      |> assign(:staged_commands, staged_commands)
       |> assign(:current_time, DateTime.utc_now())
       |> assign(:page_title, "Ops Console V2 - #{mission.name}")
       |> assign(:show_widget_palette, false)
@@ -143,6 +149,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       data-commands={Jason.encode!(Enum.map(@queue_entries, &queue_entry_json/1))}
       data-command-definitions={Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))}
       data-target-groups={Jason.encode!(Enum.map(@target_groups, &target_group_json/1))}
+      data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
       data-current-dashboard-id={@current_layout.id}
       data-token={@token}
       class="h-screen w-screen overflow-hidden bg-base-100 flex flex-col"
@@ -888,6 +895,159 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     {:noreply, put_flash(socket, :info, "Command queue resumed for all targets")}
   end
 
+  # ============================================================================
+  # Command Staging Event Handlers
+  # ============================================================================
+
+  # Add a command to the staging area
+  def handle_event(
+        "stage_command",
+        %{"command_id" => command_id, "targets" => targets} = payload,
+        socket
+      ) do
+    user = socket.assigns.current_scope.user
+    mission_id = socket.assigns.mission.id
+    priority = Map.get(payload, "priority", 3)
+    client_id = Map.get(payload, "client_id")
+
+    command = Enum.find(socket.assigns.command_definitions, &(&1.id == command_id))
+
+    if command do
+      target_entries =
+        Enum.map(targets, fn t ->
+          %{
+            target_id: t["target_id"],
+            target_name: t["target_name"],
+            params: t["params"] || %{}
+          }
+        end)
+
+      case Commands.add_to_stage(user, mission_id, command, target_entries,
+             priority: priority,
+             client_id: client_id
+           ) do
+        {:ok, staged} ->
+          {:noreply,
+           socket
+           |> update_staged_commands()
+           |> push_event("staging_updated", %{action: "added", id: staged.id})}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to stage command")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Command not found")}
+    end
+  end
+
+  # Update a target's parameters in staging
+  def handle_event(
+        "update_staged_params",
+        %{"target_entry_id" => entry_id, "params" => params},
+        socket
+      ) do
+    case Commands.update_staged_target_params(entry_id, params) do
+      {:ok, _} ->
+        {:noreply, update_staged_commands(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update parameters")}
+    end
+  end
+
+  # Update a staged command's priority
+  def handle_event(
+        "update_staged_priority",
+        %{"staged_command_id" => id, "priority" => priority},
+        socket
+      ) do
+    case Commands.update_staged_priority(id, priority) do
+      {:ok, _} ->
+        {:noreply, update_staged_commands(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update priority")}
+    end
+  end
+
+  # Remove a target from staging
+  def handle_event("remove_staged_target", %{"target_entry_id" => entry_id}, socket) do
+    case Commands.remove_staged_target(entry_id) do
+      {:ok, _} ->
+        {:noreply, update_staged_commands(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to remove target")}
+    end
+  end
+
+  # Remove an entire staged command
+  def handle_event("remove_staged_command", %{"staged_command_id" => id}, socket) do
+    case Commands.remove_staged_command(id) do
+      {:ok, _} ->
+        {:noreply, update_staged_commands(socket)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to remove staged command")}
+    end
+  end
+
+  # Queue a single target from staging
+  def handle_event("queue_staged_target", %{"target_entry_id" => entry_id}, socket) do
+    case Commands.queue_staged_target(entry_id) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> update_staged_commands()
+         |> update_queue_entries()
+         |> put_flash(:info, "Command queued")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to queue: #{inspect(reason)}")}
+    end
+  end
+
+  # Queue an entire staged command (all targets)
+  def handle_event("queue_staged_command", %{"staged_command_id" => id}, socket) do
+    case Commands.queue_staged_command(id) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> update_staged_commands()
+         |> update_queue_entries()
+         |> put_flash(:info, "#{count} command(s) queued")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to queue: #{inspect(reason)}")}
+    end
+  end
+
+  # Queue all staged commands
+  def handle_event("queue_all_staged", _params, socket) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.queue_all_staged(mission_id) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> update_staged_commands()
+         |> update_queue_entries()
+         |> put_flash(:info, "#{count} command(s) queued")}
+    end
+  end
+
+  # Clear all staged commands
+  def handle_event("clear_staging", _params, socket) do
+    mission_id = socket.assigns.mission.id
+
+    {:ok, _count} = Commands.clear_stage(mission_id)
+
+    {:noreply,
+     socket
+     |> assign(:staged_commands, [])
+     |> push_event("staging_updated", %{action: "cleared"})}
+  end
+
   # PubSub handlers for alarms
   def handle_info({:alarm_triggered, alarm}, socket) do
     active_alarms = [alarm | socket.assigns.active_alarms]
@@ -991,6 +1151,14 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   # Catch-all for other outbox events we're not interested in
   def handle_info({:outbox_event, _event}, socket) do
     {:noreply, socket}
+  end
+
+  # Handle staging changes (for multi-tab/multi-operator sync)
+  def handle_info({:staging_changed, action, _staged_command_id}, socket) do
+    {:noreply,
+     socket
+     |> update_staged_commands()
+     |> push_event("staging_updated", %{action: action})}
   end
 
   # Widget message handlers
@@ -1161,6 +1329,49 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       attempts: entry.attempts,
       last_error: entry.last_error
     }
+  end
+
+  defp staged_command_json(staged) do
+    %{
+      id: staged.id,
+      command_id: staged.meta_command_id,
+      command_name: staged.command_name,
+      priority: staged.priority,
+      created_at: staged.inserted_at && DateTime.to_iso8601(staged.inserted_at),
+      targets:
+        Enum.map(staged.targets || [], fn t ->
+          %{
+            id: t.id,
+            target_id: t.target_id,
+            target_name: t.target_name,
+            params: t.params
+          }
+        end)
+    }
+  end
+
+  defp update_staged_commands(socket) do
+    mission_id = socket.assigns.mission.id
+    staged = Commands.list_staged(mission_id)
+
+    socket
+    |> assign(:staged_commands, staged)
+    |> push_event("load_staged_commands", %{staged: Enum.map(staged, &staged_command_json/1)})
+  end
+
+  defp update_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+
+    queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        preload: [:target],
+        limit: 50
+      )
+
+    socket
+    |> assign(:queue_entries, queue_entries)
+    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
   end
 
   # Load command definitions (MetaCommands) for the mission
