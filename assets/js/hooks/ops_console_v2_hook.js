@@ -2512,8 +2512,13 @@ export const OpsConsoleV2Hook = {
     // Set editing state
     this.cmdEditingStaged = { cmdIndex, targetIndex }
 
-    // Set the command being edited
-    this.cmdSelectedCommand = staged.command
+    // Look up the command from command definitions by ID
+    const command = this.commandDefinitions.find(c => c.id === staged.command_id)
+    if (!command) {
+      console.warn('Command not found for staged entry:', staged.command_id)
+      return
+    }
+    this.cmdSelectedCommand = command
 
     // Set priority
     this.cmdPriority = staged.priority
@@ -2523,9 +2528,9 @@ export const OpsConsoleV2Hook = {
 
     // Get the target
     const target = this.targets.find(t => t.id === targetEntry.target_id)
-    this._editingTarget = target || { id: targetEntry.target_id, name: targetEntry.target_id }
+    this._editingTarget = target || { id: targetEntry.target_id, name: targetEntry.target_name }
 
-    // Open slideout
+    // Open slideout in edit mode
     this._openEditSlideout()
   },
 
