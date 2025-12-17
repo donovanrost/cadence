@@ -12,7 +12,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts, Procedures, Commands, Outbox}
+  alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts, Procedures, Commands, Outbox, Timeline}
   alias Cadence.DashboardLayouts.DashboardLayout
   alias Cadence.MissionDatabase.{Database, MetaCommand}
 
@@ -82,6 +82,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     # Load staged commands for the mission
     staged_commands = Commands.list_staged(mission_id)
 
+    # Load recent timeline events (last 2 hours + 24h future)
+    timeline_events = Timeline.list_recent_events(mission_id, 120)
+
     # Subscribe to updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
@@ -110,6 +113,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       |> assign(:command_definitions, command_definitions)
       |> assign(:target_groups, target_groups)
       |> assign(:staged_commands, staged_commands)
+      |> assign(:timeline_events, timeline_events)
       |> assign(:current_time, DateTime.utc_now())
       |> assign(:page_title, "Ops Console V2 - #{mission.name}")
       |> assign(:show_widget_palette, false)
@@ -150,6 +154,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       data-command-definitions={Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))}
       data-target-groups={Jason.encode!(Enum.map(@target_groups, &target_group_json/1))}
       data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
+      data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
       data-current-dashboard-id={@current_layout.id}
       data-token={@token}
       class="h-screen w-screen overflow-hidden bg-base-100 flex flex-col"
@@ -1048,6 +1053,52 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
      |> push_event("staging_updated", %{action: "cleared"})}
   end
 
+  # ============================================================================
+  # Timeline Event Handlers
+  # ============================================================================
+
+  @doc """
+  Load more timeline events for infinite scroll.
+
+  Receives a cursor (oldest timestamp currently loaded) and returns
+  events before that timestamp. Optionally filters by target_ids.
+  """
+  def handle_event("load_more_timeline_events", params, socket) do
+    cursor_string = params["cursor"]
+    target_ids = params["target_ids"] || []
+    # include_system is handled client-side by filtering events without target_id
+
+    mission_id = socket.assigns.mission.id
+
+    case DateTime.from_iso8601(cursor_string) do
+      {:ok, cursor, _offset} ->
+        # Build options for query
+        opts = [limit: 50]
+
+        opts =
+          if target_ids != [] do
+            Keyword.put(opts, :target_ids, target_ids)
+          else
+            opts
+          end
+
+        # Fetch older events
+        older_events = Timeline.list_events_before(mission_id, cursor, opts)
+
+        # Convert to JSON format
+        events_json = Enum.map(older_events, &timeline_event_json/1)
+
+        {:noreply,
+         push_event(socket, "more_timeline_events", %{
+           events: events_json,
+           has_more: length(older_events) >= 50
+         })}
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
+  end
+
   # PubSub handlers for alarms
   def handle_info({:alarm_triggered, alarm}, socket) do
     active_alarms = [alarm | socket.assigns.active_alarms]
@@ -1057,7 +1108,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
      socket
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
-     |> push_event("alarm_update", %{type: "triggered", alarm: alarm_json(alarm)})}
+     |> push_event("alarm_update", %{type: "triggered", alarm: alarm_json(alarm)})
+     |> push_timeline_alarm_event(alarm, :triggered)}
   end
 
   def handle_info({:alarm_created, alarm}, socket) do
@@ -1068,7 +1120,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
      socket
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
-     |> push_event("alarm_update", %{type: "created", alarm: alarm_json(alarm)})}
+     |> push_event("alarm_update", %{type: "created", alarm: alarm_json(alarm)})
+     |> push_timeline_alarm_event(alarm, :created)}
   end
 
   def handle_info({:alarm_updated, alarm}, socket) do
@@ -1099,7 +1152,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
      socket
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
-     |> push_event("alarm_update", %{type: "cleared", alarm: alarm_json(alarm)})}
+     |> push_event("alarm_update", %{type: "cleared", alarm: alarm_json(alarm)})
+     |> push_timeline_alarm_event(alarm, :cleared)}
   end
 
   def handle_info({:alarm_acknowledged, alarm}, socket) do
@@ -1108,7 +1162,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     {:noreply,
      socket
      |> assign(:active_alarms, active_alarms)
-     |> push_event("alarm_update", %{type: "acknowledged", alarm: alarm_json(alarm)})}
+     |> push_event("alarm_update", %{type: "acknowledged", alarm: alarm_json(alarm)})
+     |> push_timeline_alarm_event(alarm, :acknowledged)}
   end
 
   def handle_info({:alarm_shelved, alarm}, socket) do
@@ -1130,7 +1185,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # Outbox event handlers for command queue updates
-  def handle_info({:outbox_event, %{event_type: event_type} = _event}, socket)
+  def handle_info({:outbox_event, %{event_type: event_type, payload: payload} = _event}, socket)
       when event_type in ["command_enqueued", "command_status_changed", "command_cancelled"] do
     # Refresh command queue entries
     mission_id = socket.assigns.mission.id
@@ -1142,15 +1197,25 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         limit: 50
       )
 
-    {:noreply,
-     socket
-     |> assign(:queue_entries, queue_entries)
-     |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})}
+    # Also push timeline event for command status changes
+    socket =
+      socket
+      |> assign(:queue_entries, queue_entries)
+      |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+      |> maybe_push_timeline_command_event(payload)
+
+    {:noreply, socket}
   end
 
   # Catch-all for other outbox events we're not interested in
   def handle_info({:outbox_event, _event}, socket) do
     {:noreply, socket}
+  end
+
+  # Handle procedure execution events for timeline
+  def handle_info({:procedure_event, %Cadence.Procedures.Events.ProcedureExecutionEvent{} = event}, socket) do
+    # Convert to timeline event and push to frontend
+    {:noreply, push_timeline_procedure_event(socket, event)}
   end
 
   # Handle staging changes (for multi-tab/multi-operator sync)
@@ -1350,6 +1415,27 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     }
   end
 
+  defp timeline_event_json(%Cadence.Timeline.Event{} = event) do
+    %{
+      id: event.id,
+      type: event.type,
+      timestamp: event.timestamp && DateTime.to_iso8601(event.timestamp),
+      target_id: event.target_id,
+      target_name: event.target_name,
+      target_group: event.target_group,
+      title: event.title,
+      description: event.description,
+      status: event.status,
+      status_label: event.status_label,
+      user_id: event.user_id,
+      user_name: event.user_name,
+      is_future: event.is_future,
+      metadata: event.metadata,
+      source_id: event.source_id,
+      source_table: event.source_table
+    }
+  end
+
   defp update_staged_commands(socket) do
     mission_id = socket.assigns.mission.id
     staged = Commands.list_staged(mission_id)
@@ -1373,6 +1459,119 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     |> assign(:queue_entries, queue_entries)
     |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
   end
+
+  # Push timeline command event from outbox (pipeable)
+  defp maybe_push_timeline_command_event(socket, payload) do
+    command_log_id = payload["command_log_id"]
+
+    if command_log_id do
+      case Timeline.get_event("cmd-#{command_log_id}") do
+        nil ->
+          socket
+
+        event ->
+          push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+      end
+    else
+      socket
+    end
+  end
+
+  # Push timeline alarm event (pipeable)
+  defp push_timeline_alarm_event(socket, alarm, event_type) do
+    event = %Cadence.Timeline.Event{
+      id: "alm-#{alarm.id}-#{System.unique_integer([:positive])}",
+      type: :alarm,
+      timestamp: DateTime.utc_now(),
+      target_id: alarm.target_id,
+      target_name: nil,
+      target_group: nil,
+      title: alarm.message || alarm.alarm_type,
+      description: format_alarm_event_description(event_type),
+      status: map_alarm_status(event_type),
+      status_label: event_type |> to_string() |> String.upcase(),
+      user_id: nil,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        severity: alarm.severity,
+        source_type: alarm.source_type
+      },
+      source_id: alarm.id,
+      source_table: :alarms
+    }
+
+    push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+  end
+
+  defp format_alarm_event_description(:triggered), do: "Alarm triggered"
+  defp format_alarm_event_description(:acknowledged), do: "Acknowledged"
+  defp format_alarm_event_description(:cleared), do: "Cleared"
+  defp format_alarm_event_description(:shelved), do: "Shelved"
+  defp format_alarm_event_description(:created), do: "Alarm created"
+  defp format_alarm_event_description(type), do: to_string(type)
+
+  defp map_alarm_status(:triggered), do: :active
+  defp map_alarm_status(:acknowledged), do: :active
+  defp map_alarm_status(:cleared), do: :success
+  defp map_alarm_status(:shelved), do: :pending
+  defp map_alarm_status(:created), do: :active
+  defp map_alarm_status(_), do: :active
+
+  # Push timeline procedure event (pipeable)
+  defp push_timeline_procedure_event(socket, %Cadence.Procedures.Events.ProcedureExecutionEvent{} = proc_event) do
+    event = %Cadence.Timeline.Event{
+      id: "proc-#{proc_event.execution_id}-#{proc_event.event_type}",
+      type: :procedure,
+      timestamp: proc_event.timestamp,
+      target_id: proc_event.target_id,
+      target_name: nil,
+      target_group: nil,
+      title: proc_event.procedure_name || "Procedure",
+      description: format_procedure_event_description(proc_event),
+      status: map_procedure_event_status(proc_event.event_type),
+      status_label: proc_event.event_type |> to_string() |> String.upcase(),
+      user_id: proc_event.triggered_by_user_id,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        execution_id: proc_event.execution_id,
+        procedure_id: proc_event.procedure_id,
+        event_type: proc_event.event_type,
+        step_index: proc_event.step_index,
+        error_message: proc_event.error_message,
+        triggered_by: proc_event.triggered_by
+      },
+      source_id: proc_event.execution_id,
+      source_table: :procedure_executions
+    }
+
+    push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+  end
+
+  defp format_procedure_event_description(%{event_type: :started}), do: "Execution started"
+  defp format_procedure_event_description(%{event_type: :completed}), do: "Completed successfully"
+  defp format_procedure_event_description(%{event_type: :failed, error_message: msg}) when is_binary(msg), do: "Failed: #{msg}"
+  defp format_procedure_event_description(%{event_type: :failed}), do: "Execution failed"
+  defp format_procedure_event_description(%{event_type: :paused, step_index: idx}) when is_integer(idx), do: "Paused at step #{idx + 1}"
+  defp format_procedure_event_description(%{event_type: :paused}), do: "Paused"
+  defp format_procedure_event_description(%{event_type: :pausing}), do: "Pausing..."
+  defp format_procedure_event_description(%{event_type: :resumed}), do: "Resumed"
+  defp format_procedure_event_description(%{event_type: :cancelled}), do: "Cancelled"
+  defp format_procedure_event_description(%{event_type: :step_started, step_index: idx}), do: "Step #{idx + 1} started"
+  defp format_procedure_event_description(%{event_type: :step_completed, step_index: idx}), do: "Step #{idx + 1} completed"
+  defp format_procedure_event_description(_), do: nil
+
+  defp map_procedure_event_status(:started), do: :running
+  defp map_procedure_event_status(:completed), do: :success
+  defp map_procedure_event_status(:failed), do: :error
+  defp map_procedure_event_status(:paused), do: :pending
+  defp map_procedure_event_status(:pausing), do: :pending
+  defp map_procedure_event_status(:resumed), do: :running
+  defp map_procedure_event_status(:cancelled), do: :error
+  defp map_procedure_event_status(:step_started), do: :running
+  defp map_procedure_event_status(:step_completed), do: :running
+  defp map_procedure_event_status(_), do: :running
 
   # Load command definitions (MetaCommands) for the mission
   # Gets the first published definition set from any database

@@ -39,12 +39,13 @@ defmodule Cadence.Commands.TargetDispatcher do
 
   alias Cadence.{Repo, Missions, Targets, Interfaces}
   alias Cadence.Commands
-  alias Cadence.Commands.{CommandLog, Encoder, TargetQueue}
+  alias Cadence.Commands.{CommandLog, Encoder, TargetQueue, VerificationRunner}
+  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Telemetry.ProtocolChain
 
   @confirmation_timeout_ms 60_000
-  @default_verification_timeout_ms 5_000
+  @default_dispatch_timeout_ms 30_000
   @queue_check_interval_ms 100
 
   defmodule State do
@@ -54,8 +55,16 @@ defmodule Cadence.Commands.TargetDispatcher do
       :target_id,
       :target,
       :mission,
+      # Dispatch task supervision
+      :dispatch_task,
+      :dispatch_timeout_ref,
+      :executing_entry_id,
+      # Interface tracking
+      :write_interface_id,
+      # State flags
       paused: false,
       executing: false,
+      interface_connected: true,
       pending_confirmations: %{},
       pending_verifications: %{},
       command_counter: 0
@@ -193,11 +202,23 @@ defmodule Cadence.Commands.TargetDispatcher do
     mission = Missions.get_mission!(mission_id)
     target = Targets.get_target_with_definition_set!(target_id)
 
+    # Subscribe to interface connection events for this mission
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:events")
+
+    # Look up the write interface for this target (if any)
+    {write_interface_id, interface_connected} =
+      case Interfaces.list_interfaces_for_target(target, direction: "write") do
+        [interface | _] -> {interface.id, true}
+        [] -> {nil, true}
+      end
+
     state = %State{
       mission_id: mission_id,
       target_id: target_id,
       target: target,
-      mission: mission
+      mission: mission,
+      write_interface_id: write_interface_id,
+      interface_connected: interface_connected
     }
 
     {:ok, state}
@@ -303,6 +324,9 @@ defmodule Cadence.Commands.TargetDispatcher do
       mission_id: state.mission_id,
       target_id: state.target_id,
       paused: state.paused,
+      executing: state.executing,
+      interface_connected: state.interface_connected,
+      write_interface_id: state.write_interface_id,
       pending_confirmations: map_size(state.pending_confirmations),
       pending_verifications: map_size(state.pending_verifications),
       command_counter: state.command_counter
@@ -331,12 +355,17 @@ defmodule Cadence.Commands.TargetDispatcher do
 
   @impl true
   def handle_info({:verification_timeout, command_log_id}, state) do
+    # Simple verification timeout
     case Map.get(state.pending_verifications, command_log_id) do
       nil ->
         {:noreply, state}
 
+      %{type: :multi_stage} ->
+        # Multi-stage uses its own timeout message
+        {:noreply, state}
+
       _verification ->
-        Logger.warning("Command verification timeout for command_log_id=#{command_log_id}")
+        Logger.warning("Simple command verification timeout for command_log_id=#{command_log_id}")
 
         # Update command log status
         update_command_log_status(command_log_id, :verification_failed, %{
@@ -352,17 +381,87 @@ defmodule Cadence.Commands.TargetDispatcher do
     end
   end
 
+  def handle_info({:verification_stage_timeout, command_log_id, stage}, state) do
+    # Multi-stage verification timeout
+    case Map.get(state.pending_verifications, command_log_id) do
+      nil ->
+        {:noreply, state}
+
+      %{type: :multi_stage, runner: runner} = verification ->
+        # Verify this is the stage that timed out (not stale)
+        if VerificationRunner.current_stage(runner) == stage do
+          case VerificationRunner.handle_timeout(runner) do
+            {:continue, updated_runner} ->
+              # Move to next stage
+              case VerificationRunner.start_current_stage(updated_runner) do
+                {:ok, runner_with_stage} ->
+                  runner_with_timeout = VerificationRunner.start_timeout(runner_with_stage, self())
+
+                  update_command_log_status(command_log_id, :sent, %{
+                    current_verification_stage: to_string(VerificationRunner.current_stage(runner_with_timeout))
+                  })
+
+                  updated_verification = %{verification | runner: runner_with_timeout}
+                  new_state = %{state | pending_verifications: Map.put(state.pending_verifications, command_log_id, updated_verification)}
+                  {:noreply, new_state}
+
+                {:complete, final_runner} ->
+                  new_state = complete_multi_stage_verification(state, command_log_id, final_runner)
+                  {:noreply, new_state}
+              end
+
+            {:retry, updated_runner} ->
+              # Retry same stage
+              runner_with_timeout = VerificationRunner.start_timeout(updated_runner, self())
+              updated_verification = %{verification | runner: runner_with_timeout}
+              new_state = %{state | pending_verifications: Map.put(state.pending_verifications, command_log_id, updated_verification)}
+              {:noreply, new_state}
+
+            {:abort, _runner} ->
+              Logger.warning("Multi-stage verification aborted for command_log_id=#{command_log_id}, stage=#{stage}")
+
+              update_command_log_status(command_log_id, :verification_failed, %{
+                error_reason: "Verification stage #{stage} timeout"
+              })
+
+              new_state = %{state | pending_verifications: Map.delete(state.pending_verifications, command_log_id)}
+              {:noreply, new_state}
+          end
+        else
+          # Stale timeout message for a previous stage
+          {:noreply, state}
+        end
+
+      _other ->
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:telemetry_update, target_id, packet_name, item_name, telemetry_value}, state) do
     # Only process updates for this target
     if target_id == state.target_id do
-      full_item = "#{packet_name}.#{item_name}"
-
       state =
         Enum.reduce(state.pending_verifications, state, fn {cmd_log_id, verification}, acc ->
-          if verification.item == full_item do
-            check_verification(acc, cmd_log_id, verification, telemetry_value.value)
-          else
-            acc
+          case verification do
+            %{type: :simple, item: item} ->
+              full_item = "#{packet_name}.#{item_name}"
+              if item == full_item do
+                check_simple_verification(acc, cmd_log_id, verification, telemetry_value.value)
+              else
+                acc
+              end
+
+            %{type: :multi_stage, runner: runner} ->
+              handle_multi_stage_update(acc, cmd_log_id, runner, packet_name, item_name, telemetry_value.value)
+
+            # Legacy format (no type field)
+            %{item: item} ->
+              full_item = "#{packet_name}.#{item_name}"
+              if item == full_item do
+                check_simple_verification(acc, cmd_log_id, verification, telemetry_value.value)
+              else
+                acc
+              end
           end
         end)
 
@@ -374,6 +473,11 @@ defmodule Cadence.Commands.TargetDispatcher do
 
   # Queue processing - triggered by TargetQueue when commands are available
   def handle_info(:check_queue, %{paused: true} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info(:check_queue, %{interface_connected: false} = state) do
+    # Interface has no clients - wait for connection before processing
     {:noreply, state}
   end
 
@@ -395,14 +499,131 @@ defmodule Cadence.Commands.TargetDispatcher do
     end
   end
 
-  def handle_info({:queue_execution_complete, entry_id, result}, state) do
+  # Task.async completion - normal result
+  def handle_info({ref, result}, %{dispatch_task: %Task{ref: ref}} = state) do
+    # Clean up the monitor
+    Process.demonitor(ref, [:flush])
+
+    # Cancel the timeout timer
+    if state.dispatch_timeout_ref do
+      Process.cancel_timer(state.dispatch_timeout_ref)
+    end
+
     # Report result back to queue
-    TargetQueue.complete(state.mission_id, state.target_id, entry_id, result)
+    TargetQueue.complete(state.mission_id, state.target_id, state.executing_entry_id, result)
+
+    # Check if we lost connection - don't immediately retry
+    interface_connected =
+      case result do
+        {:error, :send_failed, :no_clients_connected} -> false
+        {:error, :interface_not_running} -> false
+        _ -> state.interface_connected
+      end
+
+    # Only check for more work if interface is still connected
+    if interface_connected do
+      Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+    end
+
+    {:noreply, %{state |
+      executing: false,
+      dispatch_task: nil,
+      dispatch_timeout_ref: nil,
+      executing_entry_id: nil,
+      interface_connected: interface_connected
+    }}
+  end
+
+  # Task.async crash - the task process died
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{dispatch_task: %Task{ref: ref}} = state) do
+    Logger.error(
+      "Command dispatch task crashed for entry_id=#{state.executing_entry_id}: #{inspect(reason)}"
+    )
+
+    # Cancel the timeout timer
+    if state.dispatch_timeout_ref do
+      Process.cancel_timer(state.dispatch_timeout_ref)
+    end
+
+    # Report failure to queue
+    TargetQueue.complete(
+      state.mission_id,
+      state.target_id,
+      state.executing_entry_id,
+      {:error, :task_crashed, inspect(reason)}
+    )
 
     # Check for more work after a brief delay
     Process.send_after(self(), :check_queue, @queue_check_interval_ms)
 
-    {:noreply, %{state | executing: false}}
+    {:noreply, %{state |
+      executing: false,
+      dispatch_task: nil,
+      dispatch_timeout_ref: nil,
+      executing_entry_id: nil
+    }}
+  end
+
+  # Dispatch timeout - task is taking too long
+  def handle_info(:dispatch_timeout, %{executing: true, dispatch_task: task} = state) when not is_nil(task) do
+    Logger.warning(
+      "Command dispatch timeout for entry_id=#{state.executing_entry_id}, shutting down task"
+    )
+
+    # Gracefully shut down the task (gives it 5 seconds to finish)
+    Task.shutdown(task, 5_000)
+
+    # Report timeout to queue
+    TargetQueue.complete(
+      state.mission_id,
+      state.target_id,
+      state.executing_entry_id,
+      {:error, :dispatch_timeout}
+    )
+
+    # Check for more work after a brief delay
+    Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+
+    {:noreply, %{state |
+      executing: false,
+      dispatch_task: nil,
+      dispatch_timeout_ref: nil,
+      executing_entry_id: nil
+    }}
+  end
+
+  # Stale dispatch timeout (already finished) - ignore
+  def handle_info(:dispatch_timeout, state) do
+    {:noreply, state}
+  end
+
+  # Interface connection events - update connection state
+  def handle_info(
+        {:interface_connection_event, %InterfaceConnectionEvent{} = event},
+        state
+      ) do
+    # Only handle events for our write interface
+    if event.interface_id == state.write_interface_id do
+      case event.new_state do
+        :connected ->
+          Logger.info(
+            "Interface #{event.interface_id} connected - resuming command dispatch for target #{state.target_id}"
+          )
+
+          # Trigger queue check now that we're connected
+          send(self(), :check_queue)
+          {:noreply, %{state | interface_connected: true}}
+
+        :disconnected ->
+          Logger.info(
+            "Interface #{event.interface_id} disconnected - pausing command dispatch for target #{state.target_id}"
+          )
+
+          {:noreply, %{state | interface_connected: false}}
+      end
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info(_msg, state) do
@@ -415,31 +636,44 @@ defmodule Cadence.Commands.TargetDispatcher do
     # Mark as executing in queue
     {:ok, _} = TargetQueue.mark_executing(state.mission_id, state.target_id, entry.id)
 
-    # Execute asynchronously
-    parent = self()
-    entry_id = entry.id
+    # Execute asynchronously with Task.async for proper monitoring
+    task =
+      Task.async(fn ->
+        # Convert stored opts back to keyword list
+        opts =
+          entry.dispatch_opts
+          |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
+          |> Keyword.put(:user_id, entry.user_id)
 
-    Task.start(fn ->
-      # Convert stored opts back to keyword list
-      opts =
-        entry.dispatch_opts
-        |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
-        |> Keyword.put(:user_id, entry.user_id)
+        result = do_dispatch(entry.command_name, entry.parameters, opts, state)
 
-      result = do_dispatch(entry.command_name, entry.parameters, opts, state)
-
-      # Normalize result for queue
-      normalized_result =
+        # Normalize result for queue
         case result do
           {:ok, command_log_id, _new_state} -> {:ok, command_log_id}
           {:requires_confirmation, info, _new_state} -> {:error, :requires_confirmation, info}
           error -> error
         end
+      end)
 
-      send(parent, {:queue_execution_complete, entry_id, normalized_result})
-    end)
+    # Start dispatch timeout timer
+    dispatch_timeout = get_dispatch_timeout(state.target)
+    timeout_ref = Process.send_after(self(), :dispatch_timeout, dispatch_timeout)
 
-    %{state | executing: true}
+    %{state |
+      executing: true,
+      dispatch_task: task,
+      dispatch_timeout_ref: timeout_ref,
+      executing_entry_id: entry.id
+    }
+  end
+
+  defp get_dispatch_timeout(target) do
+    # Check target config for custom timeout, fall back to default
+    case get_in(target.config, ["dispatch_timeout_ms"]) do
+      nil -> @default_dispatch_timeout_ms
+      timeout when is_integer(timeout) -> timeout
+      _ -> @default_dispatch_timeout_ms
+    end
   end
 
   defp do_dispatch(command_name, params, opts, state) do
@@ -464,9 +698,9 @@ defmodule Cadence.Commands.TargetDispatcher do
       # Update log to sent status
       update_command_log_status(command_log.id, :sent, %{sent_at: DateTime.utc_now()})
 
-      # Start verification if configured
+      # Start verification if configured (using verifiers association)
       new_state =
-        if command.verification_item && not Keyword.get(opts, :skip_verification, false) do
+        if not Keyword.get(opts, :skip_verification, false) do
           start_verification(state, command_log.id, command, target)
         else
           state
@@ -602,7 +836,6 @@ defmodule Cadence.Commands.TargetDispatcher do
       parameters: params,
       encoded_binary: encoded,
       status: :pending,
-      verification_item: command.verification_item,
       metadata: %{interface_id: interface_id}
     }
 
@@ -664,33 +897,63 @@ defmodule Cadence.Commands.TargetDispatcher do
   end
 
   defp start_verification(state, command_log_id, command, target) do
-    timeout_ms = command.verification_timeout_ms || @default_verification_timeout_ms
+    # Preload verifiers if not already loaded
+    command = Repo.preload(command, :verifiers)
 
-    # Subscribe to telemetry updates (if not already subscribed)
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{state.mission_id}:telemetry")
-
-    # Start timeout timer
-    timeout_ref = Process.send_after(self(), {:verification_timeout, command_log_id}, timeout_ms)
-
-    verification = %{
-      item: command.verification_item,
-      target_id: target.id,
-      timeout_ref: timeout_ref,
-      started_at: DateTime.utc_now()
-    }
-
-    # Return updated state with pending verification
-    %{
+    # Use CommandVerifiers if defined, otherwise no verification
+    if command.verifiers != nil and command.verifiers != [] do
+      start_multi_stage_verification(state, command_log_id, command.verifiers, target)
+    else
+      # No verification configured
       state
-      | pending_verifications: Map.put(state.pending_verifications, command_log_id, verification)
-    }
+    end
   end
 
-  defp check_verification(state, command_log_id, verification, actual_value) do
-    # For now, we just check that the item was updated (any value)
-    # In the future, we could compare against expected values
+  defp start_multi_stage_verification(state, command_log_id, verifiers, target) do
+    case VerificationRunner.new(command_log_id, state.mission_id, target.id, verifiers) do
+      {:ok, runner} ->
+        # Subscribe to telemetry updates (if not already subscribed)
+        Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{state.mission_id}:telemetry")
+
+        # Start the first stage
+        case VerificationRunner.start_current_stage(runner) do
+          {:ok, runner} ->
+            # Start timeout for the current stage
+            runner = VerificationRunner.start_timeout(runner, self())
+
+            # Update command log status to verifying
+            update_command_log_status(command_log_id, :sent, %{
+              verification_status: "verifying",
+              current_verification_stage: to_string(VerificationRunner.current_stage(runner))
+            })
+
+            verification = %{
+              type: :multi_stage,
+              runner: runner,
+              target_id: target.id
+            }
+
+            %{
+              state
+              | pending_verifications: Map.put(state.pending_verifications, command_log_id, verification)
+            }
+
+          {:complete, _runner} ->
+            # No stages to verify (shouldn't happen with non-empty verifiers)
+            Logger.warning("Multi-stage verification completed immediately with no stages")
+            state
+        end
+
+      {:error, :no_verifiers} ->
+        # Shouldn't happen since we checked for non-empty verifiers
+        state
+    end
+  end
+
+  defp check_simple_verification(state, command_log_id, verification, actual_value) do
+    # For simple verification, we just check that the item was updated (any value)
     Logger.info(
-      "Command verification succeeded for command_log_id=#{command_log_id}, " <>
+      "Simple command verification succeeded for command_log_id=#{command_log_id}, " <>
         "item=#{verification.item}, value=#{inspect(actual_value)}"
     )
 
@@ -705,6 +968,76 @@ defmodule Cadence.Commands.TargetDispatcher do
 
     # Remove from pending
     %{state | pending_verifications: Map.delete(state.pending_verifications, command_log_id)}
+  end
+
+  defp handle_multi_stage_update(state, cmd_log_id, runner, packet_name, item_name, value) do
+    case VerificationRunner.check_update(runner, packet_name, item_name, value) do
+      {:stage_complete, updated_runner} ->
+        Logger.info(
+          "Verification stage #{VerificationRunner.current_stage(runner)} complete for " <>
+          "command_log_id=#{cmd_log_id}, advancing to next stage"
+        )
+
+        # Start next stage
+        case VerificationRunner.start_current_stage(updated_runner) do
+          {:ok, runner_with_stage} ->
+            # Start timeout for the new stage
+            runner_with_timeout = VerificationRunner.start_timeout(runner_with_stage, self())
+
+            # Update command log with new stage
+            update_command_log_status(cmd_log_id, :sent, %{
+              current_verification_stage: to_string(VerificationRunner.current_stage(runner_with_timeout))
+            })
+
+            verification = %{
+              type: :multi_stage,
+              runner: runner_with_timeout,
+              target_id: runner.target_id
+            }
+
+            %{state | pending_verifications: Map.put(state.pending_verifications, cmd_log_id, verification)}
+
+          {:complete, final_runner} ->
+            complete_multi_stage_verification(state, cmd_log_id, final_runner)
+        end
+
+      {:all_complete, final_runner} ->
+        complete_multi_stage_verification(state, cmd_log_id, final_runner)
+
+      {:failed, _runner, reason} ->
+        Logger.warning(
+          "Verification failed for command_log_id=#{cmd_log_id}: #{inspect(reason)}"
+        )
+
+        update_command_log_status(cmd_log_id, :verification_failed, %{
+          error_reason: inspect(reason)
+        })
+
+        %{state | pending_verifications: Map.delete(state.pending_verifications, cmd_log_id)}
+
+      {:pending, updated_runner} ->
+        verification = %{
+          type: :multi_stage,
+          runner: updated_runner,
+          target_id: runner.target_id
+        }
+
+        %{state | pending_verifications: Map.put(state.pending_verifications, cmd_log_id, verification)}
+    end
+  end
+
+  defp complete_multi_stage_verification(state, cmd_log_id, runner) do
+    Logger.info(
+      "All verification stages complete for command_log_id=#{cmd_log_id}, " <>
+      "stages: #{inspect(VerificationRunner.completed_stages(runner))}"
+    )
+
+    update_command_log_status(cmd_log_id, :verified, %{
+      verified_at: DateTime.utc_now(),
+      verification_stages_completed: Enum.map(VerificationRunner.completed_stages(runner), &to_string/1)
+    })
+
+    %{state | pending_verifications: Map.delete(state.pending_verifications, cmd_log_id)}
   end
 
   defp generate_token do

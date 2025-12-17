@@ -44,7 +44,8 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
-  alias Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler
+  alias Cadence.Alarms.Engine.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
+  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   @shelve_check_interval :timer.seconds(30)
@@ -225,6 +226,12 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   end
 
   @impl true
+  def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, state) do
+    handle_interface_connection_event(event, state)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(:check_shelve_expiration, state) do
     check_shelve_expiration(state)
     schedule_shelve_check()
@@ -331,6 +338,24 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
       {:updated, alarm, _rule} ->
         cache_alarm(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_updated, alarm)
+
+      {:cleared, alarm} ->
+        remove_from_cache(alarm, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_cleared, alarm)
+
+      {:no_rule, _event} ->
+        :ok
+
+      {:no_action, _event} ->
+        :ok
+    end
+  end
+
+  defp handle_interface_connection_event(%InterfaceConnectionEvent{} = event, state) do
+    case InterfaceConnectionHandler.handle(event, state.organization_id) do
+      {:created, alarm, _rule} ->
+        cache_alarm(alarm, state.table)
+        broadcast_alarm(state.alarms_topic, :alarm_triggered, alarm)
 
       {:cleared, alarm} ->
         remove_from_cache(alarm, state.table)

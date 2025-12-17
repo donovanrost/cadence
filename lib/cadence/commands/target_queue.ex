@@ -50,6 +50,8 @@ defmodule Cadence.Commands.TargetQueue do
   # Primary wakeup is via PubSub from outbox events
   @fallback_poll_interval_ms 10_000
   @retry_delay_ms 1_000
+  # Stale executing entries older than this are recovered as failed
+  @stale_executing_timeout_ms 120_000
 
   defmodule State do
     @moduledoc false
@@ -171,6 +173,15 @@ defmodule Cadence.Commands.TargetQueue do
   end
 
   @doc """
+  Manually triggers the dispatcher to check for queued commands.
+
+  Useful for debugging or forcing immediate processing of pending commands.
+  """
+  def trigger_check(mission_id, target_id) do
+    GenServer.call(via_tuple(mission_id, target_id), :trigger_check)
+  end
+
+  @doc """
   Lists pending queue entries.
   """
   def list_pending(mission_id, target_id, opts \\ []) do
@@ -254,6 +265,7 @@ defmodule Cadence.Commands.TargetQueue do
           })
           |> Repo.update()
 
+        publish_status_changed(updated, :executing, state)
         {:reply, {:ok, updated}, %{state | executing: updated}}
     end
   end
@@ -276,10 +288,42 @@ defmodule Cadence.Commands.TargetQueue do
       target_id: state.target_id,
       pending: count_by_status(state.target_id, :pending),
       executing: if(state.executing, do: 1, else: 0),
-      failed: count_by_status(state.target_id, :failed)
+      failed: count_by_status(state.target_id, :failed),
+      dispatcher_paused: state.dispatcher_paused
     }
 
     {:reply, status, state}
+  end
+
+  def handle_call(:trigger_check, _from, state) do
+    Logger.info("Manual trigger_check for target_id=#{state.target_id}")
+
+    # Check if there are ready entries
+    has_entries = has_ready_entries?(state.target_id)
+    Logger.info("  has_ready_entries? = #{has_entries}")
+    Logger.info("  dispatcher_paused = #{state.dispatcher_paused}")
+
+    result =
+      if not state.dispatcher_paused and has_entries do
+        case TargetDispatcher.whereis(state.mission_id, state.target_id) do
+          nil ->
+            Logger.warning("  Dispatcher not found!")
+            {:error, :dispatcher_not_found}
+
+          pid ->
+            Logger.info("  Sending :check_queue to dispatcher pid=#{inspect(pid)}")
+            send(pid, :check_queue)
+            :ok
+        end
+      else
+        if state.dispatcher_paused do
+          {:error, :dispatcher_paused}
+        else
+          {:error, :no_ready_entries}
+        end
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call({:list_pending, opts}, _from, state) do
@@ -306,6 +350,9 @@ defmodule Cadence.Commands.TargetQueue do
 
   @impl true
   def handle_info(:process_queue, state) do
+    # Recover any stale executing entries (defense in depth)
+    recover_stale_entries(state.target_id)
+
     # Periodic check - notify dispatcher if there's work
     # Use cached paused state to avoid synchronous call to dispatcher
     if not state.dispatcher_paused do
@@ -514,31 +561,58 @@ defmodule Cadence.Commands.TargetQueue do
         case result do
           {:ok, command_log_id} ->
             # Success
-            entry
-            |> QueueEntry.execution_changeset(%{
-              status: :completed,
-              command_log_id: command_log_id
-            })
-            |> Repo.update()
+            {:ok, updated_entry} =
+              entry
+              |> QueueEntry.execution_changeset(%{
+                status: :completed,
+                command_log_id: command_log_id
+              })
+              |> Repo.update()
 
+            publish_status_changed(updated_entry, :completed, state)
             Logger.debug("Queue entry #{entry_id} completed successfully")
 
           {:error, :paused} ->
             # Dispatcher was paused - put back in queue
-            entry
-            |> QueueEntry.execution_changeset(%{status: :pending})
-            |> Repo.update()
+            {:ok, updated_entry} =
+              entry
+              |> QueueEntry.execution_changeset(%{status: :pending})
+              |> Repo.update()
 
+            publish_status_changed(updated_entry, :pending, state)
             Logger.debug("Queue entry #{entry_id} returned to pending (dispatcher paused)")
 
           {:error, :requires_confirmation, _info} ->
             # Hazardous command - mark as failed, don't retry
-            entry
-            |> QueueEntry.execution_changeset(%{
-              status: :failed,
-              last_error: "Hazardous command requires confirmation - cannot execute from queue"
-            })
-            |> Repo.update()
+            {:ok, updated_entry} =
+              entry
+              |> QueueEntry.execution_changeset(%{
+                status: :failed,
+                last_error: "Hazardous command requires confirmation - cannot execute from queue"
+              })
+              |> Repo.update()
+
+            publish_status_changed(updated_entry, :failed, state)
+
+          {:error, :send_failed, :no_clients_connected} ->
+            # Interface has no connected clients - return to pending, don't count as failure
+            {:ok, updated_entry} =
+              entry
+              |> QueueEntry.execution_changeset(%{status: :pending})
+              |> Repo.update()
+
+            publish_status_changed(updated_entry, :pending, state)
+            Logger.info("Queue entry #{entry_id} returned to pending (no clients connected)")
+
+          {:error, :interface_not_running} ->
+            # Interface not running - return to pending, don't count as failure
+            {:ok, updated_entry} =
+              entry
+              |> QueueEntry.execution_changeset(%{status: :pending})
+              |> Repo.update()
+
+            publish_status_changed(updated_entry, :pending, state)
+            Logger.info("Queue entry #{entry_id} returned to pending (interface not running)")
 
           {:error, reason} ->
             handle_failure(entry, reason, state)
@@ -551,31 +625,59 @@ defmodule Cadence.Commands.TargetQueue do
     end
   end
 
-  defp handle_failure(entry, reason, _state) do
+  defp handle_failure(entry, reason, state) do
     error_msg = inspect(reason)
 
     if QueueEntry.retriable?(entry) do
       # Schedule retry
-      entry
-      |> QueueEntry.execution_changeset(%{
-        status: :failed,
-        last_error: error_msg
-      })
-      |> Repo.update()
+      {:ok, updated_entry} =
+        entry
+        |> QueueEntry.execution_changeset(%{
+          status: :failed,
+          last_error: error_msg
+        })
+        |> Repo.update()
 
+      publish_status_changed(updated_entry, :failed, state)
       Process.send_after(self(), {:retry_command, entry.id}, @retry_delay_ms)
       Logger.warning("Queue entry #{entry.id} failed, will retry: #{error_msg}")
     else
       # Max attempts reached
-      entry
-      |> QueueEntry.execution_changeset(%{
-        status: :failed,
-        last_error: "Max attempts reached. Last error: #{error_msg}"
-      })
-      |> Repo.update()
+      {:ok, updated_entry} =
+        entry
+        |> QueueEntry.execution_changeset(%{
+          status: :failed,
+          last_error: "Max attempts reached. Last error: #{error_msg}"
+        })
+        |> Repo.update()
 
+      publish_status_changed(updated_entry, :failed, state)
       Logger.error("Queue entry #{entry.id} failed permanently: #{error_msg}")
     end
+  end
+
+  defp publish_status_changed(entry, new_status, state) do
+    # Insert to outbox for persistence and audit trail
+    {:ok, event} =
+      Outbox.insert(%{
+        organization_id: state.organization_id,
+        mission_id: state.mission_id,
+        event_type: "command_status_changed",
+        aggregate_type: "command_queue_entry",
+        aggregate_id: entry.id,
+        actor_type: "system",
+        payload: %{
+          command_name: entry.command_name,
+          target_id: state.target_id,
+          status: to_string(new_status),
+          command_log_id: entry.command_log_id,
+          last_error: entry.last_error
+        }
+      })
+
+    # Broadcast immediately for real-time UI updates
+    # (Processor will also broadcast, but this ensures instant feedback)
+    Outbox.broadcast(event)
   end
 
   defp expire_old_entries(target_id) do
@@ -622,5 +724,33 @@ defmodule Cadence.Commands.TargetQueue do
       nil -> :ok
       pid -> send(pid, :check_queue)
     end
+  end
+
+  defp recover_stale_entries(target_id) do
+    # Find entries stuck in :executing status for longer than the stale timeout
+    # This is a defense-in-depth mechanism - normally Task supervision handles this
+    stale_threshold = DateTime.add(DateTime.utc_now(), -@stale_executing_timeout_ms, :millisecond)
+
+    {count, _} =
+      from(e in QueueEntry,
+        where: e.target_id == ^target_id,
+        where: e.status == :executing,
+        where: e.last_attempt_at < ^stale_threshold
+      )
+      |> Repo.update_all(
+        set: [
+          status: :failed,
+          last_error: "Stale entry recovery - execution timed out after #{@stale_executing_timeout_ms}ms",
+          updated_at: DateTime.utc_now()
+        ]
+      )
+
+    if count > 0 do
+      Logger.warning(
+        "Recovered #{count} stale executing entries for target_id=#{target_id}"
+      )
+    end
+
+    count
   end
 end

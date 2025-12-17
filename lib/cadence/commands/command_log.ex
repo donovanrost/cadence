@@ -71,6 +71,11 @@ defmodule Cadence.Commands.CommandLog do
     field :verification_actual, :string
     field :verification_result, :map
 
+    # Multi-stage verification tracking
+    field :verification_status, :string
+    field :current_verification_stage, :string
+    field :verification_stages_completed, {:array, :string}, default: []
+
     # Timestamps
     field :sent_at, :utc_datetime_usec
     field :verified_at, :utc_datetime_usec
@@ -125,7 +130,11 @@ defmodule Cadence.Commands.CommandLog do
       :error_reason,
       :verification_actual,
       :verification_result,
-      :verified_at
+      :verified_at,
+      :sent_at,
+      :verification_status,
+      :current_verification_stage,
+      :verification_stages_completed
     ])
     |> validate_inclusion(:status, @status_values)
   end

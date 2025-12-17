@@ -62,12 +62,13 @@ defmodule Cadence.Commands do
   Gets a MetaCommand by name for a DefinitionSet.
 
   This is the primary lookup method for command dispatch.
+  Preloads arguments and verifiers for command execution.
   """
   def get_meta_command(definition_set_id, name) do
     from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
       where: c.name == ^name,
-      preload: :arguments,
+      preload: [:arguments, :verifiers],
       limit: 1
     )
     |> Repo.one()
@@ -79,7 +80,7 @@ defmodule Cadence.Commands do
   def get_meta_command_by_id(id) do
     MetaCommand
     |> Repo.get(id)
-    |> Repo.preload(:arguments)
+    |> Repo.preload([:arguments, :verifiers])
   end
 
   @doc """
@@ -88,7 +89,7 @@ defmodule Cadence.Commands do
   def get_meta_command_by_id!(id) do
     MetaCommand
     |> Repo.get!(id)
-    |> Repo.preload(:arguments)
+    |> Repo.preload([:arguments, :verifiers])
   end
 
   @doc """
@@ -98,7 +99,7 @@ defmodule Cadence.Commands do
     from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
       where: c.opcode == ^opcode,
-      preload: :arguments,
+      preload: [:arguments, :verifiers],
       limit: 1
     )
     |> Repo.one()

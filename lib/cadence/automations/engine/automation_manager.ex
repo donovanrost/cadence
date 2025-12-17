@@ -394,13 +394,16 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   defp alarm_to_event(alarm) do
     %{
       alarm_id: alarm.id,
+      alarm_type: alarm.alarm_type,
       alarm_rule_id: alarm.alarm_rule_id,
-      item_name: alarm.item_name,
+      source_type: alarm.source_type,
+      source_id: alarm.source_id,
       target_id: alarm.target_id,
       severity: alarm.severity,
-      state: alarm.state,
+      status: alarm.status,
       message: alarm.message,
-      value: alarm.value,
+      current_value: alarm.current_value,
+      limit_state: alarm.limit_state,
       timestamp: alarm.updated_at
     }
   end

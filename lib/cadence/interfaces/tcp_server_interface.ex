@@ -34,6 +34,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   use GenServer
   require Logger
 
+  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Telemetry.Packet
   alias Cadence.Telemetry.ProtocolChain
   alias Cadence.Telemetry.ProtocolChainSupervisor
@@ -46,6 +47,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
       :mission_id,
       :target_ids,
       :interface_id,
+      :interface_name,
       :listen_socket,
       :bind_address,
       :bind_port,
@@ -151,6 +153,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
       mission_id: mission_id,
       target_ids: target_ids,
       interface_id: interface_id,
+      interface_name: Map.get(config, :name),
       bind_address: Map.get(config, :bind_address, "0.0.0.0"),
       bind_port: Map.fetch!(config, :bind_port),
       max_clients: Map.get(config, :max_clients, 100),
@@ -219,12 +222,18 @@ defmodule Cadence.Interfaces.TcpServerInterface do
           new_clients = Map.put(state.clients, client_socket, client_state)
           send(self(), :accept)
 
-          {:noreply,
-           %{
-             state
-             | clients: new_clients,
-               total_clients_connected: state.total_clients_connected + 1
-           }}
+          new_state = %{
+            state
+            | clients: new_clients,
+              total_clients_connected: state.total_clients_connected + 1
+          }
+
+          # Broadcast connection event when first client connects
+          if map_size(state.clients) == 0 do
+            broadcast_connection_event(new_state, :disconnected, :connected, client_state)
+          end
+
+          {:noreply, new_state}
         end
 
       {:error, :timeout} ->
@@ -364,6 +373,56 @@ defmodule Cadence.Interfaces.TcpServerInterface do
     {:reply, clients, state}
   end
 
+  # Command dispatch from TargetDispatcher - broadcasts to all connected clients
+  #
+  # LIMITATION: Currently broadcasts to ALL connected clients regardless of target.
+  # This works when each target has its own interface, or when only one client is connected.
+  #
+  # TODO: When CCSDS framing is implemented, extract the APID from the command packet
+  # and route to the specific client associated with that APID. This requires:
+  # 1. Add `target_id` or `apids` field to ClientState
+  # 2. Build APID→socket mapping from incoming telemetry packets
+  # 3. Look up the correct socket based on command APID before sending
+  @impl true
+  def handle_call({:send_data, data}, _from, state) do
+    case map_size(state.clients) do
+      0 ->
+        {:reply, {:error, :no_clients_connected}, state}
+
+      count ->
+        if count > 1 do
+          Logger.warning(
+            "Broadcasting command to #{count} clients - target-specific routing not yet implemented"
+          )
+        end
+
+        {successful, failed} =
+          Enum.reduce(state.clients, {0, 0}, fn {socket, client_state}, {ok, err} ->
+            case :gen_tcp.send(socket, data) do
+              :ok ->
+                Logger.debug(
+                  "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
+                )
+                {ok + 1, err}
+
+              {:error, reason} ->
+                Logger.warning(
+                  "Failed to send to #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)}"
+                )
+                {ok, err + 1}
+            end
+          end)
+
+        new_state = %{state | bytes_sent: state.bytes_sent + byte_size(data) * successful}
+
+        if successful > 0 do
+          {:reply, :ok, new_state}
+        else
+          {:reply, {:error, :all_sends_failed, failed}, state}
+        end
+    end
+  end
+
   @impl true
   def handle_call({:send_data, data, :all}, _from, state) do
     results =
@@ -458,9 +517,41 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   end
 
   defp handle_client_disconnect(client_socket, state) do
+    client_state = Map.get(state.clients, client_socket)
     :gen_tcp.close(client_socket)
     new_clients = Map.delete(state.clients, client_socket)
-    {:noreply, %{state | clients: new_clients}}
+    new_state = %{state | clients: new_clients}
+
+    # Broadcast disconnection event when last client disconnects
+    if map_size(new_clients) == 0 and map_size(state.clients) > 0 do
+      broadcast_connection_event(new_state, :connected, :disconnected, client_state)
+    end
+
+    {:noreply, new_state}
+  end
+
+  defp broadcast_connection_event(state, previous_state, new_state, client_state) do
+    client_info =
+      if client_state do
+        %{
+          "remote_address" => client_state.remote_address,
+          "remote_port" => client_state.remote_port
+        }
+      end
+
+    event =
+      InterfaceConnectionEvent.new(%{
+        mission_id: state.mission_id,
+        interface_id: state.interface_id,
+        interface_name: state.interface_name,
+        previous_state: previous_state,
+        new_state: new_state,
+        client_count: map_size(state.clients),
+        client_info: client_info
+      })
+
+    Logger.info("Interface connection event: #{InterfaceConnectionEvent.describe(event)}")
+    InterfaceConnectionEvent.broadcast(event)
   end
 
   defp parse_bind_address(address) when is_binary(address) do

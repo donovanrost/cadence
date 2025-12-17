@@ -75,6 +75,44 @@ export const OpsConsoleV2Hook = {
     this.cmdEditingStaged = null          // { cmdIndex, targetIndex } when editing a staged entry
     this.cmdStageViewMode = 'table'       // 'table' or 'cards' view mode
 
+    // Timeline mode state
+    this.timelineEvents = JSON.parse(this.el.dataset.timelineEvents || '[]')
+    this.timelinePaused = false           // Whether live updates are paused
+    this.timelineTypeFilter = new Set(['command', 'alarm', 'procedure', 'automation'])
+    this.timelineTargetFilter = null      // Target ID to filter by, or null for all
+    this.timelineSearchQuery = ''         // Search text filter
+    this.timelineView = 'stream'          // 'stream', 'matrix', or 'lanes'
+
+    // Matrix view state
+    this.matrixGroupBy = 'target'         // 'target', 'group' (for target groups)
+    this.matrixTimeBucket = 15            // Time bucket in minutes (5, 15, 60, 240)
+    this.matrixSelectedCell = null        // { groupId, timeIndex } of selected cell
+
+    // Lanes view state
+    this.lanesPinnedTargets = []          // Array of pinned target IDs
+    this.lanesSelectedEvent = null        // Currently selected event for detail view
+    this.lanesTimeRange = 2               // Hours to show (2, 6, 12, 24)
+    this.lanesScrubbingTime = null        // DateTime when scrubbing, null = live mode
+    this.lanesIsDragging = false          // Whether currently dragging the NOW marker
+    this.lanesActivityExpanded = false    // Whether activity panel is expanded
+    this.lanesActivityHeight = null       // Custom height when resized (null = default)
+
+    // Stream view enhanced state
+    this.streamExpandedEvent = null       // ID of currently expanded event
+    this.streamExpandedCluster = null     // ID of currently expanded cluster
+    this.streamLoadingMore = false        // Whether currently loading more from server
+    this.streamHasMoreEvents = true       // Whether there are more events to load
+
+    // Stream view target filtering
+    this.streamTargetFilter = new Set()   // Selected target IDs (initialized with all on first render)
+    this.streamTargetFilterInitialized = false  // Whether we've populated initial selection
+    this.streamShowSystem = true          // Show system-level events (no target_id)
+    this.streamTargetSearch = ''          // Target search/filter text
+    this.streamFilterPanelWidth = 30      // Filter panel width percentage (default 30%)
+
+    // Live time update interval for timeline mode
+    this._timelineUpdateInterval = null
+
     // Register LiveView event handlers immediately
     this._setupEventHandlers()
 
@@ -82,6 +120,11 @@ export const OpsConsoleV2Hook = {
     requestAnimationFrame(() => {
       this._init()
     })
+
+    // Start timeline live update timer (updates relative times every second)
+    this._timelineUpdateInterval = setInterval(() => {
+      this._updateTimelineLiveElements()
+    }, 1000)
   },
 
   async _init() {
@@ -285,6 +328,12 @@ export const OpsConsoleV2Hook = {
                 </svg>
                 <span class="nav-label">Commands</span>
               </button>
+              <button class="mode-btn" data-mode="timeline">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="nav-label">Timeline</span>
+              </button>
             </div>
           </div>
 
@@ -336,6 +385,11 @@ export const OpsConsoleV2Hook = {
             <button class="rail-btn" data-mode="commands" title="Commands Mode">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </button>
+            <button class="rail-btn" data-mode="timeline" title="Timeline Mode">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
               </svg>
             </button>
           </div>
@@ -1007,6 +1061,16 @@ export const OpsConsoleV2Hook = {
       // This event is just a notification that staging changed
     })
 
+    // Handle timeline events (real-time updates)
+    this.handleEvent("timeline_event", (payload) => {
+      this._handleTimelineEvent(payload.event)
+    })
+
+    // Handle more timeline events from infinite scroll
+    this.handleEvent("more_timeline_events", (payload) => {
+      this._handleMoreTimelineEvents(payload.events, payload.has_more)
+    })
+
     this.el.addEventListener("widget:configure", (e) => {
       const { widgetId, widgetType, config } = e.detail
       this.pushEvent("open_widget_config", {
@@ -1027,14 +1091,23 @@ export const OpsConsoleV2Hook = {
     const dashboard = this.panelLayout?.elements?.dashboard
     if (!dashboard) return
 
+    // Clear all mode classes first
+    dashboard.classList.remove("commands-mode-active", "timeline-mode-active")
+
     if (this.currentMode === "commands") {
       // Hide GridStack dashboard, show Commands mode
       dashboard.classList.add("commands-mode-active")
+      this._hideTimelineMode()
       this._renderCommandsMode()
-    } else {
-      // Show GridStack dashboard, hide Commands mode
-      dashboard.classList.remove("commands-mode-active")
+    } else if (this.currentMode === "timeline") {
+      // Hide GridStack dashboard, show Timeline mode
+      dashboard.classList.add("timeline-mode-active")
       this._hideCommandsMode()
+      this._renderTimelineMode()
+    } else {
+      // Show GridStack dashboard, hide mode-specific content
+      this._hideCommandsMode()
+      this._hideTimelineMode()
     }
 
     // Update context panel based on mode
@@ -1133,6 +1206,2429 @@ export const OpsConsoleV2Hook = {
     if (commandsContainer) {
       commandsContainer.innerHTML = ""
     }
+  },
+
+  // ============================================================================
+  // Timeline Mode
+  // ============================================================================
+
+  _renderTimelineMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    // Check if timeline container already exists
+    let timelineContainer = dashboard.querySelector(".timeline-mode-container")
+    if (!timelineContainer) {
+      timelineContainer = document.createElement("div")
+      timelineContainer.className = "timeline-mode-container"
+      dashboard.appendChild(timelineContainer)
+    }
+
+    // Render the appropriate view
+    let viewContent = ''
+    switch (this.timelineView) {
+      case 'matrix':
+        viewContent = this._renderMatrixViewContent()
+        break
+      case 'lanes':
+        viewContent = this._renderLanesViewContent()
+        break
+      case 'stream':
+      default:
+        viewContent = this._renderStreamViewContent()
+        break
+    }
+
+    timelineContainer.innerHTML = `
+      <div class="timeline-mode-layout">
+        ${viewContent}
+
+        <!-- Controls Bar -->
+        <div class="timeline-controls">
+          <div class="timeline-view-tabs">
+            <button class="timeline-view-tab ${this.timelineView === 'stream' ? 'active' : ''}" data-view="stream">STREAM</button>
+            <button class="timeline-view-tab ${this.timelineView === 'matrix' ? 'active' : ''}" data-view="matrix">MATRIX</button>
+            <button class="timeline-view-tab ${this.timelineView === 'lanes' ? 'active' : ''}" data-view="lanes">LANES</button>
+          </div>
+          ${this._renderTimelineViewControls()}
+        </div>
+      </div>
+    `
+
+    // Bind event handlers
+    this._bindTimelineModeEvents(timelineContainer)
+  },
+
+  _renderTimelineViewControls() {
+    // Common type filters
+    const typeFilters = `
+      <div class="timeline-filters">
+        <label class="timeline-filter-toggle ${this.timelineTypeFilter.has('command') ? 'active' : ''}" data-type="command">
+          <span class="filter-badge filter-badge-command">CMD</span>
+        </label>
+        <label class="timeline-filter-toggle ${this.timelineTypeFilter.has('alarm') ? 'active' : ''}" data-type="alarm">
+          <span class="filter-badge filter-badge-alarm">ALM</span>
+        </label>
+        <label class="timeline-filter-toggle ${this.timelineTypeFilter.has('procedure') ? 'active' : ''}" data-type="procedure">
+          <span class="filter-badge filter-badge-procedure">PROC</span>
+        </label>
+        <label class="timeline-filter-toggle ${this.timelineTypeFilter.has('automation') ? 'active' : ''}" data-type="automation">
+          <span class="filter-badge filter-badge-automation">AUTO</span>
+        </label>
+      </div>
+    `
+
+    // View-specific controls
+    switch (this.timelineView) {
+      case 'matrix':
+        return `
+          ${typeFilters}
+          <div class="timeline-matrix-controls">
+            <select class="timeline-select" id="matrix-bucket">
+              <option value="5" ${this.matrixTimeBucket === 5 ? 'selected' : ''}>5 min</option>
+              <option value="15" ${this.matrixTimeBucket === 15 ? 'selected' : ''}>15 min</option>
+              <option value="60" ${this.matrixTimeBucket === 60 ? 'selected' : ''}>1 hour</option>
+              <option value="240" ${this.matrixTimeBucket === 240 ? 'selected' : ''}>4 hours</option>
+            </select>
+          </div>
+        `
+      case 'lanes':
+        return `
+          ${typeFilters}
+          <div class="timeline-lanes-controls">
+            <select class="timeline-select" id="lanes-range">
+              <option value="2" ${this.lanesTimeRange === 2 ? 'selected' : ''}>±2 hours</option>
+              <option value="6" ${this.lanesTimeRange === 6 ? 'selected' : ''}>±6 hours</option>
+              <option value="12" ${this.lanesTimeRange === 12 ? 'selected' : ''}>±12 hours</option>
+              <option value="24" ${this.lanesTimeRange === 24 ? 'selected' : ''}>±24 hours</option>
+            </select>
+            <button class="timeline-action-btn" id="lanes-add">+ ADD LANE</button>
+          </div>
+        `
+      case 'stream':
+      default:
+        return `
+          ${typeFilters}
+          <div class="timeline-actions">
+            <button class="timeline-action-btn ${this.timelinePaused ? 'active' : ''}" id="timeline-pause">
+              ${this.timelinePaused ? '▶ RESUME' : '⏸ PAUSE'}
+            </button>
+            <button class="timeline-action-btn" id="timeline-jump-now">↑ NOW</button>
+          </div>
+        `
+    }
+  },
+
+  _renderStreamViewContent() {
+    const now = new Date()
+
+    // Filter by event type first
+    let filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
+
+    // Apply target filter - show events for selected targets only
+    filteredEvents = filteredEvents.filter(e => {
+      // System events (no target_id)
+      if (!e.target_id) {
+        return this.streamShowSystem
+      }
+      // Only show events for selected targets
+      return this.streamTargetFilter.has(e.target_id)
+    })
+
+    // All past events - no client-side limit, server handles pagination
+    const pastEvents = filteredEvents
+      .filter(e => !e.is_future && new Date(e.timestamp) <= now)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    const futureEvents = filteredEvents
+      .filter(e => e.is_future || new Date(e.timestamp) > now)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+
+    // Cluster related events
+    const pastClusters = this._clusterEvents(pastEvents, 'past')
+    const futureClusters = this._clusterEvents(futureEvents, 'future')
+
+    // Calculate activity metrics
+    const activityRate = this._calculateActivityRate(pastEvents)
+
+    // Determine activity level class
+    const activityLevel = activityRate > 20 ? 'high' : activityRate > 5 ? 'medium' : 'low'
+
+    // Status indicator
+    const statusDotClass = this.timelinePaused ? 'paused' : 'active'
+    const statusText = this.timelinePaused ? 'PAUSED' : 'LIVE'
+
+    // Render loading state or load more button
+    const loadMoreContent = this.streamLoadingMore
+      ? `<div class="stream-loading-more">
+           <div class="stream-loading-spinner"></div>
+           <span>Loading older events...</span>
+         </div>`
+      : this.streamHasMoreEvents
+        ? `<div class="stream-load-more">
+             <button class="stream-load-more-btn" id="stream-load-more">
+               Load more events
+             </button>
+           </div>`
+        : pastEvents.length > 0
+          ? `<div class="stream-end-marker">
+               <span class="end-marker-text">End of timeline</span>
+             </div>`
+          : ''
+
+    // Get saved panel width or default to 30%
+    const filterPanelWidth = this.streamFilterPanelWidth || 30
+
+    return `
+      <div class="timeline-stream-enhanced">
+        <div class="stream-split-layout">
+          <!-- Left Panel: Target Filter -->
+          ${this._renderStreamTargetFilterPanel(filterPanelWidth)}
+
+          <!-- Resize Handle -->
+          <div class="stream-resize-handle" id="stream-resize-handle"></div>
+
+          <!-- Right Panel: Events Stream -->
+          <div class="stream-events-panel">
+            <!-- HUD Panel Header -->
+            <div class="stream-panel-header">
+              <div class="stream-panel-title">
+                <span class="stream-panel-label">EVENT STREAM</span>
+                <div class="stream-panel-status">
+                  <span class="stream-status-dot ${statusDotClass}"></span>
+                  <span class="stream-status-text">${statusText}</span>
+                </div>
+              </div>
+              <div class="stream-panel-metrics">
+                <div class="stream-metric ${activityLevel}">
+                  <div class="stream-metric-bar">
+                    <div class="stream-metric-fill" style="width: ${Math.min(100, activityRate * 5)}%"></div>
+                  </div>
+                  <span class="stream-metric-value">${activityRate.toFixed(1)} evt/min</span>
+                </div>
+                <span class="stream-metric-count">${pastEvents.length}</span>
+                ${this.timelinePaused ? '<span class="stream-paused-badge">PAUSED</span>' : ''}
+              </div>
+            </div>
+
+            <!-- HUD Body with Grid Background -->
+            <div class="stream-body">
+              <div class="stream-events-container" id="stream-events-container">
+                <!-- Future Events Section -->
+                ${futureClusters.length > 0 ? `
+                  <div class="stream-section stream-future-section">
+                    <div class="stream-section-header">
+                      <span class="stream-section-icon">◇</span>
+                      <span class="stream-section-label">SCHEDULED</span>
+                      <span class="stream-section-count">${futureEvents.length}</span>
+                    </div>
+                    <div class="stream-events-list">
+                      ${futureClusters.map(item =>
+                        item.isCluster
+                          ? this._renderEventCluster(item)
+                          : this._renderStreamEvent(item.events[0])
+                      ).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+
+                <!-- NOW Marker -->
+                <div class="stream-now-marker" id="stream-now-marker">
+                  <div class="stream-now-line"></div>
+                  <div class="stream-now-badge">
+                    <span class="stream-now-text">NOW</span>
+                    <span class="stream-now-time">${this._formatTimeUTC(now)}</span>
+                  </div>
+                  <div class="stream-now-line"></div>
+                </div>
+
+                <!-- Past Events Section with Time Context -->
+                <div class="stream-section stream-past-section">
+                  ${pastClusters.length > 0 ? `
+                    <div class="stream-events-list">
+                      ${this._renderPastEventsWithTimeContext(pastClusters)}
+                    </div>
+                  ` : `
+                    <div class="stream-empty-state">
+                      <span class="empty-icon">○</span>
+                      <span class="empty-text">No events in the selected time range</span>
+                    </div>
+                  `}
+
+                  <!-- Load More / Loading / End of timeline -->
+                  ${loadMoreContent}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Cluster related events that occur within a short time window.
+   * Groups same command to multiple targets, alarm storms, etc.
+   */
+  _clusterEvents(events, direction) {
+    if (events.length === 0) return []
+
+    const clusters = []
+    const clusterWindowMs = 30000 // 30 second window for clustering
+    let currentCluster = null
+
+    events.forEach((event, idx) => {
+      const eventTime = new Date(event.timestamp).getTime()
+
+      if (!currentCluster) {
+        currentCluster = {
+          events: [event],
+          type: event.type,
+          title: event.title,
+          startTime: eventTime,
+          endTime: eventTime
+        }
+        return
+      }
+
+      const timeDiff = direction === 'past'
+        ? currentCluster.startTime - eventTime
+        : eventTime - currentCluster.endTime
+
+      // Check if this event should be added to current cluster
+      const sameType = event.type === currentCluster.type
+      const sameTitle = event.title === currentCluster.title
+      const withinWindow = timeDiff <= clusterWindowMs
+
+      if (sameType && sameTitle && withinWindow) {
+        currentCluster.events.push(event)
+        if (direction === 'past') {
+          currentCluster.startTime = eventTime
+        } else {
+          currentCluster.endTime = eventTime
+        }
+      } else {
+        // Finalize current cluster and start new one
+        clusters.push(this._finalizeCluster(currentCluster))
+        currentCluster = {
+          events: [event],
+          type: event.type,
+          title: event.title,
+          startTime: eventTime,
+          endTime: eventTime
+        }
+      }
+    })
+
+    // Don't forget the last cluster
+    if (currentCluster) {
+      clusters.push(this._finalizeCluster(currentCluster))
+    }
+
+    return clusters
+  },
+
+  /**
+   * Finalize a cluster - determine if it should be shown as cluster or individual events
+   */
+  _finalizeCluster(cluster) {
+    const isCluster = cluster.events.length >= 3
+    return {
+      isCluster,
+      events: cluster.events,
+      type: cluster.type,
+      title: cluster.title,
+      count: cluster.events.length,
+      startTime: cluster.startTime,
+      endTime: cluster.endTime,
+      id: `cluster-${cluster.startTime}-${cluster.type}`
+    }
+  },
+
+  /**
+   * Render the target filter panel for the Stream view.
+   * Side panel with SYSTEM pseudo-target and all constellation targets.
+   */
+  _renderStreamTargetFilterPanel(widthPercent = 30) {
+    // Gather all unique targets from events and from available targets
+    const targetMap = new Map()
+
+    // Get targets from events
+    this.timelineEvents.forEach(e => {
+      if (e.target_id && e.target_name) {
+        targetMap.set(e.target_id, {
+          id: e.target_id,
+          name: e.target_name,
+          status: e.target_status || 'online'
+        })
+      }
+    })
+
+    // Also use the available targets list if available
+    const availableTargets = JSON.parse(this.el.dataset.targets || '[]')
+    availableTargets.forEach(t => {
+      if (!targetMap.has(t.id)) {
+        targetMap.set(t.id, {
+          id: t.id,
+          name: t.name,
+          status: t.status || 'online'
+        })
+      }
+    })
+
+    const targets = Array.from(targetMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    )
+
+    // Initialize filter with all targets selected on first render
+    if (!this.streamTargetFilterInitialized && targets.length > 0) {
+      this.streamTargetFilter = new Set(targets.map(t => t.id))
+      this.streamTargetFilterInitialized = true
+    }
+
+    // Count system events (events without target_id)
+    const systemEventCount = this.timelineEvents.filter(e => !e.target_id).length
+
+    // Filter targets by search
+    const filteredTargets = this.streamTargetSearch
+      ? targets.filter(t =>
+          t.name.toLowerCase().includes(this.streamTargetSearch.toLowerCase())
+        )
+      : targets
+
+    // Calculate selected count
+    const totalCount = targets.length + 1 // +1 for SYSTEM
+    const selectedCount = this.streamTargetFilter.size + (this.streamShowSystem ? 1 : 0)
+    const countText = `${selectedCount} of ${totalCount}`
+
+    return `
+      <div class="stream-target-filter-panel" style="flex: 0 0 ${widthPercent}%;">
+        <!-- Filter Panel Header -->
+        <div class="stream-target-filter-header">
+          <div class="stream-filter-title">
+            <span class="stream-filter-title-text">FILTER BY TARGET</span>
+            <span class="stream-filter-count">${countText}</span>
+          </div>
+        </div>
+
+        <!-- Search Input -->
+        <div class="stream-target-search-wrapper">
+          <input
+            type="text"
+            class="stream-target-search"
+            id="stream-target-search"
+            placeholder="Filter targets..."
+            value="${this.streamTargetSearch}"
+          />
+        </div>
+
+        <!-- Target Grid -->
+        <div class="stream-target-grid" id="stream-target-grid">
+          ${this._renderStreamTargetGrid(filteredTargets, systemEventCount)}
+        </div>
+
+        <!-- Selection Actions Footer -->
+        <div class="stream-filter-actions-footer">
+          <button class="stream-filter-action" id="stream-select-all-targets">
+            Select All
+          </button>
+          <button class="stream-filter-action" id="stream-clear-target-filter">
+            Clear
+          </button>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Render the target grid cells including SYSTEM pseudo-target.
+   */
+  _renderStreamTargetGrid(targets, systemEventCount) {
+    // SYSTEM pseudo-target (always first)
+    const systemSelected = this.streamShowSystem
+    const systemCell = `
+      <div
+        class="stream-target-cell system-target ${systemSelected ? 'selected' : ''}"
+        data-target-id="__SYSTEM__"
+        title="System events (${systemEventCount} events)"
+      >
+        <span class="stream-target-name">◆ SYSTEM</span>
+      </div>
+    `
+
+    // Regular target cells
+    const targetCells = targets.map(target => {
+      const isSelected = this.streamTargetFilter.has(target.id)
+      const statusClass = `status-${target.status || 'online'}`
+
+      return `
+        <div
+          class="stream-target-cell ${statusClass} ${isSelected ? 'selected' : ''}"
+          data-target-id="${target.id}"
+          title="${target.name}"
+        >
+          <span class="stream-target-name">${target.name}</span>
+        </div>
+      `
+    }).join('')
+
+    return systemCell + targetCells
+  },
+
+  /**
+   * Toggle a target in the stream filter.
+   */
+  _toggleStreamTargetFilter(targetId) {
+    if (targetId === '__SYSTEM__') {
+      this.streamShowSystem = !this.streamShowSystem
+    } else {
+      if (this.streamTargetFilter.has(targetId)) {
+        this.streamTargetFilter.delete(targetId)
+      } else {
+        this.streamTargetFilter.add(targetId)
+      }
+    }
+    this._renderTimelineMode()
+  },
+
+  /**
+   * Select all targets in the stream filter.
+   */
+  _selectAllStreamTargets() {
+    // Gather all target IDs
+    const targetMap = new Map()
+    this.timelineEvents.forEach(e => {
+      if (e.target_id && e.target_name) {
+        targetMap.set(e.target_id, true)
+      }
+    })
+
+    const availableTargets = JSON.parse(this.el.dataset.targets || '[]')
+    availableTargets.forEach(t => {
+      targetMap.set(t.id, true)
+    })
+
+    // Add all targets to the filter
+    this.streamTargetFilter = new Set(targetMap.keys())
+    this.streamShowSystem = true
+    this._renderTimelineMode()
+  },
+
+  /**
+   * Clear all target selections.
+   */
+  _clearStreamTargetFilter() {
+    this.streamShowSystem = false
+    this.streamTargetFilter.clear()
+    this._renderTimelineMode()
+  },
+
+  /**
+   * Handle stream target search input.
+   * Only updates the target grid, not full re-render, to preserve focus.
+   */
+  _handleStreamTargetSearch(searchText) {
+    this.streamTargetSearch = searchText
+    this._updateStreamTargetGrid()
+  },
+
+  /**
+   * Start resizing the stream filter panel.
+   */
+  _startStreamPanelResize(e) {
+    e.preventDefault()
+
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const splitLayout = dashboard?.querySelector('.stream-split-layout')
+    const filterPanel = dashboard?.querySelector('.stream-target-filter-panel')
+    const resizeHandle = dashboard?.querySelector('#stream-resize-handle')
+
+    if (!splitLayout || !filterPanel) return
+
+    resizeHandle?.classList.add('dragging')
+
+    const startX = e.clientX
+    const layoutRect = splitLayout.getBoundingClientRect()
+    const startWidth = filterPanel.getBoundingClientRect().width
+    const layoutWidth = layoutRect.width
+
+    const onMouseMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const newWidth = startWidth + deltaX
+      const newPercent = (newWidth / layoutWidth) * 100
+
+      // Clamp between 15% and 50%
+      const clampedPercent = Math.max(15, Math.min(50, newPercent))
+
+      filterPanel.style.flex = `0 0 ${clampedPercent}%`
+      this.streamFilterPanelWidth = clampedPercent
+    }
+
+    const onMouseUp = () => {
+      resizeHandle?.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  },
+
+  /**
+   * Update only the stream target grid without full re-render.
+   * Preserves search input focus.
+   */
+  _updateStreamTargetGrid() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const gridContainer = dashboard?.querySelector('#stream-target-grid')
+    if (!gridContainer) return
+
+    // Gather targets same as in _renderStreamTargetFilterPanel
+    const targetMap = new Map()
+    this.timelineEvents.forEach(e => {
+      if (e.target_id && e.target_name) {
+        targetMap.set(e.target_id, {
+          id: e.target_id,
+          name: e.target_name,
+          status: e.target_status || 'online'
+        })
+      }
+    })
+
+    const availableTargets = JSON.parse(this.el.dataset.targets || '[]')
+    availableTargets.forEach(t => {
+      if (!targetMap.has(t.id)) {
+        targetMap.set(t.id, { id: t.id, name: t.name, status: t.status || 'online' })
+      }
+    })
+
+    const targets = Array.from(targetMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    )
+
+    const filteredTargets = this.streamTargetSearch
+      ? targets.filter(t =>
+          t.name.toLowerCase().includes(this.streamTargetSearch.toLowerCase())
+        )
+      : targets
+
+    const systemEventCount = this.timelineEvents.filter(e => !e.target_id).length
+
+    // Update only the grid content
+    gridContainer.innerHTML = this._renderStreamTargetGrid(filteredTargets, systemEventCount)
+
+    // Re-bind click handlers for the new cells
+    gridContainer.querySelectorAll('.stream-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        this._toggleStreamTargetFilter(targetId)
+      })
+    })
+  },
+
+  /**
+   * Calculate activity density for the timeline spine visualization.
+   * Returns array of density segments with intensity levels.
+   */
+  _calculateDensity(events) {
+    const now = new Date()
+    const timeRangeMs = 2 * 60 * 60 * 1000 // 2 hours
+    const startTime = new Date(now.getTime() - timeRangeMs)
+    const endTime = new Date(now.getTime() + (timeRangeMs / 2)) // 1 hour future
+    const totalMs = endTime - startTime
+    const bucketCount = 30 // Number of density segments
+    const bucketMs = totalMs / bucketCount
+
+    // Initialize buckets
+    const buckets = Array(bucketCount).fill(0).map((_, i) => ({
+      time: new Date(startTime.getTime() + i * bucketMs),
+      count: 0
+    }))
+
+    // Count events per bucket
+    events.forEach(event => {
+      const eventTime = new Date(event.timestamp).getTime()
+      const bucketIndex = Math.floor((eventTime - startTime.getTime()) / bucketMs)
+      if (bucketIndex >= 0 && bucketIndex < bucketCount) {
+        buckets[bucketIndex].count++
+      }
+    })
+
+    // Find max for normalization
+    const maxCount = Math.max(1, ...buckets.map(b => b.count))
+
+    // Calculate NOW position
+    const nowPosition = ((now - startTime) / totalMs) * 100
+
+    // Map to density segments with intensity
+    return buckets.map(bucket => {
+      const ratio = bucket.count / maxCount
+      let intensity = 'none'
+      if (bucket.count > 0) {
+        if (ratio > 0.7) intensity = 'high'
+        else if (ratio > 0.3) intensity = 'medium'
+        else intensity = 'low'
+      }
+      return {
+        ...bucket,
+        height: 100 / bucketCount,
+        intensity,
+        nowPosition
+      }
+    }).map((d, _, arr) => ({ ...d, nowPosition }))
+  },
+
+  /**
+   * Calculate events per minute for the activity rate indicator.
+   */
+  _calculateActivityRate(pastEvents) {
+    if (pastEvents.length === 0) return 0
+
+    const now = new Date()
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000)
+
+    const recentEvents = pastEvents.filter(e => new Date(e.timestamp) > fiveMinAgo)
+    return recentEvents.length / 5 // events per minute over last 5 minutes
+  },
+
+  /**
+   * Get the time bucket label for a given timestamp.
+   * Returns bucket info with label and key for grouping.
+   */
+  _getTimeBucket(timestamp, now) {
+    const eventTime = new Date(timestamp)
+    const diffMs = now - eventTime
+    const diffMin = diffMs / (1000 * 60)
+    const diffHours = diffMs / (1000 * 60 * 60)
+
+    // Define buckets
+    if (diffMin < 1) {
+      return { key: 'now', label: 'JUST NOW', order: 0 }
+    } else if (diffMin < 5) {
+      return { key: '5min', label: 'LAST 5 MINUTES', order: 1 }
+    } else if (diffMin < 15) {
+      return { key: '15min', label: '5-15 MINUTES AGO', order: 2 }
+    } else if (diffMin < 30) {
+      return { key: '30min', label: '15-30 MINUTES AGO', order: 3 }
+    } else if (diffHours < 1) {
+      return { key: '1hour', label: '30-60 MINUTES AGO', order: 4 }
+    } else if (diffHours < 2) {
+      return { key: '2hours', label: '1-2 HOURS AGO', order: 5 }
+    } else if (diffHours < 6) {
+      return { key: '6hours', label: '2-6 HOURS AGO', order: 6 }
+    } else if (diffHours < 24) {
+      return { key: 'today', label: 'EARLIER TODAY', order: 7 }
+    } else if (diffHours < 48) {
+      return { key: 'yesterday', label: 'YESTERDAY', order: 8 }
+    } else {
+      // Format as date
+      const dateStr = eventTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return { key: `date-${dateStr}`, label: dateStr.toUpperCase(), order: 9 + diffHours }
+    }
+  },
+
+  /**
+   * Organize events into time buckets with gap indicators.
+   * Returns array of items: { type: 'bucket-header' | 'event' | 'gap', ... }
+   */
+  _organizeEventsWithTimeContext(events) {
+    if (events.length === 0) return []
+
+    const now = new Date()
+    const result = []
+    let currentBucketKey = null
+    let prevEventTime = null
+    const GAP_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+
+    events.forEach((event, idx) => {
+      const eventTime = new Date(event.timestamp)
+      const bucket = this._getTimeBucket(event.timestamp, now)
+
+      // Check if we need a new bucket header
+      if (bucket.key !== currentBucketKey) {
+        result.push({
+          type: 'bucket-header',
+          key: bucket.key,
+          label: bucket.label,
+          order: bucket.order
+        })
+        currentBucketKey = bucket.key
+      }
+
+      // Check for significant time gap (only within same bucket or adjacent events)
+      if (prevEventTime && idx > 0) {
+        const gapMs = prevEventTime - eventTime // prev is more recent
+        if (gapMs > GAP_THRESHOLD_MS) {
+          const gapMinutes = Math.floor(gapMs / (1000 * 60))
+          const gapText = this._formatGapDuration(gapMs)
+          result.push({
+            type: 'gap',
+            duration: gapMs,
+            durationText: gapText,
+            minutes: gapMinutes
+          })
+        }
+      }
+
+      // Add the event
+      result.push({
+        type: 'event',
+        event: event
+      })
+
+      prevEventTime = eventTime
+    })
+
+    return result
+  },
+
+  /**
+   * Format a duration gap into human-readable text.
+   */
+  _formatGapDuration(ms) {
+    const minutes = Math.floor(ms / (1000 * 60))
+    const hours = Math.floor(ms / (1000 * 60 * 60))
+
+    if (minutes < 60) {
+      return `${minutes} min`
+    } else if (hours < 24) {
+      const remainingMin = minutes % 60
+      return remainingMin > 0 ? `${hours}h ${remainingMin}m` : `${hours} hour${hours > 1 ? 's' : ''}`
+    } else {
+      const days = Math.floor(hours / 24)
+      return `${days} day${days > 1 ? 's' : ''}`
+    }
+  },
+
+  /**
+   * Render a time bucket header.
+   */
+  _renderTimeBucketHeader(bucket) {
+    return `
+      <div class="stream-time-bucket" data-bucket="${bucket.key}">
+        <div class="time-bucket-line"></div>
+        <span class="time-bucket-label">${bucket.label}</span>
+        <div class="time-bucket-line"></div>
+      </div>
+    `
+  },
+
+  /**
+   * Render a time gap indicator.
+   */
+  _renderTimeGap(gap) {
+    // Visual intensity based on gap duration
+    const intensityClass = gap.minutes > 60 ? 'gap-large' : gap.minutes > 15 ? 'gap-medium' : 'gap-small'
+
+    return `
+      <div class="stream-time-gap ${intensityClass}">
+        <div class="time-gap-connector">
+          <div class="gap-line gap-line-top"></div>
+          <div class="gap-indicator">
+            <span class="gap-icon">⋮</span>
+          </div>
+          <div class="gap-line gap-line-bottom"></div>
+        </div>
+        <div class="time-gap-label">
+          <span class="gap-duration">${gap.durationText}</span>
+          <span class="gap-text">of quiet</span>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Render past events with time bucket headers and gap indicators.
+   * Takes clustered items and adds temporal context.
+   */
+  _renderPastEventsWithTimeContext(clusteredItems) {
+    if (clusteredItems.length === 0) return ''
+
+    const now = new Date()
+    const result = []
+    let currentBucketKey = null
+    let prevItemTime = null
+    const GAP_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+
+    clusteredItems.forEach((item, idx) => {
+      // Get the representative timestamp for this item
+      const itemTime = item.isCluster
+        ? new Date(item.events[0].timestamp)
+        : new Date(item.events[0].timestamp)
+      const bucket = this._getTimeBucket(itemTime, now)
+
+      // Check if we need a new bucket header
+      if (bucket.key !== currentBucketKey) {
+        result.push(this._renderTimeBucketHeader(bucket))
+        currentBucketKey = bucket.key
+      }
+
+      // Check for significant time gap between items
+      if (prevItemTime && idx > 0) {
+        const gapMs = prevItemTime - itemTime // prev is more recent
+        if (gapMs > GAP_THRESHOLD_MS) {
+          const gapMinutes = Math.floor(gapMs / (1000 * 60))
+          const gapText = this._formatGapDuration(gapMs)
+          result.push(this._renderTimeGap({
+            duration: gapMs,
+            durationText: gapText,
+            minutes: gapMinutes
+          }))
+        }
+      }
+
+      // Render the item (cluster or single event)
+      if (item.isCluster) {
+        result.push(this._renderEventCluster(item))
+      } else {
+        result.push(this._renderStreamEvent(item.events[0]))
+      }
+
+      prevItemTime = itemTime
+    })
+
+    return result.join('')
+  },
+
+  /**
+   * Render a single enhanced stream event card.
+   */
+  _renderStreamEvent(event) {
+    const timestamp = new Date(event.timestamp)
+    const relativeTime = this._formatRelativeTime(timestamp)
+    const statusClass = this._getStatusClass(event.status)
+    const typeClass = `stream-event-${event.type}`
+    const futureClass = event.is_future ? 'stream-event-future' : ''
+    const statusIcon = this._getStatusIcon(event.status)
+
+    // Determine priority/severity styling
+    const isCritical = event.type === 'alarm' && (event.status === 'active' || event.status === 'error')
+    const priorityClass = isCritical ? 'stream-event-critical' : ''
+    const isCompleted = ['success', 'completed', 'cleared'].includes(event.status)
+    const completedClass = isCompleted ? 'stream-event-completed' : ''
+
+    // Check if this event is expanded
+    const isExpanded = this.streamExpandedEvent === event.id
+
+    return `
+      <div class="stream-event ${typeClass} ${futureClass} ${priorityClass} ${completedClass} ${isExpanded ? 'expanded' : ''}"
+           data-event-id="${event.id}">
+        <!-- Timeline connector -->
+        <div class="stream-event-connector">
+          <div class="connector-line connector-line-top"></div>
+          <div class="connector-node ${event.type}">
+            ${event.is_future ? '◇' : '●'}
+          </div>
+          <div class="connector-line connector-line-bottom"></div>
+        </div>
+
+        <!-- Event Card -->
+        <div class="stream-event-card">
+          <!-- Card Header -->
+          <div class="stream-event-header">
+            <div class="stream-event-time-group">
+              <span class="stream-event-time">${this._formatTimeUTC(timestamp)}</span>
+              <span class="stream-event-relative" data-timestamp="${event.timestamp}">${relativeTime}</span>
+            </div>
+            <div class="stream-event-status ${statusClass}">
+              <span class="status-icon">${statusIcon}</span>
+              <span class="status-text">${event.status_label || event.status || ''}</span>
+            </div>
+          </div>
+
+          <!-- Card Body -->
+          <div class="stream-event-body">
+            <span class="stream-event-type-badge ${event.type}">${event.type.toUpperCase().slice(0, 3)}</span>
+            <span class="stream-event-title">${event.title}</span>
+            ${event.target_name ? `
+              <span class="stream-event-target">
+                <span class="target-arrow">→</span>
+                <span class="target-name">${event.target_name}</span>
+              </span>
+            ` : ''}
+          </div>
+
+          ${event.description ? `
+            <div class="stream-event-description">${event.description}</div>
+          ` : ''}
+
+          <!-- Expandable Detail Section -->
+          ${isExpanded ? `
+            <div class="stream-event-detail">
+              <div class="event-detail-section">
+                <div class="detail-label">Event ID</div>
+                <div class="detail-value mono">${event.id}</div>
+              </div>
+              ${event.target_id ? `
+                <div class="event-detail-section">
+                  <div class="detail-label">Target ID</div>
+                  <div class="detail-value mono">${event.target_id}</div>
+                </div>
+              ` : ''}
+              ${event.user_name ? `
+                <div class="event-detail-section">
+                  <div class="detail-label">Initiated By</div>
+                  <div class="detail-value">${event.user_name}</div>
+                </div>
+              ` : ''}
+              ${event.metadata && Object.keys(event.metadata).length > 0 ? `
+                <div class="event-detail-section">
+                  <div class="detail-label">Parameters</div>
+                  <div class="detail-value mono">
+                    <pre>${JSON.stringify(event.metadata, null, 2)}</pre>
+                  </div>
+                </div>
+              ` : ''}
+              <div class="event-detail-actions">
+                ${event.type === 'command' ? `
+                  <button class="detail-action-btn" data-action="rerun" data-event-id="${event.id}">
+                    ↻ Re-run
+                  </button>
+                ` : ''}
+                ${event.type === 'alarm' && event.status === 'active' ? `
+                  <button class="detail-action-btn" data-action="acknowledge" data-event-id="${event.id}">
+                    ✓ Acknowledge
+                  </button>
+                ` : ''}
+                <button class="detail-action-btn secondary" data-action="copy" data-event-id="${event.id}">
+                  ⎘ Copy
+                </button>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Expand indicator -->
+          <div class="stream-event-expand-hint">
+            <span class="expand-icon">${isExpanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Render a cluster of related events.
+   */
+  _renderEventCluster(cluster) {
+    const firstEvent = cluster.events[0]
+    const timestamp = new Date(firstEvent.timestamp)
+    const relativeTime = this._formatRelativeTime(timestamp)
+    const typeClass = `stream-event-${cluster.type}`
+
+    // Summarize statuses
+    const statusCounts = {}
+    cluster.events.forEach(e => {
+      statusCounts[e.status] = (statusCounts[e.status] || 0) + 1
+    })
+
+    // Get unique targets
+    const targets = [...new Set(cluster.events.map(e => e.target_name).filter(Boolean))]
+    const targetSummary = targets.length > 3
+      ? `${targets.slice(0, 3).join(', ')} +${targets.length - 3} more`
+      : targets.join(', ')
+
+    // Check if cluster is expanded
+    const isExpanded = this.streamExpandedCluster === cluster.id
+
+    return `
+      <div class="stream-cluster ${typeClass} ${isExpanded ? 'expanded' : ''}"
+           data-cluster-id="${cluster.id}">
+        <!-- Timeline connector -->
+        <div class="stream-event-connector">
+          <div class="connector-line connector-line-top"></div>
+          <div class="connector-node cluster ${cluster.type}">
+            <span class="cluster-count">${cluster.count}</span>
+          </div>
+          <div class="connector-line connector-line-bottom"></div>
+        </div>
+
+        <!-- Cluster Card -->
+        <div class="stream-cluster-card">
+          <!-- Cluster Header -->
+          <div class="stream-cluster-header">
+            <div class="stream-event-time-group">
+              <span class="stream-event-time">${this._formatTimeUTC(timestamp)}</span>
+              <span class="stream-event-relative" data-timestamp="${firstEvent.timestamp}">${relativeTime}</span>
+              <span class="cluster-duration">over ${this._formatDuration(cluster.endTime - cluster.startTime)}</span>
+            </div>
+            <div class="cluster-status-summary">
+              ${Object.entries(statusCounts).map(([status, count]) => `
+                <span class="cluster-status-badge ${this._getStatusClass(status)}">
+                  ${count} ${status}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Cluster Summary -->
+          <div class="stream-cluster-body">
+            <span class="stream-event-type-badge ${cluster.type}">${cluster.type.toUpperCase().slice(0, 3)}</span>
+            <span class="cluster-title">
+              <strong>${cluster.count}</strong> × ${cluster.title}
+            </span>
+          </div>
+
+          <div class="cluster-targets">
+            <span class="targets-label">Targets:</span>
+            <span class="targets-list">${targetSummary || 'Multiple targets'}</span>
+          </div>
+
+          <!-- Expanded Events List -->
+          ${isExpanded ? `
+            <div class="cluster-events-expanded">
+              ${cluster.events.map(e => `
+                <div class="cluster-event-item" data-event-id="${e.id}">
+                  <span class="cluster-event-time">${this._formatTimeUTC(new Date(e.timestamp))}</span>
+                  <span class="cluster-event-target">${e.target_name || '-'}</span>
+                  <span class="cluster-event-status ${this._getStatusClass(e.status)}">
+                    ${this._getStatusIcon(e.status)} ${e.status}
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          <!-- Expand indicator -->
+          <div class="stream-cluster-expand">
+            <span class="expand-text">${isExpanded ? 'Collapse' : `Expand ${cluster.count} events`}</span>
+            <span class="expand-icon">${isExpanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Format a duration in milliseconds to a human-readable string.
+   */
+  _formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000)
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+    const hours = Math.floor(minutes / 60)
+    return `${hours}h ${minutes % 60}m`
+  },
+
+  _renderMatrixViewContent() {
+    const now = new Date()
+    const filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
+    const bucketMs = this.matrixTimeBucket * 60 * 1000
+
+    // Calculate time range: 2 hours past to 1 hour future
+    const startTime = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+    const endTime = new Date(now.getTime() + 1 * 60 * 60 * 1000)
+
+    // Generate time buckets
+    const buckets = []
+    let bucketTime = new Date(Math.floor(startTime.getTime() / bucketMs) * bucketMs)
+    while (bucketTime <= endTime) {
+      buckets.push(new Date(bucketTime))
+      bucketTime = new Date(bucketTime.getTime() + bucketMs)
+    }
+
+    // Group events by target
+    const targetGroups = new Map()
+    filteredEvents.forEach(event => {
+      const targetId = event.target_id || 'unknown'
+      const targetName = event.target_name || targetId
+      if (!targetGroups.has(targetId)) {
+        targetGroups.set(targetId, { name: targetName, events: [] })
+      }
+      targetGroups.get(targetId).events.push(event)
+    })
+
+    // Also include targets from the targets list that might not have events
+    this.targets.forEach(target => {
+      if (!targetGroups.has(target.id)) {
+        targetGroups.set(target.id, { name: target.name || target.identifier, events: [] })
+      }
+    })
+
+    // Sort targets by name
+    const sortedTargets = Array.from(targetGroups.entries())
+      .sort((a, b) => (a[1].name || '').localeCompare(b[1].name || ''))
+      .slice(0, 20) // Limit to 20 targets for performance
+
+    // Find NOW bucket index
+    const nowBucketIndex = buckets.findIndex(b =>
+      now >= b && now < new Date(b.getTime() + bucketMs)
+    )
+
+    return `
+      <div class="timeline-matrix">
+        <div class="timeline-matrix-header">
+          <div class="timeline-matrix-corner">TARGET</div>
+          ${buckets.map((bucket, idx) => `
+            <div class="timeline-matrix-time ${idx === nowBucketIndex ? 'now-bucket' : ''}"
+                 title="${bucket.toISOString()}">
+              ${this._formatTimeUTC(bucket).slice(0, 5)}
+            </div>
+          `).join('')}
+        </div>
+        <div class="timeline-matrix-body">
+          ${sortedTargets.length > 0 ? sortedTargets.map(([targetId, group]) => {
+            // Bucket events for this target
+            const eventBuckets = buckets.map(bucketStart => {
+              const bucketEnd = new Date(bucketStart.getTime() + bucketMs)
+              return group.events.filter(e => {
+                const eventTime = new Date(e.timestamp)
+                return eventTime >= bucketStart && eventTime < bucketEnd
+              })
+            })
+
+            return `
+              <div class="timeline-matrix-row" data-target-id="${targetId}">
+                <div class="timeline-matrix-label" title="${group.name}">${group.name}</div>
+                ${eventBuckets.map((cellEvents, idx) => {
+                  const hasCmd = cellEvents.some(e => e.type === 'command')
+                  const hasAlm = cellEvents.some(e => e.type === 'alarm')
+                  const hasProc = cellEvents.some(e => e.type === 'procedure')
+                  const hasAuto = cellEvents.some(e => e.type === 'automation')
+                  const hasError = cellEvents.some(e => e.status === 'error' || e.status === 'failed')
+                  const isFuture = cellEvents.some(e => e.is_future)
+
+                  return `
+                    <div class="timeline-matrix-cell ${idx === nowBucketIndex ? 'now-bucket' : ''} ${cellEvents.length > 0 ? 'has-events' : ''}"
+                         data-target-id="${targetId}"
+                         data-bucket-index="${idx}"
+                         title="${cellEvents.length} events">
+                      ${hasCmd ? `<span class="matrix-dot matrix-dot-cmd ${hasError ? 'has-error' : ''} ${isFuture ? 'is-future' : ''}">·</span>` : ''}
+                      ${hasAlm ? `<span class="matrix-dot matrix-dot-alm ${hasError ? 'has-error' : ''}">●</span>` : ''}
+                      ${hasProc ? `<span class="matrix-dot matrix-dot-proc ${hasError ? 'has-error' : ''} ${isFuture ? 'is-future' : ''}">▲</span>` : ''}
+                      ${hasAuto ? `<span class="matrix-dot matrix-dot-auto ${hasError ? 'has-error' : ''}">◆</span>` : ''}
+                    </div>
+                  `
+                }).join('')}
+              </div>
+            `
+          }).join('') : `
+            <div class="timeline-empty-state">No targets available</div>
+          `}
+        </div>
+
+        <!-- Selected Cell Detail -->
+        ${this.matrixSelectedCell ? this._renderMatrixCellDetail() : `
+          <div class="timeline-matrix-detail">
+            <div class="timeline-matrix-detail-empty">Click a cell to see events</div>
+          </div>
+        `}
+
+        <!-- Legend -->
+        <div class="timeline-matrix-legend">
+          <span class="legend-item"><span class="matrix-dot matrix-dot-cmd">·</span> CMD</span>
+          <span class="legend-item"><span class="matrix-dot matrix-dot-alm">●</span> ALM</span>
+          <span class="legend-item"><span class="matrix-dot matrix-dot-proc">▲</span> PROC</span>
+          <span class="legend-item"><span class="matrix-dot matrix-dot-auto">◆</span> AUTO</span>
+          <span class="legend-item"><span class="matrix-dot has-error">!</span> ERROR</span>
+        </div>
+      </div>
+    `
+  },
+
+  _renderMatrixCellDetail() {
+    if (!this.matrixSelectedCell) return ''
+
+    const { targetId, bucketIndex } = this.matrixSelectedCell
+    const bucketMs = this.matrixTimeBucket * 60 * 1000
+    const startTime = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const bucketStart = new Date(Math.floor(startTime.getTime() / bucketMs) * bucketMs + bucketIndex * bucketMs)
+    const bucketEnd = new Date(bucketStart.getTime() + bucketMs)
+
+    const cellEvents = this.timelineEvents.filter(e => {
+      const eventTime = new Date(e.timestamp)
+      return (e.target_id === targetId || (!e.target_id && targetId === 'unknown')) &&
+             eventTime >= bucketStart && eventTime < bucketEnd &&
+             this.timelineTypeFilter.has(e.type)
+    }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+
+    const target = this.targets.find(t => t.id === targetId)
+    const targetName = target?.name || target?.identifier || targetId
+
+    return `
+      <div class="timeline-matrix-detail">
+        <div class="timeline-matrix-detail-header">
+          <span class="detail-target">${targetName}</span>
+          <span class="detail-time">${this._formatTimeUTC(bucketStart)} - ${this._formatTimeUTC(bucketEnd)}</span>
+        </div>
+        <div class="timeline-matrix-detail-events">
+          ${cellEvents.length > 0 ? cellEvents.map(e => this._renderTimelineEvent(e)).join('') :
+            '<div class="timeline-empty-state">No events in this cell</div>'
+          }
+        </div>
+      </div>
+    `
+  },
+
+  _renderLanesViewContent() {
+    const now = new Date()
+    const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+    const startTime = new Date(now.getTime() - rangeMs)
+    const endTime = new Date(now.getTime() + rangeMs)
+    const totalMs = endTime - startTime
+
+    const filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
+
+    // Get pinned targets or default to first few targets with events
+    let pinnedTargets = this.lanesPinnedTargets
+    if (pinnedTargets.length === 0) {
+      // Auto-pin targets that have events
+      const targetsWithEvents = new Set(filteredEvents.map(e => e.target_id).filter(Boolean))
+      pinnedTargets = Array.from(targetsWithEvents).slice(0, 5)
+    }
+
+    // Calculate NOW marker position as percentage (NOW or scrubbed time)
+    const nowMarkerTime = this.lanesScrubbingTime || now
+    const nowMarkerPosition = ((nowMarkerTime - startTime) / totalMs) * 100
+
+    // Generate time markers
+    const timeMarkers = []
+    const markerInterval = this.lanesTimeRange <= 2 ? 30 : this.lanesTimeRange <= 6 ? 60 : 120 // minutes
+    let markerTime = new Date(Math.ceil(startTime.getTime() / (markerInterval * 60000)) * (markerInterval * 60000))
+    while (markerTime <= endTime) {
+      const position = ((markerTime - startTime) / totalMs) * 100
+      timeMarkers.push({ time: markerTime, position })
+      markerTime = new Date(markerTime.getTime() + markerInterval * 60000)
+    }
+
+    return `
+      <div class="timeline-lanes">
+        <!-- HUD Lanes Panel -->
+        <div class="lanes-hud-panel">
+          <!-- Panel Header -->
+          <div class="lanes-panel-header">
+            <div class="lanes-panel-title">
+              <span class="lanes-panel-label">TARGET LANES</span>
+              <span class="lanes-panel-count">${pinnedTargets.length} TARGETS</span>
+            </div>
+            <div class="lanes-panel-controls">
+              <select id="lanes-range" class="lanes-range-select">
+                <option value="2" ${this.lanesTimeRange === 2 ? 'selected' : ''}>±2h</option>
+                <option value="6" ${this.lanesTimeRange === 6 ? 'selected' : ''}>±6h</option>
+                <option value="12" ${this.lanesTimeRange === 12 ? 'selected' : ''}>±12h</option>
+                <option value="24" ${this.lanesTimeRange === 24 ? 'selected' : ''}>±24h</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Time axis -->
+          <div class="timeline-lanes-axis">
+            <div class="lanes-axis-label">TIME</div>
+            <div class="lanes-axis-track">
+              ${timeMarkers.map(m => `
+                <div class="lanes-time-marker" style="left: ${m.position}%">
+                  <span class="lanes-time-label">${this._formatTimeUTC(m.time).slice(0, 5)}</span>
+                </div>
+              `).join('')}
+              <div class="lanes-now-marker ${this.lanesScrubbingTime ? 'is-scrubbing' : ''}" style="left: ${nowMarkerPosition}%">
+                <div class="lanes-now-line"></div>
+                <span class="lanes-now-label">${this.lanesScrubbingTime ? this._formatTimeUTC(this.lanesScrubbingTime) : 'NOW'}</span>
+                ${this.lanesScrubbingTime ? '<button class="lanes-return-now" title="Return to NOW">↩</button>' : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- Lanes Body -->
+          <div class="timeline-lanes-body">
+          <!-- Single vertical scrub line spanning all lanes -->
+          <div class="lanes-scrub-line ${this.lanesScrubbingTime ? 'is-scrubbing' : ''}" style="left: calc(120px + (100% - 120px) * ${nowMarkerPosition} / 100)"></div>
+
+          <div class="timeline-lanes-container">
+            ${pinnedTargets.length > 0 ? pinnedTargets.map(targetId => {
+              const target = this.targets.find(t => t.id === targetId)
+              const targetName = target?.name || target?.identifier || targetId
+              const targetEvents = filteredEvents
+                .filter(e => e.target_id === targetId)
+                .filter(e => {
+                  const eventTime = new Date(e.timestamp)
+                  return eventTime >= startTime && eventTime <= endTime
+                })
+
+              return `
+                <div class="timeline-lane" data-target-id="${targetId}">
+                  <div class="lane-header">
+                    <span class="lane-target-name">${targetName}</span>
+                    <button class="lane-unpin" data-target-id="${targetId}" title="Remove lane">×</button>
+                  </div>
+                  <div class="lane-track">
+                    ${targetEvents.map(event => {
+                      const eventTime = new Date(event.timestamp)
+                      const position = ((eventTime - startTime) / totalMs) * 100
+                      const typeClass = `lane-event-${event.type}`
+                      const statusClass = event.status === 'error' || event.status === 'failed' ? 'has-error' : ''
+                      const futureClass = event.is_future ? 'is-future' : ''
+
+                      return `
+                        <div class="lane-event ${typeClass} ${statusClass} ${futureClass}"
+                             style="left: ${position}%"
+                             data-event-id="${event.id}"
+                             title="${event.title} - ${this._formatTimeUTC(eventTime)}">
+                          ${this._getLaneEventSymbol(event)}
+                        </div>
+                      `
+                    }).join('')}
+                  </div>
+                </div>
+              `
+            }).join('') : `
+              <div class="timeline-empty-state">
+                No lanes pinned. Click "Add Lane" or right-click an event to pin a target.
+              </div>
+            `}
+          </div>
+
+          <!-- Fleet Summary Sparkline -->
+          <div class="timeline-lanes-summary">
+            <div class="lane-header">
+              <span class="lane-target-name">FLEET</span>
+            </div>
+            <div class="lane-track lane-summary-track">
+              ${this._renderFleetActivitySparkline(filteredEvents, startTime, endTime, totalMs)}
+            </div>
+          </div>
+        </div>
+
+          <!-- HUD Corner Accents for Lanes Panel -->
+          <div class="lanes-hud-corners"></div>
+        </div>
+
+        <!-- Fleet Activity Panel (Stage Panel style) -->
+        <div class="lanes-activity-panel ${this.lanesActivityExpanded ? 'expanded' : 'minimized'}"
+             style="${this.lanesActivityHeight ? `--activity-height: ${this.lanesActivityHeight}px;` : ''}">
+          <div class="lanes-activity-resize-handle" id="activity-resize-handle"></div>
+          <div class="lanes-activity-header" id="activity-panel-toggle">
+            <div class="lanes-activity-title">
+              <span class="lanes-activity-label">FLEET ACTIVITY</span>
+              ${this.lanesScrubbingTime ? `
+                <span class="lanes-activity-time">${this._formatTimeUTC(this.lanesScrubbingTime)}</span>
+              ` : this.lanesSelectedEvent ? `
+                <span class="lanes-activity-badge">EVENT DETAIL</span>
+              ` : `
+                <span class="lanes-activity-hint">${this.lanesActivityExpanded ? 'Click header to collapse' : 'Click to expand'}</span>
+              `}
+            </div>
+            <div class="lanes-activity-actions">
+              ${this.lanesScrubbingTime ? `
+                <button class="lanes-return-now-btn" title="Return to NOW">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span>NOW</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+          ${this.lanesActivityExpanded ? `
+            <div class="lanes-activity-body">
+              ${this._renderLanesActivityContent(filteredEvents, startTime, endTime)}
+            </div>
+          ` : ''}
+          <!-- HUD Corner Accents -->
+          <div class="lanes-activity-corners"></div>
+        </div>
+      </div>
+    `
+  },
+
+  _getLaneEventSymbol(event) {
+    const symbols = {
+      command: '·',
+      alarm: '●',
+      procedure: '▲',
+      automation: '◆'
+    }
+    return symbols[event.type] || '·'
+  },
+
+  _renderFleetActivitySparkline(events, startTime, endTime, totalMs) {
+    // Create activity buckets
+    const bucketCount = 50
+    const bucketMs = totalMs / bucketCount
+    const buckets = new Array(bucketCount).fill(0)
+
+    events.forEach(event => {
+      const eventTime = new Date(event.timestamp)
+      if (eventTime >= startTime && eventTime <= endTime) {
+        const bucketIndex = Math.floor((eventTime - startTime) / bucketMs)
+        if (bucketIndex >= 0 && bucketIndex < bucketCount) {
+          buckets[bucketIndex]++
+        }
+      }
+    })
+
+    const maxCount = Math.max(...buckets, 1)
+
+    return buckets.map((count, idx) => {
+      const height = (count / maxCount) * 100
+      const left = (idx / bucketCount) * 100
+      const width = 100 / bucketCount
+      return `
+        <div class="sparkline-bar"
+             style="left: ${left}%; width: ${width}%; height: ${height}%"
+             title="${count} events">
+        </div>
+      `
+    }).join('')
+  },
+
+  /**
+   * Render the Fleet Activity panel content based on current state.
+   */
+  _renderLanesActivityContent(filteredEvents, startTime, endTime) {
+    // If scrubbing, show events near the scrubbed time
+    if (this.lanesScrubbingTime) {
+      const windowMs = 60000 // ±1 minute window
+      const nearbyEvents = filteredEvents.filter(event => {
+        const eventTime = new Date(event.timestamp)
+        return Math.abs(eventTime - this.lanesScrubbingTime) <= windowMs
+      })
+
+      if (nearbyEvents.length === 0) {
+        return `
+          <div class="lanes-activity-empty">
+            <span class="empty-icon">○</span>
+            <span class="empty-text">No events at this time</span>
+          </div>
+        `
+      }
+
+      return `
+        <div class="lanes-activity-grid">
+          ${nearbyEvents.map(event => this._renderActivityCard(event)).join('')}
+        </div>
+      `
+    }
+
+    // If an event is selected, show its detail
+    if (this.lanesSelectedEvent) {
+      const event = this.timelineEvents.find(e => e.id === this.lanesSelectedEvent)
+      if (event) {
+        return this._renderActivityEventDetail(event)
+      }
+    }
+
+    // Default empty state
+    return `
+      <div class="lanes-activity-empty">
+        <span class="empty-icon">⊙</span>
+        <span class="empty-text">Drag the timeline scrubber or click an event to see activity</span>
+      </div>
+    `
+  },
+
+  /**
+   * Render a single activity card (for scrubbed events grid).
+   */
+  _renderActivityCard(event) {
+    const target = this.targets.find(t => t.id === event.target_id)
+    const targetName = target?.name || target?.identifier || 'Unknown'
+    const relativeTime = this._formatRelativeTime(new Date(event.timestamp))
+
+    return `
+      <div class="activity-card type-${event.type}" data-event-id="${event.id}">
+        <div class="activity-card-header">
+          <span class="activity-card-type">${event.type.toUpperCase().slice(0, 3)}</span>
+          <span class="activity-card-time">${relativeTime}</span>
+        </div>
+        <div class="activity-card-title">${event.title}</div>
+        <div class="activity-card-meta">
+          <span class="activity-card-target">${targetName}</span>
+          <span class="activity-card-status ${this._getStatusClass(event.status)}">${event.status_label || event.status}</span>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Render detailed view of a selected event.
+   */
+  _renderActivityEventDetail(event) {
+    const target = this.targets.find(t => t.id === event.target_id)
+    const targetName = target?.name || target?.identifier || event.target_id || 'Unknown'
+
+    return `
+      <div class="activity-detail">
+        <div class="activity-detail-header">
+          <span class="activity-detail-type type-${event.type}">${event.type.toUpperCase()}</span>
+          <span class="activity-detail-title">${event.title}</span>
+        </div>
+        <div class="activity-detail-grid">
+          <div class="activity-detail-row">
+            <span class="detail-label">TIME</span>
+            <span class="detail-value">${this._formatTimeUTC(new Date(event.timestamp))}</span>
+          </div>
+          <div class="activity-detail-row">
+            <span class="detail-label">TARGET</span>
+            <span class="detail-value">${targetName}</span>
+          </div>
+          <div class="activity-detail-row">
+            <span class="detail-label">STATUS</span>
+            <span class="detail-value ${this._getStatusClass(event.status)}">${event.status_label || event.status}</span>
+          </div>
+          ${event.description ? `
+            <div class="activity-detail-row full-width">
+              <span class="detail-label">DETAILS</span>
+              <span class="detail-value">${event.description}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `
+  },
+
+  _renderLanesEventDetail() {
+    const event = this.timelineEvents.find(e => e.id === this.lanesSelectedEvent)
+    if (!event) return ''
+
+    const target = this.targets.find(t => t.id === event.target_id)
+    const targetName = target?.name || target?.identifier || event.target_id || 'Unknown'
+
+    return `
+      <div class="timeline-lanes-detail">
+        <div class="lanes-detail-header">
+          <span class="detail-type type-${event.type}">${event.type.toUpperCase()}</span>
+          <span class="detail-title">${event.title}</span>
+          <span class="detail-time">${this._formatTimeUTC(new Date(event.timestamp))}</span>
+        </div>
+        <div class="lanes-detail-body">
+          <div class="detail-row">
+            <span class="detail-label">Target:</span>
+            <span class="detail-value">${targetName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status:</span>
+            <span class="detail-value ${this._getStatusClass(event.status)}">${event.status_label || event.status}</span>
+          </div>
+          ${event.description ? `
+            <div class="detail-row">
+              <span class="detail-label">Details:</span>
+              <span class="detail-value">${event.description}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `
+  },
+
+  _hideTimelineMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    const timelineContainer = dashboard.querySelector(".timeline-mode-container")
+    if (timelineContainer) {
+      timelineContainer.innerHTML = ""
+    }
+  },
+
+  _renderTimelineEvent(event) {
+    const timestamp = new Date(event.timestamp)
+    const relativeTime = this._formatRelativeTime(timestamp)
+    const statusClass = this._getStatusClass(event.status)
+    const typeClass = `timeline-event-${event.type}`
+    const futureClass = event.is_future ? 'timeline-event-future' : ''
+    const statusIcon = this._getStatusIcon(event.status)
+
+    return `
+      <div class="timeline-event ${typeClass} ${futureClass} ${statusClass}" data-event-id="${event.id}">
+        <div class="timeline-event-marker">
+          ${event.is_future ? '◇' : '●'}
+        </div>
+        <div class="timeline-event-content">
+          <div class="timeline-event-header">
+            <span class="timeline-event-time">${this._formatTimeUTC(timestamp)}</span>
+            <span class="timeline-event-relative" data-timestamp="${event.timestamp}">${relativeTime}</span>
+          </div>
+          <div class="timeline-event-body">
+            <span class="timeline-event-type-badge timeline-badge-${event.type}">${event.type.toUpperCase().slice(0, 3)}</span>
+            <span class="timeline-event-title">${event.title}</span>
+            ${event.target_name ? `<span class="timeline-event-target">→ ${event.target_name}</span>` : ''}
+          </div>
+          ${event.description ? `<div class="timeline-event-description">${event.description}</div>` : ''}
+        </div>
+        <div class="timeline-event-status ${statusClass}">
+          ${statusIcon} ${event.status_label || ''}
+        </div>
+      </div>
+    `
+  },
+
+  _bindTimelineModeEvents(container) {
+    // View tab switching
+    container.querySelectorAll('.timeline-view-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const view = tab.dataset.view
+        if (view && view !== this.timelineView) {
+          this.timelineView = view
+          this._renderTimelineMode()
+        }
+      })
+    })
+
+    // Event type filter toggles
+    container.querySelectorAll('.timeline-filter-toggle').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const type = toggle.dataset.type
+        if (this.timelineTypeFilter.has(type)) {
+          this.timelineTypeFilter.delete(type)
+          toggle.classList.remove('active')
+        } else {
+          this.timelineTypeFilter.add(type)
+          toggle.classList.add('active')
+        }
+        this._renderTimelineMode()
+      })
+    })
+
+    // Stream view controls
+    container.querySelector('#timeline-pause')?.addEventListener('click', () => {
+      this.timelinePaused = !this.timelinePaused
+      this._renderTimelineMode()
+    })
+
+    container.querySelector('#timeline-jump-now')?.addEventListener('click', () => {
+      const nowMarker = container.querySelector('.timeline-now-marker')
+      if (nowMarker) {
+        nowMarker.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    })
+
+    // Matrix view controls
+    container.querySelector('#matrix-bucket')?.addEventListener('change', (e) => {
+      this.matrixTimeBucket = parseInt(e.target.value, 10)
+      this.matrixSelectedCell = null
+      this._renderTimelineMode()
+    })
+
+    // Matrix cell clicks
+    container.querySelectorAll('.timeline-matrix-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        const bucketIndex = parseInt(cell.dataset.bucketIndex, 10)
+        this.matrixSelectedCell = { targetId, bucketIndex }
+        this._renderTimelineMode()
+      })
+    })
+
+    // Lanes view controls
+    container.querySelector('#lanes-range')?.addEventListener('change', (e) => {
+      this.lanesTimeRange = parseInt(e.target.value, 10)
+      this._renderTimelineMode()
+    })
+
+    container.querySelector('#lanes-add')?.addEventListener('click', () => {
+      // Show target picker - for now, just add next available target
+      const usedTargets = new Set(this.lanesPinnedTargets)
+      const nextTarget = this.targets.find(t => !usedTargets.has(t.id))
+      if (nextTarget) {
+        this.lanesPinnedTargets.push(nextTarget.id)
+        this._renderTimelineMode()
+      }
+    })
+
+    // Lane unpin buttons
+    container.querySelectorAll('.lane-unpin').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const targetId = btn.dataset.targetId
+        this.lanesPinnedTargets = this.lanesPinnedTargets.filter(id => id !== targetId)
+        this._renderTimelineMode()
+      })
+    })
+
+    // Lane event clicks
+    container.querySelectorAll('.lane-event').forEach(eventEl => {
+      eventEl.addEventListener('click', () => {
+        const eventId = eventEl.dataset.eventId
+        this.lanesSelectedEvent = eventId
+        this.lanesScrubbingTime = null  // Clear scrubbing when selecting an event
+        this.lanesActivityExpanded = true  // Auto-expand to show detail
+        this._renderTimelineMode()
+      })
+    })
+
+    // NOW marker drag handling for time scrubbing
+    const nowMarker = container.querySelector('.lanes-now-marker')
+    if (nowMarker) {
+      nowMarker.addEventListener('mousedown', (e) => this._startLanesScrubbing(e))
+      nowMarker.addEventListener('dblclick', () => this._returnToNow())
+    }
+
+    // Return to NOW button (in scrubbing detail panel)
+    container.querySelector('.lanes-return-now')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this._returnToNow()
+    })
+
+    container.querySelector('.lanes-return-now-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this._returnToNow()
+    })
+
+    // Activity panel toggle expand/collapse
+    container.querySelector('#activity-panel-toggle')?.addEventListener('click', (e) => {
+      // Don't toggle if clicking on a button
+      if (e.target.closest('button')) return
+      this.lanesActivityExpanded = !this.lanesActivityExpanded
+      this._renderTimelineMode()
+    })
+
+    // Activity panel resize handle
+    this._bindActivityPanelResize(container)
+
+    // Enhanced Stream view event handlers
+    // Event card expand/collapse
+    container.querySelectorAll('.stream-event').forEach(eventEl => {
+      eventEl.addEventListener('click', (e) => {
+        // Don't toggle if clicking action buttons
+        if (e.target.closest('.detail-action-btn')) return
+
+        // Preserve scroll position before re-render
+        const scrollContainer = document.getElementById('stream-events-container')
+        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0
+
+        const eventId = eventEl.dataset.eventId
+        if (this.streamExpandedEvent === eventId) {
+          this.streamExpandedEvent = null
+        } else {
+          this.streamExpandedEvent = eventId
+          this.streamExpandedCluster = null // Close any expanded cluster
+        }
+        this._renderTimelineMode()
+
+        // Restore scroll position after re-render
+        requestAnimationFrame(() => {
+          const newScrollContainer = document.getElementById('stream-events-container')
+          if (newScrollContainer) {
+            newScrollContainer.scrollTop = scrollTop
+          }
+        })
+      })
+    })
+
+    // Cluster expand/collapse
+    container.querySelectorAll('.stream-cluster').forEach(clusterEl => {
+      clusterEl.addEventListener('click', (e) => {
+        // Don't toggle if clicking on individual cluster events
+        if (e.target.closest('.cluster-event-item')) return
+
+        // Preserve scroll position before re-render
+        const scrollContainer = document.getElementById('stream-events-container')
+        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0
+
+        const clusterId = clusterEl.dataset.clusterId
+        if (this.streamExpandedCluster === clusterId) {
+          this.streamExpandedCluster = null
+        } else {
+          this.streamExpandedCluster = clusterId
+          this.streamExpandedEvent = null // Close any expanded event
+        }
+        this._renderTimelineMode()
+
+        // Restore scroll position after re-render
+        requestAnimationFrame(() => {
+          const newScrollContainer = document.getElementById('stream-events-container')
+          if (newScrollContainer) {
+            newScrollContainer.scrollTop = scrollTop
+          }
+        })
+      })
+    })
+
+    // Individual cluster event clicks
+    container.querySelectorAll('.cluster-event-item').forEach(eventEl => {
+      eventEl.addEventListener('click', (e) => {
+        e.stopPropagation()
+
+        // Preserve scroll position before re-render
+        const scrollContainer = document.getElementById('stream-events-container')
+        const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0
+
+        const eventId = eventEl.dataset.eventId
+        this.streamExpandedEvent = eventId
+        this.streamExpandedCluster = null
+        this._renderTimelineMode()
+
+        // Restore scroll position after re-render
+        requestAnimationFrame(() => {
+          const newScrollContainer = document.getElementById('stream-events-container')
+          if (newScrollContainer) {
+            newScrollContainer.scrollTop = scrollTop
+          }
+        })
+      })
+    })
+
+    // Action button handlers
+    container.querySelectorAll('.detail-action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const action = btn.dataset.action
+        const eventId = btn.dataset.eventId
+        this._handleStreamEventAction(action, eventId)
+      })
+    })
+
+    // Load More button handler - fetch more from server
+    const loadMoreBtn = container.querySelector('#stream-load-more')
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', () => {
+        this._loadMoreTimelineEvents()
+      })
+    }
+
+    // Infinite scroll - load more when near bottom (debounced)
+    const eventsContainer = container.querySelector('#stream-events-container')
+    if (eventsContainer) {
+      eventsContainer.addEventListener('scroll', () => {
+        this._debounce('streamScroll', () => {
+          const { scrollTop, scrollHeight, clientHeight } = eventsContainer
+          if (scrollTop + clientHeight >= scrollHeight - 100) {
+            // Near bottom, load more from server
+            this._loadMoreTimelineEvents()
+          }
+        }, 200)
+      })
+    }
+
+    // Stream target filter - target cell clicks
+    container.querySelectorAll('.stream-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        this._toggleStreamTargetFilter(targetId)
+      })
+    })
+
+    // Stream target filter - Select All button
+    container.querySelector('#stream-select-all-targets')?.addEventListener('click', () => {
+      this._selectAllStreamTargets()
+    })
+
+    // Stream target filter - Clear button
+    container.querySelector('#stream-clear-target-filter')?.addEventListener('click', () => {
+      this._clearStreamTargetFilter()
+    })
+
+    // Stream target filter - Search input (debounced)
+    const targetSearchInput = container.querySelector('#stream-target-search')
+    if (targetSearchInput) {
+      targetSearchInput.addEventListener('input', (e) => {
+        this._debounce('streamTargetSearch', () => {
+          this._handleStreamTargetSearch(e.target.value)
+        }, 150)
+      })
+    }
+
+    // Stream panel resize handle
+    const resizeHandle = container.querySelector('#stream-resize-handle')
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', (e) => {
+        this._startStreamPanelResize(e)
+      })
+    }
+
+    // Legacy timeline-event support (for Matrix/Lanes views)
+    container.querySelectorAll('.timeline-event').forEach(eventEl => {
+      eventEl.addEventListener('click', () => {
+        const eventId = eventEl.dataset.eventId
+        console.log('[Timeline] Event clicked:', eventId)
+      })
+    })
+  },
+
+  /**
+   * Handle action button clicks in stream event detail panel.
+   */
+  _handleStreamEventAction(action, eventId) {
+    const event = this.timelineEvents.find(e => e.id === eventId)
+    if (!event) return
+
+    switch (action) {
+      case 'rerun':
+        // Push event to server to re-run command
+        this.pushEvent('rerun_command', { command_log_id: event.source_id })
+        break
+      case 'acknowledge':
+        // Push event to server to acknowledge alarm
+        this.pushEvent('acknowledge_alarm', { alarm_event_id: event.source_id })
+        break
+      case 'copy':
+        // Copy event details to clipboard
+        const details = JSON.stringify(event, null, 2)
+        navigator.clipboard.writeText(details).then(() => {
+          console.log('[Stream] Event details copied to clipboard')
+        })
+        break
+    }
+  },
+
+  _formatTimeUTC(date) {
+    if (!(date instanceof Date)) date = new Date(date)
+    return date.toISOString().slice(11, 19) + ' UTC'
+  },
+
+  _formatRelativeTime(date) {
+    if (!(date instanceof Date)) date = new Date(date)
+    const now = new Date()
+    const diffMs = now - date
+    const diffSec = Math.abs(Math.floor(diffMs / 1000))
+    const diffMin = Math.floor(diffSec / 60)
+    const diffHour = Math.floor(diffMin / 60)
+    const diffDay = Math.floor(diffHour / 24)
+
+    const isFuture = diffMs < 0
+
+    if (diffSec < 60) return isFuture ? `in ${diffSec}s` : `${diffSec}s ago`
+    if (diffMin < 60) return isFuture ? `in ${diffMin}m` : `${diffMin}m ago`
+    if (diffHour < 24) return isFuture ? `in ${diffHour}h` : `${diffHour}h ago`
+    return isFuture ? `in ${diffDay}d` : `${diffDay}d ago`
+  },
+
+  /**
+   * Start scrubbing the NOW marker in Lanes view.
+   * Called on mousedown on the NOW marker.
+   */
+  _startLanesScrubbing(e) {
+    e.preventDefault()
+    this.lanesIsDragging = true
+    this.lanesSelectedEvent = null  // Clear selected event when starting to scrub
+
+    const container = this.panelLayout?.elements?.dashboard?.querySelector('.lanes-axis-track')
+    if (!container) return
+
+    const onMouseMove = (moveEvent) => {
+      if (!this.lanesIsDragging) return
+
+      const rect = container.getBoundingClientRect()
+      const x = Math.max(0, Math.min(moveEvent.clientX - rect.left, rect.width))
+      const percent = x / rect.width
+
+      // Calculate time from position
+      const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+      const now = new Date()
+      const startTime = new Date(now.getTime() - rangeMs)
+      const totalMs = rangeMs * 2
+
+      this.lanesScrubbingTime = new Date(startTime.getTime() + (percent * totalMs))
+      this._updateScrubbingPosition()
+      this._updateFleetActivityForTime(this.lanesScrubbingTime)
+    }
+
+    const onMouseUp = () => {
+      this.lanesIsDragging = false
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  },
+
+  /**
+   * Update the NOW marker position and label during scrubbing.
+   */
+  _updateScrubbingPosition() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const marker = dashboard?.querySelector('.lanes-now-marker')
+    if (!marker || !this.lanesScrubbingTime) return
+
+    const now = new Date()
+    const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+    const startTime = new Date(now.getTime() - rangeMs)
+    const totalMs = rangeMs * 2
+
+    const position = ((this.lanesScrubbingTime - startTime) / totalMs) * 100
+    const clampedPosition = Math.max(0, Math.min(100, position))
+    marker.style.left = `${clampedPosition}%`
+
+    // Update label
+    const label = marker.querySelector('.lanes-now-label')
+    if (label) {
+      label.textContent = this._formatTimeUTC(this.lanesScrubbingTime)
+    }
+
+    // Add scrubbing class if not already present
+    if (!marker.classList.contains('is-scrubbing')) {
+      marker.classList.add('is-scrubbing')
+    }
+
+    // Update the vertical scrub line position
+    const scrubLine = dashboard?.querySelector('.lanes-scrub-line')
+    if (scrubLine) {
+      scrubLine.style.left = `calc(120px + (100% - 120px) * ${clampedPosition} / 100)`
+      if (!scrubLine.classList.contains('is-scrubbing')) {
+        scrubLine.classList.add('is-scrubbing')
+      }
+    }
+  },
+
+  /**
+   * Return to live NOW mode from scrubbing.
+   */
+  _returnToNow() {
+    this.lanesScrubbingTime = null
+    this._renderTimelineMode()
+  },
+
+  /**
+   * Bind resize drag behavior to the Fleet Activity panel.
+   * Similar to the staging panel resize in Commands mode.
+   */
+  _bindActivityPanelResize(container) {
+    const handle = container.querySelector('#activity-resize-handle')
+    if (!handle) return
+
+    let panel = null
+    let isMinimized = false
+    let startY = 0
+    let startHeight = 0
+
+    const minHeight = 100
+    const maxHeight = () => window.innerHeight * 0.5
+    const expandThreshold = 30
+    const collapseThreshold = 60
+
+    const onMouseMove = (e) => {
+      if (!panel) return
+
+      const deltaY = startY - e.clientY  // Negative because we drag up to expand
+      const newHeight = startHeight + deltaY
+
+      panel.classList.add('resizing')
+
+      if (isMinimized) {
+        // When minimized, show preview of expansion
+        if (deltaY > 10) {
+          panel.style.height = `${Math.min(minHeight + deltaY, maxHeight())}px`
+          panel.style.opacity = Math.min(1, 0.5 + deltaY / 100)
+        }
+      } else {
+        // When expanded, resize normally
+        const clampedHeight = Math.max(minHeight, Math.min(newHeight, maxHeight()))
+        panel.style.height = `${clampedHeight}px`
+      }
+    }
+
+    const onMouseUp = (e) => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+
+      if (!panel) return
+
+      const deltaY = startY - e.clientY
+      const finalHeight = startHeight + deltaY
+
+      panel.classList.remove('resizing')
+      panel.style.opacity = ''
+
+      if (isMinimized) {
+        panel.style.height = ''
+        if (deltaY > expandThreshold) {
+          this.lanesActivityExpanded = true
+          this.lanesActivityHeight = Math.min(minHeight + deltaY, maxHeight())
+          this._renderTimelineMode()
+        }
+      } else {
+        if (finalHeight < collapseThreshold) {
+          this.lanesActivityExpanded = false
+          this.lanesActivityHeight = null
+          this._renderTimelineMode()
+        } else {
+          // Keep the new height
+          this.lanesActivityHeight = Math.max(minHeight, Math.min(finalHeight, maxHeight()))
+          panel.style.setProperty('--activity-height', `${this.lanesActivityHeight}px`)
+        }
+      }
+
+      panel = null
+    }
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+
+      panel = container.querySelector('.lanes-activity-panel.expanded') ||
+              container.querySelector('.lanes-activity-panel.minimized')
+      if (!panel) return
+
+      isMinimized = panel.classList.contains('minimized')
+      startY = e.clientY
+      startHeight = panel.offsetHeight
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
+  },
+
+  /**
+   * Update the fleet activity panel for a specific scrubbed time.
+   * Re-renders just the activity panel content for smooth updates during drag.
+   */
+  _updateFleetActivityForTime(time) {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    // Auto-expand if not already expanded
+    if (!this.lanesActivityExpanded) {
+      this.lanesActivityExpanded = true
+      this._renderTimelineMode()
+      return
+    }
+
+    // Update the activity panel content (only when already expanded)
+    const activityBody = dashboard.querySelector('.lanes-activity-body')
+    const activityTime = dashboard.querySelector('.lanes-activity-time')
+
+    if (activityTime) {
+      activityTime.textContent = this._formatTimeUTC(time)
+    }
+
+    if (activityBody) {
+      const filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
+      const windowMs = 60000 // ±1 minute window
+      const nearbyEvents = filteredEvents.filter(event => {
+        const eventTime = new Date(event.timestamp)
+        return Math.abs(eventTime - time) <= windowMs
+      })
+
+      if (nearbyEvents.length === 0) {
+        activityBody.innerHTML = `
+          <div class="lanes-activity-empty">
+            <span class="empty-icon">○</span>
+            <span class="empty-text">No events at this time</span>
+          </div>
+        `
+      } else {
+        activityBody.innerHTML = `
+          <div class="lanes-activity-grid">
+            ${nearbyEvents.map(event => this._renderActivityCard(event)).join('')}
+          </div>
+        `
+      }
+    }
+  },
+
+  /**
+   * Update live time-dependent elements in the timeline without full re-render.
+   * Called every second by the interval timer.
+   */
+  _updateTimelineLiveElements() {
+    // Only update if in timeline mode and not paused
+    if (this.currentMode !== 'timeline' || this.timelinePaused) return
+
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    const now = new Date()
+
+    // Update NOW marker label in Stream view (legacy)
+    const nowLabel = dashboard.querySelector('.timeline-now-label')
+    if (nowLabel) {
+      nowLabel.textContent = `NOW ${this._formatTimeUTC(now)}`
+    }
+
+    // Update enhanced Stream view NOW marker
+    const streamNowTime = dashboard.querySelector('.stream-now-time')
+    if (streamNowTime) {
+      streamNowTime.textContent = this._formatTimeUTC(now)
+    }
+
+    // Update relative times on all events (both legacy and enhanced)
+    dashboard.querySelectorAll('.timeline-event-relative[data-timestamp], .stream-event-relative[data-timestamp]').forEach(timeEl => {
+      const timestamp = timeEl.dataset.timestamp
+      if (timestamp) {
+        timeEl.textContent = this._formatRelativeTime(new Date(timestamp))
+      }
+    })
+
+    // Update Lanes view NOW marker position if visible AND not scrubbing
+    if (this.timelineView === 'lanes' && !this.lanesScrubbingTime) {
+      const lanesContainer = dashboard.querySelector('.timeline-lanes')
+      if (lanesContainer) {
+        const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+        const startTime = new Date(now.getTime() - rangeMs)
+        const totalMs = rangeMs * 2
+        const nowPosition = ((now - startTime) / totalMs) * 100
+
+        const nowMarker = lanesContainer.querySelector('.lanes-now-marker')
+        if (nowMarker) {
+          nowMarker.style.left = `${Math.max(0, Math.min(100, nowPosition))}%`
+        }
+      }
+    }
+  },
+
+  _getStatusClass(status) {
+    const statusMap = {
+      success: 'status-success',
+      verified: 'status-success',
+      completed: 'status-success',
+      cleared: 'status-success',
+      pending: 'status-pending',
+      running: 'status-running',
+      active: 'status-active',
+      error: 'status-error',
+      failed: 'status-error'
+    }
+    return statusMap[status] || 'status-default'
+  },
+
+  _getStatusIcon(status) {
+    const iconMap = {
+      success: '✓',
+      verified: '✓',
+      completed: '✓',
+      cleared: '✓',
+      pending: '◷',
+      running: '▶',
+      active: '⚠',
+      error: '✖',
+      failed: '✖'
+    }
+    return iconMap[status] || ''
+  },
+
+  _handleTimelineEvent(event) {
+    // Find existing event with same ID
+    const existingIndex = this.timelineEvents.findIndex(e => e.id === event.id)
+
+    if (existingIndex >= 0) {
+      // Update existing event
+      this.timelineEvents[existingIndex] = event
+    } else {
+      // Add new event and sort by timestamp
+      this.timelineEvents.push(event)
+      this.timelineEvents.sort((a, b) => {
+        const dateA = new Date(a.timestamp)
+        const dateB = new Date(b.timestamp)
+        return dateB - dateA // Descending (newest first in memory)
+      })
+
+      // Trim to reasonable size (keep last 500 events)
+      if (this.timelineEvents.length > 500) {
+        this.timelineEvents = this.timelineEvents.slice(0, 500)
+      }
+    }
+
+    // Re-render if in timeline mode and not paused
+    if (this.currentMode === 'timeline' && !this.timelinePaused) {
+      // _renderTimelineMode modifies DOM directly, just call it
+      this._renderTimelineMode()
+
+      // Auto-scroll to show new event if it's recent
+      const eventDate = new Date(event.timestamp)
+      const now = new Date()
+      const diffMs = Math.abs(now - eventDate)
+
+      // If event is within 1 minute of now, scroll to make it visible
+      if (diffMs < 60000) {
+        const dashboard = this.panelLayout?.elements?.dashboard
+        const nowMarker = dashboard?.querySelector('.timeline-now-marker')
+        if (nowMarker) {
+          nowMarker.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }
+    }
+  },
+
+  /**
+   * Handle response from server with more timeline events (infinite scroll).
+   */
+  _handleMoreTimelineEvents(newEvents, hasMore) {
+    this.streamLoadingMore = false
+    this.streamHasMoreEvents = hasMore
+
+    // Capture scroll position before re-render
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const scrollContainer = dashboard?.querySelector('#stream-events-container')
+    const savedScrollTop = scrollContainer?.scrollTop || 0
+
+    if (!newEvents || newEvents.length === 0) {
+      // No more events, just re-render to update UI state
+      if (this.currentMode === 'timeline') {
+        this._renderTimelineMode()
+        // Restore scroll position
+        this._restoreStreamScrollPosition(savedScrollTop)
+      }
+      return
+    }
+
+    // Add new events to our collection (avoiding duplicates)
+    const existingIds = new Set(this.timelineEvents.map(e => e.id))
+    const uniqueNewEvents = newEvents.filter(e => !existingIds.has(e.id))
+
+    this.timelineEvents = [...this.timelineEvents, ...uniqueNewEvents]
+
+    // Sort by timestamp descending
+    this.timelineEvents.sort((a, b) => {
+      const dateA = new Date(a.timestamp)
+      const dateB = new Date(b.timestamp)
+      return dateB - dateA
+    })
+
+    // Re-render to show new events
+    if (this.currentMode === 'timeline') {
+      this._renderTimelineMode()
+      // Restore scroll position after render
+      this._restoreStreamScrollPosition(savedScrollTop)
+    }
+  },
+
+  /**
+   * Restore scroll position after re-render (for infinite scroll).
+   */
+  _restoreStreamScrollPosition(scrollTop) {
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      const dashboard = this.panelLayout?.elements?.dashboard
+      const scrollContainer = dashboard?.querySelector('#stream-events-container')
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollTop
+      }
+    })
+  },
+
+  /**
+   * Load more timeline events from the server using cursor-based pagination.
+   */
+  _loadMoreTimelineEvents() {
+    if (this.streamLoadingMore || !this.streamHasMoreEvents) {
+      return
+    }
+
+    // Find the oldest event timestamp as our cursor
+    const now = new Date()
+    const pastEvents = this.timelineEvents.filter(e =>
+      !e.is_future && new Date(e.timestamp) <= now
+    )
+
+    if (pastEvents.length === 0) {
+      return
+    }
+
+    // Get oldest event's timestamp
+    const oldestEvent = pastEvents.reduce((oldest, e) => {
+      const eDate = new Date(e.timestamp)
+      const oldestDate = new Date(oldest.timestamp)
+      return eDate < oldestDate ? e : oldest
+    }, pastEvents[0])
+
+    // Capture scroll position before showing loading state
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const scrollContainer = dashboard?.querySelector('#stream-events-container')
+    const savedScrollTop = scrollContainer?.scrollTop || 0
+
+    this.streamLoadingMore = true
+
+    // Re-render to show loading state, preserving scroll
+    if (this.currentMode === 'timeline') {
+      this._renderTimelineMode()
+      this._restoreStreamScrollPosition(savedScrollTop)
+    }
+
+    // Request more events from server, including filter state
+    this.pushEvent("load_more_timeline_events", {
+      cursor: oldestEvent.timestamp,
+      target_ids: Array.from(this.streamTargetFilter),
+      include_system: this.streamShowSystem
+    })
   },
 
   _renderTargetGrid() {
@@ -3613,6 +6109,12 @@ export const OpsConsoleV2Hook = {
 
   destroyed() {
     console.log("[OpsConsoleV2] Destroying...")
+
+    // Clean up timeline update interval
+    if (this._timelineUpdateInterval) {
+      clearInterval(this._timelineUpdateInterval)
+      this._timelineUpdateInterval = null
+    }
 
     // Remove keyboard handler
     if (this._keydownHandler) {
