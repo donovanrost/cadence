@@ -96,6 +96,13 @@ export const OpsConsoleV2Hook = {
     this.lanesIsDragging = false          // Whether currently dragging the NOW marker
     this.lanesActivityExpanded = false    // Whether activity panel is expanded
     this.lanesActivityHeight = null       // Custom height when resized (null = default)
+    this.lanesTargetSearch = ''           // Target search/filter text for picker
+    this.lanesTargetPanelWidth = 220      // Target panel width in pixels
+    this.lanesViewOffset = 0              // Time offset in ms from NOW (negative = past)
+    this.lanesScrubberPosition = 80       // Scrubber position as percentage (0-100)
+    this.lanesIsPanning = false           // Whether currently panning via drag
+    this.lanesPanStartX = 0               // Mouse X at drag start
+    this.lanesPanStartOffset = 0          // Offset at drag start
 
     // Stream view enhanced state
     this.streamExpandedEvent = null       // ID of currently expanded event
@@ -1302,7 +1309,6 @@ export const OpsConsoleV2Hook = {
               <option value="12" ${this.lanesTimeRange === 12 ? 'selected' : ''}>±12 hours</option>
               <option value="24" ${this.lanesTimeRange === 24 ? 'selected' : ''}>±24 hours</option>
             </select>
-            <button class="timeline-action-btn" id="lanes-add">+ ADD LANE</button>
           </div>
         `
       case 'stream':
@@ -2462,23 +2468,38 @@ export const OpsConsoleV2Hook = {
   _renderLanesViewContent() {
     const now = new Date()
     const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
-    const startTime = new Date(now.getTime() - rangeMs)
-    const endTime = new Date(now.getTime() + rangeMs)
+
+    // Calculate view window based on offset (for horizontal panning)
+    // Show 80% past and 20% future (viewCenter is at 80% position)
+    const viewCenter = new Date(now.getTime() + this.lanesViewOffset)
+    const pastMs = rangeMs * 1.6    // 80% of total range
+    const futureMs = rangeMs * 0.4  // 20% of total range
+    const startTime = new Date(viewCenter.getTime() - pastMs)
+    const endTime = new Date(viewCenter.getTime() + futureMs)
     const totalMs = endTime - startTime
 
     const filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
 
-    // Get pinned targets or default to first few targets with events
-    let pinnedTargets = this.lanesPinnedTargets
-    if (pinnedTargets.length === 0) {
-      // Auto-pin targets that have events
-      const targetsWithEvents = new Set(filteredEvents.map(e => e.target_id).filter(Boolean))
-      pinnedTargets = Array.from(targetsWithEvents).slice(0, 5)
-    }
+    // Use only explicitly selected targets (no auto-pin to avoid state mismatch)
+    const pinnedTargets = this.lanesPinnedTargets
 
-    // Calculate NOW marker position as percentage (NOW or scrubbed time)
-    const nowMarkerTime = this.lanesScrubbingTime || now
-    const nowMarkerPosition = ((nowMarkerTime - startTime) / totalMs) * 100
+    // The scrubber position is draggable within the timeline
+    // viewTime is calculated based on where the scrubber sits within the visible window
+    const scrubberPosition = this.lanesScrubberPosition
+    const viewTime = new Date(startTime.getTime() + (totalMs * scrubberPosition / 100))
+    const isViewingNow = Math.abs(viewTime - now) < 60000  // Scrubber within 1 minute of NOW
+    const scrubberLabel = isViewingNow ? 'NOW' : this._formatTimeUTC(viewTime)
+
+    // Calculate where real NOW is (for showing an indicator when scrolled away)
+    const realNowPosition = ((now - startTime) / totalMs) * 100
+    const realNowInView = realNowPosition >= 0 && realNowPosition <= 100
+
+    // Check if there are events near the current view time (for handle pulse indicator)
+    const eventWindowMs = 60000 // ±1 minute
+    const hasNearbyEvents = filteredEvents.some(event => {
+      const eventTime = new Date(event.timestamp)
+      return Math.abs(eventTime - viewTime) <= eventWindowMs
+    })
 
     // Generate time markers
     const timeMarkers = []
@@ -2492,25 +2513,34 @@ export const OpsConsoleV2Hook = {
 
     return `
       <div class="timeline-lanes">
-        <!-- HUD Lanes Panel -->
-        <div class="lanes-hud-panel">
-          <!-- Panel Header -->
-          <div class="lanes-panel-header">
-            <div class="lanes-panel-title">
-              <span class="lanes-panel-label">TARGET LANES</span>
-              <span class="lanes-panel-count">${pinnedTargets.length} TARGETS</span>
-            </div>
-            <div class="lanes-panel-controls">
-              <select id="lanes-range" class="lanes-range-select">
-                <option value="2" ${this.lanesTimeRange === 2 ? 'selected' : ''}>±2h</option>
-                <option value="6" ${this.lanesTimeRange === 6 ? 'selected' : ''}>±6h</option>
-                <option value="12" ${this.lanesTimeRange === 12 ? 'selected' : ''}>±12h</option>
-                <option value="24" ${this.lanesTimeRange === 24 ? 'selected' : ''}>±24h</option>
-              </select>
-            </div>
-          </div>
+        <div class="lanes-split-layout">
+          <!-- Left Panel: Target Selector -->
+          ${this._renderLanesTargetPickerPanel()}
 
-          <!-- Time axis -->
+          <!-- Resize Handle -->
+          <div class="lanes-resize-handle" id="lanes-resize-handle"></div>
+
+          <!-- Right Panel: Lanes Content -->
+          <div class="lanes-main-panel">
+            <!-- HUD Lanes Panel -->
+            <div class="lanes-hud-panel">
+              <!-- Panel Header -->
+              <div class="lanes-panel-header">
+                <div class="lanes-panel-title">
+                  <span class="lanes-panel-label">TARGET LANES</span>
+                  <span class="lanes-panel-count">${pinnedTargets.length} TARGETS</span>
+                </div>
+                <div class="lanes-panel-controls">
+                  <select id="lanes-range" class="lanes-range-select">
+                    <option value="2" ${this.lanesTimeRange === 2 ? 'selected' : ''}>±2h</option>
+                    <option value="6" ${this.lanesTimeRange === 6 ? 'selected' : ''}>±6h</option>
+                    <option value="12" ${this.lanesTimeRange === 12 ? 'selected' : ''}>±12h</option>
+                    <option value="24" ${this.lanesTimeRange === 24 ? 'selected' : ''}>±24h</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Time axis -->
           <div class="timeline-lanes-axis">
             <div class="lanes-axis-label">TIME</div>
             <div class="lanes-axis-track">
@@ -2519,25 +2549,50 @@ export const OpsConsoleV2Hook = {
                   <span class="lanes-time-label">${this._formatTimeUTC(m.time).slice(0, 5)}</span>
                 </div>
               `).join('')}
-              <div class="lanes-now-marker ${this.lanesScrubbingTime ? 'is-scrubbing' : ''}" style="left: ${nowMarkerPosition}%">
+              <!-- View marker at 80% position (80% past, 20% future) -->
+              <div class="lanes-view-marker ${isViewingNow ? '' : 'is-historical'}" style="left: ${scrubberPosition}%">
                 <div class="lanes-now-line"></div>
-                <span class="lanes-now-label">${this.lanesScrubbingTime ? this._formatTimeUTC(this.lanesScrubbingTime) : 'NOW'}</span>
-                ${this.lanesScrubbingTime ? '<button class="lanes-return-now" title="Return to NOW">↩</button>' : ''}
+                <span class="lanes-now-label">${scrubberLabel}</span>
               </div>
+              <!-- Real NOW indicator when scrolled away -->
+              ${!isViewingNow && realNowInView ? `
+                <div class="lanes-real-now-marker" style="left: ${realNowPosition}%">
+                  <div class="lanes-real-now-line"></div>
+                </div>
+              ` : ''}
+              ${!isViewingNow && !realNowInView ? `
+                <div class="lanes-now-indicator ${realNowPosition > 100 ? 'right' : 'left'}">
+                  <button class="lanes-jump-now-btn" title="Jump to NOW">
+                    ${realNowPosition > 100 ? '▶' : '◀'} NOW
+                  </button>
+                </div>
+              ` : ''}
             </div>
           </div>
 
           <!-- Lanes Body -->
           <div class="timeline-lanes-body">
-          <!-- Single vertical scrub line spanning all lanes -->
-          <div class="lanes-scrub-line ${this.lanesScrubbingTime ? 'is-scrubbing' : ''}" style="left: calc(120px + (100% - 120px) * ${nowMarkerPosition} / 100)"></div>
+          <!-- Single vertical scrub line spanning all lanes at 80% position -->
+          <div class="lanes-scrub-line ${!isViewingNow ? 'is-historical' : ''}" style="left: calc(120px + (100% - 120px) * ${scrubberPosition} / 100)"></div>
+          <!-- Real NOW line in body when scrolled away -->
+          ${!isViewingNow && realNowInView ? `
+            <div class="lanes-real-now-line-body" style="left: calc(120px + (100% - 120px) * ${realNowPosition} / 100)"></div>
+          ` : ''}
 
           <div class="timeline-lanes-container">
             ${pinnedTargets.length > 0 ? pinnedTargets.map(targetId => {
-              const target = this.targets.find(t => t.id === targetId)
-              const targetName = target?.name || target?.identifier || targetId
+              // Handle type conversion for target matching (dataset returns strings)
+              const target = this.targets.find(t => String(t.id) === String(targetId))
+              const targetName = targetId === '__SYSTEM__' ? '◆ SYSTEM' : (target?.name || target?.identifier || targetId)
               const targetEvents = filteredEvents
-                .filter(e => e.target_id === targetId)
+                .filter(e => {
+                  // SYSTEM lane shows events without target_id
+                  if (targetId === '__SYSTEM__') {
+                    return !e.target_id
+                  }
+                  // Compare as strings to handle type mismatches
+                  return String(e.target_id) === String(targetId)
+                })
                 .filter(e => {
                   const eventTime = new Date(e.timestamp)
                   return eventTime >= startTime && eventTime <= endTime
@@ -2571,7 +2626,7 @@ export const OpsConsoleV2Hook = {
               `
             }).join('') : `
               <div class="timeline-empty-state">
-                No lanes pinned. Click "Add Lane" or right-click an event to pin a target.
+                Select targets from the panel on the left to show lanes.
               </div>
             `}
           </div>
@@ -2592,22 +2647,20 @@ export const OpsConsoleV2Hook = {
         </div>
 
         <!-- Fleet Activity Panel (Stage Panel style) -->
-        <div class="lanes-activity-panel ${this.lanesActivityExpanded ? 'expanded' : 'minimized'}"
+        <div class="lanes-activity-panel ${this.lanesActivityExpanded ? 'expanded' : 'minimized'}${!this.lanesActivityExpanded && hasNearbyEvents ? ' has-events' : ''}"
              style="${this.lanesActivityHeight ? `--activity-height: ${this.lanesActivityHeight}px;` : ''}">
           <div class="lanes-activity-resize-handle" id="activity-resize-handle"></div>
           <div class="lanes-activity-header" id="activity-panel-toggle">
             <div class="lanes-activity-title">
               <span class="lanes-activity-label">FLEET ACTIVITY</span>
-              ${this.lanesScrubbingTime ? `
-                <span class="lanes-activity-time">${this._formatTimeUTC(this.lanesScrubbingTime)}</span>
-              ` : this.lanesSelectedEvent ? `
+              ${this.lanesSelectedEvent ? `
                 <span class="lanes-activity-badge">EVENT DETAIL</span>
               ` : `
                 <span class="lanes-activity-hint">${this.lanesActivityExpanded ? 'Click header to collapse' : 'Click to expand'}</span>
               `}
             </div>
             <div class="lanes-activity-actions">
-              ${this.lanesScrubbingTime ? `
+              ${!isViewingNow ? `
                 <button class="lanes-return-now-btn" title="Return to NOW">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -2624,6 +2677,8 @@ export const OpsConsoleV2Hook = {
           ` : ''}
           <!-- HUD Corner Accents -->
           <div class="lanes-activity-corners"></div>
+        </div>
+          </div>
         </div>
       </div>
     `
@@ -2671,15 +2726,133 @@ export const OpsConsoleV2Hook = {
   },
 
   /**
+   * Render the Lanes target selector panel (side panel like Stream View).
+   */
+  _renderLanesTargetPickerPanel() {
+    // Convert to strings for consistent comparison (dataset attributes return strings)
+    const pinnedSet = new Set(this.lanesPinnedTargets.map(String))
+
+    // Gather ALL targets from events and available targets list (use string IDs for consistency)
+    const targetMap = new Map()
+    this.timelineEvents.forEach(e => {
+      if (e.target_id && e.target_name) {
+        const strId = String(e.target_id)
+        targetMap.set(strId, {
+          id: strId,
+          name: e.target_name,
+          status: e.target_status || 'online'
+        })
+      }
+    })
+
+    const availableTargets = JSON.parse(this.el.dataset.targets || '[]')
+    availableTargets.forEach(t => {
+      const strId = String(t.id)
+      if (!targetMap.has(strId)) {
+        targetMap.set(strId, {
+          id: strId,
+          name: t.name,
+          status: t.status || 'online'
+        })
+      }
+    })
+
+    const targets = Array.from(targetMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    )
+
+    // Apply search filter
+    const filteredTargets = this.lanesTargetSearch
+      ? targets.filter(t =>
+          t.name.toLowerCase().includes(this.lanesTargetSearch.toLowerCase())
+        )
+      : targets
+
+    // Count system events
+    const systemEventCount = this.timelineEvents.filter(e => !e.target_id).length
+    const systemSelected = pinnedSet.has('__SYSTEM__')
+
+    // Calculate selected count
+    const totalCount = targets.length + 1 // +1 for SYSTEM
+    const selectedCount = pinnedSet.size
+    const countText = `${selectedCount} of ${totalCount}`
+
+    return `
+      <div class="lanes-target-picker-panel" style="flex: 0 0 ${this.lanesTargetPanelWidth}px;">
+        <div class="lanes-target-picker-header">
+          <div class="lanes-picker-title-row">
+            <span class="lanes-picker-title">FILTER BY TARGET</span>
+            <span class="lanes-picker-count">${countText}</span>
+          </div>
+        </div>
+
+        <div class="lanes-target-search-wrapper">
+          <input type="text"
+                 class="lanes-target-search"
+                 id="lanes-target-search"
+                 placeholder="Filter targets..."
+                 value="${this.lanesTargetSearch}" />
+        </div>
+
+        <div class="lanes-target-grid" id="lanes-target-grid">
+          ${this._renderLanesTargetGrid(filteredTargets, systemEventCount, systemSelected, pinnedSet)}
+        </div>
+
+        <div class="lanes-picker-actions">
+          <button class="lanes-picker-action" id="lanes-select-all">Select All</button>
+          <button class="lanes-picker-action" id="lanes-clear-all">Clear</button>
+        </div>
+      </div>
+    `
+  },
+
+  /**
+   * Render the target grid cells for the lanes picker.
+   */
+  _renderLanesTargetGrid(targets, systemEventCount, systemSelected, pinnedSet) {
+    // SYSTEM pseudo-target (for events without target_id)
+    const systemCell = `
+      <div class="lanes-target-cell system-target ${systemSelected ? 'selected' : ''}"
+           data-target-id="__SYSTEM__"
+           title="System events (${systemEventCount} events)">
+        <span class="lanes-target-name">◆ SYSTEM</span>
+      </div>
+    `
+
+    // Regular target cells
+    const targetCells = targets.map(target => {
+      const statusClass = `status-${target.status || 'online'}`
+      const isSelected = pinnedSet.has(String(target.id))
+      return `
+        <div class="lanes-target-cell ${statusClass} ${isSelected ? 'selected' : ''}"
+             data-target-id="${target.id}"
+             title="${target.name}">
+          <span class="lanes-target-name">${target.name}</span>
+        </div>
+      `
+    }).join('')
+
+    if (targets.length === 0 && systemEventCount === 0) {
+      return `<div class="lanes-picker-empty">No targets available</div>`
+    }
+
+    return systemCell + targetCells
+  },
+
+  /**
    * Render the Fleet Activity panel content based on current state.
    */
   _renderLanesActivityContent(filteredEvents, startTime, endTime) {
-    // If scrubbing, show events near the scrubbed time
-    if (this.lanesScrubbingTime) {
+    const isViewingNow = Math.abs(this.lanesViewOffset) < 60000
+
+    // If viewing historical time (scrolled away from NOW), show events near view center
+    if (!isViewingNow) {
+      const now = new Date()
+      const viewCenterTime = new Date(now.getTime() + this.lanesViewOffset)
       const windowMs = 60000 // ±1 minute window
       const nearbyEvents = filteredEvents.filter(event => {
         const eventTime = new Date(event.timestamp)
-        return Math.abs(eventTime - this.lanesScrubbingTime) <= windowMs
+        return Math.abs(eventTime - viewCenterTime) <= windowMs
       })
 
       if (nearbyEvents.length === 0) {
@@ -2710,7 +2883,7 @@ export const OpsConsoleV2Hook = {
     return `
       <div class="lanes-activity-empty">
         <span class="empty-icon">⊙</span>
-        <span class="empty-text">Drag the timeline scrubber or click an event to see activity</span>
+        <span class="empty-text">Scroll the timeline or click an event to see activity</span>
       </div>
     `
   },
@@ -2914,15 +3087,50 @@ export const OpsConsoleV2Hook = {
       this._renderTimelineMode()
     })
 
-    container.querySelector('#lanes-add')?.addEventListener('click', () => {
-      // Show target picker - for now, just add next available target
-      const usedTargets = new Set(this.lanesPinnedTargets)
-      const nextTarget = this.targets.find(t => !usedTargets.has(t.id))
-      if (nextTarget) {
-        this.lanesPinnedTargets.push(nextTarget.id)
-        this._renderTimelineMode()
-      }
+    // Target picker search input
+    container.querySelector('#lanes-target-search')?.addEventListener('input', (e) => {
+      this.lanesTargetSearch = e.target.value
+      this._renderTimelineMode()
     })
+
+    // Target picker cell clicks - toggle selection (like Stream View)
+    container.querySelectorAll('.lanes-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        const index = this.lanesPinnedTargets.indexOf(targetId)
+        if (index >= 0) {
+          // Already selected - remove it
+          this.lanesPinnedTargets.splice(index, 1)
+        } else {
+          // Not selected - add it
+          this.lanesPinnedTargets.push(targetId)
+        }
+        this._renderTimelineMode()
+      })
+    })
+
+    // Select All button
+    container.querySelector('#lanes-select-all')?.addEventListener('click', () => {
+      // Gather all target IDs (convert to strings for consistency)
+      const targetMap = new Map()
+      this.timelineEvents.forEach(e => {
+        if (e.target_id) targetMap.set(String(e.target_id), true)
+      })
+      const availableTargets = JSON.parse(this.el.dataset.targets || '[]')
+      availableTargets.forEach(t => targetMap.set(String(t.id), true))
+
+      this.lanesPinnedTargets = ['__SYSTEM__', ...Array.from(targetMap.keys())]
+      this._renderTimelineMode()
+    })
+
+    // Clear button
+    container.querySelector('#lanes-clear-all')?.addEventListener('click', () => {
+      this.lanesPinnedTargets = []
+      this._renderTimelineMode()
+    })
+
+    // Lanes panel resize handle
+    this._bindLanesPanelResize(container)
 
     // Lane unpin buttons
     container.querySelectorAll('.lane-unpin').forEach(btn => {
@@ -2939,17 +3147,16 @@ export const OpsConsoleV2Hook = {
       eventEl.addEventListener('click', () => {
         const eventId = eventEl.dataset.eventId
         this.lanesSelectedEvent = eventId
-        this.lanesScrubbingTime = null  // Clear scrubbing when selecting an event
         this.lanesActivityExpanded = true  // Auto-expand to show detail
         this._renderTimelineMode()
       })
     })
 
-    // NOW marker drag handling for time scrubbing
-    const nowMarker = container.querySelector('.lanes-now-marker')
-    if (nowMarker) {
-      nowMarker.addEventListener('mousedown', (e) => this._startLanesScrubbing(e))
-      nowMarker.addEventListener('dblclick', () => this._returnToNow())
+    // View marker drag handling for time scrubbing
+    const viewMarker = container.querySelector('.lanes-view-marker')
+    if (viewMarker) {
+      viewMarker.addEventListener('mousedown', (e) => this._startLanesScrubbing(e))
+      viewMarker.addEventListener('dblclick', () => this._returnToNow())
     }
 
     // Return to NOW button (in scrubbing detail panel)
@@ -2973,6 +3180,45 @@ export const OpsConsoleV2Hook = {
 
     // Activity panel resize handle
     this._bindActivityPanelResize(container)
+
+    // Lanes horizontal panning via wheel scroll
+    const lanesBody = container.querySelector('.timeline-lanes-body')
+    if (lanesBody) {
+      lanesBody.addEventListener('wheel', (e) => {
+        // Don't scroll while dragging
+        if (this.lanesIsDragging || this.lanesIsPanning) return
+
+        // Horizontal scroll with shift+wheel or horizontal trackpad gesture
+        if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          e.preventDefault()
+
+          // Convert scroll delta to time offset
+          // Sensitivity: ~500px of scroll = full range width
+          const scrollSensitivity = (this.lanesTimeRange * 60 * 60 * 1000 * 2) / 500
+          const delta = (e.deltaX || e.deltaY) * scrollSensitivity
+
+          this.lanesViewOffset += delta
+          this._checkLanesNeedMoreEvents()
+          this._renderTimelineMode()
+        }
+      }, { passive: false })
+
+      // Drag panning on lanes body
+      lanesBody.addEventListener('mousedown', (e) => {
+        // Only initiate pan on left click and not on interactive elements
+        if (e.button !== 0) return
+        if (this.lanesIsDragging || this.lanesIsPanning) return
+        if (e.target.closest('.lane-event, .lane-unpin, .lanes-view-marker, button')) return
+
+        this._startLanesPanning(e, lanesBody)
+      })
+    }
+
+    // Jump to NOW button (when panned away)
+    container.querySelector('.lanes-jump-now-btn')?.addEventListener('click', () => {
+      this.lanesViewOffset = 0
+      this._renderTimelineMode()
+    })
 
     // Enhanced Stream view event handlers
     // Event card expand/collapse
@@ -3183,39 +3429,45 @@ export const OpsConsoleV2Hook = {
   },
 
   /**
-   * Start scrubbing the NOW marker in Lanes view.
-   * Called on mousedown on the NOW marker.
+   * Start scrubbing from the view marker in Lanes view.
+   * Dragging the marker moves the scrubber position within the timeline.
    */
   _startLanesScrubbing(e) {
     e.preventDefault()
+    e.stopPropagation()
+
+    const axisTrack = this.panelLayout?.elements?.dashboard?.querySelector('.lanes-axis-track')
+    if (!axisTrack) return
+
     this.lanesIsDragging = true
     this.lanesSelectedEvent = null  // Clear selected event when starting to scrub
 
-    const container = this.panelLayout?.elements?.dashboard?.querySelector('.lanes-axis-track')
-    if (!container) return
+    const trackRect = axisTrack.getBoundingClientRect()
+    const startX = e.clientX
+    const startPosition = this.lanesScrubberPosition
 
     const onMouseMove = (moveEvent) => {
       if (!this.lanesIsDragging) return
 
-      const rect = container.getBoundingClientRect()
-      const x = Math.max(0, Math.min(moveEvent.clientX - rect.left, rect.width))
-      const percent = x / rect.width
+      const deltaX = moveEvent.clientX - startX
+      const trackWidth = trackRect.width
 
-      // Calculate time from position
-      const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
-      const now = new Date()
-      const startTime = new Date(now.getTime() - rangeMs)
-      const totalMs = rangeMs * 2
+      // Convert pixel movement to percentage
+      const deltaPercent = (deltaX / trackWidth) * 100
 
-      this.lanesScrubbingTime = new Date(startTime.getTime() + (percent * totalMs))
-      this._updateScrubbingPosition()
-      this._updateFleetActivityForTime(this.lanesScrubbingTime)
+      // Constrain to 0-100%
+      let newPosition = startPosition + deltaPercent
+      newPosition = Math.max(0, Math.min(100, newPosition))
+
+      this.lanesScrubberPosition = newPosition
+      this._renderTimelineMode()
     }
 
     const onMouseUp = () => {
       this.lanesIsDragging = false
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
+      this._renderTimelineMode()
     }
 
     document.addEventListener('mousemove', onMouseMove)
@@ -3223,40 +3475,45 @@ export const OpsConsoleV2Hook = {
   },
 
   /**
-   * Update the NOW marker position and label during scrubbing.
+   * Update the view marker label during drag without full re-render.
    */
-  _updateScrubbingPosition() {
+  _updateViewMarkerLabel() {
     const dashboard = this.panelLayout?.elements?.dashboard
-    const marker = dashboard?.querySelector('.lanes-now-marker')
-    if (!marker || !this.lanesScrubbingTime) return
+    const marker = dashboard?.querySelector('.lanes-view-marker')
+    if (!marker) return
 
     const now = new Date()
     const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
-    const startTime = new Date(now.getTime() - rangeMs)
+    const viewCenter = new Date(now.getTime() + this.lanesViewOffset)
+    const pastMs = rangeMs * 1.6
+    const startTime = new Date(viewCenter.getTime() - pastMs)
     const totalMs = rangeMs * 2
-
-    const position = ((this.lanesScrubbingTime - startTime) / totalMs) * 100
-    const clampedPosition = Math.max(0, Math.min(100, position))
-    marker.style.left = `${clampedPosition}%`
+    const viewTime = new Date(startTime.getTime() + (totalMs * this.lanesScrubberPosition / 100))
+    const isViewingNow = Math.abs(viewTime - now) < 60000
 
     // Update label
     const label = marker.querySelector('.lanes-now-label')
     if (label) {
-      label.textContent = this._formatTimeUTC(this.lanesScrubbingTime)
+      label.textContent = isViewingNow ? 'NOW' : this._formatTimeUTC(viewTime)
     }
 
-    // Add scrubbing class if not already present
-    if (!marker.classList.contains('is-scrubbing')) {
-      marker.classList.add('is-scrubbing')
+    // Toggle historical class
+    if (isViewingNow) {
+      marker.classList.remove('is-historical')
+    } else {
+      marker.classList.add('is-historical')
     }
 
-    // Update the vertical scrub line position
-    const scrubLine = dashboard?.querySelector('.lanes-scrub-line')
-    if (scrubLine) {
-      scrubLine.style.left = `calc(120px + (100% - 120px) * ${clampedPosition} / 100)`
-      if (!scrubLine.classList.contains('is-scrubbing')) {
-        scrubLine.classList.add('is-scrubbing')
-      }
+    // Update activity panel handle indicator (pulse when events nearby)
+    const activityPanel = dashboard?.querySelector('.lanes-activity-panel')
+    if (activityPanel && !this.lanesActivityExpanded) {
+      const filteredEvents = this.timelineEvents.filter(e => this.timelineTypeFilter.has(e.type))
+      const eventWindowMs = 60000 // ±1 minute
+      const hasNearbyEvents = filteredEvents.some(event => {
+        const eventTime = new Date(event.timestamp)
+        return Math.abs(eventTime - viewTime) <= eventWindowMs
+      })
+      activityPanel.classList.toggle('has-events', hasNearbyEvents)
     }
   },
 
@@ -3265,7 +3522,133 @@ export const OpsConsoleV2Hook = {
    */
   _returnToNow() {
     this.lanesScrubbingTime = null
+    this.lanesViewOffset = 0  // Reset panning when returning to NOW
+    this.lanesScrubberPosition = 80  // Reset scrubber to default position
     this._renderTimelineMode()
+  },
+
+  /**
+   * Check if we need to load more events for the current lanes view window.
+   * Called after panning to ensure we have events for the visible time range.
+   */
+  _checkLanesNeedMoreEvents() {
+    if (this.streamLoadingMore || !this.streamHasMoreEvents) {
+      return
+    }
+
+    // Calculate the current view window (80% past, 20% future)
+    const now = new Date()
+    const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+    const pastMs = rangeMs * 1.6  // 80% of total range
+    const viewCenter = new Date(now.getTime() + this.lanesViewOffset)
+    const viewStart = new Date(viewCenter.getTime() - pastMs)
+
+    // Find the oldest event we have loaded
+    const pastEvents = this.timelineEvents.filter(e =>
+      !e.is_future && new Date(e.timestamp) <= now
+    )
+
+    if (pastEvents.length === 0) {
+      return
+    }
+
+    const oldestEvent = pastEvents.reduce((oldest, e) => {
+      const eDate = new Date(e.timestamp)
+      const oldestDate = new Date(oldest.timestamp)
+      return eDate < oldestDate ? e : oldest
+    }, pastEvents[0])
+
+    const oldestEventTime = new Date(oldestEvent.timestamp)
+
+    // If the view extends before the oldest loaded event, load more
+    // Add a small buffer (5 minutes) to trigger loading before we hit the edge
+    const bufferMs = 5 * 60 * 1000
+    if (viewStart.getTime() < oldestEventTime.getTime() + bufferMs) {
+      this._loadMoreTimelineEvents()
+    }
+  },
+
+  /**
+   * Start horizontal panning of the lanes view.
+   * Called on mousedown on the lanes body (not on interactive elements).
+   */
+  _startLanesPanning(e, lanesBody) {
+    e.preventDefault()
+    this.lanesIsPanning = true
+    this.lanesPanStartX = e.clientX
+    this.lanesPanStartOffset = this.lanesViewOffset
+
+    lanesBody.style.cursor = 'grabbing'
+    lanesBody.classList.add('is-panning')
+
+    const onMouseMove = (moveEvent) => {
+      if (!this.lanesIsPanning) return
+
+      const deltaX = moveEvent.clientX - this.lanesPanStartX
+      const containerWidth = lanesBody.getBoundingClientRect().width
+
+      // Convert pixel delta to time offset
+      // Moving mouse right = scrolling left (going back in time)
+      const rangeMs = this.lanesTimeRange * 60 * 60 * 1000 * 2
+      const msPerPixel = rangeMs / containerWidth
+
+      this.lanesViewOffset = this.lanesPanStartOffset - (deltaX * msPerPixel)
+      this._renderTimelineMode()
+    }
+
+    const onMouseUp = () => {
+      this.lanesIsPanning = false
+      lanesBody.style.cursor = ''
+      lanesBody.classList.remove('is-panning')
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+
+      // Check if we need to load more events after panning
+      this._checkLanesNeedMoreEvents()
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  },
+
+  /**
+   * Bind resize drag behavior to the Lanes target panel.
+   */
+  _bindLanesPanelResize(container) {
+    const handle = container.querySelector('#lanes-resize-handle')
+    if (!handle) return
+
+    const panel = container.querySelector('.lanes-target-picker-panel')
+    if (!panel) return
+
+    const minWidth = 150
+    const maxWidth = 400
+
+    const onMouseMove = (e) => {
+      const splitLayout = container.querySelector('.lanes-split-layout')
+      if (!splitLayout) return
+
+      const rect = splitLayout.getBoundingClientRect()
+      const newWidth = e.clientX - rect.left
+
+      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth))
+      this.lanesTargetPanelWidth = clampedWidth
+      panel.style.flex = `0 0 ${clampedWidth}px`
+
+      handle.classList.add('dragging')
+    }
+
+    const onMouseUp = () => {
+      handle.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
   },
 
   /**
@@ -3438,18 +3821,34 @@ export const OpsConsoleV2Hook = {
       }
     })
 
-    // Update Lanes view NOW marker position if visible AND not scrubbing
-    if (this.timelineView === 'lanes' && !this.lanesScrubbingTime) {
+    // Update Lanes view - marker is centered, so just update label if viewing NOW
+    if (this.timelineView === 'lanes') {
       const lanesContainer = dashboard.querySelector('.timeline-lanes')
       if (lanesContainer) {
-        const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
-        const startTime = new Date(now.getTime() - rangeMs)
-        const totalMs = rangeMs * 2
-        const nowPosition = ((now - startTime) / totalMs) * 100
+        const isViewingNow = Math.abs(this.lanesViewOffset) < 60000
+        const viewMarker = lanesContainer.querySelector('.lanes-view-marker')
+        if (viewMarker && isViewingNow) {
+          // When viewing NOW, keep the label showing "NOW" with current time
+          const label = viewMarker.querySelector('.lanes-now-label')
+          if (label) {
+            label.textContent = 'NOW'
+          }
+        }
 
-        const nowMarker = lanesContainer.querySelector('.lanes-now-marker')
-        if (nowMarker) {
-          nowMarker.style.left = `${Math.max(0, Math.min(100, nowPosition))}%`
+        // Update real NOW indicator position if scrolled away (80% past, 20% future)
+        const realNowLine = lanesContainer.querySelector('.lanes-real-now-line-body')
+        if (realNowLine && !isViewingNow) {
+          const rangeMs = this.lanesTimeRange * 60 * 60 * 1000
+          const pastMs = rangeMs * 1.6
+          const futureMs = rangeMs * 0.4
+          const viewCenter = new Date(now.getTime() + this.lanesViewOffset)
+          const startTime = new Date(viewCenter.getTime() - pastMs)
+          const totalMs = pastMs + futureMs
+          const realNowPosition = ((now - startTime) / totalMs) * 100
+
+          if (realNowPosition >= 0 && realNowPosition <= 100) {
+            realNowLine.style.left = `calc(120px + (100% - 120px) * ${realNowPosition} / 100)`
+          }
         }
       }
     }

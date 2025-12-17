@@ -5746,6 +5746,325 @@
   align-items: center;
 }
 
+/* Lanes Split Layout (similar to Stream View) */
+.lanes-split-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  gap: 0;
+}
+
+.lanes-main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+/* Lanes Target Picker Panel (side panel like Stream View) */
+.lanes-target-picker-panel {
+  flex: 0 0 220px;
+  min-width: 150px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  background: oklch(8% 0.01 265);
+  border: 1px solid oklch(25% 0.02 265);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Lanes resize handle */
+.lanes-resize-handle {
+  flex: 0 0 8px;
+  background: transparent;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 5;
+}
+
+.lanes-resize-handle::before {
+  content: '';
+  width: 2px;
+  height: 40px;
+  background: oklch(30% 0.02 265);
+  border-radius: 1px;
+  transition: all 0.15s ease;
+}
+
+.lanes-resize-handle:hover::before {
+  background: oklch(70% 0.12 195 / 0.6);
+  height: 60px;
+  box-shadow: 0 0 8px oklch(70% 0.12 195 / 0.3);
+}
+
+.lanes-resize-handle.dragging::before {
+  background: oklch(70% 0.12 195);
+  height: 80px;
+  box-shadow: 0 0 12px oklch(70% 0.12 195 / 0.5);
+}
+
+/* HUD corner accents */
+.lanes-target-picker-panel::before,
+.lanes-target-picker-panel::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.lanes-target-picker-panel::before {
+  top: 0;
+  left: 0;
+  border-top: 2px solid oklch(70% 0.12 195 / 0.7);
+  border-left: 2px solid oklch(70% 0.12 195 / 0.7);
+}
+
+.lanes-target-picker-panel::after {
+  top: 0;
+  right: 0;
+  border-top: 2px solid oklch(70% 0.12 195 / 0.7);
+  border-right: 2px solid oklch(70% 0.12 195 / 0.7);
+}
+
+.lanes-target-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(
+    180deg,
+    oklch(14% 0.02 265) 0%,
+    oklch(11% 0.015 265) 100%
+  );
+  border-bottom: 1px solid oklch(25% 0.02 265);
+}
+
+.lanes-picker-title {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: oklch(70% 0.1 195);
+  letter-spacing: 0.08em;
+}
+
+.lanes-picker-available {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: oklch(55% 0.02 265);
+}
+
+.lanes-target-search-wrapper {
+  padding: 0.5rem 0.75rem;
+  background: oklch(12% 0.015 265);
+  border-bottom: 1px solid oklch(20% 0.01 265);
+}
+
+.lanes-target-search {
+  width: 100%;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid oklch(28% 0.02 265);
+  background: oklch(14% 0.015 265);
+  color: oklch(85% 0.02 250);
+}
+
+.lanes-target-search::placeholder {
+  color: oklch(50% 0.02 250);
+}
+
+.lanes-target-search:focus {
+  outline: none;
+  border-color: oklch(70% 0.12 195 / 0.6);
+}
+
+/* Target grid - 2 column layout like Stream view */
+.lanes-target-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 4px;
+  padding: 0.5rem;
+  overflow-y: auto;
+  background: oklch(9% 0.015 265);
+}
+
+.lanes-target-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: oklch(14% 0.015 265);
+  border: 1px solid oklch(20% 0.02 265);
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.lanes-target-cell:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(28% 0.02 265);
+}
+
+/* Status indicator dot */
+.lanes-target-cell::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(45% 0.02 250);
+}
+
+.lanes-target-cell.status-online::before {
+  background: oklch(78% 0.10 185);
+  box-shadow: 0 0 4px oklch(78% 0.10 185 / 0.6);
+}
+
+.lanes-target-cell.status-offline::before {
+  background: oklch(40% 0.02 250);
+}
+
+/* SYSTEM pseudo-target - amber/yellow styling */
+.lanes-target-cell.system-target {
+  background: oklch(16% 0.04 70);
+  border-color: oklch(30% 0.06 70);
+}
+
+.lanes-target-cell.system-target::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: oklch(72% 0.15 70);
+  box-shadow: 0 0 4px oklch(72% 0.15 70 / 0.5);
+}
+
+.lanes-target-cell.system-target .lanes-target-name {
+  color: oklch(80% 0.08 70);
+}
+
+.lanes-target-cell.system-target:hover {
+  background: oklch(20% 0.05 70);
+  border-color: oklch(40% 0.08 70);
+}
+
+.lanes-target-cell.system-target.selected {
+  background: oklch(22% 0.08 70);
+  border-color: oklch(72% 0.15 70 / 0.6);
+  box-shadow: 0 0 6px oklch(72% 0.15 70 / 0.3),
+              inset 0 0 8px oklch(72% 0.15 70 / 0.1);
+}
+
+.lanes-target-cell.system-target.selected::after {
+  background: oklch(72% 0.15 70);
+}
+
+.lanes-target-cell.system-target.selected .lanes-target-name {
+  color: oklch(88% 0.1 70);
+}
+
+.lanes-target-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: oklch(80% 0.02 250);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+/* Selected state for target cells */
+.lanes-target-cell.selected {
+  background: oklch(20% 0.05 195);
+  border-color: oklch(70% 0.12 195 / 0.6);
+  box-shadow: 0 0 6px oklch(70% 0.12 195 / 0.2),
+              inset 0 0 8px oklch(70% 0.12 195 / 0.1);
+}
+
+.lanes-target-cell.selected .lanes-target-name {
+  color: oklch(88% 0.06 195);
+}
+
+/* Selection checkmark for selected cells */
+.lanes-target-cell.selected::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  background: oklch(70% 0.12 195);
+  border-radius: 1px;
+}
+
+/* Title row with count */
+.lanes-picker-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lanes-picker-count {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: oklch(55% 0.02 265);
+}
+
+/* Action buttons footer */
+.lanes-picker-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: oklch(10% 0.015 265);
+  border-top: 1px solid oklch(22% 0.02 265);
+  margin-top: auto;
+}
+
+.lanes-picker-action {
+  flex: 1;
+  padding: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 500;
+  color: oklch(70% 0.08 195);
+  background: transparent;
+  border: 1px solid oklch(30% 0.02 265);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lanes-picker-action:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(70% 0.08 195 / 0.5);
+}
+
+.lanes-picker-action:active {
+  background: oklch(20% 0.03 195);
+}
+
+.lanes-picker-empty {
+  padding: 1rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: oklch(50% 0.02 265);
+}
+
 /* ============================================================================
    Enhanced Stream View - HUD Style
    ============================================================================ */
@@ -7623,6 +7942,90 @@
   background: oklch(30% 0.05 265);
 }
 
+/* View marker - centered scrubber that shows current view time */
+.lanes-view-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  z-index: 5;
+  cursor: grab;
+  user-select: none;
+}
+
+.lanes-view-marker:active {
+  cursor: grabbing;
+}
+
+.lanes-view-marker .lanes-now-line {
+  width: 2px;
+  flex: 1;
+  background: oklch(70% 0.15 195);
+}
+
+.lanes-view-marker .lanes-now-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: oklch(85% 0.15 195);
+  background: oklch(30% 0.08 195);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+/* Historical view state - different color when not viewing NOW */
+.lanes-view-marker.is-historical .lanes-now-line {
+  background: oklch(60% 0.12 60);
+}
+
+.lanes-view-marker.is-historical .lanes-now-label {
+  background: oklch(30% 0.1 60);
+  color: oklch(90% 0.1 60);
+}
+
+.lanes-view-marker.is-historical .lanes-return-now {
+  background: oklch(25% 0.08 195);
+  border-color: oklch(50% 0.12 195);
+}
+
+/* Real NOW marker - subtle indicator when view is scrolled away */
+.lanes-real-now-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.lanes-real-now-line {
+  width: 1px;
+  height: 100%;
+  background: oklch(60% 0.12 195 / 0.5);
+  border-left: 1px dashed oklch(60% 0.12 195 / 0.3);
+}
+
+/* Real NOW line in the lanes body area */
+.lanes-real-now-line-body {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: oklch(60% 0.12 195 / 0.4);
+  border-left: 1px dashed oklch(60% 0.12 195 / 0.3);
+  z-index: 5;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+/* Scrub line historical state */
+.lanes-scrub-line.is-historical {
+  background: oklch(60% 0.12 60);
+}
+
 /* Scrubbing detail panel header */
 .scrubbing-header {
   display: flex;
@@ -7654,6 +8057,46 @@
 
 .lanes-return-now-btn:hover {
   background: oklch(35% 0.1 195);
+}
+
+/* NOW off-screen indicator (when panned away from NOW) */
+.lanes-now-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+}
+
+.lanes-now-indicator.left {
+  left: 4px;
+}
+
+.lanes-now-indicator.right {
+  right: 4px;
+}
+
+.lanes-jump-now-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  background: oklch(25% 0.08 195);
+  border: 1px solid oklch(50% 0.12 195);
+  border-radius: 3px;
+  color: oklch(80% 0.1 195);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px oklch(0% 0 0 / 0.3);
+}
+
+.lanes-jump-now-btn:hover {
+  background: oklch(30% 0.1 195);
+  border-color: oklch(60% 0.14 195);
+  box-shadow: 0 2px 12px oklch(70% 0.12 195 / 0.2);
 }
 
 /* Scrubbed events list */
@@ -7869,6 +8312,12 @@
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+
+.timeline-lanes-body.is-panning {
+  cursor: grabbing;
 }
 
 /* Single vertical scrub line spanning all lanes */
@@ -8168,6 +8617,23 @@
 
 .lanes-activity-panel.minimized .lanes-activity-resize-handle {
   top: -4px;
+}
+
+/* Pulse animation for handle when events are nearby (minimized state) */
+@keyframes handle-pulse {
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: none;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 8px oklch(70% 0.12 195 / 0.5);
+  }
+}
+
+.lanes-activity-panel.minimized.has-events .lanes-activity-resize-handle::before {
+  background: oklch(70% 0.12 195 / 0.8);
+  animation: handle-pulse 2s ease-in-out infinite;
 }
 
 /* HUD Corner Accents */
