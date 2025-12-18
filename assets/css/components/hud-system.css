@@ -238,7 +238,7 @@
   }
 
   .dark .hud-label {
-    color: oklch(65% 0.10 210);
+    color: oklch(from var(--glow-cyan) 65% 0.10 h);
   }
 
   /* ============================================
@@ -473,7 +473,7 @@
     font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.875rem;
     font-variant-numeric: tabular-nums;
-    color: oklch(85% 0.08 210);
+    color: oklch(from var(--glow-cyan) 85% 0.08 h);
   }
 
   /* ============================================

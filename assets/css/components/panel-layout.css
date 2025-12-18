@@ -508,7 +508,7 @@
 }
 
 [data-theme="light"] .panel-toggle .toggle-icon {
-  color: oklch(50% 0.08 210);
+  color: oklch(from var(--glow-cyan) 50% 0.08 h);
 }
 
 [data-theme="light"] .panel-toggle:hover .toggle-icon {
@@ -555,7 +555,7 @@
   background: oklch(from var(--glow-cyan) l c h / 0.1);
   border-left-color: var(--glow-cyan);
   color: var(--glow-cyan);
-  box-shadow: inset 0 0 20px rgba(125, 207, 255, 0.1);
+  box-shadow: inset 0 0 20px oklch(from var(--glow-cyan) l c h / 0.1);
 }
 
 /* Active indicator dot for mode buttons */
@@ -567,7 +567,7 @@
   height: 6px;
   background: var(--glow-cyan);
   border-radius: 2px;
-  box-shadow: 0 0 6px rgba(125, 207, 255, 0.8);
+  box-shadow: 0 0 6px oklch(from var(--glow-cyan) l c h / 0.8);
 }
 
 .dashboard-item {
@@ -599,7 +599,7 @@
   background: oklch(from var(--glow-cyan) l c h / 0.1);
   border-left-color: var(--glow-cyan);
   color: var(--glow-cyan);
-  box-shadow: inset 0 0 20px rgba(125, 207, 255, 0.1);
+  box-shadow: inset 0 0 20px oklch(from var(--glow-cyan) l c h / 0.1);
 }
 
 /* Note: No ::after dot for dashboard items since they have action buttons on the right */

@@ -229,7 +229,7 @@
 
 .cmd-view-btn.active {
   color: var(--glow-cyan);
-  background: oklch(22% 0.04 210);
+  background: oklch(from var(--glow-cyan) 22% 0.04 h);
 }
 
 /* ----------------------------------------
@@ -394,7 +394,7 @@
 }
 
 .cmd-target-cell.selected {
-  background: oklch(20% 0.05 210);
+  background: oklch(from var(--glow-cyan) 20% 0.05 h);
   border-color: oklch(from var(--glow-cyan) l c h / 0.6);
   box-shadow: 0 0 6px oklch(from var(--glow-cyan) l c h / 0.2),
               inset 0 0 8px oklch(from var(--glow-cyan) l c h / 0.1);
@@ -460,7 +460,7 @@
 }
 
 .cmd-target-cell.selected .cmd-target-name {
-  color: oklch(88% 0.06 210);
+  color: oklch(from var(--glow-cyan) 88% 0.06 h);
 }
 
 .cmd-target-cell.status-offline .cmd-target-name {
@@ -541,7 +541,7 @@
   font-size: 0.5rem;
   font-family: var(--font-mono);
   font-weight: 600;
-  color: oklch(65% 0.08 210);
+  color: oklch(from var(--glow-cyan) 65% 0.08 h);
   background: oklch(20% 0.03 210 / 0.4);
   padding: 1px 4px;
   border-radius: 2px;
@@ -632,7 +632,7 @@
 }
 
 .cmd-command-item.selected {
-  background: oklch(20% 0.05 285);
+  background: oklch(from var(--glow-purple) 20% 0.05 h);
   border-color: oklch(from var(--glow-purple) l c h / 0.7);
   border-left-color: var(--glow-purple);
   box-shadow: 0 0 8px oklch(from var(--glow-purple) l c h / 0.2),
@@ -682,7 +682,7 @@
 }
 
 .cmd-command-item.selected .cmd-command-name {
-  color: oklch(90% 0.08 285);
+  color: oklch(from var(--glow-purple) 90% 0.08 h);
 }
 
 .cmd-hazard-badge {
@@ -706,8 +706,8 @@
 
 .cmd-opcode {
   font-family: var(--font-mono);
-  color: oklch(60% 0.08 285);
-  background: oklch(18% 0.02 285 / 0.3);
+  color: oklch(from var(--glow-purple) 60% 0.08 h);
+  background: oklch(from var(--glow-purple) 18% 0.02 h / 0.3);
   padding: 0 0.25rem;
   border-radius: 1px;
 }
@@ -767,7 +767,7 @@
 /* Status-based left border */
 .qe.pending { border-left-color: var(--glow-cyan); }
 .qe.executing { border-left-color: oklch(75% 0.18 70); background: oklch(14% 0.02 70 / 0.4); }
-.qe.held { border-left-color: oklch(70% 0.15 285); background: oklch(14% 0.02 285 / 0.3); opacity: 0.85; }
+.qe.held { border-left-color: oklch(from var(--glow-purple) 70% 0.15 h); background: oklch(from var(--glow-purple) 14% 0.02 h / 0.3); opacity: 0.85; }
 .qe.failed { border-left-color: oklch(65% 0.22 25); background: oklch(14% 0.02 25 / 0.3); }
 
 /* Row 1: Target + Badges */
@@ -797,7 +797,7 @@
 .qe-target {
   font-size: 0.65rem;
   font-family: var(--font-mono);
-  color: oklch(65% 0.08 210);
+  color: oklch(from var(--glow-cyan) 65% 0.08 h);
   white-space: nowrap;
   line-height: 1;
 }
@@ -815,7 +815,7 @@
   padding: 0.125rem 0.375rem;
   border-radius: 2px;
   background: var(--glow-cyan);
-  color: oklch(12% 0.01 210);
+  color: oklch(from var(--glow-cyan) 12% 0.01 h);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -827,8 +827,8 @@
 }
 
 .qe.held .qe-status {
-  background: oklch(70% 0.15 285);
-  color: oklch(15% 0.02 285);
+  background: oklch(from var(--glow-purple) 70% 0.15 h);
+  color: oklch(from var(--glow-purple) 15% 0.02 h);
 }
 
 .qe.failed .qe-status {
@@ -924,7 +924,7 @@
 
 .qe-detail-status.pending { border-left-color: var(--glow-cyan); }
 .qe-detail-status.executing { border-left-color: oklch(75% 0.18 70); background: oklch(16% 0.025 70 / 0.5); }
-.qe-detail-status.held { border-left-color: oklch(70% 0.15 285); background: oklch(16% 0.02 285 / 0.5); }
+.qe-detail-status.held { border-left-color: oklch(from var(--glow-purple) 70% 0.15 h); background: oklch(from var(--glow-purple) 16% 0.02 h / 0.5); }
 .qe-detail-status.failed { border-left-color: oklch(65% 0.22 25); background: oklch(16% 0.03 25 / 0.4); }
 
 .qe-detail-status-badge {
@@ -939,9 +939,9 @@
   width: fit-content;
 }
 
-.qe-detail-status.pending .qe-detail-status-badge { background: var(--glow-cyan); color: oklch(12% 0.01 210); }
+.qe-detail-status.pending .qe-detail-status-badge { background: var(--glow-cyan); color: oklch(from var(--glow-cyan) 12% 0.01 h); }
 .qe-detail-status.executing .qe-detail-status-badge { background: oklch(75% 0.18 70); color: oklch(15% 0.02 70); }
-.qe-detail-status.held .qe-detail-status-badge { background: oklch(70% 0.15 285); color: oklch(15% 0.02 285); }
+.qe-detail-status.held .qe-detail-status-badge { background: oklch(from var(--glow-purple) 70% 0.15 h); color: oklch(from var(--glow-purple) 15% 0.02 h); }
 .qe-detail-status.failed .qe-detail-status-badge { background: oklch(65% 0.22 25); color: oklch(98% 0.01 25); }
 
 .qe-detail-status-text {
@@ -1088,9 +1088,9 @@
 }
 
 .qe-detail-btn-hold:hover {
-  border-color: oklch(70% 0.15 285 / 0.6);
-  background: oklch(25% 0.05 285 / 0.4);
-  color: oklch(75% 0.12 285);
+  border-color: oklch(from var(--glow-purple) 70% 0.15 h / 0.6);
+  background: oklch(from var(--glow-purple) 25% 0.05 h / 0.4);
+  color: oklch(from var(--glow-purple) 75% 0.12 h);
 }
 
 .qe-detail-btn-release {
@@ -1185,7 +1185,7 @@
 .cmd-param-hint {
   display: block;
   font-size: 0.55rem;
-  color: oklch(65% 0.10 210);
+  color: oklch(from var(--glow-cyan) 65% 0.10 h);
   margin-top: 0.125rem;
   font-family: var(--font-mono);
 }
@@ -1266,7 +1266,7 @@
 }
 
 .cmd-value-btn.selected {
-  background: oklch(20% 0.05 285);
+  background: oklch(from var(--glow-purple) 20% 0.05 h);
   border-color: oklch(from var(--glow-purple) l c h / 0.6);
   box-shadow: 0 0 8px oklch(from var(--glow-purple) l c h / 0.2),
               inset 0 0 10px oklch(from var(--glow-purple) l c h / 0.05);
@@ -1287,7 +1287,7 @@
 }
 
 .cmd-value-btn.selected .cmd-value-label {
-  color: oklch(88% 0.08 285);
+  color: oklch(from var(--glow-purple) 88% 0.08 h);
 }
 
 .cmd-value-raw {
@@ -1298,7 +1298,7 @@
 }
 
 .cmd-value-btn.selected .cmd-value-raw {
-  color: oklch(65% 0.10 285);
+  color: oklch(from var(--glow-purple) 65% 0.10 h);
 }
 
 /* Enhanced dropdown preview */
@@ -1356,7 +1356,7 @@
 }
 
 .cmd-dispatch-btn.queue:hover {
-  background: oklch(18% 0.03 210);
+  background: oklch(from var(--glow-cyan) 18% 0.03 h);
   border-color: var(--glow-cyan);
   box-shadow: 0 0 12px oklch(from var(--glow-cyan) l c h / 0.2);
 }
@@ -1364,7 +1364,7 @@
 .cmd-dispatch-btn.send-now {
   background: oklch(from var(--glow-purple) l c h / 0.15);
   border: 1px solid var(--glow-purple);
-  color: oklch(90% 0.08 285);
+  color: oklch(from var(--glow-purple) 90% 0.08 h);
 }
 
 .cmd-dispatch-btn.send-now:hover {
@@ -1482,7 +1482,7 @@
 }
 
 .cmd-breadcrumb:hover {
-  color: oklch(90% 0.12 210);
+  color: oklch(from var(--glow-cyan) 90% 0.12 h);
   background: var(--neutral-mid);
   text-decoration: none;
 }
@@ -1521,7 +1521,7 @@
 }
 
 .cmd-mode-switch:hover {
-  color: oklch(90% 0.12 210);
+  color: oklch(from var(--glow-cyan) 90% 0.12 h);
   background: var(--neutral-mid);
 }
 
@@ -1645,10 +1645,10 @@
 
 /* Active target chip (currently being configured) */
 .cmd-slideout-target-chip.active {
-  background: oklch(25% 0.08 210);
-  border-color: oklch(65% 0.15 210);
-  color: oklch(90% 0.05 210);
-  box-shadow: 0 0 0 2px oklch(65% 0.15 210 / 0.3);
+  background: oklch(from var(--glow-cyan) 25% 0.08 h);
+  border-color: oklch(from var(--glow-cyan) 65% 0.15 h);
+  color: oklch(from var(--glow-cyan) 90% 0.05 h);
+  box-shadow: 0 0 0 2px oklch(from var(--glow-cyan) 65% 0.15 h / 0.3);
 }
 
 /* Staged target chip (params saved) */
@@ -1732,7 +1732,7 @@
 .param-target-label {
   font-size: 0.55rem;
   font-weight: normal;
-  color: oklch(65% 0.12 210);
+  color: oklch(from var(--glow-cyan) 65% 0.12 h);
   margin-left: 0.5rem;
 }
 
@@ -1744,14 +1744,14 @@
 
 .cmd-dispatch-btn.stage {
   flex: 1;
-  background: oklch(25% 0.08 210);
+  background: oklch(from var(--glow-cyan) 25% 0.08 h);
   border-color: var(--glow-cyan);
-  color: oklch(85% 0.08 210);
+  color: oklch(from var(--glow-cyan) 85% 0.08 h);
 }
 
 .cmd-dispatch-btn.stage:hover:not(:disabled) {
-  background: oklch(30% 0.1 210);
-  border-color: oklch(65% 0.15 210);
+  background: oklch(from var(--glow-cyan) 30% 0.1 h);
+  border-color: oklch(from var(--glow-cyan) 65% 0.15 h);
 }
 
 .cmd-dispatch-btn.queue-staged {
@@ -1801,26 +1801,26 @@
 }
 
 .cmd-dispatch-btn.stage-all {
-  background: oklch(25% 0.08 210);
-  border-color: oklch(50% 0.1 210);
-  color: oklch(90% 0.08 210);
+  background: oklch(from var(--glow-cyan) 25% 0.08 h);
+  border-color: oklch(from var(--glow-cyan) 50% 0.1 h);
+  color: oklch(from var(--glow-cyan) 90% 0.08 h);
   flex: 1;
 }
 
 .cmd-dispatch-btn.stage-all:hover:not(:disabled) {
-  background: oklch(30% 0.1 210);
-  border-color: oklch(60% 0.12 210);
+  background: oklch(from var(--glow-cyan) 30% 0.1 h);
+  border-color: oklch(from var(--glow-cyan) 60% 0.12 h);
 }
 
 .cmd-dispatch-btn.review {
-  background: oklch(20% 0.06 285);
-  border-color: oklch(45% 0.1 285);
-  color: oklch(85% 0.08 285);
+  background: oklch(from var(--glow-purple) 20% 0.06 h);
+  border-color: oklch(from var(--glow-purple) 45% 0.1 h);
+  color: oklch(from var(--glow-purple) 85% 0.08 h);
 }
 
 .cmd-dispatch-btn.review:hover:not(:disabled) {
-  background: oklch(25% 0.08 285);
-  border-color: oklch(55% 0.12 285);
+  background: oklch(from var(--glow-purple) 25% 0.08 h);
+  border-color: oklch(from var(--glow-purple) 55% 0.12 h);
 }
 
 .cmd-dispatch-btn.review:disabled {
@@ -2290,7 +2290,7 @@
 }
 
 .cmd-staged-priority {
-  color: oklch(70% 0.08 285);
+  color: oklch(from var(--glow-purple) 70% 0.08 h);
   text-align: center;
   width: 50px;
 }
@@ -2583,7 +2583,7 @@
   font-size: 0.6rem;
   font-family: var(--font-mono);
   font-weight: 600;
-  color: oklch(80% 0.1 210);
+  color: oklch(from var(--glow-cyan) 80% 0.1 h);
   letter-spacing: 0.02em;
 }
 
@@ -2599,9 +2599,9 @@
   font-size: 0.55rem;
   font-family: var(--font-mono);
   font-weight: 600;
-  color: oklch(65% 0.08 285);
+  color: oklch(from var(--glow-purple) 65% 0.08 h);
   padding: 0.125rem 0.375rem;
-  background: oklch(20% 0.04 285 / 0.3);
+  background: oklch(from var(--glow-purple) 20% 0.04 h / 0.3);
   border-radius: 2px;
   letter-spacing: 0.05em;
 }
@@ -2729,14 +2729,14 @@
 }
 
 .cmd-dispatch-btn.update {
-  background: oklch(25% 0.08 210);
-  border-color: oklch(50% 0.1 210);
-  color: oklch(90% 0.08 210);
+  background: oklch(from var(--glow-cyan) 25% 0.08 h);
+  border-color: oklch(from var(--glow-cyan) 50% 0.1 h);
+  color: oklch(from var(--glow-cyan) 90% 0.08 h);
 }
 
 .cmd-dispatch-btn.update:hover {
-  background: oklch(30% 0.1 210);
-  border-color: oklch(60% 0.12 210);
+  background: oklch(from var(--glow-cyan) 30% 0.1 h);
+  border-color: oklch(from var(--glow-cyan) 60% 0.12 h);
 }
 
 /* Staging panel scrollbar */

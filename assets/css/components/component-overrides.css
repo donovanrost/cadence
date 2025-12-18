@@ -108,15 +108,15 @@
   }
 
   [data-theme="dark"] .badge-primary {
-    background: oklch(75% 0.15 210);
-    border-color: oklch(75% 0.15 210);
-    color: oklch(15% 0.05 210);
+    background: oklch(from var(--glow-cyan) 75% 0.15 h);
+    border-color: oklch(from var(--glow-cyan) 75% 0.15 h);
+    color: oklch(from var(--glow-cyan) 15% 0.05 h);
   }
 
   [data-theme="dark"] .badge-secondary {
-    background: oklch(70% 0.2 285);
-    border-color: oklch(70% 0.2 285);
-    color: oklch(15% 0.05 285);
+    background: oklch(from var(--glow-purple) 70% 0.2 h);
+    border-color: oklch(from var(--glow-purple) 70% 0.2 h);
+    color: oklch(from var(--glow-purple) 15% 0.05 h);
   }
 
   /* Dark mode form inputs - technical look with dark backgrounds */
@@ -158,9 +158,11 @@
     color: var(--text-muted) !important;
   }
 
-  /* Dark mode select dropdown arrow */
+  /* Dark mode select dropdown arrow
+     Note: SVG data URLs can't use CSS variables, so we use text-bright color.
+     For full brand customization, selects should be wrapped in a custom component. */
   [data-theme="dark"] .select {
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%237dcfff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23c0caf5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
     background-position: right 0.5rem center !important;
     background-repeat: no-repeat !important;
     background-size: 1.5em 1.5em !important;
@@ -187,8 +189,8 @@
   }
 
   [data-theme="dark"] .checkbox:checked {
-    background: oklch(80% 0.12 210) !important;
-    border-color: oklch(80% 0.12 210) !important;
+    background: var(--glow-cyan) !important;
+    border-color: var(--glow-cyan) !important;
   }
 
   /* Dark mode form labels */
@@ -449,11 +451,11 @@
   }
 
   .hud-data-value {
-    color: oklch(30% 0.08 210);
+    color: oklch(from var(--glow-cyan) 30% 0.08 h);
   }
 
   .hud-label {
-    color: oklch(45% 0.10 210);
+    color: oklch(from var(--glow-cyan) 45% 0.10 h);
   }
 
   .input,
@@ -476,7 +478,7 @@
   }
 
   .table th {
-    color: oklch(45% 0.08 210);
+    color: oklch(from var(--glow-cyan) 45% 0.08 h);
     border-bottom-color: oklch(from var(--glow-cyan) l c h / 0.2);
   }
 
@@ -487,5 +489,49 @@
   .table-zebra tbody tr:nth-child(odd) {
     background: oklch(from var(--glow-cyan) l c h / 0.03);
   }
+}
+
+/* ============================================
+   DaisyUI Color Utility Overrides
+   Make text-primary, bg-primary etc. use brand colors
+   ============================================ */
+
+/* Primary color utilities - derive from brand */
+.text-primary {
+  color: var(--glow-cyan) !important;
+}
+
+.bg-primary {
+  background-color: var(--glow-cyan) !important;
+}
+
+.border-primary {
+  border-color: var(--glow-cyan) !important;
+}
+
+/* Secondary color utilities - derive from brand */
+.text-secondary {
+  color: var(--glow-purple) !important;
+}
+
+.bg-secondary {
+  background-color: var(--glow-purple) !important;
+}
+
+.border-secondary {
+  border-color: var(--glow-purple) !important;
+}
+
+/* Accent color utilities - derive from brand */
+.text-accent {
+  color: var(--glow-pink) !important;
+}
+
+.bg-accent {
+  background-color: var(--glow-pink) !important;
+}
+
+.border-accent {
+  border-color: var(--glow-pink) !important;
 }
 

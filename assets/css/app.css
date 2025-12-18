@@ -129,10 +129,45 @@
    ============================================ */
 
 :root {
-  /* Glow colors (used extensively in HUD aesthetic) */
-  --glow-cyan: oklch(80% 0.12 210);
-  --glow-purple: oklch(72% 0.15 285);
-  --glow-pink: oklch(60% 0.25 340);
+  /* ============================================
+     Brand Identity Colors (White-Label Foundation)
+
+     Override these variables to customize the brand colors.
+     The entire UI will adapt automatically via the cascade:
+
+       BRAND LAYER (--brand-primary, --brand-secondary, --brand-accent)
+           ↓ derives
+       AESTHETIC LAYER (--glow-cyan, --glow-purple, --glow-pink)
+           ↓ derives
+       SEMANTIC LAYER (--surface-*, --status-*, etc.)
+
+     To customize for white-labeling, override the brand colors:
+       :root {
+         --brand-primary: oklch(80% 0.12 220);   (Blue instead of cyan)
+       }
+       [data-theme="light"] {
+         --brand-primary: oklch(55% 0.12 220);   (Darker for light theme)
+       }
+
+     OKLCH color format: oklch(lightness% chroma hue)
+       - Lightness: 0-100% (dark to light)
+       - Chroma: 0-0.4 (gray to vivid)
+       - Hue: 0-360 (red=0, yellow=90, green=145, cyan=195, blue=220, purple=285, pink=340)
+     ============================================ */
+
+  /* Primary brand color - CTAs, links, primary actions, focus states */
+  --brand-primary: oklch(80% 0.12 210);   /* Cyan - hue 210 */
+
+  /* Secondary brand color - supporting elements, less prominent actions */
+  --brand-secondary: oklch(72% 0.15 285); /* Purple - hue 285 */
+
+  /* Accent brand color - highlights, special callouts, vaporwave energy */
+  --brand-accent: oklch(60% 0.25 340);    /* Pink - hue 340 */
+
+  /* Glow colors (HUD aesthetic) - derived from brand */
+  --glow-cyan: var(--brand-primary);
+  --glow-purple: var(--brand-secondary);
+  --glow-pink: var(--brand-accent);
 
   /* Surface backgrounds (dark theme base) - 8-level depth scale */
   --surface-overlay: oklch(8% 0.02 265);
@@ -155,20 +190,20 @@
   --text-bright: oklch(85% 0.02 250);
 
   /* Icon/UI chrome */
-  --icon-muted: oklch(70% 0.08 210);
+  --icon-muted: oklch(from var(--brand-primary) 70% 0.08 h);
 
-  /* Mode-specific accent */
-  --timeline-accent: oklch(70% 0.12 195);
+  /* Mode-specific accent - derives from brand primary */
+  --timeline-accent: oklch(from var(--brand-primary) 70% 0.12 h);
 
   /* Badge colors */
   --badge-health: oklch(72% 0.19 160);
   --badge-pending: oklch(75% 0.18 85);
-  --badge-procedure: oklch(55% 0.15 280);
+  --badge-procedure: oklch(from var(--brand-secondary) 55% 0.15 h);
 
   /* Event type colors (for timeline/activity differentiation) */
-  --event-command: oklch(75% 0.15 195);
+  --event-command: oklch(from var(--brand-primary) 75% 0.15 h);
   --event-alarm: oklch(75% 0.15 85);
-  --event-procedure: oklch(75% 0.15 280);
+  --event-procedure: oklch(from var(--brand-secondary) 75% 0.15 h);
   --event-automation: oklch(75% 0.15 175);
 
   /* Neutral grays (for UI chrome) */
@@ -207,9 +242,10 @@
 
 /* Light theme overrides */
 [data-theme="light"] {
-  --glow-cyan: oklch(55% 0.12 210);
-  --glow-purple: oklch(50% 0.25 285);
-  --glow-pink: oklch(62% 0.23 340);
+  /* Brand colors adjusted for light backgrounds */
+  --brand-primary: oklch(55% 0.12 210);   /* Darker cyan for light bg */
+  --brand-secondary: oklch(50% 0.25 285); /* Darker, more saturated purple */
+  --brand-accent: oklch(62% 0.23 340);    /* Adjusted pink */
 
   /* Surface depth scale (inverted for light) */
   --surface-overlay: oklch(100% 0 0);
@@ -230,15 +266,15 @@
   --text-bright: oklch(25% 0.02 250);
 
   /* Icon/UI chrome */
-  --icon-muted: oklch(50% 0.08 210);
+  --icon-muted: oklch(from var(--brand-primary) 50% 0.08 h);
 
-  /* Mode-specific accent */
-  --timeline-accent: oklch(50% 0.12 195);
+  /* Mode-specific accent - derives from brand primary */
+  --timeline-accent: oklch(from var(--brand-primary) 50% 0.12 h);
 
-  /* Event type colors stay similar in light theme */
-  --event-command: oklch(55% 0.15 195);
+  /* Event type colors - derive from brand in light theme too */
+  --event-command: oklch(from var(--brand-primary) 55% 0.15 h);
   --event-alarm: oklch(55% 0.15 85);
-  --event-procedure: oklch(55% 0.15 280);
+  --event-procedure: oklch(from var(--brand-secondary) 55% 0.15 h);
   --event-automation: oklch(55% 0.15 175);
 
   /* Neutral grays for light theme */

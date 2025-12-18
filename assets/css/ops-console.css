@@ -385,18 +385,18 @@
 /* Tokyo Night / Vaporwave Neon Glow for Active Dashboard */
 .dashboard-item.active {
   background: transparent;
-  border-left: 2px solid oklch(75% 0.15 210);
+  border-left: 2px solid oklch(from var(--glow-cyan) 75% 0.15 h);
   box-shadow:
-    -4px 0 12px oklch(70% 0.18 210 / 0.5),
-    0 0 20px oklch(70% 0.18 210 / 0.2);
+    -4px 0 12px oklch(from var(--glow-cyan) 70% 0.18 h / 0.5),
+    0 0 20px oklch(from var(--glow-cyan) 70% 0.18 h / 0.2);
 }
 
 .dashboard-item.active .dashboard-name {
-  color: oklch(75% 0.15 210);  /* Cyan glow color */
+  color: oklch(from var(--glow-cyan) 75% 0.15 h);
   font-weight: 600;
   text-shadow:
-    0 0 8px oklch(70% 0.18 210 / 0.8),
-    0 0 16px oklch(70% 0.18 210 / 0.4);
+    0 0 8px oklch(from var(--glow-cyan) 70% 0.18 h / 0.8),
+    0 0 16px oklch(from var(--glow-cyan) 70% 0.18 h / 0.4);
 }
 
 /* Dashboard name */

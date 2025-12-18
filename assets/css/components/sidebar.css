@@ -235,7 +235,7 @@
 [data-theme="light"] .sidebar-toggle-btn {
   background: oklch(94% 0.005 250);
   border-color: oklch(from var(--glow-cyan) l c h / 0.3);
-  color: oklch(50% 0.08 210);
+  color: oklch(from var(--glow-cyan) 50% 0.08 h);
 }
 
 [data-theme="light"] .sidebar-toggle-btn:hover {
