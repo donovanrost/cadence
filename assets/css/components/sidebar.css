@@ -202,7 +202,7 @@
   cursor: pointer;
   z-index: 50;
   transition: all var(--transition-fast);
-  color: oklch(70% 0.08 210);
+  color: var(--icon-muted);
 }
 
 /* Center toggle button when collapsed */
@@ -217,7 +217,7 @@
 }
 
 .sidebar-toggle-btn:hover {
-  background: oklch(22% 0.02 258);
+  background: var(--surface-hover);
   border-color: oklch(from var(--glow-cyan) l c h / 0.5);
   color: var(--glow-cyan);
 }

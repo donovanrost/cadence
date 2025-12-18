@@ -193,7 +193,7 @@
 
   /* Dark mode form labels */
   [data-theme="dark"] label {
-    color: oklch(85% 0.02 250);
+    color: var(--text-bright);
   }
 
   /* Dark mode fieldset and form sections */
@@ -359,7 +359,7 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: oklch(70% 0.08 210);
+    color: var(--icon-muted);
     border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.2);
   }
 

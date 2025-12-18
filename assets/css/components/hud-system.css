@@ -214,7 +214,7 @@
 
   /* Sidebar darker background for dark mode */
   .sidebar-dark-bg {
-    background-color: oklch(10% 0.02 265);
+    background-color: var(--surface-inset);
   }
 
   /* ============================================
@@ -234,7 +234,7 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: oklch(70% 0.08 210);
+    color: var(--icon-muted);
   }
 
   .dark .hud-label {
@@ -381,7 +381,7 @@
   }
 
   .hud-status-nominal .hud-status-dot {
-    background: oklch(78% 0.10 185);
+    background: var(--status-success);
     box-shadow: 0 0 6px oklch(from var(--status-success) l c h / 0.8);
   }
 
@@ -543,15 +543,15 @@
      ============================================ */
 
   .status-badge-nominal {
-    background: oklch(72% 0.19 160 / 0.15);
-    color: oklch(72% 0.19 160);
-    border: 1px solid oklch(72% 0.19 160 / 0.3);
+    background: oklch(from var(--badge-health) l c h / 0.15);
+    color: var(--badge-health);
+    border: 1px solid oklch(from var(--badge-health) l c h / 0.3);
   }
 
   .status-badge-caution {
-    background: oklch(75% 0.18 85 / 0.15);
-    color: oklch(75% 0.18 85);
-    border: 1px solid oklch(75% 0.18 85 / 0.3);
+    background: oklch(from var(--badge-pending) l c h / 0.15);
+    color: var(--badge-pending);
+    border: 1px solid oklch(from var(--badge-pending) l c h / 0.3);
   }
 
   .status-badge-warning {
@@ -567,9 +567,9 @@
   }
 
   .status-badge-stale {
-    background: oklch(55% 0.15 280 / 0.15);
-    color: oklch(55% 0.15 280);
-    border: 1px solid oklch(55% 0.15 280 / 0.3);
+    background: oklch(from var(--badge-procedure) l c h / 0.15);
+    color: var(--badge-procedure);
+    border: 1px solid oklch(from var(--badge-procedure) l c h / 0.3);
   }
 
   /* ============================================

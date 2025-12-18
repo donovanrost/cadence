@@ -138,7 +138,7 @@
 
 .alarm-item-v2.shelved {
   opacity: 0.5;
-  background: oklch(55% 0.15 280 / 0.05);
+  background: oklch(from var(--badge-procedure) l c h / 0.05);
 }
 
 .alarm-item-header {
@@ -151,7 +151,7 @@
 .alarm-source {
   font-weight: 600;
   font-family: ui-monospace, monospace;
-  color: oklch(85% 0.02 250);
+  color: var(--text-bright);
 }
 
 .alarm-time {
@@ -399,14 +399,14 @@
 }
 
 .panel-toggle:hover {
-  background: oklch(22% 0.02 258);
+  background: var(--surface-hover);
   border-color: oklch(from var(--glow-cyan) l c h / 0.4);
 }
 
 .panel-toggle .toggle-icon {
   width: 12px;
   height: 12px;
-  color: oklch(70% 0.08 210);
+  color: var(--icon-muted);
   transition: transform var(--transition-normal);
 }
 

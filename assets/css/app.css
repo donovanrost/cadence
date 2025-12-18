@@ -134,11 +134,14 @@
   --glow-purple: oklch(72% 0.15 285);
   --glow-pink: oklch(60% 0.25 340);
 
-  /* Surface backgrounds (dark theme base) */
+  /* Surface backgrounds (dark theme base) - 8-level depth scale */
+  --surface-overlay: oklch(8% 0.02 265);
+  --surface-inset: oklch(10% 0.015 265);
   --surface-base: oklch(12% 0.02 265);
+  --surface-input: oklch(14% 0.015 265);
   --surface-raised: oklch(15% 0.02 260);
   --surface-elevated: oklch(18% 0.02 258);
-  --surface-overlay: oklch(8% 0.02 265);
+  --surface-hover: oklch(22% 0.02 265);
 
   /* Status colors (bright variants for indicators) */
   --status-critical: oklch(62% 0.25 25);
@@ -149,6 +152,18 @@
   /* Text colors */
   --text-muted: oklch(55% 0.02 250);
   --text-subtle: oklch(65% 0.02 250);
+  --text-bright: oklch(85% 0.02 250);
+
+  /* Icon/UI chrome */
+  --icon-muted: oklch(70% 0.08 210);
+
+  /* Mode-specific accent */
+  --timeline-accent: oklch(70% 0.12 195);
+
+  /* Badge colors */
+  --badge-health: oklch(72% 0.19 160);
+  --badge-pending: oklch(75% 0.18 85);
+  --badge-procedure: oklch(55% 0.15 280);
 
   /* Event type colors (for timeline/activity differentiation) */
   --event-command: oklch(75% 0.15 195);
@@ -196,10 +211,14 @@
   --glow-purple: oklch(50% 0.25 285);
   --glow-pink: oklch(62% 0.23 340);
 
+  /* Surface depth scale (inverted for light) */
+  --surface-overlay: oklch(100% 0 0);
+  --surface-inset: oklch(90% 0.005 250);
   --surface-base: oklch(98% 0.005 250);
+  --surface-input: oklch(96% 0.005 250);
   --surface-raised: oklch(96% 0.005 250);
   --surface-elevated: oklch(92% 0.008 250);
-  --surface-overlay: oklch(100% 0 0);
+  --surface-hover: oklch(88% 0.005 250);
 
   --status-critical: oklch(60% 0.22 10);
   --status-warning: oklch(68% 0.18 40);
@@ -208,6 +227,13 @@
 
   --text-muted: oklch(45% 0.01 250);
   --text-subtle: oklch(55% 0.02 250);
+  --text-bright: oklch(25% 0.02 250);
+
+  /* Icon/UI chrome */
+  --icon-muted: oklch(50% 0.08 210);
+
+  /* Mode-specific accent */
+  --timeline-accent: oklch(50% 0.12 195);
 
   /* Event type colors stay similar in light theme */
   --event-command: oklch(55% 0.15 195);
