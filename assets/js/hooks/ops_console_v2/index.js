@@ -7,14 +7,22 @@
  * - Enhanced mission-control visual design
  * - Fullscreen widget capability
  * - New widget types (Command, Procedure, Alarm Summary, Fleet Health)
+ *
+ * Module structure:
+ * - state.js: State initialization and management
+ * - utils.js: Utility methods (debounce, etc.)
+ * - index.js: Main hook with all methods (this file)
  */
 
-import { createPanelLayout } from "../layout/panel_layout"
-import { createGridManager } from "../dashboard/gridstack_manager"
-import { TelemetryStore, getStore } from "../telemetry_store"
+import { createPanelLayout } from "../../layout/panel_layout"
+import { createGridManager } from "../../dashboard/gridstack_manager"
+import { TelemetryStore, getStore } from "../../telemetry_store"
 
 // Import widgets to register them
-import "../widgets/index"
+import "../../widgets/index"
+
+// Import state initialization
+import { initializeState } from "./state"
 
 /**
  * OpsConsoleV2 LiveView Hook
@@ -23,102 +31,8 @@ export const OpsConsoleV2Hook = {
   mounted() {
     console.log("[OpsConsoleV2] Mounting...", this.el.id)
 
-    // Get configuration from data attributes
-    this.missionId = this.el.dataset.missionId
-    this.frameLayout = JSON.parse(this.el.dataset.layout || "null")
-    this.widgets = JSON.parse(this.el.dataset.widgets || "[]")
-    this.targets = JSON.parse(this.el.dataset.targets || "[]")
-    this.dashboards = JSON.parse(this.el.dataset.dashboards || "[]")
-    this.alarms = JSON.parse(this.el.dataset.alarms || "[]")
-    this.commands = JSON.parse(this.el.dataset.commands || "[]")
-    this.commandDefinitions = JSON.parse(this.el.dataset.commandDefinitions || "[]")
-    this.targetGroups = JSON.parse(this.el.dataset.targetGroups || "[]")
-    this.currentDashboardId = this.el.dataset.currentDashboardId
-    this.token = this.el.dataset.token
-
-    // Track collapsed state for context panel sections
-    this.collapsedSections = {
-      alarms: false,
-      commands: false
-    }
-
-    // Track managers
-    this.panelLayout = null
-    this.gridManager = null
-    this.telemetryStore = null
-    this._windowResizeHandler = null
-    this._initialized = false
-    this._fullscreenWidget = null
-    this.currentMode = "overview"
-    this.selectedTargetId = null
-
-    // Commands mode state
-    this.cmdSelectedTargets = new Set()
-    this.cmdSelectedCommand = null
-    this.cmdTargetFilter = ""
-    this.cmdCommandFilter = ""
-    this.cmdQueuePaused = false
-    this.cmdPriority = 3 // Normal priority by default
-    this.cmdTargetViewMode = "compact" // "compact" or "detailed"
-
-    // Per-target parameterized command state
-    this.cmdStagedParams = new Map()      // targetId -> { params: {...} }
-    this.cmdActiveTargetIndex = 0         // Index of currently active target in selection
-    this.cmdPerTargetMode = false         // Whether we're in per-target configuration mode
-    this.cmdReviewMode = false            // Whether showing review screen before queue
-
-    // Persistent staging area (loaded from server)
-    this.cmdStagedCommands = JSON.parse(this.el.dataset.stagedCommands || '[]')
-    this.cmdStagePanelExpanded = false    // Whether staging panel is expanded
-    this.cmdStagePanelHeight = null       // Custom height when resized (null = auto)
-    this.cmdStageFilter = ''              // Filter text for staging table
-    this.cmdEditingStaged = null          // { cmdIndex, targetIndex } when editing a staged entry
-    this.cmdStageViewMode = 'table'       // 'table' or 'cards' view mode
-
-    // Timeline mode state
-    this.timelineEvents = JSON.parse(this.el.dataset.timelineEvents || '[]')
-    this.timelinePaused = false           // Whether live updates are paused
-    this.timelineTypeFilter = new Set(['command', 'alarm', 'procedure', 'automation'])
-    this.timelineTargetFilter = null      // Target ID to filter by, or null for all
-    this.timelineSearchQuery = ''         // Search text filter
-    this.timelineView = 'stream'          // 'stream', 'matrix', or 'lanes'
-
-    // Matrix view state
-    this.matrixGroupBy = 'target'         // 'target', 'group' (for target groups)
-    this.matrixTimeBucket = 15            // Time bucket in minutes (5, 15, 60, 240)
-    this.matrixSelectedCell = null        // { groupId, timeIndex } of selected cell
-
-    // Lanes view state
-    this.lanesPinnedTargets = []          // Array of pinned target IDs
-    this.lanesSelectedEvent = null        // Currently selected event for detail view
-    this.lanesTimeRange = 2               // Hours to show (2, 6, 12, 24)
-    this.lanesScrubbingTime = null        // DateTime when scrubbing, null = live mode
-    this.lanesIsDragging = false          // Whether currently dragging the NOW marker
-    this.lanesActivityExpanded = false    // Whether activity panel is expanded
-    this.lanesActivityHeight = null       // Custom height when resized (null = default)
-    this.lanesTargetSearch = ''           // Target search/filter text for picker
-    this.lanesTargetPanelWidth = 220      // Target panel width in pixels
-    this.lanesViewOffset = 0              // Time offset in ms from NOW (negative = past)
-    this.lanesScrubberPosition = 80       // Scrubber position as percentage (0-100)
-    this.lanesIsPanning = false           // Whether currently panning via drag
-    this.lanesPanStartX = 0               // Mouse X at drag start
-    this.lanesPanStartOffset = 0          // Offset at drag start
-
-    // Stream view enhanced state
-    this.streamExpandedEvent = null       // ID of currently expanded event
-    this.streamExpandedCluster = null     // ID of currently expanded cluster
-    this.streamLoadingMore = false        // Whether currently loading more from server
-    this.streamHasMoreEvents = true       // Whether there are more events to load
-
-    // Stream view target filtering
-    this.streamTargetFilter = new Set()   // Selected target IDs (initialized with all on first render)
-    this.streamTargetFilterInitialized = false  // Whether we've populated initial selection
-    this.streamShowSystem = true          // Show system-level events (no target_id)
-    this.streamTargetSearch = ''          // Target search/filter text
-    this.streamFilterPanelWidth = 30      // Filter panel width percentage (default 30%)
-
-    // Live time update interval for timeline mode
-    this._timelineUpdateInterval = null
+    // Initialize all state from data attributes
+    initializeState(this)
 
     // Register LiveView event handlers immediately
     this._setupEventHandlers()

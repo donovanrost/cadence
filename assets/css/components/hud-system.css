@@ -1,0 +1,631 @@
+/* ============================================
+   CADENCE HUD DESIGN SYSTEM
+   Mission Control / Space Operations Aesthetic
+   ============================================ */
+
+/* Vaporwave custom utilities */
+@layer utilities {
+  /* ============================================
+     Glow Effects (using CSS variables)
+     ============================================ */
+
+  /* Strong neon glow effects */
+  .glow-cyan {
+    box-shadow: 0 0 10px oklch(from var(--glow-cyan) l c h / 0.5),
+                0 0 20px oklch(from var(--glow-cyan) l c h / 0.3);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 10px oklch(from var(--glow-purple) l c h / 0.5),
+                0 0 20px oklch(from var(--glow-purple) l c h / 0.3);
+  }
+
+  .glow-pink {
+    box-shadow: 0 0 10px oklch(from var(--glow-pink) l c h / 0.5),
+                0 0 20px oklch(from var(--glow-pink) l c h / 0.3);
+  }
+
+  /* Soft glow effects (for hover/focus states) */
+  .glow-cyan-soft {
+    box-shadow: 0 0 8px oklch(from var(--glow-cyan) l c h / 0.4),
+                0 0 16px oklch(from var(--glow-cyan) l c h / 0.2);
+  }
+
+  .glow-purple-soft {
+    box-shadow: 0 0 8px oklch(from var(--glow-purple) l c h / 0.4),
+                0 0 16px oklch(from var(--glow-purple) l c h / 0.2);
+  }
+
+  /* Status indicator glows */
+  .glow-critical {
+    box-shadow: 0 0 6px oklch(from var(--status-critical) l c h / 0.8);
+  }
+
+  .glow-warning {
+    box-shadow: 0 0 6px oklch(from var(--status-warning) l c h / 0.8);
+  }
+
+  .glow-success {
+    box-shadow: 0 0 6px oklch(from var(--status-success) l c h / 0.8);
+  }
+
+  .glow-info {
+    box-shadow: 0 0 6px oklch(from var(--status-info) l c h / 0.8);
+  }
+
+  /* Hover glow utilities */
+  .hover-glow-cyan {
+    transition: box-shadow var(--transition-smooth);
+  }
+
+  .hover-glow-cyan:hover {
+    box-shadow: 0 0 8px oklch(from var(--glow-cyan) l c h / 0.4),
+                0 0 16px oklch(from var(--glow-cyan) l c h / 0.2);
+  }
+
+  .hover-glow-purple:hover {
+    box-shadow: 0 0 8px oklch(from var(--glow-purple) l c h / 0.4),
+                0 0 16px oklch(from var(--glow-purple) l c h / 0.2);
+  }
+
+  /* ============================================
+     Border Utilities
+     ============================================ */
+
+  /* Cyan borders at different opacities */
+  .border-cyan-subtle {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.2);
+  }
+
+  .border-cyan {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.3);
+  }
+
+  .border-cyan-strong {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.5);
+  }
+
+  /* Left accent borders for status indicators */
+  .border-l-accent-cyan {
+    border-left: 2px solid var(--glow-cyan);
+  }
+
+  .border-l-accent-critical {
+    border-left: 2px solid var(--status-critical);
+  }
+
+  .border-l-accent-warning {
+    border-left: 2px solid var(--status-warning);
+  }
+
+  .border-l-accent-success {
+    border-left: 2px solid var(--status-success);
+  }
+
+  .border-l-accent-info {
+    border-left: 2px solid var(--status-info);
+  }
+
+  /* ============================================
+     Background Utilities
+     ============================================ */
+
+  /* Ghost backgrounds (semi-transparent) */
+  .bg-cyan-ghost {
+    background: oklch(from var(--glow-cyan) l c h / 0.1);
+  }
+
+  .bg-cyan-hover {
+    background: oklch(from var(--glow-cyan) l c h / 0.15);
+  }
+
+  .bg-purple-ghost {
+    background: oklch(from var(--glow-purple) l c h / 0.1);
+  }
+
+  .bg-critical-ghost {
+    background: oklch(from var(--status-critical) l c h / 0.08);
+  }
+
+  .bg-warning-ghost {
+    background: oklch(from var(--status-warning) l c h / 0.08);
+  }
+
+  .bg-success-ghost {
+    background: oklch(from var(--status-success) l c h / 0.08);
+  }
+
+  .bg-info-ghost {
+    background: oklch(from var(--status-info) l c h / 0.08);
+  }
+
+  /* Surface backgrounds */
+  .bg-surface-base {
+    background: var(--surface-base);
+  }
+
+  .bg-surface-raised {
+    background: var(--surface-raised);
+  }
+
+  .bg-surface-elevated {
+    background: var(--surface-elevated);
+  }
+
+  .bg-surface-overlay {
+    background: var(--surface-overlay);
+  }
+
+  /* ============================================
+     Focus Ring Utilities
+     ============================================ */
+
+  .focus-ring-cyan:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px oklch(from var(--glow-cyan) l c h / 0.3),
+                0 0 10px oklch(from var(--glow-cyan) l c h / 0.15);
+  }
+
+  .focus-ring-cyan:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px oklch(from var(--glow-cyan) l c h / 0.3),
+                0 0 10px oklch(from var(--glow-cyan) l c h / 0.15);
+  }
+
+  /* ============================================
+     Transition Utilities
+     ============================================ */
+
+  .transition-fast {
+    transition: all var(--transition-fast);
+  }
+
+  .transition-normal {
+    transition: all var(--transition-normal);
+  }
+
+  .transition-smooth {
+    transition: all var(--transition-smooth);
+  }
+
+  /* ============================================
+     Gradients
+     ============================================ */
+
+  /* Vaporwave gradient backgrounds */
+  .gradient-vaporwave {
+    background: linear-gradient(135deg,
+                var(--glow-pink) 0%,
+                var(--glow-purple) 50%,
+                var(--glow-cyan) 100%);
+  }
+
+  .gradient-vaporwave-subtle {
+    background: linear-gradient(135deg,
+                oklch(from var(--glow-pink) l c h / 0.1) 0%,
+                oklch(from var(--glow-purple) l c h / 0.1) 50%,
+                oklch(from var(--glow-cyan) l c h / 0.1) 100%);
+  }
+
+  /* Smooth transitions */
+  .transition-glow {
+    transition: box-shadow var(--transition-smooth), transform var(--transition-normal);
+  }
+
+  /* Sidebar darker background for dark mode */
+  .sidebar-dark-bg {
+    background-color: oklch(10% 0.02 265);
+  }
+
+  /* ============================================
+     HUD Typography
+     ============================================ */
+
+  /* Monospace for data displays */
+  .font-mono-data {
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.025em;
+  }
+
+  /* Section labels - uppercase, tracked */
+  .hud-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: oklch(70% 0.08 210);
+  }
+
+  .dark .hud-label {
+    color: oklch(65% 0.10 210);
+  }
+
+  /* ============================================
+     HUD Corner Brackets
+     Decorative corner accents for panels/cards
+     ============================================ */
+
+  .hud-corners {
+    position: relative;
+  }
+
+  .hud-corners::before,
+  .hud-corners::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: oklch(from var(--glow-cyan) l c h / 0.6);
+    border-style: solid;
+    pointer-events: none;
+  }
+
+  .hud-corners::before {
+    top: 0;
+    left: 0;
+    border-width: 2px 0 0 2px;
+  }
+
+  .hud-corners::after {
+    top: 0;
+    right: 0;
+    border-width: 2px 2px 0 0;
+  }
+
+  /* Additional corners via child pseudo-elements or wrapper */
+  .hud-corners-full {
+    position: relative;
+  }
+
+  .hud-corners-full::before,
+  .hud-corners-full::after,
+  .hud-corners-full > .hud-corner-bl,
+  .hud-corners-full > .hud-corner-br {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: oklch(from var(--glow-cyan) l c h / 0.6);
+    border-style: solid;
+    pointer-events: none;
+  }
+
+  .hud-corners-full::before {
+    top: 0;
+    left: 0;
+    border-width: 2px 0 0 2px;
+  }
+
+  .hud-corners-full::after {
+    top: 0;
+    right: 0;
+    border-width: 2px 2px 0 0;
+  }
+
+  /* ============================================
+     HUD Borders & Frames
+     ============================================ */
+
+  .hud-border {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.3);
+  }
+
+  .hud-border-strong {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.6);
+  }
+
+  .hud-border-glow {
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.5);
+    box-shadow:
+      inset 0 0 20px oklch(from var(--glow-cyan) l c h / 0.05),
+      0 0 10px oklch(from var(--glow-cyan) l c h / 0.1);
+  }
+
+  /* Status-colored borders */
+  .hud-border-success {
+    border-color: oklch(from var(--status-success) l c h / 0.6);
+  }
+
+  .hud-border-warning {
+    border-color: oklch(72% 0.15 50 / 0.6);
+  }
+
+  .hud-border-error {
+    border-color: oklch(68% 0.20 10 / 0.6);
+  }
+
+  /* ============================================
+     HUD Panel / Card Styles
+     ============================================ */
+
+  .hud-panel {
+    background: oklch(15% 0.02 260 / 0.8);
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.2);
+    border-radius: 2px;
+    backdrop-filter: blur(8px);
+  }
+
+  .hud-panel-header {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.15);
+    background: oklch(from var(--glow-cyan) l c h / 0.05);
+  }
+
+  /* Inset panel style - appears recessed */
+  .hud-inset {
+    background: oklch(10% 0.02 265 / 0.5);
+    border: 1px solid oklch(0% 0 0 / 0.3);
+    box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.2);
+  }
+
+  /* ============================================
+     HUD Status Indicators
+     ============================================ */
+
+  .hud-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .hud-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    animation: hud-pulse 2s ease-in-out infinite;
+  }
+
+  .hud-status-nominal .hud-status-dot {
+    background: oklch(78% 0.10 185);
+    box-shadow: 0 0 6px oklch(from var(--status-success) l c h / 0.8);
+  }
+
+  .hud-status-warning .hud-status-dot {
+    background: oklch(72% 0.15 50);
+    box-shadow: 0 0 6px oklch(72% 0.15 50 / 0.8);
+    animation: hud-pulse-warning 1s ease-in-out infinite;
+  }
+
+  .hud-status-critical .hud-status-dot {
+    background: oklch(68% 0.20 10);
+    box-shadow: 0 0 6px oklch(68% 0.20 10 / 0.8);
+    animation: hud-pulse-critical 0.5s ease-in-out infinite;
+  }
+
+  @keyframes hud-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  @keyframes hud-pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes hud-pulse-critical {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+
+  /* ============================================
+     HUD Grid / Scanline Effects
+     ============================================ */
+
+  .hud-grid {
+    background-image:
+      linear-gradient(oklch(from var(--glow-cyan) l c h / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(from var(--glow-cyan) l c h / 0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .hud-grid-dense {
+    background-image:
+      linear-gradient(oklch(from var(--glow-cyan) l c h / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(from var(--glow-cyan) l c h / 0.05) 1px, transparent 1px);
+    background-size: 10px 10px;
+  }
+
+  /* Subtle scanline overlay */
+  .hud-scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0% 0 0 / 0.03) 2px,
+      oklch(0% 0 0 / 0.03) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* ============================================
+     HUD Data Display
+     ============================================ */
+
+  .hud-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.1);
+  }
+
+  .hud-data-row:last-child {
+    border-bottom: none;
+  }
+
+  .hud-data-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: oklch(70% 0.05 250);
+  }
+
+  .hud-data-value {
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    color: oklch(85% 0.08 210);
+  }
+
+  /* ============================================
+     HUD Dividers
+     ============================================ */
+
+  .hud-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(from var(--glow-cyan) l c h / 0.3) 20%,
+      oklch(from var(--glow-cyan) l c h / 0.3) 80%,
+      transparent
+    );
+    margin: 1rem 0;
+  }
+
+  .hud-divider-vertical {
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      oklch(from var(--glow-cyan) l c h / 0.3) 20%,
+      oklch(from var(--glow-cyan) l c h / 0.3) 80%,
+      transparent
+    );
+    margin: 0 1rem;
+  }
+
+  /* ============================================
+     Mission Control V2 - Status Bar & Typography
+     ============================================ */
+
+  /* Mission control label - uppercase, small, tracked */
+  .mc-label-subsystem {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Mission control value displays */
+  .mc-value-large {
+    font-size: 2rem;
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mc-value-medium {
+    font-size: 1.25rem;
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mc-value-small {
+    font-size: 0.875rem;
+    font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ============================================
+     Mission Control V2 - Status Badges
+     ============================================ */
+
+  .status-badge-nominal {
+    background: oklch(72% 0.19 160 / 0.15);
+    color: oklch(72% 0.19 160);
+    border: 1px solid oklch(72% 0.19 160 / 0.3);
+  }
+
+  .status-badge-caution {
+    background: oklch(75% 0.18 85 / 0.15);
+    color: oklch(75% 0.18 85);
+    border: 1px solid oklch(75% 0.18 85 / 0.3);
+  }
+
+  .status-badge-warning {
+    background: oklch(from var(--status-warning) l c h / 0.15);
+    color: oklch(70% 0.20 50);
+    border: 1px solid oklch(from var(--status-warning) l c h / 0.3);
+  }
+
+  .status-badge-critical {
+    background: oklch(from var(--status-critical) l c h / 0.15);
+    color: oklch(62% 0.25 25);
+    border: 1px solid oklch(from var(--status-critical) l c h / 0.3);
+  }
+
+  .status-badge-stale {
+    background: oklch(55% 0.15 280 / 0.15);
+    color: oklch(55% 0.15 280);
+    border: 1px solid oklch(55% 0.15 280 / 0.3);
+  }
+
+  /* ============================================
+     Mission Control V2 - Animated Indicators
+     ============================================ */
+
+  /* Critical pulse - fast, urgent */
+  .status-critical-pulse {
+    animation: mc-pulse-critical 1s ease-in-out infinite;
+  }
+
+  @keyframes mc-pulse-critical {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Warning pulse - slower */
+  .status-warning-pulse {
+    animation: mc-pulse-warning 2s ease-in-out infinite;
+  }
+
+  @keyframes mc-pulse-warning {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  /* ============================================
+     Mission Control V2 - Status Bar Component
+     ============================================ */
+
+  .status-bar {
+    background: linear-gradient(
+      180deg,
+      oklch(15% 0.02 260) 0%,
+      oklch(12% 0.02 265) 100%
+    );
+    border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.2);
+    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.3);
+  }
+
+  [data-theme="light"] .status-bar {
+    background: linear-gradient(
+      180deg,
+      oklch(98% 0.005 250) 0%,
+      oklch(96% 0.005 250) 100%
+    );
+    border-bottom-color: oklch(from var(--glow-cyan) l c h / 0.2);
+    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.1);
+  }
+}
+
