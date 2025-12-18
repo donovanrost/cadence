@@ -1052,7 +1052,7 @@ export const OpsConsoleV2Hook = {
         <!-- Top: Target Selection and Command Browser -->
         <div class="cmd-panels-row">
           <!-- Left: Target Selection -->
-          <div class="cmd-target-panel">
+          <div class="cmd-target-panel" style="flex: 0 0 ${this.cmdTargetPanelWidth || 40}%">
             <div class="cmd-panel-header">
               <div class="cmd-panel-title">
                 <span class="mc-label-subsystem">TARGET SELECTION</span>
@@ -1091,6 +1091,9 @@ export const OpsConsoleV2Hook = {
               <button class="btn btn-ghost btn-xs" id="cmd-clear-selection">Clear</button>
             </div>
           </div>
+
+          <!-- Resize Handle -->
+          <div class="cmd-resize-handle" id="cmd-resize-handle"></div>
 
           <!-- Right: Command Browser -->
           <div class="cmd-command-panel">
@@ -1681,6 +1684,48 @@ export const OpsConsoleV2Hook = {
 
       filterPanel.style.flex = `0 0 ${clampedPercent}%`
       this.streamFilterPanelWidth = clampedPercent
+    }
+
+    const onMouseUp = () => {
+      resizeHandle?.classList.remove('dragging')
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  },
+
+  /**
+   * Start resizing the commands target panel.
+   */
+  _startCmdPanelResize(e) {
+    e.preventDefault()
+
+    const dashboard = this.panelLayout?.elements?.dashboard
+    const panelsRow = dashboard?.querySelector('.cmd-panels-row')
+    const targetPanel = dashboard?.querySelector('.cmd-target-panel')
+    const resizeHandle = dashboard?.querySelector('#cmd-resize-handle')
+
+    if (!panelsRow || !targetPanel) return
+
+    resizeHandle?.classList.add('dragging')
+
+    const startX = e.clientX
+    const layoutRect = panelsRow.getBoundingClientRect()
+    const startWidth = targetPanel.getBoundingClientRect().width
+    const layoutWidth = layoutRect.width
+
+    const onMouseMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const newWidth = startWidth + deltaX
+      const newPercent = (newWidth / layoutWidth) * 100
+
+      // Clamp between 15% and 60%
+      const clampedPercent = Math.max(15, Math.min(60, newPercent))
+
+      targetPanel.style.flex = `0 0 ${clampedPercent}%`
+      this.cmdTargetPanelWidth = clampedPercent
     }
 
     const onMouseUp = () => {
@@ -4399,6 +4444,14 @@ export const OpsConsoleV2Hook = {
 
     // Initialize tooltip
     this._initTargetTooltip(container)
+
+    // Commands panel resize handle
+    const resizeHandle = container.querySelector('#cmd-resize-handle')
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', (e) => {
+        this._startCmdPanelResize(e)
+      })
+    }
 
     // View toggle buttons
     container.querySelectorAll(".cmd-view-btn").forEach(btn => {

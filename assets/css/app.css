@@ -305,6 +305,9 @@
 /* Widget Styles */
 @import "./components/widgets.css";
 
+/* Target Selection Panel - shared component */
+@import "./components/target-selection-panel.css";
+
 /* ============================================
    Mode-Specific Styles
    ============================================ */

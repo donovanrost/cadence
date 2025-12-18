@@ -1,0 +1,308 @@
+/* =============================================================================
+   Target Selection Panel - Shared Component
+   Used by: Commands Mode, Timeline Mode
+   ============================================================================= */
+
+/*
+   Usage: Set --target-panel-accent on the parent container:
+   --target-panel-accent: var(--glow-cyan);     // Commands mode
+   --target-panel-accent: var(--timeline-accent); // Timeline mode
+*/
+
+/* ----------------------------------------
+   Panel Header
+   ---------------------------------------- */
+.target-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(
+    180deg,
+    oklch(12% 0.015 265) 0%,
+    var(--surface-inset) 100%
+  );
+  border-bottom: 1px solid var(--neutral-mid);
+  gap: 0.5rem;
+  min-height: 0;
+  flex-wrap: wrap;
+}
+
+.target-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.target-panel-title-text {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--target-panel-accent, var(--glow-cyan));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.target-panel-count {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.target-panel-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* View Toggle Buttons */
+.target-panel-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  background: transparent;
+  border: 1px solid var(--neutral-border);
+  border-radius: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.target-panel-view-btn:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.4);
+  color: var(--text-bright);
+}
+
+.target-panel-view-btn.active {
+  background: oklch(from var(--target-panel-accent, var(--glow-cyan)) 20% 0.04 h);
+  border-color: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.5);
+  color: var(--target-panel-accent, var(--glow-cyan));
+}
+
+.target-panel-view-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ----------------------------------------
+   Search/Filter Bar
+   ---------------------------------------- */
+.target-panel-filters {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--surface-inset);
+  border-bottom: 1px solid oklch(18% 0.02 265);
+}
+
+.target-panel-search {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid oklch(28% 0.02 265);
+  background: var(--surface-input);
+  color: var(--text-bright);
+  transition: all var(--transition-fast);
+  min-width: 0;
+}
+
+.target-panel-search::placeholder {
+  color: oklch(50% 0.02 250);
+}
+
+.target-panel-search:focus {
+  outline: none;
+  border-color: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.5);
+  box-shadow: 0 0 0 1px oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.2);
+}
+
+.target-panel-group-filter {
+  padding: 0.3rem 0.375rem;
+  font-size: 0.55rem;
+  font-family: var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid oklch(28% 0.02 265);
+  background: var(--surface-input);
+  color: var(--text-bright);
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 80px;
+}
+
+/* ----------------------------------------
+   Target Grid
+   ---------------------------------------- */
+.target-panel-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: oklch(9% 0.015 265);
+}
+
+/* Detailed view - larger cells */
+.target-panel-grid.detailed-view {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+/* ----------------------------------------
+   Target Cell
+   ---------------------------------------- */
+.target-panel-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--surface-input);
+  border: 1px solid oklch(20% 0.02 265);
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.target-panel-cell:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(28% 0.02 265);
+}
+
+/* Status dot indicator */
+.target-panel-cell::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: oklch(45% 0.02 250);
+}
+
+/* Status variants */
+.target-panel-cell.status-online::before {
+  background: var(--status-success);
+  box-shadow: 0 0 4px oklch(from var(--status-success) l c h / 0.6);
+}
+
+.target-panel-cell.status-offline::before {
+  background: oklch(40% 0.02 250);
+}
+
+.target-panel-cell.status-standby::before {
+  background: oklch(75% 0.15 85);
+  box-shadow: 0 0 4px oklch(75% 0.15 85 / 0.4);
+}
+
+.target-panel-cell.status-fault::before {
+  background: oklch(65% 0.2 25);
+  box-shadow: 0 0 4px oklch(65% 0.2 25 / 0.5);
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Selected state */
+.target-panel-cell.selected {
+  background: oklch(from var(--target-panel-accent, var(--glow-cyan)) 18% 0.04 h);
+  border-color: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.4);
+  box-shadow: 0 0 8px oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.15),
+              inset 0 0 12px oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.05);
+}
+
+/* Selection indicator */
+.target-panel-cell.selected::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  background: var(--target-panel-accent, var(--glow-cyan));
+  border-radius: 1px;
+  box-shadow: 0 0 4px var(--target-panel-accent, var(--glow-cyan));
+}
+
+/* Target name */
+.target-panel-name {
+  flex: 1;
+  font-size: 0.6rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: oklch(80% 0.02 250);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.target-panel-cell.selected .target-panel-name {
+  color: oklch(90% 0.02 250);
+}
+
+/* ----------------------------------------
+   Footer Actions
+   ---------------------------------------- */
+.target-panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-top: 1px solid var(--neutral-mid);
+  background: var(--surface-inset);
+}
+
+.target-panel-footer-btn {
+  padding: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(from var(--target-panel-accent, var(--glow-cyan)) 70% 0.08 h);
+  background: transparent;
+  border: 1px solid var(--neutral-border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.target-panel-footer-btn:hover {
+  background: oklch(18% 0.02 265);
+  border-color: oklch(from var(--target-panel-accent, var(--glow-cyan)) 70% 0.08 h / 0.5);
+}
+
+/* ----------------------------------------
+   Scrollbar
+   ---------------------------------------- */
+.target-panel-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.target-panel-grid::-webkit-scrollbar-track {
+  background: var(--surface-inset);
+}
+
+.target-panel-grid::-webkit-scrollbar-thumb {
+  background: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.3);
+  border-radius: 2px;
+}
+
+.target-panel-grid::-webkit-scrollbar-thumb:hover {
+  background: oklch(from var(--target-panel-accent, var(--glow-cyan)) l c h / 0.5);
+}
