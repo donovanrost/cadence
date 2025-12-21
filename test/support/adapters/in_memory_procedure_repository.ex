@@ -30,6 +30,8 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
   use Agent
 
   @behaviour Cadence.Ports.Repository.Procedures.ProcedureRepository
+  @behaviour Cadence.Ports.Repository.Procedures.ApprovalOperations
+  @behaviour Cadence.Ports.Repository.Procedures.ExecutionOperations
 
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion
 
@@ -41,7 +43,16 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     name = Keyword.get(opts, :name, __MODULE__)
 
     Agent.start_link(
-      fn -> %{procedures: %{}, versions: %{}, version_numbers: %{}} end,
+      fn ->
+        %{
+          procedures: %{},
+          versions: %{},
+          version_numbers: %{},
+          approvals: %{},
+          executions: %{},
+          logs: %{}
+        }
+      end,
       name: name
     )
   end
@@ -249,6 +260,229 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
   end
 
   # ============================================================================
+  # ApprovalOperations Implementation
+  # ============================================================================
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def find_approval(id) do
+    case Agent.get(__MODULE__, fn state -> Map.get(state.approvals, id) end) do
+      nil -> {:error, :not_found}
+      approval -> {:ok, approval}
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def find_user_approval(version_id, user_id) do
+    Agent.get(__MODULE__, fn state ->
+      result =
+        state.approvals
+        |> Map.values()
+        |> Enum.find(fn a ->
+          a.procedure_version_id == version_id && a.user_id == user_id
+        end)
+
+      case result do
+        nil -> {:error, :not_found}
+        approval -> {:ok, approval}
+      end
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def list_approvals(version_id, _opts \\ []) do
+    Agent.get(__MODULE__, fn state ->
+      state.approvals
+      |> Map.values()
+      |> Enum.filter(&(&1.procedure_version_id == version_id))
+      |> Enum.sort_by(& &1.inserted_at)
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def save_approval(attrs) do
+    id = Ecto.UUID.generate()
+    now = DateTime.utc_now()
+
+    approval = %{
+      id: id,
+      procedure_version_id: Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
+      user_id: Map.get(attrs, :user_id) || Map.get(attrs, "user_id"),
+      decision: Map.get(attrs, :decision) || Map.get(attrs, "decision"),
+      comment: Map.get(attrs, :comment) || Map.get(attrs, "comment"),
+      inserted_at: now,
+      updated_at: now
+    }
+
+    Agent.update(__MODULE__, fn state ->
+      %{state | approvals: Map.put(state.approvals, id, approval)}
+    end)
+
+    {:ok, approval}
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def count_approvals(version_id, decision) do
+    Agent.get(__MODULE__, fn state ->
+      state.approvals
+      |> Map.values()
+      |> Enum.count(fn a ->
+        a.procedure_version_id == version_id && a.decision == decision
+      end)
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def delete_approvals(version_id) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      {to_delete, to_keep} =
+        state.approvals
+        |> Map.split_with(fn {_id, a} -> a.procedure_version_id == version_id end)
+
+      count = map_size(to_delete)
+      {{:ok, count}, %{state | approvals: to_keep}}
+    end)
+  end
+
+  # ============================================================================
+  # ExecutionOperations Implementation
+  # ============================================================================
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def find_execution(id) do
+    case Agent.get(__MODULE__, fn state -> Map.get(state.executions, id) end) do
+      nil -> {:error, :not_found}
+      execution -> {:ok, execution}
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_executions(opts \\ []) do
+    mission_id = Keyword.get(opts, :mission_id)
+    procedure_id = Keyword.get(opts, :procedure_id)
+    status = Keyword.get(opts, :status)
+    limit = Keyword.get(opts, :limit, 50)
+
+    Agent.get(__MODULE__, fn state ->
+      state.executions
+      |> Map.values()
+      |> filter_executions(:mission_id, mission_id)
+      |> filter_executions(:procedure_id, procedure_id)
+      |> filter_executions(:status, status)
+      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+      |> Enum.take(limit)
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def create_execution(attrs) do
+    id = Ecto.UUID.generate()
+    now = DateTime.utc_now()
+
+    execution = %{
+      id: id,
+      procedure_id: Map.get(attrs, :procedure_id) || Map.get(attrs, "procedure_id"),
+      procedure_version_id: Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
+      organization_id: Map.get(attrs, :organization_id) || Map.get(attrs, "organization_id"),
+      mission_id: Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id"),
+      target_id: Map.get(attrs, :target_id) || Map.get(attrs, "target_id"),
+      parameters: Map.get(attrs, :parameters) || Map.get(attrs, "parameters") || %{},
+      status: Map.get(attrs, :status) || Map.get(attrs, "status") || :pending,
+      triggered_by: Map.get(attrs, :triggered_by) || Map.get(attrs, "triggered_by") || :manual,
+      triggered_by_user_id: Map.get(attrs, :triggered_by_user_id) || Map.get(attrs, "triggered_by_user_id"),
+      inserted_at: now,
+      updated_at: now
+    }
+
+    Agent.update(__MODULE__, fn state ->
+      %{state | executions: Map.put(state.executions, id, execution)}
+    end)
+
+    {:ok, execution}
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def update_execution(id, attrs) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      case Map.get(state.executions, id) do
+        nil ->
+          {{:error, :not_found}, state}
+
+        execution ->
+          updated =
+            attrs
+            |> Enum.reduce(execution, fn {key, value}, acc ->
+              Map.put(acc, key, value)
+            end)
+            |> Map.put(:updated_at, DateTime.utc_now())
+
+          new_executions = Map.put(state.executions, id, updated)
+          {{:ok, updated}, %{state | executions: new_executions}}
+      end
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_running_executions do
+    Agent.get(__MODULE__, fn state ->
+      state.executions
+      |> Map.values()
+      |> Enum.filter(&(&1.status in [:running, :pausing]))
+      |> Enum.sort_by(& &1.started_at)
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_logs(execution_id, opts \\ []) do
+    level = Keyword.get(opts, :level)
+    limit = Keyword.get(opts, :limit, 100)
+    offset = Keyword.get(opts, :offset, 0)
+
+    Agent.get(__MODULE__, fn state ->
+      state.logs
+      |> Map.values()
+      |> Enum.filter(&(&1.execution_id == execution_id))
+      |> filter_logs(:level, level)
+      |> Enum.sort_by(& &1.timestamp)
+      |> Enum.drop(offset)
+      |> Enum.take(limit)
+    end)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def create_log(attrs) do
+    id = Ecto.UUID.generate()
+
+    log = %{
+      id: id,
+      execution_id: Map.get(attrs, :execution_id) || Map.get(attrs, "execution_id"),
+      timestamp: Map.get(attrs, :timestamp) || Map.get(attrs, "timestamp") || DateTime.utc_now(),
+      level: Map.get(attrs, :level) || Map.get(attrs, "level") || :info,
+      message: Map.get(attrs, :message) || Map.get(attrs, "message"),
+      step_index: Map.get(attrs, :step_index) || Map.get(attrs, "step_index"),
+      metadata: Map.get(attrs, :metadata) || Map.get(attrs, "metadata") || %{}
+    }
+
+    Agent.update(__MODULE__, fn state ->
+      %{state | logs: Map.put(state.logs, id, log)}
+    end)
+
+    {:ok, log}
+  end
+
+  # Private helpers for execution/log filtering
+  defp filter_executions(executions, _field, nil), do: executions
+
+  defp filter_executions(executions, field, value) do
+    Enum.filter(executions, &(Map.get(&1, field) == value))
+  end
+
+  defp filter_logs(logs, _field, nil), do: logs
+
+  defp filter_logs(logs, field, value) do
+    Enum.filter(logs, &(Map.get(&1, field) == value))
+  end
+
+  # ============================================================================
   # Test Helpers
   # ============================================================================
 
@@ -285,7 +519,14 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
   """
   def clear do
     Agent.update(__MODULE__, fn _ ->
-      %{procedures: %{}, versions: %{}, version_numbers: %{}}
+      %{
+        procedures: %{},
+        versions: %{},
+        version_numbers: %{},
+        approvals: %{},
+        executions: %{},
+        logs: %{}
+      }
     end)
   end
 

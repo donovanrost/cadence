@@ -33,12 +33,14 @@ defmodule Cadence.Settings do
       #=> {:error, :less_restrictive_than_org, %{org_value: 1, min_allowed: 1}}
   """
 
-  import Ecto.Query, warn: false
-
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
   alias Cadence.Settings.Setting
+  alias Cadence.Ports.Repository.Settings.SettingsRepository
+
+  # Repository accessor
+  defp settings_repo, do: SettingsRepository.impl()
 
   # Registry of all definition modules
   @definition_modules [
@@ -188,17 +190,10 @@ defmodule Cadence.Settings do
   @spec clear_mission_override(Mission.t(), atom(), atom()) ::
           {:ok, Setting.t()} | {:error, :not_found}
   def clear_mission_override(%Mission{id: mission_id}, namespace, key) do
-    query =
-      from s in Setting,
-        where:
-          s.scope_type == "mission" and
-            s.scope_id == ^mission_id and
-            s.namespace == ^to_string(namespace) and
-            s.key == ^to_string(key)
-
-    case Repo.delete_all(query) do
-      {0, _} -> {:error, :not_found}
-      {1, _} -> :ok
+    case settings_repo().delete(mission_id, "mission", to_string(namespace), to_string(key)) do
+      {:ok, 0} -> {:error, :not_found}
+      {:ok, _count} -> :ok
+      {:error, _} = error -> error
     end
   end
 
@@ -357,16 +352,7 @@ defmodule Cadence.Settings do
   end
 
   defp get_stored_value(scope_id, scope_type, namespace, key) do
-    query =
-      from s in Setting,
-        where:
-          s.scope_type == ^scope_type and
-            s.scope_id == ^scope_id and
-            s.namespace == ^to_string(namespace) and
-            s.key == ^to_string(key),
-        select: s.value
-
-    case Repo.one(query) do
+    case settings_repo().get_value(scope_id, scope_type, to_string(namespace), to_string(key)) do
       nil -> nil
       value_map -> Setting.extract_value(value_map)
     end
@@ -381,26 +367,7 @@ defmodule Cadence.Settings do
       value: Setting.wrap_value(value, type)
     }
 
-    # Try to find existing setting
-    query =
-      from s in Setting,
-        where:
-          s.scope_type == ^scope_type and
-            s.scope_id == ^scope_id and
-            s.namespace == ^to_string(namespace) and
-            s.key == ^to_string(key)
-
-    case Repo.one(query) do
-      nil ->
-        %Setting{}
-        |> Setting.changeset(attrs)
-        |> Repo.insert()
-
-      existing ->
-        existing
-        |> Setting.changeset(attrs)
-        |> Repo.update()
-    end
+    settings_repo().upsert(attrs)
   end
 
   defp valid_value?(definition, value) do

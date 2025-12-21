@@ -11,8 +11,7 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Organizations, Accounts, Repo}
-  alias Cadence.Organizations.OrganizationMembership
+  alias Cadence.{Organizations, Accounts}
 
   @impl true
   def mount(%{"id" => org_id}, _session, socket) do
@@ -55,9 +54,9 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
   end
 
   def handle_event("remove_member", %{"membership_id" => membership_id}, socket) do
-    membership = Repo.get!(OrganizationMembership, membership_id)
+    membership = Organizations.get_organization_membership!(membership_id)
 
-    case Repo.delete(membership) do
+    case Organizations.delete_organization_membership(membership) do
       {:ok, _} ->
         members = load_members(socket.assigns.organization.id)
 
@@ -74,7 +73,7 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
   end
 
   def handle_event("change_role", %{"membership_id" => membership_id, "role" => role}, socket) do
-    membership = Repo.get!(OrganizationMembership, membership_id)
+    membership = Organizations.get_organization_membership!(membership_id)
 
     case Organizations.update_organization_membership(membership, %{role: role}) do
       {:ok, _} ->
@@ -217,8 +216,7 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
   ## Private Functions
 
   defp load_members(org_id) do
-    Organizations.list_organization_memberships(org_id)
-    |> Repo.preload(:user)
+    Organizations.list_organization_memberships_with_users(org_id)
   end
 
   defp available_users(all_users, members) do

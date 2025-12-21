@@ -26,6 +26,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   """
 
   @behaviour Cadence.Ports.Repository.Procedures.ProcedureRepository
+  @behaviour Cadence.Ports.Repository.Procedures.ApprovalOperations
+  @behaviour Cadence.Ports.Repository.Procedures.ExecutionOperations
 
   import Ecto.Query
 
@@ -33,6 +35,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   alias Cadence.Procedures.Procedure, as: ProcedureSchema
   alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
   alias Cadence.Procedures.ProcedureApproval, as: ProcedureApprovalSchema
+  alias Cadence.Procedures.ProcedureExecution, as: ProcedureExecutionSchema
+  alias Cadence.Procedures.ProcedureLog, as: ProcedureLogSchema
   alias Cadence.Domain.Procedures.Entities.Procedure, as: ProcedureEntity
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion, as: ProcedureVersionEntity
 
@@ -288,6 +292,169 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
 
     {:ok, count}
   end
+
+  # ===========================================================================
+  # ApprovalOperations Implementation
+  # ===========================================================================
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def find_approval(id) do
+    case Repo.get(ProcedureApprovalSchema, id) do
+      nil -> {:error, :not_found}
+      approval -> {:ok, approval}
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def find_user_approval(version_id, user_id) do
+    query =
+      from a in ProcedureApprovalSchema,
+        where: a.procedure_version_id == ^version_id and a.user_id == ^user_id
+
+    case Repo.one(query) do
+      nil -> {:error, :not_found}
+      approval -> {:ok, approval}
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def list_approvals(version_id, opts \\ []) do
+    preloads = Keyword.get(opts, :preload, [:user])
+
+    query =
+      from a in ProcedureApprovalSchema,
+        where: a.procedure_version_id == ^version_id,
+        order_by: [asc: a.inserted_at]
+
+    query
+    |> preload(^preloads)
+    |> Repo.all()
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def save_approval(attrs) do
+    %ProcedureApprovalSchema{}
+    |> ProcedureApprovalSchema.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def count_approvals(version_id, decision) do
+    query =
+      from a in ProcedureApprovalSchema,
+        where: a.procedure_version_id == ^version_id and a.decision == ^decision,
+        select: count(a.id)
+
+    Repo.one(query) || 0
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
+  def delete_approvals(version_id) do
+    query =
+      from a in ProcedureApprovalSchema,
+        where: a.procedure_version_id == ^version_id
+
+    {count, _} = Repo.delete_all(query)
+    {:ok, count}
+  end
+
+  # ===========================================================================
+  # ExecutionOperations Implementation
+  # ===========================================================================
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def find_execution(id) do
+    case Repo.get(ProcedureExecutionSchema, id) do
+      nil -> {:error, :not_found}
+      execution -> {:ok, execution}
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_executions(opts \\ []) do
+    mission_id = Keyword.get(opts, :mission_id)
+    procedure_id = Keyword.get(opts, :procedure_id)
+    status = Keyword.get(opts, :status)
+    limit = Keyword.get(opts, :limit, 50)
+    preloads = Keyword.get(opts, :preload, [])
+
+    query =
+      from e in ProcedureExecutionSchema,
+        order_by: [desc: e.inserted_at],
+        limit: ^limit
+
+    query =
+      query
+      |> apply_execution_filter(:mission_id, mission_id)
+      |> apply_execution_filter(:procedure_id, procedure_id)
+      |> apply_execution_filter(:status, status)
+
+    query
+    |> preload(^preloads)
+    |> Repo.all()
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def create_execution(attrs) do
+    %ProcedureExecutionSchema{}
+    |> ProcedureExecutionSchema.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def update_execution(id, attrs) do
+    case Repo.get(ProcedureExecutionSchema, id) do
+      nil ->
+        {:error, :not_found}
+
+      execution ->
+        execution
+        |> ProcedureExecutionSchema.status_changeset(attrs)
+        |> Repo.update()
+    end
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_running_executions do
+    query =
+      from e in ProcedureExecutionSchema,
+        where: e.status in [:running, :pausing],
+        order_by: [asc: e.started_at]
+
+    Repo.all(query)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def list_logs(execution_id, opts \\ []) do
+    level = Keyword.get(opts, :level)
+    limit = Keyword.get(opts, :limit, 100)
+    offset = Keyword.get(opts, :offset, 0)
+
+    query =
+      from l in ProcedureLogSchema,
+        where: l.execution_id == ^execution_id,
+        order_by: [asc: l.timestamp],
+        limit: ^limit,
+        offset: ^offset
+
+    query = apply_log_filter(query, :level, level)
+
+    Repo.all(query)
+  end
+
+  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
+  def create_log(attrs) do
+    %ProcedureLogSchema{}
+    |> ProcedureLogSchema.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  # Private helpers for execution/log filtering
+  defp apply_execution_filter(query, _field, nil), do: query
+  defp apply_execution_filter(query, field, value), do: where(query, [e], field(e, ^field) == ^value)
+
+  defp apply_log_filter(query, _field, nil), do: query
+  defp apply_log_filter(query, field, value), do: where(query, [l], field(l, ^field) == ^value)
 
   # ===========================================================================
   # Entity <-> Schema Conversion

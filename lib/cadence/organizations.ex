@@ -125,6 +125,36 @@ defmodule Cadence.Organizations do
     |> Repo.update()
   end
 
+  @doc """
+  Gets a single organization membership.
+
+  Raises `Ecto.NoResultsError` if the OrganizationMembership does not exist.
+  """
+  def get_organization_membership!(id) do
+    alias Cadence.Organizations.OrganizationMembership
+    Repo.get!(OrganizationMembership, id)
+  end
+
+  @doc """
+  Deletes an organization membership.
+  """
+  def delete_organization_membership(%Cadence.Organizations.OrganizationMembership{} = membership) do
+    Repo.delete(membership)
+  end
+
+  @doc """
+  Lists all organization memberships for an organization, preloaded with users.
+  """
+  def list_organization_memberships_with_users(org_id) do
+    alias Cadence.Organizations.OrganizationMembership
+
+    OrganizationMembership
+    |> where([om], om.organization_id == ^org_id)
+    |> order_by([om], om.inserted_at)
+    |> preload(:user)
+    |> Repo.all()
+  end
+
   ## Quota Management
 
   @doc """

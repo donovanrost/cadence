@@ -14,11 +14,15 @@ defmodule Cadence.Timeline do
   """
 
   import Ecto.Query
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Repo
   alias Cadence.Timeline.Event
   alias Cadence.Commands.QueueEntry
   alias Cadence.Recordings
   alias Cadence.Recordings.Recording
+
+  # Event publisher accessor
+  defp event_publisher, do: EventPublisher.impl()
 
   @type event_type :: :command | :alarm | :procedure | :automation | :system
   @type list_opts :: [
@@ -129,13 +133,13 @@ defmodule Cadence.Timeline do
     Cadence.Outbox.subscribe_mission(mission_id)
 
     # Subscribe to alarm events
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
+    event_publisher().subscribe("mission:#{mission_id}:alarms")
 
     # Subscribe to procedure events
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:procedures")
+    event_publisher().subscribe("mission:#{mission_id}:procedures")
 
     # Subscribe to automation events
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:automations")
+    event_publisher().subscribe("mission:#{mission_id}:automations")
 
     :ok
   end
@@ -145,9 +149,9 @@ defmodule Cadence.Timeline do
   """
   @spec unsubscribe(binary()) :: :ok
   def unsubscribe(mission_id) do
-    Phoenix.PubSub.unsubscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
-    Phoenix.PubSub.unsubscribe(Cadence.PubSub, "mission:#{mission_id}:procedures")
-    Phoenix.PubSub.unsubscribe(Cadence.PubSub, "mission:#{mission_id}:automations")
+    event_publisher().unsubscribe("mission:#{mission_id}:alarms")
+    event_publisher().unsubscribe("mission:#{mission_id}:procedures")
+    event_publisher().unsubscribe("mission:#{mission_id}:automations")
     :ok
   end
 

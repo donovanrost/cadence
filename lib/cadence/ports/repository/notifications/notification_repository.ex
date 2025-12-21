@@ -20,6 +20,7 @@ defmodule Cadence.Ports.Repository.Notifications.NotificationRepository do
   """
 
   alias Cadence.Notifications.Notification
+  alias Cadence.Notifications.NotificationPreference
 
   @type id :: String.t()
   @type user_id :: String.t()
@@ -103,6 +104,46 @@ defmodule Cadence.Ports.Repository.Notifications.NotificationRepository do
   Archives a notification.
   """
   @callback archive(Notification.t()) :: {:ok, Notification.t()} | {:error, error()}
+
+  # ============================================================================
+  # Notification Preference Operations
+  # ============================================================================
+
+  @doc """
+  Finds a user's preference for a notification type.
+
+  When `mission_id` is nil, finds the global preference.
+  When `mission_id` is provided, finds the mission-specific override.
+
+  Returns `{:ok, preference}` if found, `{:error, :not_found}` otherwise.
+  """
+  @callback find_preference(user_id(), notification_type :: String.t(), mission_id :: String.t() | nil) ::
+              {:ok, NotificationPreference.t()} | {:error, :not_found}
+
+  @doc """
+  Saves a notification preference (insert or update).
+
+  Returns `{:ok, preference}` on success, `{:error, reason}` on failure.
+  """
+  @callback save_preference(attrs :: map()) ::
+              {:ok, NotificationPreference.t()} | {:error, error()}
+
+  @doc """
+  Lists all preferences for a user.
+
+  ## Options
+
+  - `:mission_id` - Filter by specific mission (nil = global preferences only)
+  - `:include_mission_prefs` - Include mission-specific preferences (default: true)
+  """
+  @callback list_preferences(user_id(), opts()) :: [NotificationPreference.t()]
+
+  @doc """
+  Deletes a preference by ID.
+
+  Returns `{:ok, preference}` if deleted, `{:error, :not_found}` if not found.
+  """
+  @callback delete_preference(id()) :: {:ok, NotificationPreference.t()} | {:error, :not_found}
 
   @doc """
   Returns the configured notification repository implementation.

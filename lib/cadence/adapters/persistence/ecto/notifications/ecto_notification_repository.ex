@@ -22,6 +22,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
 
   alias Cadence.Repo
   alias Cadence.Notifications.Notification
+  alias Cadence.Notifications.NotificationPreference
 
   # ===========================================================================
   # NotificationRepository Implementation
@@ -164,8 +165,106 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
   end
 
   # ===========================================================================
+  # Notification Preference Operations
+  # ===========================================================================
+
+  @impl true
+  def find_preference(user_id, notification_type, nil) do
+    query =
+      from p in NotificationPreference,
+        where: p.user_id == ^user_id,
+        where: p.notification_type == ^notification_type,
+        where: is_nil(p.mission_id)
+
+    case Repo.one(query) do
+      nil -> {:error, :not_found}
+      preference -> {:ok, preference}
+    end
+  end
+
+  def find_preference(user_id, notification_type, mission_id) do
+    query =
+      from p in NotificationPreference,
+        where: p.user_id == ^user_id,
+        where: p.notification_type == ^notification_type,
+        where: p.mission_id == ^mission_id
+
+    case Repo.one(query) do
+      nil -> {:error, :not_found}
+      preference -> {:ok, preference}
+    end
+  end
+
+  @impl true
+  def save_preference(attrs) do
+    user_id = Map.get(attrs, :user_id) || Map.get(attrs, "user_id")
+    notification_type = Map.get(attrs, :notification_type) || Map.get(attrs, "notification_type")
+    mission_id = Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id")
+
+    # Try to find existing preference
+    case find_preference(user_id, notification_type, mission_id) do
+      {:ok, existing} ->
+        existing
+        |> NotificationPreference.changeset(attrs)
+        |> Repo.update()
+
+      {:error, :not_found} ->
+        %NotificationPreference{}
+        |> NotificationPreference.changeset(attrs)
+        |> Repo.insert()
+    end
+  end
+
+  @impl true
+  def list_preferences(user_id, opts \\ []) do
+    mission_id = Keyword.get(opts, :mission_id)
+    include_mission_prefs = Keyword.get(opts, :include_mission_prefs, true)
+
+    query =
+      from p in NotificationPreference,
+        where: p.user_id == ^user_id,
+        order_by: [asc: p.notification_type]
+
+    query = apply_preference_filters(query, mission_id: mission_id, include_mission_prefs: include_mission_prefs)
+
+    Repo.all(query)
+  end
+
+  @impl true
+  def delete_preference(id) do
+    case Repo.get(NotificationPreference, id) do
+      nil ->
+        {:error, :not_found}
+
+      preference ->
+        case Repo.delete(preference) do
+          {:ok, deleted} -> {:ok, deleted}
+          {:error, _changeset} -> {:error, :delete_failed}
+        end
+    end
+  end
+
+  # ===========================================================================
   # Private Helpers
   # ===========================================================================
+
+  defp apply_preference_filters(query, filters) do
+    Enum.reduce(filters, query, fn
+      {:mission_id, nil}, q ->
+        q
+
+      {:mission_id, mission_id}, q ->
+        # When a specific mission_id is given, only return that mission's prefs
+        from(p in q, where: p.mission_id == ^mission_id)
+
+      {:include_mission_prefs, true}, q ->
+        q
+
+      {:include_mission_prefs, false}, q ->
+        # Only return global preferences (no mission)
+        from(p in q, where: is_nil(p.mission_id))
+    end)
+  end
 
   defp apply_filters(query, filters) do
     Enum.reduce(filters, query, fn

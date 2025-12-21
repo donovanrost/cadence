@@ -176,7 +176,7 @@ defmodule Cadence.Missions.AuthorizationTest do
 
       # Verify it's gone
       assert_raise Ecto.NoResultsError, fn ->
-        Missions.get_mission!(mission.id)
+        Missions.get_mission_unscoped!(mission.id)
       end
     end
 
@@ -202,7 +202,7 @@ defmodule Cadence.Missions.AuthorizationTest do
       assert {:error, :unauthorized} = Missions.delete_mission_authorized(mission, scope)
 
       # Verify mission still exists
-      assert Missions.get_mission!(mission.id)
+      assert Missions.get_mission_unscoped!(mission.id)
     end
   end
 end

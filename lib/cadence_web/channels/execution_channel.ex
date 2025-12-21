@@ -71,8 +71,8 @@ defmodule CadenceWeb.ExecutionChannel do
 
   defp load_user(user_id) do
     try do
-      user = Accounts.get_user!(user_id)
-      {:ok, Cadence.Repo.preload(user, :organization_memberships)}
+      user = Accounts.get_user_with_memberships!(user_id)
+      {:ok, user}
     rescue
       Ecto.NoResultsError -> {:error, :user_not_found}
     end

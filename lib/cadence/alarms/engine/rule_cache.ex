@@ -22,7 +22,11 @@ defmodule Cadence.Alarms.Engine.RuleCache do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.AlarmRule
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Targets
+
+  # Event publisher accessor
+  defp event_publisher, do: EventPublisher.impl()
 
   @table_name :alarm_rules_cache
   @refresh_interval :timer.minutes(5)
@@ -105,7 +109,7 @@ defmodule Cadence.Alarms.Engine.RuleCache do
     ])
 
     # Subscribe to rule change events
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "alarm_rules:changed")
+    event_publisher().subscribe("alarm_rules:changed")
 
     # Schedule periodic refresh
     schedule_refresh()

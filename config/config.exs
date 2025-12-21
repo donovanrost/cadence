@@ -109,7 +109,13 @@ config :cadence, Oban,
 # Defaults to Ecto implementations - override in test.exs with in-memory adapters
 config :cadence, :alarm_repository, Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository
 config :cadence, :queue_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository
+config :cadence, :commands_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoCommandsRepository
 config :cadence, :procedure_repository, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+config :cadence, :approval_operations, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+config :cadence, :execution_operations, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+config :cadence, :missions_repository, Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository
+config :cadence, :settings_repository, Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository
+config :cadence, :notification_repository, Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationRepository
 
 # Messaging adapters
 config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender

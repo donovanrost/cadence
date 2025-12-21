@@ -251,7 +251,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     {selected_database_id, selected_definition_set_id} =
       if target.definition_set_id do
         # Target has a specific definition set - find its database
-        ds = Cadence.Repo.get(DefinitionSet, target.definition_set_id)
+        ds = MissionDatabase.get_definition_set(target.definition_set_id)
 
         if ds do
           {ds.database_id, ds.id}

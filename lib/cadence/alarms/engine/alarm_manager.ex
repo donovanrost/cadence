@@ -201,7 +201,7 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
 
     # Subscribe to mission events
     events_topic = "mission:#{mission_id}:events"
-    Phoenix.PubSub.subscribe(Cadence.PubSub, events_topic)
+    event_publisher().subscribe(events_topic)
 
     # Load existing active alarms into cache
     load_active_alarms(mission_id, table)

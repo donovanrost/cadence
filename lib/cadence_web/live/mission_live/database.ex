@@ -101,7 +101,7 @@ defmodule CadenceWeb.MissionLive.Database do
 
   @impl true
   def handle_event("publish", %{"id" => id}, socket) do
-    case Cadence.Repo.get(DefinitionSet, id) do
+    case MissionDatabase.get_definition_set(id) do
       nil ->
         {:noreply, put_flash(socket, :error, "Version not found")}
 

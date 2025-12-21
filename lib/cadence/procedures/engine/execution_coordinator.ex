@@ -282,7 +282,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
       ref = Process.monitor(pid)
 
       # Subscribe to this execution's status updates
-      Phoenix.PubSub.subscribe(Cadence.PubSub, "procedure:#{execution.id}")
+      event_publisher().subscribe("procedure:#{execution.id}")
 
       # Track in state
       entry = %{
@@ -433,7 +433,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
       %{ref: ref} ->
         Process.demonitor(ref, [:flush])
         # Unsubscribe from this execution's topic
-        Phoenix.PubSub.unsubscribe(Cadence.PubSub, "procedure:#{execution_id}")
+        event_publisher().unsubscribe("procedure:#{execution_id}")
         %{state | active_executions: Map.delete(state.active_executions, execution_id)}
     end
   end

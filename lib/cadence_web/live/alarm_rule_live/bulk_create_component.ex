@@ -12,6 +12,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Alarms.RuleSuggester
+  alias Cadence.Targets
 
   @impl true
   def render(assigns) do
@@ -292,7 +293,7 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
   end
 
   defp get_target_identifier(target_id) do
-    case Cadence.Repo.get(Cadence.Targets.Target, target_id) do
+    case Targets.get_target_unscoped(target_id) do
       nil -> nil
       target -> target.identifier
     end

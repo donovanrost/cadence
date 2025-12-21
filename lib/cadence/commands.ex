@@ -53,6 +53,11 @@ defmodule Cadence.Commands do
 
   alias Cadence.Telemetry.CurrentValueTable
 
+  alias Cadence.Ports.Repository.Commanding.CommandsRepository
+
+  # Repository accessor for MetaCommand lookups
+  defp commands_repo, do: CommandsRepository.impl()
+
   # ============================================================================
   # MetaCommand Lookup Operations
   # ============================================================================
@@ -64,70 +69,54 @@ defmodule Cadence.Commands do
   Preloads arguments and verifiers for command execution.
   """
   def get_meta_command(definition_set_id, name) do
-    from(c in MetaCommand,
-      where: c.definition_set_id == ^definition_set_id,
-      where: c.name == ^name,
-      preload: [:arguments, :verifiers],
-      limit: 1
-    )
-    |> Repo.one()
+    case commands_repo().find_by_name(definition_set_id, name) do
+      {:ok, command} -> command
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
   Gets a MetaCommand by ID.
   """
   def get_meta_command_by_id(id) do
-    MetaCommand
-    |> Repo.get(id)
-    |> Repo.preload([:arguments, :verifiers])
+    case commands_repo().find(id) do
+      {:ok, command} -> command
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
   Gets a MetaCommand by ID, raising if not found.
   """
   def get_meta_command_by_id!(id) do
-    MetaCommand
-    |> Repo.get!(id)
-    |> Repo.preload([:arguments, :verifiers])
+    case commands_repo().find(id) do
+      {:ok, command} -> command
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: MetaCommand
+    end
   end
 
   @doc """
   Gets a MetaCommand by opcode for a DefinitionSet.
   """
   def get_meta_command_by_opcode(definition_set_id, opcode) do
-    from(c in MetaCommand,
-      where: c.definition_set_id == ^definition_set_id,
-      where: c.opcode == ^opcode,
-      preload: [:arguments, :verifiers],
-      limit: 1
-    )
-    |> Repo.one()
+    case commands_repo().find_by_opcode(definition_set_id, opcode) do
+      {:ok, command} -> command
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
   Lists all MetaCommands for a DefinitionSet.
   """
   def list_meta_commands(definition_set_id) do
-    from(c in MetaCommand,
-      where: c.definition_set_id == ^definition_set_id,
-      where: c.abstract == false or is_nil(c.abstract),
-      order_by: [asc: c.name],
-      preload: :arguments
-    )
-    |> Repo.all()
+    commands_repo().list(definition_set_id, preload: [:arguments])
   end
 
   @doc """
   Lists hazardous MetaCommands for a DefinitionSet.
   """
   def list_hazardous_meta_commands(definition_set_id) do
-    from(c in MetaCommand,
-      where: c.definition_set_id == ^definition_set_id,
-      where: c.is_hazardous == true,
-      order_by: [asc: c.name],
-      preload: :arguments
-    )
-    |> Repo.all()
+    commands_repo().list_hazardous(definition_set_id)
   end
 
   @doc """
@@ -142,11 +131,7 @@ defmodule Cadence.Commands do
   Counts MetaCommands in a DefinitionSet.
   """
   def count_meta_commands(definition_set_id) do
-    from(c in MetaCommand,
-      where: c.definition_set_id == ^definition_set_id,
-      select: count(c.id)
-    )
-    |> Repo.one()
+    commands_repo().count(definition_set_id)
   end
 
   # ============================================================================

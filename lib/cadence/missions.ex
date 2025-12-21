@@ -7,6 +7,9 @@ defmodule Cadence.Missions do
   - Mission lifecycle (starting/stopping runtime supervision trees)
   - Mission membership management
   - Mission-scoped queries
+
+  Persistence is delegated to the MissionsRepository port, allowing for
+  different storage implementations (Ecto, in-memory for tests, etc.).
   """
 
   import Ecto.Query, warn: false
@@ -14,6 +17,10 @@ defmodule Cadence.Missions do
 
   alias Cadence.Missions.{Mission, MissionMembership, MissionSupervisor}
   alias Cadence.Organizations.Organization
+  alias Cadence.Ports.Repository.Missions.MissionsRepository
+
+  # Repository accessor
+  defp repo, do: MissionsRepository.impl()
 
   ## Mission CRUD
 
@@ -21,10 +28,7 @@ defmodule Cadence.Missions do
   Returns the list of missions for an organization.
   """
   def list_missions(%Organization{id: org_id}) do
-    Mission
-    |> where([m], m.organization_id == ^org_id)
-    |> order_by([m], desc: m.inserted_at)
-    |> Repo.all()
+    repo().list(org_id, [])
   end
 
   @doc """
@@ -33,9 +37,10 @@ defmodule Cadence.Missions do
   Raises `Ecto.NoResultsError` if the Mission does not exist or doesn't belong to the organization.
   """
   def get_mission!(id, organization_id) do
-    Mission
-    |> where([m], m.id == ^id and m.organization_id == ^organization_id)
-    |> Repo.one!()
+    case repo().find_by_org(id, organization_id) do
+      {:ok, mission} -> mission
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Mission
+    end
   end
 
   @doc """
@@ -44,9 +49,10 @@ defmodule Cadence.Missions do
   Returns `nil` if the Mission does not exist or doesn't belong to the organization.
   """
   def get_mission(id, organization_id) do
-    Mission
-    |> where([m], m.id == ^id and m.organization_id == ^organization_id)
-    |> Repo.one()
+    case repo().find_by_org(id, organization_id) do
+      {:ok, mission} -> mission
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
@@ -55,7 +61,12 @@ defmodule Cadence.Missions do
   WARNING: This bypasses multi-tenancy. Only use for internal operations
   where organization context is verified elsewhere (e.g., mission supervisors).
   """
-  def get_mission_unscoped(id), do: Repo.get(Mission, id)
+  def get_mission_unscoped(id) do
+    case repo().find(id) do
+      {:ok, mission} -> mission
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Gets a single mission by ID without organization scoping, raises if not found.
@@ -63,7 +74,12 @@ defmodule Cadence.Missions do
   WARNING: This bypasses multi-tenancy. Only use for internal operations
   where organization context is verified elsewhere (e.g., mission supervisors).
   """
-  def get_mission_unscoped!(id), do: Repo.get!(Mission, id)
+  def get_mission_unscoped!(id) do
+    case repo().find(id) do
+      {:ok, mission} -> mission
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Mission
+    end
+  end
 
   @doc """
   Gets a single mission with authorization check.
@@ -240,30 +256,32 @@ defmodule Cadence.Missions do
   Returns the list of memberships for a mission.
   """
   def list_mission_memberships(%Mission{id: mission_id}) do
-    MissionMembership
-    |> where([mm], mm.mission_id == ^mission_id)
-    |> preload(:user)
-    |> Repo.all()
+    repo().list_memberships(mission_id, preload: [:user])
   end
 
   @doc """
   Gets a single mission membership.
   """
-  def get_mission_membership!(id), do: Repo.get!(MissionMembership, id)
+  def get_mission_membership!(id) do
+    case repo().find_membership(id) do
+      {:ok, membership} -> membership
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: MissionMembership
+    end
+  end
 
   @doc """
   Creates a mission membership.
   """
   def create_mission_membership(attrs \\ %{}) do
-    %MissionMembership{}
-    |> MissionMembership.changeset(attrs)
-    |> Repo.insert()
+    membership = struct(MissionMembership, normalize_attrs(attrs))
+    repo().save_membership(membership)
   end
 
   @doc """
   Updates a mission membership (typically to change role).
   """
   def update_mission_membership(%MissionMembership{} = membership, attrs) do
+    # Keep using Repo for changeset-based updates
     membership
     |> MissionMembership.update_role_changeset(attrs)
     |> Repo.update()
@@ -273,7 +291,7 @@ defmodule Cadence.Missions do
   Deletes a mission membership.
   """
   def delete_mission_membership(%MissionMembership{} = membership) do
-    Repo.delete(membership)
+    repo().delete_membership(membership.id)
   end
 
   @doc """
@@ -282,9 +300,17 @@ defmodule Cadence.Missions do
   Returns the role string or nil if the user is not a member.
   """
   def get_user_mission_role(user_id, mission_id) do
-    MissionMembership
-    |> where([mm], mm.user_id == ^user_id and mm.mission_id == ^mission_id)
-    |> select([mm], mm.role)
-    |> Repo.one()
+    case repo().find_user_role(user_id, mission_id) do
+      {:ok, role} -> role
+      {:error, :not_found} -> nil
+    end
+  end
+
+  # Private helper to normalize attrs to atom keys
+  defp normalize_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {k, v}, acc when is_binary(k) -> Map.put(acc, String.to_existing_atom(k), v)
+      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
+    end)
   end
 end

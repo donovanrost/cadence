@@ -130,6 +130,13 @@ defmodule Cadence.MissionDatabase do
   end
 
   @doc """
+  Deletes a DefinitionSet.
+  """
+  def delete_definition_set(%DefinitionSet{} = definition_set) do
+    Repo.delete(definition_set)
+  end
+
+  @doc """
   Gets telemetry catalog data for widget configuration.
 
   Returns packets (containers) and derived items for the mission.

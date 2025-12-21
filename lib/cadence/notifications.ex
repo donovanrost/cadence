@@ -9,14 +9,14 @@ defmodule Cadence.Notifications do
   - Real-time notification broadcasting
   """
 
-  import Ecto.Query, warn: false
-
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Ports.Repository.Notifications.NotificationRepository
   alias Cadence.Repo
   alias Cadence.Notifications.{Notification, NotificationPreference}
   alias Cadence.Missions
 
-  @pubsub Cadence.PubSub
+  # Repository accessor
+  defp notifications_repo, do: NotificationRepository.impl()
 
   # ============================================================================
   # Notification CRUD
@@ -28,15 +28,12 @@ defmodule Cadence.Notifications do
   Returns `{:ok, notification}` or `{:error, changeset}`.
   """
   def create_notification(attrs) do
-    result =
-      %Notification{}
-      |> Notification.changeset(attrs)
-      |> Repo.insert()
+    notification = struct(Notification, normalize_attrs(attrs))
 
-    case result do
-      {:ok, notification} ->
-        broadcast_notification(notification)
-        {:ok, notification}
+    case notifications_repo().save(notification) do
+      {:ok, saved} ->
+        broadcast_notification(saved)
+        {:ok, saved}
 
       error ->
         error
@@ -49,50 +46,46 @@ defmodule Cadence.Notifications do
   Returns `{:ok, notifications}` or `{:error, failed_changesets}`.
   """
   def create_notifications_batch(notifications_attrs) do
-    Repo.transaction(fn ->
+    notifications =
       Enum.map(notifications_attrs, fn attrs ->
-        case create_notification(attrs) do
-          {:ok, notification} -> notification
-          {:error, changeset} -> Repo.rollback(changeset)
-        end
+        struct(Notification, normalize_attrs(attrs))
       end)
-    end)
+
+    case notifications_repo().save_batch(notifications) do
+      {:ok, saved_list} ->
+        Enum.each(saved_list, &broadcast_notification/1)
+        {:ok, saved_list}
+
+      error ->
+        error
+    end
   end
 
   @doc """
   Gets a notification by ID.
   """
-  def get_notification(id), do: Repo.get(Notification, id)
+  def get_notification(id) do
+    case notifications_repo().find_unscoped(id) do
+      {:ok, notification} -> notification
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Gets a notification by ID, raising if not found.
   """
-  def get_notification!(id), do: Repo.get!(Notification, id)
+  def get_notification!(id) do
+    case notifications_repo().find_unscoped(id) do
+      {:ok, notification} -> notification
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Notification
+    end
+  end
 
   @doc """
   Lists unread notifications for a user.
   """
   def list_unread(user_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-    mission_id = Keyword.get(opts, :mission_id)
-
-    query =
-      from n in Notification,
-        where: n.user_id == ^user_id,
-        where: is_nil(n.read_at),
-        where: is_nil(n.archived_at),
-        order_by: [desc: n.inserted_at],
-        limit: ^limit,
-        preload: [:actor, :mission]
-
-    query =
-      if mission_id do
-        where(query, [n], n.mission_id == ^mission_id)
-      else
-        query
-      end
-
-    Repo.all(query)
+    notifications_repo().list_unread(user_id, opts)
   end
 
   @doc """
@@ -106,57 +99,14 @@ defmodule Cadence.Notifications do
   Lists all notifications for a user with optional filtering.
   """
   def list_notifications(user_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-    offset = Keyword.get(opts, :offset, 0)
-    include_archived = Keyword.get(opts, :include_archived, false)
-    unread_only = Keyword.get(opts, :unread_only, false)
-
-    query =
-      from n in Notification,
-        where: n.user_id == ^user_id,
-        order_by: [desc: n.inserted_at],
-        limit: ^limit,
-        offset: ^offset,
-        preload: [:actor, :mission]
-
-    query =
-      unless include_archived do
-        where(query, [n], is_nil(n.archived_at))
-      else
-        query
-      end
-
-    query =
-      if unread_only do
-        where(query, [n], is_nil(n.read_at))
-      else
-        query
-      end
-
-    Repo.all(query)
+    notifications_repo().list(user_id, opts)
   end
 
   @doc """
   Gets unread notification count for a user.
   """
   def unread_count(user_id, opts \\ []) do
-    mission_id = Keyword.get(opts, :mission_id)
-
-    query =
-      from n in Notification,
-        where: n.user_id == ^user_id,
-        where: is_nil(n.read_at),
-        where: is_nil(n.archived_at),
-        select: count(n.id)
-
-    query =
-      if mission_id do
-        where(query, [n], n.mission_id == ^mission_id)
-      else
-        query
-      end
-
-    Repo.one(query)
+    notifications_repo().count_unread(user_id, opts)
   end
 
   @doc """
@@ -165,13 +115,14 @@ defmodule Cadence.Notifications do
   Accepts either a `%Notification{}` struct or a notification ID (binary).
   """
   def mark_read(%Notification{} = notification) do
-    notification
-    |> Notification.mark_read_changeset()
-    |> Repo.update()
-    |> tap(fn
-      {:ok, updated} -> broadcast_notification_read(updated)
-      _ -> :ok
-    end)
+    case notifications_repo().mark_read(notification) do
+      {:ok, updated} ->
+        broadcast_notification_read(updated)
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   def mark_read(notification_id) when is_binary(notification_id) do
@@ -186,24 +137,15 @@ defmodule Cadence.Notifications do
   """
   def mark_all_read(user_id, opts \\ []) do
     mission_id = Keyword.get(opts, :mission_id)
-    now = DateTime.utc_now()
 
-    query =
-      from n in Notification,
-        where: n.user_id == ^user_id,
-        where: is_nil(n.read_at),
-        where: is_nil(n.archived_at)
+    case notifications_repo().mark_all_read(user_id, opts) do
+      {:ok, count} ->
+        broadcast_all_read(user_id, mission_id)
+        {:ok, count}
 
-    query =
-      if mission_id do
-        where(query, [n], n.mission_id == ^mission_id)
-      else
-        query
-      end
-
-    {count, _} = Repo.update_all(query, set: [read_at: now])
-    broadcast_all_read(user_id, mission_id)
-    {:ok, count}
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -212,9 +154,7 @@ defmodule Cadence.Notifications do
   Accepts either a `%Notification{}` struct or a notification ID (binary).
   """
   def archive(%Notification{} = notification) do
-    notification
-    |> Notification.mark_archived_changeset()
-    |> Repo.update()
+    notifications_repo().archive(notification)
   end
 
   def archive(notification_id) when is_binary(notification_id) do
@@ -325,57 +265,27 @@ defmodule Cadence.Notifications do
   def set_preferences(user_id, notification_type, attrs, opts \\ []) do
     mission_id = Keyword.get(opts, :mission_id)
 
-    # Find or create preference - use query to handle nil mission_id
-    pref =
-      find_preference(user_id, notification_type, mission_id) || %NotificationPreference{}
-
     attrs =
       attrs
       |> Map.put(:user_id, user_id)
       |> Map.put(:notification_type, notification_type)
       |> Map.put(:mission_id, mission_id)
 
-    pref
-    |> NotificationPreference.changeset(attrs)
-    |> Repo.insert_or_update()
-  end
-
-  defp find_preference(user_id, notification_type, nil) do
-    from(p in NotificationPreference,
-      where: p.user_id == ^user_id,
-      where: p.notification_type == ^notification_type,
-      where: is_nil(p.mission_id)
-    )
-    |> Repo.one()
+    notifications_repo().save_preference(attrs)
   end
 
   defp find_preference(user_id, notification_type, mission_id) do
-    Repo.get_by(NotificationPreference,
-      user_id: user_id,
-      notification_type: notification_type,
-      mission_id: mission_id
-    )
+    case notifications_repo().find_preference(user_id, notification_type, mission_id) do
+      {:ok, preference} -> preference
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
   Lists all preferences for a user.
   """
   def list_preferences(user_id, opts \\ []) do
-    mission_id = Keyword.get(opts, :mission_id)
-
-    query =
-      from p in NotificationPreference,
-        where: p.user_id == ^user_id,
-        order_by: [asc: p.notification_type]
-
-    query =
-      if mission_id do
-        where(query, [p], p.mission_id == ^mission_id or is_nil(p.mission_id))
-      else
-        query
-      end
-
-    Repo.all(query)
+    notifications_repo().list_preferences(user_id, opts)
   end
 
   # ============================================================================
@@ -386,14 +296,14 @@ defmodule Cadence.Notifications do
   Subscribes the current process to notifications for a user.
   """
   def subscribe(user_id) do
-    Phoenix.PubSub.subscribe(@pubsub, "notifications:#{user_id}")
+    event_publisher().subscribe("notifications:#{user_id}")
   end
 
   @doc """
   Unsubscribes the current process from notifications for a user.
   """
   def unsubscribe(user_id) do
-    Phoenix.PubSub.unsubscribe(@pubsub, "notifications:#{user_id}")
+    event_publisher().unsubscribe("notifications:#{user_id}")
   end
 
   defp event_publisher, do: EventPublisher.impl()
@@ -417,5 +327,13 @@ defmodule Cadence.Notifications do
       "notifications:#{user_id}",
       {:all_notifications_read, mission_id}
     )
+  end
+
+  # Private helper to normalize attrs to atom keys
+  defp normalize_attrs(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {k, v}, acc when is_binary(k) -> Map.put(acc, String.to_existing_atom(k), v)
+      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
+    end)
   end
 end

@@ -1,6 +1,7 @@
 defmodule CadenceWeb.DatabaseLive.ShowComponent do
   use CadenceWeb, :live_component
 
+  alias Cadence.MissionDatabase
   alias Cadence.MissionDatabase.DefinitionSet
 
   @impl true
@@ -306,7 +307,7 @@ defmodule CadenceWeb.DatabaseLive.ShowComponent do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
-        case Cadence.Repo.delete(definition_set) do
+        case MissionDatabase.delete_definition_set(definition_set) do
           {:ok, _} ->
             notify_parent({:deleted, definition_set})
 
