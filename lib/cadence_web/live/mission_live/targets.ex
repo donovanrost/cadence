@@ -54,20 +54,22 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   defp apply_action(socket, :edit, %{"target_id" => target_id}) do
     mission = socket.assigns.mission
-    target = Targets.get_target!(target_id)
-    targets = Targets.list_targets(mission)
-    interfaces = Interfaces.list_interfaces(mission)
 
-    if target.mission_id == mission.id do
-      socket
-      |> assign(:page_title, "Edit Target")
-      |> assign(:targets, targets)
-      |> assign(:interfaces, interfaces)
-      |> assign(:target, target)
-    else
-      socket
-      |> put_flash(:error, "Target not found in this mission")
-      |> push_patch(to: ~p"/missions/#{mission}/targets")
+    case Targets.get_target(target_id, mission.id) do
+      nil ->
+        socket
+        |> put_flash(:error, "Target not found in this mission")
+        |> push_patch(to: ~p"/missions/#{mission}/targets")
+
+      target ->
+        targets = Targets.list_targets(mission)
+        interfaces = Interfaces.list_interfaces(mission)
+
+        socket
+        |> assign(:page_title, "Edit Target")
+        |> assign(:targets, targets)
+        |> assign(:interfaces, interfaces)
+        |> assign(:target, target)
     end
   end
 
@@ -79,19 +81,22 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   @impl true
   def handle_event("delete", %{"id" => target_id}, socket) do
-    target = Targets.get_target!(target_id)
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
-    if target.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Targets.delete_target(target) do
-            {:ok, _} ->
-              targets = Targets.list_targets(mission)
+    case Targets.get_target(target_id, mission.id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Target not found in this mission")}
 
-              {:noreply,
-               socket
+      target ->
+        case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+          :ok ->
+            case Targets.delete_target(target) do
+              {:ok, _} ->
+                targets = Targets.list_targets(mission)
+
+                {:noreply,
+                 socket
                |> put_flash(:info, "Target deleted successfully")
                |> assign(:targets, targets)}
 
@@ -102,8 +107,6 @@ defmodule CadenceWeb.MissionLive.Targets do
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
       end
-    else
-      {:noreply, put_flash(socket, :error, "Target not found in this mission")}
     end
   end
 

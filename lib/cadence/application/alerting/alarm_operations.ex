@@ -287,16 +287,16 @@ defmodule Cadence.Application.Alerting.AlarmOperations do
     recorder().record(:alarm_acknowledged, alarm, user_id, %{note: note})
   end
 
-  defp record_shelved(alarm, user_id, _reason) do
-    recorder().record(:alarm_shelved, alarm, user_id, %{})
+  defp record_shelved(alarm, user_id, reason) do
+    recorder().record(:alarm_shelved, alarm, user_id, %{reason: reason})
   end
 
-  defp record_unshelved(alarm, user_id, _type) do
-    recorder().record(:alarm_unshelved, alarm, user_id, %{})
+  defp record_unshelved(alarm, user_id, unshelve_type) do
+    recorder().record(:alarm_unshelved, alarm, user_id, %{unshelve_type: unshelve_type})
   end
 
-  defp record_cleared(alarm, user_id, _type) do
-    recorder().record(:alarm_cleared, alarm, user_id, %{})
+  defp record_cleared(alarm, user_id, clear_type) do
+    recorder().record(:alarm_cleared, alarm, user_id, %{clear_type: clear_type})
   end
 
   defp record_escalated(alarm, previous_severity, _value) do

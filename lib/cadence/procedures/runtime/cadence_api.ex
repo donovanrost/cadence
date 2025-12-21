@@ -92,7 +92,7 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
           to_string(item_name),
           to_string(operator),
           value,
-          trunc(timeout_ms || 30000)
+          trunc(timeout_ms || 30_000)
         )
 
       {[result], state}

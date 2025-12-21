@@ -47,6 +47,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
   require Logger
 
   alias Cadence.Procedures
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Procedures.Engine.ExecutionProcess
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
 
@@ -337,8 +338,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
                   broadcast(%{state | active_executions: new_active}, {:procedure_event, event})
 
                   # Also broadcast on the execution-specific topic
-                  Phoenix.PubSub.broadcast(
-                    Cadence.PubSub,
+                  event_publisher().publish(
                     "procedure:#{execution_id}",
                     {:status_changed, :pausing, updated_execution}
                   )
@@ -473,8 +473,10 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
     state
   end
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast(state, message) do
-    Phoenix.PubSub.broadcast(Cadence.PubSub, state.pubsub_topic, message)
+    event_publisher().publish(state.pubsub_topic, message)
   end
 
   defp via_tuple(mission_id) do

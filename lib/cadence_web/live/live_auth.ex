@@ -138,7 +138,9 @@ defmodule CadenceWeb.LiveAuth do
     mission_id = params["id"] || params["mission_id"]
 
     if mission_id do
-      case Cadence.Missions.get_mission(mission_id) do
+      # Use unscoped here since we're loading from URL params for authorization
+      # Authorization is handled via Bodyguard in the LiveViews
+      case Cadence.Missions.get_mission_unscoped(mission_id) do
         nil ->
           socket =
             socket

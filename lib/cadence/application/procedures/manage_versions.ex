@@ -23,6 +23,7 @@ defmodule Cadence.Application.Procedures.ManageVersions do
 
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Application.Procedures.ProcedureQueries
+  alias Cadence.Ports.Messaging.EventPublisher
 
   @type version_id :: String.t()
   @type procedure_id :: String.t()
@@ -214,9 +215,10 @@ defmodule Cadence.Application.Procedures.ManageVersions do
   # Private Helpers
   # ===========================================================================
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast_created(%ProcedureVersion{procedure_id: procedure_id} = version) do
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
+    event_publisher().publish(
       "procedure:#{procedure_id}:versions",
       {:version_created, version}
     )

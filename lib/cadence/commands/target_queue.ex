@@ -61,6 +61,7 @@ defmodule Cadence.Commands.TargetQueue do
       :mission_id,
       :target_id,
       :organization_id,
+      :target,
       executing: nil,
       sequence_counter: 0,
       process_timer: nil,
@@ -205,8 +206,10 @@ defmodule Cadence.Commands.TargetQueue do
       "Starting TargetQueue for mission_id=#{mission_id}, target_id=#{target_id}"
     )
 
-    mission = Missions.get_mission!(mission_id)
-    _target = Targets.get_target!(target_id)
+    # These are internal GenServer processes - use unscoped as mission context
+    # is already verified through the supervision tree
+    mission = Missions.get_mission_unscoped!(mission_id)
+    target = Targets.get_target_unscoped!(target_id)
 
     # Subscribe to outbox events for this target
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:outbox")
@@ -218,6 +221,7 @@ defmodule Cadence.Commands.TargetQueue do
       mission_id: mission_id,
       target_id: target_id,
       organization_id: mission.organization_id,
+      target: target,
       sequence_counter: sequence_counter
     }
 
@@ -476,6 +480,7 @@ defmodule Cadence.Commands.TargetQueue do
         %{
           organization_id: state.organization_id,
           mission_id: state.mission_id,
+          bucket_id: state.target.bucket_id,
           aggregate_type: "QueueEntry",
           aggregate_id: entry.id,
           actor_id: user_id,
@@ -817,6 +822,7 @@ defmodule Cadence.Commands.TargetQueue do
     recording_attrs = %{
       organization_id: state.organization_id,
       mission_id: state.mission_id,
+      bucket_id: state.target.bucket_id,
       aggregate_type: "QueueEntry",
       aggregate_id: entry.id,
       actor_type: "system",

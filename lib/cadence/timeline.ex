@@ -262,7 +262,8 @@ defmodule Cadence.Timeline do
   """
   @spec get_event(binary()) :: Event.t() | nil
   def get_event("rec-" <> id) do
-    case Recordings.get_recording(id) do
+    # Unscoped because event IDs are internal references, authorization happens at the caller level
+    case Recordings.get_recording_unscoped(id) do
       nil -> nil
       recording -> Event.from_recording(recording)
     end

@@ -47,14 +47,32 @@ defmodule Cadence.Automations do
   end
 
   @doc """
-  Gets a single automation.
+  Gets a single automation scoped to an organization.
+
+  Returns `nil` if not found or if the automation doesn't belong to the organization.
   """
-  def get_automation(id), do: Repo.get(Automation, id)
+  def get_automation(id, organization_id) do
+    Automation
+    |> where([a], a.id == ^id and a.organization_id == ^organization_id)
+    |> Repo.one()
+  end
 
   @doc """
-  Gets a single automation, raises if not found.
+  Gets a single automation scoped to an organization, raises if not found.
   """
-  def get_automation!(id), do: Repo.get!(Automation, id)
+  def get_automation!(id, organization_id) do
+    Automation
+    |> where([a], a.id == ^id and a.organization_id == ^organization_id)
+    |> Repo.one!()
+  end
+
+  @doc """
+  Gets a single automation by ID without organization scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where organization context is verified elsewhere (e.g., automation engine).
+  """
+  def get_automation_unscoped(id), do: Repo.get(Automation, id)
 
   @doc """
   Creates an automation.
@@ -219,16 +237,22 @@ defmodule Cadence.Automations do
   defp rate_limited?(%Automation{max_executions_per_hour: nil}), do: false
 
   defp rate_limited?(%Automation{id: id, max_executions_per_hour: max}) do
+    count_recent_executions(id) >= max
+  end
+
+  @doc """
+  Counts executions for an automation within the last hour.
+
+  Used for rate limiting checks.
+  """
+  def count_recent_executions(automation_id) do
     one_hour_ago = DateTime.add(DateTime.utc_now(), -1, :hour)
 
-    count =
-      AutomationExecution
-      |> where([e], e.automation_id == ^id)
-      |> where([e], e.inserted_at >= ^one_hour_ago)
-      |> select([e], count(e.id))
-      |> Repo.one()
-
-    count >= max
+    AutomationExecution
+    |> where([e], e.automation_id == ^automation_id)
+    |> where([e], e.inserted_at >= ^one_hour_ago)
+    |> select([e], count(e.id))
+    |> Repo.one()
   end
 
   # ============================================================================

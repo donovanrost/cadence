@@ -62,7 +62,12 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     procedure_version_rejected: Recordables.ProcedureVersionRejected,
     procedure_version_withdrawn: Recordables.ProcedureVersionWithdrawn,
     procedure_version_deprecated: Recordables.ProcedureVersionDeprecated,
-    procedure_approval_added: Recordables.ProcedureApprovalAdded
+    procedure_approval_added: Recordables.ProcedureApprovalAdded,
+    # Automation events
+    automation_triggered: Recordables.AutomationTriggered,
+    automation_completed: Recordables.AutomationCompleted,
+    automation_failed: Recordables.AutomationFailed,
+    automation_skipped: Recordables.AutomationSkipped
   }
 
   defp get_recordable_module(event_type) do
@@ -93,8 +98,11 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     %{note: Map.get(attrs, :note)}
   end
 
-  defp build_recordable_attrs(:alarm_cleared, _alarm, _attrs) do
-    %{}
+  defp build_recordable_attrs(:alarm_cleared, alarm, attrs) do
+    %{
+      clear_type: Map.get(attrs, :clear_type, :manual),
+      final_value: alarm.current_value
+    }
   end
 
   defp build_recordable_attrs(:alarm_shelved, alarm, _attrs) do
@@ -104,8 +112,10 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     }
   end
 
-  defp build_recordable_attrs(:alarm_unshelved, _alarm, _attrs) do
-    %{}
+  defp build_recordable_attrs(:alarm_unshelved, _alarm, attrs) do
+    %{
+      unshelve_type: Map.get(attrs, :unshelve_type, :manual)
+    }
   end
 
   defp build_recordable_attrs(:alarm_escalated, alarm, attrs) do
@@ -173,6 +183,33 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
 
   defp build_recordable_attrs(:procedure_approval_added, _version, attrs) do
     %{comment: Map.get(attrs, :comment)}
+  end
+
+  # Automation events
+  defp build_recordable_attrs(:automation_triggered, automation, attrs) do
+    %{
+      automation_id: automation.id,
+      trigger_type: automation.trigger_type,
+      trigger_event: Map.get(attrs, :trigger_event)
+    }
+  end
+
+  defp build_recordable_attrs(:automation_completed, _automation, attrs) do
+    %{
+      action_result: Map.get(attrs, :action_result)
+    }
+  end
+
+  defp build_recordable_attrs(:automation_failed, _automation, attrs) do
+    %{
+      error_message: Map.get(attrs, :error_message)
+    }
+  end
+
+  defp build_recordable_attrs(:automation_skipped, _automation, attrs) do
+    %{
+      reason: Map.get(attrs, :reason)
+    }
   end
 
   # ===========================================================================

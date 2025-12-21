@@ -37,6 +37,7 @@ defmodule Cadence.Application.Alerting.ManageAlarmRules do
   import Ecto.Query, warn: false
   alias Cadence.Repo
   alias Cadence.Alarms.AlarmRule
+  alias Cadence.Ports.Messaging.EventPublisher
 
   @type organization_id :: String.t()
   @type rule_id :: String.t()
@@ -270,19 +271,19 @@ defmodule Cadence.Application.Alerting.ManageAlarmRules do
   # Private Helpers
   # ===========================================================================
 
+  defp event_publisher, do: EventPublisher.impl()
+
   # Broadcasts alarm rule changes for cache invalidation and UI updates
   defp broadcast_rule_change(%AlarmRule{} = rule, event_type) do
     # Global topic for cache invalidation
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
+    event_publisher().publish(
       "alarm_rules:changed",
       {:alarm_rule_changed, event_type, rule}
     )
 
     # Mission-specific topic for UI updates
     if rule.mission_id do
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
+      event_publisher().publish(
         "mission:#{rule.mission_id}:alarm_rules",
         {:alarm_rule_changed, event_type, rule}
       )

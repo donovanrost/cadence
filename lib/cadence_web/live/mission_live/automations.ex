@@ -58,7 +58,7 @@ defmodule CadenceWeb.MissionLive.Automations do
 
   defp apply_action(socket, :edit, %{"automation_id" => automation_id}) do
     mission = socket.assigns.mission
-    automation = Automations.get_automation!(automation_id)
+    automation = Automations.get_automation!(automation_id, mission.organization_id)
     automations = Automations.list_automations(mission.organization_id, mission_id: mission.id)
     procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
 
@@ -87,8 +87,8 @@ defmodule CadenceWeb.MissionLive.Automations do
 
   @impl true
   def handle_event("toggle", %{"id" => automation_id}, socket) do
-    automation = Automations.get_automation!(automation_id)
     mission = socket.assigns.mission
+    automation = Automations.get_automation!(automation_id, mission.organization_id)
     scope = socket.assigns.current_scope
 
     if automation.mission_id == mission.id do
@@ -127,8 +127,8 @@ defmodule CadenceWeb.MissionLive.Automations do
 
   @impl true
   def handle_event("delete", %{"id" => automation_id}, socket) do
-    automation = Automations.get_automation!(automation_id)
     mission = socket.assigns.mission
+    automation = Automations.get_automation!(automation_id, mission.organization_id)
     scope = socket.assigns.current_scope
 
     if automation.mission_id == mission.id do

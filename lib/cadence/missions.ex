@@ -28,18 +28,42 @@ defmodule Cadence.Missions do
   end
 
   @doc """
-  Gets a single mission.
+  Gets a single mission scoped to an organization.
 
-  Raises `Ecto.NoResultsError` if the Mission does not exist.
+  Raises `Ecto.NoResultsError` if the Mission does not exist or doesn't belong to the organization.
   """
-  def get_mission!(id), do: Repo.get!(Mission, id)
+  def get_mission!(id, organization_id) do
+    Mission
+    |> where([m], m.id == ^id and m.organization_id == ^organization_id)
+    |> Repo.one!()
+  end
 
   @doc """
-  Gets a single mission.
+  Gets a single mission scoped to an organization.
 
-  Returns `nil` if the Mission does not exist.
+  Returns `nil` if the Mission does not exist or doesn't belong to the organization.
   """
-  def get_mission(id), do: Repo.get(Mission, id)
+  def get_mission(id, organization_id) do
+    Mission
+    |> where([m], m.id == ^id and m.organization_id == ^organization_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets a single mission by ID without organization scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where organization context is verified elsewhere (e.g., mission supervisors).
+  """
+  def get_mission_unscoped(id), do: Repo.get(Mission, id)
+
+  @doc """
+  Gets a single mission by ID without organization scoping, raises if not found.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where organization context is verified elsewhere (e.g., mission supervisors).
+  """
+  def get_mission_unscoped!(id), do: Repo.get!(Mission, id)
 
   @doc """
   Gets a single mission with authorization check.
@@ -47,7 +71,8 @@ defmodule Cadence.Missions do
   Returns `{:ok, mission}` if authorized, `{:error, :unauthorized}` otherwise.
   """
   def get_mission_authorized(id, scope) do
-    mission = get_mission!(id)
+    # Use unscoped since we're checking authorization via Bodyguard
+    mission = get_mission_unscoped!(id)
 
     case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
       :ok -> {:ok, mission}
@@ -153,7 +178,8 @@ defmodule Cadence.Missions do
   telemetry pipeline, and command queue.
   """
   def start_mission(mission_id) when is_binary(mission_id) do
-    mission = get_mission!(mission_id)
+    # Internal lifecycle management - use unscoped
+    mission = get_mission_unscoped!(mission_id)
     start_mission(mission)
   end
 

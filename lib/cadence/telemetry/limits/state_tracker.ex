@@ -33,6 +33,7 @@ defmodule Cadence.Telemetry.Limits.StateTracker do
   use GenServer
   require Logger
 
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Telemetry.Limits.{Evaluator, Cache}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
@@ -881,14 +882,9 @@ defmodule Cadence.Telemetry.Limits.StateTracker do
       timestamp: DateTime.utc_now()
     }
 
-    # Broadcast event via PubSub
+    # Broadcast event via EventPublisher port
     topic = "mission:#{mission_id}:events"
-
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
-      topic,
-      {:limit_event, event}
-    )
+    EventPublisher.impl().publish(topic, {:limit_event, event})
 
     Logger.info(
       "Limit state transition: #{qualified_item_name} #{previous_state} -> #{new_state} " <>

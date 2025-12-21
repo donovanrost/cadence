@@ -177,7 +177,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp maybe_start_mission(%{start_mission: true, mission_id: mission_id}) do
     Mix.shell().info("Starting mission runtime (interfaces, pipeline, etc.)...")
 
-    case Cadence.Missions.get_mission(mission_id) do
+    # Mix task - use unscoped for CLI access
+    case Cadence.Missions.get_mission_unscoped(mission_id) do
       nil ->
         Mix.raise("Mission not found: #{mission_id}")
 

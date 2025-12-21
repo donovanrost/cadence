@@ -241,6 +241,7 @@ defmodule Cadence.Procedures do
         %{
           organization_id: procedure.organization_id,
           mission_id: procedure.mission_id,
+          bucket_id: get_mission_bucket_id(procedure.mission_id),
           aggregate_type: "ProcedureVersion",
           aggregate_id: v.id,
           actor_id: user_id,
@@ -332,6 +333,7 @@ defmodule Cadence.Procedures do
         %{
           organization_id: version.procedure.organization_id,
           mission_id: version.procedure.mission_id,
+          bucket_id: get_mission_bucket_id(version.procedure.mission_id),
           aggregate_type: "ProcedureVersion",
           aggregate_id: v.id,
           actor_id: user_id,
@@ -780,6 +782,7 @@ defmodule Cadence.Procedures do
           %{
             organization_id: procedure.organization_id,
             mission_id: procedure.mission_id,
+            bucket_id: get_mission_bucket_id(procedure.mission_id),
             aggregate_type: "ProcedureExecution",
             aggregate_id: exec.id,
             actor_id: user_id,

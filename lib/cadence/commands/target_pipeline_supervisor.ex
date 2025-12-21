@@ -48,20 +48,15 @@ defmodule Cadence.Commands.TargetPipelineSupervisor do
   Returns `{:ok, pid}` or `{:error, reason}`.
   """
   def start_pipeline(mission_id, target_id) do
-    case Targets.get_target!(target_id) do
+    # Use scoped get_target! to ensure target belongs to mission
+    case Targets.get_target(target_id, mission_id) do
       nil ->
         {:error, :target_not_found}
 
-      target ->
-        if target.mission_id != mission_id do
-          {:error, :target_not_in_mission}
-        else
-          child_spec = {TargetPipeline, mission_id: mission_id, target_id: target_id}
-          DynamicSupervisor.start_child(via_tuple(mission_id), child_spec)
-        end
+      _target ->
+        child_spec = {TargetPipeline, mission_id: mission_id, target_id: target_id}
+        DynamicSupervisor.start_child(via_tuple(mission_id), child_spec)
     end
-  rescue
-    Ecto.NoResultsError -> {:error, :target_not_found}
   end
 
   @doc """
@@ -132,7 +127,8 @@ defmodule Cadence.Commands.TargetPipelineSupervisor do
   defp load_and_start_pipelines(mission_id) do
     Logger.info("Loading target pipelines for mission #{mission_id}")
 
-    mission = Missions.get_mission!(mission_id)
+    # Internal engine - use unscoped as mission context is verified through supervision tree
+    mission = Missions.get_mission_unscoped!(mission_id)
     targets = Targets.list_targets(mission)
 
     Logger.info("Found #{length(targets)} target(s) for mission #{mission_id}")

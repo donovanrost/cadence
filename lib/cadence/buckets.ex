@@ -65,16 +65,35 @@ defmodule Cadence.Buckets do
   end
 
   @doc """
-  Gets a bucket by ID.
+  Gets a bucket by ID scoped to a mission.
+
+  Returns `nil` if not found or if the bucket doesn't belong to the mission.
   """
-  @spec get_bucket(String.t()) :: Bucket.t() | nil
-  def get_bucket(id), do: Repo.get(Bucket, id)
+  @spec get_bucket(String.t(), String.t()) :: Bucket.t() | nil
+  def get_bucket(id, mission_id) do
+    Bucket
+    |> where([b], b.id == ^id and b.mission_id == ^mission_id)
+    |> Repo.one()
+  end
 
   @doc """
-  Gets a bucket by ID, raising if not found.
+  Gets a bucket by ID scoped to a mission, raising if not found.
   """
-  @spec get_bucket!(String.t()) :: Bucket.t()
-  def get_bucket!(id), do: Repo.get!(Bucket, id)
+  @spec get_bucket!(String.t(), String.t()) :: Bucket.t()
+  def get_bucket!(id, mission_id) do
+    Bucket
+    |> where([b], b.id == ^id and b.mission_id == ^mission_id)
+    |> Repo.one!()
+  end
+
+  @doc """
+  Gets a bucket by ID without mission scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where mission context is verified elsewhere (e.g., tree traversal).
+  """
+  @spec get_bucket_unscoped(String.t()) :: Bucket.t() | nil
+  def get_bucket_unscoped(id), do: Repo.get(Bucket, id)
 
   @doc """
   Gets a bucket by its bucketable reference.
@@ -166,10 +185,25 @@ defmodule Cadence.Buckets do
   end
 
   @doc """
-  Gets a membership by ID.
+  Gets a membership by ID scoped to a bucket.
+
+  Returns `nil` if not found or if the membership doesn't belong to the bucket.
   """
-  @spec get_membership(String.t()) :: BucketMembership.t() | nil
-  def get_membership(id), do: Repo.get(BucketMembership, id)
+  @spec get_membership(String.t(), String.t()) :: BucketMembership.t() | nil
+  def get_membership(id, bucket_id) do
+    BucketMembership
+    |> where([m], m.id == ^id and m.bucket_id == ^bucket_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets a membership by ID without bucket scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where bucket context is verified elsewhere.
+  """
+  @spec get_membership_unscoped(String.t()) :: BucketMembership.t() | nil
+  def get_membership_unscoped(id), do: Repo.get(BucketMembership, id)
 
   @doc """
   Gets an active membership for a user in a bucket.
@@ -313,7 +347,7 @@ defmodule Cadence.Buckets do
         segment
 
       parent_id ->
-        case get_bucket(parent_id) do
+        case get_bucket_unscoped(parent_id) do
           nil -> segment
           parent -> "#{parent.path}.#{segment}"
         end
@@ -335,7 +369,7 @@ defmodule Cadence.Buckets do
   def get_ancestors(%Bucket{parent_id: nil}), do: []
 
   def get_ancestors(%Bucket{parent_id: parent_id}) do
-    case get_bucket(parent_id) do
+    case get_bucket_unscoped(parent_id) do
       nil -> []
       parent -> [parent | get_ancestors(parent)]
     end

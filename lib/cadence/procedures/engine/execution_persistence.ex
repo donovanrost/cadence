@@ -23,6 +23,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
 
   require Logger
 
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Repo
   alias Cadence.Procedures
   alias Cadence.Procedures.ProcedureLog
@@ -357,20 +358,22 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   # Broadcasting
   # ============================================================================
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast_status_change(execution, new_status) do
     topic = "procedure:#{execution.id}"
-    Phoenix.PubSub.broadcast(Cadence.PubSub, topic, {:status_changed, new_status, execution})
+    event_publisher().publish(topic, {:status_changed, new_status, execution})
   end
 
   defp broadcast_log(execution_id, level, message) do
     topic = "procedure:#{execution_id}"
-    Phoenix.PubSub.broadcast(Cadence.PubSub, topic, {:log, level, message})
+    event_publisher().publish(topic, {:log, level, message})
   end
 
   defp broadcast_step_event(execution_id, status, step_name, data) do
     topic = "procedure:#{execution_id}"
     event = dag_status_to_event(status, step_name, data)
-    Phoenix.PubSub.broadcast(Cadence.PubSub, topic, event)
+    event_publisher().publish(topic, event)
   end
 
   defp dag_status_to_event(:running, step_name, data), do: {:dag_step_started, step_name, data}

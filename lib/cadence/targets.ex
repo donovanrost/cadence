@@ -30,18 +30,42 @@ defmodule Cadence.Targets do
   end
 
   @doc """
-  Gets a single target.
+  Gets a single target scoped to a mission.
 
-  Raises `Ecto.NoResultsError` if the Target does not exist.
+  Raises `Ecto.NoResultsError` if the Target does not exist or doesn't belong to the mission.
   """
-  def get_target!(id), do: Repo.get!(Target, id)
+  def get_target!(id, mission_id) do
+    Target
+    |> where([t], t.id == ^id and t.mission_id == ^mission_id)
+    |> Repo.one!()
+  end
 
   @doc """
-  Gets a single target.
+  Gets a single target scoped to a mission.
 
-  Returns nil if the Target does not exist.
+  Returns nil if the Target does not exist or doesn't belong to the mission.
   """
-  def get_target(id), do: Repo.get(Target, id)
+  def get_target(id, mission_id) do
+    Target
+    |> where([t], t.id == ^id and t.mission_id == ^mission_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets a single target by ID without mission scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where mission context is verified elsewhere (e.g., command pipeline, queue).
+  """
+  def get_target_unscoped(id), do: Repo.get(Target, id)
+
+  @doc """
+  Gets a single target by ID without mission scoping, raises if not found.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where mission context is verified elsewhere (e.g., command pipeline, queue).
+  """
+  def get_target_unscoped!(id), do: Repo.get!(Target, id)
 
   @doc """
   Gets a target by identifier within a mission.

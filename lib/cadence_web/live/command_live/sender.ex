@@ -21,7 +21,8 @@ defmodule CadenceWeb.CommandLive.Sender do
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do
-    mission = Missions.get_mission!(mission_id)
+    # Use unscoped - authorization is handled via LiveView hooks
+    mission = Missions.get_mission_unscoped!(mission_id)
     targets = Targets.list_targets(mission)
 
     {:ok,

@@ -502,7 +502,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("switch_dashboard", %{"id" => id}, socket) do
-    case DashboardLayouts.get_layout(id) do
+    user = socket.assigns.current_scope.user
+
+    case DashboardLayouts.get_layout(id, user.id) do
       {:ok, layout} ->
         {:noreply,
          socket
@@ -530,7 +532,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("rename_dashboard", %{"dashboard_id" => id, "name" => name}, socket) do
-    case DashboardLayouts.get_layout(id) do
+    user = socket.assigns.current_scope.user
+
+    case DashboardLayouts.get_layout(id, user.id) do
       {:ok, layout} ->
         case DashboardLayouts.save_layout(layout, %{name: name}) do
           {:ok, updated_layout} ->
@@ -564,7 +568,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("duplicate_dashboard", %{"id" => id}, socket) do
-    case DashboardLayouts.get_layout(id) do
+    user = socket.assigns.current_scope.user
+
+    case DashboardLayouts.get_layout(id, user.id) do
       {:ok, layout} ->
         case DashboardLayouts.duplicate_layout(layout, "#{layout.name} (copy)") do
           {:ok, new_layout} ->
@@ -597,7 +603,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("confirm_delete_dashboard", %{"id" => id}, socket) do
-    case DashboardLayouts.get_layout(id) do
+    user = socket.assigns.current_scope.user
+
+    case DashboardLayouts.get_layout(id, user.id) do
       {:ok, layout} ->
         case DashboardLayouts.delete_layout(layout) do
           {:ok, _} ->

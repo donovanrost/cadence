@@ -26,7 +26,8 @@ defmodule CadenceWeb.MissionLive.Index do
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    mission = Missions.get_mission!(id)
+    # Use unscoped - authorization is handled via Bodyguard below
+    mission = Missions.get_mission_unscoped!(id)
     scope = socket.assigns.current_scope
 
     # Check if user can update this mission
@@ -66,7 +67,8 @@ defmodule CadenceWeb.MissionLive.Index do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    mission = Missions.get_mission!(id)
+    # Use unscoped - authorization is handled via delete_mission_authorized
+    mission = Missions.get_mission_unscoped!(id)
     scope = socket.assigns.current_scope
 
     case Missions.delete_mission_authorized(mission, scope) do
@@ -80,7 +82,8 @@ defmodule CadenceWeb.MissionLive.Index do
 
   @impl true
   def handle_event("start_mission", %{"id" => id}, socket) do
-    mission = Missions.get_mission!(id)
+    # Use unscoped - authorization is handled via Bodyguard below
+    mission = Missions.get_mission_unscoped!(id)
     scope = socket.assigns.current_scope
 
     # Check if user can manage this mission (start/stop operations)
@@ -101,7 +104,8 @@ defmodule CadenceWeb.MissionLive.Index do
 
   @impl true
   def handle_event("stop_mission", %{"id" => id}, socket) do
-    mission = Missions.get_mission!(id)
+    # Use unscoped - authorization is handled via Bodyguard below
+    mission = Missions.get_mission_unscoped!(id)
     scope = socket.assigns.current_scope
 
     # Check if user can manage this mission (start/stop operations)

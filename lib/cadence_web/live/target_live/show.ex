@@ -10,8 +10,10 @@ defmodule CadenceWeb.TargetLive.Show do
 
   @impl true
   def handle_params(%{"id" => id}, _, socket) do
-    target = Targets.get_target!(id)
-    mission = Missions.get_mission!(target.mission_id)
+    # Use unscoped because we need to fetch target to determine its mission for authorization
+    # Authorization is enforced via Bodyguard below
+    target = Targets.get_target_unscoped!(id)
+    mission = Missions.get_mission_unscoped!(target.mission_id)
     scope = socket.assigns.current_scope
 
     # Check if user can view the mission (and thus the target)

@@ -13,7 +13,8 @@ defmodule CadenceWeb.TelemetryLive.Index do
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do
-    mission = Missions.get_mission!(mission_id)
+    # Use unscoped - authorization is handled via LiveView hooks
+    mission = Missions.get_mission_unscoped!(mission_id)
 
     if connected?(socket) do
       # Poll CVT at ~120 Hz (8ms interval) instead of PubSub subscription

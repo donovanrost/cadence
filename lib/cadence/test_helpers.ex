@@ -23,7 +23,8 @@ defmodule Cadence.TestHelpers do
       {:ok, [target1, target2, target3]}
   """
   def create_test_targets(mission) when is_binary(mission) do
-    Missions.get_mission!(mission)
+    # Test helper - use unscoped for convenience
+    Missions.get_mission_unscoped!(mission)
     |> create_test_targets()
   end
 
@@ -112,7 +113,8 @@ defmodule Cadence.TestHelpers do
       )
   """
   def create_target(mission, identifier, opts \\ []) when is_binary(identifier) do
-    mission = if is_binary(mission), do: Missions.get_mission!(mission), else: mission
+    # Test helper - use unscoped for convenience
+    mission = if is_binary(mission), do: Missions.get_mission_unscoped!(mission), else: mission
 
     name = Keyword.get(opts, :name, identifier)
     type = Keyword.get(opts, :type, "spacecraft")

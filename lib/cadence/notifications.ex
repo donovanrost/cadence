@@ -11,6 +11,7 @@ defmodule Cadence.Notifications do
 
   import Ecto.Query, warn: false
 
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Repo
   alias Cadence.Notifications.{Notification, NotificationPreference}
   alias Cadence.Missions
@@ -395,25 +396,24 @@ defmodule Cadence.Notifications do
     Phoenix.PubSub.unsubscribe(@pubsub, "notifications:#{user_id}")
   end
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast_notification(%Notification{} = notification) do
-    Phoenix.PubSub.broadcast(
-      @pubsub,
+    event_publisher().publish(
       "notifications:#{notification.user_id}",
       {:notification_created, notification}
     )
   end
 
   defp broadcast_notification_read(%Notification{} = notification) do
-    Phoenix.PubSub.broadcast(
-      @pubsub,
+    event_publisher().publish(
       "notifications:#{notification.user_id}",
       {:notification_read, notification}
     )
   end
 
   defp broadcast_all_read(user_id, mission_id) do
-    Phoenix.PubSub.broadcast(
-      @pubsub,
+    event_publisher().publish(
       "notifications:#{user_id}",
       {:all_notifications_read, mission_id}
     )

@@ -206,7 +206,8 @@ defmodule Cadence.Commands.TargetDispatcher do
     )
 
     # Load mission and target (with definition_set preloaded)
-    mission = Missions.get_mission!(mission_id)
+    # Internal GenServer - use unscoped as mission context is verified through supervision tree
+    mission = Missions.get_mission_unscoped!(mission_id)
     target = Targets.get_target_with_definition_set!(target_id)
 
     # Subscribe to interface connection events for this mission

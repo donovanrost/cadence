@@ -56,11 +56,28 @@ defmodule Cadence.DashboardLayouts do
   end
 
   @doc """
-  Gets a layout by ID.
+  Gets a layout by ID scoped to a user.
 
   Returns `{:ok, layout}` or `{:error, :not_found}`.
   """
-  def get_layout(id) do
+  def get_layout(id, user_id) do
+    query =
+      from l in DashboardLayout,
+        where: l.id == ^id and l.user_id == ^user_id
+
+    case Repo.one(query) do
+      nil -> {:error, :not_found}
+      layout -> {:ok, layout}
+    end
+  end
+
+  @doc """
+  Gets a layout by ID without user scoping.
+
+  WARNING: This bypasses ownership checks. Only use for internal operations
+  where user context is verified elsewhere.
+  """
+  def get_layout_unscoped(id) do
     case Repo.get(DashboardLayout, id) do
       nil -> {:error, :not_found}
       layout -> {:ok, layout}

@@ -175,12 +175,12 @@ defmodule Cadence.Interfaces.InterfaceSchema do
       type when type in ["tcp_client", "udp_client"] ->
         changeset
         |> validate_required([:host, :port])
-        |> validate_number(:port, greater_than: 0, less_than: 65536)
+        |> validate_number(:port, greater_than: 0, less_than: 65_536)
 
       type when type in ["tcp_server", "udp_server"] ->
         changeset
         |> validate_required([:bind_port])
-        |> validate_number(:bind_port, greater_than: 0, less_than: 65536)
+        |> validate_number(:bind_port, greater_than: 0, less_than: 65_536)
 
       "serial" ->
         changeset

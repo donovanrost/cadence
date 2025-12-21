@@ -378,16 +378,42 @@ defmodule Cadence.Recordings do
   # ============================================
 
   @doc """
-  Gets a recording by ID.
+  Gets a recording by ID scoped to an organization.
+
+  Returns `nil` if not found or if the recording doesn't belong to the organization.
   """
-  def get_recording(id) do
+  def get_recording(id, organization_id) do
+    Recording
+    |> where([r], r.id == ^id and r.organization_id == ^organization_id)
+    |> Repo.one()
+  end
+
+  @doc """
+  Gets a recording by ID scoped to an organization, raises if not found.
+  """
+  def get_recording!(id, organization_id) do
+    Recording
+    |> where([r], r.id == ^id and r.organization_id == ^organization_id)
+    |> Repo.one!()
+  end
+
+  @doc """
+  Gets a recording by ID without organization scoping.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where organization context is verified elsewhere.
+  """
+  def get_recording_unscoped(id) do
     Repo.get(Recording, id)
   end
 
   @doc """
-  Gets a recording by ID, raises if not found.
+  Gets a recording by ID without organization scoping, raises if not found.
+
+  WARNING: This bypasses multi-tenancy. Only use for internal operations
+  where organization context is verified elsewhere.
   """
-  def get_recording!(id) do
+  def get_recording_unscoped!(id) do
     Repo.get!(Recording, id)
   end
 

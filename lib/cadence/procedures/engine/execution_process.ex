@@ -74,6 +74,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   use GenServer, restart: :temporary
   require Logger
 
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Procedures
   alias Cadence.Procedures.Dag.{Executor, StepExecutor}
   alias Cadence.Procedures.Engine.ExecutionPersistence
@@ -450,12 +451,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
     # This is lightweight (no DB writes) to avoid performance issues with frequent updates
     on_progress = fn step_name, progress_data ->
       topic = "procedure:#{state.execution_id}"
-
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
-        topic,
-        {:dag_step_progress, step_name, progress_data}
-      )
+      EventPublisher.impl().publish(topic, {:dag_step_progress, step_name, progress_data})
     end
 
     # Create step executor with progress callback
@@ -690,9 +686,11 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   # Broadcasting
   # ============================================================================
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast(state, message) do
     topic = "procedure:#{state.execution_id}"
-    Phoenix.PubSub.broadcast(Cadence.PubSub, topic, message)
+    event_publisher().publish(topic, message)
   end
 
   defp broadcast_step_event(state, step_index, step_info, event_type) do
@@ -707,7 +705,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
     # Broadcast to mission topic for automations/other subscribers
     mission_topic = "mission:#{state.execution.mission_id}:procedures"
-    Phoenix.PubSub.broadcast(Cadence.PubSub, mission_topic, {:procedure_event, event})
+    event_publisher().publish(mission_topic, {:procedure_event, event})
 
     # Also broadcast legacy format to execution-specific topic for UI subscribers
     broadcast(state, {event_type, step_index, step_info})

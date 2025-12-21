@@ -17,6 +17,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   alias Cadence.Automations.Automation
   alias Cadence.Automations.Engine.ActionExecutor
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @ets_table :automations_cache
 
@@ -213,7 +214,8 @@ defmodule Cadence.Automations.Engine.AutomationManager do
 
   def handle_info({:automation_updated, automation_id}, state) do
     # Reload single automation when updated
-    case Automations.get_automation(automation_id) do
+    # Use unscoped version since we're the internal engine and already scoped by mission
+    case Automations.get_automation_unscoped(automation_id) do
       nil ->
         :ets.delete(state.table, automation_id)
 
@@ -281,9 +283,11 @@ defmodule Cadence.Automations.Engine.AutomationManager do
 
         {:error, :cooldown} ->
           Logger.debug("Automation #{automation.id} in cooldown, skipping")
+          record_skipped(automation, :cooldown, state)
 
         {:error, :rate_limited} ->
           Logger.debug("Automation #{automation.id} rate limited, skipping")
+          record_skipped(automation, :rate_limited, state)
       end
     end)
   end
@@ -309,6 +313,9 @@ defmodule Cadence.Automations.Engine.AutomationManager do
            started_at: DateTime.utc_now()
          }) do
       {:ok, execution} ->
+        # Record that automation was triggered
+        record_triggered(automation, event, state)
+
         # Execute the action
         result =
           ActionExecutor.execute(automation.action_type, automation.action_config, event, state)
@@ -323,6 +330,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
             })
 
             Automations.record_trigger(automation)
+            record_completed(automation, action_result, state)
             {:ok, execution}
 
           {:error, reason} ->
@@ -332,6 +340,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
               completed_at: DateTime.utc_now()
             })
 
+            record_failed(automation, reason, state)
             {:error, reason}
         end
 
@@ -456,5 +465,43 @@ defmodule Cadence.Automations.Engine.AutomationManager do
       completed_at: event.completed_at,
       timestamp: event.timestamp
     }
+  end
+
+  # ============================================================================
+  # Recording Functions
+  # ============================================================================
+
+  defp recorder, do: EventRecorder.impl()
+
+  defp record_triggered(automation, event, state) do
+    recorder().record(:automation_triggered, automation, nil, %{
+      trigger_event: event,
+      organization_id: state.organization_id,
+      mission_id: state.mission_id
+    })
+  end
+
+  defp record_completed(automation, action_result, state) do
+    recorder().record(:automation_completed, automation, nil, %{
+      action_result: action_result,
+      organization_id: state.organization_id,
+      mission_id: state.mission_id
+    })
+  end
+
+  defp record_failed(automation, reason, state) do
+    recorder().record(:automation_failed, automation, nil, %{
+      error_message: inspect(reason),
+      organization_id: state.organization_id,
+      mission_id: state.mission_id
+    })
+  end
+
+  defp record_skipped(automation, reason, state) do
+    recorder().record(:automation_skipped, automation, nil, %{
+      reason: to_string(reason),
+      organization_id: state.organization_id,
+      mission_id: state.mission_id
+    })
   end
 end

@@ -448,10 +448,7 @@ defmodule Cadence.Procedures.Parameters do
   # ============================================================================
 
   defp target_exists?(mission_id, target_id) do
-    target = Targets.get_target!(target_id)
-    target.mission_id == mission_id
-  rescue
-    Ecto.NoResultsError -> false
+    Targets.get_target(target_id, mission_id) != nil
   end
 
   @doc """

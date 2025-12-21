@@ -46,6 +46,7 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.Engine.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   @shelve_check_interval :timer.seconds(30)
@@ -435,12 +436,10 @@ defmodule Cadence.Alarms.Engine.AlarmManager do
   # PubSub Broadcasting
   # ============================================================================
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast_alarm(topic, event_type, %Alarm{} = alarm) do
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
-      topic,
-      {event_type, alarm}
-    )
+    event_publisher().publish(topic, {event_type, alarm})
   end
 
   # ============================================================================

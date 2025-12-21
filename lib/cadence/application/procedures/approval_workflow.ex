@@ -30,6 +30,7 @@ defmodule Cadence.Application.Procedures.ApprovalWorkflow do
 
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Application.Procedures.ProcedureQueries
+  alias Cadence.Ports.Messaging.EventPublisher
 
   @type version_id :: String.t()
   @type user_id :: String.t()
@@ -244,9 +245,10 @@ defmodule Cadence.Application.Procedures.ApprovalWorkflow do
     repo().deprecate_other_versions(procedure_id, except_id)
   end
 
+  defp event_publisher, do: EventPublisher.impl()
+
   defp broadcast_status_change(%ProcedureVersion{procedure_id: procedure_id} = version, event) do
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
+    event_publisher().publish(
       "procedure:#{procedure_id}:versions",
       {:version_status_changed, event, version}
     )
@@ -258,8 +260,7 @@ defmodule Cadence.Application.Procedures.ApprovalWorkflow do
   end
 
   defp broadcast_approval_added(%ProcedureVersion{procedure_id: procedure_id} = version, user_id) do
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
+    event_publisher().publish(
       "procedure:#{procedure_id}:versions",
       {:approval_added, version, user_id}
     )
