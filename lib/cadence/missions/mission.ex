@@ -51,7 +51,6 @@ defmodule Cadence.Missions.Mission do
     # Associations
     belongs_to :organization, Cadence.Organizations.Organization
     has_many :targets, Cadence.Targets.Target
-    has_many :target_groups, Cadence.Targets.TargetGroup
     has_many :mission_memberships, Cadence.Missions.MissionMembership
     has_many :users, through: [:mission_memberships, :user]
 

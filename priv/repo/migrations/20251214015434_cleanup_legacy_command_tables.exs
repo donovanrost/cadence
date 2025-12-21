@@ -12,48 +12,60 @@ defmodule Cadence.Repo.Migrations.CleanupLegacyCommandTables do
   """
 
   def up do
-    # 1. Update command_logs table
-    # Drop old FK to command_definitions if it exists
+    # 1. Update command_logs table (if it exists - table was removed in recordings migration)
+    execute """
+    DO $$
+    BEGIN
+      -- Only process if command_logs table exists
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'command_logs'
+      ) THEN
+        -- Drop old FK to command_definitions if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints
+          WHERE constraint_name = 'command_logs_command_definition_id_fkey'
+          AND table_name = 'command_logs'
+        ) THEN
+          ALTER TABLE command_logs DROP CONSTRAINT command_logs_command_definition_id_fkey;
+        END IF;
+
+        -- Drop the old column if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'command_logs' AND column_name = 'command_definition_id'
+        ) THEN
+          ALTER TABLE command_logs DROP COLUMN command_definition_id;
+        END IF;
+
+        -- Add new FK to meta_commands if not exists
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'command_logs' AND column_name = 'meta_command_id'
+        ) THEN
+          ALTER TABLE command_logs ADD COLUMN meta_command_id uuid REFERENCES mdb_meta_commands(id) ON DELETE SET NULL;
+        END IF;
+      END IF;
+    END $$;
+    """
+
+    # Create index only if table exists
     execute """
     DO $$
     BEGIN
       IF EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'command_logs_command_definition_id_fkey'
-        AND table_name = 'command_logs'
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'command_logs'
       ) THEN
-        ALTER TABLE command_logs DROP CONSTRAINT command_logs_command_definition_id_fkey;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'command_logs' AND indexname = 'command_logs_meta_command_id_index'
+        ) THEN
+          CREATE INDEX command_logs_meta_command_id_index ON command_logs(meta_command_id);
+        END IF;
       END IF;
     END $$;
     """
-
-    # Drop the old column if it exists
-    execute """
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'command_logs' AND column_name = 'command_definition_id'
-      ) THEN
-        ALTER TABLE command_logs DROP COLUMN command_definition_id;
-      END IF;
-    END $$;
-    """
-
-    # Add new FK to meta_commands if not exists
-    execute """
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'command_logs' AND column_name = 'meta_command_id'
-      ) THEN
-        ALTER TABLE command_logs ADD COLUMN meta_command_id uuid REFERENCES mdb_meta_commands(id) ON DELETE SET NULL;
-      END IF;
-    END $$;
-    """
-
-    create_if_not_exists index(:command_logs, [:meta_command_id])
 
     # 2. Update command_queue_entries table
     execute """

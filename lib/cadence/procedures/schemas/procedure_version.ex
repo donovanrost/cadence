@@ -40,7 +40,7 @@ defmodule Cadence.Procedures.ProcedureVersion do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Procedures.{Procedure, ProcedureApproval, ProcedureVersionEvent}
+  alias Cadence.Procedures.{Procedure, ProcedureApproval}
 
   @type t :: %__MODULE__{}
 
@@ -75,7 +75,6 @@ defmodule Cadence.Procedures.ProcedureVersion do
     belongs_to :rejected_by, Cadence.Accounts.User
 
     has_many :approvals, ProcedureApproval
-    has_many :events, ProcedureVersionEvent
 
     timestamps(type: :utc_datetime)
   end

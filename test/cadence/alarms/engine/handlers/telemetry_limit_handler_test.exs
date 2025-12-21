@@ -11,6 +11,7 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler
   alias Cadence.Alarms.Engine.RuleCache
+  alias Cadence.Recordings
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -422,9 +423,9 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
       assert updated.severity == :critical
       assert updated.limit_state == :red
 
-      # Verify escalated event was recorded
-      events = Alarms.list_alarm_events(alarm.id)
-      assert Enum.any?(events, &(&1.event_type == :escalated))
+      # Verify escalated recording was created
+      recordings = Recordings.get_aggregate_history("Alarm", alarm.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmEscalated"))
     end
 
     test "deescalates severity from critical to warning", %{

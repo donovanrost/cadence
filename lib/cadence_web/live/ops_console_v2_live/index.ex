@@ -64,7 +64,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     # Load running procedures for the mission
     running_procedures = Procedures.list_executions(mission_id: mission_id, status: :running)
 
-    # Load command queue entries (pending and executing)
+    # Load command queue entries (pending and executing) for context panel
     queue_entries =
       Commands.list_queue_entries(mission_id,
         status: [:pending, :executing],
@@ -72,12 +72,17 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         limit: 50
       )
 
+    # Load all queue entries for Queue mode dashboard (includes completed, failed, etc.)
+    all_queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing, :completed, :failed, :cancelled, :expired],
+        preload: [:target],
+        limit: 200
+      )
+
     # Load command definitions for Commands mode
     # Commands (MetaCommands) belong to MDB DefinitionSets, which belong to Databases
     command_definitions = load_command_definitions(mission_id)
-
-    # Load target groups for filtering
-    target_groups = Targets.list_target_groups(mission)
 
     # Load staged commands for the mission
     staged_commands = Commands.list_staged(mission_id)
@@ -110,8 +115,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       |> assign(:fleet_health, fleet_health)
       |> assign(:running_procedures, running_procedures)
       |> assign(:queue_entries, queue_entries)
+      |> assign(:all_queue_entries, all_queue_entries)
       |> assign(:command_definitions, command_definitions)
-      |> assign(:target_groups, target_groups)
+      |> assign(:target_groups, [])
       |> assign(:staged_commands, staged_commands)
       |> assign(:timeline_events, timeline_events)
       |> assign(:current_time, DateTime.utc_now())
@@ -151,8 +157,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
       data-alarms={Jason.encode!(Enum.map(@active_alarms, &alarm_json/1))}
       data-commands={Jason.encode!(Enum.map(@queue_entries, &queue_entry_json/1))}
+      data-queue-entries={Jason.encode!(Enum.map(@all_queue_entries, &queue_entry_json/1))}
       data-command-definitions={Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))}
-      data-target-groups={Jason.encode!(Enum.map(@target_groups, &target_group_json/1))}
+      data-target-groups={Jason.encode!([])}
       data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
       data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
       data-current-dashboard-id={@current_layout.id}
@@ -901,6 +908,160 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # ============================================================================
+  # Queue Mode Event Handlers
+  # ============================================================================
+
+  # Cancel command from Queue mode (with target_id provided)
+  def handle_event(
+        "queue_cancel_command",
+        %{"entry_id" => entry_id, "target_id" => target_id},
+        socket
+      ) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.cancel_queued(mission_id, target_id, entry_id) do
+      {:ok, _cancelled_entry} ->
+        {:noreply,
+         socket
+         |> refresh_all_queue_entries()
+         |> put_flash(:info, "Command cancelled")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to cancel command: #{inspect(reason)}")}
+    end
+  end
+
+  # Pause all queues from Queue mode
+  def handle_event("queue_pause_all", _, socket) do
+    mission_id = socket.assigns.mission.id
+    Commands.pause_all_targets(mission_id)
+    {:noreply, put_flash(socket, :info, "All command queues paused")}
+  end
+
+  # Resume all queues from Queue mode
+  def handle_event("queue_resume_all", _, socket) do
+    mission_id = socket.assigns.mission.id
+    Commands.resume_all_targets(mission_id)
+    {:noreply, put_flash(socket, :info, "All command queues resumed")}
+  end
+
+  # Pause a specific target's queue
+  def handle_event("queue_pause_target", %{"target_id" => target_id}, socket) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.pause_target(mission_id, target_id) do
+      :ok ->
+        {:noreply, push_event(socket, "queue_target_paused", %{target_id: target_id})}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to pause queue: #{inspect(reason)}")}
+    end
+  end
+
+  # Resume a specific target's queue
+  def handle_event("queue_resume_target", %{"target_id" => target_id}, socket) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.resume_target(mission_id, target_id) do
+      :ok ->
+        {:noreply, push_event(socket, "queue_target_resumed", %{target_id: target_id})}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to resume queue: #{inspect(reason)}")}
+    end
+  end
+
+  # Cancel a single queued command
+  def handle_event("queue_cancel_entry", %{"entry_id" => entry_id, "target_id" => target_id}, socket) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.cancel_queued(mission_id, target_id, entry_id) do
+      {:ok, _entry} ->
+        {:noreply,
+         socket
+         |> refresh_all_queue_entries()
+         |> put_flash(:info, "Command cancelled")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to cancel command: #{inspect(reason)}")}
+    end
+  end
+
+  # Cancel all queued commands for a target
+  def handle_event("queue_cancel_all_target", %{"target_id" => target_id}, socket) do
+    mission_id = socket.assigns.mission.id
+
+    case Commands.cancel_all_queued_for_target(mission_id, target_id) do
+      {:ok, count} ->
+        {:noreply,
+         socket
+         |> refresh_all_queue_entries()
+         |> put_flash(:info, "Cancelled #{count} command(s)")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to cancel commands: #{inspect(reason)}")}
+    end
+  end
+
+  # Change priority of a queued command
+  def handle_event(
+        "queue_change_priority",
+        %{"entry_id" => entry_id, "target_id" => target_id, "priority" => priority},
+        socket
+      ) do
+    mission_id = socket.assigns.mission.id
+    priority = if is_binary(priority), do: String.to_integer(priority), else: priority
+
+    case Commands.reorder_queued(mission_id, target_id, entry_id, priority) do
+      {:ok, _updated_entry} ->
+        {:noreply,
+         socket
+         |> refresh_all_queue_entries()
+         |> put_flash(:info, "Command priority updated")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to change priority: #{inspect(reason)}")}
+    end
+  end
+
+  # Refresh queue entries for Queue mode
+  def handle_event("queue_refresh", _, socket) do
+    {:noreply, refresh_all_queue_entries(socket)}
+  end
+
+  # Helper to refresh all queue entries and push to frontend
+  defp refresh_all_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+
+    # Refresh both queue entry sets
+    queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        preload: [:target],
+        limit: 50
+      )
+
+    all_queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing, :completed, :failed, :cancelled, :expired],
+        preload: [:target],
+        limit: 200
+      )
+
+    # Get server-side aggregated metrics (accurate counts regardless of limit)
+    metrics = Commands.get_mission_queue_metrics(mission_id)
+
+    socket
+    |> assign(:queue_entries, queue_entries)
+    |> assign(:all_queue_entries, all_queue_entries)
+    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+    |> push_event("update_queue_entries", %{
+      entries: Enum.map(all_queue_entries, &queue_entry_json/1)
+    })
+    |> push_event("queue_metrics", %{metrics: metrics})
+  end
+
+  # ============================================================================
   # Command Staging Event Handlers
   # ============================================================================
 
@@ -1004,7 +1165,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         {:noreply,
          socket
          |> update_staged_commands()
-         |> update_queue_entries()
+         |> refresh_all_queue_entries()
          |> put_flash(:info, "Command queued")}
 
       {:error, reason} ->
@@ -1019,7 +1180,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         {:noreply,
          socket
          |> update_staged_commands()
-         |> update_queue_entries()
+         |> refresh_all_queue_entries()
          |> put_flash(:info, "#{count} command(s) queued")}
 
       {:error, reason} ->
@@ -1036,7 +1197,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         {:noreply,
          socket
          |> update_staged_commands()
-         |> update_queue_entries()
+         |> refresh_all_queue_entries()
          |> put_flash(:info, "#{count} command(s) queued")}
     end
   end
@@ -1185,24 +1346,13 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # Outbox event handlers for command queue updates
-  def handle_info({:outbox_event, %{event_type: event_type, payload: payload} = _event}, socket)
+  def handle_info({:outbox_event, %{event_type: event_type} = event}, socket)
       when event_type in ["command_enqueued", "command_status_changed", "command_cancelled"] do
-    # Refresh command queue entries
-    mission_id = socket.assigns.mission.id
-
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
-
-    # Also push timeline event for command status changes
+    # Refresh all queue entries (context panel + Queue mode) and push timeline event
     socket =
       socket
-      |> assign(:queue_entries, queue_entries)
-      |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
-      |> maybe_push_timeline_command_event(payload)
+      |> refresh_all_queue_entries()
+      |> maybe_push_timeline_command_event(event)
 
     {:noreply, socket}
   end
@@ -1384,14 +1534,16 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     %{
       id: entry.id,
       command_name: entry.command_name,
-      status: entry.status,
+      status: to_string(entry.status),
       priority: entry.priority,
+      sequence_number: entry.sequence_number,
       target_id: entry.target_id,
       target_name: entry.target && entry.target.name,
       parameters: entry.parameters,
       scheduled_at: entry.scheduled_at && DateTime.to_iso8601(entry.scheduled_at),
       created_at: entry.inserted_at && DateTime.to_iso8601(entry.inserted_at),
       attempts: entry.attempts,
+      max_attempts: entry.max_attempts,
       last_error: entry.last_error
     }
   end
@@ -1445,37 +1597,68 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     |> push_event("load_staged_commands", %{staged: Enum.map(staged, &staged_command_json/1)})
   end
 
-  defp update_queue_entries(socket) do
-    mission_id = socket.assigns.mission.id
-
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
-
-    socket
-    |> assign(:queue_entries, queue_entries)
-    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
-  end
-
   # Push timeline command event from outbox (pipeable)
-  defp maybe_push_timeline_command_event(socket, payload) do
-    command_log_id = payload["command_log_id"]
+  # Construct the event directly from the outbox data (like alarms) to avoid database queries
+  defp maybe_push_timeline_command_event(socket, %{event_type: event_type, payload: payload} = event) do
+    command_name = Map.get(payload, "command_name") || Map.get(payload, :command_name) || "Command"
+    target_id = Map.get(payload, "target_id") || Map.get(payload, :target_id)
+    status = Map.get(payload, "status") || Map.get(payload, :status)
 
-    if command_log_id do
-      case Timeline.get_event("cmd-#{command_log_id}") do
-        nil ->
-          socket
-
-        event ->
-          push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
-      end
+    # Use recording_id if available, otherwise use aggregate_id for uniqueness
+    event_id = if event.recording_id do
+      "rec-#{event.recording_id}"
     else
-      socket
+      "cmd-#{event.aggregate_id}-#{System.unique_integer([:positive])}"
     end
+
+    timeline_event = %Cadence.Timeline.Event{
+      id: event_id,
+      type: :command,
+      timestamp: event.inserted_at || DateTime.utc_now(),
+      target_id: target_id,
+      target_name: nil,
+      target_group: nil,
+      title: command_name,
+      description: format_command_event_description(event_type, status),
+      status: map_command_event_status(event_type, status),
+      status_label: format_command_status_label(event_type, status),
+      user_id: event.actor_id,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        event_type: event_type,
+        priority: Map.get(payload, "priority") || Map.get(payload, :priority),
+        scheduled_at: Map.get(payload, "scheduled_at") || Map.get(payload, :scheduled_at)
+      },
+      source_id: event.aggregate_id,
+      source_table: :command_queue_entries
+    }
+
+    push_event(socket, "timeline_event", %{event: timeline_event_json(timeline_event)})
   end
+
+  defp maybe_push_timeline_command_event(socket, _event), do: socket
+
+  defp format_command_event_description("command_enqueued", _), do: "Command queued"
+  defp format_command_event_description("command_status_changed", "completed"), do: "Command completed"
+  defp format_command_event_description("command_status_changed", "failed"), do: "Command failed"
+  defp format_command_event_description("command_status_changed", "executing"), do: "Command executing"
+  defp format_command_event_description("command_status_changed", "pending"), do: "Command pending"
+  defp format_command_event_description("command_cancelled", _), do: "Command cancelled"
+  defp format_command_event_description(_, status) when is_binary(status), do: "Command #{status}"
+  defp format_command_event_description(_, _), do: "Command"
+
+  defp map_command_event_status("command_enqueued", _), do: :pending
+  defp map_command_event_status("command_status_changed", "completed"), do: :success
+  defp map_command_event_status("command_status_changed", "failed"), do: :error
+  defp map_command_event_status("command_status_changed", "executing"), do: :running
+  defp map_command_event_status("command_cancelled", _), do: :error
+  defp map_command_event_status(_, _), do: :pending
+
+  defp format_command_status_label("command_enqueued", _), do: "QUEUED"
+  defp format_command_status_label("command_status_changed", status) when is_binary(status), do: String.upcase(status)
+  defp format_command_status_label("command_cancelled", _), do: "CANCELLED"
+  defp format_command_status_label(_, _), do: "PENDING"
 
   # Push timeline alarm event (pipeable)
   defp push_timeline_alarm_event(socket, alarm, event_type) do
@@ -1628,15 +1811,6 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
             units: nil
           }
         end)
-    }
-  end
-
-  defp target_group_json(group) do
-    %{
-      id: group.id,
-      name: group.name,
-      group_type: group.group_type,
-      description: group.description
     }
   end
 

@@ -13,13 +13,23 @@ defmodule Cadence.Procedures do
     ProcedureApproval,
     ProcedureExecution,
     ProcedureLog,
-    ProcedureVersion,
-    ProcedureVersionEvent
+    ProcedureVersion
   }
 
   alias Cadence.Repo
   alias Cadence.Settings
   alias Cadence.Outbox
+  alias Cadence.Recordings
+  alias Cadence.Recordings.Recordables.{
+    ProcedureVersionCreated,
+    ProcedureVersionSubmitted,
+    ProcedureVersionWithdrawn,
+    ProcedureApprovalAdded,
+    ProcedureVersionApproved,
+    ProcedureVersionRejected,
+    ProcedureVersionDeprecated,
+    ProcedureStarted
+  }
   alias Ecto.Multi
 
   # ============================================================================
@@ -196,6 +206,9 @@ defmodule Cadence.Procedures do
   end
 
   def create_version(procedure_id, attrs, opts) when is_binary(procedure_id) do
+    procedure = get_procedure!(procedure_id)
+    user_id = Keyword.get(opts, :user_id)
+
     # Get next version number
     max_version =
       ProcedureVersion
@@ -203,23 +216,53 @@ defmodule Cadence.Procedures do
       |> select([v], max(v.version_number))
       |> Repo.one() || 0
 
+    version_number = max_version + 1
+
     # Build version attrs, preserving any passed-in values but ensuring required fields
     version_attrs =
       attrs
       |> Map.put(:procedure_id, procedure_id)
-      |> Map.put(:version_number, max_version + 1)
+      |> Map.put(:version_number, version_number)
       |> Map.put_new(:status, :draft)
 
     # Only set created_by_id from opts if not already in attrs
     version_attrs =
-      case Keyword.get(opts, :user_id) do
+      case user_id do
         nil -> version_attrs
-        user_id -> Map.put_new(version_attrs, :created_by_id, user_id)
+        uid -> Map.put_new(version_attrs, :created_by_id, uid)
       end
 
-    %ProcedureVersion{}
-    |> ProcedureVersion.changeset(version_attrs)
-    |> Repo.insert()
+    # Recordable attrs for ProcedureVersionCreated
+    source_code = get_in(attrs, [:source]) || get_in(attrs, ["source"])
+    source_snippet = if is_map(source_code), do: Jason.encode!(source_code) |> String.slice(0, 500), else: nil
+
+    version_created_attrs = %{
+      procedure_id: procedure_id,
+      version_number: version_number,
+      source_code: source_snippet
+    }
+
+    result =
+      Multi.new()
+      |> Multi.insert(:version, ProcedureVersion.changeset(%ProcedureVersion{}, version_attrs))
+      |> Recordings.append(:created, ProcedureVersionCreated, version_created_attrs, fn %{version: v} ->
+        %{
+          organization_id: procedure.organization_id,
+          mission_id: procedure.mission_id,
+          aggregate_type: "ProcedureVersion",
+          aggregate_id: v.id,
+          actor_id: user_id,
+          actor_type: if(user_id, do: "user", else: "system"),
+          timestamp: DateTime.utc_now()
+        }
+      end)
+      |> Repo.transaction()
+
+    case result do
+      {:ok, %{version: version}} -> {:ok, version}
+      {:error, :version, changeset, _} -> {:error, changeset}
+      {:error, _, changeset, _} -> {:error, changeset}
+    end
   end
 
   @doc """
@@ -277,12 +320,6 @@ defmodule Cadence.Procedures do
           submitted_by_id: user_id
         })
       )
-      |> Multi.insert(:event, fn %{version: v} ->
-        ProcedureVersionEvent.changeset(
-          %ProcedureVersionEvent{},
-          ProcedureVersionEvent.submitted(v, user_id)
-        )
-      end)
       |> Outbox.append(:outbox, fn %{version: v} ->
         %{
           organization_id: version.procedure.organization_id,
@@ -297,6 +334,17 @@ defmodule Cadence.Procedures do
             procedure_name: version.procedure.name,
             version_number: version.version_number
           }
+        }
+      end)
+      |> Recordings.append(:submitted, ProcedureVersionSubmitted, %{note: nil}, fn %{version: v} ->
+        %{
+          organization_id: version.procedure.organization_id,
+          mission_id: version.procedure.mission_id,
+          aggregate_type: "ProcedureVersion",
+          aggregate_id: v.id,
+          actor_id: user_id,
+          actor_type: "user",
+          timestamp: DateTime.utc_now()
         }
       end)
       |> Repo.transaction()
@@ -318,6 +366,8 @@ defmodule Cadence.Procedures do
   def withdraw_submission(%ProcedureVersion{} = version, user_id) do
     with :ok <- validate_status(version, :in_review),
          :ok <- validate_can_withdraw(version, user_id) do
+      version = Repo.preload(version, :procedure)
+
       Repo.transaction(fn ->
         # Delete any existing approvals
         from(a in ProcedureApproval, where: a.procedure_version_id == ^version.id)
@@ -328,7 +378,8 @@ defmodule Cadence.Procedures do
           |> ProcedureVersion.withdrawal_changeset(%{})
           |> Repo.update!()
 
-        create_version_event!(ProcedureVersionEvent.withdrawn(updated, user_id))
+        # Record the withdrawal
+        record_version_event(updated, user_id, ProcedureVersionWithdrawn, %{})
 
         updated
       end)
@@ -367,9 +418,10 @@ defmodule Cadence.Procedures do
           |> Repo.insert()
 
         # Record audit event
-        create_version_event!(
-          ProcedureVersionEvent.approval_added(version, user_id, decision, comment)
-        )
+        record_version_event(version, user_id, ProcedureApprovalAdded, %{
+          decision: to_string(decision),
+          comment: comment
+        })
 
         # Handle decision consequences and emit outbox event
         updated_version = handle_approval_decision(version, user_id, decision, comment)
@@ -445,6 +497,8 @@ defmodule Cadence.Procedures do
   @doc """
   Lists all audit events for a version.
 
+  Returns recordings for the version aggregate with their recordables loaded.
+
   ## Options
 
   - `:limit` - Maximum number of events to return (default: 100)
@@ -452,13 +506,10 @@ defmodule Cadence.Procedures do
   def list_version_events(version_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
 
-    from(e in ProcedureVersionEvent,
-      where: e.procedure_version_id == ^version_id,
-      preload: :user,
-      order_by: [asc: e.inserted_at],
-      limit: ^limit
+    Recordings.list_aggregate_recordings("ProcedureVersion", nil,
+      Keyword.merge(opts, aggregate_id: version_id, limit: limit)
     )
-    |> Repo.all()
+    |> Recordings.load_recordables_for_recordings()
   end
 
   # Private approval workflow helpers
@@ -509,7 +560,7 @@ defmodule Cadence.Procedures do
       })
       |> Repo.update!()
 
-    create_version_event!(ProcedureVersionEvent.rejected(updated, user_id, reason))
+    record_version_event(updated, user_id, ProcedureVersionRejected, %{reason: reason})
 
     updated
   end
@@ -533,7 +584,7 @@ defmodule Cadence.Procedures do
       from(p in Procedure, where: p.id == ^version.procedure_id)
       |> Repo.update_all(set: [current_version_id: version.id])
 
-      create_version_event!(ProcedureVersionEvent.approved(updated, user_id))
+      record_version_event(updated, user_id, ProcedureVersionApproved, %{})
 
       # Emit outbox event for finalization
       {:ok, _} =
@@ -565,10 +616,35 @@ defmodule Cadence.Procedures do
     |> Repo.aggregate(:count)
   end
 
-  defp create_version_event!(attrs) do
-    %ProcedureVersionEvent{}
-    |> ProcedureVersionEvent.changeset(attrs)
-    |> Repo.insert!()
+  defp record_version_event(%ProcedureVersion{} = version, user_id, recordable_module, recordable_attrs) do
+    version = Repo.preload(version, :procedure)
+
+    # Look up the mission's bucket (procedures are scoped to missions)
+    bucket_id = get_mission_bucket_id(version.procedure.mission_id)
+
+    recording_attrs = %{
+      organization_id: version.procedure.organization_id,
+      bucket_id: bucket_id,
+      aggregate_type: "ProcedureVersion",
+      aggregate_id: version.id,
+      actor_id: user_id,
+      actor_type: if(user_id, do: "user", else: "system"),
+      timestamp: DateTime.utc_now()
+    }
+
+    case Recordings.create(recordable_module, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok  # Don't fail for recording errors
+    end
+  end
+
+  defp get_mission_bucket_id(nil), do: nil
+
+  defp get_mission_bucket_id(mission_id) do
+    case Cadence.Buckets.get_bucket_by_bucketable("Mission", mission_id) do
+      nil -> nil
+      bucket -> bucket.id
+    end
   end
 
   # ============================================================================
@@ -695,9 +771,39 @@ defmodule Cadence.Procedures do
         status: :pending
       }
 
-      with {:ok, execution} <- create_execution(execution_attrs),
+      # Recordable attrs for ProcedureStarted
+      started_attrs = %{
+        procedure_id: procedure_id,
+        procedure_version_id: version.id,
+        target_id: target_id,
+        parameters: validated_params,
+        triggered_by: to_string(triggered_by),
+        trigger_context: trigger_context
+      }
+
+      result =
+        Multi.new()
+        |> Multi.insert(:execution, ProcedureExecution.changeset(%ProcedureExecution{}, execution_attrs))
+        |> Recordings.append(:started, ProcedureStarted, started_attrs, fn %{execution: exec} ->
+          %{
+            organization_id: procedure.organization_id,
+            mission_id: procedure.mission_id,
+            aggregate_type: "ProcedureExecution",
+            aggregate_id: exec.id,
+            actor_id: user_id,
+            actor_type: if(user_id, do: "user", else: "system"),
+            timestamp: DateTime.utc_now()
+          }
+        end)
+        |> Repo.transaction()
+
+      with {:ok, %{execution: execution}} <- result,
            {:ok, _pid} <- start_execution_process(execution.id) do
         {:ok, execution}
+      else
+        {:error, :execution, changeset, _} -> {:error, changeset}
+        {:error, _, changeset, _} -> {:error, changeset}
+        other -> other
       end
     end
   end

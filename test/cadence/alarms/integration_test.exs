@@ -13,6 +13,7 @@ defmodule Cadence.Alarms.IntegrationTest do
   alias Cadence.Alarms
   alias Cadence.Alarms.Engine.AlarmManager
   alias Cadence.Alarms.Engine.RuleCache
+  alias Cadence.Recordings
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -122,12 +123,12 @@ defmodule Cadence.Alarms.IntegrationTest do
       cached_alarms_after = AlarmManager.get_active_alarms(mission.id)
       refute Enum.any?(cached_alarms_after, &(&1.id == alarm.id))
 
-      # Verify alarm events were recorded
-      events = Alarms.list_alarm_events(alarm.id)
-      event_types = Enum.map(events, & &1.event_type)
-      assert :triggered in event_types
-      assert :acknowledged in event_types
-      assert :cleared in event_types
+      # Verify alarm recordings were created
+      recordings = Recordings.get_aggregate_history("Alarm", alarm.id)
+      recordable_types = Enum.map(recordings, & &1.recordable_type)
+      assert "AlarmTriggered" in recordable_types
+      assert "AlarmAcknowledged" in recordable_types
+      assert "AlarmCleared" in recordable_types
     end
 
     test "violation -> alarm -> shelve -> unshelve -> clear", %{
@@ -188,13 +189,13 @@ defmodule Cadence.Alarms.IntegrationTest do
       {:ok, cleared_alarm} = await_alarm_cleared(5000)
       assert cleared_alarm.status == :cleared
 
-      # Verify event history
-      events = Alarms.list_alarm_events(alarm.id)
-      event_types = Enum.map(events, & &1.event_type)
-      assert :triggered in event_types
-      assert :shelved in event_types
-      assert :unshelved in event_types
-      assert :cleared in event_types
+      # Verify recording history
+      recordings = Recordings.get_aggregate_history("Alarm", alarm.id)
+      recordable_types = Enum.map(recordings, & &1.recordable_type)
+      assert "AlarmTriggered" in recordable_types
+      assert "AlarmShelved" in recordable_types
+      assert "AlarmUnshelved" in recordable_types
+      assert "AlarmCleared" in recordable_types
     end
 
     test "violation -> alarm -> escalation -> recovery -> clear", %{
@@ -256,12 +257,12 @@ defmodule Cadence.Alarms.IntegrationTest do
       {:ok, cleared_alarm} = await_alarm_cleared(5000)
       assert cleared_alarm.status == :cleared
 
-      # Verify escalation event was recorded
-      events = Alarms.list_alarm_events(alarm.id)
-      event_types = Enum.map(events, & &1.event_type)
-      assert :triggered in event_types
-      assert :escalated in event_types or :value_updated in event_types
-      assert :cleared in event_types
+      # Verify escalation recording was recorded
+      recordings = Recordings.get_aggregate_history("Alarm", alarm.id)
+      recordable_types = Enum.map(recordings, & &1.recordable_type)
+      assert "AlarmTriggered" in recordable_types
+      assert "AlarmEscalated" in recordable_types or "AlarmValueUpdated" in recordable_types
+      assert "AlarmCleared" in recordable_types
     end
 
     test "alarm deduplication - same source creates one alarm", %{

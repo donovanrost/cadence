@@ -4,7 +4,7 @@ defmodule Cadence.TargetsFixtures do
   """
 
   alias Cadence.Repo
-  alias Cadence.Targets.{Target, TargetGroup}
+  alias Cadence.Targets.Target
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -93,33 +93,6 @@ defmodule Cadence.TargetsFixtures do
   def online_target_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
     target_fixture(Map.merge(attrs, %{status: "online"}))
-  end
-
-  # ============================================================================
-  # Target Group
-  # ============================================================================
-
-  @doc """
-  Creates a target group fixture.
-  """
-  def target_group_fixture(attrs \\ %{}) do
-    attrs = ensure_map(attrs)
-
-    org = attrs[:organization] || organization_fixture()
-    mission = attrs[:mission] || mission_fixture(organization: org)
-
-    attrs =
-      attrs
-      |> Map.drop([:organization, :mission])
-      |> Enum.into(%{
-        mission_id: mission.id,
-        name: "Test Group #{System.unique_integer([:positive])}",
-        description: "Test target group"
-      })
-
-    %TargetGroup{}
-    |> TargetGroup.changeset(attrs)
-    |> Repo.insert!()
   end
 
   # ============================================================================

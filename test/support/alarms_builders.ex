@@ -25,7 +25,7 @@ defmodule Cadence.AlarmsBuilders do
       event = build_limit_event(new_state: :red, item_name: "HEALTH.cpu_temp")
   """
 
-  alias Cadence.Alarms.{Alarm, AlarmRule, AlarmEvent}
+  alias Cadence.Alarms.{Alarm, AlarmRule}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   # ============================================================================
@@ -300,102 +300,6 @@ defmodule Cadence.AlarmsBuilders do
     build_alarm_rule(
       Map.merge(
         %{mission_id: mission_id, target_id: target_id},
-        to_map(overrides)
-      )
-    )
-  end
-
-  # ============================================================================
-  # Alarm Event Builders
-  # ============================================================================
-
-  @doc """
-  Builds an AlarmEvent struct with defaults.
-  """
-  def build_alarm_event(overrides \\ %{}) do
-    defaults = %{
-      id: Ecto.UUID.generate(),
-      alarm_id: Ecto.UUID.generate(),
-      user_id: nil,
-      event_type: :triggered,
-      previous_state: nil,
-      new_state: %{"status" => "active", "severity" => "warning"},
-      note: nil,
-      trigger_value: nil,
-      inserted_at: DateTime.utc_now(),
-      updated_at: DateTime.utc_now()
-    }
-
-    struct!(AlarmEvent, Map.merge(defaults, to_map(overrides)))
-  end
-
-  @doc """
-  Builds a triggered event.
-  """
-  def build_triggered_event(alarm_id, trigger_value \\ nil, overrides \\ %{}) do
-    build_alarm_event(
-      Map.merge(
-        %{
-          alarm_id: alarm_id,
-          event_type: :triggered,
-          trigger_value: trigger_value,
-          new_state: %{"status" => "active", "severity" => "warning"}
-        },
-        to_map(overrides)
-      )
-    )
-  end
-
-  @doc """
-  Builds an acknowledged event.
-  """
-  def build_acknowledged_event(alarm_id, user_id, note \\ nil, overrides \\ %{}) do
-    build_alarm_event(
-      Map.merge(
-        %{
-          alarm_id: alarm_id,
-          event_type: :acknowledged,
-          user_id: user_id,
-          note: note,
-          previous_state: %{"status" => "active"},
-          new_state: %{"status" => "acknowledged"}
-        },
-        to_map(overrides)
-      )
-    )
-  end
-
-  @doc """
-  Builds an escalated event.
-  """
-  def build_escalated_event(alarm_id, trigger_value, overrides \\ %{}) do
-    build_alarm_event(
-      Map.merge(
-        %{
-          alarm_id: alarm_id,
-          event_type: :escalated,
-          trigger_value: trigger_value,
-          previous_state: %{"severity" => "warning", "limit_state" => "yellow"},
-          new_state: %{"severity" => "critical", "limit_state" => "red"}
-        },
-        to_map(overrides)
-      )
-    )
-  end
-
-  @doc """
-  Builds a cleared event.
-  """
-  def build_cleared_event(alarm_id, user_id \\ nil, overrides \\ %{}) do
-    build_alarm_event(
-      Map.merge(
-        %{
-          alarm_id: alarm_id,
-          event_type: :cleared,
-          user_id: user_id,
-          previous_state: %{"status" => "active"},
-          new_state: %{"status" => "cleared"}
-        },
         to_map(overrides)
       )
     )

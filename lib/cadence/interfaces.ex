@@ -405,7 +405,7 @@ defmodule Cadence.Interfaces do
     results = Repo.all(query)
 
     if preload do
-      Repo.preload(results, [:mission, :target_groups])
+      Repo.preload(results, [:mission])
     else
       results
     end

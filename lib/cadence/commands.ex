@@ -40,7 +40,6 @@ defmodule Cadence.Commands do
   alias Cadence.MissionDatabase.{MetaCommand, Argument}
 
   alias Cadence.Commands.{
-    CommandLog,
     TargetDispatcher,
     TargetQueue,
     TargetPipelineSupervisor,
@@ -49,6 +48,8 @@ defmodule Cadence.Commands do
     StagedCommand,
     StagedCommandTarget
   }
+
+  alias Cadence.Recordings
 
   alias Cadence.{Missions, Targets}
 
@@ -458,69 +459,35 @@ defmodule Cadence.Commands do
   defp compare_value(actual, expected, :lte), do: actual <= expected
 
   # ============================================================================
-  # Command Log Operations
+  # Command History Operations (via Recordings)
   # ============================================================================
 
   @doc """
-  Gets a command log entry by ID.
-  """
-  def get_command_log(id) do
-    Repo.get(CommandLog, id)
-  end
+  Lists command recordings for an organization/mission.
 
-  @doc """
-  Lists command logs for a mission.
+  Returns recordings with their loaded recordables for command-related events.
 
   ## Options
 
   - `:limit` - Max entries to return (default: 100)
-  - `:status` - Filter by status
-  - `:target_id` - Filter by target
-  - `:command_name` - Filter by command name
+  - `:organization_id` - Filter by organization
+  - `:path_prefix` - Filter by bucket path prefix
+  - `:bucket_id` - Filter by specific bucket
   """
-  def list_command_logs(mission_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 100)
-
-    query =
-      from(c in CommandLog,
-        where: c.mission_id == ^mission_id,
-        order_by: [desc: c.inserted_at],
-        limit: ^limit
-      )
-
-    query =
-      case Keyword.get(opts, :status) do
-        nil -> query
-        status -> from(c in query, where: c.status == ^status)
-      end
-
-    query =
-      case Keyword.get(opts, :target_id) do
-        nil -> query
-        target_id -> from(c in query, where: c.target_id == ^target_id)
-      end
-
-    query =
-      case Keyword.get(opts, :command_name) do
-        nil -> query
-        name -> from(c in query, where: c.command_name == ^name)
-      end
-
-    Repo.all(query)
+  def list_command_history(opts \\ []) do
+    Recordings.list_recordings_with_recordables(
+      nil,
+      Keyword.merge(opts, aggregate_types: ["Command"])
+    )
   end
 
   @doc """
-  Gets command history for a specific target.
+  Gets command history for a specific bucket.
   """
-  def get_target_command_history(target_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-
-    from(c in CommandLog,
-      where: c.target_id == ^target_id,
-      order_by: [desc: c.sent_at],
-      limit: ^limit
+  def get_bucket_command_history(bucket_id, opts \\ []) do
+    Recordings.list_aggregate_recordings("Command", nil,
+      Keyword.merge(opts, bucket_id: bucket_id)
     )
-    |> Repo.all()
   end
 
   # ============================================================================
@@ -1005,10 +972,12 @@ defmodule Cadence.Commands do
     target_id = Keyword.get(opts, :target_id)
     preload = Keyword.get(opts, :preload, [])
 
+    # Order by status (PG enum defines order: executing, pending, failed, completed, cancelled, expired),
+    # then by command priority, then sequence number
     query =
       from(e in QueueEntry,
         where: e.mission_id == ^mission_id,
-        order_by: [asc: e.priority, asc: e.sequence_number],
+        order_by: [asc: e.status, asc: e.priority, asc: e.sequence_number],
         limit: ^limit
       )
 
@@ -1030,6 +999,46 @@ defmodule Cadence.Commands do
     query
     |> Repo.all()
     |> Repo.preload(preload)
+  end
+
+  @doc """
+  Gets aggregated queue metrics for a mission.
+
+  Returns counts by status, success rate, and total.
+  """
+  @spec get_mission_queue_metrics(String.t()) :: map()
+  def get_mission_queue_metrics(mission_id) do
+    # Get status counts
+    status_counts =
+      from(e in QueueEntry,
+        where: e.mission_id == ^mission_id,
+        group_by: e.status,
+        select: {e.status, count(e.id)}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    pending = Map.get(status_counts, :pending, 0)
+    executing = Map.get(status_counts, :executing, 0)
+    completed = Map.get(status_counts, :completed, 0)
+    failed = Map.get(status_counts, :failed, 0)
+    cancelled = Map.get(status_counts, :cancelled, 0)
+    expired = Map.get(status_counts, :expired, 0)
+
+    total_attempted = completed + failed
+    success_rate = if total_attempted > 0, do: Float.round(completed / total_attempted * 100, 1), else: 100.0
+
+    %{
+      pending: pending,
+      executing: executing,
+      completed: completed,
+      failed: failed,
+      cancelled: cancelled,
+      expired: expired,
+      success_rate: success_rate,
+      total_queued: pending + executing,
+      total: pending + executing + completed + failed + cancelled + expired
+    }
   end
 
   # ============================================================================

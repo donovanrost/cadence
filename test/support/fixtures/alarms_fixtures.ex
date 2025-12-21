@@ -4,7 +4,7 @@ defmodule Cadence.AlarmsFixtures do
   """
 
   alias Cadence.Repo
-  alias Cadence.Alarms.{Alarm, AlarmRule, AlarmEvent}
+  alias Cadence.Alarms.{Alarm, AlarmRule}
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -270,34 +270,6 @@ defmodule Cadence.AlarmsFixtures do
       shelve_reason: "Shelved for testing"
     })
     |> Repo.update!()
-  end
-
-  # ============================================================================
-  # Alarm Events
-  # ============================================================================
-
-  @doc """
-  Creates an alarm event fixture.
-  """
-  def alarm_event_fixture(attrs \\ %{}) do
-    attrs = ensure_map(attrs)
-
-    alarm = attrs[:alarm] || alarm_fixture()
-
-    attrs =
-      attrs
-      |> Map.drop([:alarm])
-      |> Enum.into(%{
-        alarm_id: alarm.id,
-        event_type: :triggered,
-        severity: alarm.severity,
-        previous_state: %{},
-        current_value: alarm.current_value
-      })
-
-    %AlarmEvent{}
-    |> AlarmEvent.changeset(attrs)
-    |> Repo.insert!()
   end
 
   # ============================================================================

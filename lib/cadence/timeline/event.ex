@@ -7,6 +7,9 @@ defmodule Cadence.Timeline.Event do
   Timeline Mode.
   """
 
+  alias Cadence.Recordings.Recording
+  alias Cadence.Recordings.Recordable
+
   @type event_type :: :command | :alarm | :procedure | :automation | :system
   @type status :: :pending | :success | :error | :active | :cleared | :running | :completed | :failed
 
@@ -49,72 +52,48 @@ defmodule Cadence.Timeline.Event do
   ]
 
   @doc """
-  Convert a CommandLog to a Timeline.Event.
+  Convert a Recording to a Timeline.Event.
+
+  Uses the Recordable protocol to extract display information from the
+  associated recordable.
   """
-  def from_command_log(%Cadence.Commands.CommandLog{} = log, opts \\ []) do
+  def from_recording(%Recording{} = recording, opts \\ []) do
     target = Keyword.get(opts, :target)
     user = Keyword.get(opts, :user)
 
+    # Load the recordable if not already loaded
+    recordable = Keyword.get(opts, :recordable) || Cadence.Recordings.load_recordable(recording)
+
+    # Use the Recordable protocol for display info
+    title = if recordable, do: Recordable.title(recordable), else: recording.recordable_type
+    status_str = if recordable, do: Recordable.status(recordable), else: "pending"
+    severity = if recordable, do: Recordable.severity(recordable), else: nil
+
     %__MODULE__{
-      id: "cmd-#{log.id}",
-      type: :command,
-      timestamp: log.sent_at || log.inserted_at,
-      target_id: log.target_id,
+      id: "rec-#{recording.id}",
+      type: map_aggregate_to_event_type(recording.aggregate_type),
+      timestamp: recording.timestamp,
+      target_id: nil,
       target_name: target && target.name,
       target_group: nil,
-      title: log.command_name,
-      description: build_command_description(log),
-      status: map_command_status(log.status),
-      status_label: format_command_status(log.status),
-      user_id: log.user_id,
+      title: title,
+      description: recording.recordable_type,
+      status: map_status_string(status_str),
+      status_label: String.upcase(status_str || "PENDING"),
+      user_id: recording.actor_id,
       user_name: user && user.email,
       is_future: false,
       metadata: %{
-        opcode: log.opcode,
-        parameters: log.parameters,
-        verification_status: log.verification_status,
-        verification_stages_completed: log.verification_stages_completed,
-        error_reason: log.error_reason,
-        sent_at: log.sent_at,
-        verified_at: log.verified_at
+        recordable_type: recording.recordable_type,
+        aggregate_type: recording.aggregate_type,
+        aggregate_id: recording.aggregate_id,
+        severity: severity,
+        parent_id: recording.parent_id,
+        root_id: recording.root_id,
+        bucket_id: recording.bucket_id
       },
-      source_id: log.id,
-      source_table: :command_logs
-    }
-  end
-
-  @doc """
-  Convert an AlarmEvent to a Timeline.Event.
-  """
-  def from_alarm_event(%Cadence.Alarms.AlarmEvent{} = event, opts \\ []) do
-    alarm = Keyword.get(opts, :alarm)
-    target = Keyword.get(opts, :target)
-    user = Keyword.get(opts, :user)
-
-    %__MODULE__{
-      id: "alm-#{event.id}",
-      type: :alarm,
-      timestamp: event.inserted_at,
-      target_id: alarm && alarm.target_id,
-      target_name: target && target.name,
-      target_group: nil,
-      title: (alarm && (alarm.message || alarm.alarm_type)) || "Alarm",
-      description: build_alarm_description(event, alarm),
-      status: map_alarm_event_status(event.event_type),
-      status_label: format_alarm_event_type(event.event_type),
-      user_id: event.user_id,
-      user_name: user && user.email,
-      is_future: false,
-      metadata: %{
-        event_type: event.event_type,
-        severity: alarm && alarm.severity,
-        trigger_value: event.trigger_value,
-        note: event.note,
-        previous_state: event.previous_state,
-        new_state: event.new_state
-      },
-      source_id: event.id,
-      source_table: :alarm_events
+      source_id: recording.id,
+      source_table: :recordings
     }
   end
 
@@ -186,56 +165,30 @@ defmodule Cadence.Timeline.Event do
 
   # Private helpers
 
-  defp build_command_description(%{status: :verified, verified_at: verified_at, sent_at: sent_at})
-       when not is_nil(verified_at) and not is_nil(sent_at) do
-    delta_ms = DateTime.diff(verified_at, sent_at, :millisecond)
-    "Verified in #{format_duration(delta_ms)}"
-  end
+  defp map_aggregate_to_event_type("Command"), do: :command
+  defp map_aggregate_to_event_type("Alarm"), do: :alarm
+  defp map_aggregate_to_event_type("ProcedureExecution"), do: :procedure
+  defp map_aggregate_to_event_type("ProcedureVersion"), do: :procedure
+  defp map_aggregate_to_event_type("Automation"), do: :automation
+  defp map_aggregate_to_event_type("QueueEntry"), do: :command
+  defp map_aggregate_to_event_type(_), do: :system
 
-  defp build_command_description(%{status: :error, error_reason: reason}) when is_binary(reason) do
-    "Error: #{reason}"
-  end
-
-  defp build_command_description(%{status: :verification_failed, error_reason: reason})
-       when is_binary(reason) do
-    "Verification failed: #{reason}"
-  end
-
-  defp build_command_description(%{status: :rejected, error_reason: reason})
-       when is_binary(reason) do
-    "Rejected: #{reason}"
-  end
-
-  defp build_command_description(_), do: nil
-
-  defp build_alarm_description(event, alarm) do
-    case event.event_type do
-      :triggered ->
-        if event.trigger_value do
-          "Triggered at #{event.trigger_value}"
-        else
-          "Triggered"
-        end
-
-      :acknowledged ->
-        "Acknowledged"
-
-      :cleared ->
-        "Cleared"
-
-      :shelved ->
-        "Shelved"
-
-      :unshelved ->
-        "Unshelved"
-
-      :escalated ->
-        "Escalated to #{alarm && alarm.severity}"
-
-      _ ->
-        to_string(event.event_type)
-    end
-  end
+  defp map_status_string("pending"), do: :pending
+  defp map_status_string("sent"), do: :pending
+  defp map_status_string("verified"), do: :success
+  defp map_status_string("error"), do: :error
+  defp map_status_string("failed"), do: :error
+  defp map_status_string("active"), do: :active
+  defp map_status_string("triggered"), do: :active
+  defp map_status_string("cleared"), do: :cleared
+  defp map_status_string("acknowledged"), do: :active
+  defp map_status_string("running"), do: :running
+  defp map_status_string("completed"), do: :completed
+  defp map_status_string("draft"), do: :pending
+  defp map_status_string("pending_review"), do: :pending
+  defp map_status_string("approved"), do: :success
+  defp map_status_string("rejected"), do: :error
+  defp map_status_string(_), do: :pending
 
   defp build_procedure_description(%{status: :completed, completed_at: completed_at, started_at: started_at})
        when not is_nil(completed_at) and not is_nil(started_at) do
@@ -253,36 +206,6 @@ defmodule Cadence.Timeline.Event do
   end
 
   defp build_procedure_description(%{status: status}), do: to_string(status)
-
-  defp map_command_status(:verified), do: :success
-  defp map_command_status(:sent), do: :pending
-  defp map_command_status(:pending), do: :pending
-  defp map_command_status(:error), do: :error
-  defp map_command_status(:verification_failed), do: :error
-  defp map_command_status(:rejected), do: :error
-  defp map_command_status(_), do: :pending
-
-  defp format_command_status(:verified), do: "VERIFIED"
-  defp format_command_status(:sent), do: "SENT"
-  defp format_command_status(:pending), do: "PENDING"
-  defp format_command_status(:error), do: "ERROR"
-  defp format_command_status(:verification_failed), do: "VERIFY FAILED"
-  defp format_command_status(:rejected), do: "REJECTED"
-  defp format_command_status(status), do: status |> to_string() |> String.upcase()
-
-  defp map_alarm_event_status(:triggered), do: :active
-  defp map_alarm_event_status(:cleared), do: :cleared
-  defp map_alarm_event_status(:acknowledged), do: :active
-  defp map_alarm_event_status(:shelved), do: :active
-  defp map_alarm_event_status(_), do: :active
-
-  defp format_alarm_event_type(:triggered), do: "TRIGGERED"
-  defp format_alarm_event_type(:cleared), do: "CLEARED"
-  defp format_alarm_event_type(:acknowledged), do: "ACKNOWLEDGED"
-  defp format_alarm_event_type(:shelved), do: "SHELVED"
-  defp format_alarm_event_type(:unshelved), do: "UNSHELVED"
-  defp format_alarm_event_type(:escalated), do: "ESCALATED"
-  defp format_alarm_event_type(type), do: type |> to_string() |> String.upcase()
 
   defp map_procedure_status(:completed), do: :completed
   defp map_procedure_status(:running), do: :running

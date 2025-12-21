@@ -318,6 +318,9 @@
 /* Timeline Mode */
 @import "./modes/timeline-mode.css";
 
+/* Queue Mode */
+@import "./modes/queue-mode.css";
+
 /* ============================================
    External Libraries
    ============================================ */

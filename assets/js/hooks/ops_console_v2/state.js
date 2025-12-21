@@ -44,6 +44,9 @@ export function initializeState(hook) {
   // Initialize timeline mode state
   initializeTimelineState(hook)
 
+  // Initialize queue mode state
+  initializeQueueState(hook)
+
   // Live time update interval for timeline mode
   hook._timelineUpdateInterval = null
 }
@@ -150,4 +153,59 @@ export function resetTimelineState(hook) {
   hook.streamExpandedCluster = null
   hook.lanesSelectedEvent = null
   hook.matrixSelectedCell = null
+}
+
+/**
+ * Initialize queue mode state
+ * @param {Object} hook - The LiveView hook instance
+ */
+export function initializeQueueState(hook) {
+  // Queue entries (loaded from server)
+  hook.queueEntries = JSON.parse(hook.el.dataset.queueEntries || '[]')
+  hook.queueServerMetrics = null  // Will be populated by server push
+
+  // Target selection state (for target panel)
+  hook.queueSelectedTargets = new Set()        // Selected target IDs (empty = all targets)
+  hook.queueTargetSearch = ''                  // Target search filter
+  hook.queueTargetViewMode = 'compact'         // 'compact' or 'detailed'
+  hook.queueTargetPanelWidth = 30              // Panel width percentage (default 30%)
+
+  // Queue filtering state
+  hook.queueStatusFilter = new Set(['pending', 'executing', 'failed'])  // Default active filters
+  hook.queuePriorityMin = 0                    // Min priority (0 = emergency)
+  hook.queuePriorityMax = 5                    // Max priority (5 = background)
+  hook.queueSearchQuery = ''                   // Command name search
+
+  // Sorting state
+  hook.queueSortColumn = 'priority'            // Default sort by priority
+  hook.queueSortDirection = 'asc'              // Ascending (0 = highest priority first)
+
+  // View options
+  hook.queueViewMode = 'overview'              // 'overview', 'table', or 'manage'
+  hook.queueMetricsExpanded = true             // Metrics bar expanded by default
+  hook.queueSelectedEntries = new Set()        // Selected entry IDs for bulk operations
+
+  // Manage view state
+  hook.queueManageSelectedTarget = null        // Currently selected target in manage view
+  hook.queueTargetStatuses = new Map()         // target_id -> { paused, pending_count, executing_count }
+
+  // Debounce timers
+  hook._queueSearchDebounce = null
+  hook._queueTargetSearchDebounce = null
+}
+
+/**
+ * Reset queue mode state (useful when switching modes)
+ * @param {Object} hook - The LiveView hook instance
+ */
+export function resetQueueState(hook) {
+  hook.queueSelectedTargets = new Set()
+  hook.queueTargetSearch = ''
+  hook.queueStatusFilter = new Set(['pending', 'executing', 'failed'])
+  hook.queuePriorityMin = 0
+  hook.queuePriorityMax = 5
+  hook.queueSearchQuery = ''
+  hook.queueSelectedEntries = new Set()
+  hook.queueManageSelectedTarget = null
+  hook.queueTargetStatuses = new Map()
 }

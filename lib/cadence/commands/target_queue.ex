@@ -44,6 +44,8 @@ defmodule Cadence.Commands.TargetQueue do
   alias Cadence.Commands.{QueueEntry, TargetDispatcher}
   alias Cadence.{Missions, Targets}
   alias Cadence.Outbox
+  alias Cadence.Recordings
+  alias Cadence.Recordings.Recordables.{CommandQueued, CommandDequeued}
   alias Ecto.Multi
 
   # Fallback poll interval - used as safety net for scheduled commands and missed events
@@ -272,8 +274,13 @@ defmodule Cadence.Commands.TargetQueue do
 
   def handle_call({:cancel, entry_id}, _from, state) do
     case do_cancel(entry_id, state.target_id) do
-      {:ok, entry} -> {:reply, {:ok, entry}, state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:ok, entry} ->
+        # Create CommandDequeued recording for cancellation
+        record_command_dequeued(entry, "cancelled", nil, state)
+        {:reply, {:ok, entry}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -412,6 +419,11 @@ defmodule Cadence.Commands.TargetQueue do
   defp do_enqueue(command_name, params, opts, state) do
     sequence = state.sequence_counter + 1
     user_id = Keyword.get(opts, :user_id)
+    priority = Keyword.get(opts, :priority, 3)
+    scheduled_at = Keyword.get(opts, :scheduled_at)
+    expires_at = Keyword.get(opts, :expires_at)
+    max_attempts = Keyword.get(opts, :max_attempts, 3)
+    dispatch_opts = opts_to_map(opts)
 
     entry_attrs = %{
       organization_id: state.organization_id,
@@ -419,13 +431,25 @@ defmodule Cadence.Commands.TargetQueue do
       target_id: state.target_id,
       command_name: command_name,
       parameters: params,
-      priority: Keyword.get(opts, :priority, 3),
+      priority: priority,
       sequence_number: sequence,
-      scheduled_at: Keyword.get(opts, :scheduled_at),
-      expires_at: Keyword.get(opts, :expires_at),
-      max_attempts: Keyword.get(opts, :max_attempts, 3),
+      scheduled_at: scheduled_at,
+      expires_at: expires_at,
+      max_attempts: max_attempts,
       user_id: user_id,
-      dispatch_opts: opts_to_map(opts)
+      dispatch_opts: dispatch_opts
+    }
+
+    # Recordable attrs for CommandQueued (computed before Multi since values are known)
+    queued_attrs = %{
+      command_name: command_name,
+      parameters: params,
+      target_id: state.target_id,
+      priority: priority,
+      scheduled_at: scheduled_at,
+      expires_at: expires_at,
+      max_attempts: max_attempts,
+      dispatch_opts: dispatch_opts
     }
 
     result =
@@ -443,9 +467,20 @@ defmodule Cadence.Commands.TargetQueue do
           payload: %{
             command_name: command_name,
             target_id: state.target_id,
-            priority: entry.priority,
-            scheduled_at: entry.scheduled_at
+            priority: priority,
+            scheduled_at: scheduled_at
           }
+        }
+      end)
+      |> Recordings.append(:queued, CommandQueued, queued_attrs, fn %{entry: entry} ->
+        %{
+          organization_id: state.organization_id,
+          mission_id: state.mission_id,
+          aggregate_type: "QueueEntry",
+          aggregate_id: entry.id,
+          actor_id: user_id,
+          actor_type: if(user_id, do: "user", else: "system"),
+          timestamp: DateTime.utc_now()
         }
       end)
       |> Repo.transaction()
@@ -464,6 +499,14 @@ defmodule Cadence.Commands.TargetQueue do
       {:error, :outbox, changeset, _changes} ->
         Logger.error("Failed to create outbox event: #{inspect(changeset.errors)}")
         {:error, {:outbox_failed, changeset}}
+
+      {:error, :queued_recordable, changeset, _changes} ->
+        Logger.error("Failed to create CommandQueued recordable: #{inspect(changeset.errors)}")
+        {:error, {:recording_failed, changeset}}
+
+      {:error, :queued_recording, changeset, _changes} ->
+        Logger.error("Failed to create recording: #{inspect(changeset.errors)}")
+        {:error, {:recording_failed, changeset}}
     end
   end
 
@@ -559,17 +602,20 @@ defmodule Cadence.Commands.TargetQueue do
 
       entry ->
         case result do
-          {:ok, command_log_id} ->
+          {:ok, %{aggregate_id: aggregate_id, recording_id: recording_id}} ->
             # Success
             {:ok, updated_entry} =
               entry
               |> QueueEntry.execution_changeset(%{
                 status: :completed,
-                command_log_id: command_log_id
+                command_log_id: aggregate_id
               })
               |> Repo.update()
 
-            publish_status_changed(updated_entry, :completed, state)
+            # Create CommandDequeued recording for successful execution
+            record_command_dequeued(entry, "executed", aggregate_id, state)
+
+            publish_status_changed(updated_entry, :completed, recording_id, state)
             Logger.debug("Queue entry #{entry_id} completed successfully")
 
           {:error, :paused} ->
@@ -657,11 +703,16 @@ defmodule Cadence.Commands.TargetQueue do
   end
 
   defp publish_status_changed(entry, new_status, state) do
+    publish_status_changed(entry, new_status, nil, state)
+  end
+
+  defp publish_status_changed(entry, new_status, recording_id, state) do
     # Insert to outbox for persistence and audit trail
     {:ok, event} =
       Outbox.insert(%{
         organization_id: state.organization_id,
         mission_id: state.mission_id,
+        recording_id: recording_id,
         event_type: "command_status_changed",
         aggregate_type: "command_queue_entry",
         aggregate_id: entry.id,
@@ -752,5 +803,34 @@ defmodule Cadence.Commands.TargetQueue do
     end
 
     count
+  end
+
+  # Creates a CommandDequeued recording for queue entry state transitions
+  defp record_command_dequeued(entry, reason, command_aggregate_id, state) do
+    dequeued_attrs = %{
+      reason: reason,
+      command_aggregate_id: command_aggregate_id,
+      attempts: entry.attempts,
+      last_error: entry.last_error
+    }
+
+    recording_attrs = %{
+      organization_id: state.organization_id,
+      mission_id: state.mission_id,
+      aggregate_type: "QueueEntry",
+      aggregate_id: entry.id,
+      actor_type: "system",
+      timestamp: DateTime.utc_now()
+    }
+
+    case Recordings.create(CommandDequeued, dequeued_attrs, recording_attrs) do
+      {:ok, _} ->
+        :ok
+
+      {:error, step, changeset, _} ->
+        Logger.error(
+          "Failed to create CommandDequeued recording (#{step}): #{inspect(changeset.errors)}"
+        )
+    end
   end
 end

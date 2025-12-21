@@ -12,8 +12,18 @@ defmodule Cadence.Alarms do
   import Ecto.Query, warn: false
 
   alias Cadence.Repo
-  alias Cadence.Alarms.{Alarm, AlarmEvent, AlarmRule}
+  alias Cadence.Alarms.{Alarm, AlarmRule}
   alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Recordings
+  alias Cadence.Recordings.Recordables.{
+    AlarmTriggered,
+    AlarmAcknowledged,
+    AlarmCleared,
+    AlarmShelved,
+    AlarmUnshelved,
+    AlarmEscalated,
+    AlarmValueUpdated
+  }
 
   # ============================================================================
   # Alarm Rules
@@ -315,7 +325,7 @@ defmodule Cadence.Alarms do
 
     Repo.transaction(fn ->
       with {:ok, alarm} <- do_create_alarm(attrs),
-           {:ok, _event} <- create_event(AlarmEvent.triggered(alarm, attrs[:current_value])) do
+           :ok <- record_alarm_triggered(alarm, attrs) do
         alarm
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -378,8 +388,9 @@ defmodule Cadence.Alarms do
           case do_create_alarm_with_conflict_handling(attrs) do
             {:ok, alarm} ->
               # Successfully created - record the triggered event
-              case create_event(AlarmEvent.triggered(alarm, attrs[:current_value])) do
-                {:ok, _event} -> {alarm, :created}
+              with :ok <- record_alarm_triggered(alarm, attrs) do
+                {alarm, :created}
+              else
                 {:error, changeset} -> Repo.rollback(changeset)
               end
 
@@ -485,7 +496,7 @@ defmodule Cadence.Alarms do
       }
 
       with {:ok, updated} <- do_acknowledge_alarm_changeset(alarm, attrs),
-           {:ok, _event} <- create_event(AlarmEvent.acknowledged(updated, user_id, note)) do
+           :ok <- record_alarm_acknowledged(updated, user_id, note) do
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -540,7 +551,7 @@ defmodule Cadence.Alarms do
       }
 
       with {:ok, updated} <- do_shelve_alarm_changeset(alarm, attrs),
-           {:ok, _event} <- create_event(AlarmEvent.shelved(updated, user_id, reason)) do
+           :ok <- record_alarm_shelved(updated, user_id, shelved_until, reason) do
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -579,11 +590,11 @@ defmodule Cadence.Alarms do
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_unshelve_alarm(%Alarm{} = alarm, user_id) do
     Repo.transaction(fn ->
-      previous_state = %{"status" => "shelved", "shelved_until" => alarm.shelved_until}
       previous_status = if alarm.acknowledged_at, do: :acknowledged, else: :active
+      unshelve_type = if user_id, do: "manual", else: "timeout"
 
       with {:ok, updated} <- do_unshelve_alarm_changeset(alarm, previous_status),
-           {:ok, _event} <- create_event(AlarmEvent.unshelved(updated, previous_state, user_id)) do
+           :ok <- record_alarm_unshelved(updated, user_id, unshelve_type) do
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -622,14 +633,10 @@ defmodule Cadence.Alarms do
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_clear_alarm(%Alarm{} = alarm, user_id) do
     Repo.transaction(fn ->
-      previous_state = %{
-        "status" => to_string(alarm.status),
-        "severity" => to_string(alarm.severity),
-        "current_value" => alarm.current_value
-      }
+      clear_type = if user_id, do: "manual", else: "automatic"
 
       with {:ok, updated} <- do_clear_alarm_changeset(alarm),
-           {:ok, _event} <- create_event(AlarmEvent.cleared(updated, previous_state, user_id)) do
+           :ok <- record_alarm_cleared(updated, user_id, clear_type) do
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -682,12 +689,6 @@ defmodule Cadence.Alarms do
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_update_alarm_value(%Alarm{} = alarm, value, limit_state, new_severity, message) do
     Repo.transaction(fn ->
-      previous_state = %{
-        "severity" => to_string(alarm.severity),
-        "limit_state" => alarm.limit_state && to_string(alarm.limit_state),
-        "current_value" => alarm.current_value
-      }
-
       attrs = %{
         current_value: value,
         limit_state: limit_state,
@@ -697,7 +698,7 @@ defmodule Cadence.Alarms do
       }
 
       with {:ok, updated} <- do_update_alarm_value_changeset(alarm, attrs),
-           {:ok, _event} <- create_value_event(alarm, updated, previous_state, value) do
+           :ok <- record_value_change(alarm, updated, value) do
         updated
       else
         {:error, changeset} -> Repo.rollback(changeset)
@@ -711,50 +712,19 @@ defmodule Cadence.Alarms do
     |> Repo.update()
   end
 
-  defp create_value_event(old_alarm, new_alarm, previous_state, value) do
-    event_attrs =
-      cond do
-        severity_rank(new_alarm.severity) > severity_rank(old_alarm.severity) ->
-          AlarmEvent.escalated(new_alarm, previous_state, value)
+  defp record_value_change(old_alarm, new_alarm, value) do
+    cond do
+      severity_rank(new_alarm.severity) > severity_rank(old_alarm.severity) ->
+        record_alarm_escalated(new_alarm, old_alarm.severity, value)
 
-        severity_rank(new_alarm.severity) < severity_rank(old_alarm.severity) ->
-          AlarmEvent.deescalated(new_alarm, previous_state, value)
-
-        true ->
-          AlarmEvent.value_updated(new_alarm, previous_state, value)
-      end
-
-    create_event(event_attrs)
+      true ->
+        record_alarm_value_updated(new_alarm, old_alarm.current_value, value)
+    end
   end
 
   defp severity_rank(:info), do: 0
   defp severity_rank(:warning), do: 1
   defp severity_rank(:critical), do: 2
-
-  # ============================================================================
-  # Alarm Events
-  # ============================================================================
-
-  @doc """
-  Lists events for an alarm.
-  """
-  @spec list_alarm_events(String.t()) :: [AlarmEvent.t()]
-  def list_alarm_events(alarm_id) do
-    AlarmEvent
-    |> where([e], e.alarm_id == ^alarm_id)
-    |> order_by([e], asc: e.inserted_at)
-    |> Repo.all()
-  end
-
-  @doc """
-  Creates a new alarm event.
-  """
-  @spec create_event(map()) :: {:ok, AlarmEvent.t()} | {:error, Ecto.Changeset.t()}
-  def create_event(attrs) do
-    %AlarmEvent{}
-    |> AlarmEvent.changeset(attrs)
-    |> Repo.insert()
-  end
 
   # ============================================================================
   # Shelve Expiration
@@ -848,4 +818,175 @@ defmodule Cadence.Alarms do
 
   defp maybe_offset(query, nil), do: query
   defp maybe_offset(query, offset), do: offset(query, ^offset)
+
+  # ============================================================================
+  # Recording Helpers
+  # ============================================================================
+
+  defp record_alarm_triggered(%Alarm{} = alarm, attrs) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+
+    recordable_attrs = %{
+      alarm_type: attrs[:alarm_type] || "limit",
+      severity: to_string(alarm.severity),
+      source_type: alarm.source_type,
+      source_id: alarm.source_id,
+      message: alarm.message,
+      trigger_value: alarm.current_value,
+      limit_state: alarm.limit_state && to_string(alarm.limit_state),
+      alarm_rule_id: attrs[:alarm_rule_id]
+    }
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_type: "system",
+      timestamp: alarm.triggered_at || DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmTriggered, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok  # Don't fail the transaction for recording errors
+    end
+  end
+
+  defp record_alarm_acknowledged(%Alarm{} = alarm, user_id, note) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+    recordable_attrs = %{note: note}
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_id: user_id,
+      actor_type: "user",
+      timestamp: alarm.acknowledged_at || DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmAcknowledged, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  defp record_alarm_shelved(%Alarm{} = alarm, user_id, shelved_until, reason) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+
+    recordable_attrs = %{
+      shelve_until: shelved_until,
+      reason: reason
+    }
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_id: user_id,
+      actor_type: "user",
+      timestamp: alarm.shelved_at || DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmShelved, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  defp record_alarm_unshelved(%Alarm{} = alarm, user_id, unshelve_type) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+    recordable_attrs = %{unshelve_type: unshelve_type}
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_id: user_id,
+      actor_type: if(user_id, do: "user", else: "system"),
+      timestamp: DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmUnshelved, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  defp record_alarm_cleared(%Alarm{} = alarm, user_id, clear_type) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+
+    recordable_attrs = %{
+      clear_type: clear_type,
+      final_value: alarm.current_value
+    }
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_id: user_id,
+      actor_type: if(user_id, do: "user", else: "system"),
+      timestamp: alarm.cleared_at || DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmCleared, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  defp record_alarm_escalated(%Alarm{} = alarm, previous_severity, trigger_value) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+
+    recordable_attrs = %{
+      previous_severity: to_string(previous_severity),
+      new_severity: to_string(alarm.severity),
+      trigger_value: trigger_value
+    }
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_type: "system",
+      timestamp: DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmEscalated, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  defp record_alarm_value_updated(%Alarm{} = alarm, previous_value, trigger_value) do
+    bucket_id = get_bucket_id_for_target(alarm.target_id)
+
+    recordable_attrs = %{
+      trigger_value: trigger_value,
+      previous_value: previous_value
+    }
+
+    recording_attrs = %{
+      organization_id: alarm.organization_id,
+      bucket_id: bucket_id,
+      aggregate_id: alarm.id,
+      actor_type: "system",
+      timestamp: DateTime.utc_now()
+    }
+
+    case Recordings.create(AlarmValueUpdated, recordable_attrs, recording_attrs) do
+      {:ok, _} -> :ok
+      {:error, _, _, _} -> :ok
+    end
+  end
+
+  # Looks up the bucket_id for a target (or nil if no target)
+  defp get_bucket_id_for_target(nil), do: nil
+
+  defp get_bucket_id_for_target(target_id) do
+    case Cadence.Targets.get_target(target_id) do
+      nil -> nil
+      target -> target.bucket_id
+    end
+  end
 end

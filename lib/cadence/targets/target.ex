@@ -56,8 +56,8 @@ defmodule Cadence.Targets.Target do
     # The C&T database version this target uses (required)
     belongs_to :definition_set, Cadence.MissionDatabase.DefinitionSet
 
-    many_to_many :target_groups, Cadence.Targets.TargetGroup,
-      join_through: "target_group_memberships"
+    # Bucket for hierarchical organization (target group)
+    belongs_to :bucket, Cadence.Buckets.Bucket
 
     timestamps(type: :utc_datetime)
   end

@@ -3,6 +3,7 @@ defmodule Cadence.AlarmsTest do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.{Alarm, AlarmRule}
+  alias Cadence.Recordings
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -451,9 +452,9 @@ defmodule Cadence.AlarmsTest do
 
       assert {:ok, %Alarm{} = alarm} = Alarms.create_alarm(attrs)
 
-      events = Alarms.list_alarm_events(alarm.id)
-      assert length(events) == 1
-      assert hd(events).event_type == :triggered
+      recordings = Recordings.get_aggregate_history("Alarm", alarm.id)
+      assert length(recordings) == 1
+      assert hd(recordings).recordable_type == "AlarmTriggered"
     end
 
     test "returns error changeset with invalid data" do
@@ -473,14 +474,14 @@ defmodule Cadence.AlarmsTest do
       assert acked.acknowledgment_note == "Got it"
     end
 
-    test "creates an acknowledged event" do
+    test "creates an acknowledged recording" do
       alarm = alarm_fixture()
       user = Cadence.AccountsFixtures.user_fixture()
 
       {:ok, acked} = Alarms.acknowledge_alarm(alarm, user.id)
 
-      events = Alarms.list_alarm_events(acked.id)
-      assert Enum.any?(events, &(&1.event_type == :acknowledged))
+      recordings = Recordings.get_aggregate_history("Alarm", acked.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmAcknowledged"))
     end
   end
 
@@ -499,14 +500,14 @@ defmodule Cadence.AlarmsTest do
       assert shelved.shelve_reason == "Investigating"
     end
 
-    test "creates a shelved event" do
+    test "creates a shelved recording" do
       alarm = alarm_fixture()
       user = Cadence.AccountsFixtures.user_fixture()
 
       {:ok, shelved} = Alarms.shelve_alarm(alarm, user.id, 30)
 
-      events = Alarms.list_alarm_events(shelved.id)
-      assert Enum.any?(events, &(&1.event_type == :shelved))
+      recordings = Recordings.get_aggregate_history("Alarm", shelved.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmShelved"))
     end
   end
 
@@ -536,13 +537,13 @@ defmodule Cadence.AlarmsTest do
       assert unshelved.status == :acknowledged
     end
 
-    test "creates an unshelved event" do
+    test "creates an unshelved recording" do
       alarm = shelved_alarm_fixture()
 
       {:ok, unshelved} = Alarms.unshelve_alarm(alarm)
 
-      events = Alarms.list_alarm_events(unshelved.id)
-      assert Enum.any?(events, &(&1.event_type == :unshelved))
+      recordings = Recordings.get_aggregate_history("Alarm", unshelved.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmUnshelved"))
     end
   end
 
@@ -555,13 +556,13 @@ defmodule Cadence.AlarmsTest do
       assert not is_nil(cleared.cleared_at)
     end
 
-    test "creates a cleared event" do
+    test "creates a cleared recording" do
       alarm = alarm_fixture()
 
       {:ok, cleared} = Alarms.clear_alarm(alarm)
 
-      events = Alarms.list_alarm_events(cleared.id)
-      assert Enum.any?(events, &(&1.event_type == :cleared))
+      recordings = Recordings.get_aggregate_history("Alarm", cleared.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmCleared"))
     end
   end
 
@@ -576,7 +577,7 @@ defmodule Cadence.AlarmsTest do
       assert not is_nil(updated.last_value_at)
     end
 
-    test "escalates severity and creates escalated event" do
+    test "escalates severity and creates escalated recording" do
       alarm = alarm_fixture(severity: :warning, limit_state: :yellow)
 
       {:ok, escalated} = Alarms.update_alarm_value(alarm, 105.0, :red, :critical, "Now critical!")
@@ -584,11 +585,11 @@ defmodule Cadence.AlarmsTest do
       assert escalated.severity == :critical
       assert escalated.limit_state == :red
 
-      events = Alarms.list_alarm_events(escalated.id)
-      assert Enum.any?(events, &(&1.event_type == :escalated))
+      recordings = Recordings.get_aggregate_history("Alarm", escalated.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmEscalated"))
     end
 
-    test "deescalates severity and creates deescalated event" do
+    test "deescalates severity and creates value_updated recording" do
       alarm = alarm_fixture(severity: :critical, limit_state: :red)
 
       {:ok, deescalated} = Alarms.update_alarm_value(alarm, 85.0, :yellow, :warning)
@@ -596,42 +597,18 @@ defmodule Cadence.AlarmsTest do
       assert deescalated.severity == :warning
       assert deescalated.limit_state == :yellow
 
-      events = Alarms.list_alarm_events(deescalated.id)
-      assert Enum.any?(events, &(&1.event_type == :deescalated))
+      recordings = Recordings.get_aggregate_history("Alarm", deescalated.id)
+      # De-escalation is recorded as value_updated (not a separate recordable)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmValueUpdated"))
     end
 
-    test "creates value_updated event when severity unchanged" do
+    test "creates value_updated recording when severity unchanged" do
       alarm = alarm_fixture(severity: :warning, current_value: 80.0)
 
       {:ok, updated} = Alarms.update_alarm_value(alarm, 82.0, :yellow, :warning)
 
-      events = Alarms.list_alarm_events(updated.id)
-      assert Enum.any?(events, &(&1.event_type == :value_updated))
-    end
-  end
-
-  # ============================================================================
-  # Alarm Events
-  # ============================================================================
-
-  describe "list_alarm_events/1" do
-    test "returns events for an alarm in chronological order" do
-      alarm = alarm_fixture()
-
-      # Create several events
-      event1 = alarm_event_fixture(alarm: alarm, event_type: :triggered)
-      Process.sleep(10)
-      event2 = alarm_event_fixture(alarm: alarm, event_type: :acknowledged)
-      Process.sleep(10)
-      event3 = alarm_event_fixture(alarm: alarm, event_type: :cleared)
-
-      events = Alarms.list_alarm_events(alarm.id)
-
-      assert length(events) == 3
-      # Should be in chronological order (oldest first)
-      assert Enum.at(events, 0).id == event1.id
-      assert Enum.at(events, 1).id == event2.id
-      assert Enum.at(events, 2).id == event3.id
+      recordings = Recordings.get_aggregate_history("Alarm", updated.id)
+      assert Enum.any?(recordings, &(&1.recordable_type == "AlarmValueUpdated"))
     end
   end
 

@@ -49,6 +49,7 @@ defmodule Cadence.Outbox.Event do
 
   alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
+  alias Cadence.Recordings.Recording
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -59,6 +60,7 @@ defmodule Cadence.Outbox.Event do
           id: Ecto.UUID.t(),
           organization_id: Ecto.UUID.t(),
           mission_id: Ecto.UUID.t() | nil,
+          recording_id: Ecto.UUID.t() | nil,
           event_type: String.t(),
           aggregate_type: String.t(),
           aggregate_id: Ecto.UUID.t(),
@@ -77,6 +79,7 @@ defmodule Cadence.Outbox.Event do
   schema "outbox_events" do
     belongs_to :organization, Organization
     belongs_to :mission, Mission
+    belongs_to :recording, Recording
 
     # Event identification
     field :event_type, :string
@@ -113,6 +116,7 @@ defmodule Cadence.Outbox.Event do
     |> cast(attrs, [
       :organization_id,
       :mission_id,
+      :recording_id,
       :event_type,
       :aggregate_type,
       :aggregate_id,
@@ -130,6 +134,7 @@ defmodule Cadence.Outbox.Event do
     |> validate_inclusion(:actor_type, @actor_types ++ [nil])
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
+    |> foreign_key_constraint(:recording_id)
     |> unique_constraint(:idempotency_key)
   end
 

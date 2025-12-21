@@ -479,9 +479,10 @@ defmodule Cadence.ProceduresTest do
       assert version.submitted_at != nil
       assert version.submitted_by_id == ctx.author.id
 
-      events = Procedures.list_version_events(version.id)
-      assert length(events) == 1
-      assert hd(events).event_type == :submitted
+      recordings = Procedures.list_version_events(version.id)
+      # At least 1 recording for submitted (fixture may not create version-created recording)
+      assert length(recordings) >= 1
+      assert Enum.any?(recordings, &(&1.recording.recordable_type == "ProcedureVersionSubmitted"))
     end
 
     test "submit_for_review fails if not in draft status", ctx do
@@ -501,8 +502,8 @@ defmodule Cadence.ProceduresTest do
       assert withdrawn.submitted_by_id == nil
       assert Procedures.list_approvals(version.id) == []
 
-      events = Procedures.list_version_events(version.id)
-      assert Enum.any?(events, &(&1.event_type == :withdrawn))
+      recordings = Procedures.list_version_events(version.id)
+      assert Enum.any?(recordings, &(&1.recording.recordable_type == "ProcedureVersionWithdrawn"))
     end
 
     test "withdraw_submission fails if not author", ctx do
@@ -634,12 +635,13 @@ defmodule Cadence.ProceduresTest do
       {:ok, version} = Procedures.submit_for_review(ctx.version, ctx.author.id)
       {:ok, _} = Procedures.add_approval(version, ctx.approver.id, :approved)
 
-      events = Procedures.list_version_events(version.id)
+      recordings = Procedures.list_version_events(version.id)
 
-      assert length(events) >= 2
-      event_types = Enum.map(events, & &1.event_type)
-      assert :submitted in event_types
-      assert :approval_added in event_types
+      # Should have: created, submitted, approval_added
+      assert length(recordings) >= 3
+      recordable_types = Enum.map(recordings, & &1.recording.recordable_type)
+      assert "ProcedureVersionSubmitted" in recordable_types
+      assert "ProcedureApprovalAdded" in recordable_types
     end
 
     test "approval updates procedure current_version_id", ctx do

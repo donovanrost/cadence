@@ -255,6 +255,12 @@ export const OpsConsoleV2Hook = {
                 </svg>
                 <span class="nav-label">Timeline</span>
               </button>
+              <button class="mode-btn" data-mode="queue">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+                <span class="nav-label">Queue</span>
+              </button>
             </div>
           </div>
 
@@ -311,6 +317,11 @@ export const OpsConsoleV2Hook = {
             <button class="rail-btn" data-mode="timeline" title="Timeline Mode">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </button>
+            <button class="rail-btn" data-mode="queue" title="Queue Mode">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
               </svg>
             </button>
           </div>
@@ -969,6 +980,52 @@ export const OpsConsoleV2Hook = {
       this._populateContextPanel()
     })
 
+    // Handle queue entries update (for Queue mode)
+    this.handleEvent("update_queue_entries", (payload) => {
+      this.queueEntries = payload.entries || []
+      // Re-render queue mode if active
+      if (this.currentMode === "queue") {
+        this._renderQueueMode()
+      }
+    })
+
+    // Handle server-side queue metrics (accurate counts from database)
+    this.handleEvent("queue_metrics", ({ metrics }) => {
+      this.queueServerMetrics = metrics
+      // Re-render queue mode if active (metrics will be used in overview)
+      if (this.currentMode === "queue") {
+        this._renderQueueMode()
+      }
+    })
+
+    // Handle target queue paused
+    this.handleEvent("queue_target_paused", (payload) => {
+      const targetId = payload.target_id
+      if (targetId) {
+        const status = this.queueTargetStatuses.get(targetId) || { paused: false, pending: 0, executing: 0 }
+        status.paused = true
+        this.queueTargetStatuses.set(targetId, status)
+        // Re-render if in queue mode and manage view
+        if (this.currentMode === "queue" && this.queueViewMode === "manage") {
+          this._renderQueueMode()
+        }
+      }
+    })
+
+    // Handle target queue resumed
+    this.handleEvent("queue_target_resumed", (payload) => {
+      const targetId = payload.target_id
+      if (targetId) {
+        const status = this.queueTargetStatuses.get(targetId) || { paused: false, pending: 0, executing: 0 }
+        status.paused = false
+        this.queueTargetStatuses.set(targetId, status)
+        // Re-render if in queue mode and manage view
+        if (this.currentMode === "queue" && this.queueViewMode === "manage") {
+          this._renderQueueMode()
+        }
+      }
+    })
+
     // Handle staged commands loaded from server
     this.handleEvent("load_staged_commands", (payload) => {
       this.cmdStagedCommands = payload.staged || []
@@ -1013,22 +1070,31 @@ export const OpsConsoleV2Hook = {
     if (!dashboard) return
 
     // Clear all mode classes first
-    dashboard.classList.remove("commands-mode-active", "timeline-mode-active")
+    dashboard.classList.remove("commands-mode-active", "timeline-mode-active", "queue-mode-active")
 
     if (this.currentMode === "commands") {
       // Hide GridStack dashboard, show Commands mode
       dashboard.classList.add("commands-mode-active")
       this._hideTimelineMode()
+      this._hideQueueMode()
       this._renderCommandsMode()
     } else if (this.currentMode === "timeline") {
       // Hide GridStack dashboard, show Timeline mode
       dashboard.classList.add("timeline-mode-active")
       this._hideCommandsMode()
+      this._hideQueueMode()
       this._renderTimelineMode()
+    } else if (this.currentMode === "queue") {
+      // Hide GridStack dashboard, show Queue mode
+      dashboard.classList.add("queue-mode-active")
+      this._hideCommandsMode()
+      this._hideTimelineMode()
+      this._renderQueueMode()
     } else {
       // Show GridStack dashboard, hide mode-specific content
       this._hideCommandsMode()
       this._hideTimelineMode()
+      this._hideQueueMode()
     }
 
     // Update context panel based on mode
@@ -5293,6 +5359,1397 @@ export const OpsConsoleV2Hook = {
     const dashboard = this.panelLayout?.elements?.dashboard
     if (dashboard) {
       dashboard.querySelectorAll(".cmd-command-item").forEach(i => i.classList.remove("selected"))
+    }
+  },
+
+  // ============================================================================
+  // Queue Mode
+  // ============================================================================
+
+  _renderQueueMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    // Check if queue container already exists
+    let queueContainer = dashboard.querySelector(".queue-mode-container")
+    if (!queueContainer) {
+      queueContainer = document.createElement("div")
+      queueContainer.className = "queue-mode-container"
+      dashboard.appendChild(queueContainer)
+    }
+
+    // Render view-specific content
+    let viewContent
+    if (this.queueViewMode === 'overview') {
+      viewContent = this._renderQueueOverviewContent()
+    } else if (this.queueViewMode === 'manage') {
+      viewContent = this._renderQueueManageContent()
+    } else {
+      viewContent = this._renderQueueTableContent()
+    }
+
+    queueContainer.innerHTML = `
+      <div class="queue-mode-layout">
+        ${viewContent}
+
+        <!-- Controls Bar (Bottom) -->
+        <div class="queue-controls">
+          <div class="queue-view-tabs">
+            <button class="queue-view-tab ${this.queueViewMode === 'overview' ? 'active' : ''}"
+                    data-view="overview">OVERVIEW</button>
+            <button class="queue-view-tab ${this.queueViewMode === 'table' ? 'active' : ''}"
+                    data-view="table">TABLE</button>
+            <button class="queue-view-tab ${this.queueViewMode === 'manage' ? 'active' : ''}"
+                    data-view="manage">MANAGE</button>
+          </div>
+          <div class="queue-global-actions">
+            <button class="btn btn-warning btn-sm" id="queue-pause-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              PAUSE ALL
+            </button>
+            <button class="btn btn-success btn-sm" id="queue-resume-all">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              RESUME ALL
+            </button>
+            <button class="btn btn-ghost btn-sm" id="queue-refresh" title="Refresh">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `
+
+    this._bindQueueModeEvents(queueContainer)
+    if (this.queueViewMode === 'table') {
+      this._initQueuePanelResize(queueContainer)
+    }
+  },
+
+  _renderQueueOverviewContent() {
+    const metrics = this._calculateQueueMetrics()
+    const targetActivity = this._calculateTargetActivity()
+
+    return `
+      <div class="queue-overview">
+        <!-- Large Metric Cards -->
+        <div class="queue-overview-metrics">
+          <div class="queue-metric-card-lg queue-metric-queued">
+            <span class="queue-metric-card-value">${metrics.counts.pending + metrics.counts.executing}</span>
+            <span class="queue-metric-card-label">QUEUED</span>
+          </div>
+          <div class="queue-metric-card-lg queue-metric-pending">
+            <span class="queue-metric-card-value">${metrics.counts.pending}</span>
+            <span class="queue-metric-card-label">PENDING</span>
+          </div>
+          <div class="queue-metric-card-lg queue-metric-executing">
+            <span class="queue-metric-card-value">${metrics.counts.executing}</span>
+            <span class="queue-metric-card-label">EXECUTING</span>
+          </div>
+          <div class="queue-metric-card-lg queue-metric-failed">
+            <span class="queue-metric-card-value">${metrics.counts.failed}</span>
+            <span class="queue-metric-card-label">FAILED</span>
+          </div>
+          <div class="queue-metric-card-lg queue-metric-success">
+            <span class="queue-metric-card-value">${metrics.successRate}%</span>
+            <span class="queue-metric-card-label">SUCCESS RATE</span>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="queue-overview-charts">
+          <!-- Status Breakdown -->
+          <div class="queue-chart-panel">
+            <div class="queue-chart-header">
+              <span class="mc-label-subsystem">STATUS BREAKDOWN</span>
+            </div>
+            <div class="queue-status-chart">
+              ${this._renderStatusBreakdownChart(metrics)}
+            </div>
+          </div>
+
+          <!-- Target Activity -->
+          <div class="queue-chart-panel">
+            <div class="queue-chart-header">
+              <span class="mc-label-subsystem">TARGET ACTIVITY</span>
+            </div>
+            <div class="queue-target-activity">
+              ${this._renderTargetActivityChart(targetActivity)}
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="queue-overview-actions">
+          <span class="mc-label-subsystem">QUICK ACTIONS</span>
+          <div class="queue-quick-actions">
+            <button class="btn btn-error btn-sm" id="queue-retry-failed" ${metrics.counts.failed === 0 ? 'disabled' : ''}>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              RETRY ALL FAILED (${metrics.counts.failed})
+            </button>
+            <button class="btn btn-ghost btn-sm" id="queue-clear-completed" ${metrics.counts.completed === 0 ? 'disabled' : ''}>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+              CLEAR COMPLETED (${metrics.counts.completed})
+            </button>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  _renderQueueManageContent() {
+    const selectedTarget = this.queueManageSelectedTarget
+    const selectedTargetData = selectedTarget
+      ? this.targets.find(t => t.id === selectedTarget)
+      : null
+
+    // Calculate queue stats per target
+    const targetStats = this._calculateTargetQueueStats()
+
+    return `
+      <div class="queue-manage-view">
+        <!-- Left Panel: Target List -->
+        <div class="queue-manage-target-panel">
+          <div class="queue-panel-header">
+            <span class="mc-label-subsystem">TARGET QUEUES</span>
+          </div>
+          <div class="queue-manage-target-list">
+            ${this.targets.map(target => {
+              const stats = targetStats.get(target.id) || { pending: 0, executing: 0, paused: false }
+              const isSelected = selectedTarget === target.id
+              const isPaused = this.queueTargetStatuses.get(target.id)?.paused || false
+
+              return `
+                <div class="queue-manage-target-item ${isSelected ? 'selected' : ''} ${isPaused ? 'paused' : ''}"
+                     data-target-id="${target.id}">
+                  <div class="queue-manage-target-info">
+                    <span class="queue-manage-target-name">${target.name}</span>
+                    <span class="queue-manage-target-stats">
+                      ${stats.pending + stats.executing + (stats.failed || 0)} queued${stats.failed > 0 ? ` (${stats.failed} failed)` : ''}
+                    </span>
+                  </div>
+                  <button class="queue-manage-pause-btn ${isPaused ? 'paused' : ''}"
+                          data-target-id="${target.id}"
+                          title="${isPaused ? 'Resume queue' : 'Pause queue'}">
+                    ${isPaused
+                      ? `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                         </svg>`
+                      : `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                         </svg>`
+                    }
+                  </button>
+                </div>
+              `
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Right Panel: Queue Detail -->
+        <div class="queue-manage-detail-panel">
+          ${selectedTargetData
+            ? this._renderQueueDetailPanel(selectedTargetData, targetStats.get(selectedTarget) || { pending: 0, executing: 0, paused: false })
+            : `<div class="queue-manage-empty-state">
+                 <svg class="w-12 h-12 text-neutral-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                 </svg>
+                 <span>Select a target to manage its queue</span>
+               </div>`
+          }
+        </div>
+      </div>
+    `
+  },
+
+  _renderQueueDetailPanel(target, stats) {
+    const isPaused = this.queueTargetStatuses.get(target.id)?.paused || false
+    const entries = this.queueEntries.filter(e =>
+      e.target_id === target.id &&
+      ['pending', 'executing', 'failed'].includes(e.status)
+    ).sort((a, b) => {
+      // Sort by status (executing first, then pending, then failed), then priority, then sequence
+      const statusOrder = { executing: 0, pending: 1, failed: 2 }
+      const statusDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99)
+      if (statusDiff !== 0) return statusDiff
+      if (a.priority !== b.priority) return a.priority - b.priority
+      return (a.sequence_number || 0) - (b.sequence_number || 0)
+    })
+
+    return `
+      <div class="queue-detail-header">
+        <div class="queue-detail-title">
+          <span class="queue-detail-target-name">${target.name}</span>
+          <span class="queue-detail-status ${isPaused ? 'paused' : 'active'}">
+            ${isPaused ? 'PAUSED' : 'ACTIVE'}
+          </span>
+        </div>
+        <div class="queue-detail-stats">
+          <span>Pending: <strong>${stats.pending}</strong></span>
+          <span>Executing: <strong>${stats.executing}</strong></span>
+          ${stats.failed > 0 ? `<span class="text-error">Failed: <strong>${stats.failed}</strong></span>` : ''}
+        </div>
+      </div>
+
+      <div class="queue-detail-actions">
+        <button class="btn ${isPaused ? 'btn-success' : 'btn-warning'} btn-sm"
+                id="queue-detail-toggle-pause"
+                data-target-id="${target.id}">
+          ${isPaused ? 'RESUME QUEUE' : 'PAUSE QUEUE'}
+        </button>
+        <button class="btn btn-error btn-sm"
+                id="queue-detail-cancel-all"
+                data-target-id="${target.id}"
+                ${entries.length === 0 ? 'disabled' : ''}>
+          CANCEL ALL (${entries.length})
+        </button>
+      </div>
+
+      <div class="queue-detail-table-wrapper">
+        ${entries.length === 0
+          ? `<div class="queue-detail-empty">
+               <span>No commands queued for this target</span>
+             </div>`
+          : `<table class="queue-detail-table">
+               <thead>
+                 <tr>
+                   <th class="queue-detail-th-pos">#</th>
+                   <th class="queue-detail-th-pri">PRI</th>
+                   <th class="queue-detail-th-cmd">COMMAND</th>
+                   <th class="queue-detail-th-status">STATUS</th>
+                   <th class="queue-detail-th-actions"></th>
+                 </tr>
+               </thead>
+               <tbody>
+                 ${entries.map((entry, index) => `
+                   <tr class="queue-detail-row queue-status-${entry.status}">
+                     <td class="queue-detail-td-pos">${index + 1}</td>
+                     <td class="queue-detail-td-pri">
+                       <span class="queue-priority-badge priority-${entry.priority}">P${entry.priority}</span>
+                     </td>
+                     <td class="queue-detail-td-cmd">${entry.command_name}</td>
+                     <td class="queue-detail-td-status">
+                       <span class="queue-status-badge status-${entry.status}">${entry.status.toUpperCase()}</span>
+                     </td>
+                     <td class="queue-detail-td-actions">
+                       ${entry.status === 'pending'
+                         ? `<button class="queue-cancel-entry-btn"
+                                    data-entry-id="${entry.id}"
+                                    data-target-id="${target.id}"
+                                    title="Cancel command">
+                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                              </svg>
+                            </button>`
+                         : ''
+                       }
+                     </td>
+                   </tr>
+                 `).join('')}
+               </tbody>
+             </table>`
+        }
+      </div>
+    `
+  },
+
+  _calculateTargetQueueStats() {
+    const stats = new Map()
+
+    // Initialize all targets with zero counts
+    this.targets.forEach(target => {
+      stats.set(target.id, { pending: 0, executing: 0, failed: 0, paused: false })
+    })
+
+    // Count entries per target
+    this.queueEntries.forEach(entry => {
+      if (!entry.target_id) return
+      let targetStats = stats.get(entry.target_id)
+
+      // If target not in our list, create a stats entry for it anyway
+      if (!targetStats) {
+        targetStats = { pending: 0, executing: 0, failed: 0, paused: false }
+        stats.set(entry.target_id, targetStats)
+      }
+
+      if (entry.status === 'pending') {
+        targetStats.pending++
+      } else if (entry.status === 'executing') {
+        targetStats.executing++
+      } else if (entry.status === 'failed') {
+        targetStats.failed++
+      }
+    })
+
+    return stats
+  },
+
+  _renderQueueTableContent() {
+    const selectedCount = this.queueSelectedTargets.size
+    const totalTargets = this.targets.length
+
+    return `
+      <div class="queue-table-view">
+        <!-- Main Panels Row -->
+        <div class="queue-panels-row">
+          <!-- Left: Target Selection Panel -->
+          <div class="queue-target-panel" style="flex: 0 0 ${this.queueTargetPanelWidth}%">
+            <div class="queue-panel-header">
+              <div class="queue-panel-title">
+                <span class="mc-label-subsystem">TARGET FILTER</span>
+                <span class="queue-selection-count">${selectedCount === 0 ? 'All' : selectedCount} of ${totalTargets}</span>
+              </div>
+              <div class="queue-panel-actions">
+                <button class="queue-view-toggle ${this.queueTargetViewMode === 'compact' ? 'active' : ''}"
+                        data-view="compact" title="Compact view">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                  </svg>
+                </button>
+                <button class="queue-view-toggle ${this.queueTargetViewMode === 'detailed' ? 'active' : ''}"
+                        data-view="detailed" title="Detailed view">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="queue-target-filters">
+              <input type="text"
+                     class="queue-target-search"
+                     id="queue-target-search"
+                     placeholder="Search targets..."
+                     value="${this.queueTargetSearch}">
+            </div>
+
+            <div class="queue-target-grid ${this.queueTargetViewMode}">
+              ${this._renderQueueTargetGrid()}
+            </div>
+
+            <div class="queue-selection-actions">
+              <button class="btn btn-ghost btn-xs" id="queue-select-all-targets">Select All</button>
+              <button class="btn btn-ghost btn-xs" id="queue-clear-targets">Clear</button>
+            </div>
+          </div>
+
+          <!-- Resize Handle -->
+          <div class="queue-resize-handle" id="queue-resize-handle">
+            <div class="queue-resize-grip"></div>
+          </div>
+
+          <!-- Right: Queue Panel -->
+          <div class="queue-main-panel">
+            <!-- Filter Bar -->
+            <div class="queue-filter-bar">
+              ${this._renderQueueFilterBar()}
+            </div>
+
+            <!-- Queue Table -->
+            <div class="queue-table-container">
+              ${this._renderQueueTable()}
+            </div>
+
+            <!-- Bulk Actions Bar -->
+            <div class="queue-bulk-bar">
+              <span class="queue-selected-count">${this.queueSelectedEntries.size} selected</span>
+              <button class="btn btn-ghost btn-xs" id="queue-bulk-cancel"
+                      ${this.queueSelectedEntries.size === 0 ? 'disabled' : ''}>
+                CANCEL SELECTED
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+  },
+
+  _calculateTargetActivity() {
+    const entries = this.queueEntries || []
+    const activity = new Map()
+
+    // Count entries per target
+    entries.forEach(entry => {
+      const targetId = entry.target_id
+      const targetName = entry.target_name || 'Unknown'
+      if (!activity.has(targetId)) {
+        activity.set(targetId, { id: targetId, name: targetName, count: 0 })
+      }
+      activity.get(targetId).count++
+    })
+
+    // Sort by count descending, take top 10
+    return Array.from(activity.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+  },
+
+  _renderStatusBreakdownChart(metrics) {
+    const statuses = [
+      { key: 'pending', label: 'Pending', count: metrics.counts.pending, color: 'var(--badge-pending)' },
+      { key: 'executing', label: 'Executing', count: metrics.counts.executing, color: 'var(--glow-cyan)' },
+      { key: 'failed', label: 'Failed', count: metrics.counts.failed, color: 'var(--status-critical)' },
+      { key: 'completed', label: 'Completed', count: metrics.counts.completed, color: 'var(--status-success)' },
+      { key: 'cancelled', label: 'Cancelled', count: metrics.counts.cancelled, color: 'var(--neutral-text)' }
+    ].filter(s => s.count > 0)
+
+    const maxCount = Math.max(...statuses.map(s => s.count), 1)
+
+    return statuses.map(status => `
+      <div class="queue-status-bar-item">
+        <div class="queue-status-bar-label">
+          <span class="queue-status-bar-name">${status.label}</span>
+          <span class="queue-status-bar-count">${status.count}</span>
+        </div>
+        <div class="queue-status-bar-track">
+          <div class="queue-status-bar-fill" style="width: ${(status.count / maxCount) * 100}%; background: ${status.color}"></div>
+        </div>
+      </div>
+    `).join('')
+  },
+
+  _renderTargetActivityChart(targetActivity) {
+    if (targetActivity.length === 0) {
+      return `<div class="queue-chart-empty">No target activity</div>`
+    }
+
+    const maxCount = Math.max(...targetActivity.map(t => t.count), 1)
+
+    return targetActivity.map(target => `
+      <div class="queue-target-bar-item" data-target-id="${target.id}">
+        <div class="queue-target-bar-label">
+          <span class="queue-target-bar-name">${target.name}</span>
+          <span class="queue-target-bar-count">${target.count}</span>
+        </div>
+        <div class="queue-target-bar-track">
+          <div class="queue-target-bar-fill" style="width: ${(target.count / maxCount) * 100}%"></div>
+        </div>
+      </div>
+    `).join('')
+  },
+
+  _hideQueueMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    const queueContainer = dashboard.querySelector(".queue-mode-container")
+    if (queueContainer) {
+      queueContainer.innerHTML = ""
+    }
+  },
+
+  _calculateQueueMetrics() {
+    // Use server-side metrics if available (accurate counts from database)
+    if (this.queueServerMetrics) {
+      const m = this.queueServerMetrics
+      return {
+        counts: {
+          pending: m.pending || 0,
+          executing: m.executing || 0,
+          completed: m.completed || 0,
+          failed: m.failed || 0,
+          cancelled: m.cancelled || 0,
+          expired: m.expired || 0
+        },
+        total: m.total || 0,
+        successRate: Math.round(m.success_rate || 100)
+      }
+    }
+
+    // Fallback to client-side calculation from fetched entries
+    const entries = this.queueEntries || []
+
+    const counts = {
+      pending: entries.filter(e => e.status === 'pending').length,
+      executing: entries.filter(e => e.status === 'executing').length,
+      completed: entries.filter(e => e.status === 'completed').length,
+      failed: entries.filter(e => e.status === 'failed').length,
+      cancelled: entries.filter(e => e.status === 'cancelled').length,
+      expired: entries.filter(e => e.status === 'expired').length
+    }
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0)
+    const successful = counts.completed
+    const attempted = counts.completed + counts.failed
+    const successRate = attempted > 0 ? Math.round((successful / attempted) * 100) : 100
+
+    return { counts, total, successRate }
+  },
+
+  _renderQueueMetricsSummary(metrics) {
+    return `
+      <div class="queue-metric queue-metric-total">
+        <span class="queue-metric-value">${metrics.counts.pending + metrics.counts.executing}</span>
+        <span class="queue-metric-label">QUEUED</span>
+      </div>
+      <div class="queue-metric queue-metric-pending">
+        <span class="queue-metric-value">${metrics.counts.pending}</span>
+        <span class="queue-metric-label">PENDING</span>
+      </div>
+      <div class="queue-metric queue-metric-executing">
+        <span class="queue-metric-value">${metrics.counts.executing}</span>
+        <span class="queue-metric-label">EXECUTING</span>
+      </div>
+      <div class="queue-metric queue-metric-failed">
+        <span class="queue-metric-value">${metrics.counts.failed}</span>
+        <span class="queue-metric-label">FAILED</span>
+      </div>
+      <div class="queue-metric queue-metric-success">
+        <span class="queue-metric-value">${metrics.successRate}%</span>
+        <span class="queue-metric-label">SUCCESS</span>
+      </div>
+    `
+  },
+
+  _renderQueueMetricsDetail(metrics) {
+    return `
+      <div class="queue-metrics-grid">
+        <div class="queue-metric-card">
+          <span class="queue-metric-card-value">${metrics.counts.completed}</span>
+          <span class="queue-metric-card-label">COMPLETED</span>
+        </div>
+        <div class="queue-metric-card">
+          <span class="queue-metric-card-value">${metrics.counts.cancelled}</span>
+          <span class="queue-metric-card-label">CANCELLED</span>
+        </div>
+        <div class="queue-metric-card">
+          <span class="queue-metric-card-value">${metrics.counts.expired}</span>
+          <span class="queue-metric-card-label">EXPIRED</span>
+        </div>
+        <div class="queue-metric-card">
+          <span class="queue-metric-card-value">${metrics.total}</span>
+          <span class="queue-metric-card-label">TOTAL</span>
+        </div>
+      </div>
+    `
+  },
+
+  _renderQueueTargetGrid() {
+    // Filter targets by search
+    const filteredTargets = this.targets.filter(t => {
+      if (!this.queueTargetSearch) return true
+      const search = this.queueTargetSearch.toLowerCase()
+      return t.name?.toLowerCase().includes(search) ||
+             t.identifier?.toLowerCase().includes(search)
+    })
+
+    if (filteredTargets.length === 0) {
+      return `
+        <div class="queue-target-empty">
+          <p>No targets match filter</p>
+        </div>
+      `
+    }
+
+    return filteredTargets.map(target => {
+      const isSelected = this.queueSelectedTargets.has(target.id)
+
+      // Get target status and queue info
+      const statusClass = target.connection_status || 'unknown'
+      const queuedCount = (this.queueEntries || []).filter(e =>
+        e.target_id === target.id && ['pending', 'executing'].includes(e.status)
+      ).length
+
+      // Get alarm count for this target
+      const alarmCount = (this.alarms || []).filter(a =>
+        a.target_id === target.id && a.active
+      ).length
+
+      if (this.queueTargetViewMode === 'detailed') {
+        return `
+          <div class="queue-target-cell ${isSelected ? 'selected' : ''} status-${statusClass}"
+               data-target-id="${target.id}">
+            <div class="queue-target-main">
+              <span class="queue-target-name">${target.name}</span>
+              <span class="queue-target-status-dot status-${statusClass}"></span>
+            </div>
+            <div class="queue-target-meta">
+              ${queuedCount > 0 ? `<span class="queue-target-queued">${queuedCount} queued</span>` : ''}
+              ${alarmCount > 0 ? `<span class="queue-target-alarms">${alarmCount} alarms</span>` : ''}
+            </div>
+          </div>
+        `
+      }
+
+      // Compact view
+      return `
+        <div class="queue-target-cell ${isSelected ? 'selected' : ''} status-${statusClass} ${alarmCount > 0 ? 'has-alarms' : ''}"
+             data-target-id="${target.id}">
+          <span class="queue-target-name">${target.name}</span>
+          ${queuedCount > 0 ? `<span class="queue-target-badge">${queuedCount}</span>` : ''}
+        </div>
+      `
+    }).join('')
+  },
+
+  _renderQueueFilterBar() {
+    const statusButtons = ['pending', 'executing', 'failed', 'completed'].map(status => `
+      <button class="queue-status-btn ${this.queueStatusFilter.has(status) ? 'active' : ''}"
+              data-status="${status}">${status.toUpperCase()}</button>
+    `).join('')
+
+    // Priority range display
+    const priorityDisplay = this._getPriorityRangeDisplay()
+
+    return `
+      <!-- Row 1: Search & Status -->
+      <div class="queue-filter-row">
+        <input type="text"
+               class="queue-search"
+               id="queue-search"
+               placeholder="Search commands..."
+               value="${this.queueSearchQuery}">
+
+        <div class="queue-status-filters">
+          ${statusButtons}
+        </div>
+      </div>
+
+      <!-- Row 2: Priority Range & Actions -->
+      <div class="queue-filter-row">
+        <div class="queue-priority-range">
+          <span class="queue-priority-label">PRIORITY</span>
+          <div class="queue-range-slider">
+            <input type="range"
+                   id="queue-range-min"
+                   class="queue-range-input queue-range-min"
+                   min="0" max="5" step="1"
+                   value="${this.queuePriorityMin}">
+            <input type="range"
+                   id="queue-range-max"
+                   class="queue-range-input queue-range-max"
+                   min="0" max="5" step="1"
+                   value="${this.queuePriorityMax}">
+            <div class="queue-range-track">
+              <div class="queue-range-fill" id="queue-range-fill"></div>
+            </div>
+          </div>
+          <span class="queue-priority-value" id="queue-priority-display">${priorityDisplay}</span>
+        </div>
+
+        <div class="queue-filter-actions">
+          <button class="btn btn-ghost btn-xs" id="queue-clear-filters">CLEAR</button>
+          <span class="queue-entry-count">${this._getFilteredQueueEntries().length} entries</span>
+        </div>
+      </div>
+    `
+  },
+
+  _getPriorityRangeDisplay() {
+    if (this.queuePriorityMin === 0 && this.queuePriorityMax === 5) {
+      return 'ALL'
+    } else if (this.queuePriorityMin === this.queuePriorityMax) {
+      return `P${this.queuePriorityMin}`
+    } else {
+      return `P${this.queuePriorityMin} – P${this.queuePriorityMax}`
+    }
+  },
+
+  _updatePriorityRangeDisplay(container) {
+    // Update text display
+    const displayEl = container.querySelector('#queue-priority-display')
+    if (displayEl) {
+      displayEl.textContent = this._getPriorityRangeDisplay()
+    }
+
+    // Update range fill visual
+    const fillEl = container.querySelector('#queue-range-fill')
+    if (fillEl) {
+      const minPercent = (this.queuePriorityMin / 5) * 100
+      const maxPercent = (this.queuePriorityMax / 5) * 100
+      fillEl.style.left = `${minPercent}%`
+      fillEl.style.width = `${maxPercent - minPercent}%`
+    }
+
+    // Sync slider positions (in case they were swapped)
+    const minSlider = container.querySelector('#queue-range-min')
+    const maxSlider = container.querySelector('#queue-range-max')
+    if (minSlider) minSlider.value = this.queuePriorityMin
+    if (maxSlider) maxSlider.value = this.queuePriorityMax
+  },
+
+  _renderQueueTable() {
+    const entries = this._getFilteredQueueEntries()
+
+    if (entries.length === 0) {
+      return `
+        <div class="queue-table-empty">
+          <svg class="w-12 h-12 text-base-content/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          </svg>
+          <p class="text-base-content/40">No queue entries match your filters</p>
+        </div>
+      `
+    }
+
+    const sortIndicator = (col) => {
+      if (this.queueSortColumn !== col) return ''
+      return this.queueSortDirection === 'asc' ? ' ↑' : ' ↓'
+    }
+
+    return `
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th class="queue-th queue-th-checkbox">
+              <input type="checkbox" class="checkbox checkbox-xs" id="queue-select-all">
+            </th>
+            <th class="queue-th queue-th-target sortable" data-sort="target_name">
+              TARGET${sortIndicator('target_name')}
+            </th>
+            <th class="queue-th queue-th-command sortable" data-sort="command_name">
+              COMMAND${sortIndicator('command_name')}
+            </th>
+            <th class="queue-th queue-th-status sortable" data-sort="status">
+              STATUS${sortIndicator('status')}
+            </th>
+            <th class="queue-th queue-th-priority sortable" data-sort="priority">
+              PRI${sortIndicator('priority')}
+            </th>
+            <th class="queue-th queue-th-scheduled sortable" data-sort="scheduled_at">
+              SCHEDULED${sortIndicator('scheduled_at')}
+            </th>
+            <th class="queue-th queue-th-attempts">
+              ATT
+            </th>
+            <th class="queue-th queue-th-actions">
+              ACTIONS
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map(entry => this._renderQueueTableRow(entry)).join('')}
+        </tbody>
+      </table>
+    `
+  },
+
+  _renderQueueTableRow(entry) {
+    const statusClass = `queue-status-${entry.status}`
+    const priorityClass = `queue-priority-${entry.priority}`
+    const isSelected = this.queueSelectedEntries.has(entry.id)
+
+    const scheduledTime = entry.scheduled_at
+      ? new Date(entry.scheduled_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      : '—'
+
+    return `
+      <tr class="queue-row ${statusClass} ${isSelected ? 'selected' : ''}" data-entry-id="${entry.id}">
+        <td class="queue-td queue-td-checkbox">
+          <input type="checkbox" class="checkbox checkbox-xs queue-entry-checkbox"
+                 data-id="${entry.id}" ${isSelected ? 'checked' : ''}>
+        </td>
+        <td class="queue-td queue-td-target">
+          <span class="queue-target-name">${entry.target_name || 'Unknown'}</span>
+        </td>
+        <td class="queue-td queue-td-command">
+          <span class="queue-command-name">${entry.command_name}</span>
+        </td>
+        <td class="queue-td queue-td-status">
+          <span class="queue-status-badge ${statusClass}">${entry.status.toUpperCase()}</span>
+        </td>
+        <td class="queue-td queue-td-priority">
+          <span class="queue-priority-badge ${priorityClass}">${entry.priority}</span>
+        </td>
+        <td class="queue-td queue-td-scheduled">
+          ${scheduledTime}
+        </td>
+        <td class="queue-td queue-td-attempts">
+          ${entry.attempts || 0}/${entry.max_attempts || 3}
+        </td>
+        <td class="queue-td queue-td-actions">
+          <div class="queue-row-actions">
+            ${entry.status === 'pending' ? `
+              <button class="btn btn-ghost btn-xs queue-action-priority" data-id="${entry.id}"
+                      data-target-id="${entry.target_id}" title="Change Priority">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+              </button>
+              <button class="btn btn-ghost btn-xs queue-action-cancel" data-id="${entry.id}"
+                      data-target-id="${entry.target_id}" title="Cancel">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            ` : ''}
+            ${entry.status === 'failed' && entry.last_error ? `
+              <button class="btn btn-ghost btn-xs queue-action-error" data-id="${entry.id}"
+                      data-error="${encodeURIComponent(entry.last_error)}" title="View Error">
+                <svg class="w-3 h-3 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+              </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `
+  },
+
+  _renderQueueActionsBar() {
+    const selectedCount = this.queueSelectedEntries.size
+
+    return `
+      <div class="queue-bulk-actions">
+        <span class="queue-selected-count">${selectedCount} selected</span>
+        <button class="btn btn-ghost btn-xs" id="queue-bulk-cancel" ${selectedCount === 0 ? 'disabled' : ''}>
+          Cancel Selected
+        </button>
+      </div>
+
+      <div class="queue-global-actions">
+        <button class="btn btn-outline btn-xs btn-warning" id="queue-pause-all">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          PAUSE ALL
+        </button>
+        <button class="btn btn-outline btn-xs btn-success" id="queue-resume-all">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          RESUME ALL
+        </button>
+        <button class="btn btn-ghost btn-xs" id="queue-refresh" title="Refresh">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+      </div>
+    `
+  },
+
+  _getFilteredQueueEntries() {
+    let entries = this.queueEntries || []
+
+    // Filter by selected targets (if any selected, show only those; if none, show all)
+    if (this.queueSelectedTargets.size > 0) {
+      entries = entries.filter(e => this.queueSelectedTargets.has(e.target_id))
+    }
+
+    // Filter by status
+    if (this.queueStatusFilter.size > 0) {
+      entries = entries.filter(e => this.queueStatusFilter.has(e.status))
+    }
+
+    // Filter by priority range
+    entries = entries.filter(e =>
+      e.priority >= this.queuePriorityMin &&
+      e.priority <= this.queuePriorityMax
+    )
+
+    // Search filter
+    if (this.queueSearchQuery) {
+      const query = this.queueSearchQuery.toLowerCase()
+      entries = entries.filter(e =>
+        e.command_name?.toLowerCase().includes(query) ||
+        e.target_name?.toLowerCase().includes(query)
+      )
+    }
+
+    // Sort
+    entries = [...entries].sort((a, b) => {
+      let aVal = a[this.queueSortColumn]
+      let bVal = b[this.queueSortColumn]
+
+      // Handle null/undefined
+      if (aVal == null) aVal = ''
+      if (bVal == null) bVal = ''
+
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase()
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase()
+
+      if (aVal < bVal) return this.queueSortDirection === 'asc' ? -1 : 1
+      if (aVal > bVal) return this.queueSortDirection === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return entries
+  },
+
+  _getPriorityLabel(priority) {
+    const labels = ['EMERGENCY', 'CRITICAL', 'HIGH', 'NORMAL', 'LOW', 'BACKGROUND']
+    return labels[priority] || 'UNKNOWN'
+  },
+
+  _bindQueueModeEvents(container) {
+    // View tab switching
+    container.querySelectorAll('.queue-view-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const view = tab.dataset.view
+        if (view && view !== this.queueViewMode) {
+          this.queueViewMode = view
+          this._renderQueueMode()
+        }
+      })
+    })
+
+    // Global actions (available in both views)
+    container.querySelector('#queue-pause-all')?.addEventListener('click', () => {
+      this.pushEvent('queue_pause_all', {})
+    })
+
+    container.querySelector('#queue-resume-all')?.addEventListener('click', () => {
+      this.pushEvent('queue_resume_all', {})
+    })
+
+    container.querySelector('#queue-refresh')?.addEventListener('click', () => {
+      this.pushEvent('queue_refresh', {})
+    })
+
+    // Overview-specific events
+    if (this.queueViewMode === 'overview') {
+      // Retry all failed
+      container.querySelector('#queue-retry-failed')?.addEventListener('click', () => {
+        this.pushEvent('queue_retry_all_failed', {})
+      })
+
+      // Clear completed
+      container.querySelector('#queue-clear-completed')?.addEventListener('click', () => {
+        this.pushEvent('queue_clear_completed', {})
+      })
+
+      // Target bar click - switch to table view filtered to that target
+      container.querySelectorAll('.queue-target-bar-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const targetId = item.dataset.targetId
+          if (targetId) {
+            this.queueSelectedTargets.clear()
+            this.queueSelectedTargets.add(targetId)
+            this.queueViewMode = 'table'
+            this._renderQueueMode()
+          }
+        })
+      })
+
+      return // Skip other view-specific event bindings
+    }
+
+    // Manage view-specific events
+    if (this.queueViewMode === 'manage') {
+      // Target item click - select target
+      container.querySelectorAll('.queue-manage-target-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          // Don't select if clicking the pause button
+          if (e.target.closest('.queue-manage-pause-btn')) return
+
+          const targetId = item.dataset.targetId
+          if (targetId && targetId !== this.queueManageSelectedTarget) {
+            this.queueManageSelectedTarget = targetId
+            this._renderQueueMode()
+          }
+        })
+      })
+
+      // Pause/resume buttons in target list
+      container.querySelectorAll('.queue-manage-pause-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const targetId = btn.dataset.targetId
+          const isPaused = this.queueTargetStatuses.get(targetId)?.paused || false
+
+          if (isPaused) {
+            this.pushEvent('queue_resume_target', { target_id: targetId })
+          } else {
+            this.pushEvent('queue_pause_target', { target_id: targetId })
+          }
+        })
+      })
+
+      // Detail panel: toggle pause
+      container.querySelector('#queue-detail-toggle-pause')?.addEventListener('click', () => {
+        const targetId = this.queueManageSelectedTarget
+        if (!targetId) return
+
+        const isPaused = this.queueTargetStatuses.get(targetId)?.paused || false
+        if (isPaused) {
+          this.pushEvent('queue_resume_target', { target_id: targetId })
+        } else {
+          this.pushEvent('queue_pause_target', { target_id: targetId })
+        }
+      })
+
+      // Detail panel: cancel all
+      container.querySelector('#queue-detail-cancel-all')?.addEventListener('click', () => {
+        const targetId = this.queueManageSelectedTarget
+        if (!targetId) return
+
+        if (confirm('Cancel all queued commands for this target?')) {
+          this.pushEvent('queue_cancel_all_target', { target_id: targetId })
+        }
+      })
+
+      // Cancel individual entry buttons
+      container.querySelectorAll('.queue-cancel-entry-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const entryId = btn.dataset.entryId
+          const targetId = btn.dataset.targetId
+          if (entryId && targetId) {
+            this.pushEvent('queue_cancel_entry', { entry_id: entryId, target_id: targetId })
+          }
+        })
+      })
+
+      return // Skip table-specific event bindings
+    }
+
+    // Table view-specific events below
+
+    // Search with debounce
+    container.querySelector('#queue-search')?.addEventListener('input', (e) => {
+      this.queueSearchQuery = e.target.value
+      if (this._queueSearchDebounce) clearTimeout(this._queueSearchDebounce)
+      this._queueSearchDebounce = setTimeout(() => {
+        this._updateQueueTable(container)
+      }, 150)
+    })
+
+    // Target panel: target cell clicks (multi-select)
+    container.querySelectorAll('.queue-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        if (this.queueSelectedTargets.has(targetId)) {
+          this.queueSelectedTargets.delete(targetId)
+          cell.classList.remove('selected')
+        } else {
+          this.queueSelectedTargets.add(targetId)
+          cell.classList.add('selected')
+        }
+        this._updateQueueTargetCount(container)
+        this._updateQueueTable(container)
+      })
+    })
+
+    // Target panel: search filter
+    container.querySelector('#queue-target-search')?.addEventListener('input', (e) => {
+      this.queueTargetSearch = e.target.value
+      if (this._queueTargetSearchDebounce) clearTimeout(this._queueTargetSearchDebounce)
+      this._queueTargetSearchDebounce = setTimeout(() => {
+        this._updateQueueTargetGrid(container)
+      }, 150)
+    })
+
+    // Target panel: view mode toggle (compact/detailed)
+    container.querySelectorAll('.queue-view-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.queueTargetViewMode = btn.dataset.view
+        container.querySelectorAll('.queue-view-toggle').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        const grid = container.querySelector('.queue-target-grid')
+        if (grid) {
+          grid.classList.remove('compact', 'detailed')
+          grid.classList.add(this.queueTargetViewMode)
+          grid.innerHTML = this._renderQueueTargetGrid()
+        }
+        // Re-bind target cell events
+        this._bindQueueTargetCellEvents(container)
+      })
+    })
+
+    // Target panel: select all targets
+    container.querySelector('#queue-select-all-targets')?.addEventListener('click', () => {
+      // Select all visible (filtered) targets
+      const visibleCells = container.querySelectorAll('.queue-target-cell')
+      visibleCells.forEach(cell => {
+        this.queueSelectedTargets.add(cell.dataset.targetId)
+        cell.classList.add('selected')
+      })
+      this._updateQueueTargetCount(container)
+      this._updateQueueTable(container)
+    })
+
+    // Target panel: clear selection
+    container.querySelector('#queue-clear-targets')?.addEventListener('click', () => {
+      this.queueSelectedTargets.clear()
+      container.querySelectorAll('.queue-target-cell').forEach(cell => {
+        cell.classList.remove('selected')
+      })
+      this._updateQueueTargetCount(container)
+      this._updateQueueTable(container)
+    })
+
+    // Status filters
+    container.querySelectorAll('.queue-status-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const status = btn.dataset.status
+        if (this.queueStatusFilter.has(status)) {
+          this.queueStatusFilter.delete(status)
+        } else {
+          this.queueStatusFilter.add(status)
+        }
+        btn.classList.toggle('active')
+        this._updateQueueTable(container)
+      })
+    })
+
+    // Priority range slider handlers
+    const minSlider = container.querySelector('#queue-range-min')
+    const maxSlider = container.querySelector('#queue-range-max')
+
+    const updatePriorityRange = () => {
+      let min = parseInt(minSlider?.value || 0)
+      let max = parseInt(maxSlider?.value || 5)
+
+      // Ensure min <= max by swapping if needed
+      if (min > max) {
+        [min, max] = [max, min]
+      }
+
+      this.queuePriorityMin = min
+      this.queuePriorityMax = max
+
+      // Update the display
+      this._updatePriorityRangeDisplay(container)
+      this._updateQueueTable(container)
+    }
+
+    minSlider?.addEventListener('input', updatePriorityRange)
+    maxSlider?.addEventListener('input', updatePriorityRange)
+
+    // Clear filters
+    container.querySelector('#queue-clear-filters')?.addEventListener('click', () => {
+      // Note: We don't clear target selection from this button - that's done via the target panel
+      this.queueStatusFilter = new Set(['pending', 'executing', 'failed'])
+      this.queuePriorityMin = 0
+      this.queuePriorityMax = 5
+      this.queueSearchQuery = ''
+      this._renderQueueMode()
+    })
+
+    // Sort columns
+    container.querySelectorAll('.queue-th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort
+        if (this.queueSortColumn === col) {
+          this.queueSortDirection = this.queueSortDirection === 'asc' ? 'desc' : 'asc'
+        } else {
+          this.queueSortColumn = col
+          this.queueSortDirection = 'asc'
+        }
+        this._updateQueueTable(container)
+      })
+    })
+
+    // Bind table row events
+    this._bindQueueTableEvents(container)
+
+    // Bulk selection
+    container.querySelector('#queue-select-all')?.addEventListener('change', (e) => {
+      const checked = e.target.checked
+      const entries = this._getFilteredQueueEntries()
+      this.queueSelectedEntries.clear()
+      if (checked) {
+        entries.forEach(entry => this.queueSelectedEntries.add(entry.id))
+      }
+      container.querySelectorAll('.queue-entry-checkbox').forEach(cb => {
+        cb.checked = checked
+      })
+      this._updateBulkActions(container)
+    })
+
+    // Bulk cancel
+    container.querySelector('#queue-bulk-cancel')?.addEventListener('click', () => {
+      if (this.queueSelectedEntries.size === 0) return
+
+      // Get target_id for each selected entry
+      this.queueSelectedEntries.forEach(entryId => {
+        const entry = this.queueEntries.find(e => e.id === entryId)
+        if (entry && entry.status === 'pending') {
+          this.pushEvent('queue_cancel_command', {
+            entry_id: entryId,
+            target_id: entry.target_id
+          })
+        }
+      })
+      this.queueSelectedEntries.clear()
+      this._updateBulkActions(container)
+    })
+  },
+
+  _bindQueueTableEvents(container) {
+    // Individual row checkboxes
+    container.querySelectorAll('.queue-entry-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id
+        if (cb.checked) {
+          this.queueSelectedEntries.add(id)
+        } else {
+          this.queueSelectedEntries.delete(id)
+        }
+        this._updateBulkActions(container)
+      })
+    })
+
+    // Cancel buttons
+    container.querySelectorAll('.queue-action-cancel').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const entryId = btn.dataset.id
+        const targetId = btn.dataset.targetId
+        this.pushEvent('queue_cancel_command', { entry_id: entryId, target_id: targetId })
+      })
+    })
+
+    // Priority change buttons
+    container.querySelectorAll('.queue-action-priority').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const entryId = btn.dataset.id
+        const targetId = btn.dataset.targetId
+        this._showPriorityModal(entryId, targetId)
+      })
+    })
+
+    // Error view buttons
+    container.querySelectorAll('.queue-action-error').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const error = decodeURIComponent(btn.dataset.error)
+        alert(`Command Error:\n\n${error}`)
+      })
+    })
+  },
+
+  _updateQueueTable(container) {
+    const tableContainer = container.querySelector('.queue-table-container')
+    if (tableContainer) {
+      tableContainer.innerHTML = this._renderQueueTable()
+      this._bindQueueTableEvents(container)
+    }
+
+    // Update count
+    const countEl = container.querySelector('.queue-entry-count')
+    if (countEl) {
+      countEl.textContent = `${this._getFilteredQueueEntries().length} entries`
+    }
+
+    // Update select-all checkbox state
+    const selectAll = container.querySelector('#queue-select-all')
+    if (selectAll) {
+      const entries = this._getFilteredQueueEntries()
+      const allSelected = entries.length > 0 && entries.every(e => this.queueSelectedEntries.has(e.id))
+      selectAll.checked = allSelected
+    }
+  },
+
+  _updateQueueTargetCount(container) {
+    const countEl = container.querySelector('.queue-selection-count')
+    if (countEl) {
+      const selectedCount = this.queueSelectedTargets.size
+      const totalTargets = this.targets.length
+      countEl.textContent = `${selectedCount === 0 ? 'All' : selectedCount} of ${totalTargets}`
+    }
+  },
+
+  _updateQueueTargetGrid(container) {
+    const grid = container.querySelector('.queue-target-grid')
+    if (grid) {
+      grid.innerHTML = this._renderQueueTargetGrid()
+      this._bindQueueTargetCellEvents(container)
+    }
+  },
+
+  _bindQueueTargetCellEvents(container) {
+    container.querySelectorAll('.queue-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        if (this.queueSelectedTargets.has(targetId)) {
+          this.queueSelectedTargets.delete(targetId)
+          cell.classList.remove('selected')
+        } else {
+          this.queueSelectedTargets.add(targetId)
+          cell.classList.add('selected')
+        }
+        this._updateQueueTargetCount(container)
+        this._updateQueueTable(container)
+      })
+    })
+  },
+
+  _initQueuePanelResize(container) {
+    const resizeHandle = container.querySelector('#queue-resize-handle')
+    if (!resizeHandle) return
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+
+      const panelsRow = container.querySelector('.queue-panels-row')
+      const targetPanel = container.querySelector('.queue-target-panel')
+
+      if (!panelsRow || !targetPanel) return
+
+      resizeHandle.classList.add('dragging')
+
+      const startX = e.clientX
+      const layoutRect = panelsRow.getBoundingClientRect()
+      const startWidth = targetPanel.getBoundingClientRect().width
+      const layoutWidth = layoutRect.width
+
+      const onMouseMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX
+        const newWidth = startWidth + deltaX
+        const newPercent = (newWidth / layoutWidth) * 100
+
+        // Clamp between 15% and 50%
+        const clampedPercent = Math.max(15, Math.min(50, newPercent))
+
+        targetPanel.style.flex = `0 0 ${clampedPercent}%`
+        this.queueTargetPanelWidth = clampedPercent
+      }
+
+      const onMouseUp = () => {
+        resizeHandle.classList.remove('dragging')
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
+  },
+
+  _updateBulkActions(container) {
+    const selected = this.queueSelectedEntries.size
+    const countEl = container.querySelector('.queue-selected-count')
+    const cancelBtn = container.querySelector('#queue-bulk-cancel')
+
+    if (countEl) countEl.textContent = `${selected} selected`
+    if (cancelBtn) cancelBtn.disabled = selected === 0
+  },
+
+  _showPriorityModal(entryId, targetId) {
+    const entry = this.queueEntries.find(e => e.id === entryId)
+    if (!entry) return
+
+    const currentPriority = entry.priority
+    const newPriority = prompt(
+      `Change priority for ${entry.command_name}\n\nCurrent: P${currentPriority} (${this._getPriorityLabel(currentPriority)})\n\nEnter new priority (0-5):\n0 = EMERGENCY\n1 = CRITICAL\n2 = HIGH\n3 = NORMAL\n4 = LOW\n5 = BACKGROUND`,
+      currentPriority.toString()
+    )
+
+    if (newPriority !== null) {
+      const priority = parseInt(newPriority)
+      if (priority >= 0 && priority <= 5 && priority !== currentPriority) {
+        this.pushEvent('queue_change_priority', {
+          entry_id: entryId,
+          target_id: targetId,
+          priority: priority
+        })
+      }
     }
   },
 

@@ -2,12 +2,12 @@ defmodule Cadence.Timeline do
   @moduledoc """
   Timeline context for unified mission event queries.
 
-  Provides a single interface to query and stream events from multiple sources:
-  - Command logs
-  - Alarm events
-  - Procedure executions
-  - Automation executions
-  - Scheduled future events
+  Provides a single interface to query and stream events from the recordings system:
+  - Command recordings (dispatched, sent, verified, etc.)
+  - Alarm recordings (triggered, acknowledged, cleared, etc.)
+  - Procedure recordings
+  - Automation recordings
+  - Scheduled future events (from queue)
 
   Events are normalized into `Cadence.Timeline.Event` structs for consistent
   display in the Timeline Mode UI.
@@ -16,10 +16,9 @@ defmodule Cadence.Timeline do
   import Ecto.Query
   alias Cadence.Repo
   alias Cadence.Timeline.Event
-  alias Cadence.Commands.CommandLog
   alias Cadence.Commands.QueueEntry
-  alias Cadence.Alarms.AlarmEvent
-  alias Cadence.Alarms.Alarm
+  alias Cadence.Recordings
+  alias Cadence.Recordings.Recording
 
   @type event_type :: :command | :alarm | :procedure | :automation | :system
   @type list_opts :: [
@@ -29,6 +28,15 @@ defmodule Cadence.Timeline do
           include_future: boolean(),
           cursor: DateTime.t() | nil
         ]
+
+  # Map event types to aggregate types in recordings
+  @type_to_aggregate %{
+    command: "Command",
+    alarm: "Alarm",
+    procedure: "ProcedureExecution",
+    automation: "Automation",
+    queue: "QueueEntry"
+  }
 
   @doc """
   List timeline events for a mission within a time range.
@@ -52,43 +60,42 @@ defmodule Cadence.Timeline do
       [%Event{}, ...]
   """
   @spec list_events(binary(), DateTime.t(), DateTime.t(), list_opts()) :: [Event.t()]
-  def list_events(mission_id, start_time, end_time, opts \\ []) do
+  def list_events(path_prefix, start_time, end_time, opts \\ []) do
     types = Keyword.get(opts, :types, [:command, :alarm, :procedure, :automation])
-    target_ids = Keyword.get(opts, :target_ids, [])
     limit = Keyword.get(opts, :limit, 100)
     include_future = Keyword.get(opts, :include_future, true)
+    organization_id = Keyword.get(opts, :organization_id)
+    mission_id = Keyword.get(opts, :mission_id)
 
-    events = []
+    # Convert types to aggregate types for recordings query
+    aggregate_types = Enum.map(types, &Map.get(@type_to_aggregate, &1)) |> Enum.reject(&is_nil/1)
 
-    # Collect events from each source based on requested types
+    # Query recordings using path prefix
+    recordings =
+      Recordings.list_recordings(start_time, end_time,
+        aggregate_types: aggregate_types,
+        path_prefix: path_prefix,
+        organization_id: organization_id,
+        limit: limit
+      )
+
+    # Batch load recordables to avoid N+1 queries
+    recordings_with_recordables = Recordings.load_recordables_for_recordings(recordings)
+
+    # Convert recordings to timeline events (passing pre-loaded recordable)
     events =
-      if :command in types do
-        command_events = list_command_events(mission_id, start_time, end_time, target_ids, limit)
-        events ++ command_events
-      else
-        events
-      end
+      Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
+        Event.from_recording(recording, recordable: recordable)
+      end)
 
     # Add scheduled future commands if requested
     events =
-      if include_future and :command in types do
-        scheduled = list_scheduled_commands(mission_id, end_time, target_ids, limit)
+      if include_future and :command in types and mission_id do
+        scheduled = list_scheduled_commands(mission_id, end_time, [], limit)
         events ++ scheduled
       else
         events
       end
-
-    # Add alarm events
-    events =
-      if :alarm in types do
-        alarm_events = list_alarm_events(mission_id, start_time, end_time, target_ids, limit)
-        events ++ alarm_events
-      else
-        events
-      end
-
-    # TODO: Add procedure events when expanding beyond vertical slice
-    # TODO: Add automation events when expanding beyond vertical slice
 
     # Sort all events by timestamp and apply limit
     events
@@ -150,52 +157,28 @@ defmodule Cadence.Timeline do
   Used by LiveView handlers to transform incoming events.
   """
   @spec event_from_pubsub(atom(), map()) :: Event.t() | nil
-  def event_from_pubsub(:command_log_updated, %CommandLog{} = log) do
-    Event.from_command_log(log)
+  def event_from_pubsub(:recording_created, %Recording{} = recording) do
+    Event.from_recording(recording)
   end
 
   def event_from_pubsub(:alarm_triggered, _alarm) do
-    # TODO: Implement when expanding beyond vertical slice
+    # Alarms now go through recordings
     nil
   end
 
   def event_from_pubsub(:alarm_updated, _alarm) do
-    # TODO: Implement when expanding beyond vertical slice
+    # Alarms now go through recordings
     nil
   end
 
   def event_from_pubsub(:procedure_event, _execution) do
-    # TODO: Implement when expanding beyond vertical slice
+    # Procedures now go through recordings
     nil
   end
 
   def event_from_pubsub(_, _), do: nil
 
   # Private functions
-
-  defp list_command_events(mission_id, start_time, end_time, target_ids, limit) do
-    query =
-      from(cl in CommandLog,
-        where: cl.mission_id == ^mission_id,
-        where: cl.sent_at >= ^start_time and cl.sent_at <= ^end_time,
-        order_by: [desc: cl.sent_at],
-        limit: ^limit,
-        preload: [:target]
-      )
-
-    query =
-      if target_ids != [] do
-        from(cl in query, where: cl.target_id in ^target_ids)
-      else
-        query
-      end
-
-    query
-    |> Repo.all()
-    |> Enum.map(fn log ->
-      Event.from_command_log(log, target: log.target)
-    end)
-  end
 
   defp list_scheduled_commands(mission_id, after_time, target_ids, limit) do
     now = DateTime.utc_now()
@@ -226,31 +209,6 @@ defmodule Cadence.Timeline do
     end)
   end
 
-  defp list_alarm_events(mission_id, start_time, end_time, target_ids, limit) do
-    query =
-      from(ae in AlarmEvent,
-        join: a in Alarm, on: ae.alarm_id == a.id,
-        where: a.mission_id == ^mission_id,
-        where: ae.inserted_at >= ^start_time and ae.inserted_at <= ^end_time,
-        order_by: [desc: ae.inserted_at],
-        limit: ^limit,
-        preload: [alarm: :target]
-      )
-
-    query =
-      if target_ids != [] do
-        from([ae, a] in query, where: a.target_id in ^target_ids)
-      else
-        query
-      end
-
-    query
-    |> Repo.all()
-    |> Enum.map(fn event ->
-      Event.from_alarm_event(event, alarm: event.alarm, target: event.alarm && event.alarm.target)
-    end)
-  end
-
   @doc """
   Load older timeline events before a cursor timestamp.
 
@@ -264,32 +222,31 @@ defmodule Cadence.Timeline do
     * `:limit` - Maximum events to return (default: 50)
   """
   @spec list_events_before(binary(), DateTime.t(), list_opts()) :: [Event.t()]
-  def list_events_before(mission_id, cursor, opts \\ []) do
+  def list_events_before(path_prefix, cursor, opts \\ []) do
     types = Keyword.get(opts, :types, [:command, :alarm, :procedure, :automation])
-    target_ids = Keyword.get(opts, :target_ids, [])
     limit = Keyword.get(opts, :limit, 50)
+    organization_id = Keyword.get(opts, :organization_id)
 
-    events = []
+    # Convert types to aggregate types for recordings query
+    aggregate_types = Enum.map(types, &Map.get(@type_to_aggregate, &1)) |> Enum.reject(&is_nil/1)
 
-    # Collect events from each source before the cursor
+    # Query recordings before cursor using path prefix
+    recordings =
+      Recordings.list_recordings_before(%{timestamp: cursor, id: nil},
+        aggregate_types: aggregate_types,
+        path_prefix: path_prefix,
+        organization_id: organization_id,
+        limit: limit
+      )
+
+    # Batch load recordables to avoid N+1 queries
+    recordings_with_recordables = Recordings.load_recordables_for_recordings(recordings)
+
+    # Convert recordings to timeline events (passing pre-loaded recordable)
     events =
-      if :command in types do
-        command_events = list_command_events_before(mission_id, cursor, target_ids, limit)
-        events ++ command_events
-      else
-        events
-      end
-
-    events =
-      if :alarm in types do
-        alarm_events = list_alarm_events_before(mission_id, cursor, target_ids, limit)
-        events ++ alarm_events
-      else
-        events
-      end
-
-    # TODO: Add procedure events when expanding beyond vertical slice
-    # TODO: Add automation events when expanding beyond vertical slice
+      Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
+        Event.from_recording(recording, recordable: recordable)
+      end)
 
     # Sort all events by timestamp descending and apply limit
     events
@@ -297,65 +254,17 @@ defmodule Cadence.Timeline do
     |> Enum.take(limit)
   end
 
-  defp list_command_events_before(mission_id, cursor, target_ids, limit) do
-    query =
-      from(cl in CommandLog,
-        where: cl.mission_id == ^mission_id,
-        where: cl.sent_at < ^cursor,
-        order_by: [desc: cl.sent_at],
-        limit: ^limit,
-        preload: [:target]
-      )
-
-    query =
-      if target_ids != [] do
-        from(cl in query, where: cl.target_id in ^target_ids)
-      else
-        query
-      end
-
-    query
-    |> Repo.all()
-    |> Enum.map(fn log ->
-      Event.from_command_log(log, target: log.target)
-    end)
-  end
-
-  defp list_alarm_events_before(mission_id, cursor, target_ids, limit) do
-    query =
-      from(ae in AlarmEvent,
-        join: a in Alarm, on: ae.alarm_id == a.id,
-        where: a.mission_id == ^mission_id,
-        where: ae.inserted_at < ^cursor,
-        order_by: [desc: ae.inserted_at],
-        limit: ^limit,
-        preload: [alarm: :target]
-      )
-
-    query =
-      if target_ids != [] do
-        from([ae, a] in query, where: a.target_id in ^target_ids)
-      else
-        query
-      end
-
-    query
-    |> Repo.all()
-    |> Enum.map(fn event ->
-      Event.from_alarm_event(event, alarm: event.alarm, target: event.alarm && event.alarm.target)
-    end)
-  end
-
   @doc """
   Get a single event by its composite ID.
 
-  Event IDs are prefixed with their source type (e.g., "cmd-uuid", "alm-uuid").
+  Event IDs are prefixed with their source type (e.g., "rec-uuid" for recordings,
+  "sched-cmd-uuid" for scheduled commands).
   """
   @spec get_event(binary()) :: Event.t() | nil
-  def get_event("cmd-" <> id) do
-    case Repo.get(CommandLog, id) |> Repo.preload(:target) do
+  def get_event("rec-" <> id) do
+    case Recordings.get_recording(id) do
       nil -> nil
-      log -> Event.from_command_log(log, target: log.target)
+      recording -> Event.from_recording(recording)
     end
   end
 

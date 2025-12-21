@@ -37,7 +37,8 @@ defmodule Cadence.Commands.QueueEntry do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @status_values [:pending, :executing, :completed, :failed, :cancelled, :expired]
+  # Order matches PostgreSQL enum for correct ORDER BY behavior
+  @status_values [:executing, :pending, :failed, :completed, :cancelled, :expired]
   @priority_levels [0, 1, 2, 3, 4, 5]
 
   schema "command_queue_entries" do
