@@ -82,13 +82,6 @@ defmodule Cadence.Automations do
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking automation changes.
-  """
-  def change_automation(%Automation{} = automation, attrs \\ %{}) do
-    Automation.changeset(automation, attrs)
-  end
-
-  @doc """
   Enables an automation.
   """
   def enable_automation(%Automation{} = automation) do

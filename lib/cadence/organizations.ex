@@ -67,13 +67,6 @@ defmodule Cadence.Organizations do
     Repo.delete(organization)
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking organization changes.
-  """
-  def change_organization(%Organization{} = organization, attrs \\ %{}) do
-    Organization.changeset(organization, attrs)
-  end
-
   ## Organization Membership
 
   @doc """

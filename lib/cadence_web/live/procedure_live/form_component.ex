@@ -5,6 +5,7 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Procedures
+  alias Cadence.Procedures.Procedure
 
   @impl true
   def render(assigns) do
@@ -144,7 +145,7 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
     tags = procedure.tags || []
     tags_input = Enum.join(tags, ", ")
 
-    changeset = Procedures.change_procedure(procedure)
+    changeset = Procedure.changeset(procedure, %{})
 
     {:ok,
      socket
@@ -210,7 +211,7 @@ defmodule CadenceWeb.ProcedureLive.FormComponent do
 
     changeset =
       socket.assigns.procedure
-      |> Procedures.change_procedure(procedure_params)
+      |> Procedure.changeset(procedure_params)
       |> Map.put(:action, :validate)
 
     {:noreply,

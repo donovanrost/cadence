@@ -46,3 +46,35 @@ config :cadence, Cadence.Outbox.Processor, enabled: false
 
 # Configure Oban for testing - inline execution
 config :cadence, Oban, testing: :inline
+
+# =============================================================================
+# Ports & Adapters Test Configuration (Hexagonal Architecture)
+#
+# By default, tests still use Ecto repositories (via DataCase).
+# For pure unit tests (PureCase), start the fake adapters manually in setup.
+#
+# To use fake adapters globally, uncomment the lines below. However, this is
+# generally not recommended as most tests benefit from integration testing
+# with the real database.
+# =============================================================================
+
+# Fake email sender for tests (use FakeEmailSender.start_link() in setup)
+# config :cadence, :email_sender, Cadence.Test.Adapters.FakeEmailSender
+
+# Fake event publisher for tests (use FakeEventPublisher.start_link() in setup)
+# config :cadence, :event_publisher, Cadence.Test.Adapters.FakeEventPublisher
+
+# Fake event recorder for tests (use InMemoryEventRecorder.start_link() in setup)
+# config :cadence, :event_recorder, Cadence.Test.Adapters.InMemoryEventRecorder
+
+# Note: For pure unit tests using PureCase, you'll typically start the fake
+# adapters in the test setup and configure them via Application.put_env/3.
+# This gives you more control over the test lifecycle.
+#
+# Example:
+#   setup do
+#     {:ok, _} = FakeEmailSender.start_link()
+#     Application.put_env(:cadence, :email_sender, Cadence.Test.Adapters.FakeEmailSender)
+#     on_exit(fn -> Application.delete_env(:cadence, :email_sender) end)
+#     :ok
+#   end

@@ -1,7 +1,16 @@
 defmodule CadenceWeb.MissionLive.FormComponent do
+  @moduledoc """
+  Form component for creating and editing missions.
+
+  Uses the Mission schema directly for changesets rather than going through
+  the context, following hexagonal architecture principles where the web
+  layer works directly with schemas for form validation.
+  """
   use CadenceWeb, :live_component
 
-  alias Cadence.{Missions, Organizations}
+  alias Cadence.Missions
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations
 
   @impl true
   def render(assigns) do
@@ -56,7 +65,8 @@ defmodule CadenceWeb.MissionLive.FormComponent do
 
   @impl true
   def update(%{mission: mission} = assigns, socket) do
-    changeset = Missions.change_mission(mission)
+    # Use schema changeset directly instead of context wrapper
+    changeset = Mission.changeset(mission, %{})
 
     organizations =
       Organizations.list_organizations()
@@ -71,9 +81,10 @@ defmodule CadenceWeb.MissionLive.FormComponent do
 
   @impl true
   def handle_event("validate", %{"mission" => mission_params}, socket) do
+    # Use schema changeset directly for validation
     changeset =
       socket.assigns.mission
-      |> Missions.change_mission(mission_params)
+      |> Mission.changeset(mission_params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign_form(socket, changeset)}

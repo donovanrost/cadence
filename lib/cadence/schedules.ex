@@ -110,13 +110,6 @@ defmodule Cadence.Schedules do
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking schedule changes.
-  """
-  def change_schedule(%Schedule{} = schedule, attrs \\ %{}) do
-    Schedule.changeset(schedule, attrs)
-  end
-
-  @doc """
   Enables a schedule.
   """
   def enable_schedule(%Schedule{} = schedule) do

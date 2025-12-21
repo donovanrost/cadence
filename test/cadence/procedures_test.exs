@@ -2,6 +2,7 @@ defmodule Cadence.ProceduresTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Procedures
+  alias Cadence.Procedures.Procedure
   alias Cadence.Settings
 
   import Cadence.OrganizationsFixtures
@@ -195,7 +196,7 @@ defmodule Cadence.ProceduresTest do
     test "tags are normalized via changeset" do
       # Test normalization via changeset directly
       changeset =
-        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+        Procedure.changeset(%Procedure{}, %{
           name: "Tag Test",
           organization_id: Ecto.UUID.generate(),
           tags: ["Safety", "RECOVERY", "safety"]
@@ -211,7 +212,7 @@ defmodule Cadence.ProceduresTest do
 
       # Test validation via changeset directly since create_procedure uses insert!
       changeset =
-        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+        Procedure.changeset(%Procedure{}, %{
           organization_id: org.id,
           mission_id: mission.id,
           name: "Tag Test",
@@ -230,7 +231,7 @@ defmodule Cadence.ProceduresTest do
 
       # Test validation via changeset directly since create_procedure uses insert!
       changeset =
-        Procedures.change_procedure(%Cadence.Procedures.Procedure{}, %{
+        Procedure.changeset(%Procedure{}, %{
           organization_id: org.id,
           mission_id: mission.id,
           name: "Tag Test",

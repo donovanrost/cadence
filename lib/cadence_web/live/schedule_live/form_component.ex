@@ -5,6 +5,7 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Schedules
+  alias Cadence.Schedules.Schedule
 
   @schedule_types [
     {"Recurring (Cron)", :cron},
@@ -152,7 +153,7 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
 
   @impl true
   def update(%{schedule: schedule} = assigns, socket) do
-    changeset = Schedules.change_schedule(schedule)
+    changeset = Schedule.changeset(schedule, %{})
 
     # Build procedure options
     procedure_options =
@@ -197,7 +198,7 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
   def handle_event("validate", %{"schedule" => schedule_params}, socket) do
     changeset =
       socket.assigns.schedule
-      |> Schedules.change_schedule(schedule_params)
+      |> Schedule.changeset(schedule_params)
       |> Map.put(:action, :validate)
 
     cron_description = describe_cron(schedule_params["cron_expression"])
@@ -212,7 +213,7 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
     # Update the form with the selected cron expression
     changeset =
       socket.assigns.schedule
-      |> Schedules.change_schedule(%{cron_expression: cron})
+      |> Schedule.changeset(%{cron_expression: cron})
 
     {:noreply,
      socket

@@ -2,6 +2,7 @@ defmodule CadenceWeb.OrganizationLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Organizations
+  alias Cadence.Organizations.Organization
 
   @impl true
   def render(assigns) do
@@ -48,7 +49,7 @@ defmodule CadenceWeb.OrganizationLive.FormComponent do
 
   @impl true
   def update(%{organization: organization} = assigns, socket) do
-    changeset = Organizations.change_organization(organization)
+    changeset = Organization.changeset(organization, %{})
 
     {:ok,
      socket
@@ -60,7 +61,7 @@ defmodule CadenceWeb.OrganizationLive.FormComponent do
   def handle_event("validate", %{"organization" => organization_params}, socket) do
     changeset =
       socket.assigns.organization
-      |> Organizations.change_organization(organization_params)
+      |> Organization.changeset(organization_params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign_form(socket, changeset)}

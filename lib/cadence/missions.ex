@@ -144,13 +144,6 @@ defmodule Cadence.Missions do
     end
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking mission changes.
-  """
-  def change_mission(%Mission{} = mission, attrs \\ %{}) do
-    Mission.changeset(mission, attrs)
-  end
-
   ## Mission Lifecycle
 
   @doc """

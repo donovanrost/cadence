@@ -154,13 +154,6 @@ defmodule Cadence.Targets do
     end
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking target changes.
-  """
-  def change_target(%Target{} = target, attrs \\ %{}) do
-    Target.changeset(target, attrs)
-  end
-
   ## Definition Set Assignment
 
   @doc """

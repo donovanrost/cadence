@@ -32,7 +32,7 @@ defmodule Cadence.Alarms.Engine.Handlers.InterfaceConnectionHandler do
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.AlarmRule
-  alias Cadence.Alarms.Engine.{Matcher, RuleCache}
+  alias Cadence.Alarms.Engine.RuleCache
   alias Cadence.Alarms.Notifications.Dispatcher
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
 

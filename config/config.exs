@@ -98,6 +98,30 @@ config :cadence, Oban,
      ]}
   ]
 
+# =============================================================================
+# Ports & Adapters Configuration (Hexagonal Architecture)
+#
+# These settings configure which implementations are used for external
+# dependencies. Override in environment-specific configs for testing.
+# =============================================================================
+
+# Repository adapters (persistence)
+# Defaults to Ecto implementations - override in test.exs with in-memory adapters
+config :cadence, :alarm_repository, Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository
+config :cadence, :queue_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository
+config :cadence, :procedure_repository, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+
+# Messaging adapters
+config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender
+config :cadence, :event_publisher, Cadence.Adapters.Messaging.PhoenixEventPublisher
+
+# Recordings adapter
+config :cadence, :event_recorder, Cadence.Adapters.Recordings.RecordingsEventRecorder
+
+# Base URL for generating links in emails/notifications
+# Override in runtime.exs for production
+config :cadence, :base_url, "http://localhost:4000"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

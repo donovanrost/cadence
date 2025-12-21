@@ -1,10 +1,26 @@
 defmodule Cadence.Accounts.UserNotifier do
+  @moduledoc """
+  Handles email notifications for user account operations.
+
+  This module sends emails for:
+  - Magic link login
+  - Account confirmation
+  - Email change instructions
+  - Notification digests
+  """
+
   import Swoosh.Email
 
   alias Cadence.Mailer
   alias Cadence.Accounts.User
   alias Cadence.Notifications.Notification
   alias Cadence.Repo
+
+  # Get base URL from application config instead of CadenceWeb.Endpoint
+  # This removes the web layer dependency from the domain layer
+  defp base_url do
+    Application.get_env(:cadence, :base_url, "http://localhost:4000")
+  end
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do
@@ -139,8 +155,6 @@ defmodule Cadence.Accounts.UserNotifier do
   end
 
   defp notification_email_body(notification) do
-    base_url = CadenceWeb.Endpoint.url()
-
     """
 
     ==============================
@@ -149,15 +163,13 @@ defmodule Cadence.Accounts.UserNotifier do
 
     #{notification.body}
 
-    View in Cadence: #{base_url}#{notification.action_url}
+    View in Cadence: #{base_url()}#{notification.action_url}
 
     ==============================
     """
   end
 
   defp build_digest_body(notifications, period_text) do
-    base_url = CadenceWeb.Endpoint.url()
-
     notification_list =
       notifications
       |> Enum.map(fn n -> "- #{n.title}" end)
@@ -173,7 +185,7 @@ defmodule Cadence.Accounts.UserNotifier do
 
     #{notification_list}
 
-    View all in Cadence: #{base_url}/notifications
+    View all in Cadence: #{base_url()}/notifications
 
     ==============================
     """

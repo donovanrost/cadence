@@ -3,6 +3,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
   alias Cadence.{Interfaces, Targets, MissionDatabase}
   alias Cadence.MissionDatabase.DefinitionSet
+  alias Cadence.Targets.Target
 
   @impl true
   def render(assigns) do
@@ -222,7 +223,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
   @impl true
   def update(%{target: target, mission: mission} = assigns, socket) do
-    changeset = Targets.change_target(target)
+    changeset = Target.changeset(target, %{})
 
     # Load available interfaces from assigns or default to empty
     available_interfaces = Map.get(assigns, :interfaces, [])
@@ -285,7 +286,7 @@ defmodule CadenceWeb.TargetLive.FormComponent do
   def handle_event("validate", %{"target" => target_params}, socket) do
     changeset =
       socket.assigns.target
-      |> Targets.change_target(target_params)
+      |> Target.changeset(target_params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign_form(socket, changeset)}

@@ -27,7 +27,6 @@ defmodule Cadence.Procedures do
     ProcedureApprovalAdded,
     ProcedureVersionApproved,
     ProcedureVersionRejected,
-    ProcedureVersionDeprecated,
     ProcedureStarted
   }
   alias Ecto.Multi
@@ -155,13 +154,6 @@ defmodule Cadence.Procedures do
   """
   def delete_procedure(%Procedure{} = procedure) do
     Repo.delete(procedure)
-  end
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking procedure changes.
-  """
-  def change_procedure(%Procedure{} = procedure, attrs \\ %{}) do
-    Procedure.changeset(procedure, attrs)
   end
 
   # ============================================================================

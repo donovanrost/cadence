@@ -5,6 +5,7 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Automations
+  alias Cadence.Automations.Automation
 
   @trigger_types [
     {"Alarm Fired", "alarm_fired"},
@@ -200,7 +201,7 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
 
   @impl true
   def update(%{automation: automation} = assigns, socket) do
-    changeset = Automations.change_automation(automation)
+    changeset = Automation.changeset(automation, %{})
 
     # Build procedure options
     procedure_options =
@@ -240,7 +241,7 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
   def handle_event("validate", %{"automation" => automation_params}, socket) do
     changeset =
       socket.assigns.automation
-      |> Automations.change_automation(automation_params)
+      |> Automation.changeset(automation_params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign_form(socket, changeset)}

@@ -44,9 +44,7 @@ defmodule Cadence.Commands do
     TargetQueue,
     TargetPipelineSupervisor,
     QueueEntry,
-    Staging,
-    StagedCommand,
-    StagedCommandTarget
+    Staging
   }
 
   alias Cadence.Recordings

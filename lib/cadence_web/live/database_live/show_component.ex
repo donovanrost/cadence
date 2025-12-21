@@ -1,7 +1,6 @@
 defmodule CadenceWeb.DatabaseLive.ShowComponent do
   use CadenceWeb, :live_component
 
-  alias Cadence.MissionDatabase
   alias Cadence.MissionDatabase.DefinitionSet
 
   @impl true

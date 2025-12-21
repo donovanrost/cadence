@@ -1,32 +1,28 @@
 defmodule Cadence.Alarms do
   @moduledoc """
-  Context for managing alarms and alarm rules.
+  Context facade for managing alarms and alarm rules.
 
   This module provides the public API for:
   - Creating and managing alarm rules
   - Querying active and historical alarms
   - Acknowledging, shelving, and clearing alarms
   - Recording alarm events for audit trail
+
+  ## Architecture
+
+  This facade delegates to focused use case modules:
+  - `AlarmQueries` - Read operations for alarms
+  - `AlarmOperations` - State transitions (acknowledge, shelve, clear)
+  - `TriggerAlarm` - Alarm creation and deduplication
+  - `ManageAlarmRules` - Rule CRUD and matching
   """
 
-  import Ecto.Query, warn: false
-
-  alias Cadence.Repo
+  alias Cadence.Application.Alerting.{AlarmQueries, AlarmOperations, TriggerAlarm, ManageAlarmRules}
   alias Cadence.Alarms.{Alarm, AlarmRule}
   alias Cadence.Alarms.Engine.AlarmManager
-  alias Cadence.Recordings
-  alias Cadence.Recordings.Recordables.{
-    AlarmTriggered,
-    AlarmAcknowledged,
-    AlarmCleared,
-    AlarmShelved,
-    AlarmUnshelved,
-    AlarmEscalated,
-    AlarmValueUpdated
-  }
 
   # ============================================================================
-  # Alarm Rules
+  # Alarm Rules - Delegate to ManageAlarmRules
   # ============================================================================
 
   @doc """
@@ -40,129 +36,50 @@ defmodule Cadence.Alarms do
   - `:enabled` - Filter by enabled status (default: all)
   """
   @spec list_rules(String.t(), keyword()) :: [AlarmRule.t()]
-  def list_rules(organization_id, opts \\ []) do
-    AlarmRule
-    |> where([r], r.organization_id == ^organization_id)
-    |> apply_rule_filters(opts)
-    |> order_by([r], desc: r.inserted_at)
-    |> Repo.all()
-  end
+  defdelegate list_rules(organization_id, opts \\ []), to: ManageAlarmRules, as: :list
 
   @doc """
   Gets a single alarm rule by ID.
   """
   @spec get_rule(String.t()) :: AlarmRule.t() | nil
-  def get_rule(id), do: Repo.get(AlarmRule, id)
+  defdelegate get_rule(id), to: ManageAlarmRules, as: :get
 
   @doc """
   Gets a single alarm rule by ID, raising if not found.
   """
   @spec get_rule!(String.t()) :: AlarmRule.t()
-  def get_rule!(id), do: Repo.get!(AlarmRule, id)
+  defdelegate get_rule!(id), to: ManageAlarmRules, as: :get!
 
   @doc """
   Creates a new alarm rule.
   """
   @spec create_rule(map()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  def create_rule(attrs) do
-    result =
-      %AlarmRule{}
-      |> AlarmRule.changeset(attrs)
-      |> Repo.insert()
-
-    with {:ok, rule} <- result do
-      broadcast_rule_change(rule, :created)
-      {:ok, rule}
-    end
-  end
+  defdelegate create_rule(attrs), to: ManageAlarmRules, as: :create
 
   @doc """
   Updates an alarm rule.
   """
   @spec update_rule(AlarmRule.t(), map()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  def update_rule(%AlarmRule{} = rule, attrs) do
-    result =
-      rule
-      |> AlarmRule.changeset(attrs)
-      |> Repo.update()
-
-    with {:ok, updated_rule} <- result do
-      broadcast_rule_change(updated_rule, :updated)
-      {:ok, updated_rule}
-    end
-  end
+  defdelegate update_rule(rule, attrs), to: ManageAlarmRules, as: :update
 
   @doc """
   Enables an alarm rule.
   """
   @spec enable_rule(AlarmRule.t()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  def enable_rule(%AlarmRule{} = rule) do
-    result =
-      rule
-      |> AlarmRule.enable_changeset(%{enabled: true})
-      |> Repo.update()
-
-    with {:ok, updated_rule} <- result do
-      broadcast_rule_change(updated_rule, :enabled)
-      {:ok, updated_rule}
-    end
-  end
+  defdelegate enable_rule(rule), to: ManageAlarmRules, as: :enable
 
   @doc """
   Disables an alarm rule with optional reason.
   """
   @spec disable_rule(AlarmRule.t(), String.t() | nil, String.t() | nil) ::
           {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  def disable_rule(%AlarmRule{} = rule, user_id \\ nil, reason \\ nil) do
-    result =
-      rule
-      |> AlarmRule.enable_changeset(%{
-        enabled: false,
-        disabled_at: DateTime.utc_now(),
-        disabled_by_id: user_id,
-        disabled_reason: reason
-      })
-      |> Repo.update()
-
-    with {:ok, updated_rule} <- result do
-      broadcast_rule_change(updated_rule, :disabled)
-      {:ok, updated_rule}
-    end
-  end
+  defdelegate disable_rule(rule, user_id \\ nil, reason \\ nil), to: ManageAlarmRules, as: :disable
 
   @doc """
   Deletes an alarm rule.
   """
   @spec delete_rule(AlarmRule.t()) :: {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  def delete_rule(%AlarmRule{} = rule) do
-    result = Repo.delete(rule)
-
-    with {:ok, deleted_rule} <- result do
-      broadcast_rule_change(deleted_rule, :deleted)
-      {:ok, deleted_rule}
-    end
-  end
-
-  # Broadcasts alarm rule changes for cache invalidation and UI updates
-  defp broadcast_rule_change(%AlarmRule{} = rule, event_type) do
-    # Global topic for cache invalidation
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
-      "alarm_rules:changed",
-      {:alarm_rule_changed, event_type, rule}
-    )
-
-    # Mission-specific topic for UI updates
-    if rule.mission_id do
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
-        "mission:#{rule.mission_id}:alarm_rules",
-        {:alarm_rule_changed, event_type, rule}
-      )
-    end
-
-    :ok
-  end
+  defdelegate delete_rule(rule), to: ManageAlarmRules, as: :delete
 
   @doc """
   Finds matching rules for a given event.
@@ -171,39 +88,12 @@ defmodule Cadence.Alarms do
   """
   @spec find_matching_rules(String.t(), String.t(), String.t() | nil, String.t()) ::
           [AlarmRule.t()]
-  def find_matching_rules(organization_id, mission_id, target_id, event_type) do
-    AlarmRule
-    |> where([r], r.organization_id == ^organization_id)
-    |> where([r], r.event_type == ^event_type)
-    |> where([r], r.enabled == true)
-    |> apply_scope_filter(mission_id, target_id)
-    |> Repo.all()
-    |> Enum.sort_by(&AlarmRule.specificity/1, :desc)
-  end
-
-  defp apply_scope_filter(query, mission_id, nil) do
-    # When no target specified, return org-wide and mission-wide rules only
-    where(
-      query,
-      [r],
-      (is_nil(r.mission_id) and is_nil(r.target_id)) or
-        (r.mission_id == ^mission_id and is_nil(r.target_id))
-    )
-  end
-
-  defp apply_scope_filter(query, mission_id, target_id) do
-    # When target specified, return org-wide, mission-wide, and target-specific rules
-    where(
-      query,
-      [r],
-      (is_nil(r.mission_id) and is_nil(r.target_id)) or
-        (r.mission_id == ^mission_id and is_nil(r.target_id)) or
-        (r.mission_id == ^mission_id and r.target_id == ^target_id)
-    )
-  end
+  defdelegate find_matching_rules(organization_id, mission_id, target_id, event_type),
+    to: ManageAlarmRules,
+    as: :find_matching
 
   # ============================================================================
-  # Alarms
+  # Alarm Queries - Delegate to AlarmQueries
   # ============================================================================
 
   @doc """
@@ -220,13 +110,9 @@ defmodule Cadence.Alarms do
   """
   @spec list_alarms(String.t(), keyword()) :: [Alarm.t()]
   def list_alarms(mission_id, opts \\ []) do
-    Alarm
-    |> where([a], a.mission_id == ^mission_id)
-    |> apply_alarm_filters(opts)
-    |> order_by([a], desc: a.triggered_at)
-    |> maybe_limit(opts[:limit])
-    |> maybe_offset(opts[:offset])
-    |> Repo.all()
+    # AlarmQueries returns domain entities, but facade returns schemas for compatibility
+    # For now, use the adapter directly for backward compatibility
+    repo().list(mission_id, opts) |> Enum.map(&entity_to_schema/1)
   end
 
   @doc """
@@ -234,234 +120,85 @@ defmodule Cadence.Alarms do
   """
   @spec list_active_alarms(String.t(), keyword()) :: [Alarm.t()]
   def list_active_alarms(mission_id, opts \\ []) do
-    list_alarms(mission_id, Keyword.put(opts, :status, [:active, :acknowledged, :shelved]))
+    repo().list_active(mission_id, opts) |> Enum.map(&entity_to_schema/1)
   end
 
   @doc """
   Counts alarms by status for a mission.
   """
   @spec count_alarms_by_status(String.t()) :: map()
-  def count_alarms_by_status(mission_id) do
-    Alarm
-    |> where([a], a.mission_id == ^mission_id)
-    |> group_by([a], a.status)
-    |> select([a], {a.status, count(a.id)})
-    |> Repo.all()
-    |> Map.new()
-  end
+  defdelegate count_alarms_by_status(mission_id), to: AlarmQueries, as: :count_by_status
 
   @doc """
   Gets a single alarm by ID.
   """
   @spec get_alarm(String.t()) :: Alarm.t() | nil
-  def get_alarm(id), do: Repo.get(Alarm, id)
+  def get_alarm(id) do
+    case AlarmQueries.find(id) do
+      {:ok, entity} -> entity_to_schema(entity)
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Gets a single alarm by ID, raising if not found.
   """
   @spec get_alarm!(String.t()) :: Alarm.t()
-  def get_alarm!(id), do: Repo.get!(Alarm, id)
+  def get_alarm!(id) do
+    case AlarmQueries.find(id) do
+      {:ok, entity} -> entity_to_schema(entity)
+      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Alarm
+    end
+  end
 
   @doc """
   Finds an existing active alarm for the given source.
 
   Used for deduplication - only one active alarm per source.
-
-  The target_id can be either a UUID or a string identifier.
-  If it's a string identifier, we look up the target to get its UUID.
   """
   @spec find_active_alarm(String.t(), String.t() | nil, String.t(), String.t()) :: Alarm.t() | nil
   def find_active_alarm(mission_id, target_id, source_type, source_id) do
-    resolved_target_id = resolve_target_id(mission_id, target_id)
-
-    query =
-      Alarm
-      |> where([a], a.mission_id == ^mission_id)
-      |> where([a], a.source_type == ^source_type)
-      |> where([a], a.source_id == ^source_id)
-      |> where([a], a.status in [:active, :acknowledged, :shelved])
-
-    query =
-      if resolved_target_id do
-        where(query, [a], a.target_id == ^resolved_target_id)
-      else
-        where(query, [a], is_nil(a.target_id))
-      end
-
-    Repo.one(query)
-  end
-
-  # Resolves a target_id to a UUID.
-  # If it's already a valid UUID, returns it as-is.
-  # If it's a string identifier, looks up the target and returns its UUID.
-  # Returns nil if not found or if target_id is nil.
-  defp resolve_target_id(_mission_id, nil), do: nil
-
-  defp resolve_target_id(mission_id, target_id) when is_binary(target_id) do
-    case Ecto.UUID.cast(target_id) do
-      {:ok, uuid} ->
-        # It's already a valid UUID
-        uuid
-
-      :error ->
-        # It's a string identifier, look up the target
-        case Cadence.Targets.get_target_by_identifier(mission_id, target_id) do
-          %{id: uuid} -> uuid
-          nil -> nil
-        end
+    case AlarmQueries.find_active_by_source(mission_id, target_id, source_type, source_id) do
+      {:ok, entity} -> entity_to_schema(entity)
+      {:error, :not_found} -> nil
     end
   end
 
+  # ============================================================================
+  # Alarm Creation - Delegate to TriggerAlarm
+  # ============================================================================
+
   @doc """
   Creates a new alarm and records the triggered event.
-
-  The target_id can be either a UUID or a string identifier.
-  If it's a string identifier, we look up the target to get its UUID.
   """
   @spec create_alarm(map()) :: {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def create_alarm(attrs) do
-    # Resolve target_id if it's a string identifier
-    attrs = resolve_target_id_in_attrs(attrs)
-
-    Repo.transaction(fn ->
-      with {:ok, alarm} <- do_create_alarm(attrs),
-           :ok <- record_alarm_triggered(alarm, attrs) do
-        alarm
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_create_alarm(attrs) do
-    %Alarm{}
-    |> Alarm.changeset(attrs)
-    |> Repo.insert()
+    case TriggerAlarm.from_telemetry(attrs) do
+      {:ok, entity, _status} -> {:ok, entity_to_schema(entity)}
+      {:error, reason} -> {:error, domain_error_to_changeset(reason)}
+    end
   end
 
   @doc """
   Finds an existing active alarm or creates a new one atomically.
 
-  This function handles the race condition where multiple concurrent events
-  might try to create an alarm for the same source. It uses the database
-  unique constraint (alarms_unique_active_source_idx) to ensure only one
-  active alarm exists per source.
-
   Returns:
   - `{:ok, alarm, :created}` - A new alarm was created
   - `{:ok, alarm, :existing}` - An existing active alarm was found
   - `{:error, changeset}` - Validation or other error
-
-  ## Example
-
-      attrs = %{
-        organization_id: org_id,
-        mission_id: mission_id,
-        target_id: target_id,
-        source_type: "telemetry_item",
-        source_id: "HEALTH.cpu_temp",
-        ...
-      }
-
-      case find_or_create_alarm(attrs) do
-        {:ok, alarm, :created} -> # New alarm created
-        {:ok, alarm, :existing} -> # Found existing alarm
-        {:error, changeset} -> # Handle error
-      end
   """
   @spec find_or_create_alarm(map()) ::
           {:ok, Alarm.t(), :created | :existing} | {:error, Ecto.Changeset.t()}
   def find_or_create_alarm(attrs) do
-    # Resolve target_id if it's a string identifier
-    attrs = resolve_target_id_in_attrs(attrs)
-
-    mission_id = attrs[:mission_id]
-    target_id = attrs[:target_id]
-    source_type = attrs[:source_type]
-    source_id = attrs[:source_id]
-
-    Repo.transaction(fn ->
-      # First, try to find an existing active alarm
-      case find_active_alarm(mission_id, target_id, source_type, source_id) do
-        nil ->
-          # No existing alarm, try to create one
-          case do_create_alarm_with_conflict_handling(attrs) do
-            {:ok, alarm} ->
-              # Successfully created - record the triggered event
-              with :ok <- record_alarm_triggered(alarm, attrs) do
-                {alarm, :created}
-              else
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
-
-            {:error, :conflict} ->
-              # Unique constraint violation - another process created the alarm
-              # Fetch the existing alarm and return it
-              case find_active_alarm(mission_id, target_id, source_type, source_id) do
-                nil ->
-                  # Very rare race: alarm was created and then cleared
-                  Repo.rollback(:alarm_not_found_after_conflict)
-
-                alarm ->
-                  {alarm, :existing}
-              end
-
-            {:error, changeset} ->
-              Repo.rollback(changeset)
-          end
-
-        existing_alarm ->
-          {existing_alarm, :existing}
-      end
-    end)
-    |> case do
-      {:ok, {alarm, status}} -> {:ok, alarm, status}
+    case TriggerAlarm.from_telemetry(attrs) do
+      {:ok, entity, status} -> {:ok, entity_to_schema(entity), status}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  # Attempts to create an alarm, handling unique constraint violations gracefully
-  defp do_create_alarm_with_conflict_handling(attrs) do
-    %Alarm{}
-    |> Alarm.changeset(attrs)
-    |> Repo.insert()
-    |> case do
-      {:ok, alarm} ->
-        {:ok, alarm}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        # Check if this is a unique constraint violation
-        if unique_constraint_violation?(changeset) do
-          {:error, :conflict}
-        else
-          {:error, changeset}
-        end
-    end
-  end
-
-  # Checks if the changeset error is due to our unique active alarm constraint
-  defp unique_constraint_violation?(%Ecto.Changeset{errors: errors}) do
-    Enum.any?(errors, fn
-      {_field, {_msg, [constraint: :unique, constraint_name: "alarms_unique_active_source_idx"]}} ->
-        true
-
-      _ ->
-        false
-    end)
-  end
-
-  # Resolves target_id in attrs map if it's a string identifier
-  defp resolve_target_id_in_attrs(attrs) do
-    mission_id = attrs[:mission_id]
-    target_id = attrs[:target_id]
-
-    if mission_id && target_id do
-      resolved = resolve_target_id(mission_id, target_id)
-      Map.put(attrs, :target_id, resolved)
-    else
-      attrs
-    end
-  end
+  # ============================================================================
+  # Alarm Operations - Delegate to AlarmOperations via AlarmManager
+  # ============================================================================
 
   @doc """
   Acknowledges an alarm.
@@ -470,11 +207,20 @@ defmodule Cadence.Alarms do
   """
   @spec acknowledge_alarm(Alarm.t(), String.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def acknowledge_alarm(%Alarm{mission_id: mission_id} = alarm, user_id, note \\ nil) do
+  def acknowledge_alarm(alarm, user_id, note \\ nil)
+
+  def acknowledge_alarm(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, user_id, note) do
+    acknowledge_alarm(entity_to_schema(entity), user_id, note)
+  end
+
+  def acknowledge_alarm(%Alarm{mission_id: mission_id} = alarm, user_id, note) do
     case AlarmManager.whereis(mission_id) do
       nil ->
-        # Mission not running, update directly
-        do_acknowledge_alarm(alarm, user_id, note)
+        # Mission not running, use AlarmOperations directly
+        case AlarmOperations.acknowledge(alarm.id, user_id, note) do
+          {:ok, entity} -> {:ok, entity_to_schema(entity)}
+          {:error, reason} -> {:error, reason}
+        end
 
       _pid ->
         # Route through AlarmManager for cache consistency
@@ -483,31 +229,14 @@ defmodule Cadence.Alarms do
   end
 
   @doc false
-  # Internal function called by AlarmManager. Performs the database update
-  # and records the event, but does NOT update the cache (caller handles that).
+  # Internal function called by AlarmManager
   @spec do_acknowledge_alarm(Alarm.t(), String.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_acknowledge_alarm(%Alarm{} = alarm, user_id, note) do
-    Repo.transaction(fn ->
-      attrs = %{
-        acknowledged_by_id: user_id,
-        acknowledged_at: DateTime.utc_now(),
-        acknowledgment_note: note
-      }
-
-      with {:ok, updated} <- do_acknowledge_alarm_changeset(alarm, attrs),
-           :ok <- record_alarm_acknowledged(updated, user_id, note) do
-        updated
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_acknowledge_alarm_changeset(alarm, attrs) do
-    alarm
-    |> Alarm.acknowledge_changeset(attrs)
-    |> Repo.update()
+    case AlarmOperations.acknowledge(alarm.id, user_id, note) do
+      {:ok, entity} -> {:ok, entity_to_schema(entity)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -517,19 +246,26 @@ defmodule Cadence.Alarms do
   """
   @spec shelve_alarm(Alarm.t(), String.t(), integer(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def shelve_alarm(alarm, user_id, duration_minutes, reason \\ nil)
+
+  def shelve_alarm(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, user_id, duration_minutes, reason) do
+    shelve_alarm(entity_to_schema(entity), user_id, duration_minutes, reason)
+  end
+
   def shelve_alarm(
         %Alarm{mission_id: mission_id} = alarm,
         user_id,
         duration_minutes,
-        reason \\ nil
+        reason
       ) do
     case AlarmManager.whereis(mission_id) do
       nil ->
-        # Mission not running, update directly
-        do_shelve_alarm(alarm, user_id, duration_minutes, reason)
+        case AlarmOperations.shelve(alarm.id, user_id, duration_minutes, reason) do
+          {:ok, entity} -> {:ok, entity_to_schema(entity)}
+          {:error, reason} -> {:error, reason}
+        end
 
       _pid ->
-        # Route through AlarmManager for cache consistency
         AlarmManager.shelve_alarm(mission_id, alarm.id, user_id, duration_minutes, reason)
     end
   end
@@ -539,30 +275,10 @@ defmodule Cadence.Alarms do
   @spec do_shelve_alarm(Alarm.t(), String.t(), integer(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_shelve_alarm(%Alarm{} = alarm, user_id, duration_minutes, reason) do
-    Repo.transaction(fn ->
-      now = DateTime.utc_now()
-      shelved_until = DateTime.add(now, duration_minutes * 60, :second)
-
-      attrs = %{
-        shelved_by_id: user_id,
-        shelved_at: now,
-        shelved_until: shelved_until,
-        shelve_reason: reason
-      }
-
-      with {:ok, updated} <- do_shelve_alarm_changeset(alarm, attrs),
-           :ok <- record_alarm_shelved(updated, user_id, shelved_until, reason) do
-        updated
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_shelve_alarm_changeset(alarm, attrs) do
-    alarm
-    |> Alarm.shelve_changeset(attrs)
-    |> Repo.update()
+    case AlarmOperations.shelve(alarm.id, user_id, duration_minutes, reason) do
+      {:ok, entity} -> {:ok, entity_to_schema(entity)}
+      {:error, r} -> {:error, r}
+    end
   end
 
   @doc """
@@ -572,14 +288,21 @@ defmodule Cadence.Alarms do
   """
   @spec unshelve_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def unshelve_alarm(%Alarm{mission_id: mission_id} = alarm, user_id \\ nil) do
+  def unshelve_alarm(alarm, user_id \\ nil)
+
+  def unshelve_alarm(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, user_id) do
+    unshelve_alarm(entity_to_schema(entity), user_id)
+  end
+
+  def unshelve_alarm(%Alarm{mission_id: mission_id} = alarm, user_id) do
     case AlarmManager.whereis(mission_id) do
       nil ->
-        # Mission not running, update directly
-        do_unshelve_alarm(alarm, user_id)
+        case AlarmOperations.unshelve(alarm.id, user_id) do
+          {:ok, entity} -> {:ok, entity_to_schema(entity)}
+          {:error, reason} -> {:error, reason}
+        end
 
       _pid ->
-        # Route through AlarmManager for cache consistency
         AlarmManager.unshelve_alarm(mission_id, alarm.id, user_id)
     end
   end
@@ -589,23 +312,10 @@ defmodule Cadence.Alarms do
   @spec do_unshelve_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_unshelve_alarm(%Alarm{} = alarm, user_id) do
-    Repo.transaction(fn ->
-      previous_status = if alarm.acknowledged_at, do: :acknowledged, else: :active
-      unshelve_type = if user_id, do: "manual", else: "timeout"
-
-      with {:ok, updated} <- do_unshelve_alarm_changeset(alarm, previous_status),
-           :ok <- record_alarm_unshelved(updated, user_id, unshelve_type) do
-        updated
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_unshelve_alarm_changeset(alarm, previous_status) do
-    alarm
-    |> Alarm.unshelve_changeset(previous_status)
-    |> Repo.update()
+    case AlarmOperations.unshelve(alarm.id, user_id) do
+      {:ok, entity} -> {:ok, entity_to_schema(entity)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
@@ -615,14 +325,21 @@ defmodule Cadence.Alarms do
   """
   @spec clear_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
-  def clear_alarm(%Alarm{mission_id: mission_id} = alarm, user_id \\ nil) do
+  def clear_alarm(alarm, user_id \\ nil)
+
+  def clear_alarm(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, user_id) do
+    clear_alarm(entity_to_schema(entity), user_id)
+  end
+
+  def clear_alarm(%Alarm{mission_id: mission_id} = alarm, user_id) do
     case AlarmManager.whereis(mission_id) do
       nil ->
-        # Mission not running, update directly
-        do_clear_alarm(alarm, user_id)
+        case AlarmOperations.clear(alarm.id, user_id) do
+          {:ok, entity} -> {:ok, entity_to_schema(entity)}
+          {:error, reason} -> {:error, reason}
+        end
 
       _pid ->
-        # Route through AlarmManager for cache consistency
         AlarmManager.clear_alarm(mission_id, alarm.id, user_id)
     end
   end
@@ -632,46 +349,42 @@ defmodule Cadence.Alarms do
   @spec do_clear_alarm(Alarm.t(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_clear_alarm(%Alarm{} = alarm, user_id) do
-    Repo.transaction(fn ->
-      clear_type = if user_id, do: "manual", else: "automatic"
-
-      with {:ok, updated} <- do_clear_alarm_changeset(alarm),
-           :ok <- record_alarm_cleared(updated, user_id, clear_type) do
-        updated
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_clear_alarm_changeset(alarm) do
-    alarm
-    |> Alarm.clear_changeset(%{cleared_at: DateTime.utc_now()})
-    |> Repo.update()
+    case AlarmOperations.clear(alarm.id, user_id) do
+      {:ok, entity} -> {:ok, entity_to_schema(entity)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
   Updates an alarm's value and optionally escalates/deescalates severity.
 
-  Used when a telemetry item is still in violation but the value changed.
   Routes through AlarmManager when the mission is active, ensuring cache consistency.
   """
   @spec update_alarm_value(Alarm.t(), float(), atom(), atom(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
+  def update_alarm_value(alarm, value, limit_state, new_severity, message \\ nil)
+
+  def update_alarm_value(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, value, limit_state, new_severity, message) do
+    update_alarm_value(entity_to_schema(entity), value, limit_state, new_severity, message)
+  end
+
   def update_alarm_value(
         %Alarm{mission_id: mission_id} = alarm,
         value,
         limit_state,
         new_severity,
-        message \\ nil
+        message
       ) do
     case AlarmManager.whereis(mission_id) do
       nil ->
-        # Mission not running, update directly
-        do_update_alarm_value(alarm, value, limit_state, new_severity, message)
+        opts = [severity: new_severity, limit_state: limit_state, message: message]
+
+        case AlarmOperations.update_value(alarm.id, value, opts) do
+          {:ok, entity} -> {:ok, entity_to_schema(entity)}
+          {:error, reason} -> {:error, reason}
+        end
 
       _pid ->
-        # Route through AlarmManager for cache consistency
         AlarmManager.update_alarm_value(
           mission_id,
           alarm.id,
@@ -688,43 +401,13 @@ defmodule Cadence.Alarms do
   @spec do_update_alarm_value(Alarm.t(), float(), atom(), atom(), String.t() | nil) ::
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def do_update_alarm_value(%Alarm{} = alarm, value, limit_state, new_severity, message) do
-    Repo.transaction(fn ->
-      attrs = %{
-        current_value: value,
-        limit_state: limit_state,
-        last_value_at: DateTime.utc_now(),
-        severity: new_severity,
-        message: message || alarm.message
-      }
+    opts = [severity: new_severity, limit_state: limit_state, message: message]
 
-      with {:ok, updated} <- do_update_alarm_value_changeset(alarm, attrs),
-           :ok <- record_value_change(alarm, updated, value) do
-        updated
-      else
-        {:error, changeset} -> Repo.rollback(changeset)
-      end
-    end)
-  end
-
-  defp do_update_alarm_value_changeset(alarm, attrs) do
-    alarm
-    |> Alarm.update_value_changeset(attrs)
-    |> Repo.update()
-  end
-
-  defp record_value_change(old_alarm, new_alarm, value) do
-    cond do
-      severity_rank(new_alarm.severity) > severity_rank(old_alarm.severity) ->
-        record_alarm_escalated(new_alarm, old_alarm.severity, value)
-
-      true ->
-        record_alarm_value_updated(new_alarm, old_alarm.current_value, value)
+    case AlarmOperations.update_value(alarm.id, value, opts) do
+      {:ok, entity} -> {:ok, entity_to_schema(entity)}
+      {:error, reason} -> {:error, reason}
     end
   end
-
-  defp severity_rank(:info), do: 0
-  defp severity_rank(:warning), do: 1
-  defp severity_rank(:critical), do: 2
 
   # ============================================================================
   # Shelve Expiration
@@ -735,12 +418,7 @@ defmodule Cadence.Alarms do
   """
   @spec find_expired_shelved_alarms() :: [Alarm.t()]
   def find_expired_shelved_alarms do
-    now = DateTime.utc_now()
-
-    Alarm
-    |> where([a], a.status == :shelved)
-    |> where([a], a.shelved_until < ^now)
-    |> Repo.all()
+    repo().list_expired_shelved() |> Enum.map(&entity_to_schema/1)
   end
 
   @doc """
@@ -749,244 +427,74 @@ defmodule Cadence.Alarms do
   Returns the count of alarms unshelved.
   """
   @spec unshelve_expired_alarms() :: {:ok, integer()}
-  def unshelve_expired_alarms do
-    alarms = find_expired_shelved_alarms()
-
-    Enum.each(alarms, fn alarm ->
-      unshelve_alarm(alarm, nil)
-    end)
-
-    {:ok, length(alarms)}
-  end
+  defdelegate unshelve_expired_alarms(), to: AlarmOperations, as: :unshelve_expired
 
   # ============================================================================
   # Private Helpers
   # ============================================================================
 
-  defp apply_rule_filters(query, opts) do
-    query
-    |> maybe_filter_by_mission(opts[:mission_id])
-    |> maybe_filter_by_target(opts[:target_id])
-    |> maybe_filter_by_event_type(opts[:event_type])
-    |> maybe_filter_by_enabled(opts[:enabled])
+  defp repo do
+    Application.get_env(
+      :cadence,
+      :alarm_repository,
+      Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository
+    )
   end
 
-  defp apply_alarm_filters(query, opts) do
-    query
-    |> maybe_filter_by_status(opts[:status])
-    |> maybe_filter_by_severity(opts[:severity])
-    |> maybe_filter_by_target(opts[:target_id])
-    |> maybe_filter_by_source(opts[:source_id])
+  # Convert domain entity to Ecto schema for backward compatibility
+  # This allows existing code that expects Ecto schemas to continue working
+  defp entity_to_schema(%Cadence.Domain.Alerting.Entities.Alarm{} = entity) do
+    %Alarm{
+      id: entity.id,
+      organization_id: entity.organization_id,
+      mission_id: entity.mission_id,
+      target_id: entity.target_id,
+      alarm_rule_id: entity.alarm_rule_id,
+      alarm_type: entity.alarm_type,
+      severity: entity.severity,
+      status: entity.status,
+      source_type: entity.source_type,
+      source_id: entity.source_id,
+      message: entity.message,
+      current_value: entity.current_value,
+      limit_state: entity.limit_state,
+      triggered_at: entity.triggered_at,
+      acknowledged_at: entity.acknowledged_at,
+      acknowledged_by_id: entity.acknowledged_by_id,
+      acknowledgment_note: entity.acknowledgment_note,
+      shelved_at: entity.shelved_at,
+      shelved_by_id: entity.shelved_by_id,
+      shelved_until: entity.shelved_until,
+      shelve_reason: entity.shelve_reason,
+      cleared_at: entity.cleared_at,
+      last_value_at: entity.last_value_at,
+      metadata: entity.metadata
+    }
   end
 
-  defp maybe_filter_by_mission(query, nil), do: query
+  # Convert domain validation errors to Ecto.Changeset for backward compatibility
+  defp domain_error_to_changeset({:missing_required, fields}) do
+    changeset = Ecto.Changeset.change(%Alarm{})
 
-  defp maybe_filter_by_mission(query, mission_id) do
-    where(query, [r], is_nil(r.mission_id) or r.mission_id == ^mission_id)
+    Enum.reduce(fields, changeset, fn field, cs ->
+      Ecto.Changeset.add_error(cs, field, "can't be blank")
+    end)
   end
 
-  defp maybe_filter_by_target(query, nil), do: query
-  defp maybe_filter_by_target(query, target_id), do: where(query, [x], x.target_id == ^target_id)
+  defp domain_error_to_changeset({:validation, errors}) when is_map(errors) do
+    changeset = Ecto.Changeset.change(%Alarm{})
 
-  defp maybe_filter_by_event_type(query, nil), do: query
-
-  defp maybe_filter_by_event_type(query, event_type),
-    do: where(query, [r], r.event_type == ^event_type)
-
-  defp maybe_filter_by_enabled(query, nil), do: query
-  defp maybe_filter_by_enabled(query, enabled), do: where(query, [r], r.enabled == ^enabled)
-
-  defp maybe_filter_by_status(query, nil), do: query
-
-  defp maybe_filter_by_status(query, statuses) when is_list(statuses),
-    do: where(query, [a], a.status in ^statuses)
-
-  defp maybe_filter_by_status(query, status), do: where(query, [a], a.status == ^status)
-
-  defp maybe_filter_by_severity(query, nil), do: query
-
-  defp maybe_filter_by_severity(query, severities) when is_list(severities),
-    do: where(query, [a], a.severity in ^severities)
-
-  defp maybe_filter_by_severity(query, severity), do: where(query, [a], a.severity == ^severity)
-
-  defp maybe_filter_by_source(query, nil), do: query
-  defp maybe_filter_by_source(query, source_id), do: where(query, [a], a.source_id == ^source_id)
-
-  defp maybe_limit(query, nil), do: query
-  defp maybe_limit(query, limit), do: limit(query, ^limit)
-
-  defp maybe_offset(query, nil), do: query
-  defp maybe_offset(query, offset), do: offset(query, ^offset)
-
-  # ============================================================================
-  # Recording Helpers
-  # ============================================================================
-
-  defp record_alarm_triggered(%Alarm{} = alarm, attrs) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-
-    recordable_attrs = %{
-      alarm_type: attrs[:alarm_type] || "limit",
-      severity: to_string(alarm.severity),
-      source_type: alarm.source_type,
-      source_id: alarm.source_id,
-      message: alarm.message,
-      trigger_value: alarm.current_value,
-      limit_state: alarm.limit_state && to_string(alarm.limit_state),
-      alarm_rule_id: attrs[:alarm_rule_id]
-    }
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_type: "system",
-      timestamp: alarm.triggered_at || DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmTriggered, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok  # Don't fail the transaction for recording errors
-    end
+    Enum.reduce(errors, changeset, fn {field, messages}, cs ->
+      Enum.reduce(List.wrap(messages), cs, fn msg, cs_inner ->
+        Ecto.Changeset.add_error(cs_inner, field, msg)
+      end)
+    end)
   end
 
-  defp record_alarm_acknowledged(%Alarm{} = alarm, user_id, note) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-    recordable_attrs = %{note: note}
+  defp domain_error_to_changeset(%Ecto.Changeset{} = changeset), do: changeset
 
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_id: user_id,
-      actor_type: "user",
-      timestamp: alarm.acknowledged_at || DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmAcknowledged, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  defp record_alarm_shelved(%Alarm{} = alarm, user_id, shelved_until, reason) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-
-    recordable_attrs = %{
-      shelve_until: shelved_until,
-      reason: reason
-    }
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_id: user_id,
-      actor_type: "user",
-      timestamp: alarm.shelved_at || DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmShelved, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  defp record_alarm_unshelved(%Alarm{} = alarm, user_id, unshelve_type) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-    recordable_attrs = %{unshelve_type: unshelve_type}
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_id: user_id,
-      actor_type: if(user_id, do: "user", else: "system"),
-      timestamp: DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmUnshelved, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  defp record_alarm_cleared(%Alarm{} = alarm, user_id, clear_type) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-
-    recordable_attrs = %{
-      clear_type: clear_type,
-      final_value: alarm.current_value
-    }
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_id: user_id,
-      actor_type: if(user_id, do: "user", else: "system"),
-      timestamp: alarm.cleared_at || DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmCleared, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  defp record_alarm_escalated(%Alarm{} = alarm, previous_severity, trigger_value) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-
-    recordable_attrs = %{
-      previous_severity: to_string(previous_severity),
-      new_severity: to_string(alarm.severity),
-      trigger_value: trigger_value
-    }
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_type: "system",
-      timestamp: DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmEscalated, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  defp record_alarm_value_updated(%Alarm{} = alarm, previous_value, trigger_value) do
-    bucket_id = get_bucket_id_for_target(alarm.target_id)
-
-    recordable_attrs = %{
-      trigger_value: trigger_value,
-      previous_value: previous_value
-    }
-
-    recording_attrs = %{
-      organization_id: alarm.organization_id,
-      bucket_id: bucket_id,
-      aggregate_id: alarm.id,
-      actor_type: "system",
-      timestamp: DateTime.utc_now()
-    }
-
-    case Recordings.create(AlarmValueUpdated, recordable_attrs, recording_attrs) do
-      {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok
-    end
-  end
-
-  # Looks up the bucket_id for a target (or nil if no target)
-  defp get_bucket_id_for_target(nil), do: nil
-
-  defp get_bucket_id_for_target(target_id) do
-    case Cadence.Targets.get_target(target_id) do
-      nil -> nil
-      target -> target.bucket_id
-    end
+  defp domain_error_to_changeset(error) do
+    Ecto.Changeset.change(%Alarm{})
+    |> Ecto.Changeset.add_error(:base, "#{inspect(error)}")
   end
 end

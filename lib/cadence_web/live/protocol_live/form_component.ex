@@ -2,6 +2,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Interfaces
+  alias Cadence.Interfaces.InterfaceProtocol
 
   @impl true
   def render(assigns) do
@@ -327,7 +328,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       |> Map.put(:ccsds_crc_endian, protocol_config["crc_endian"])
       |> Map.put(:ccsds_crc_on_failure, protocol_config["crc_on_failure"])
 
-    changeset = Interfaces.change_protocol(protocol_with_fields)
+    changeset = InterfaceProtocol.changeset(protocol_with_fields, %{})
 
     # Track CCSDS CRC enabled state for conditional rendering
     ccsds_crc_enabled = Map.get(protocol_config, "crc_enabled", false)
@@ -348,7 +349,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
 
     changeset =
       socket.assigns.protocol
-      |> Interfaces.change_protocol(protocol_params)
+      |> InterfaceProtocol.changeset(protocol_params)
       |> Map.put(:action, :validate)
 
     {:noreply,

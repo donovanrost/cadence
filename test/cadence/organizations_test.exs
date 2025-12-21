@@ -54,10 +54,6 @@ defmodule Cadence.OrganizationsTest do
       assert_raise Ecto.NoResultsError, fn -> Organizations.get_organization!(org.id) end
     end
 
-    test "change_organization/1 returns an organization changeset" do
-      org = organization_fixture()
-      assert %Ecto.Changeset{} = Organizations.change_organization(org)
-    end
   end
 
   describe "quota management" do

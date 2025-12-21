@@ -2,6 +2,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
   use CadenceWeb, :live_component
 
   alias Cadence.Interfaces
+  alias Cadence.Interfaces.InterfaceSchema
 
   @impl true
   def render(assigns) do
@@ -157,7 +158,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
 
   @impl true
   def update(%{interface: interface} = assigns, socket) do
-    changeset = Interfaces.change_interface(interface)
+    changeset = InterfaceSchema.changeset(interface, %{})
 
     # Load available targets from assigns or default to empty
     available_targets = Map.get(assigns, :targets, [])
@@ -194,7 +195,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
 
     changeset =
       socket.assigns.interface
-      |> Interfaces.change_interface(interface_params)
+      |> InterfaceSchema.changeset(interface_params)
       |> Map.put(:action, :validate)
 
     {:noreply,

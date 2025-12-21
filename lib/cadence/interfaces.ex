@@ -97,13 +97,6 @@ defmodule Cadence.Interfaces do
     Repo.delete(interface)
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking interface changes.
-  """
-  def change_interface(%InterfaceSchema{} = interface, attrs \\ %{}) do
-    InterfaceSchema.changeset(interface, attrs)
-  end
-
   ## Status Management
 
   @doc """
@@ -275,13 +268,6 @@ defmodule Cadence.Interfaces do
         list_protocols(interface_id)
       end
     end)
-  end
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking protocol changes.
-  """
-  def change_protocol(%InterfaceProtocol{} = protocol, attrs \\ %{}) do
-    InterfaceProtocol.changeset(protocol, attrs)
   end
 
   ## Target-Interface Routing

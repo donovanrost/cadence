@@ -1,0 +1,207 @@
+defmodule Cadence.Application.Commanding.EnqueueCommandTest do
+  @moduledoc """
+  Use case tests for EnqueueCommand.
+
+  Tests the command queuing logic with in-memory adapters.
+  """
+  use Cadence.PureCase, async: false
+
+  alias Cadence.Application.Commanding.EnqueueCommand
+  alias Cadence.Test.Adapters.InMemoryQueueRepository
+  alias Cadence.Test.Adapters.FakeEventPublisher
+  alias Cadence.Test.Adapters.InMemoryEventRecorder
+
+  setup do
+    # Start fake adapters
+    {:ok, _} = InMemoryQueueRepository.start_link()
+    {:ok, _} = FakeEventPublisher.start_link()
+    {:ok, _} = InMemoryEventRecorder.start_link()
+
+    # Configure DI
+    Application.put_env(:cadence, :queue_repository, InMemoryQueueRepository)
+    Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
+    Application.put_env(:cadence, :event_recorder, InMemoryEventRecorder)
+
+    on_exit(fn ->
+      Application.delete_env(:cadence, :queue_repository)
+      Application.delete_env(:cadence, :event_publisher)
+      Application.delete_env(:cadence, :event_recorder)
+      InMemoryQueueRepository.stop()
+      FakeEventPublisher.stop()
+      InMemoryEventRecorder.stop()
+    end)
+
+    :ok
+  end
+
+  describe "enqueue/2" do
+    test "enqueues a command with default priority" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, entry} = EnqueueCommand.enqueue(attrs)
+
+      assert entry.id != nil
+      assert entry.command_name == attrs.command_name
+      assert entry.status == :pending
+      assert entry.priority == 3
+      assert entry.sequence_number != nil
+    end
+
+    test "enqueues with custom priority" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, entry} = EnqueueCommand.enqueue(attrs, priority: 1)
+
+      assert entry.priority == 1
+    end
+
+    test "enqueues with scheduled_at" do
+      attrs = valid_enqueue_attrs()
+      scheduled = from_now(30, :minutes)
+
+      {:ok, entry} = EnqueueCommand.enqueue(attrs, scheduled_at: scheduled)
+
+      assert entry.scheduled_at == scheduled
+    end
+
+    test "enqueues with expires_at" do
+      attrs = valid_enqueue_attrs()
+      expires = from_now(1, :hour)
+
+      {:ok, entry} = EnqueueCommand.enqueue(attrs, expires_at: expires)
+
+      assert entry.expires_at == expires
+    end
+
+    test "assigns sequential sequence numbers" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, entry1} = EnqueueCommand.enqueue(attrs)
+      {:ok, entry2} = EnqueueCommand.enqueue(attrs)
+      {:ok, entry3} = EnqueueCommand.enqueue(attrs)
+
+      assert entry2.sequence_number == entry1.sequence_number + 1
+      assert entry3.sequence_number == entry2.sequence_number + 1
+    end
+
+    test "broadcasts enqueued event" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, _entry} = EnqueueCommand.enqueue(attrs)
+
+      events = FakeEventPublisher.list_events()
+      assert length(events) >= 1
+
+      event_entry = List.first(events)
+      assert event_entry.topic =~ "target:"
+      assert match?({:command_enqueued, _}, event_entry.event)
+    end
+
+    test "records command_queued event" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, _entry} = EnqueueCommand.enqueue(attrs)
+
+      assert InMemoryEventRecorder.recorded?(:command_queued)
+    end
+  end
+
+  describe "schedule/3" do
+    test "schedules a command for future execution" do
+      attrs = valid_enqueue_attrs()
+      scheduled = from_now(1, :hour)
+
+      {:ok, entry} = EnqueueCommand.schedule(attrs, scheduled)
+
+      assert entry.scheduled_at == scheduled
+      assert entry.status == :pending
+    end
+  end
+
+  describe "enqueue_emergency/2" do
+    test "enqueues with priority 0" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, entry} = EnqueueCommand.enqueue_emergency(attrs)
+
+      assert entry.priority == 0
+    end
+
+    test "overrides any provided priority" do
+      attrs = valid_enqueue_attrs()
+
+      {:ok, entry} = EnqueueCommand.enqueue_emergency(attrs, priority: 5)
+
+      assert entry.priority == 0
+    end
+  end
+
+  describe "enqueue_batch/2" do
+    test "enqueues multiple commands" do
+      commands = [
+        {valid_enqueue_attrs(command_name: "CMD_1"), []},
+        {valid_enqueue_attrs(command_name: "CMD_2"), []},
+        {valid_enqueue_attrs(command_name: "CMD_3"), []}
+      ]
+
+      {:ok, entries} = EnqueueCommand.enqueue_batch(commands)
+
+      assert length(entries) == 3
+      assert Enum.map(entries, & &1.command_name) == ["CMD_1", "CMD_2", "CMD_3"]
+    end
+
+    test "applies base_opts to all commands" do
+      commands = [
+        {valid_enqueue_attrs(command_name: "CMD_1"), []},
+        {valid_enqueue_attrs(command_name: "CMD_2"), []}
+      ]
+
+      {:ok, entries} = EnqueueCommand.enqueue_batch(commands, priority: 1)
+
+      assert Enum.all?(entries, &(&1.priority == 1))
+    end
+
+    test "individual opts override base_opts" do
+      commands = [
+        {valid_enqueue_attrs(command_name: "CMD_1"), [priority: 2]},
+        {valid_enqueue_attrs(command_name: "CMD_2"), []}
+      ]
+
+      {:ok, entries} = EnqueueCommand.enqueue_batch(commands, priority: 3)
+
+      [entry1, entry2] = entries
+      assert entry1.priority == 2
+      assert entry2.priority == 3
+    end
+
+    test "maintains ordering through sequence numbers" do
+      commands = [
+        {valid_enqueue_attrs(command_name: "CMD_1"), []},
+        {valid_enqueue_attrs(command_name: "CMD_2"), []},
+        {valid_enqueue_attrs(command_name: "CMD_3"), []}
+      ]
+
+      {:ok, entries} = EnqueueCommand.enqueue_batch(commands)
+
+      sequences = Enum.map(entries, & &1.sequence_number)
+      assert sequences == Enum.sort(sequences)
+    end
+  end
+
+  # ============================================================================
+  # Test Helpers
+  # ============================================================================
+
+  defp valid_enqueue_attrs(overrides \\ []) do
+    defaults = %{
+      organization_id: random_id(),
+      mission_id: random_id(),
+      target_id: random_id(),
+      command_name: Keyword.get(overrides, :command_name, "TEST_CMD"),
+      user_id: random_id(),
+      parameters: %{"param1" => "value1"}
+    }
+
+    Map.merge(defaults, Map.new(overrides))
+  end
+end
