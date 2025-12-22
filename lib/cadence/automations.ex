@@ -4,46 +4,27 @@ defmodule Cadence.Automations do
 
   Manages automation rules that trigger procedures in response to events
   like alarm state changes, telemetry limit violations, or procedure completions.
+
+  This module serves as the public API facade, delegating to:
+  - `Cadence.Application.Automations.AutomationQueries` for read operations
+  - `Cadence.Application.Automations.AutomationOperations` for write operations
   """
 
-  import Ecto.Query
-  alias Cadence.Repo
-  alias Cadence.Automations.{Automation, AutomationExecution}
+  alias Cadence.Domain.Automations.Entities.Automation
+  alias Cadence.Domain.Automations.Entities.AutomationExecution
+  alias Cadence.Application.Automations.AutomationQueries
+  alias Cadence.Application.Automations.AutomationOperations
 
   # ============================================================================
-  # Automations
+  # Automation Queries
   # ============================================================================
 
   @doc """
   Lists automations for an organization, optionally filtered by mission.
   """
+  @spec list_automations(String.t(), keyword()) :: [Automation.t()]
   def list_automations(organization_id, opts \\ []) do
-    mission_id = Keyword.get(opts, :mission_id)
-    enabled_only = Keyword.get(opts, :enabled_only, false)
-    trigger_type = Keyword.get(opts, :trigger_type)
-
-    Automation
-    |> where([a], a.organization_id == ^organization_id)
-    |> maybe_filter_by_mission(mission_id)
-    |> maybe_filter_enabled(enabled_only)
-    |> maybe_filter_trigger_type(trigger_type)
-    |> order_by([a], asc: a.name)
-    |> Repo.all()
-  end
-
-  defp maybe_filter_by_mission(query, nil), do: query
-
-  defp maybe_filter_by_mission(query, mission_id) do
-    where(query, [a], a.mission_id == ^mission_id or is_nil(a.mission_id))
-  end
-
-  defp maybe_filter_enabled(query, false), do: query
-  defp maybe_filter_enabled(query, true), do: where(query, [a], a.enabled == true)
-
-  defp maybe_filter_trigger_type(query, nil), do: query
-
-  defp maybe_filter_trigger_type(query, trigger_type) do
-    where(query, [a], a.trigger_type == ^trigger_type)
+    AutomationQueries.list(organization_id, opts)
   end
 
   @doc """
@@ -51,19 +32,20 @@ defmodule Cadence.Automations do
 
   Returns `nil` if not found or if the automation doesn't belong to the organization.
   """
+  @spec get_automation(String.t(), String.t()) :: Automation.t() | nil
   def get_automation(id, organization_id) do
-    Automation
-    |> where([a], a.id == ^id and a.organization_id == ^organization_id)
-    |> Repo.one()
+    case AutomationQueries.find(id, organization_id) do
+      {:ok, automation} -> automation
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
   Gets a single automation scoped to an organization, raises if not found.
   """
+  @spec get_automation!(String.t(), String.t()) :: Automation.t()
   def get_automation!(id, organization_id) do
-    Automation
-    |> where([a], a.id == ^id and a.organization_id == ^organization_id)
-    |> Repo.one!()
+    AutomationQueries.find!(id, organization_id)
   end
 
   @doc """
@@ -72,99 +54,116 @@ defmodule Cadence.Automations do
   WARNING: This bypasses multi-tenancy. Only use for internal operations
   where organization context is verified elsewhere (e.g., automation engine).
   """
-  def get_automation_unscoped(id), do: Repo.get(Automation, id)
+  @spec get_automation_unscoped(String.t()) :: Automation.t() | nil
+  def get_automation_unscoped(id) do
+    case AutomationQueries.find_unscoped(id) do
+      {:ok, automation} -> automation
+      {:error, :not_found} -> nil
+    end
+  end
+
+  @doc """
+  Lists enabled automations for a specific mission.
+  """
+  @spec list_enabled_for_mission(String.t(), String.t()) :: [Automation.t()]
+  def list_enabled_for_mission(organization_id, mission_id) do
+    AutomationQueries.list_enabled_for_mission(organization_id, mission_id)
+  end
+
+  # ============================================================================
+  # Automation Operations
+  # ============================================================================
 
   @doc """
   Creates an automation.
   """
+  @spec create_automation(map()) :: {:ok, Automation.t()} | {:error, term()}
   def create_automation(attrs) do
-    %Automation{}
-    |> Automation.changeset(attrs)
-    |> Repo.insert()
+    AutomationOperations.create(attrs)
   end
 
   @doc """
   Updates an automation.
   """
+  @spec update_automation(Automation.t(), map()) :: {:ok, Automation.t()} | {:error, term()}
   def update_automation(%Automation{} = automation, attrs) do
-    automation
-    |> Automation.changeset(attrs)
-    |> Repo.update()
+    AutomationOperations.update(automation, attrs)
   end
 
   @doc """
   Deletes an automation.
   """
+  @spec delete_automation(Automation.t()) :: {:ok, Automation.t()} | {:error, term()}
   def delete_automation(%Automation{} = automation) do
-    Repo.delete(automation)
+    AutomationOperations.delete(automation)
   end
 
   @doc """
   Enables an automation.
   """
+  @spec enable_automation(Automation.t()) :: {:ok, Automation.t()} | {:error, term()}
   def enable_automation(%Automation{} = automation) do
-    update_automation(automation, %{enabled: true})
+    AutomationOperations.enable(automation)
   end
 
   @doc """
   Disables an automation.
   """
+  @spec disable_automation(Automation.t()) :: {:ok, Automation.t()} | {:error, term()}
   def disable_automation(%Automation{} = automation) do
-    update_automation(automation, %{enabled: false})
+    AutomationOperations.disable(automation)
   end
 
   @doc """
   Records that an automation was triggered.
   Updates the trigger tracking fields.
   """
+  @spec record_trigger(Automation.t()) :: {:ok, Automation.t()} | {:error, term()}
   def record_trigger(%Automation{} = automation) do
-    automation
-    |> Automation.trigger_changeset(%{
-      last_triggered_at: DateTime.utc_now(),
-      trigger_count: (automation.trigger_count || 0) + 1
-    })
-    |> Repo.update()
+    AutomationOperations.record_trigger(automation)
   end
 
   # ============================================================================
   # Executions
   # ============================================================================
 
+  # Get configured execution repository
+  defp execution_repo do
+    Application.get_env(
+      :cadence,
+      :automation_execution_repository,
+      Cadence.Adapters.Persistence.Ecto.Automations.EctoAutomationExecutionRepository
+    )
+  end
+
   @doc """
   Lists automation executions, optionally filtered.
   """
+  @spec list_executions(keyword()) :: [AutomationExecution.t()]
   def list_executions(opts \\ []) do
-    organization_id = Keyword.get(opts, :organization_id)
-    mission_id = Keyword.get(opts, :mission_id)
-    automation_id = Keyword.get(opts, :automation_id)
-    status = Keyword.get(opts, :status)
-    limit = Keyword.get(opts, :limit, 50)
-
-    AutomationExecution
-    |> maybe_filter(:organization_id, organization_id)
-    |> maybe_filter(:mission_id, mission_id)
-    |> maybe_filter(:automation_id, automation_id)
-    |> maybe_filter(:status, status)
-    |> order_by([e], desc: e.inserted_at)
-    |> limit(^limit)
-    |> Repo.all()
+    execution_repo().list(opts)
   end
-
-  defp maybe_filter(query, _field, nil), do: query
-  defp maybe_filter(query, field, value), do: where(query, [e], field(e, ^field) == ^value)
 
   @doc """
   Gets an execution by ID.
   """
-  def get_execution(id), do: Repo.get(AutomationExecution, id)
+  @spec get_execution(String.t()) :: AutomationExecution.t() | nil
+  def get_execution(id) do
+    case execution_repo().find(id) do
+      {:ok, execution} -> execution
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Gets an execution by ID with preloads.
   """
+  @spec get_execution!(String.t()) :: AutomationExecution.t()
   def get_execution!(id) do
-    AutomationExecution
-    |> Repo.get!(id)
-    |> Repo.preload([:automation])
+    case execution_repo().find_with_automation(id) do
+      {:ok, execution} -> execution
+      {:error, :not_found} -> raise "AutomationExecution not found: #{id}"
+    end
   end
 
   @doc """
@@ -173,31 +172,22 @@ defmodule Cadence.Automations do
   If the execution has an idempotency_key that already exists, returns
   `{:error, :duplicate}` to signal that this is a duplicate event.
   """
+  @spec create_execution(map()) :: {:ok, AutomationExecution.t()} | {:error, :duplicate | term()}
   def create_execution(attrs) do
-    %AutomationExecution{}
-    |> AutomationExecution.changeset(attrs)
-    |> Repo.insert()
-    |> case do
-      {:ok, execution} ->
-        {:ok, execution}
-
-      {:error, %Ecto.Changeset{errors: errors} = changeset} ->
-        # Check if this is a duplicate idempotency key error
-        if Keyword.has_key?(errors, :idempotency_key) do
-          {:error, :duplicate}
-        else
-          {:error, changeset}
-        end
+    with {:ok, execution} <- AutomationExecution.new(attrs) do
+      execution_repo().save(execution)
     end
   end
 
   @doc """
   Updates an execution's status.
   """
+  @spec update_execution_status(AutomationExecution.t(), map()) ::
+          {:ok, AutomationExecution.t()} | {:error, term()}
   def update_execution_status(%AutomationExecution{} = execution, attrs) do
-    execution
-    |> AutomationExecution.status_changeset(attrs)
-    |> Repo.update()
+    with {:ok, updated} <- AutomationExecution.update_status(execution, attrs) do
+      execution_repo().save(updated)
+    end
   end
 
   # ============================================================================
@@ -212,32 +202,10 @@ defmodule Cadence.Automations do
   - `{:error, :cooldown}` if still in cooldown period
   - `{:error, :rate_limited}` if max executions per hour exceeded
   """
+  @spec check_rate_limits(Automation.t()) ::
+          {:ok, :allowed} | {:error, :cooldown | :rate_limited}
   def check_rate_limits(%Automation{} = automation) do
-    cond do
-      in_cooldown?(automation) ->
-        {:error, :cooldown}
-
-      rate_limited?(automation) ->
-        {:error, :rate_limited}
-
-      true ->
-        {:ok, :allowed}
-    end
-  end
-
-  defp in_cooldown?(%Automation{cooldown_seconds: nil}), do: false
-  defp in_cooldown?(%Automation{cooldown_seconds: 0}), do: false
-  defp in_cooldown?(%Automation{last_triggered_at: nil}), do: false
-
-  defp in_cooldown?(%Automation{cooldown_seconds: seconds, last_triggered_at: last}) do
-    cooldown_end = DateTime.add(last, seconds, :second)
-    DateTime.compare(DateTime.utc_now(), cooldown_end) == :lt
-  end
-
-  defp rate_limited?(%Automation{max_executions_per_hour: nil}), do: false
-
-  defp rate_limited?(%Automation{id: id, max_executions_per_hour: max}) do
-    count_recent_executions(id) >= max
+    AutomationOperations.check_rate_limits(automation)
   end
 
   @doc """
@@ -245,14 +213,10 @@ defmodule Cadence.Automations do
 
   Used for rate limiting checks.
   """
+  @spec count_recent_executions(String.t()) :: non_neg_integer()
   def count_recent_executions(automation_id) do
     one_hour_ago = DateTime.add(DateTime.utc_now(), -1, :hour)
-
-    AutomationExecution
-    |> where([e], e.automation_id == ^automation_id)
-    |> where([e], e.inserted_at >= ^one_hour_ago)
-    |> select([e], count(e.id))
-    |> Repo.one()
+    execution_repo().count_recent(automation_id, one_hour_ago)
   end
 
   # ============================================================================
@@ -264,57 +228,8 @@ defmodule Cadence.Automations do
 
   Returns `true` if all conditions match, `false` otherwise.
   """
-  def matches_conditions?(%Automation{trigger_conditions: nil}, _event), do: true
-
-  def matches_conditions?(%Automation{trigger_conditions: conditions}, _event)
-      when conditions == %{},
-      do: true
-
-  def matches_conditions?(%Automation{trigger_conditions: conditions}, event) do
-    Enum.all?(conditions, fn {key, value} ->
-      matches_condition?(key, value, event)
-    end)
+  @spec matches_conditions?(Automation.t(), map()) :: boolean()
+  def matches_conditions?(%Automation{} = automation, event) do
+    Automation.matches_conditions?(automation, event)
   end
-
-  defp matches_condition?("severity_in", severities, event) when is_list(severities) do
-    event_severity = Map.get(event, :severity) || Map.get(event, "severity")
-    to_string(event_severity) in Enum.map(severities, &to_string/1)
-  end
-
-  defp matches_condition?("item_pattern", pattern, event) do
-    item_name = Map.get(event, :item_name) || Map.get(event, "item_name")
-    item_name && String.match?(item_name, ~r/#{pattern}/)
-  end
-
-  defp matches_condition?("alarm_rule_id", rule_id, event) do
-    event_rule_id = Map.get(event, :alarm_rule_id) || Map.get(event, "alarm_rule_id")
-    to_string(event_rule_id) == to_string(rule_id)
-  end
-
-  defp matches_condition?("target_id", target_id, event) do
-    event_target_id = Map.get(event, :target_id) || Map.get(event, "target_id")
-    to_string(event_target_id) == to_string(target_id)
-  end
-
-  defp matches_condition?("state_in", states, event) when is_list(states) do
-    event_state = Map.get(event, :new_state) || Map.get(event, "new_state")
-    to_string(event_state) in Enum.map(states, &to_string/1)
-  end
-
-  defp matches_condition?("previous_state_in", states, event) when is_list(states) do
-    previous_state = Map.get(event, :previous_state) || Map.get(event, "previous_state")
-    to_string(previous_state) in Enum.map(states, &to_string/1)
-  end
-
-  defp matches_condition?("procedure_id", procedure_id, event) do
-    event_proc_id = Map.get(event, :procedure_id) || Map.get(event, "procedure_id")
-    to_string(event_proc_id) == to_string(procedure_id)
-  end
-
-  defp matches_condition?("procedure_name_pattern", pattern, event) do
-    proc_name = Map.get(event, :procedure_name) || Map.get(event, "procedure_name")
-    proc_name && String.match?(proc_name, ~r/#{pattern}/)
-  end
-
-  defp matches_condition?(_key, _value, _event), do: true
 end

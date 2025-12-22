@@ -374,6 +374,12 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
           {:error, %Ecto.Changeset{} = changeset} ->
             {:noreply, assign_form(socket, changeset)}
+
+          {:error, reason} ->
+            # Handle domain entity errors
+            {:noreply,
+             socket
+             |> put_flash(:error, format_domain_error(reason))}
         end
 
       {:error, _} ->
@@ -416,6 +422,12 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
           {:error, %Ecto.Changeset{} = changeset} ->
             {:noreply, assign_form(socket, changeset)}
+
+          {:error, reason} ->
+            # Handle domain entity errors
+            {:noreply,
+             socket
+             |> put_flash(:error, format_domain_error(reason))}
         end
 
       {:error, _} ->
@@ -462,6 +474,46 @@ defmodule CadenceWeb.TargetLive.FormComponent do
   end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
+
+  # Formats domain entity errors for display
+  defp format_domain_error({:required, field}) do
+    "#{humanize_field(field)} is required"
+  end
+
+  defp format_domain_error({:invalid, field}) do
+    "#{humanize_field(field)} is invalid"
+  end
+
+  defp format_domain_error({:invalid_identifier, _}) do
+    "Identifier must be uppercase alphanumeric with hyphens/underscores"
+  end
+
+  defp format_domain_error({:invalid_type, _}) do
+    "Invalid target type"
+  end
+
+  defp format_domain_error({:invalid_status, _}) do
+    "Invalid status"
+  end
+
+  defp format_domain_error(%{} = errors) when is_map(errors) do
+    # Handle validation error maps from Ecto
+    errors
+    |> Enum.map(fn {field, messages} -> "#{humanize_field(field)}: #{Enum.join(messages, ", ")}" end)
+    |> Enum.join("; ")
+  end
+
+  defp format_domain_error(error) when is_binary(error), do: error
+  defp format_domain_error(error), do: "An error occurred: #{inspect(error)}"
+
+  defp humanize_field(field) when is_atom(field) do
+    field
+    |> Atom.to_string()
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp humanize_field(field), do: to_string(field)
 
   # Returns a status label for a DefinitionSet based on its lifecycle fields
   defp version_status_label(%DefinitionSet{published_at: nil}), do: "(draft)"

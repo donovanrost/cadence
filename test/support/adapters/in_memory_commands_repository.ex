@@ -134,6 +134,12 @@ defmodule Cadence.Test.Adapters.InMemoryCommandsRepository do
     end)
   end
 
+  @impl true
+  def ensure_loaded(command, _opts \\ []) do
+    # In-memory commands are always fully loaded
+    command
+  end
+
   # ============================================================================
   # Test Helpers
   # ============================================================================

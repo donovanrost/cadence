@@ -5,7 +5,8 @@ defmodule CadenceWeb.MissionLive.Schedules do
   use CadenceWeb, :live_view
 
   alias Cadence.{Schedules, Procedures}
-  alias Cadence.Schedules.Schedule
+  # Use Ecto schema for form handling (changesets), domain entity for operations
+  alias Cadence.Schedules.Schedule, as: ScheduleSchema
 
   @impl true
   def mount(_params, _session, socket) do
@@ -49,7 +50,7 @@ defmodule CadenceWeb.MissionLive.Schedules do
     |> assign(:page_title, "New Schedule")
     |> assign(:schedules, schedules)
     |> assign(:procedures, procedures)
-    |> assign(:schedule, %Schedule{
+    |> assign(:schedule, %ScheduleSchema{
       enabled: true,
       schedule_type: :cron,
       timezone: "UTC"
@@ -58,16 +59,19 @@ defmodule CadenceWeb.MissionLive.Schedules do
 
   defp apply_action(socket, :edit, %{"schedule_id" => schedule_id}) do
     mission = socket.assigns.mission
-    schedule = Schedules.get_schedule!(schedule_id)
+    schedule_entity = Schedules.get_schedule!(schedule_id, mission.organization_id)
     schedules = Schedules.list_schedules(mission.organization_id, mission_id: mission.id)
     procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
 
-    if schedule.mission_id == mission.id do
+    if schedule_entity.mission_id == mission.id do
+      # Convert domain entity to Ecto schema for form changeset handling
+      schedule_schema = entity_to_schema(schedule_entity)
+
       socket
       |> assign(:page_title, "Edit Schedule")
       |> assign(:schedules, schedules)
       |> assign(:procedures, procedures)
-      |> assign(:schedule, schedule)
+      |> assign(:schedule, schedule_schema)
     else
       socket
       |> put_flash(:error, "Schedule not found in this mission")
@@ -87,8 +91,8 @@ defmodule CadenceWeb.MissionLive.Schedules do
 
   @impl true
   def handle_event("toggle", %{"id" => schedule_id}, socket) do
-    schedule = Schedules.get_schedule!(schedule_id)
     mission = socket.assigns.mission
+    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
     scope = socket.assigns.current_scope
 
     if schedule.mission_id == mission.id do
@@ -127,8 +131,8 @@ defmodule CadenceWeb.MissionLive.Schedules do
 
   @impl true
   def handle_event("run_now", %{"id" => schedule_id}, socket) do
-    schedule = Schedules.get_schedule!(schedule_id)
     mission = socket.assigns.mission
+    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
     scope = socket.assigns.current_scope
 
     if schedule.mission_id == mission.id do
@@ -154,8 +158,8 @@ defmodule CadenceWeb.MissionLive.Schedules do
 
   @impl true
   def handle_event("delete", %{"id" => schedule_id}, socket) do
-    schedule = Schedules.get_schedule!(schedule_id)
     mission = socket.assigns.mission
+    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
     scope = socket.assigns.current_scope
 
     if schedule.mission_id == mission.id do
@@ -290,5 +294,29 @@ defmodule CadenceWeb.MissionLive.Schedules do
       />
     </.modal>
     """
+  end
+
+  # Converts a domain entity to an Ecto schema for form changeset handling
+  defp entity_to_schema(entity) do
+    %ScheduleSchema{
+      id: entity.id,
+      name: entity.name,
+      description: entity.description,
+      enabled: entity.enabled,
+      schedule_type: entity.schedule_type,
+      cron_expression: entity.cron_expression,
+      scheduled_at: entity.scheduled_at,
+      timezone: entity.timezone,
+      parameters: entity.parameters,
+      last_run_at: entity.last_run_at,
+      next_run_at: entity.next_run_at,
+      run_count: entity.run_count,
+      procedure_id: entity.procedure_id,
+      organization_id: entity.organization_id,
+      mission_id: entity.mission_id,
+      target_id: entity.target_id,
+      inserted_at: entity.inserted_at,
+      updated_at: entity.updated_at
+    }
   end
 end

@@ -33,10 +33,6 @@ defmodule Cadence.Commands do
       :ok = Commands.validate_arguments(cmd, %{"target_temp" => 25.0})
   """
 
-  import Ecto.Query
-
-  alias Cadence.Repo
-
   alias Cadence.MissionDatabase.{MetaCommand, Argument}
 
   alias Cadence.Commands.{
@@ -54,9 +50,14 @@ defmodule Cadence.Commands do
   alias Cadence.Telemetry.CurrentValueTable
 
   alias Cadence.Ports.Repository.Commanding.CommandsRepository
+  alias Cadence.Ports.Repository.Commanding.QueueRepository
+  alias Cadence.Domain.Commanding.Entities.QueuedCommand
 
   # Repository accessor for MetaCommand lookups
   defp commands_repo, do: CommandsRepository.impl()
+
+  # Repository accessor for queue operations
+  defp queue_repo, do: QueueRepository.impl()
 
   # ============================================================================
   # MetaCommand Lookup Operations
@@ -152,7 +153,7 @@ defmodule Cadence.Commands do
       end
   """
   def validate_arguments(%MetaCommand{} = command, args) when is_map(args) do
-    command = Repo.preload(command, :arguments)
+    command = commands_repo().ensure_loaded(command, associations: [:arguments])
 
     errors =
       command.arguments
@@ -937,54 +938,31 @@ defmodule Cadence.Commands do
 
   @doc """
   Gets a queue entry by ID.
+
+  Returns a QueuedCommand domain entity.
   """
-  @spec get_queue_entry(String.t()) :: QueueEntry.t() | nil
+  @spec get_queue_entry(String.t()) :: QueuedCommand.t() | nil
   def get_queue_entry(id) do
-    Repo.get(QueueEntry, id)
+    case queue_repo().find(id) do
+      {:ok, entry} -> entry
+      {:error, :not_found} -> nil
+    end
   end
 
   @doc """
-  Lists queue entries by status.
+  Lists queue entries for a mission.
+
+  Returns QueuedCommand domain entities ordered by priority, then sequence number.
 
   ## Options
 
   - `:limit` - Max entries to return (default: 100)
   - `:status` - Filter by status (:pending, :executing, :completed, :failed, :cancelled, :expired)
+  - `:target_id` - Filter by specific target
   """
-  @spec list_queue_entries(String.t(), keyword()) :: [QueueEntry.t()]
+  @spec list_queue_entries(String.t(), keyword()) :: [QueuedCommand.t()]
   def list_queue_entries(mission_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 100)
-    status = Keyword.get(opts, :status)
-    target_id = Keyword.get(opts, :target_id)
-    preload = Keyword.get(opts, :preload, [])
-
-    # Order by status (PG enum defines order: executing, pending, failed, completed, cancelled, expired),
-    # then by command priority, then sequence number
-    query =
-      from(e in QueueEntry,
-        where: e.mission_id == ^mission_id,
-        order_by: [asc: e.status, asc: e.priority, asc: e.sequence_number],
-        limit: ^limit
-      )
-
-    query =
-      if status do
-        statuses = List.wrap(status)
-        from(e in query, where: e.status in ^statuses)
-      else
-        query
-      end
-
-    query =
-      if target_id do
-        from(e in query, where: e.target_id == ^target_id)
-      else
-        query
-      end
-
-    query
-    |> Repo.all()
-    |> Repo.preload(preload)
+    queue_repo().list(mission_id, opts)
   end
 
   @doc """
@@ -994,15 +972,7 @@ defmodule Cadence.Commands do
   """
   @spec get_mission_queue_metrics(String.t()) :: map()
   def get_mission_queue_metrics(mission_id) do
-    # Get status counts
-    status_counts =
-      from(e in QueueEntry,
-        where: e.mission_id == ^mission_id,
-        group_by: e.status,
-        select: {e.status, count(e.id)}
-      )
-      |> Repo.all()
-      |> Map.new()
+    status_counts = queue_repo().count_by_status_for_mission(mission_id)
 
     pending = Map.get(status_counts, :pending, 0)
     executing = Map.get(status_counts, :executing, 0)

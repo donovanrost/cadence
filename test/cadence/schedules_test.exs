@@ -100,7 +100,7 @@ defmodule Cadence.SchedulesTest do
       org: org,
       procedure: procedure
     } do
-      {:error, changeset} =
+      {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Schedule",
           organization_id: org.id,
@@ -108,14 +108,15 @@ defmodule Cadence.SchedulesTest do
           schedule_type: :cron
         })
 
-      assert errors_on(changeset).cron_expression != nil
+      # Domain entity returns error tuples
+      assert error == {:required_for_cron, :cron_expression}
     end
 
     test "create_schedule/1 validates scheduled_at required for once type", %{
       org: org,
       procedure: procedure
     } do
-      {:error, changeset} =
+      {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Schedule",
           organization_id: org.id,
@@ -123,11 +124,12 @@ defmodule Cadence.SchedulesTest do
           schedule_type: :once
         })
 
-      assert errors_on(changeset).scheduled_at != nil
+      # Domain entity returns error tuples
+      assert error == {:required_for_once, :scheduled_at}
     end
 
     test "create_schedule/1 validates cron expression syntax", %{org: org, procedure: procedure} do
-      {:error, changeset} =
+      {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Cron",
           organization_id: org.id,
@@ -136,7 +138,8 @@ defmodule Cadence.SchedulesTest do
           cron_expression: "not a cron"
         })
 
-      assert errors_on(changeset).cron_expression != nil
+      # Domain entity returns error tuples
+      assert error == {:invalid, :cron_expression}
     end
 
     test "update_schedule/2 updates schedule", %{
@@ -158,7 +161,7 @@ defmodule Cadence.SchedulesTest do
       schedule = schedule_fixture(org, mission, procedure)
 
       {:ok, _} = Schedules.delete_schedule(schedule)
-      assert Schedules.get_schedule(schedule.id) == nil
+      assert Schedules.get_schedule(schedule.id, org.id) == nil
     end
 
     test "enable_schedule/1 enables schedule", %{

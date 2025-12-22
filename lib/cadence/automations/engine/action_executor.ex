@@ -21,6 +21,23 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
   """
   def execute(action_type, action_config, trigger_event, context)
 
+  # Handle atom action types (from domain entity)
+  def execute(:execute_procedure, config, trigger_event, context) do
+    execute("execute_procedure", config, trigger_event, context)
+  end
+
+  def execute(:acknowledge_alarm, config, trigger_event, context) do
+    execute("acknowledge_alarm", config, trigger_event, context)
+  end
+
+  def execute(:shelve_alarm, config, trigger_event, context) do
+    execute("shelve_alarm", config, trigger_event, context)
+  end
+
+  def execute(:send_notification, config, trigger_event, context) do
+    execute("send_notification", config, trigger_event, context)
+  end
+
   def execute("execute_procedure", config, trigger_event, context) do
     procedure_id = config["procedure_id"]
     parameters = build_parameters(config, trigger_event)

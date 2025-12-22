@@ -7,133 +7,120 @@ defmodule Cadence.Schedules do
   - One-time at a specific datetime
 
   Schedules are registered with Oban's Cron plugin for automatic execution.
+
+  This module serves as the public API facade, delegating to:
+  - `Cadence.Application.Schedules.ScheduleQueries` for read operations
+  - `Cadence.Application.Schedules.ScheduleOperations` for write operations
   """
 
-  import Ecto.Query
-  alias Cadence.Repo
-  alias Cadence.Schedules.Schedule
+  alias Cadence.Domain.Schedules.Entities.Schedule
+  alias Cadence.Application.Schedules.ScheduleQueries
+  alias Cadence.Application.Schedules.ScheduleOperations
 
   # ============================================================================
-  # Schedules
+  # Schedule Queries
   # ============================================================================
 
   @doc """
   Lists schedules for an organization, optionally filtered.
+
+  ## Options
+
+  - `:mission_id` - Filter by mission
+  - `:procedure_id` - Filter by procedure
+  - `:enabled_only` - Only return enabled schedules
+  - `:limit` - Maximum number of results
+  - `:offset` - Pagination offset
   """
+  @spec list_schedules(String.t(), keyword()) :: [Schedule.t()]
   def list_schedules(organization_id, opts \\ []) do
-    mission_id = Keyword.get(opts, :mission_id)
-    procedure_id = Keyword.get(opts, :procedure_id)
-    enabled_only = Keyword.get(opts, :enabled_only, false)
-
-    Schedule
-    |> where([s], s.organization_id == ^organization_id)
-    |> maybe_filter_by_mission(mission_id)
-    |> maybe_filter_by_procedure(procedure_id)
-    |> maybe_filter_enabled(enabled_only)
-    |> order_by([s], asc: s.name)
-    |> Repo.all()
-    |> Repo.preload(:procedure)
+    ScheduleQueries.list(organization_id, opts)
   end
-
-  defp maybe_filter_by_mission(query, nil), do: query
-
-  defp maybe_filter_by_mission(query, mission_id) do
-    where(query, [s], s.mission_id == ^mission_id or is_nil(s.mission_id))
-  end
-
-  defp maybe_filter_by_procedure(query, nil), do: query
-
-  defp maybe_filter_by_procedure(query, procedure_id) do
-    where(query, [s], s.procedure_id == ^procedure_id)
-  end
-
-  defp maybe_filter_enabled(query, false), do: query
-  defp maybe_filter_enabled(query, true), do: where(query, [s], s.enabled == true)
 
   @doc """
-  Gets a single schedule.
+  Gets a single schedule scoped to an organization.
+
+  Returns `nil` if not found or if the schedule doesn't belong to the organization.
   """
-  def get_schedule(id), do: Repo.get(Schedule, id)
+  @spec get_schedule(String.t(), String.t()) :: Schedule.t() | nil
+  def get_schedule(id, organization_id) do
+    case ScheduleQueries.find(id, organization_id) do
+      {:ok, schedule} -> schedule
+      {:error, :not_found} -> nil
+    end
+  end
+
+  @doc """
+  Gets a single schedule by ID without organization scoping.
+
+  WARNING: Only use for internal operations where organization context is verified elsewhere.
+  """
+  @spec get_schedule_unscoped(String.t()) :: Schedule.t() | nil
+  def get_schedule_unscoped(id) do
+    case ScheduleQueries.find_unscoped(id) do
+      {:ok, schedule} -> schedule
+      {:error, :not_found} -> nil
+    end
+  end
 
   @doc """
   Gets a single schedule, raises if not found.
   """
-  def get_schedule!(id) do
-    Schedule
-    |> Repo.get!(id)
-    |> Repo.preload(:procedure)
+  @spec get_schedule!(String.t(), String.t()) :: Schedule.t()
+  def get_schedule!(id, organization_id) do
+    ScheduleQueries.find!(id, organization_id)
   end
+
+  # ============================================================================
+  # Schedule Operations
+  # ============================================================================
 
   @doc """
   Creates a schedule.
   """
+  @spec create_schedule(map()) :: {:ok, Schedule.t()} | {:error, term()}
   def create_schedule(attrs) do
-    result =
-      %Schedule{}
-      |> Schedule.changeset(attrs)
-      |> Repo.insert()
-
-    case result do
-      {:ok, schedule} ->
-        schedule = Repo.preload(schedule, :procedure)
-        {:ok, schedule}
-
-      error ->
-        error
-    end
+    ScheduleOperations.create(attrs)
   end
 
   @doc """
   Updates a schedule.
   """
+  @spec update_schedule(Schedule.t(), map()) :: {:ok, Schedule.t()} | {:error, term()}
   def update_schedule(%Schedule{} = schedule, attrs) do
-    result =
-      schedule
-      |> Schedule.changeset(attrs)
-      |> Repo.update()
-
-    case result do
-      {:ok, schedule} ->
-        schedule = Repo.preload(schedule, :procedure)
-        {:ok, schedule}
-
-      error ->
-        error
-    end
+    ScheduleOperations.update(schedule, attrs)
   end
 
   @doc """
   Deletes a schedule.
   """
+  @spec delete_schedule(Schedule.t()) :: {:ok, Schedule.t()} | {:error, term()}
   def delete_schedule(%Schedule{} = schedule) do
-    Repo.delete(schedule)
+    ScheduleOperations.delete(schedule)
   end
 
   @doc """
   Enables a schedule.
   """
+  @spec enable_schedule(Schedule.t()) :: {:ok, Schedule.t()} | {:error, term()}
   def enable_schedule(%Schedule{} = schedule) do
-    update_schedule(schedule, %{enabled: true})
+    ScheduleOperations.enable(schedule)
   end
 
   @doc """
   Disables a schedule.
   """
+  @spec disable_schedule(Schedule.t()) :: {:ok, Schedule.t()} | {:error, term()}
   def disable_schedule(%Schedule{} = schedule) do
-    update_schedule(schedule, %{enabled: false})
+    ScheduleOperations.disable(schedule)
   end
 
   @doc """
   Records that a schedule was executed.
   """
+  @spec record_run(Schedule.t(), DateTime.t() | nil) :: {:ok, Schedule.t()} | {:error, term()}
   def record_run(%Schedule{} = schedule, next_run_at \\ nil) do
-    schedule
-    |> Schedule.run_changeset(%{
-      last_run_at: DateTime.utc_now(),
-      next_run_at: next_run_at,
-      run_count: (schedule.run_count || 0) + 1
-    })
-    |> Repo.update()
+    ScheduleOperations.record_run(schedule, next_run_at)
   end
 
   # ============================================================================
@@ -143,44 +130,36 @@ defmodule Cadence.Schedules do
   @doc """
   Gets all enabled cron schedules for registration with Oban.
 
-  Returns a list of tuples: {cron_expression, worker_module, args}
+  Returns a list of tuples: {cron_expression, {worker_module, args}}
   """
+  @spec get_cron_jobs() :: [{String.t(), {module(), keyword()}}]
   def get_cron_jobs do
-    Schedule
-    |> where([s], s.enabled == true)
-    |> where([s], s.schedule_type == :cron)
-    |> where([s], not is_nil(s.cron_expression))
-    |> Repo.all()
-    |> Enum.map(&schedule_to_cron_job/1)
-  end
-
-  defp schedule_to_cron_job(%Schedule{} = schedule) do
-    {schedule.cron_expression,
-     {Cadence.Schedules.Workers.ExecuteScheduleWorker,
-      [schedule_id: schedule.id, name: "schedule:#{schedule.id}"]}}
+    ScheduleQueries.list_cron_jobs()
   end
 
   @doc """
   Gets one-time schedules that are due for execution.
   """
+  @spec get_due_once_schedules() :: [Schedule.t()]
   def get_due_once_schedules do
-    now = DateTime.utc_now()
-
-    Schedule
-    |> where([s], s.enabled == true)
-    |> where([s], s.schedule_type == :once)
-    |> where([s], s.scheduled_at <= ^now)
-    |> where([s], is_nil(s.last_run_at))
-    |> Repo.all()
-    |> Repo.preload(:procedure)
+    ScheduleQueries.list_due_once()
   end
 
   @doc """
-  Enqueues a one-time schedule for immediate execution.
+  Enqueues a schedule for immediate execution.
   """
+  @spec enqueue_schedule(Schedule.t()) :: {:ok, Oban.Job.t()} | {:error, term()}
   def enqueue_schedule(%Schedule{} = schedule) do
-    %{schedule_id: schedule.id}
-    |> Cadence.Schedules.Workers.ExecuteScheduleWorker.new()
-    |> Oban.insert()
+    ScheduleOperations.enqueue(schedule)
+  end
+
+  @doc """
+  Enqueues all due one-time schedules for execution.
+
+  Called periodically by a background job.
+  """
+  @spec enqueue_due_once_schedules() :: {:ok, non_neg_integer()}
+  def enqueue_due_once_schedules do
+    ScheduleOperations.enqueue_due_once_schedules()
   end
 end

@@ -96,3 +96,15 @@ defmodule Cadence.Shifts.Shift do
   def statuses, do: @statuses
   def shift_types, do: @shift_types
 end
+
+defimpl Cadence.Buckets.Bucketable, for: Cadence.Shifts.Shift do
+  @moduledoc false
+
+  def bucket_type(_), do: :shift
+  def bucketable_type(_), do: :shift
+  def bucket_name(shift), do: shift.name
+  def bucket_started_at(shift), do: shift.scheduled_start
+  def bucket_ended_at(shift), do: shift.scheduled_end
+  def parent_bucket_id(_), do: nil
+  def bucket_metadata(shift), do: shift.metadata || %{}
+end

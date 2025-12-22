@@ -30,7 +30,7 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   defp apply_action(socket, :index, _params) do
     mission = socket.assigns.mission
-    targets = Targets.list_targets(mission)
+    targets = Targets.list_targets_with_preloads(mission)
     interfaces = Interfaces.list_interfaces(mission)
 
     socket
@@ -42,7 +42,7 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   defp apply_action(socket, :new, _params) do
     mission = socket.assigns.mission
-    targets = Targets.list_targets(mission)
+    targets = Targets.list_targets_with_preloads(mission)
     interfaces = Interfaces.list_interfaces(mission)
 
     socket
@@ -55,14 +55,15 @@ defmodule CadenceWeb.MissionLive.Targets do
   defp apply_action(socket, :edit, %{"target_id" => target_id}) do
     mission = socket.assigns.mission
 
-    case Targets.get_target(target_id, mission.id) do
+    # Use schema version for form compatibility
+    case Targets.get_target_schema_unscoped(target_id) do
       nil ->
         socket
         |> put_flash(:error, "Target not found in this mission")
         |> push_patch(to: ~p"/missions/#{mission}/targets")
 
       target ->
-        targets = Targets.list_targets(mission)
+        targets = Targets.list_targets_with_preloads(mission)
         interfaces = Interfaces.list_interfaces(mission)
 
         socket
@@ -75,7 +76,7 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   @impl true
   def handle_info({CadenceWeb.TargetLive.FormComponent, {:saved, _target}}, socket) do
-    targets = Targets.list_targets(socket.assigns.mission)
+    targets = Targets.list_targets_with_preloads(socket.assigns.mission)
     {:noreply, assign(socket, :targets, targets)}
   end
 
@@ -85,15 +86,15 @@ defmodule CadenceWeb.MissionLive.Targets do
     scope = socket.assigns.current_scope
 
     case Targets.get_target(target_id, mission.id) do
-      nil ->
+      {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Target not found in this mission")}
 
-      target ->
+      {:ok, target} ->
         case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
           :ok ->
             case Targets.delete_target(target) do
               {:ok, _} ->
-                targets = Targets.list_targets(mission)
+                targets = Targets.list_targets_with_preloads(mission)
 
                 {:noreply,
                  socket

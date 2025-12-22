@@ -142,7 +142,21 @@ defmodule Cadence.Test.Adapters.InMemoryQueueRepository do
   end
 
   @impl true
-  def count_by_status(mission_id) do
+  def count_by_status(target_id) do
+    Agent.get(__MODULE__, fn state ->
+      initial = %{pending: 0, executing: 0, completed: 0, failed: 0, cancelled: 0, expired: 0}
+
+      state.entries
+      |> Map.values()
+      |> Enum.filter(&(&1.target_id == target_id))
+      |> Enum.reduce(initial, fn entry, acc ->
+        Map.update(acc, entry.status, 1, &(&1 + 1))
+      end)
+    end)
+  end
+
+  @impl true
+  def count_by_status_for_mission(mission_id) do
     Agent.get(__MODULE__, fn state ->
       initial = %{pending: 0, executing: 0, completed: 0, failed: 0, cancelled: 0, expired: 0}
 

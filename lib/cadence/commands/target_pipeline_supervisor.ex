@@ -48,12 +48,12 @@ defmodule Cadence.Commands.TargetPipelineSupervisor do
   Returns `{:ok, pid}` or `{:error, reason}`.
   """
   def start_pipeline(mission_id, target_id) do
-    # Use scoped get_target! to ensure target belongs to mission
+    # Use scoped get_target to ensure target belongs to mission
     case Targets.get_target(target_id, mission_id) do
-      nil ->
+      {:error, :not_found} ->
         {:error, :target_not_found}
 
-      _target ->
+      {:ok, _target} ->
         child_spec = {TargetPipeline, mission_id: mission_id, target_id: target_id}
         DynamicSupervisor.start_child(via_tuple(mission_id), child_spec)
     end

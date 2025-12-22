@@ -14,7 +14,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   require Logger
 
   alias Cadence.Automations
-  alias Cadence.Automations.Automation
+  alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Automations.Engine.ActionExecutor
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
   alias Cadence.Ports.Recordings.EventRecorder
@@ -266,11 +266,14 @@ defmodule Cadence.Automations.Engine.AutomationManager do
 
   defp process_event(trigger_type, event, state) do
     # Find matching automations for this trigger type
+    # The domain entity stores trigger_type as an atom, so convert for comparison
+    trigger_type_atom = String.to_existing_atom(trigger_type)
+
     matching_automations =
       state.table
       |> :ets.tab2list()
       |> Enum.filter(fn {_id, automation} ->
-        automation.trigger_type == trigger_type &&
+        automation.trigger_type == trigger_type_atom &&
           Automations.matches_conditions?(automation, event)
       end)
       |> Enum.map(fn {_id, automation} -> automation end)

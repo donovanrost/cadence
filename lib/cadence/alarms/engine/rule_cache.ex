@@ -228,8 +228,8 @@ defmodule Cadence.Alarms.Engine.RuleCache do
 
       :error ->
         case Targets.get_target_by_identifier(mission_id, target_id) do
-          %{id: uuid} -> uuid
-          nil -> nil
+          {:ok, %{id: uuid}} -> uuid
+          {:error, :not_found} -> nil
         end
     end
   end

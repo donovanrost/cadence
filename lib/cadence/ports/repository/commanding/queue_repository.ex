@@ -68,11 +68,18 @@ defmodule Cadence.Ports.Repository.Commanding.QueueRepository do
   @callback claim_next(target_id()) :: {:ok, QueuedCommand.t()} | {:error, :queue_empty}
 
   @doc """
-  Counts entries by status for a mission.
+  Counts entries by status for a target.
 
   Returns a map like `%{pending: 5, executing: 1, completed: 100, ...}`.
   """
-  @callback count_by_status(mission_id()) :: %{status() => non_neg_integer()}
+  @callback count_by_status(target_id()) :: %{status() => non_neg_integer()}
+
+  @doc """
+  Counts entries by status for a mission (all targets).
+
+  Returns a map like `%{pending: 5, executing: 1, completed: 100, ...}`.
+  """
+  @callback count_by_status_for_mission(mission_id()) :: %{status() => non_neg_integer()}
 
   @doc """
   Enqueues a new command, assigning it the next sequence number.

@@ -112,4 +112,10 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoCommandsRepository do
 
     Repo.one(query) || 0
   end
+
+  @impl true
+  def ensure_loaded(%MetaCommand{} = command, opts \\ []) do
+    associations = Keyword.get(opts, :associations, [:arguments])
+    Repo.preload(command, associations)
+  end
 end

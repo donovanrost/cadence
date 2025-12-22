@@ -18,7 +18,7 @@ defmodule Cadence.Application.Automations.AutomationQueries do
       {:ok, automation} = AutomationQueries.find(id, organization_id)
   """
 
-  alias Cadence.Automations.Automation
+  alias Cadence.Domain.Automations.Entities.Automation
 
   @type id :: String.t()
   @type organization_id :: String.t()

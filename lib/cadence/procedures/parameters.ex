@@ -448,7 +448,7 @@ defmodule Cadence.Procedures.Parameters do
   # ============================================================================
 
   defp target_exists?(mission_id, target_id) do
-    Targets.get_target(target_id, mission_id) != nil
+    match?({:ok, _}, Targets.get_target(target_id, mission_id))
   end
 
   @doc """

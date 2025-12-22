@@ -116,6 +116,7 @@ config :cadence, :execution_operations, Cadence.Adapters.Persistence.Ecto.Proced
 config :cadence, :missions_repository, Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository
 config :cadence, :settings_repository, Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository
 config :cadence, :notification_repository, Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationRepository
+config :cadence, :target_repository, Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository
 
 # Messaging adapters
 config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender

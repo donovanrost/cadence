@@ -52,64 +52,63 @@ defmodule Cadence.AutomationsTest do
           name: "Test Automation",
           organization_id: org.id,
           mission_id: mission.id,
-          trigger_type: "alarm_fired",
+          trigger_type: :alarm_fired,
           trigger_conditions: %{"severity_in" => ["critical"]},
-          action_type: "execute_procedure",
+          action_type: :execute_procedure,
           action_config: %{"procedure_id" => procedure.id}
         })
 
       assert automation.name == "Test Automation"
-      assert automation.trigger_type == "alarm_fired"
+      assert automation.trigger_type == :alarm_fired
       assert automation.enabled == true
     end
 
     test "create_automation/1 validates required fields", %{org: org} do
-      {:error, changeset} =
+      {:error, error} =
         Automations.create_automation(%{
           organization_id: org.id
         })
 
-      assert errors_on(changeset).name != nil
-      assert errors_on(changeset).trigger_type != nil
-      assert errors_on(changeset).action_type != nil
+      # Domain entity returns error tuples like {:required, :field}
+      assert error == {:required, :name}
     end
 
     test "create_automation/1 validates trigger_type", %{org: org} do
-      {:error, changeset} =
+      {:error, error} =
         Automations.create_automation(%{
           name: "Test",
           organization_id: org.id,
           trigger_type: "invalid_type",
-          action_type: "execute_procedure",
+          action_type: :execute_procedure,
           action_config: %{"procedure_id" => Ecto.UUID.generate()}
         })
 
-      assert errors_on(changeset).trigger_type != nil
+      assert error == {:invalid, :trigger_type}
     end
 
     test "create_automation/1 validates action_type", %{org: org} do
-      {:error, changeset} =
+      {:error, error} =
         Automations.create_automation(%{
           name: "Test",
           organization_id: org.id,
-          trigger_type: "alarm_fired",
+          trigger_type: :alarm_fired,
           action_type: "invalid_action"
         })
 
-      assert errors_on(changeset).action_type != nil
+      assert error == {:invalid, :action_type}
     end
 
     test "create_automation/1 validates execute_procedure requires procedure_id", %{org: org} do
-      {:error, changeset} =
+      {:error, error} =
         Automations.create_automation(%{
           name: "Test",
           organization_id: org.id,
-          trigger_type: "alarm_fired",
-          action_type: "execute_procedure",
+          trigger_type: :alarm_fired,
+          action_type: :execute_procedure,
           action_config: %{}
         })
 
-      assert errors_on(changeset).action_config != nil
+      assert error == {:missing_config, :procedure_id}
     end
 
     test "update_automation/2 updates automation", %{org: org, mission: mission} do
@@ -123,7 +122,7 @@ defmodule Cadence.AutomationsTest do
       automation = automation_fixture(organization: org, mission: mission)
 
       {:ok, _} = Automations.delete_automation(automation)
-      assert Automations.get_automation(automation.id) == nil
+      assert Automations.get_automation(automation.id, org.id) == nil
     end
 
     test "enable_automation/1 enables automation", %{org: org, mission: mission} do
@@ -359,14 +358,25 @@ defmodule Cadence.AutomationsTest do
     mission = Keyword.get(opts, :mission)
     procedure_id = Keyword.get(opts, :procedure_id, Ecto.UUID.generate())
 
+    # Convert string trigger_type to atom if provided as string
+    trigger_type = Keyword.get(opts, :trigger_type, :alarm_fired)
+
+    trigger_type =
+      if is_binary(trigger_type), do: String.to_atom(trigger_type), else: trigger_type
+
+    action_type = Keyword.get(opts, :action_type, :execute_procedure)
+
+    action_type =
+      if is_binary(action_type), do: String.to_atom(action_type), else: action_type
+
     attrs =
       %{
         name: "Test Automation #{System.unique_integer([:positive])}",
         organization_id: org.id,
         mission_id: mission && mission.id,
-        trigger_type: Keyword.get(opts, :trigger_type, "alarm_fired"),
+        trigger_type: trigger_type,
         trigger_conditions: Keyword.get(opts, :trigger_conditions, %{}),
-        action_type: Keyword.get(opts, :action_type, "execute_procedure"),
+        action_type: action_type,
         action_config: Keyword.get(opts, :action_config, %{"procedure_id" => procedure_id}),
         enabled: Keyword.get(opts, :enabled, true),
         cooldown_seconds: Keyword.get(opts, :cooldown_seconds, 0)

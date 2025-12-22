@@ -85,6 +85,18 @@ defmodule Cadence.Ports.Repository.Commanding.CommandsRepository do
   @callback count(definition_set_id()) :: non_neg_integer()
 
   @doc """
+  Ensures a MetaCommand has its associations loaded.
+
+  Used when a command may have been fetched without associations,
+  or when validating arguments requires the arguments association.
+
+  ## Options
+
+  - `:associations` - List of associations to ensure are loaded (default: [:arguments])
+  """
+  @callback ensure_loaded(MetaCommand.t(), opts()) :: MetaCommand.t()
+
+  @doc """
   Returns the configured commands repository implementation.
   """
   @spec impl() :: module()

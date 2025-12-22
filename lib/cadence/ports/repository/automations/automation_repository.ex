@@ -13,7 +13,7 @@ defmodule Cadence.Ports.Repository.Automations.AutomationRepository do
   - `Cadence.Test.Adapters.InMemoryAutomationRepository` - In-memory for tests
   """
 
-  alias Cadence.Automations.Automation
+  alias Cadence.Domain.Automations.Entities.Automation
 
   @type id :: String.t()
   @type organization_id :: String.t()

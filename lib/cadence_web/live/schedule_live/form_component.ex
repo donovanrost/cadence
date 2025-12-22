@@ -241,7 +241,11 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
   end
 
   defp save_schedule(socket, :edit, schedule_params) do
-    case Schedules.update_schedule(socket.assigns.schedule, schedule_params) do
+    # Look up the domain entity by ID for the update operation
+    schedule_entity =
+      Schedules.get_schedule!(socket.assigns.schedule.id, socket.assigns.mission.organization_id)
+
+    case Schedules.update_schedule(schedule_entity, atomize_keys(schedule_params)) do
       {:ok, schedule} ->
         notify_parent({:saved, schedule})
 
@@ -250,13 +254,14 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
          |> put_flash(:info, "Schedule updated successfully")
          |> push_patch(to: socket.assigns.patch)}
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+      {:error, reason} ->
+        # Domain entity returns error tuples, not changesets
+        {:noreply, put_flash(socket, :error, "Failed to update schedule: #{inspect(reason)}")}
     end
   end
 
   defp save_schedule(socket, :new, schedule_params) do
-    case Schedules.create_schedule(schedule_params) do
+    case Schedules.create_schedule(atomize_keys(schedule_params)) do
       {:ok, schedule} ->
         notify_parent({:saved, schedule})
 
@@ -265,8 +270,9 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
          |> put_flash(:info, "Schedule created successfully")
          |> push_patch(to: socket.assigns.patch)}
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+      {:error, reason} ->
+        # Domain entity returns error tuples, not changesets
+        {:noreply, put_flash(socket, :error, "Failed to create schedule: #{inspect(reason)}")}
     end
   end
 
@@ -321,4 +327,40 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
   defp weekday_name("6"), do: "Saturday"
   defp weekday_name("7"), do: "Sunday"
   defp weekday_name(other), do: "day #{other}"
+
+  # Convert string keys to atom keys for domain entity
+  defp atomize_keys(map) when is_map(map) do
+    Map.new(map, fn
+      {key, value} when is_binary(key) ->
+        {String.to_existing_atom(key), atomize_value(value)}
+
+      {key, value} ->
+        {key, atomize_value(value)}
+    end)
+  rescue
+    ArgumentError ->
+      # If atom doesn't exist, just use safe atom conversion for known keys
+      Map.new(map, fn
+        {key, value} when is_binary(key) -> {safe_atomize(key), atomize_value(value)}
+        {key, value} -> {key, atomize_value(value)}
+      end)
+  end
+
+  defp atomize_value(%{} = value), do: atomize_keys(value)
+  defp atomize_value(value), do: value
+
+  # Safe atom conversion for known schedule keys
+  defp safe_atomize("name"), do: :name
+  defp safe_atomize("description"), do: :description
+  defp safe_atomize("procedure_id"), do: :procedure_id
+  defp safe_atomize("organization_id"), do: :organization_id
+  defp safe_atomize("mission_id"), do: :mission_id
+  defp safe_atomize("target_id"), do: :target_id
+  defp safe_atomize("schedule_type"), do: :schedule_type
+  defp safe_atomize("cron_expression"), do: :cron_expression
+  defp safe_atomize("scheduled_at"), do: :scheduled_at
+  defp safe_atomize("timezone"), do: :timezone
+  defp safe_atomize("parameters"), do: :parameters
+  defp safe_atomize("enabled"), do: :enabled
+  defp safe_atomize(key), do: String.to_atom(key)
 end

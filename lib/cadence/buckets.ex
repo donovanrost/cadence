@@ -31,7 +31,7 @@ defmodule Cadence.Buckets do
   import Ecto.Query, warn: false
 
   alias Cadence.Repo
-  alias Cadence.Buckets.{Bucket, BucketMembership}
+  alias Cadence.Buckets.{Bucket, BucketMembership, Bucketable}
 
   # ============================================================================
   # Bucket CRUD
@@ -48,20 +48,48 @@ defmodule Cadence.Buckets do
   end
 
   @doc """
+  Creates a bucket for any entity that implements the Bucketable protocol.
+
+  ## Options
+
+  - `:organization_id` - Required. The organization this bucket belongs to.
+  - `:mission_id` - Optional. The mission this bucket belongs to.
+
+  ## Examples
+
+      iex> create_bucket_for(shift, organization_id: org.id, mission_id: mission.id)
+      {:ok, %Bucket{}}
+
+  """
+  @spec create_bucket_for(struct(), keyword()) :: {:ok, Bucket.t()} | {:error, Ecto.Changeset.t()}
+  def create_bucket_for(bucketable, opts \\ []) do
+    attrs = %{
+      organization_id: Keyword.fetch!(opts, :organization_id),
+      mission_id: Keyword.get(opts, :mission_id),
+      bucket_type: Bucketable.bucket_type(bucketable) |> Atom.to_string(),
+      bucketable_type: Bucketable.bucketable_type(bucketable) |> Atom.to_string(),
+      bucketable_id: bucketable.id,
+      name: Bucketable.bucket_name(bucketable),
+      started_at: Bucketable.bucket_started_at(bucketable),
+      ended_at: Bucketable.bucket_ended_at(bucketable),
+      parent_id: Bucketable.parent_bucket_id(bucketable),
+      metadata: Bucketable.bucket_metadata(bucketable)
+    }
+
+    create_bucket_with_path(attrs)
+  end
+
+  @doc """
   Creates a bucket for a shift.
+
+  Deprecated: Use `create_bucket_for/2` with a Shift that implements Bucketable.
   """
   @spec create_bucket_for_shift(struct()) :: {:ok, Bucket.t()} | {:error, Ecto.Changeset.t()}
   def create_bucket_for_shift(shift) do
-    create_bucket(%{
+    create_bucket_for(shift,
       organization_id: shift.organization_id,
-      mission_id: shift.mission_id,
-      bucket_type: "shift",
-      bucketable_type: "Shift",
-      bucketable_id: shift.id,
-      name: shift.name,
-      started_at: shift.scheduled_start,
-      ended_at: shift.scheduled_end
-    })
+      mission_id: shift.mission_id
+    )
   end
 
   @doc """

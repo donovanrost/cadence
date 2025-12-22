@@ -18,7 +18,7 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"schedule_id" => schedule_id}}) do
-    case Schedules.get_schedule(schedule_id) do
+    case Schedules.get_schedule_unscoped(schedule_id) do
       nil ->
         Logger.warning("Schedule #{schedule_id} not found, skipping execution")
         :ok

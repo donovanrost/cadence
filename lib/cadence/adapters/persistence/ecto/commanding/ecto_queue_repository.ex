@@ -152,6 +152,19 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
   end
 
   @impl true
+  def count_by_status_for_mission(mission_id) do
+    query =
+      from q in QueueEntrySchema,
+        where: q.mission_id == ^mission_id,
+        group_by: q.status,
+        select: {q.status, count(q.id)}
+
+    query
+    |> Repo.all()
+    |> Enum.into(%{})
+  end
+
+  @impl true
   def cancel_all_pending(target_id) do
     now = DateTime.utc_now()
 

@@ -6,7 +6,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   enabling/disabling schedules, and recording execution events.
 
   All operations:
-  1. Validate using schema/changeset logic
+  1. Validate using domain entity logic
   2. Persist via repository
   3. Optionally broadcast for updates
 
@@ -22,7 +22,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
       {:ok, schedule} = ScheduleOperations.record_run(schedule, next_run_at)
   """
 
-  alias Cadence.Schedules.Schedule
+  alias Cadence.Domain.Schedules.Entities.Schedule
   alias Cadence.Application.Schedules.ScheduleQueries
 
   @type schedule_id :: String.t()
@@ -67,19 +67,14 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, schedule}` - Successfully created
-  - `{:error, changeset}` - Validation failed
+  - `{:error, reason}` - Validation failed
   """
-  @spec create(map()) :: {:ok, Schedule.t()} | {:error, Ecto.Changeset.t()}
+  @spec create(map()) :: {:ok, Schedule.t()} | {:error, term()}
   def create(attrs) do
-    schedule = struct(Schedule, attrs)
-
-    case repo().save(schedule) do
-      {:ok, saved} ->
-        broadcast_change(saved, :created)
-        {:ok, saved}
-
-      error ->
-        error
+    with {:ok, schedule} <- Schedule.new(attrs),
+         {:ok, saved} <- repo().save(schedule) do
+      broadcast_change(saved, :created)
+      {:ok, saved}
     end
   end
 
@@ -94,19 +89,14 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, schedule}` - Successfully updated
-  - `{:error, changeset}` - Validation failed
+  - `{:error, reason}` - Validation failed
   """
-  @spec update(Schedule.t(), map()) :: {:ok, Schedule.t()} | {:error, Ecto.Changeset.t()}
+  @spec update(Schedule.t(), map()) :: {:ok, Schedule.t()} | {:error, term()}
   def update(%Schedule{} = schedule, attrs) do
-    updated = struct(schedule, attrs)
-
-    case repo().save(updated) do
-      {:ok, saved} ->
-        broadcast_change(saved, :updated)
-        {:ok, saved}
-
-      error ->
-        error
+    with {:ok, updated} <- Schedule.update(schedule, attrs),
+         {:ok, saved} <- repo().save(updated) do
+      broadcast_change(saved, :updated)
+      {:ok, saved}
     end
   end
 
@@ -136,7 +126,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, schedule}` - Successfully enabled
-  - `{:error, changeset}` - Update failed
+  - `{:error, reason}` - Update failed
   """
   @spec enable(Schedule.t()) :: {:ok, Schedule.t()} | {:error, term()}
   def enable(%Schedule{} = schedule) do
@@ -156,7 +146,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, schedule}` - Successfully disabled
-  - `{:error, changeset}` - Update failed
+  - `{:error, reason}` - Update failed
   """
   @spec disable(Schedule.t()) :: {:ok, Schedule.t()} | {:error, term()}
   def disable(%Schedule{} = schedule) do
@@ -183,7 +173,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, schedule}` - Successfully recorded
-  - `{:error, changeset}` - Update failed
+  - `{:error, reason}` - Update failed
   """
   @spec record_run(Schedule.t(), DateTime.t() | nil) :: {:ok, Schedule.t()} | {:error, term()}
   def record_run(%Schedule{} = schedule, next_run_at \\ nil) do
@@ -205,7 +195,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   ## Returns
 
   - `{:ok, job}` - Successfully enqueued
-  - `{:error, changeset}` - Enqueue failed
+  - `{:error, reason}` - Enqueue failed
   """
   @spec enqueue(Schedule.t()) :: {:ok, Oban.Job.t()} | {:error, term()}
   def enqueue(%Schedule{} = schedule) do

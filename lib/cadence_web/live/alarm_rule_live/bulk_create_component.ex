@@ -294,8 +294,8 @@ defmodule CadenceWeb.AlarmRuleLive.BulkCreateComponent do
 
   defp get_target_identifier(target_id) do
     case Targets.get_target_unscoped(target_id) do
-      nil -> nil
-      target -> target.identifier
+      {:error, :not_found} -> nil
+      {:ok, target} -> target.identifier
     end
   end
 

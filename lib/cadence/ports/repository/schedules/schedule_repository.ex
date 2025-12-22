@@ -13,7 +13,7 @@ defmodule Cadence.Ports.Repository.Schedules.ScheduleRepository do
   - `Cadence.Test.Adapters.InMemoryScheduleRepository` - In-memory for tests
   """
 
-  alias Cadence.Schedules.Schedule
+  alias Cadence.Domain.Schedules.Entities.Schedule
 
   @type id :: String.t()
   @type organization_id :: String.t()

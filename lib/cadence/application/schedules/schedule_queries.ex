@@ -18,7 +18,7 @@ defmodule Cadence.Application.Schedules.ScheduleQueries do
       {:ok, schedule} = ScheduleQueries.find(id, organization_id)
   """
 
-  alias Cadence.Schedules.Schedule
+  alias Cadence.Domain.Schedules.Entities.Schedule
 
   @type id :: String.t()
   @type organization_id :: String.t()

@@ -10,9 +10,9 @@ defmodule CadenceWeb.TargetLive.Show do
 
   @impl true
   def handle_params(%{"id" => id}, _, socket) do
-    # Use unscoped because we need to fetch target to determine its mission for authorization
+    # Use schema version for LiveView form compatibility (changesets work with Ecto schemas)
     # Authorization is enforced via Bodyguard below
-    target = Targets.get_target_unscoped!(id)
+    target = Targets.get_target_schema_unscoped!(id)
     mission = Missions.get_mission_unscoped!(target.mission_id)
     scope = socket.assigns.current_scope
 
