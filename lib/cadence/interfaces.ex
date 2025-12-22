@@ -1,15 +1,49 @@
 defmodule Cadence.Interfaces do
   @moduledoc """
-  The Interfaces context - boundary for interface-related operations.
+  The Interfaces context - facade for interface-related operations.
 
-  This context handles:
-  - Interface CRUD operations
-  - Interface status tracking
-  - Protocol configuration management
+  This module delegates to hexagonal architecture application services while
+  maintaining backward compatibility with existing code that uses Ecto schemas.
 
-  Interfaces represent the physical/network connections to targets or data sources.
-  They handle connection management and protocol framing following the OpenC3 COSMOS
-  architecture.
+  ## Architecture
+
+  This context is built on hexagonal architecture with the following layers:
+
+  - **Domain**: `Cadence.Domain.Interfaces.Entities.*` - Pure business entities
+  - **Ports**: `Cadence.Ports.Repository.Interfaces.*` - Repository contracts
+  - **Adapters**: `Cadence.Adapters.Persistence.Ecto.Interfaces.*` - Ecto implementations
+  - **Application**: `Cadence.Application.Interfaces.*` - Use case orchestration
+
+  ## For New Code
+
+  Prefer using the application services directly:
+
+      alias Cadence.Application.Interfaces.{InterfaceQueries, InterfaceOperations}
+
+      # Find interface with protocols (for GenServers)
+      {:ok, interface} = InterfaceQueries.find_with_protocols(id)
+
+      # Create interface
+      {:ok, interface} = InterfaceOperations.create(attrs)
+
+      # Add protocol to chain
+      {:ok, interface} = InterfaceOperations.add_protocol(interface_id, protocol_attrs)
+
+  ## Data Plane Compatibility
+
+  The hexagonal layer emits PubSub events on configuration changes,
+  enabling future Data Plane / Control Plane architecture:
+
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:\#{mission_id}:interface_config")
+
+      def handle_info({:interface_updated, interface}, state) do
+        # Reload interface GenServer with new config
+      end
+
+  ## Legacy Support
+
+  Functions in this module maintain backward compatibility with existing code
+  that works with Ecto schemas directly.
   """
 
   import Ecto.Query, warn: false
@@ -19,6 +53,11 @@ defmodule Cadence.Interfaces do
   alias Cadence.Interfaces.InterfaceProtocol
   alias Cadence.Interfaces.TargetInterface
   alias Cadence.Missions.Mission
+
+  # Application services for new hexagonal architecture
+  alias Cadence.Application.Interfaces.InterfaceQueries
+  alias Cadence.Application.Interfaces.InterfaceOperations
+  alias Cadence.Application.Interfaces.RoutingOperations
 
   ## Interface CRUD
 
@@ -421,5 +460,95 @@ defmodule Cadence.Interfaces do
         |> TargetInterface.changeset(%{direction: new_direction})
         |> Repo.update()
     end
+  end
+
+  # ===========================================================================
+  # Domain Entity Access (New API - Returns Domain Entities)
+  # ===========================================================================
+
+  @doc """
+  Finds an interface and returns a domain entity.
+
+  Use this when you want to work with the hexagonal architecture.
+  """
+  @spec find_interface(String.t()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, :not_found}
+  def find_interface(id), do: InterfaceQueries.find(id)
+
+  @doc """
+  Finds an interface with protocols preloaded and returns a domain entity.
+
+  This is the preferred method for loading interfaces that will be used
+  by GenServers, as it includes all protocol chain configuration.
+  """
+  @spec find_interface_with_protocols(String.t()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, :not_found}
+  def find_interface_with_protocols(id), do: InterfaceQueries.find_with_protocols(id)
+
+  @doc """
+  Lists interfaces for a mission as domain entities.
+  """
+  @spec list_interfaces_as_entities(String.t(), keyword()) ::
+          [Cadence.Domain.Interfaces.Entities.Interface.t()]
+  def list_interfaces_as_entities(mission_id, opts \\ []) do
+    InterfaceQueries.list_for_mission(mission_id, opts)
+  end
+
+  @doc """
+  Creates an interface using the hexagonal architecture.
+
+  Returns a domain entity. Emits `:interface_created` event.
+  """
+  @spec create_interface_entity(map()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
+  def create_interface_entity(attrs), do: InterfaceOperations.create(attrs)
+
+  @doc """
+  Updates an interface using the hexagonal architecture.
+
+  Returns a domain entity. Emits `:interface_updated` event.
+  """
+  @spec update_interface_entity(String.t(), map()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
+  def update_interface_entity(interface_id, attrs) do
+    InterfaceOperations.update(interface_id, attrs)
+  end
+
+  @doc """
+  Deletes an interface using the hexagonal architecture.
+
+  Emits `:interface_deleted` event.
+  """
+  @spec delete_interface_entity(String.t()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
+  def delete_interface_entity(interface_id), do: InterfaceOperations.delete(interface_id)
+
+  @doc """
+  Adds a protocol to an interface's chain using the hexagonal architecture.
+
+  Returns a domain entity. Emits `:interface_protocols_updated` event.
+  """
+  @spec add_protocol_entity(String.t(), map()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
+  def add_protocol_entity(interface_id, protocol_attrs) do
+    InterfaceOperations.add_protocol(interface_id, protocol_attrs)
+  end
+
+  @doc """
+  Creates a target-interface routing using the hexagonal architecture.
+
+  Returns a domain entity. Emits `:routing_created` event.
+  """
+  @spec create_routing(map()) ::
+          {:ok, Cadence.Domain.Interfaces.Entities.TargetInterface.t()} | {:error, term()}
+  def create_routing(attrs), do: RoutingOperations.create(attrs)
+
+  @doc """
+  Lists routings for an interface as domain entities.
+  """
+  @spec list_routings_for_interface(String.t()) ::
+          [Cadence.Domain.Interfaces.Entities.TargetInterface.t()]
+  def list_routings_for_interface(interface_id) do
+    RoutingOperations.list_for_interface(interface_id)
   end
 end

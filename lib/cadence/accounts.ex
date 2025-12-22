@@ -1,12 +1,50 @@
 defmodule Cadence.Accounts do
   @moduledoc """
-  The Accounts context.
+  The Accounts context - facade for user and authentication operations.
+
+  This module delegates to hexagonal architecture application services while
+  maintaining backward compatibility with existing code that uses Ecto schemas.
+
+  ## Architecture
+
+  This context is built on hexagonal architecture with the following layers:
+
+  - **Domain**: `Cadence.Domain.Accounts.Entities.*` - Pure business entities
+  - **Ports**: `Cadence.Ports.Repository.Accounts.*` - Repository contracts
+  - **Adapters**: `Cadence.Adapters.Persistence.Ecto.Accounts.*` - Ecto implementations
+  - **Application**: `Cadence.Application.Accounts.*` - Use case orchestration
+
+  ## For New Code
+
+  Prefer using the application services directly:
+
+      alias Cadence.Application.Accounts.{UserQueries, UserOperations, SessionOperations}
+
+      # Find user
+      {:ok, user} = UserQueries.find(id)
+
+      # Authenticate
+      {:ok, user} = SessionOperations.authenticate_by_password(email, password)
+
+      # Create session
+      {:ok, token, user} = SessionOperations.create_session(user_id)
+
+  ## Legacy Support
+
+  Functions in this module maintain backward compatibility with existing code
+  that works with Ecto schemas directly.
   """
 
   import Ecto.Query, warn: false
   alias Cadence.Repo
 
   alias Cadence.Accounts.{User, UserToken, UserNotifier}
+
+  # Application services for new hexagonal architecture
+  alias Cadence.Application.Accounts.UserQueries
+  alias Cadence.Application.Accounts.UserOperations
+  alias Cadence.Application.Accounts.SessionOperations
+  alias Cadence.Application.Accounts.MagicLinkOperations
 
   ## Database getters
 
@@ -389,4 +427,85 @@ defmodule Cadence.Accounts do
       end
     end)
   end
+
+  # ===========================================================================
+  # Domain Entity Access (New API - Returns Domain Entities)
+  # ===========================================================================
+
+  @doc """
+  Finds a user and returns a domain entity.
+
+  Use this when you want to work with the hexagonal architecture.
+  """
+  @spec find_user(String.t()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, :not_found}
+  def find_user(id), do: UserQueries.find(id)
+
+  @doc """
+  Finds a user by email and returns a domain entity.
+  """
+  @spec find_user_by_email(String.t()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, :not_found}
+  def find_user_by_email(email), do: UserQueries.find_by_email(email)
+
+  @doc """
+  Lists users as domain entities.
+  """
+  @spec list_users_as_entities(keyword()) :: [Cadence.Domain.Accounts.Entities.User.t()]
+  def list_users_as_entities(opts \\ []), do: UserQueries.list(opts)
+
+  @doc """
+  Registers a user using the hexagonal architecture.
+
+  Returns a domain entity.
+  """
+  @spec register_user_entity(map()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, term()}
+  def register_user_entity(attrs), do: UserOperations.register(attrs)
+
+  @doc """
+  Authenticates a user by email and password using the hexagonal architecture.
+
+  Returns a domain entity.
+  """
+  @spec authenticate_user(String.t(), String.t()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, :invalid_credentials}
+  def authenticate_user(email, password) do
+    SessionOperations.authenticate_by_password(email, password)
+  end
+
+  @doc """
+  Creates a session using the hexagonal architecture.
+
+  Returns `{:ok, token, user}` where user is a domain entity.
+  """
+  @spec create_session(String.t()) ::
+          {:ok, binary(), Cadence.Domain.Accounts.Entities.User.t()} | {:error, term()}
+  def create_session(user_id), do: SessionOperations.create_session(user_id)
+
+  @doc """
+  Validates a session token using the hexagonal architecture.
+
+  Returns `{:ok, user}` where user is a domain entity.
+  """
+  @spec validate_session(binary()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, term()}
+  def validate_session(token), do: SessionOperations.validate_session(token)
+
+  @doc """
+  Generates a magic link token for a user.
+
+  Returns `{:ok, url_token}` where url_token is base64-encoded.
+  """
+  @spec generate_magic_link(String.t()) :: {:ok, String.t()} | {:error, term()}
+  def generate_magic_link(user_id), do: MagicLinkOperations.generate(user_id)
+
+  @doc """
+  Verifies and consumes a magic link token.
+
+  Returns `{:ok, user}` where user is a domain entity.
+  """
+  @spec verify_magic_link(String.t()) ::
+          {:ok, Cadence.Domain.Accounts.Entities.User.t()} | {:error, term()}
+  def verify_magic_link(url_token), do: MagicLinkOperations.verify_and_consume(url_token)
 end
