@@ -208,7 +208,7 @@ defmodule Cadence.Commands.TargetQueue do
 
     # These are internal GenServer processes - use unscoped as mission context
     # is already verified through the supervision tree
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     target = Targets.get_target_unscoped!(target_id)
 
     # Subscribe to outbox events for this target

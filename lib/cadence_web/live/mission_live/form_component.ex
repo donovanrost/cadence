@@ -96,33 +96,43 @@ defmodule CadenceWeb.MissionLive.FormComponent do
 
   defp save_mission(socket, :edit, mission_params) do
     scope = socket.assigns.current_scope
+    mission = socket.assigns.mission
 
-    case Missions.update_mission_authorized(socket.assigns.mission, mission_params, scope) do
-      {:ok, mission} ->
-        notify_parent({:saved, mission})
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        case Missions.update_mission(mission.id, mission.organization_id, mission_params) do
+          {:ok, updated_mission} ->
+            notify_parent({:saved, updated_mission})
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Mission updated successfully")
-         |> push_patch(to: socket.assigns.patch)}
+            {:noreply,
+             socket
+             |> put_flash(:info, "Mission updated successfully")
+             |> push_patch(to: socket.assigns.patch)}
 
-      {:error, :unauthorized} ->
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Failed to update mission: #{inspect(reason)}")
+             |> assign_form(Mission.changeset(mission, mission_params))}
+        end
+
+      {:error, _} ->
         {:noreply,
          socket
          |> put_flash(:error, "You don't have permission to update this mission")
          |> push_patch(to: socket.assigns.patch)}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
     end
   end
 
   defp save_mission(socket, :new, mission_params) do
-    # Add creator_user_id so mission_membership is auto-created
-    params_with_creator =
-      Map.put(mission_params, "creator_user_id", socket.assigns.current_user.id)
+    org_id = mission_params["organization_id"]
+    creator_user_id = socket.assigns.current_user.id
 
-    case Missions.create_mission(params_with_creator) do
+    attrs =
+      mission_params
+      |> Map.put("creator_user_id", creator_user_id)
+
+    case Missions.create_mission(org_id, attrs) do
       {:ok, mission} ->
         notify_parent({:saved, mission})
 
@@ -131,8 +141,11 @@ defmodule CadenceWeb.MissionLive.FormComponent do
          |> put_flash(:info, "Mission created successfully")
          |> push_patch(to: socket.assigns.patch)}
 
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_form(socket, changeset)}
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to create mission: #{inspect(reason)}")
+         |> assign_form(Mission.changeset(socket.assigns.mission, mission_params))}
     end
   end
 

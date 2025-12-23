@@ -16,7 +16,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
 
   defp apply_action(socket, :index, %{"id" => mission_id, "interface_id" => interface_id}) do
     # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     interface = Interfaces.get_interface!(interface_id)
     scope = socket.assigns.current_scope
 
@@ -50,7 +50,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
 
   defp apply_action(socket, :new, %{"id" => mission_id, "interface_id" => interface_id}) do
     # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     interface = Interfaces.get_interface!(interface_id)
     scope = socket.assigns.current_scope
 
@@ -88,7 +88,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
          "protocol_id" => protocol_id
        }) do
     # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     interface = Interfaces.get_interface!(interface_id)
     protocol = Interfaces.get_protocol!(protocol_id)
     scope = socket.assigns.current_scope

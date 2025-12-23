@@ -16,11 +16,10 @@ defmodule Cadence.Missions.Policy do
 
   @behaviour Bodyguard.Policy
 
-  import Ecto.Query
   alias Cadence.Accounts.{User, Scope}
-  alias Cadence.Missions.{Mission, MissionMembership}
+  alias Cadence.Missions.Mission
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Repo
+  alias Cadence.Application.Missions.MissionQueries
 
   # System admins can do anything
   def authorize(_action, %Scope{system_admin?: true}, %Mission{}), do: :ok
@@ -117,9 +116,9 @@ defmodule Cadence.Missions.Policy do
   defp check_mission_role_permission(_, _), do: :error
 
   defp get_mission_role(user_id, mission_id) do
-    MissionMembership
-    |> where([mm], mm.user_id == ^user_id and mm.mission_id == ^mission_id)
-    |> select([mm], mm.role)
-    |> Repo.one()
+    case MissionQueries.get_user_role(user_id, mission_id) do
+      {:ok, role} -> Atom.to_string(role)
+      {:error, :not_found} -> nil
+    end
   end
 end

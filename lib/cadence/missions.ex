@@ -1,408 +1,259 @@
 defmodule Cadence.Missions do
   @moduledoc """
-  The Missions context - boundary for mission-related operations.
+  The Missions context - facade for mission-related operations.
 
-  This context handles:
-  - Mission CRUD operations
-  - Mission lifecycle (starting/stopping runtime supervision trees)
-  - Mission membership management
-  - Mission-scoped queries
+  This module delegates to hexagonal architecture application services:
 
-  Persistence is delegated to the MissionsRepository port, allowing for
-  different storage implementations (Ecto, in-memory for tests, etc.).
-
-  ## Hexagonal Architecture
-
-  This facade delegates to the application layer services:
-  - `Cadence.Application.Missions.MissionQueries` - Read operations
-  - `Cadence.Application.Missions.MissionOperations` - Write operations
+  - `Cadence.Application.Missions.MissionQueries` - Mission read operations
+  - `Cadence.Application.Missions.MissionOperations` - Mission write operations
   - `Cadence.Application.Missions.MembershipOperations` - Membership management
 
-  Domain entities are returned for new code, while Ecto schemas are still
-  supported for backward compatibility with LiveView forms and existing code.
+  ## Domain Entities
+
+  All functions return domain entities from `Cadence.Domain.Missions.Entities.*`,
+  not Ecto schemas.
+
+  ## Usage
+
+      # Find a mission (scoped)
+      {:ok, mission} = Missions.get_mission(id, org_id)
+
+      # Find a mission (unscoped - for internal use)
+      {:ok, mission} = Missions.get_mission(id)
+
+      # Create a mission
+      {:ok, mission} = Missions.create_mission(org_id, attrs)
+
+      # Start mission runtime
+      {:ok, mission} = Missions.start_mission(mission_id, org_id)
+
+  ## Form Helpers
+
+  Some functions return Ecto changesets for Phoenix form compatibility.
+  These are clearly marked in the documentation.
   """
 
-  import Ecto.Query, warn: false
-  alias Cadence.Repo
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Domain.Missions.Entities.MissionMembership, as: MembershipEntity
 
-  alias Cadence.Missions.{Mission, MissionMembership}
-  alias Cadence.Runtime.Missions.MissionSupervisor
-  alias Cadence.Organizations.Organization
-  alias Cadence.Ports.Repository.Missions.MissionsRepository
-
-  # Application layer services
+  # Application services
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Missions.MissionOperations
   alias Cadence.Application.Missions.MembershipOperations
 
-  # Domain entities
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Domain.Missions.Entities.MissionMembership, as: MembershipEntity
+  # Ecto schemas needed for form helpers
+  alias Cadence.Missions.Mission, as: MissionSchema
 
-  # Repository accessor
-  defp repo, do: MissionsRepository.impl()
-
-  ## Mission CRUD
+  # ============================================================================
+  # Mission Queries
+  # ============================================================================
 
   @doc """
-  Returns the list of missions for an organization.
+  Lists all missions for an organization.
   """
-  def list_missions(%Organization{id: org_id}) do
-    repo().list(org_id, [])
-  end
-
-  @doc """
-  Gets a single mission scoped to an organization.
-
-  Raises `Ecto.NoResultsError` if the Mission does not exist or doesn't belong to the organization.
-  """
-  def get_mission!(id, organization_id) do
-    case repo().find_by_org(id, organization_id) do
-      {:ok, mission} -> mission
-      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Mission
-    end
-  end
-
-  @doc """
-  Gets a single mission scoped to an organization.
-
-  Returns `nil` if the Mission does not exist or doesn't belong to the organization.
-  """
-  def get_mission(id, organization_id) do
-    case repo().find_by_org(id, organization_id) do
-      {:ok, mission} -> mission
-      {:error, :not_found} -> nil
-    end
-  end
-
-  @doc """
-  Gets a single mission by ID without organization scoping.
-
-  WARNING: This bypasses multi-tenancy. Only use for internal operations
-  where organization context is verified elsewhere (e.g., mission supervisors).
-  """
-  def get_mission_unscoped(id) do
-    case repo().find(id) do
-      {:ok, mission} -> mission
-      {:error, :not_found} -> nil
-    end
-  end
-
-  @doc """
-  Gets a single mission by ID without organization scoping, raises if not found.
-
-  WARNING: This bypasses multi-tenancy. Only use for internal operations
-  where organization context is verified elsewhere (e.g., mission supervisors).
-  """
-  def get_mission_unscoped!(id) do
-    case repo().find(id) do
-      {:ok, mission} -> mission
-      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: Mission
-    end
-  end
-
-  @doc """
-  Gets a single mission with authorization check.
-
-  Returns `{:ok, mission}` if authorized, `{:error, :unauthorized}` otherwise.
-  """
-  def get_mission_authorized(id, scope) do
-    # Use unscoped since we're checking authorization via Bodyguard
-    mission = get_mission_unscoped!(id)
-
-    case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
-      :ok -> {:ok, mission}
-      {:error, _} -> {:error, :unauthorized}
-    end
-  end
-
-  @doc """
-  Gets a single mission by ID and organization.
-
-  Returns nil if not found or doesn't belong to the organization.
-  """
-  def get_mission_by_org(id, %Organization{id: org_id}) do
-    Mission
-    |> where([m], m.id == ^id and m.organization_id == ^org_id)
-    |> Repo.one()
-  end
-
-  @doc """
-  Creates a mission.
-
-  If `creator_user_id` is provided in attrs, automatically creates a mission_membership
-  for that user with role "admin".
-  """
-  def create_mission(attrs \\ %{}) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.insert(:mission, Mission.changeset(%Mission{}, attrs))
-    |> Ecto.Multi.run(:mission_membership, fn repo, %{mission: mission} ->
-      # Create mission membership for the creator if user_id is provided
-      case Map.get(attrs, "creator_user_id") || Map.get(attrs, :creator_user_id) do
-        nil ->
-          {:ok, nil}
-
-        user_id ->
-          %MissionMembership{}
-          |> MissionMembership.changeset(%{
-            user_id: user_id,
-            mission_id: mission.id,
-            role: "admin"
-          })
-          |> repo.insert()
-      end
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{mission: mission}} -> {:ok, mission}
-      {:error, :mission, changeset, _} -> {:error, changeset}
-      {:error, _step, reason, _} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  Updates a mission.
-  """
-  def update_mission(%Mission{} = mission, attrs) do
-    mission
-    |> Mission.update_changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Updates a mission with authorization check.
-
-  Returns `{:ok, mission}` if authorized and updated, `{:error, :unauthorized}` if not authorized.
-  """
-  def update_mission_authorized(%Mission{} = mission, attrs, scope) do
-    with :ok <- Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
-      update_mission(mission, attrs)
-    else
-      {:error, _} -> {:error, :unauthorized}
-    end
-  end
-
-  @doc """
-  Deletes a mission.
-  """
-  def delete_mission(%Mission{} = mission) do
-    # Stop the mission runtime if it's running
-    stop_mission(mission.id)
-
-    Repo.delete(mission)
-  end
-
-  @doc """
-  Deletes a mission with authorization check.
-
-  Returns `{:ok, mission}` if authorized and deleted, `{:error, :unauthorized}` if not authorized.
-  """
-  def delete_mission_authorized(%Mission{} = mission, scope) do
-    with :ok <- Bodyguard.permit(Cadence.Missions.Policy, :delete, scope, mission) do
-      delete_mission(mission)
-    else
-      {:error, _} -> {:error, :unauthorized}
-    end
-  end
-
-  ## Mission Lifecycle
-
-  @doc """
-  Starts a mission's supervision tree.
-
-  This activates the mission's runtime processes including CVT, interfaces,
-  telemetry pipeline, and command queue.
-  """
-  def start_mission(mission_id) when is_binary(mission_id) do
-    # Internal lifecycle management - use unscoped
-    mission = get_mission_unscoped!(mission_id)
-    start_mission(mission)
-  end
-
-  def start_mission(%Mission{status: "active"} = mission) do
-    case MissionSupervisor.start_mission(mission) do
-      {:ok, _pid} = result ->
-        result
-
-      {:error, reason} = error ->
-        {:error, "Failed to start mission: #{inspect(reason)}"}
-        error
-    end
-  end
-
-  def start_mission(%Mission{status: status}) do
-    {:error, "Cannot start mission with status: #{status}"}
-  end
-
-  @doc """
-  Stops a mission's supervision tree.
-
-  This gracefully shuts down all mission processes.
-  """
-  def stop_mission(mission_id) when is_binary(mission_id) do
-    MissionSupervisor.stop_mission(mission_id)
-  end
-
-  @doc """
-  Activates a mission (sets status to active and starts runtime).
-  """
-  def activate_mission(%Mission{} = mission) do
-    with {:ok, mission} <- update_mission(mission, %{status: "active"}),
-         {:ok, _pid} <- start_mission(mission) do
-      {:ok, mission}
-    end
-  end
-
-  @doc """
-  Deactivates a mission (stops runtime and sets status to inactive).
-  """
-  def deactivate_mission(%Mission{} = mission) do
-    with :ok <- stop_mission(mission.id),
-         {:ok, mission} <- update_mission(mission, %{status: "inactive"}) do
-      {:ok, mission}
-    end
-  end
-
-  @doc """
-  Lists all running missions.
-  """
-  def list_running_missions do
-    MissionSupervisor.list_running_missions()
-  end
-
-  ## Mission Memberships
-
-  @doc """
-  Returns the list of memberships for a mission.
-  """
-  def list_mission_memberships(%Mission{id: mission_id}) do
-    repo().list_memberships(mission_id, preload: [:user])
-  end
-
-  @doc """
-  Gets a single mission membership.
-  """
-  def get_mission_membership!(id) do
-    case repo().find_membership(id) do
-      {:ok, membership} -> membership
-      {:error, :not_found} -> raise Ecto.NoResultsError, queryable: MissionMembership
-    end
-  end
-
-  @doc """
-  Creates a mission membership.
-  """
-  def create_mission_membership(attrs \\ %{}) do
-    membership = struct(MissionMembership, normalize_attrs(attrs))
-    repo().save_membership(membership)
-  end
-
-  @doc """
-  Updates a mission membership (typically to change role).
-  """
-  def update_mission_membership(%MissionMembership{} = membership, attrs) do
-    # Keep using Repo for changeset-based updates
-    membership
-    |> MissionMembership.update_role_changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a mission membership.
-  """
-  def delete_mission_membership(%MissionMembership{} = membership) do
-    repo().delete_membership(membership.id)
-  end
-
-  @doc """
-  Gets a user's role in a mission.
-
-  Returns the role string or nil if the user is not a member.
-  """
-  def get_user_mission_role(user_id, mission_id) do
-    case repo().find_user_role(user_id, mission_id) do
-      {:ok, role} -> role
-      {:error, :not_found} -> nil
-    end
-  end
-
-  # Private helper to normalize attrs to atom keys
-  defp normalize_attrs(attrs) when is_map(attrs) do
-    Enum.reduce(attrs, %{}, fn
-      {k, v}, acc when is_binary(k) -> Map.put(acc, String.to_existing_atom(k), v)
-      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
-    end)
-  end
-
-  # ===========================================================================
-  # Hexagonal Architecture API (Domain Entities)
-  # ===========================================================================
-  # These functions return domain entities and delegate to the application layer.
-  # Use these for new code that doesn't need Ecto changesets.
-
-  @doc """
-  Gets a mission as a domain entity.
-
-  Returns `{:ok, mission_entity}` or `{:error, :not_found}`.
-  """
-  @spec get_mission_entity(String.t(), String.t()) ::
-          {:ok, MissionEntity.t()} | {:error, :not_found}
-  def get_mission_entity(mission_id, organization_id) do
-    MissionQueries.find_by_org(mission_id, organization_id)
-  end
-
-  @doc """
-  Lists missions as domain entities for an organization.
-  """
-  @spec list_mission_entities(String.t(), keyword()) :: [MissionEntity.t()]
-  def list_mission_entities(organization_id, opts \\ []) do
+  @spec list_missions(String.t(), keyword()) :: [MissionEntity.t()]
+  def list_missions(organization_id, opts \\ []) when is_binary(organization_id) do
     MissionQueries.list(organization_id, opts)
   end
 
   @doc """
-  Creates a mission with bucket integration.
+  Gets a mission by ID (unscoped).
 
-  This creates both the mission and its associated bucket for recording context.
-  Returns `{:ok, mission_entity}` or `{:error, reason}`.
+  WARNING: This bypasses multi-tenancy. Use for internal operations where
+  organization context is verified elsewhere (e.g., authorization checks).
   """
-  @spec create_mission_with_bucket(String.t(), map()) ::
-          {:ok, MissionEntity.t()} | {:error, term()}
-  def create_mission_with_bucket(organization_id, attrs) do
-    MissionOperations.create(organization_id, attrs)
-  end
+  @spec get_mission(String.t()) :: {:ok, MissionEntity.t()} | {:error, :not_found}
+  def get_mission(id), do: MissionQueries.find(id)
 
   @doc """
-  Deletes a mission and its associated bucket.
+  Gets a mission by ID, raising if not found (unscoped).
 
-  Returns `:ok` or `{:error, reason}`.
+  WARNING: This bypasses multi-tenancy.
   """
-  @spec delete_mission_with_bucket(String.t(), String.t()) :: :ok | {:error, term()}
-  def delete_mission_with_bucket(mission_id, organization_id) do
-    MissionOperations.delete(mission_id, organization_id)
-  end
+  @spec get_mission!(String.t()) :: MissionEntity.t()
+  def get_mission!(id), do: MissionQueries.find!(id)
 
   @doc """
-  Adds a member to a mission using domain entities.
+  Gets a mission by ID scoped to an organization.
   """
-  @spec add_mission_member(String.t(), String.t(), atom() | nil) ::
-          {:ok, MembershipEntity.t()} | {:error, term()}
-  def add_mission_member(mission_id, user_id, role \\ nil) do
-    MembershipOperations.add_member(mission_id, user_id, role)
-  end
-
-  @doc """
-  Checks if a user can send commands in a mission.
-  """
-  @spec user_can_command?(String.t(), String.t()) :: boolean()
-  def user_can_command?(user_id, mission_id) do
-    MissionQueries.can_command?(user_id, mission_id)
-  end
+  @spec get_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, :not_found}
+  def get_mission(id, organization_id), do: MissionQueries.find_by_org(id, organization_id)
 
   @doc """
   Checks if a mission runtime is running.
   """
-  @spec mission_running?(String.t()) :: boolean()
-  def mission_running?(mission_id) do
-    MissionQueries.running?(mission_id)
+  @spec running?(String.t()) :: boolean()
+  def running?(mission_id), do: MissionQueries.running?(mission_id)
+
+  @doc """
+  Checks if a user can send commands in a mission.
+  """
+  @spec can_command?(String.t(), String.t()) :: boolean()
+  def can_command?(user_id, mission_id), do: MissionQueries.can_command?(user_id, mission_id)
+
+  @doc """
+  Gets a user's role in a mission.
+  """
+  @spec get_user_role(String.t(), String.t()) :: {:ok, atom()} | {:error, :not_found}
+  def get_user_role(user_id, mission_id), do: MissionQueries.get_user_role(user_id, mission_id)
+
+  # ============================================================================
+  # Mission Operations
+  # ============================================================================
+
+  @doc """
+  Creates a new mission with its associated bucket.
+
+  ## Attributes
+
+  Required:
+  - `:name` - Mission display name
+  - `:slug` - URL-safe identifier
+
+  Optional:
+  - `:description` - Mission description
+  - `:creator_user_id` - User ID of creator (will be added as admin member)
+  """
+  @spec create_mission(String.t(), map()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def create_mission(organization_id, attrs) do
+    MissionOperations.create(organization_id, attrs)
+  end
+
+  @doc """
+  Updates an existing mission.
+  """
+  @spec update_mission(String.t(), String.t(), map()) ::
+          {:ok, MissionEntity.t()} | {:error, term()}
+  def update_mission(mission_id, organization_id, attrs) do
+    MissionOperations.update(mission_id, organization_id, attrs)
+  end
+
+  @doc """
+  Deletes a mission and its associated bucket.
+  """
+  @spec delete_mission(String.t(), String.t()) :: :ok | {:error, term()}
+  def delete_mission(mission_id, organization_id) do
+    MissionOperations.delete(mission_id, organization_id)
+  end
+
+  # ============================================================================
+  # Mission Lifecycle
+  # ============================================================================
+
+  @doc """
+  Starts a mission's runtime (sets status to active and starts supervision tree).
+  """
+  @spec start_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def start_mission(mission_id, organization_id) do
+    MissionOperations.start(mission_id, organization_id)
+  end
+
+  @doc """
+  Stops a mission's runtime (stops supervision tree and sets status to inactive).
+  """
+  @spec stop_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def stop_mission(mission_id, organization_id) do
+    MissionOperations.stop(mission_id, organization_id)
+  end
+
+  @doc """
+  Suspends a mission's runtime.
+  """
+  @spec suspend_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def suspend_mission(mission_id, organization_id) do
+    MissionOperations.suspend(mission_id, organization_id)
+  end
+
+  @doc """
+  Resumes a suspended mission.
+  """
+  @spec resume_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def resume_mission(mission_id, organization_id) do
+    MissionOperations.resume(mission_id, organization_id)
+  end
+
+  @doc """
+  Advances a mission to a new lifecycle phase.
+  """
+  @spec advance_phase(String.t(), String.t(), atom()) ::
+          {:ok, MissionEntity.t()} | {:error, term()}
+  def advance_phase(mission_id, organization_id, new_phase) do
+    MissionOperations.advance_phase(mission_id, organization_id, new_phase)
+  end
+
+  # ============================================================================
+  # Mission Memberships
+  # ============================================================================
+
+  @doc """
+  Adds a member to a mission.
+  """
+  @spec add_member(String.t(), String.t(), atom() | nil) ::
+          {:ok, MembershipEntity.t()} | {:error, term()}
+  def add_member(mission_id, user_id, role \\ nil) do
+    MembershipOperations.add_member(mission_id, user_id, role)
+  end
+
+  @doc """
+  Changes a member's role.
+  """
+  @spec change_member_role(String.t(), atom()) ::
+          {:ok, MembershipEntity.t()} | {:error, term()}
+  def change_member_role(membership_id, new_role) do
+    MembershipOperations.change_role(membership_id, new_role)
+  end
+
+  @doc """
+  Removes a member from a mission.
+  """
+  @spec remove_member(String.t()) :: :ok | {:error, term()}
+  def remove_member(membership_id) do
+    MembershipOperations.remove_member(membership_id)
+  end
+
+  @doc """
+  Lists all members of a mission.
+  """
+  @spec list_members(String.t(), keyword()) :: [MembershipEntity.t()]
+  def list_members(mission_id, opts \\ []) do
+    MembershipOperations.list_members(mission_id, opts)
+  end
+
+  @doc """
+  Gets a membership by ID.
+  """
+  @spec get_membership(String.t()) :: {:ok, MembershipEntity.t()} | {:error, :not_found}
+  def get_membership(membership_id) do
+    MembershipOperations.find(membership_id)
+  end
+
+  @doc """
+  Checks if a user is a member of a mission.
+  """
+  @spec member?(String.t(), String.t()) :: boolean()
+  def member?(user_id, mission_id) do
+    MembershipOperations.member?(user_id, mission_id)
+  end
+
+  # ============================================================================
+  # Form Helpers (Ecto Schema Layer)
+  # ============================================================================
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for changing mission attributes.
+
+  This is a form helper that works with Ecto schemas.
+  """
+  def change_mission(mission \\ %MissionSchema{}, attrs \\ %{}) do
+    MissionSchema.changeset(mission, attrs)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for updating mission attributes.
+
+  This is a form helper that works with Ecto schemas.
+  """
+  def change_mission_for_update(mission, attrs \\ %{}) do
+    MissionSchema.update_changeset(mission, attrs)
   end
 end

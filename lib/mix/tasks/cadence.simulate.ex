@@ -178,19 +178,16 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Mix.shell().info("Starting mission runtime (interfaces, pipeline, etc.)...")
 
     # Mix task - use unscoped for CLI access
-    case Cadence.Missions.get_mission_unscoped(mission_id) do
-      nil ->
+    case Cadence.Missions.get_mission(mission_id) do
+      {:error, :not_found} ->
         Mix.raise("Mission not found: #{mission_id}")
 
-      mission ->
-        case Cadence.Missions.start_mission(mission) do
-          {:ok, pid} ->
-            Mix.shell().info("Mission started: #{inspect(pid)}")
+      {:ok, mission} ->
+        case Cadence.Missions.start_mission(mission.id, mission.organization_id) do
+          {:ok, _mission} ->
+            Mix.shell().info("Mission started")
             # Give interfaces time to start
             :timer.sleep(500)
-
-          {:error, {:already_started, pid}} ->
-            Mix.shell().info("Mission already running: #{inspect(pid)}")
 
           {:error, reason} ->
             Mix.raise("Failed to start mission: #{inspect(reason)}")

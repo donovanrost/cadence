@@ -128,7 +128,7 @@ defmodule Cadence.Commands.TargetPipelineSupervisor do
     Logger.info("Loading target pipelines for mission #{mission_id}")
 
     # Internal engine - use unscoped as mission context is verified through supervision tree
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     targets = Targets.list_targets(mission)
 
     Logger.info("Found #{length(targets)} target(s) for mission #{mission_id}")

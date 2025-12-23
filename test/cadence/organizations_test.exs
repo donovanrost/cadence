@@ -67,8 +67,7 @@ defmodule Cadence.OrganizationsTest do
 
       # Create a mission to reach the quota
       {:ok, _mission} =
-        Cadence.Missions.create_mission(%{
-          organization_id: org.id,
+        Cadence.Missions.create_mission(org.id, %{
           name: "Test Mission",
           slug: "test-mission",
           status: "active"

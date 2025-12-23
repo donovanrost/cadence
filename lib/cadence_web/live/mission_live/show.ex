@@ -91,8 +91,8 @@ defmodule CadenceWeb.MissionLive.Show do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.start_mission(mission) do
-          {:ok, _pid} ->
+        case Missions.start_mission(mission.id, mission.organization_id) do
+          {:ok, _mission} ->
             {:noreply,
              socket
              |> put_flash(:info, "Mission started successfully")}
@@ -113,8 +113,8 @@ defmodule CadenceWeb.MissionLive.Show do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.stop_mission(mission.id) do
-          :ok ->
+        case Missions.stop_mission(mission.id, mission.organization_id) do
+          {:ok, _mission} ->
             {:noreply,
              socket
              |> put_flash(:info, "Mission stopped successfully")}

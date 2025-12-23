@@ -18,26 +18,26 @@ defmodule Cadence.Missions.MissionLifecycleTest do
       org = organization_fixture()
 
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Test Mission",
           slug: "test-mission",
-          status: "active",
+          status: "inactive",
           phase: "testing"
         })
 
       %{mission: mission, organization: org}
     end
 
-    test "starts mission supervision tree", %{mission: mission} do
-      {:ok, pid} = Missions.start_mission(mission)
+    test "starts mission supervision tree", %{mission: mission, organization: org} do
+      {:ok, _started_mission} = Missions.start_mission(mission.id, org.id)
 
+      # Get the PID from the supervisor
+      {:ok, pid} = MissionSupervisor.get_mission_pid(mission.id)
       assert Process.alive?(pid)
-      assert {:ok, ^pid} = MissionSupervisor.get_mission_pid(mission.id)
     end
 
-    test "CVT process is started with mission", %{mission: mission} do
-      {:ok, _pid} = Missions.start_mission(mission)
+    test "CVT process is started with mission", %{mission: mission, organization: org} do
+      {:ok, _started_mission} = Missions.start_mission(mission.id, org.id)
 
       # Verify CVT is running by trying to set a value
       :ok =
@@ -55,11 +55,14 @@ defmodule Cadence.Missions.MissionLifecycleTest do
       assert value.limits_state == :green
     end
 
-    test "stops mission supervision tree", %{mission: mission} do
-      {:ok, pid} = Missions.start_mission(mission)
+    test "stops mission supervision tree", %{mission: mission, organization: org} do
+      {:ok, _started_mission} = Missions.start_mission(mission.id, org.id)
+
+      # Get the PID from the supervisor
+      {:ok, pid} = MissionSupervisor.get_mission_pid(mission.id)
       assert Process.alive?(pid)
 
-      :ok = Missions.stop_mission(mission.id)
+      {:ok, _stopped} = Missions.stop_mission(mission.id, org.id)
 
       # Give it a moment to terminate
       Process.sleep(50)
@@ -68,39 +71,41 @@ defmodule Cadence.Missions.MissionLifecycleTest do
       assert {:error, :not_found} = MissionSupervisor.get_mission_pid(mission.id)
     end
 
-    test "does not start mission with inactive status" do
+    test "cannot start an already-running mission" do
       org = organization_fixture()
 
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
-          name: "Inactive Mission",
-          slug: "inactive-mission",
+        Missions.create_mission(org.id, %{
+          name: "Running Mission",
+          slug: "running-mission",
           status: "inactive"
         })
 
-      assert {:error, _} = Missions.start_mission(mission)
+      # Start mission first time - should succeed
+      {:ok, _} = Missions.start_mission(mission.id, org.id)
+
+      # Try to start again - should fail with invalid transition
+      assert {:error, {:invalid_transition, :active, :active}} =
+               Missions.start_mission(mission.id, org.id)
     end
 
     test "mission instances are isolated - different ETS tables", %{organization: org} do
       {:ok, mission1} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Mission 1",
           slug: "mission-1",
-          status: "active"
+          status: "inactive"
         })
 
       {:ok, mission2} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Mission 2",
           slug: "mission-2",
-          status: "active"
+          status: "inactive"
         })
 
-      {:ok, _} = Missions.start_mission(mission1)
-      {:ok, _} = Missions.start_mission(mission2)
+      {:ok, _} = Missions.start_mission(mission1.id, org.id)
+      {:ok, _} = Missions.start_mission(mission2.id, org.id)
 
       # Set different values in each mission's CVT
       :ok = CurrentValueTable.set(mission1.id, "SAT-A", "STATUS", "temp", 25.0)
@@ -117,8 +122,8 @@ defmodule Cadence.Missions.MissionLifecycleTest do
       assert {:error, :not_found} = CurrentValueTable.get(mission1.id, "SAT-B", "STATUS", "temp")
 
       # Clean up
-      Missions.stop_mission(mission1.id)
-      Missions.stop_mission(mission2.id)
+      Missions.stop_mission(mission1.id, org.id)
+      Missions.stop_mission(mission2.id, org.id)
     end
   end
 
@@ -127,17 +132,16 @@ defmodule Cadence.Missions.MissionLifecycleTest do
       org = organization_fixture()
 
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "CVT Test Mission",
           slug: "cvt-test",
-          status: "active"
+          status: "inactive"
         })
 
-      {:ok, _} = Missions.start_mission(mission)
+      {:ok, _} = Missions.start_mission(mission.id, org.id)
 
       on_exit(fn ->
-        Missions.stop_mission(mission.id)
+        Missions.stop_mission(mission.id, org.id)
       end)
 
       %{mission: mission}

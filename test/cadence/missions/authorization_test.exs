@@ -54,8 +54,7 @@ defmodule Cadence.Missions.AuthorizationTest do
     test "user can create mission and gets mission_membership", %{user: user, org: org} do
       # Create mission with creator_user_id
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Test Mission",
           slug: "test-mission-#{System.unique_integer([:positive])}",
           description: "Test mission",
@@ -68,17 +67,16 @@ defmodule Cadence.Missions.AuthorizationTest do
       assert mission.name == "Test Mission"
 
       # Verify mission_membership was auto-created
-      memberships = Missions.list_mission_memberships(mission)
+      memberships = Missions.list_members(mission.id)
       assert length(memberships) == 1
       assert hd(memberships).user_id == user.id
-      assert hd(memberships).role in ["admin", :admin]
+      assert hd(memberships).role in [:admin, "admin"]
     end
 
     test "user can view their own mission", %{user: user, org: org} do
       # Create mission
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "My Mission",
           slug: "my-mission-#{System.unique_integer([:positive])}",
           status: "active",
@@ -88,8 +86,8 @@ defmodule Cadence.Missions.AuthorizationTest do
       # Get scope for user
       scope = Scope.for_user(user)
 
-      # Verify user can view the mission
-      assert {:ok, _mission} = Missions.get_mission_authorized(mission.id, scope)
+      # Verify user can view the mission via Bodyguard
+      assert :ok = Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission)
     end
 
     test "user cannot view mission they're not a member of", %{
@@ -99,8 +97,7 @@ defmodule Cadence.Missions.AuthorizationTest do
     } do
       # Other user creates a mission in their org
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: other_org.id,
+        Missions.create_mission(other_org.id, %{
           name: "Other Mission",
           slug: "other-mission-#{System.unique_integer([:positive])}",
           status: "active",
@@ -111,14 +108,13 @@ defmodule Cadence.Missions.AuthorizationTest do
       scope = Scope.for_user(user)
 
       # Verify first user CANNOT view the other user's mission
-      assert {:error, :unauthorized} = Missions.get_mission_authorized(mission.id, scope)
+      assert {:error, _} = Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission)
     end
 
     test "user can update their own mission", %{user: user, org: org} do
       # Create mission
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Original Name",
           slug: "original-#{System.unique_integer([:positive])}",
           status: "active",
@@ -128,8 +124,11 @@ defmodule Cadence.Missions.AuthorizationTest do
       # Get scope for user
       scope = Scope.for_user(user)
 
+      # Verify authorization passes
+      assert :ok = Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission)
+
       # Update mission
-      {:ok, updated} = Missions.update_mission_authorized(mission, %{name: "Updated Name"}, scope)
+      {:ok, updated} = Missions.update_mission(mission.id, org.id, %{name: "Updated Name"})
 
       assert updated.name == "Updated Name"
     end
@@ -141,8 +140,7 @@ defmodule Cadence.Missions.AuthorizationTest do
     } do
       # Other user creates a mission in their org
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: other_org.id,
+        Missions.create_mission(other_org.id, %{
           name: "Other Mission",
           slug: "other-mission-#{System.unique_integer([:positive])}",
           status: "active",
@@ -152,16 +150,14 @@ defmodule Cadence.Missions.AuthorizationTest do
       # Get scope for first user
       scope = Scope.for_user(user)
 
-      # Try to update - should fail
-      assert {:error, :unauthorized} =
-               Missions.update_mission_authorized(mission, %{name: "Hacked"}, scope)
+      # Try to authorize - should fail
+      assert {:error, _} = Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission)
     end
 
     test "user can delete their own mission", %{user: user, org: org} do
       # Create mission
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "To Delete",
           slug: "to-delete-#{System.unique_integer([:positive])}",
           status: "active",
@@ -171,13 +167,14 @@ defmodule Cadence.Missions.AuthorizationTest do
       # Get scope for user
       scope = Scope.for_user(user)
 
+      # Verify authorization passes
+      assert :ok = Bodyguard.permit(Cadence.Missions.Policy, :delete, scope, mission)
+
       # Delete mission
-      {:ok, _deleted} = Missions.delete_mission_authorized(mission, scope)
+      :ok = Missions.delete_mission(mission.id, org.id)
 
       # Verify it's gone
-      assert_raise Ecto.NoResultsError, fn ->
-        Missions.get_mission_unscoped!(mission.id)
-      end
+      assert {:error, :not_found} = Missions.get_mission(mission.id)
     end
 
     test "user cannot delete mission they're not a member of", %{
@@ -187,8 +184,7 @@ defmodule Cadence.Missions.AuthorizationTest do
     } do
       # Other user creates a mission in their org
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: other_org.id,
+        Missions.create_mission(other_org.id, %{
           name: "Protected Mission",
           slug: "protected-#{System.unique_integer([:positive])}",
           status: "active",
@@ -198,11 +194,11 @@ defmodule Cadence.Missions.AuthorizationTest do
       # Get scope for first user
       scope = Scope.for_user(user)
 
-      # Try to delete - should fail
-      assert {:error, :unauthorized} = Missions.delete_mission_authorized(mission, scope)
+      # Try to authorize - should fail
+      assert {:error, _} = Bodyguard.permit(Cadence.Missions.Policy, :delete, scope, mission)
 
       # Verify mission still exists
-      assert Missions.get_mission_unscoped!(mission.id)
+      assert {:ok, _} = Missions.get_mission(mission.id)
     end
   end
 end

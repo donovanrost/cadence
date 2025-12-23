@@ -9,12 +9,13 @@ defmodule CadenceWeb.TelemetryLive.Index do
   use CadenceWeb, :live_view
 
   alias Cadence.{Missions, Targets}
+  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Telemetry.CurrentValueTable
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do
     # Use unscoped - authorization is handled via LiveView hooks
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
 
     if connected?(socket) do
       # Poll CVT at ~120 Hz (8ms interval) instead of PubSub subscription
@@ -23,7 +24,7 @@ defmodule CadenceWeb.TelemetryLive.Index do
     end
 
     # Check if mission is running using Registry lookup
-    mission_running? = match?({:ok, _pid}, Missions.MissionSupervisor.get_mission_pid(mission_id))
+    mission_running? = match?({:ok, _pid}, MissionSupervisor.get_mission_pid(mission_id))
 
     # Load targets from database
     targets = Targets.list_targets(mission)

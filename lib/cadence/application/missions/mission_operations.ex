@@ -22,7 +22,9 @@ defmodule Cadence.Application.Missions.MissionOperations do
 
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Domain.Missions.Entities.Mission
+  alias Cadence.Domain.Missions.Entities.MissionMembership
   alias Cadence.Ports.Repository.Missions.MissionsRepository
+  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Buckets
   alias Cadence.Repo
 
@@ -54,27 +56,45 @@ defmodule Cadence.Application.Missions.MissionOperations do
   - `:metadata` - Additional metadata
   - `:start_date` - Planned start date
   - `:end_date` - Planned end date
+  - `:creator_user_id` - User ID of creator (will be added as admin member)
 
   ## Examples
 
       {:ok, mission} = MissionOperations.create(org_id, %{
         name: "ISS Operations",
-        slug: "iss-ops"
+        slug: "iss-ops",
+        creator_user_id: user_id
       })
   """
   @spec create(org_id(), attrs()) :: {:ok, Mission.t()} | {:error, term()}
   def create(org_id, attrs) do
     mission_attrs = Map.put(attrs, :organization_id, org_id)
+    creator_user_id = attrs[:creator_user_id] || attrs["creator_user_id"]
 
     Repo.transaction(fn ->
       with {:ok, mission} <- Mission.new(mission_attrs),
            {:ok, saved} <- repo().save(mission),
-           {:ok, _bucket} <- Buckets.create_bucket_for(saved, organization_id: org_id) do
+           {:ok, _bucket} <- Buckets.create_bucket_for(saved, organization_id: org_id),
+           :ok <- maybe_create_creator_membership(saved.id, creator_user_id) do
         saved
       else
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp maybe_create_creator_membership(_mission_id, nil), do: :ok
+
+  defp maybe_create_creator_membership(mission_id, user_id) do
+    with {:ok, membership} <-
+           MissionMembership.new(%{
+             mission_id: mission_id,
+             user_id: user_id,
+             role: :admin
+           }),
+         {:ok, _saved} <- repo().save_membership(membership) do
+      :ok
+    end
   end
 
   @doc """
@@ -97,12 +117,14 @@ defmodule Cadence.Application.Missions.MissionOperations do
   Starts the mission runtime.
 
   This activates the mission's supervision tree, CVT, and telemetry processing.
+  Updates the mission status to :active and starts the MissionSupervisor tree.
   """
   @spec start(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def start(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
          {:ok, started} <- Mission.start(mission),
-         {:ok, saved} <- repo().save(started) do
+         {:ok, saved} <- repo().save(started),
+         {:ok, _pid} <- MissionSupervisor.start_mission(saved) do
       {:ok, saved}
     end
   end
@@ -110,14 +132,24 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @doc """
   Stops the mission runtime.
 
-  This gracefully shuts down the mission's supervision tree.
+  This gracefully shuts down the mission's supervision tree and updates
+  the mission status to :inactive.
   """
   @spec stop(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def stop(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
+         :ok <- stop_runtime(mission_id),
          {:ok, stopped} <- Mission.stop(mission),
          {:ok, saved} <- repo().save(stopped) do
       {:ok, saved}
+    end
+  end
+
+  defp stop_runtime(mission_id) do
+    case MissionSupervisor.stop_mission(mission_id) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+      error -> error
     end
   end
 

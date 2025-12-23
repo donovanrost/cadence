@@ -11,8 +11,7 @@ defmodule Cadence.TargetsTest do
     org = organization_fixture()
 
     {:ok, mission} =
-      Missions.create_mission(%{
-        organization_id: org.id,
+      Missions.create_mission(org.id, %{
         name: "Test Mission",
         slug: "test-mission",
         status: "active"

@@ -29,8 +29,7 @@ defmodule Cadence.Telemetry.IntegrationTest do
 
       # Create test mission
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "Test Mission",
           slug: "test-mission-#{System.unique_integer([:positive])}",
           description: "Integration test mission",

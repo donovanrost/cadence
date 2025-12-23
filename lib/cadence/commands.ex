@@ -539,7 +539,7 @@ defmodule Cadence.Commands do
   @spec pause_all_targets(String.t()) :: :ok
   def pause_all_targets(mission_id) do
     # Internal command operations - use unscoped
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     targets = Targets.list_targets(mission)
 
     Enum.each(targets, fn target ->
@@ -555,7 +555,7 @@ defmodule Cadence.Commands do
   @spec resume_all_targets(String.t()) :: :ok
   def resume_all_targets(mission_id) do
     # Internal command operations - use unscoped
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     targets = Targets.list_targets(mission)
 
     Enum.each(targets, fn target ->
@@ -594,7 +594,7 @@ defmodule Cadence.Commands do
   @spec clear_all_queues(String.t()) :: {:ok, non_neg_integer()}
   def clear_all_queues(mission_id) do
     # Internal command operations - use unscoped
-    mission = Missions.get_mission_unscoped!(mission_id)
+    mission = Missions.get_mission!(mission_id)
     targets = Targets.list_targets(mission)
 
     total =

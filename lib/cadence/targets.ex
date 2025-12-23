@@ -137,9 +137,13 @@ defmodule Cadence.Targets do
   @doc """
   Gets a target by identifier within a mission.
   """
-  @spec get_target_by_identifier(Mission.t() | String.t(), String.t()) ::
+  @spec get_target_by_identifier(Mission.t() | MissionEntity.t() | String.t(), String.t()) ::
           {:ok, Target.t()} | {:error, :not_found}
   def get_target_by_identifier(%Mission{id: mission_id}, identifier) do
+    get_target_by_identifier(mission_id, identifier)
+  end
+
+  def get_target_by_identifier(%MissionEntity{id: mission_id}, identifier) do
     get_target_by_identifier(mission_id, identifier)
   end
 

@@ -165,10 +165,10 @@ defmodule Cadence.Notifications do
     procedure_version = Repo.preload(procedure_version, procedure: :mission)
     mission = procedure_version.procedure.mission
 
-    memberships = Missions.list_mission_memberships(mission)
+    memberships = Missions.list_members(mission.id)
 
     memberships
-    |> Enum.filter(fn m -> m.role in ["engineer", "admin"] end)
+    |> Enum.filter(fn m -> m.role in [:engineer, :admin] end)
     |> Enum.map(& &1.user_id)
     |> Enum.reject(&(&1 == exclude_actor_id))
     |> Enum.uniq()

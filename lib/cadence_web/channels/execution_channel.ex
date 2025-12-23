@@ -87,10 +87,7 @@ defmodule CadenceWeb.ExecutionChannel do
 
   defp get_mission(mission_id) do
     # Use unscoped - authorization is handled via Policy.authorize below
-    case Missions.get_mission_unscoped(mission_id) do
-      nil -> {:error, :not_found}
-      mission -> {:ok, mission}
-    end
+    Missions.get_mission(mission_id)
   end
 
   defp authorize_user(user, mission) do

@@ -20,7 +20,7 @@ defmodule CadenceWeb.TargetLive.Index do
     # Get all missions for the organization to determine which targets are viewable
     missions =
       if current_org do
-        Missions.list_missions(current_org)
+        Missions.list_missions(current_org.id)
       else
         []
       end

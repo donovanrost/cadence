@@ -12,7 +12,7 @@ defmodule CadenceWeb.MissionLive.Index do
 
     missions =
       if current_org do
-        Missions.list_missions(current_org)
+        Missions.list_missions(current_org.id)
       else
         []
       end
@@ -26,8 +26,8 @@ defmodule CadenceWeb.MissionLive.Index do
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(id)
+    # Fetch mission - authorization is handled via Bodyguard below
+    mission = Missions.get_mission!(id)
     scope = socket.assigns.current_scope
 
     # Check if user can update this mission
@@ -67,30 +67,36 @@ defmodule CadenceWeb.MissionLive.Index do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    # Use unscoped - authorization is handled via delete_mission_authorized
-    mission = Missions.get_mission_unscoped!(id)
+    mission = Missions.get_mission!(id)
     scope = socket.assigns.current_scope
+    org_id = scope.current_organization.id
 
-    case Missions.delete_mission_authorized(mission, scope) do
-      {:ok, _} ->
-        {:noreply, stream_delete(socket, :missions, mission)}
+    case Bodyguard.permit(Cadence.Missions.Policy, :delete, scope, mission) do
+      :ok ->
+        case Missions.delete_mission(id, org_id) do
+          :ok ->
+            {:noreply, stream_delete(socket, :missions, mission)}
 
-      {:error, :unauthorized} ->
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to delete mission: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to delete this mission")}
     end
   end
 
   @impl true
   def handle_event("start_mission", %{"id" => id}, socket) do
-    # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(id)
+    mission = Missions.get_mission!(id)
     scope = socket.assigns.current_scope
+    org_id = scope.current_organization.id
 
     # Check if user can manage this mission (start/stop operations)
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.start_mission(mission) do
-          {:ok, _pid} ->
+        case Missions.start_mission(id, org_id) do
+          {:ok, _mission} ->
             {:noreply, put_flash(socket, :info, "Mission #{mission.name} started successfully")}
 
           {:error, reason} ->
@@ -104,15 +110,15 @@ defmodule CadenceWeb.MissionLive.Index do
 
   @impl true
   def handle_event("stop_mission", %{"id" => id}, socket) do
-    # Use unscoped - authorization is handled via Bodyguard below
-    mission = Missions.get_mission_unscoped!(id)
+    mission = Missions.get_mission!(id)
     scope = socket.assigns.current_scope
+    org_id = scope.current_organization.id
 
     # Check if user can manage this mission (start/stop operations)
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.stop_mission(id) do
-          :ok ->
+        case Missions.stop_mission(id, org_id) do
+          {:ok, _mission} ->
             {:noreply, put_flash(socket, :info, "Mission stopped successfully")}
 
           {:error, reason} ->

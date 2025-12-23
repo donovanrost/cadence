@@ -53,6 +53,7 @@ defmodule Cadence.Interfaces do
   alias Cadence.Interfaces.InterfaceProtocol
   alias Cadence.Interfaces.TargetInterface
   alias Cadence.Missions.Mission
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
 
   # Application services for new hexagonal architecture
   alias Cadence.Application.Interfaces.InterfaceQueries
@@ -65,10 +66,11 @@ defmodule Cadence.Interfaces do
   Returns the list of interfaces for a mission.
   """
   def list_interfaces(%Mission{id: mission_id}) do
-    InterfaceSchema
-    |> where([i], i.mission_id == ^mission_id)
-    |> order_by([i], i.name)
-    |> Repo.all()
+    list_interfaces(mission_id)
+  end
+
+  def list_interfaces(%MissionEntity{id: mission_id}) do
+    list_interfaces(mission_id)
   end
 
   def list_interfaces(mission_id) when is_binary(mission_id) do

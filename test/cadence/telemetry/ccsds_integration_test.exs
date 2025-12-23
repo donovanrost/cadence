@@ -36,8 +36,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
       # Create test mission
       {:ok, mission} =
-        Missions.create_mission(%{
-          organization_id: org.id,
+        Missions.create_mission(org.id, %{
           name: "CCSDS Test Mission",
           slug: "ccsds-test-mission-#{System.unique_integer([:positive])}",
           description: "Testing CCSDS binary telemetry processing",

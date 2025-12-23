@@ -13,7 +13,7 @@ defmodule CadenceWeb.TargetLive.Show do
     # Use schema version for LiveView form compatibility (changesets work with Ecto schemas)
     # Authorization is enforced via Bodyguard below
     target = Targets.get_target_schema_unscoped!(id)
-    mission = Missions.get_mission_unscoped!(target.mission_id)
+    mission = Missions.get_mission!(target.mission_id)
     scope = socket.assigns.current_scope
 
     # Check if user can view the mission (and thus the target)

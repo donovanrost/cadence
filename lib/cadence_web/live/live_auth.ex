@@ -140,17 +140,17 @@ defmodule CadenceWeb.LiveAuth do
     if mission_id do
       # Use unscoped here since we're loading from URL params for authorization
       # Authorization is handled via Bodyguard in the LiveViews
-      case Cadence.Missions.get_mission_unscoped(mission_id) do
-        nil ->
+      case Cadence.Missions.get_mission(mission_id) do
+        {:ok, mission} ->
+          {:cont, assign(socket, :mission, mission)}
+
+        {:error, :not_found} ->
           socket =
             socket
             |> put_flash(:error, "Mission not found.")
             |> redirect(to: "/missions")
 
           {:halt, socket}
-
-        mission ->
-          {:cont, assign(socket, :mission, mission)}
       end
     else
       {:cont, assign(socket, :mission, nil)}

@@ -24,17 +24,17 @@ defmodule Cadence.TestHelpers do
   """
   def create_test_targets(mission) when is_binary(mission) do
     # Test helper - use unscoped for convenience
-    Missions.get_mission_unscoped!(mission)
+    Missions.get_mission!(mission)
     |> create_test_targets()
   end
 
-  def create_test_targets(%Missions.Mission{} = mission) do
+  def create_test_targets(%{id: _} = mission) do
     # Get or create a definition set for the mission
     definition_set_id = get_or_create_definition_set(mission)
     create_test_targets(mission, definition_set_id)
   end
 
-  def create_test_targets(%Missions.Mission{} = mission, definition_set_id) do
+  def create_test_targets(%{id: _} = mission, definition_set_id) do
     target_configs = [
       %{identifier: "SAT-1", name: "Satellite 1"},
       %{identifier: "SAT-2", name: "Satellite 2"},
@@ -66,7 +66,8 @@ defmodule Cadence.TestHelpers do
   end
 
   defp get_or_create_definition_set(mission) do
-    mission = Repo.preload(mission, :organization)
+    # Get organization - works with both domain entities and Ecto schemas
+    organization = Cadence.Organizations.get_organization!(mission.organization_id)
 
     # Try to find existing database for mission
     database =
@@ -76,7 +77,7 @@ defmodule Cadence.TestHelpers do
     # Try to find existing definition set for database
     definition_set =
       Repo.get_by(DefinitionSet, database_id: database.id) ||
-        create_definition_set(mission.organization, database)
+        create_definition_set(organization, database)
 
     definition_set.id
   end
@@ -114,7 +115,7 @@ defmodule Cadence.TestHelpers do
   """
   def create_target(mission, identifier, opts \\ []) when is_binary(identifier) do
     # Test helper - use unscoped for convenience
-    mission = if is_binary(mission), do: Missions.get_mission_unscoped!(mission), else: mission
+    mission = if is_binary(mission), do: Missions.get_mission!(mission), else: mission
 
     name = Keyword.get(opts, :name, identifier)
     type = Keyword.get(opts, :type, "spacecraft")
@@ -177,8 +178,7 @@ defmodule Cadence.TestHelpers do
 
     # Create mission
     {:ok, mission} =
-      Missions.create_mission(%{
-        organization_id: org.id,
+      Missions.create_mission(org.id, %{
         name: mission_name,
         slug: "test-mission-#{System.unique_integer([:positive])}",
         description: "Test mission for development",
