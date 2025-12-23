@@ -6,6 +6,7 @@ defmodule Cadence.SettingsTest do
 
   alias Cadence.Settings
   alias Cadence.Settings.Setting
+  alias Cadence.Domain.Settings.Entities.Setting, as: SettingEntity
 
   describe "definitions" do
     test "get_definition/2 returns definition for known settings" do
@@ -139,14 +140,14 @@ defmodule Cadence.SettingsTest do
     test "creates setting when it doesn't exist" do
       org = organization_fixture()
 
-      assert {:ok, %Setting{} = setting} =
+      assert {:ok, %SettingEntity{} = setting} =
                Settings.set_org(org, :procedures, :required_approvals, 2)
 
-      assert setting.scope_type == "organization"
+      assert setting.scope_type == :organization
       assert setting.scope_id == org.id
-      assert setting.namespace == "procedures"
-      assert setting.key == "required_approvals"
-      assert Setting.extract_value(setting.value) == 2
+      assert setting.namespace == :procedures
+      assert setting.key == :required_approvals
+      assert setting.value == 2
     end
 
     test "updates setting when it already exists" do
@@ -156,7 +157,7 @@ defmodule Cadence.SettingsTest do
       {:ok, setting2} = Settings.set_org(org, :procedures, :required_approvals, 3)
 
       assert setting1.id == setting2.id
-      assert Setting.extract_value(setting2.value) == 3
+      assert setting2.value == 3
     end
 
     test "validates value against definition" do
@@ -190,10 +191,10 @@ defmodule Cadence.SettingsTest do
     end
 
     test "creates override when value is valid", %{mission: mission} do
-      assert {:ok, %Setting{} = setting} =
+      assert {:ok, %SettingEntity{} = setting} =
                Settings.set_mission(mission, :procedures, :required_approvals, 2)
 
-      assert setting.scope_type == "mission"
+      assert setting.scope_type == :mission
       assert setting.scope_id == mission.id
     end
 

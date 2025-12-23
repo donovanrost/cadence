@@ -1,6 +1,6 @@
 defmodule Cadence.Settings do
   @moduledoc """
-  Context for managing hierarchical settings.
+  Context facade for managing hierarchical settings.
 
   Settings support a two-level hierarchy:
   - Organization-level defaults
@@ -31,22 +31,18 @@ defmodule Cadence.Settings do
       # Trying to set less restrictive value fails
       Settings.set_mission(mission, :procedures, :required_approvals, 0)
       #=> {:error, :less_restrictive_than_org, %{org_value: 1, min_allowed: 1}}
+
+  This module is a thin facade that delegates to:
+  - `Cadence.Application.Settings.SettingOperations` for write operations
+  - `Cadence.Application.Settings.SettingQueries` for read operations
   """
 
-  alias Cadence.Missions.Mission
+  alias Cadence.Application.Settings.SettingOperations
+  alias Cadence.Application.Settings.SettingQueries
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
-  alias Cadence.Settings.Setting
-  alias Cadence.Ports.Repository.Settings.SettingsRepository
-
-  # Repository accessor
-  defp settings_repo, do: SettingsRepository.impl()
-
-  # Registry of all definition modules
-  @definition_modules [
-    Cadence.Settings.Definitions.Procedures
-  ]
 
   ## Public API - Getting Settings
 
@@ -56,28 +52,14 @@ defmodule Cadence.Settings do
   This considers the org-level default and any mission-level override.
   If no setting is stored at either level, returns the definition default.
   """
-  @spec get(Mission.t(), atom(), atom()) :: any()
-  def get(%MissionEntity{id: id, organization_id: org_id}, namespace, key) do
-    mission = Cadence.Missions.get_mission!(id, org_id)
-    get(mission, namespace, key)
+  @spec get(Mission.t() | MissionEntity.t(), atom(), atom()) :: any()
+  def get(%MissionEntity{id: mission_id, organization_id: org_id}, namespace, key) do
+    SettingQueries.get(mission_id, org_id, namespace, key)
   end
 
   def get(%Mission{} = mission, namespace, key) do
     mission = ensure_organization_loaded(mission)
-    definition = get_definition(namespace, key)
-
-    if is_nil(definition) do
-      nil
-    else
-      mission_value = get_stored_value(mission.id, "mission", namespace, key)
-      org_value = get_stored_value(mission.organization_id, "organization", namespace, key)
-
-      cond do
-        not is_nil(mission_value) -> mission_value
-        not is_nil(org_value) -> org_value
-        true -> definition.default
-      end
-    end
+    SettingQueries.get(mission.id, mission.organization_id, namespace, key)
   end
 
   @doc """
@@ -85,20 +67,14 @@ defmodule Cadence.Settings do
 
   Returns a map of key => value for all settings in the namespace.
   """
-  @spec all(Mission.t(), atom()) :: map()
-  def all(%MissionEntity{id: id, organization_id: org_id}, namespace) do
-    mission = Cadence.Missions.get_mission!(id, org_id)
-    all(mission, namespace)
+  @spec all(Mission.t() | MissionEntity.t(), atom()) :: map()
+  def all(%MissionEntity{id: mission_id, organization_id: org_id}, namespace) do
+    SettingQueries.all(mission_id, org_id, namespace)
   end
 
   def all(%Mission{} = mission, namespace) do
-    definitions = list_definitions(namespace)
-
-    definitions
-    |> Enum.map(fn definition ->
-      {definition.key, get(mission, namespace, definition.key)}
-    end)
-    |> Map.new()
+    mission = ensure_organization_loaded(mission)
+    SettingQueries.all(mission.id, mission.organization_id, namespace)
   end
 
   @doc """
@@ -108,16 +84,7 @@ defmodule Cadence.Settings do
   """
   @spec get_org(Organization.t(), atom(), atom()) :: any()
   def get_org(%Organization{id: org_id}, namespace, key) do
-    definition = get_definition(namespace, key)
-
-    if is_nil(definition) do
-      nil
-    else
-      case get_stored_value(org_id, "organization", namespace, key) do
-        nil -> definition.default
-        value -> value
-      end
-    end
+    SettingQueries.get_org_value_or_default(org_id, namespace, key)
   end
 
   @doc """
@@ -125,17 +92,13 @@ defmodule Cadence.Settings do
 
   Returns nil if no mission-level override exists.
   """
-  @spec get_mission_override(Mission.t(), atom(), atom()) :: any() | nil
+  @spec get_mission_override(Mission.t() | MissionEntity.t(), atom(), atom()) :: any() | nil
   def get_mission_override(%MissionEntity{id: mission_id}, namespace, key) do
-    get_mission_override_by_id(mission_id, namespace, key)
+    SettingQueries.get_mission_override(mission_id, namespace, key)
   end
 
   def get_mission_override(%Mission{id: mission_id}, namespace, key) do
-    get_mission_override_by_id(mission_id, namespace, key)
-  end
-
-  defp get_mission_override_by_id(mission_id, namespace, key) do
-    get_stored_value(mission_id, "mission", namespace, key)
+    SettingQueries.get_mission_override(mission_id, namespace, key)
   end
 
   ## Public API - Setting Values
@@ -146,23 +109,9 @@ defmodule Cadence.Settings do
   Validates the value against the setting definition.
   """
   @spec set_org(Organization.t(), atom(), atom(), any()) ::
-          {:ok, Setting.t()} | {:error, Ecto.Changeset.t()} | {:error, :invalid_value}
+          {:ok, any()} | {:error, term()}
   def set_org(%Organization{id: org_id}, namespace, key, value) do
-    definition = get_definition(namespace, key)
-
-    cond do
-      is_nil(definition) ->
-        {:error, :unknown_setting}
-
-      definition.scope == :mission_only ->
-        {:error, :mission_only_setting}
-
-      not valid_value?(definition, value) ->
-        {:error, :invalid_value}
-
-      true ->
-        upsert_setting(org_id, "organization", namespace, key, value, definition.type)
-    end
+    SettingOperations.set_org(org_id, namespace, key, value)
   end
 
   @doc """
@@ -170,63 +119,30 @@ defmodule Cadence.Settings do
 
   Validates that the value is more restrictive than the org default.
   """
-  @spec set_mission(Mission.t(), atom(), atom(), any()) ::
-          {:ok, Setting.t()}
-          | {:error, Ecto.Changeset.t()}
+  @spec set_mission(Mission.t() | MissionEntity.t(), atom(), atom(), any()) ::
+          {:ok, any()}
           | {:error, :less_restrictive_than_org, map()}
-          | {:error, :org_only_setting}
-          | {:error, :invalid_value}
-  def set_mission(%MissionEntity{id: id, organization_id: org_id}, namespace, key, value) do
-    mission = Cadence.Missions.get_mission!(id, org_id)
-    set_mission(mission, namespace, key, value)
+          | {:error, term()}
+  def set_mission(%MissionEntity{id: mission_id, organization_id: org_id}, namespace, key, value) do
+    SettingOperations.set_mission(mission_id, org_id, namespace, key, value)
   end
 
   def set_mission(%Mission{} = mission, namespace, key, value) do
     mission = ensure_organization_loaded(mission)
-    definition = get_definition(namespace, key)
-
-    cond do
-      is_nil(definition) ->
-        {:error, :unknown_setting}
-
-      definition.scope == :org_only ->
-        {:error, :org_only_setting}
-
-      not valid_value?(definition, value) ->
-        {:error, :invalid_value}
-
-      true ->
-        org_value = get_org(mission.organization, namespace, key)
-
-        case check_restrictiveness(definition, org_value, value) do
-          :ok ->
-            upsert_setting(mission.id, "mission", namespace, key, value, definition.type)
-
-          {:error, reason} ->
-            {:error, :less_restrictive_than_org, reason}
-        end
-    end
+    SettingOperations.set_mission(mission.id, mission.organization_id, namespace, key, value)
   end
 
   @doc """
   Clears a mission-level override, reverting to the org default.
   """
-  @spec clear_mission_override(Mission.t(), atom(), atom()) ::
-          {:ok, Setting.t()} | {:error, :not_found}
+  @spec clear_mission_override(Mission.t() | MissionEntity.t(), atom(), atom()) ::
+          :ok | {:error, :not_found}
   def clear_mission_override(%MissionEntity{id: mission_id}, namespace, key) do
-    clear_mission_override_by_id(mission_id, namespace, key)
+    SettingOperations.clear_mission_override(mission_id, namespace, key)
   end
 
   def clear_mission_override(%Mission{id: mission_id}, namespace, key) do
-    clear_mission_override_by_id(mission_id, namespace, key)
-  end
-
-  defp clear_mission_override_by_id(mission_id, namespace, key) do
-    case settings_repo().delete(mission_id, "mission", to_string(namespace), to_string(key)) do
-      {:ok, 0} -> {:error, :not_found}
-      {:ok, _count} -> :ok
-      {:error, _} = error -> error
-    end
+    SettingOperations.clear_mission_override(mission_id, namespace, key)
   end
 
   ## Public API - Definitions
@@ -236,10 +152,7 @@ defmodule Cadence.Settings do
   """
   @spec get_definition(atom(), atom()) :: map() | nil
   def get_definition(namespace, key) do
-    case find_definition_module(namespace) do
-      nil -> nil
-      module -> module.get_definition(key)
-    end
+    SettingQueries.get_definition(namespace, key)
   end
 
   @doc """
@@ -247,10 +160,7 @@ defmodule Cadence.Settings do
   """
   @spec list_definitions(atom()) :: [map()]
   def list_definitions(namespace) do
-    case find_definition_module(namespace) do
-      nil -> []
-      module -> module.list_definitions()
-    end
+    SettingQueries.list_definitions(namespace)
   end
 
   @doc """
@@ -258,7 +168,7 @@ defmodule Cadence.Settings do
   """
   @spec list_namespaces() :: [atom()]
   def list_namespaces do
-    Enum.map(@definition_modules, & &1.__namespace__())
+    SettingQueries.list_namespaces()
   end
 
   ## Public API - UI Helpers
@@ -268,22 +178,8 @@ defmodule Cadence.Settings do
   Useful for rendering settings UI.
   """
   @spec get_all_org_settings(Organization.t(), atom()) :: [map()]
-  def get_all_org_settings(%Organization{} = org, namespace) do
-    list_definitions(namespace)
-    |> Enum.filter(fn def -> def.scope in [:both, :org_only] end)
-    |> Enum.map(fn definition ->
-      %{
-        key: definition.key,
-        label: definition.label,
-        description: definition.description,
-        type: definition.type,
-        default: definition.default,
-        value: get_org(org, namespace, definition.key),
-        restrictiveness: definition.restrictiveness,
-        validate: definition.validate,
-        scope: definition.scope
-      }
-    end)
+  def get_all_org_settings(%Organization{id: org_id}, namespace) do
+    SettingQueries.get_all_org_settings(org_id, namespace)
   end
 
   @doc """
@@ -291,39 +187,13 @@ defmodule Cadence.Settings do
   Useful for rendering mission settings UI with override support.
   """
   @spec get_all_mission_settings(Mission.t() | MissionEntity.t(), atom()) :: [map()]
-  def get_all_mission_settings(%MissionEntity{id: id, organization_id: org_id}, namespace) do
-    # Load the Ecto schema for preloading organization
-    mission = Cadence.Missions.get_mission!(id, org_id)
-    get_all_mission_settings(mission, namespace)
+  def get_all_mission_settings(%MissionEntity{id: mission_id, organization_id: org_id}, namespace) do
+    SettingQueries.get_all_mission_settings(mission_id, org_id, namespace)
   end
 
   def get_all_mission_settings(%Mission{} = mission, namespace) do
     mission = ensure_organization_loaded(mission)
-
-    list_definitions(namespace)
-    |> Enum.filter(fn def -> def.scope in [:both, :mission_only] end)
-    |> Enum.map(fn definition ->
-      org_value = get_org(mission.organization, namespace, definition.key)
-      mission_override = get_mission_override(mission, namespace, definition.key)
-
-      %{
-        key: definition.key,
-        label: definition.label,
-        description: definition.description,
-        type: definition.type,
-        org_value: org_value,
-        mission_override: mission_override,
-        has_override: not is_nil(mission_override),
-        effective_value: if(is_nil(mission_override), do: org_value, else: mission_override),
-        restrictiveness: definition.restrictiveness,
-        validate: definition.validate,
-        scope: definition.scope,
-        # Computed constraints for UI
-        min_value: compute_min_value(definition, org_value),
-        max_value: compute_max_value(definition, org_value),
-        can_override: can_override?(definition, org_value)
-      }
-    end)
+    SettingQueries.get_all_mission_settings(mission.id, mission.organization_id, namespace)
   end
 
   @doc """
@@ -332,18 +202,7 @@ defmodule Cadence.Settings do
   """
   @spec get_namespace_info(atom()) :: map() | nil
   def get_namespace_info(namespace) do
-    case namespace do
-      :procedures ->
-        %{
-          key: :procedures,
-          label: "Procedures",
-          description: "Settings for procedure approval workflows",
-          icon: "hero-document-text"
-        }
-
-      _ ->
-        nil
-    end
+    SettingQueries.get_namespace_info(namespace)
   end
 
   @doc """
@@ -351,9 +210,7 @@ defmodule Cadence.Settings do
   """
   @spec list_namespaces_with_info() :: [map()]
   def list_namespaces_with_info do
-    list_namespaces()
-    |> Enum.map(&get_namespace_info/1)
-    |> Enum.reject(&is_nil/1)
+    SettingQueries.list_namespaces_with_info()
   end
 
   ## Public API - Validation Helpers
@@ -363,113 +220,18 @@ defmodule Cadence.Settings do
 
   Returns `:ok` or `{:error, :less_restrictive_than_org, details}`.
   """
-  @spec can_mission_override?(Mission.t(), atom(), atom(), any()) ::
+  @spec can_mission_override?(Mission.t() | MissionEntity.t(), atom(), atom(), any()) ::
           :ok | {:error, :less_restrictive_than_org, map()} | {:error, :unknown_setting}
-  def can_mission_override?(%MissionEntity{id: id, organization_id: org_id}, namespace, key, value) do
-    mission = Cadence.Missions.get_mission!(id, org_id)
-    can_mission_override?(mission, namespace, key, value)
+  def can_mission_override?(%MissionEntity{id: mission_id, organization_id: org_id}, namespace, key, value) do
+    SettingOperations.can_set_mission_value?(mission_id, org_id, namespace, key, value)
   end
 
   def can_mission_override?(%Mission{} = mission, namespace, key, value) do
     mission = ensure_organization_loaded(mission)
-    definition = get_definition(namespace, key)
-
-    if is_nil(definition) do
-      {:error, :unknown_setting}
-    else
-      org_value = get_org(mission.organization, namespace, key)
-
-      case check_restrictiveness(definition, org_value, value) do
-        :ok -> :ok
-        {:error, reason} -> {:error, :less_restrictive_than_org, reason}
-      end
-    end
+    SettingOperations.can_set_mission_value?(mission.id, mission.organization_id, namespace, key, value)
   end
 
   ## Private Functions
-
-  defp find_definition_module(namespace) do
-    Enum.find(@definition_modules, fn module ->
-      module.__namespace__() == namespace
-    end)
-  end
-
-  defp get_stored_value(scope_id, scope_type, namespace, key) do
-    case settings_repo().get_value(scope_id, scope_type, to_string(namespace), to_string(key)) do
-      nil -> nil
-      value_map -> Setting.extract_value(value_map)
-    end
-  end
-
-  defp upsert_setting(scope_id, scope_type, namespace, key, value, type) do
-    attrs = %{
-      scope_type: scope_type,
-      scope_id: scope_id,
-      namespace: to_string(namespace),
-      key: to_string(key),
-      value: Setting.wrap_value(value, type)
-    }
-
-    settings_repo().upsert(attrs)
-  end
-
-  defp valid_value?(definition, value) do
-    type_valid =
-      case definition.type do
-        :integer -> is_integer(value)
-        :boolean -> is_boolean(value)
-        :string -> is_binary(value)
-        _ -> false
-      end
-
-    alias Cadence.Settings.Definition
-
-    type_valid && Definition.valid?(value, definition.validate)
-  end
-
-  defp check_restrictiveness(definition, org_value, mission_value) do
-    if more_restrictive?(definition.restrictiveness, org_value, mission_value) do
-      :ok
-    else
-      {:error, build_restrictiveness_error(definition, org_value, mission_value)}
-    end
-  end
-
-  defp more_restrictive?(restrictiveness, org_value, mission_value) do
-    case restrictiveness do
-      :none ->
-        true
-
-      :higher ->
-        mission_value >= org_value
-
-      :lower ->
-        mission_value <= org_value
-
-      :false_is_stricter ->
-        # false is more restrictive than true
-        # mission can set false if org is true, but not true if org is false
-        not mission_value or org_value
-    end
-  end
-
-  defp build_restrictiveness_error(definition, org_value, mission_value) do
-    base = %{org_value: org_value, mission_value: mission_value}
-
-    case definition.restrictiveness do
-      :higher ->
-        Map.put(base, :min_allowed, org_value)
-
-      :lower ->
-        Map.put(base, :max_allowed, org_value)
-
-      :false_is_stricter ->
-        Map.put(base, :reason, "cannot enable when disabled at org level")
-
-      _ ->
-        base
-    end
-  end
 
   defp ensure_organization_loaded(%Mission{organization: %Organization{}} = mission) do
     mission
@@ -477,29 +239,5 @@ defmodule Cadence.Settings do
 
   defp ensure_organization_loaded(%Mission{} = mission) do
     Repo.preload(mission, :organization)
-  end
-
-  defp compute_min_value(definition, org_value) do
-    case {definition.type, definition.restrictiveness, definition.validate} do
-      {:integer, :higher, {:range, _, _}} -> org_value
-      {:integer, _, {:range, min, _}} -> min
-      _ -> nil
-    end
-  end
-
-  defp compute_max_value(definition, org_value) do
-    case {definition.type, definition.restrictiveness, definition.validate} do
-      {:integer, :lower, {:range, _, _}} -> org_value
-      {:integer, _, {:range, _, max}} -> max
-      _ -> nil
-    end
-  end
-
-  defp can_override?(definition, org_value) do
-    # For false_is_stricter booleans, can only override if org is true
-    case {definition.type, definition.restrictiveness} do
-      {:boolean, :false_is_stricter} -> org_value == true
-      _ -> true
-    end
   end
 end
