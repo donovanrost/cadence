@@ -11,8 +11,8 @@ defmodule Cadence.Alarms.IntegrationTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Alarms
-  alias Cadence.Alarms.Engine.AlarmManager
-  alias Cadence.Alarms.Engine.RuleCache
+  alias Cadence.Runtime.Alarms.AlarmManager
+  alias Cadence.Runtime.Alarms.RuleCache
   alias Cadence.Recordings
 
   import Cadence.OrganizationsFixtures

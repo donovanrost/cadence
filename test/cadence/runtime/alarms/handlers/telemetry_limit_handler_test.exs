@@ -1,4 +1,4 @@
-defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
+defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandlerTest do
   @moduledoc """
   Tests for TelemetryLimitHandler.
 
@@ -9,8 +9,8 @@ defmodule Cadence.Alarms.Engine.Handlers.TelemetryLimitHandlerTest do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
-  alias Cadence.Alarms.Engine.Handlers.TelemetryLimitHandler
-  alias Cadence.Alarms.Engine.RuleCache
+  alias Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandler
+  alias Cadence.Runtime.Alarms.RuleCache
   alias Cadence.Recordings
 
   import Cadence.OrganizationsFixtures

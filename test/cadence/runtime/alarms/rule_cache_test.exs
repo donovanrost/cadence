@@ -1,10 +1,10 @@
-defmodule Cadence.Alarms.Engine.RuleCacheTest do
+defmodule Cadence.Runtime.Alarms.RuleCacheTest do
   @moduledoc """
   Tests for RuleCache ETS-based caching of alarm rules.
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Alarms.Engine.RuleCache
+  alias Cadence.Runtime.Alarms.RuleCache
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

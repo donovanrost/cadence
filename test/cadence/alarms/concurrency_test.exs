@@ -16,7 +16,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Alarms
-  alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Runtime.Alarms.AlarmManager
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

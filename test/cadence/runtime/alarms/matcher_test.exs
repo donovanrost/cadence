@@ -1,8 +1,8 @@
-defmodule Cadence.Alarms.Engine.MatcherTest do
+defmodule Cadence.Runtime.Alarms.MatcherTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Alarms.AlarmRule
-  alias Cadence.Alarms.Engine.Matcher
+  alias Cadence.Runtime.Alarms.Matcher
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   describe "matches?/2" do
