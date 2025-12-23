@@ -65,8 +65,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository do
 
       schema ->
         schema
-        |> UserSchema.email_changeset(entity_to_schema_attrs(entity))
+        # Use validate_unique: false to skip the "email did not change" validation
+        # This allows us to update other fields without requiring an email change
+        |> UserSchema.email_changeset(entity_to_schema_attrs(entity), validate_unique: false)
         |> maybe_apply_password_update(schema, entity)
+        |> maybe_apply_confirmed_at(entity)
         |> Repo.update()
         |> handle_result()
     end
@@ -248,6 +251,12 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository do
     else
       changeset
     end
+  end
+
+  defp maybe_apply_confirmed_at(changeset, %UserEntity{confirmed_at: nil}), do: changeset
+
+  defp maybe_apply_confirmed_at(changeset, %UserEntity{confirmed_at: confirmed_at}) do
+    Ecto.Changeset.put_change(changeset, :confirmed_at, confirmed_at)
   end
 
   defp apply_filter(query, _field, nil), do: query

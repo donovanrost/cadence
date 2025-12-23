@@ -120,19 +120,20 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   - `url_safe_token` is the base64-encoded token for the confirmation URL
   - `token_entity` is the entity to persist (with hashed token)
 
-  The context includes the new email address for verification.
+  The context includes the CURRENT email for verification.
+  The sent_to field contains the NEW email.
   """
-  @spec build_change_email_token(String.t(), String.t()) :: {String.t(), t()}
-  def build_change_email_token(user_id, new_email) do
-    build_change_email_token_with_bytes(user_id, new_email, :crypto.strong_rand_bytes(@rand_size))
+  @spec build_change_email_token(String.t(), String.t(), String.t()) :: {String.t(), t()}
+  def build_change_email_token(user_id, current_email, new_email) do
+    build_change_email_token_with_bytes(user_id, current_email, new_email, :crypto.strong_rand_bytes(@rand_size))
   end
 
   @doc """
   Builds a change email token with provided random bytes.
   """
-  @spec build_change_email_token_with_bytes(String.t(), String.t(), binary()) :: {String.t(), t()}
-  def build_change_email_token_with_bytes(user_id, new_email, random_bytes) do
-    context = "change:#{new_email}"
+  @spec build_change_email_token_with_bytes(String.t(), String.t(), String.t(), binary()) :: {String.t(), t()}
+  def build_change_email_token_with_bytes(user_id, current_email, new_email, random_bytes) do
+    context = "change:#{current_email}"
     build_hashed_token(user_id, context, new_email, random_bytes)
   end
 
@@ -198,10 +199,13 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   def valid_change_email_token?(_), do: false
 
   @doc """
-  Extracts the new email from a change email token context.
+  Extracts the new email from a change email token's sent_to field.
   """
   @spec extract_new_email(t()) :: {:ok, String.t()} | :error
-  def extract_new_email(%__MODULE__{context: "change:" <> email}), do: {:ok, email}
+  def extract_new_email(%__MODULE__{context: "change:" <> _, sent_to: email}) when is_binary(email) do
+    {:ok, email}
+  end
+
   def extract_new_email(_), do: :error
 
   # ===========================================================================

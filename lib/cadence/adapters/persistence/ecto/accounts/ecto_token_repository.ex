@@ -204,6 +204,37 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoTokenRepository do
   end
 
   # ===========================================================================
+  # Bulk Token Operations
+  # ===========================================================================
+
+  @impl true
+  def list_all_for_user(user_id) do
+    query =
+      from t in TokenSchema,
+        where: t.user_id == ^user_id,
+        order_by: [desc: t.inserted_at]
+
+    query
+    |> Repo.all()
+    |> Enum.map(&schema_to_entity/1)
+  end
+
+  @impl true
+  def delete_all_for_user(user_id) do
+    # First get all tokens so we can return them
+    tokens = list_all_for_user(user_id)
+
+    # Then delete them
+    query =
+      from t in TokenSchema,
+        where: t.user_id == ^user_id
+
+    Repo.delete_all(query)
+
+    {:ok, tokens}
+  end
+
+  # ===========================================================================
   # Cleanup Operations
   # ===========================================================================
 

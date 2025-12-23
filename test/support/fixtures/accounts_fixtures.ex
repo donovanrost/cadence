@@ -26,6 +26,11 @@ defmodule Cadence.AccountsFixtures do
     |> Map.put(:organization_id, organization.id)
   end
 
+  @doc """
+  Creates an unconfirmed user (domain entity).
+
+  Use `unconfirmed_user_schema_fixture/1` if you need an Ecto schema.
+  """
   def unconfirmed_user_fixture(attrs \\ %{}) do
     {:ok, user} =
       attrs
@@ -35,18 +40,32 @@ defmodule Cadence.AccountsFixtures do
     user
   end
 
-  def user_fixture(attrs \\ %{}) do
+  @doc """
+  Creates an unconfirmed user and returns Ecto schema for backward compatibility.
+  """
+  def unconfirmed_user_schema_fixture(attrs \\ %{}) do
     user = unconfirmed_user_fixture(attrs)
+    Cadence.Repo.get!(Cadence.Accounts.User, user.id)
+  end
+
+  @doc """
+  Creates a confirmed user and returns Ecto schema for backward compatibility.
+  """
+  def user_fixture(attrs \\ %{}) do
+    # Use domain entity for the confirmation flow
+    user_entity = unconfirmed_user_fixture(attrs)
 
     token =
       extract_user_token(fn url ->
-        Accounts.deliver_login_instructions(user, url)
+        Accounts.deliver_login_instructions(user_entity, url)
       end)
 
-    {:ok, {user, _expired_tokens}} =
+    {:ok, {confirmed_user, _expired_tokens}} =
       Accounts.login_user_by_magic_link(token)
 
-    user
+    # Reload as Ecto schema for backward compatibility with tests
+    # that expect Ecto associations and preloading
+    Cadence.Repo.get!(Cadence.Accounts.User, confirmed_user.id)
   end
 
   def user_scope_fixture do
@@ -59,10 +78,14 @@ defmodule Cadence.AccountsFixtures do
   end
 
   def set_password(user) do
-    {:ok, {user, _expired_tokens}} =
-      Accounts.update_user_password(user, %{password: valid_user_password()})
+    # Accept either domain entity or Ecto schema
+    user_id = if is_struct(user, Cadence.Accounts.User), do: user.id, else: user.id
 
-    user
+    {:ok, {_updated_entity, _expired_tokens}} =
+      Accounts.update_user_password(user_id, %{password: valid_user_password()})
+
+    # Reload as Ecto schema for backward compatibility
+    Cadence.Repo.get!(Cadence.Accounts.User, user_id)
   end
 
   def extract_user_token(fun) do

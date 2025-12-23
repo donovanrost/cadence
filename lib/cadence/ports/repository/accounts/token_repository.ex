@@ -121,6 +121,23 @@ defmodule Cadence.Ports.Repository.Accounts.TokenRepository do
   @callback delete_all_change_email_tokens_for_user(user_id()) :: :ok
 
   # ============================================================================
+  # Bulk Token Operations
+  # ============================================================================
+
+  @doc """
+  Lists all tokens for a user.
+  """
+  @callback list_all_for_user(user_id()) :: [UserToken.t()]
+
+  @doc """
+  Deletes all tokens for a user and returns the deleted tokens.
+
+  Used when password is changed or user is confirmed via magic link,
+  to invalidate all existing sessions.
+  """
+  @callback delete_all_for_user(user_id()) :: {:ok, [UserToken.t()]}
+
+  # ============================================================================
   # Cleanup Operations
   # ============================================================================
 

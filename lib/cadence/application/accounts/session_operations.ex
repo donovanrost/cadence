@@ -142,6 +142,18 @@ defmodule Cadence.Application.Accounts.SessionOperations do
     token_repo().delete_all_sessions_for_user(user_id)
   end
 
+  @doc """
+  Deletes all tokens for a user (all sessions, magic links, email change tokens).
+
+  Returns the list of tokens that were deleted.
+
+  Used when password is changed or user is confirmed via magic link.
+  """
+  @spec delete_all_tokens(user_id()) :: {:ok, [UserToken.t()]}
+  def delete_all_tokens(user_id) do
+    token_repo().delete_all_for_user(user_id)
+  end
+
   # ===========================================================================
   # Private Helpers
   # ===========================================================================

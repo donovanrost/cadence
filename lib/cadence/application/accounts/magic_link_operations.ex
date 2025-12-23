@@ -124,6 +124,63 @@ defmodule Cadence.Application.Accounts.MagicLinkOperations do
     token_repo().delete_all_login_tokens_for_user(user_id)
   end
 
+  @doc """
+  Logs the user in by magic link.
+
+  There are three cases to consider:
+
+  1. The user has already confirmed their email. They are logged in
+     and the magic link is consumed.
+
+  2. The user has not confirmed their email and no password is set.
+     In this case, the user gets confirmed, logged in, and all tokens
+     are expired (to prevent session fixation).
+
+  3. The user has not confirmed their email but a password is set.
+     This is a security risk and raises an error.
+
+  Returns `{:ok, {user, expired_tokens}}` on success.
+  """
+  @spec login(url_token()) ::
+          {:ok, {User.t(), [UserToken.t()]}} | {:error, :not_found | :invalid_token}
+  def login(url_token) do
+    case verify(url_token) do
+      {:ok, user} ->
+        handle_login(user)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp handle_login(%User{confirmed_at: nil, hashed_password: hash} = _user)
+       when not is_nil(hash) do
+    # Security: Prevent session fixation attacks
+    raise """
+    magic link log in is not allowed for unconfirmed users with a password set!
+
+    This cannot happen with the default implementation, which indicates that you
+    might have adapted the code to a different use case. Please make sure to read the
+    "Mixing magic link and password registration" section of `mix help phx.gen.auth`.
+    """
+  end
+
+  defp handle_login(%User{confirmed_at: nil} = user) do
+    # Unconfirmed user without password - confirm and delete all tokens
+    alias Cadence.Application.Accounts.{UserOperations, SessionOperations}
+
+    with {:ok, confirmed_user} <- UserOperations.confirm(user.id),
+         {:ok, expired_tokens} <- SessionOperations.delete_all_tokens(user.id) do
+      {:ok, {confirmed_user, expired_tokens}}
+    end
+  end
+
+  defp handle_login(%User{} = user) do
+    # Confirmed user - just consume the login token
+    consume(user.id)
+    {:ok, {user, []}}
+  end
+
   # ===========================================================================
   # Email Change Tokens
   # ===========================================================================
@@ -133,12 +190,15 @@ defmodule Cadence.Application.Accounts.MagicLinkOperations do
 
   The token is sent to the new email address and, when verified,
   confirms the user wants to change their email to this address.
+
+  The context is built from the current email, and the new email
+  is stored in sent_to for extraction during verification.
   """
-  @spec generate_change_email_token(user_id(), String.t()) ::
+  @spec generate_change_email_token(user_id(), String.t(), String.t()) ::
           {:ok, url_token()} | {:error, term()}
-  def generate_change_email_token(user_id, new_email) do
+  def generate_change_email_token(user_id, current_email, new_email) do
     with {:ok, _user} <- UserQueries.find(user_id) do
-      {url_token, token_entity} = UserToken.build_change_email_token(user_id, new_email)
+      {url_token, token_entity} = UserToken.build_change_email_token(user_id, current_email, new_email)
 
       case token_repo().save(token_entity) do
         {:ok, _saved} -> {:ok, url_token}

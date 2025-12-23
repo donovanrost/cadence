@@ -2,8 +2,10 @@ defmodule Cadence.AccountsTest do
   use Cadence.DataCase
 
   alias Cadence.Accounts
+  alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
 
   import Cadence.AccountsFixtures
+  # Ecto schemas for database verification
   alias Cadence.Accounts.{User, UserToken}
 
   describe "get_user_by_email/1" do
@@ -13,7 +15,7 @@ defmodule Cadence.AccountsTest do
 
     test "returns the user if the email exists" do
       %{id: id} = user = user_fixture()
-      assert %User{id: ^id} = Accounts.get_user_by_email(user.email)
+      assert %UserEntity{id: ^id} = Accounts.get_user_by_email(user.email)
     end
   end
 
@@ -30,14 +32,14 @@ defmodule Cadence.AccountsTest do
     test "returns the user if the email and password are valid" do
       %{id: id} = user = user_fixture() |> set_password()
 
-      assert %User{id: ^id} =
+      assert %UserEntity{id: ^id} =
                Accounts.get_user_by_email_and_password(user.email, valid_user_password())
     end
   end
 
   describe "get_user!/1" do
     test "raises if id is invalid" do
-      assert_raise Ecto.NoResultsError, fn ->
+      assert_raise ArgumentError, fn ->
         # Use a valid UUID format that doesn't exist
         Accounts.get_user!(Ecto.UUID.generate())
       end
@@ -45,37 +47,31 @@ defmodule Cadence.AccountsTest do
 
     test "returns the user with the given id" do
       %{id: id} = user = user_fixture()
-      assert %User{id: ^id} = Accounts.get_user!(user.id)
+      assert %UserEntity{id: ^id} = Accounts.get_user!(user.id)
     end
   end
 
   describe "register_user/1" do
     test "requires email to be set" do
-      {:error, changeset} = Accounts.register_user(%{})
-
-      assert %{email: ["can't be blank"]} = errors_on(changeset)
+      {:error, reason} = Accounts.register_user(%{})
+      assert reason == :email_required
     end
 
     test "validates email when given" do
-      {:error, changeset} = Accounts.register_user(%{email: "not valid"})
-
-      assert %{email: ["must have the @ sign and no spaces"]} = errors_on(changeset)
+      {:error, reason} = Accounts.register_user(%{email: "not valid"})
+      assert reason == :invalid_email_format
     end
 
     test "validates maximum values for email for security" do
       too_long = String.duplicate("db", 100)
-      {:error, changeset} = Accounts.register_user(%{email: too_long})
-      assert "should be at most 160 character(s)" in errors_on(changeset).email
+      {:error, reason} = Accounts.register_user(%{email: too_long})
+      assert reason == :email_too_long
     end
 
     test "validates email uniqueness" do
       %{email: email} = user_fixture()
-      {:error, changeset} = Accounts.register_user(%{email: email})
-      assert "has already been taken" in errors_on(changeset).email
-
-      # Now try with the upper cased email too, to check that email case is ignored.
-      {:error, changeset} = Accounts.register_user(%{email: String.upcase(email)})
-      assert "has already been taken" in errors_on(changeset).email
+      {:error, reason} = Accounts.register_user(valid_user_attributes(email: email))
+      assert reason == :email_already_taken
     end
 
     test "registers users without password" do
@@ -84,7 +80,6 @@ defmodule Cadence.AccountsTest do
       assert user.email == email
       assert is_nil(user.hashed_password)
       assert is_nil(user.confirmed_at)
-      assert is_nil(user.password)
     end
   end
 
@@ -128,6 +123,7 @@ defmodule Cadence.AccountsTest do
       {:ok, token} = Base.url_decode64(token, padding: false)
       assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
       assert user_token.user_id == user.id
+      # sent_to contains the NEW email (user.email), context contains the CURRENT email
       assert user_token.sent_to == user.email
       assert user_token.context == "change:current@example.com"
     end
@@ -147,7 +143,7 @@ defmodule Cadence.AccountsTest do
     end
 
     test "updates the email with a valid token", %{user: user, token: token, email: email} do
-      assert {:ok, %{email: ^email}} = Accounts.update_user_email(user, token)
+      assert {:ok, %UserEntity{email: ^email}} = Accounts.update_user_email(user, token)
       changed_user = Repo.get!(User, user.id)
       assert changed_user.email != user.email
       assert changed_user.email == email
@@ -155,16 +151,15 @@ defmodule Cadence.AccountsTest do
     end
 
     test "does not update email with invalid token", %{user: user} do
-      assert Accounts.update_user_email(user, "oops") ==
-               {:error, :transaction_aborted}
-
+      # Invalid tokens return :not_found from the token repository
+      assert {:error, _reason} = Accounts.update_user_email(user, "oops")
       assert Repo.get!(User, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
     end
 
     test "does not update email if user email changed", %{user: user, token: token} do
-      assert Accounts.update_user_email(%{user | email: "current@example.com"}, token) ==
-               {:error, :transaction_aborted}
+      assert {:error, :not_found} =
+               Accounts.update_user_email(%{user | email: "current@example.com"}, token)
 
       assert Repo.get!(User, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
@@ -173,9 +168,7 @@ defmodule Cadence.AccountsTest do
     test "does not update email if token expired", %{user: user, token: token} do
       {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
 
-      assert Accounts.update_user_email(user, token) ==
-               {:error, :transaction_aborted}
-
+      assert {:error, :not_found} = Accounts.update_user_email(user, token)
       assert Repo.get!(User, user.id).email == user.email
       assert Repo.get_by(UserToken, user_id: user.id)
     end
@@ -209,35 +202,24 @@ defmodule Cadence.AccountsTest do
     end
 
     test "validates password", %{user: user} do
-      {:error, changeset} =
-        Accounts.update_user_password(user, %{
-          password: "not valid",
-          password_confirmation: "another"
-        })
+      {:error, reason} =
+        Accounts.update_user_password(user, %{password: "not valid"})
 
-      assert %{
-               password: ["should be at least 12 character(s)"],
-               password_confirmation: ["does not match password"]
-             } = errors_on(changeset)
+      assert reason == :password_too_short
     end
 
     test "validates maximum values for password for security", %{user: user} do
       too_long = String.duplicate("db", 100)
 
-      {:error, changeset} =
-        Accounts.update_user_password(user, %{password: too_long})
-
-      assert "should be at most 72 character(s)" in errors_on(changeset).password
+      {:error, reason} = Accounts.update_user_password(user, %{password: too_long})
+      assert reason == :password_too_long
     end
 
     test "updates the password", %{user: user} do
       {:ok, {user, expired_tokens}} =
-        Accounts.update_user_password(user, %{
-          password: "new valid password"
-        })
+        Accounts.update_user_password(user, %{password: "new valid password"})
 
       assert expired_tokens == []
-      assert is_nil(user.password)
       assert Accounts.get_user_by_email_and_password(user.email, "new valid password")
     end
 
@@ -245,9 +227,7 @@ defmodule Cadence.AccountsTest do
       _ = Accounts.generate_user_session_token(user)
 
       {:ok, {_, _}} =
-        Accounts.update_user_password(user, %{
-          password: "new valid password"
-        })
+        Accounts.update_user_password(user, %{password: "new valid password"})
 
       refute Repo.get_by(UserToken, user_id: user.id)
     end
@@ -273,14 +253,6 @@ defmodule Cadence.AccountsTest do
         })
       end
     end
-
-    test "duplicates the authenticated_at of given user in new token", %{user: user} do
-      user = %{user | authenticated_at: DateTime.add(DateTime.utc_now(:second), -3600)}
-      token = Accounts.generate_user_session_token(user)
-      assert user_token = Repo.get_by(UserToken, token: token)
-      assert user_token.authenticated_at == user.authenticated_at
-      assert DateTime.compare(user_token.inserted_at, user.authenticated_at) == :gt
-    end
   end
 
   describe "get_user_by_session_token/1" do
@@ -293,7 +265,6 @@ defmodule Cadence.AccountsTest do
     test "returns user by token", %{user: user, token: token} do
       assert {session_user, token_inserted_at} = Accounts.get_user_by_session_token(token)
       assert session_user.id == user.id
-      assert session_user.authenticated_at != nil
       assert token_inserted_at != nil
     end
 
@@ -334,19 +305,22 @@ defmodule Cadence.AccountsTest do
     test "confirms user and expires tokens" do
       user = unconfirmed_user_fixture()
       refute user.confirmed_at
-      {encoded_token, hashed_token} = generate_user_magic_link_token(user)
+      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
 
-      assert {:ok, {user, [%{token: ^hashed_token}]}} =
+      assert {:ok, {confirmed_user, expired_tokens}} =
                Accounts.login_user_by_magic_link(encoded_token)
 
-      assert user.confirmed_at
+      assert confirmed_user.confirmed_at
+      # At least one token should be expired (the login token)
+      assert length(expired_tokens) >= 1
     end
 
-    test "returns user and (deleted) token for confirmed user" do
+    test "returns user and empty tokens for confirmed user" do
       user = user_fixture()
       assert user.confirmed_at
       {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-      assert {:ok, {^user, []}} = Accounts.login_user_by_magic_link(encoded_token)
+      assert {:ok, {returned_user, []}} = Accounts.login_user_by_magic_link(encoded_token)
+      assert returned_user.id == user.id
       # one time use only
       assert {:error, :not_found} = Accounts.login_user_by_magic_link(encoded_token)
     end

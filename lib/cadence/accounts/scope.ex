@@ -17,6 +17,7 @@ defmodule Cadence.Accounts.Scope do
   """
 
   alias Cadence.Accounts.User
+  alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
   alias Cadence.Organizations.Organization
 
   defstruct [
@@ -36,6 +37,12 @@ defmodule Cadence.Accounts.Scope do
   - `:preload_organizations` - Whether to preload all organizations (defaults to true)
   """
   def for_user(user_or_nil, opts \\ [])
+
+  # Handle domain entities by loading the Ecto schema
+  def for_user(%UserEntity{id: user_id}, opts) do
+    user = Cadence.Repo.get!(User, user_id)
+    for_user(user, opts)
+  end
 
   def for_user(%User{} = user, opts) do
     preload_orgs? = Keyword.get(opts, :preload_organizations, true)

@@ -63,8 +63,32 @@ defmodule Cadence.Application.Accounts.UserOperations do
     with {:ok, hashed_password} <- maybe_hash_password(attrs[:password]),
          attrs <- Map.put(attrs, :hashed_password, hashed_password),
          {:ok, user} <- User.new(attrs),
-         {:ok, saved} <- repo().save(user) do
+         {:ok, saved} <- repo().save(user),
+         :ok <- maybe_create_organization_membership(saved, attrs) do
       {:ok, saved}
+    end
+  end
+
+  defp maybe_create_organization_membership(user, attrs) do
+    org_id = attrs[:organization_id]
+
+    if is_nil(org_id) do
+      :ok
+    else
+      role = attrs[:role] || "member"
+
+      # Create organization membership via the Organizations context
+      # This couples Accounts to Organizations, but preserves backward compat
+      membership_attrs = %{
+        organization_id: org_id,
+        user_id: user.id,
+        role: role
+      }
+
+      case Cadence.Organizations.create_organization_membership(membership_attrs) do
+        {:ok, _membership} -> :ok
+        {:error, reason} -> {:error, {:membership_creation_failed, reason}}
+      end
     end
   end
 
@@ -180,6 +204,58 @@ defmodule Cadence.Application.Accounts.UserOperations do
     with {:ok, user} <- UserQueries.find(user_id),
          {:ok, updated} <- User.revoke_system_admin(user),
          {:ok, saved} <- repo().save(updated) do
+      {:ok, saved}
+    end
+  end
+
+  # ===========================================================================
+  # System Admin Management
+  # ===========================================================================
+
+  @doc """
+  Ensures a system admin user exists with the given email and password.
+
+  If the user already exists:
+  - Updates the password if provided
+  - Ensures system_admin flag is true
+
+  If the user doesn't exist:
+  - Creates a new system admin user with confirmed email
+
+  This function is idempotent and safe to call on every application start.
+  """
+  @spec ensure_system_admin(String.t(), String.t()) :: {:ok, User.t()} | {:error, term()}
+  def ensure_system_admin(email, password) when is_binary(email) and is_binary(password) do
+    case repo().find_by_email(email) do
+      {:ok, user} ->
+        update_existing_system_admin(user, password)
+
+      {:error, :not_found} ->
+        create_system_admin(email, password)
+    end
+  end
+
+  defp create_system_admin(email, password) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    with {:ok, hashed_password} <- maybe_hash_password(password),
+         {:ok, user} <-
+           User.new(%{
+             email: email,
+             hashed_password: hashed_password,
+             system_admin: true,
+             confirmed_at: now
+           }),
+         {:ok, saved} <- repo().save(user) do
+      {:ok, saved}
+    end
+  end
+
+  defp update_existing_system_admin(user, password) do
+    with {:ok, hashed_password} <- maybe_hash_password(password),
+         {:ok, updated} <- User.set_hashed_password(user, hashed_password),
+         {:ok, admin} <- User.make_system_admin(updated),
+         {:ok, saved} <- repo().save(admin) do
       {:ok, saved}
     end
   end
