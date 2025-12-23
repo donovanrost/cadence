@@ -28,7 +28,7 @@ defmodule Cadence.Targets do
   alias Cadence.Application.Targeting.{TargetQueries, TargetOperations}
   alias Cadence.Missions.Mission
   alias Cadence.Runtime.Missions.MissionInstance
-  alias Cadence.Commands.TargetPipelineSupervisor
+  alias Cadence.Runtime.Commands.TargetPipelineSupervisor
   alias Cadence.Repo
 
   import Ecto.Query, only: [from: 2]
@@ -473,7 +473,7 @@ defmodule Cadence.Targets do
   end
 
   defp cleanup_target_commands(%Target{} = target) do
-    alias Cadence.Commands.TargetQueue
+    alias Cadence.Runtime.Commands.TargetQueue
     alias Cadence.Ports.Repository.Commanding.QueueRepository
 
     case TargetQueue.whereis(target.mission_id, target.id) do

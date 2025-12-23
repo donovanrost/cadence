@@ -5,6 +5,7 @@ defmodule CadenceWeb.MissionLive.Show do
   use CadenceWeb, :live_view
 
   alias Cadence.{Alarms, Interfaces, MissionDatabase, Missions, Targets}
+  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Telemetry.Database.DerivedItem
 
   @impl true
@@ -32,6 +33,12 @@ defmodule CadenceWeb.MissionLive.Show do
   defp apply_action(socket, :show, _params) do
     mission = socket.assigns.mission
 
+    # Subscribe to real-time updates for dashboard
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "targets:#{mission.id}")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:events")
+    end
+
     # Load summary counts for the overview cards
     targets = Targets.list_targets(mission)
     interfaces = Interfaces.list_interfaces(mission)
@@ -40,7 +47,7 @@ defmodule CadenceWeb.MissionLive.Show do
     alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
     # Calculate summary stats
-    targets_online = Enum.count(targets, &(&1.status == "online"))
+    targets_online = Enum.count(targets, &(&1.status == :online))
     interfaces_connected = Enum.count(interfaces, &(&1.status == "connected"))
 
     # Get active definition set from first database with one
@@ -52,12 +59,19 @@ defmodule CadenceWeb.MissionLive.Show do
 
     enabled_alarms = Enum.count(alarm_rules, & &1.enabled)
 
+    # Build interface connection status map
+    interface_connection_status =
+      Enum.reduce(interfaces, %{}, fn interface, acc ->
+        Map.put(acc, interface.id, %{state: :unknown, client_count: 0})
+      end)
+
     socket
     |> assign(:page_title, mission.name)
     |> assign(:targets, targets)
     |> assign(:targets_online, targets_online)
     |> assign(:interfaces, interfaces)
     |> assign(:interfaces_connected, interfaces_connected)
+    |> assign(:interface_connection_status, interface_connection_status)
     |> assign(:databases, databases)
     |> assign(:active_definition_set, active_definition_set)
     |> assign(:derived_items_count, length(derived_items))
@@ -127,6 +141,52 @@ defmodule CadenceWeb.MissionLive.Show do
         {:noreply, put_flash(socket, :error, "You don't have permission to stop this mission")}
     end
   end
+
+  # Real-time target status updates
+  @impl true
+  def handle_info({:target_changed, _event_type, updated_target}, socket) do
+    # Update the target in the list and recalculate online count
+    targets =
+      Enum.map(socket.assigns.targets, fn target ->
+        if target.id == updated_target.id do
+          %{target | status: updated_target.status}
+        else
+          target
+        end
+      end)
+
+    targets_online = Enum.count(targets, &(&1.status == :online))
+
+    {:noreply,
+     socket
+     |> assign(:targets, targets)
+     |> assign(:targets_online, targets_online)}
+  end
+
+  # Real-time interface connection status updates
+  def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, socket) do
+    interface_connection_status =
+      Map.put(
+        socket.assigns[:interface_connection_status] || %{},
+        event.interface_id,
+        %{state: event.new_state, client_count: event.client_count}
+      )
+
+    # Recalculate connected count based on real-time status
+    interfaces_connected =
+      Enum.count(socket.assigns.interfaces, fn interface ->
+        conn_status = Map.get(interface_connection_status, interface.id, %{state: :disconnected})
+        conn_status.state == :connected
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:interface_connection_status, interface_connection_status)
+     |> assign(:interfaces_connected, interfaces_connected)}
+  end
+
+  # Catch-all for other PubSub events
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

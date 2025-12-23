@@ -34,7 +34,7 @@ defmodule Cadence.Commands.Verification do
 
   require Logger
 
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   @doc """
   Verification configuration struct.

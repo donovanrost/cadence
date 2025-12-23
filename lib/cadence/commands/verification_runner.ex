@@ -41,7 +41,7 @@ defmodule Cadence.Commands.VerificationRunner do
 
   alias Cadence.MissionDatabase.CommandVerifier
   alias Cadence.Commands.Verification
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   @stage_order [
     :transferred_to_range,

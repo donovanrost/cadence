@@ -60,6 +60,7 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
   import Ecto.Changeset
   import Ecto.Query
 
+  alias Cadence.Config.VersionRegistry
   alias Cadence.Repo
   alias Cadence.MissionDatabase.Database
 
@@ -223,25 +224,37 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
 
   Multiple versions can be published simultaneously within a database.
   Targets explicitly choose which version to use.
+
+  Invalidates the definition_set config version to trigger cache reloads.
   """
   def publish(%__MODULE__{} = definition_set) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    definition_set
-    |> change(%{published_at: now})
-    |> Repo.update()
+    with {:ok, updated} <-
+           definition_set
+           |> change(%{published_at: now})
+           |> Repo.update() do
+      VersionRegistry.invalidate(:definition_set, updated.id)
+      {:ok, updated}
+    end
   end
 
   @doc """
   Marks a DefinitionSet as deprecated.
   Deprecated versions can still be used by targets but shouldn't be assigned to new ones.
+
+  Invalidates the definition_set config version to trigger cache reloads.
   """
   def deprecate(%__MODULE__{} = definition_set) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    definition_set
-    |> change(%{superseded_at: now})
-    |> Repo.update()
+    with {:ok, updated} <-
+           definition_set
+           |> change(%{superseded_at: now})
+           |> Repo.update() do
+      VersionRegistry.invalidate(:definition_set, updated.id)
+      {:ok, updated}
+    end
   end
 
   # ===========================================================================

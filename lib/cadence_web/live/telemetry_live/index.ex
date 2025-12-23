@@ -10,7 +10,7 @@ defmodule CadenceWeb.TelemetryLive.Index do
 
   alias Cadence.{Missions, Targets}
   alias Cadence.Runtime.Missions.MissionSupervisor
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do

@@ -29,8 +29,8 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
 
   require Logger
 
-  alias Cadence.Commands.TargetDispatcher
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Commands.TargetDispatcher
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   @type context :: %{
           mission_id: String.t(),

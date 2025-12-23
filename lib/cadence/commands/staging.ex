@@ -29,7 +29,8 @@ defmodule Cadence.Commands.Staging do
   import Ecto.Query, warn: false
 
   alias Cadence.Repo
-  alias Cadence.Commands.{StagedCommand, StagedCommandTarget, TargetQueue}
+  alias Cadence.Commands.{StagedCommand, StagedCommandTarget}
+  alias Cadence.Runtime.Commands.TargetQueue
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Outbox
   alias Ecto.Multi

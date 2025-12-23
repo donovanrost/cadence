@@ -7,6 +7,9 @@ defmodule Cadence.Application do
 
   @impl true
   def start(_type, _args) do
+    # Initialize ETS tables that need to exist before supervision tree starts
+    Cadence.Config.VersionRegistry.init()
+
     children = [
       CadenceWeb.Telemetry,
       Cadence.Repo,
@@ -29,16 +32,16 @@ defmodule Cadence.Application do
       {DynamicSupervisor, name: Cadence.Procedures.ExecutionSupervisor, strategy: :one_for_one},
 
       # Derived Items Cache - caches derived item definitions per mission
-      Cadence.Telemetry.DerivedItems.Cache,
+      Cadence.Runtime.Telemetry.DerivedItems.Cache,
 
       # Processor State - ETS storage for stateful derived item functions
       Cadence.Telemetry.DerivedItems.ProcessorState,
 
       # Limits Cache - caches limits configurations per mission/target
-      Cadence.Telemetry.Limits.Cache,
+      Cadence.Runtime.Telemetry.Limits.Cache,
 
       # Alarm Rule Cache - caches alarm rules for fast lookup
-      Cadence.Alarms.Engine.RuleCache,
+      Cadence.Runtime.Alarms.RuleCache,
 
       # Outbox Processor - processes transactional outbox events
       Cadence.Outbox.Processor,

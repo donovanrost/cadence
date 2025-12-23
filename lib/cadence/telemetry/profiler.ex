@@ -26,9 +26,11 @@ defmodule Cadence.Telemetry.Profiler do
       Cadence.Telemetry.Profiler.analyze(mission_id)
   """
 
-  alias Cadence.Telemetry.{BroadwayPubSub, CurrentValueTable, Pipeline, Stats}
-  alias Cadence.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
-  alias Cadence.Telemetry.Limits.{StateTracker, Cache}
+  alias Cadence.Telemetry.Stats
+  alias Cadence.Runtime.Telemetry.{BroadwayPubSub, Pipeline}
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
+  alias Cadence.Runtime.Telemetry.Limits.{StateTracker, Cache}
 
   @doc """
   Analyzes timing data to detect warmup effects and GC spikes.

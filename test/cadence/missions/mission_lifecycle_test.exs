@@ -5,7 +5,7 @@ defmodule Cadence.Missions.MissionLifecycleTest do
 
   alias Cadence.Missions
   alias Cadence.Runtime.Missions.MissionSupervisor
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   # Allow mission supervisor spawned processes to access the database
   setup do

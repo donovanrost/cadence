@@ -203,7 +203,7 @@ defmodule Cadence.Telemetry.Database.DerivedItem do
 
   # Invalidate the cache for a mission (if cache is running)
   defp invalidate_cache(mission_id) do
-    alias Cadence.Telemetry.DerivedItems.Cache
+    alias Cadence.Runtime.Telemetry.DerivedItems.Cache
 
     if Process.whereis(Cache) do
       Cache.invalidate(mission_id)

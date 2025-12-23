@@ -230,10 +230,21 @@ defmodule Cadence.Application.Targeting.TargetOperations do
   # ===========================================================================
 
   defp broadcast_change(target, event_type) do
+    # Broadcast to existing UI listeners
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
       "targets:#{target.mission_id}",
       {:target_changed, event_type, target}
     )
+
+    # Broadcast to cache listeners (MetaCommandCache, PacketIdentifier)
+    cache_topic = "mission:#{target.mission_id}:targets"
+    cache_event = cache_event_for(event_type, target)
+
+    Phoenix.PubSub.broadcast(Cadence.PubSub, cache_topic, cache_event)
   end
+
+  defp cache_event_for(:created, target), do: {:target_created, target}
+  defp cache_event_for(:deleted, target), do: {:target_deleted, target}
+  defp cache_event_for(_event_type, target), do: {:target_updated, target}
 end

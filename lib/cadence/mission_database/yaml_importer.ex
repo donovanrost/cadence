@@ -76,6 +76,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
 
   require Logger
 
+  alias Cadence.Config.VersionRegistry
   alias Cadence.Repo
 
   alias Cadence.MissionDatabase.{
@@ -103,13 +104,24 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
 
-      import_parsed(database, validated, %{
-        version: version,
-        description: description,
-        source_format: :yaml,
-        source_filename: Path.basename(file_path),
-        source_hash: source_hash
-      })
+      result =
+        import_parsed(database, validated, %{
+          version: version,
+          description: description,
+          source_format: :yaml,
+          source_filename: Path.basename(file_path),
+          source_hash: source_hash
+        })
+
+      # Invalidate cache after successful import
+      case result do
+        {:ok, definition_set} ->
+          VersionRegistry.invalidate(:definition_set, definition_set.id)
+          {:ok, definition_set}
+
+        error ->
+          error
+      end
     end
   end
 
@@ -123,13 +135,24 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       description = validated["description"]
       source_hash = :crypto.hash(:sha256, yaml_content) |> Base.encode16(case: :lower)
 
-      import_parsed(database, validated, %{
-        version: version,
-        description: description,
-        source_format: :yaml,
-        source_filename: nil,
-        source_hash: source_hash
-      })
+      result =
+        import_parsed(database, validated, %{
+          version: version,
+          description: description,
+          source_format: :yaml,
+          source_filename: nil,
+          source_hash: source_hash
+        })
+
+      # Invalidate cache after successful import
+      case result do
+        {:ok, definition_set} ->
+          VersionRegistry.invalidate(:definition_set, definition_set.id)
+          {:ok, definition_set}
+
+        error ->
+          error
+      end
     end
   end
 

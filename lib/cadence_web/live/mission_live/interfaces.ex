@@ -5,6 +5,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
   use CadenceWeb, :live_view
 
   alias Cadence.{Interfaces, Targets}
+  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
 
   @impl true
   def mount(_params, _session, socket) do
@@ -29,10 +30,19 @@ defmodule CadenceWeb.MissionLive.Interfaces do
 
   defp apply_action(socket, :index, _params) do
     mission = socket.assigns.mission
+
+    # Subscribe to real-time interface status updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:events")
+    end
+
     interfaces = Interfaces.list_interfaces(mission)
     targets = Targets.list_targets(mission)
     interface_protocol_counts = build_protocol_counts(interfaces)
     interface_targets = build_interface_targets(interfaces)
+
+    # Build a map of interface_id -> connection status for runtime state
+    interface_connection_status = build_connection_status(interfaces, mission.id)
 
     socket
     |> assign(:page_title, "Interfaces")
@@ -40,6 +50,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     |> assign(:targets, targets)
     |> assign(:interface_protocol_counts, interface_protocol_counts)
     |> assign(:interface_targets, interface_targets)
+    |> assign(:interface_connection_status, interface_connection_status)
     |> assign(:interface, nil)
   end
 
@@ -94,6 +105,22 @@ defmodule CadenceWeb.MissionLive.Interfaces do
      |> assign(:interface_protocol_counts, interface_protocol_counts)
      |> assign(:interface_targets, interface_targets)}
   end
+
+  # Real-time interface connection status updates via PubSub
+  def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, socket) do
+    # Update the connection status map with the new state
+    interface_connection_status =
+      Map.put(
+        socket.assigns[:interface_connection_status] || %{},
+        event.interface_id,
+        %{state: event.new_state, client_count: event.client_count}
+      )
+
+    {:noreply, assign(socket, :interface_connection_status, interface_connection_status)}
+  end
+
+  # Catch-all for other PubSub events we don't handle
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("delete", %{"id" => interface_id}, socket) do
@@ -151,6 +178,15 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     |> Map.new()
   end
 
+  # Build initial connection status - starts as disconnected, updated via PubSub
+  defp build_connection_status(interfaces, _mission_id) do
+    # Initial state is disconnected for all interfaces
+    # Real-time updates come via PubSub :interface_connection_event
+    Enum.reduce(interfaces, %{}, fn interface, acc ->
+      Map.put(acc, interface.id, %{state: :unknown, client_count: 0})
+    end)
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -205,6 +241,25 @@ defmodule CadenceWeb.MissionLive.Interfaces do
       </:col>
       <:col :let={interface} label="Status">
         <.status_badge status={interface.status} />
+      </:col>
+      <:col :let={interface} label="Connection">
+        <% conn_status = Map.get(@interface_connection_status, interface.id, %{state: :disconnected, client_count: 0}) %>
+        <%= case conn_status.state do %>
+          <% :connected -> %>
+            <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+              <span class="mr-1.5 h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+              Connected ({conn_status.client_count})
+            </span>
+          <% :disconnected -> %>
+            <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+              <span class="mr-1.5 h-2 w-2 rounded-full bg-gray-400"></span>
+              Disconnected
+            </span>
+          <% _ -> %>
+            <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+              Unknown
+            </span>
+        <% end %>
       </:col>
       <:col :let={interface} label="Auto Reconnect">
         <.status_badge status={interface.auto_reconnect} true_label="Enabled" false_label="Disabled" />

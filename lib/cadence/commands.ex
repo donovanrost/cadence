@@ -35,19 +35,14 @@ defmodule Cadence.Commands do
 
   alias Cadence.MissionDatabase.{MetaCommand, Argument}
 
-  alias Cadence.Commands.{
-    TargetDispatcher,
-    TargetQueue,
-    TargetPipelineSupervisor,
-    QueueEntry,
-    Staging
-  }
+  alias Cadence.Commands.{QueueEntry, Staging}
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue, TargetPipelineSupervisor}
 
   alias Cadence.Recordings
 
   alias Cadence.{Missions, Targets}
 
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   alias Cadence.Ports.Repository.Commanding.CommandsRepository
   alias Cadence.Ports.Repository.Commanding.QueueRepository

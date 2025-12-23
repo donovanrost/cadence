@@ -25,14 +25,16 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   # Accept both Ecto schema and domain entity
   alias Cadence.Missions.Mission
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Telemetry.CurrentValueTable
-  alias Cadence.Telemetry.PipelineV2
-  alias Cadence.Telemetry.Limits.StateTracker
-  alias Cadence.Telemetry.Limits.StalenessMonitor
-  alias Cadence.Commands.TargetPipelineSupervisor
-  alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.PipelineV2
+  alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
+  alias Cadence.Runtime.Commands.MetaCommandCache
+  alias Cadence.Runtime.Commands.TargetPipelineSupervisor
+  alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Automations.Engine.AutomationManager
   alias Cadence.Procedures.Engine.ExecutionCoordinator
+  alias Cadence.Runtime.Missions.CacheWarmer
 
   @default_partition_count 16
 
@@ -67,7 +69,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
         {CurrentValueTable, mission_id: mission_id},
 
         # Packet Identifier - ETS-based packet type lookup
-        {Cadence.Telemetry.PacketIdentifier, mission_id: mission_id},
+        {Cadence.Runtime.Telemetry.PacketIdentifier, mission_id: mission_id},
+
+        # MetaCommand Cache - ETS-based command lookup for O(1) dispatch
+        {MetaCommandCache, mission_id: mission_id},
 
         # Limits State Tracker - tracks limit states and persistence counting
         {StateTracker, mission_id: mission_id},
@@ -84,7 +89,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
           {Cadence.Telemetry.ProtocolChainSupervisor, mission_id: mission_id},
 
           # Interface Supervisor - manages TCP/UDP/Serial connections
-          {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission_id},
+          {Cadence.Runtime.Interfaces.InterfaceSupervisor, mission_id: mission_id},
 
           # Target Pipeline Supervisor - manages per-target command queues and dispatchers
           {TargetPipelineSupervisor, mission_id: mission_id},
@@ -93,7 +98,11 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
           {ExecutionCoordinator, mission_id: mission_id, organization_id: organization_id},
 
           # Automation Manager - processes events and triggers automations
-          {AutomationManager, mission_id: mission_id, organization_id: organization_id}
+          {AutomationManager, mission_id: mission_id, organization_id: organization_id},
+
+          # Cache Warmer - pre-warms Limits and DerivedItems caches
+          # Must be last to ensure all ETS tables and services are ready
+          {CacheWarmer, mission_id: mission_id}
         ]
 
     # Strategy: one_for_one means if a child crashes, only restart that child
@@ -105,10 +114,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   defp pipeline_children(:v1, mission_id) do
     [
       # Telemetry Pipeline - processes incoming telemetry (GenServer, for simulator)
-      {Cadence.Telemetry.Pipeline, mission_id: mission_id},
+      {Cadence.Runtime.Telemetry.Pipeline, mission_id: mission_id},
 
       # Broadway Pipeline - high-throughput telemetry processing (for real interfaces)
-      {Cadence.Telemetry.BroadwayPipeline, mission_id: mission_id}
+      {Cadence.Runtime.Telemetry.BroadwayPipeline, mission_id: mission_id}
     ]
   end
 
@@ -118,7 +127,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
     [
       # Telemetry Pipeline - processes incoming telemetry (GenServer, for simulator)
-      {Cadence.Telemetry.Pipeline, mission_id: mission_id},
+      {Cadence.Runtime.Telemetry.Pipeline, mission_id: mission_id},
 
       # V2 Pipeline - high-throughput GenStage-based processing
       {PipelineV2.Supervisor,
@@ -136,10 +145,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
     [
       # Telemetry Pipeline - processes incoming telemetry (GenServer, for simulator)
-      {Cadence.Telemetry.Pipeline, mission_id: mission_id},
+      {Cadence.Runtime.Telemetry.Pipeline, mission_id: mission_id},
 
       # V1 Broadway Pipeline
-      {Cadence.Telemetry.BroadwayPipeline, mission_id: mission_id},
+      {Cadence.Runtime.Telemetry.BroadwayPipeline, mission_id: mission_id},
 
       # V2 Pipeline (will also subscribe to same PubSub topic)
       {PipelineV2.Supervisor,

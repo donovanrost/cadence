@@ -14,9 +14,9 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
 
   require Logger
 
-  alias Cadence.Commands.TargetDispatcher
+  alias Cadence.Runtime.Commands.TargetDispatcher
   alias Cadence.Procedures.ConditionEvaluator
-  alias Cadence.Telemetry.CurrentValueTable, as: CVT
+  alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVT
 
   @type step_name :: String.t()
   @type step_def :: map()

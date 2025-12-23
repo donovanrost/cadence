@@ -30,6 +30,12 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   defp apply_action(socket, :index, _params) do
     mission = socket.assigns.mission
+
+    # Subscribe to real-time target status updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "targets:#{mission.id}")
+    end
+
     targets = Targets.list_targets_with_preloads(mission)
     interfaces = Interfaces.list_interfaces(mission)
 
@@ -79,6 +85,25 @@ defmodule CadenceWeb.MissionLive.Targets do
     targets = Targets.list_targets_with_preloads(socket.assigns.mission)
     {:noreply, assign(socket, :targets, targets)}
   end
+
+  # Real-time target status updates via PubSub
+  def handle_info({:target_changed, _event_type, updated_target}, socket) do
+    # Update the target in the list with the new data
+    targets =
+      Enum.map(socket.assigns.targets, fn target ->
+        if target.id == updated_target.id do
+          # Merge status fields from the domain entity into the schema
+          %{target | status: updated_target.status, circuit_breaker_status: updated_target.circuit_breaker_status}
+        else
+          target
+        end
+      end)
+
+    {:noreply, assign(socket, :targets, targets)}
+  end
+
+  # Catch-all for other PubSub events we don't handle
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("delete", %{"id" => target_id}, socket) do

@@ -26,6 +26,8 @@ defmodule Cadence.MissionDatabase do
   """
 
   import Ecto.Query
+
+  alias Cadence.Config.VersionRegistry
   alias Cadence.Repo
 
   alias Cadence.MissionDatabase.{
@@ -131,9 +133,14 @@ defmodule Cadence.MissionDatabase do
 
   @doc """
   Deletes a DefinitionSet.
+
+  Invalidates the definition_set config version to trigger cache reloads.
   """
   def delete_definition_set(%DefinitionSet{} = definition_set) do
-    Repo.delete(definition_set)
+    with {:ok, deleted} <- Repo.delete(definition_set) do
+      VersionRegistry.invalidate(:definition_set, deleted.id)
+      {:ok, deleted}
+    end
   end
 
   @doc """

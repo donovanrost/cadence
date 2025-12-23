@@ -212,14 +212,30 @@ defmodule Cadence.Telemetry.Conversions do
     StateTableConverter
   }
 
+  alias Cadence.MissionDatabase.Algorithm
+
   @doc """
   Applies a database-backed conversion to a raw value.
 
-  Accepts a conversion schema loaded from the database and applies it.
+  Accepts either:
+  - A Conversion schema (from PacketItem)
+  - An Algorithm schema (from MissionDatabase calibrators)
+
   Returns {:ok, converted_value} or {:error, reason}.
   """
   def apply_db_conversion(raw_value, nil), do: {:ok, raw_value}
 
+  # Handle MissionDatabase Algorithm structs (calibrators)
+  def apply_db_conversion(raw_value, %Algorithm{} = algorithm) when is_number(raw_value) do
+    {:ok, Algorithm.apply(algorithm, raw_value)}
+  end
+
+  def apply_db_conversion(raw_value, %Algorithm{}) do
+    # Non-numeric values pass through unchanged
+    {:ok, raw_value}
+  end
+
+  # Handle legacy Conversion schemas
   def apply_db_conversion(raw_value, %Conversion{conversion_type: "polynomial"} = conversion) do
     conversion = Repo.preload(conversion, :polynomial_conversion)
     config = %{coefficients: conversion.polynomial_conversion.coefficients}

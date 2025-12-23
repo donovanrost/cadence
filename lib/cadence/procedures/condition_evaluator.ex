@@ -30,7 +30,7 @@ defmodule Cadence.Procedures.ConditionEvaluator do
 
   require Logger
 
-  alias Cadence.Telemetry.CurrentValueTable, as: CVT
+  alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVT
 
   @type context :: %{
           optional(:mission_id) => String.t(),

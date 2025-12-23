@@ -19,7 +19,7 @@ defmodule Cadence.Alarms do
 
   alias Cadence.Application.Alerting.{AlarmQueries, AlarmOperations, TriggerAlarm, ManageAlarmRules}
   alias Cadence.Alarms.{Alarm, AlarmRule}
-  alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Runtime.Alarms.AlarmManager
 
   # ============================================================================
   # Alarm Rules - Delegate to ManageAlarmRules

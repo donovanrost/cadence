@@ -32,7 +32,7 @@ defmodule CadenceWeb.TelemetryChannel do
 
   use CadenceWeb, :channel
 
-  alias Cadence.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   require Logger
 

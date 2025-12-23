@@ -16,7 +16,8 @@ defmodule Cadence.Telemetry.IntegrationTest do
   alias Cadence.{Organizations, Missions}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Simulator.PacketSimulator
-  alias Cadence.Telemetry.{CurrentValueTable, Pipeline}
+  alias Cadence.Runtime.Telemetry.Pipeline
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   describe "end-to-end telemetry flow" do
     setup do
