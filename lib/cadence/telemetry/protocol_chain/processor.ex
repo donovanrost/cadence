@@ -35,9 +35,17 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   )
 
   @doc """
-  Maps protocol type string to its implementing module.
+  Maps protocol type to its implementing module.
+
+  Accepts both atom (domain entity) and string (legacy) formats.
   """
-  @spec protocol_module_for_type(String.t()) :: module() | nil
+  @spec protocol_module_for_type(atom() | String.t()) :: module() | nil
+  def protocol_module_for_type(:ccsds), do: CCSDSProtocol
+  def protocol_module_for_type(:crc), do: CRCProtocol
+  def protocol_module_for_type(:length), do: LengthProtocol
+  def protocol_module_for_type(:template), do: TemplateProtocol
+  def protocol_module_for_type(:terminated), do: TerminatedProtocol
+  def protocol_module_for_type(:fixed), do: FixedProtocol
   def protocol_module_for_type("ccsds"), do: CCSDSProtocol
   def protocol_module_for_type("crc"), do: CRCProtocol
   def protocol_module_for_type("length"), do: LengthProtocol
@@ -47,22 +55,18 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   def protocol_module_for_type(_), do: nil
 
   @doc """
-  Initializes a single protocol from its database configuration.
+  Initializes a single protocol from its configuration.
+
+  Accepts both domain entities (InterfaceProtocol) and legacy Ecto schemas.
+  - Domain entities use `.protocol_type` (atom) and `.config` (map)
+  - Legacy schemas use `.protocol_type` (string) and `.protocol_config` (map)
 
   Returns `{module, state}` tuple or nil if initialization fails.
   """
-  @spec init_protocol(map()) :: protocol_instance() | nil
+  @spec init_protocol(map() | struct()) :: protocol_instance() | nil
   def init_protocol(protocol_config) do
     protocol_module = protocol_module_for_type(protocol_config.protocol_type)
-
-    if protocol_module do
-      opts = atomize_protocol_config(protocol_config.protocol_config)
-      protocol_state = protocol_module.new(opts)
-      {protocol_module, protocol_state}
-    else
-      Logger.warning("Unknown protocol type: #{protocol_config.protocol_type}")
-      nil
-    end
+    do_init_protocol(protocol_module, protocol_config)
   rescue
     error ->
       Logger.error(
@@ -72,20 +76,58 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
       nil
   end
 
-  @doc """
-  Initializes a complete protocol chain from database configurations.
+  defp do_init_protocol(nil, protocol_config) do
+    Logger.warning("Unknown protocol type: #{protocol_config.protocol_type}")
+    nil
+  end
 
-  Takes a list of InterfaceProtocol schemas (already sorted by order).
+  defp do_init_protocol(protocol_module, protocol_config) do
+    # Handle both domain entity (.config) and legacy schema (.protocol_config)
+    raw_config = get_protocol_config(protocol_config)
+    opts = atomize_protocol_config(raw_config)
+    protocol_state = protocol_module.new(opts)
+    {protocol_module, protocol_state}
+  end
+
+  # Get config from either domain entity or legacy schema
+  defp get_protocol_config(protocol_config) do
+    # Try domain entity field first, then legacy field
+    Map.get(protocol_config, :config) ||
+      Map.get(protocol_config, :protocol_config) ||
+      %{}
+  end
+
+  @doc """
+  Initializes a complete protocol chain from configurations.
+
+  Accepts both domain entities (InterfaceProtocol) and legacy Ecto schemas.
+  Takes a list of protocol configs (already sorted by order).
   Returns a list of `{module, state}` tuples for the specified direction.
+
+  The direction parameter can be a string ("read", "write") for compatibility.
   """
-  @spec init_chain([map()], String.t()) :: protocol_chain()
+  @spec init_chain([map() | struct()], String.t()) :: protocol_chain()
   def init_chain(protocol_configs, direction) do
     protocol_configs
     |> Enum.filter(fn config ->
-      config.protocol_direction in [direction, "read_write"]
+      matches_direction?(config.protocol_direction, direction)
     end)
     |> Enum.map(&init_protocol/1)
     |> Enum.reject(&is_nil/1)
+  end
+
+  # Match direction handling both atom (domain entity) and string (legacy) formats
+  defp matches_direction?(protocol_dir, target_dir) when is_atom(protocol_dir) do
+    case {protocol_dir, target_dir} do
+      {:read_write, _} -> true
+      {:read, "read"} -> true
+      {:write, "write"} -> true
+      _ -> false
+    end
+  end
+
+  defp matches_direction?(protocol_dir, target_dir) when is_binary(protocol_dir) do
+    protocol_dir in [target_dir, "read_write"]
   end
 
   @doc """
@@ -96,18 +138,20 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   """
   @spec clone_chain([{String.t(), map()}]) :: protocol_chain()
   def clone_chain(protocol_configs) do
-    Enum.map(protocol_configs, fn {protocol_type, config} ->
+    protocol_configs
+    |> Enum.map(fn {protocol_type, config} ->
       protocol_module = protocol_module_for_type(protocol_type)
-
-      if protocol_module do
-        opts = atomize_protocol_config(config)
-        protocol_state = protocol_module.new(opts)
-        {protocol_module, protocol_state}
-      else
-        nil
-      end
+      do_clone_protocol(protocol_module, config)
     end)
     |> Enum.reject(&is_nil/1)
+  end
+
+  defp do_clone_protocol(nil, _config), do: nil
+
+  defp do_clone_protocol(protocol_module, config) do
+    opts = atomize_protocol_config(config)
+    protocol_state = protocol_module.new(opts)
+    {protocol_module, protocol_state}
   end
 
   @doc """

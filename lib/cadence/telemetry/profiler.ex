@@ -26,7 +26,7 @@ defmodule Cadence.Telemetry.Profiler do
       Cadence.Telemetry.Profiler.analyze(mission_id)
   """
 
-  alias Cadence.Telemetry.{CurrentValueTable, Pipeline, Stats}
+  alias Cadence.Telemetry.{BroadwayPubSub, CurrentValueTable, Pipeline, Stats}
   alias Cadence.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
   alias Cadence.Telemetry.Limits.{StateTracker, Cache}
 
@@ -123,10 +123,7 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp format_us_compact(us) when is_number(us) do
-    cond do
-      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
-      true -> "#{round(us)}μs"
-    end
+    if us >= 1000, do: "#{Float.round(us / 1000, 1)}ms", else: "#{round(us)}μs"
   end
 
   defp format_us_compact(_), do: "-"
@@ -331,17 +328,18 @@ defmodule Cadence.Telemetry.Profiler do
     initial = snapshot(mission_id)
     print_snapshot(initial, nil)
 
-    Enum.reduce(1..iterations, initial, fn i, prev ->
-      Process.sleep(interval)
-      current = snapshot(mission_id)
-      print_snapshot(current, prev)
+    _final =
+      Enum.reduce(1..iterations, initial, fn i, prev ->
+        Process.sleep(interval)
+        current = snapshot(mission_id)
+        print_snapshot(current, prev)
 
-      if i == iterations do
-        print_summary(initial, current, duration)
-      end
+        if i == iterations do
+          print_summary(initial, current, duration)
+        end
 
-      current
-    end)
+        current
+      end)
 
     :ok
   end
@@ -498,7 +496,7 @@ defmodule Cadence.Telemetry.Profiler do
     case Registry.lookup(Cadence.MissionRegistry, producer_key) do
       [{pid, _}] ->
         try do
-          Cadence.Telemetry.BroadwayPubSub.queue_depth(pid)
+          BroadwayPubSub.queue_depth(pid)
         catch
           _, _ -> nil
         end
@@ -893,11 +891,8 @@ defmodule Cadence.Telemetry.Profiler do
   defp print_stage_errors(_), do: :ok
 
   defp format_us(us) when is_number(us) do
-    cond do
-      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
-      true -> "#{round(us)}μs"
-    end
-    |> String.pad_leading(8)
+    formatted = if us >= 1000, do: "#{Float.round(us / 1000, 1)}ms", else: "#{round(us)}μs"
+    String.pad_leading(formatted, 8)
   end
 
   defp format_us(_), do: String.pad_leading("-", 8)

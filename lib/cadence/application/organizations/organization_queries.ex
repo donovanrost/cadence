@@ -20,13 +20,14 @@ defmodule Cadence.Application.Organizations.OrganizationQueries do
   """
 
   alias Cadence.Domain.Organizations.Entities.Organization
+  alias Cadence.Ports.Repository.Organizations.OrganizationRepository
 
   @type org_id :: String.t()
   @type opts :: keyword()
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Organizations.OrganizationRepository.impl()
+    OrganizationRepository.impl()
   end
 
   @doc """

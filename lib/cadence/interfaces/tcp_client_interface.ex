@@ -5,13 +5,17 @@ defmodule Cadence.Interfaces.TcpClientInterface do
   Protocol processing is delegated to ProtocolChain processes managed by the
   ProtocolChainSupervisor, providing fault isolation and reusability.
 
-  ## Configuration
+  ## Data Plane Architecture
+
+  This GenServer receives a domain entity at startup - no database calls are made
+  during runtime. Configuration changes are handled via PubSub events.
+
+  ## Configuration (via Interface Entity)
 
   - host: Remote hostname or IP address
   - port: Remote port number
-  - target_id: Target identifier for telemetry routing
-  - interface_id: Interface schema ID for loading protocol config
-  - reconnect_interval: Milliseconds between reconnection attempts (default: 5000)
+  - target_ids: List of target identifiers for telemetry routing
+  - reconnect_delay_ms: Milliseconds between reconnection attempts (default: 5000)
 
   ## Protocol Chain Architecture
 
@@ -25,6 +29,7 @@ defmodule Cadence.Interfaces.TcpClientInterface do
   use GenServer
   require Logger
 
+  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Telemetry.{Pipeline, Packet}
   alias Cadence.Telemetry.ProtocolChain
   alias Cadence.Telemetry.ProtocolChainSupervisor
@@ -33,9 +38,8 @@ defmodule Cadence.Interfaces.TcpClientInterface do
   defmodule State do
     @moduledoc false
     defstruct [
-      :mission_id,
+      :interface,
       :target_id,
-      :interface_id,
       :host,
       :port,
       :socket,
@@ -53,13 +57,14 @@ defmodule Cadence.Interfaces.TcpClientInterface do
 
   ## Client API
 
-  def start_link(opts) do
-    mission_id = Keyword.fetch!(opts, :mission_id)
-    interface_id = Keyword.fetch!(opts, :interface_id)
-    config = Keyword.fetch!(opts, :config)
+  @doc """
+  Starts the TCP client interface with the given Interface entity.
 
-    name = {:via, Registry, {@registry, {:interface, mission_id, interface_id}}}
-    GenServer.start_link(__MODULE__, {mission_id, interface_id, config}, name: name)
+  The entity contains all configuration - no database lookups are performed.
+  """
+  def start_link(%Interface{} = interface) do
+    name = {:via, Registry, {@registry, {:interface, interface.mission_id, interface.id}}}
+    GenServer.start_link(__MODULE__, interface, name: name)
   end
 
   @doc """
@@ -79,20 +84,22 @@ defmodule Cadence.Interfaces.TcpClientInterface do
   ## GenServer Callbacks
 
   @impl true
-  def init({mission_id, interface_id, config}) do
-    # Start the protocol chain for this interface
-    start_protocol_chain(mission_id, interface_id)
+  def init(%Interface{} = interface) do
+    # Start the protocol chain for this interface with injected protocols
+    start_protocol_chain(interface.mission_id, interface.id, interface.protocols)
 
     # Clone the chain for this client
-    protocol_chain = clone_protocol_chain(interface_id)
+    protocol_chain = clone_protocol_chain(interface.id)
+
+    # TCP clients connect to a single target - use first or "unknown"
+    target_id = List.first(interface.target_ids) || "unknown"
 
     state = %State{
-      mission_id: mission_id,
-      target_id: Map.fetch!(config, :target_id),
-      interface_id: interface_id,
-      host: Map.fetch!(config, :host) |> to_charlist(),
-      port: Map.fetch!(config, :port),
-      reconnect_interval: Map.get(config, :reconnect_interval, 5000),
+      interface: interface,
+      target_id: target_id,
+      host: interface.host |> to_charlist(),
+      port: interface.port,
+      reconnect_interval: interface.reconnect_delay_ms || 5000,
       protocol_chain: protocol_chain
     }
 
@@ -105,7 +112,7 @@ defmodule Cadence.Interfaces.TcpClientInterface do
       end
 
     Logger.info(
-      "Starting TCP client interface for target=#{state.target_id}, host=#{config.host}, port=#{config.port}, protocols=#{protocol_info}"
+      "Starting TCP client interface #{interface.name} for target=#{target_id}, host=#{interface.host}, port=#{interface.port}, protocols=#{protocol_info}"
     )
 
     # Attempt initial connection asynchronously
@@ -185,18 +192,18 @@ defmodule Cadence.Interfaces.TcpClientInterface do
         # Forward extracted packets to pipeline
         Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
           metadata = %{
-            mission_id: state.mission_id,
+            mission_id: state.interface.mission_id,
             stored: false,
             target_id: state.target_id,
             received_at: DateTime.utc_now(),
-            interface_id: state.interface_id
+            interface_id: state.interface.id
           }
 
           # Construct Packet struct based on format
           packet = construct_packet(packet_binary, metadata, format)
 
           # Send to pipeline
-          Pipeline.process_packet(state.mission_id, packet, metadata)
+          Pipeline.process_packet(state.interface.mission_id, packet, metadata)
         end)
 
         {:noreply,
@@ -234,19 +241,19 @@ defmodule Cadence.Interfaces.TcpClientInterface do
   def terminate(_reason, %State{socket: socket} = state) when not is_nil(socket) do
     Logger.info("Closing TCP connection for target=#{state.target_id}")
     :gen_tcp.close(socket)
-    ProtocolChainSupervisor.stop_chain(state.mission_id, state.interface_id)
+    ProtocolChainSupervisor.stop_chain(state.interface.mission_id, state.interface.id)
     :ok
   end
 
   def terminate(_reason, state) do
-    ProtocolChainSupervisor.stop_chain(state.mission_id, state.interface_id)
+    ProtocolChainSupervisor.stop_chain(state.interface.mission_id, state.interface.id)
     :ok
   end
 
   ## Private Functions
 
-  defp start_protocol_chain(mission_id, interface_id) do
-    case ProtocolChainSupervisor.start_chain(mission_id, interface_id) do
+  defp start_protocol_chain(mission_id, interface_id, protocols) do
+    case ProtocolChainSupervisor.start_chain(mission_id, interface_id, protocols: protocols) do
       {:ok, pid} ->
         Logger.debug("Started protocol chain #{inspect(pid)} for interface #{interface_id}")
         {:ok, pid}

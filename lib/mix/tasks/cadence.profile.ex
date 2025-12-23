@@ -316,10 +316,7 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp format_us_compact(us) when is_number(us) do
-    cond do
-      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
-      true -> "#{round(us)}μs"
-    end
+    if us >= 1000, do: "#{Float.round(us / 1000, 1)}ms", else: "#{round(us)}μs"
   end
 
   defp format_us_compact(_), do: "-"
@@ -638,11 +635,8 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp print_stage_errors(_), do: :ok
 
   defp format_us(us) when is_number(us) do
-    cond do
-      us >= 1000 -> "#{Float.round(us / 1000, 1)}ms"
-      true -> "#{round(us)}μs"
-    end
-    |> String.pad_leading(8)
+    formatted = if us >= 1000, do: "#{Float.round(us / 1000, 1)}ms", else: "#{round(us)}μs"
+    String.pad_leading(formatted, 8)
   end
 
   defp format_us(_), do: String.pad_leading("-", 8)

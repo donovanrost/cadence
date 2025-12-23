@@ -191,7 +191,9 @@ defmodule Cadence.Commands.TargetDispatcherTest do
       # Mission is in "operational" phase, but command only allowed in "commissioning" or "testing"
       result = Commands.dispatch(mission.id, "COMMISSIONING_CMD", %{}, target: target.id)
 
-      assert {:error, :not_allowed_in_phase, "operational"} = result
+      # Phase can be string or atom depending on whether Ecto schema or domain entity is used
+      assert {:error, :not_allowed_in_phase, phase} = result
+      assert phase in ["operational", :operational]
     end
   end
 

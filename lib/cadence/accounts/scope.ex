@@ -44,8 +44,6 @@ defmodule Cadence.Accounts.Scope do
       if preload_orgs? do
         Cadence.Repo.preload(user, :organization_memberships, force: true)
         |> Cadence.Repo.preload([organization_memberships: :organization], force: true)
-        # Preload deprecated association
-        |> Cadence.Repo.preload(:organization, force: true)
       else
         user
       end
@@ -92,19 +90,10 @@ defmodule Cadence.Accounts.Scope do
 
   defp get_user_organizations(_), do: []
 
-  defp get_current_organization(user, organizations, opts) do
-    cond do
-      # If current_organization_id is specified, use it
-      org_id = Keyword.get(opts, :current_organization_id) ->
-        Enum.find(organizations, &(&1.id == org_id))
-
-      # If user has deprecated organization_id, use it for backward compatibility
-      user.organization_id && user.organization ->
-        user.organization
-
-      # Otherwise use first organization
-      true ->
-        List.first(organizations)
+  defp get_current_organization(_user, organizations, opts) do
+    case Keyword.get(opts, :current_organization_id) do
+      nil -> List.first(organizations)
+      org_id -> Enum.find(organizations, &(&1.id == org_id))
     end
   end
 end

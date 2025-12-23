@@ -2,7 +2,7 @@
 # Run with: mix run scripts/test_telemetry.exs
 
 alias Cadence.{Accounts, Organizations, Missions, Targets, Repo}
-alias Cadence.Missions.MissionSupervisor
+alias Cadence.Runtime.Missions.MissionSupervisor
 alias Cadence.Simulator.PacketSimulator
 alias Cadence.Telemetry.{CurrentValueTable, Pipeline}
 

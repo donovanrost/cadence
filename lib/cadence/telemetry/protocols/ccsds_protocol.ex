@@ -323,7 +323,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
             "got 0x#{Integer.to_string(actual, 16)}"
         )
 
-        # TODO: pass the packet anyway
+        # Pass packet anyway per CRC failure policy :pass
         extract_packets(remaining, new_state, acc)
     end
   end

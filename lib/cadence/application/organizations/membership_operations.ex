@@ -23,6 +23,7 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
 
   alias Cadence.Domain.Organizations.Entities.OrganizationMembership
   alias Cadence.Domain.Organizations.ValueObjects.MembershipRole
+  alias Cadence.Ports.Repository.Organizations.{MembershipRepository, OrganizationRepository}
 
   @type membership_id :: String.t()
   @type user_id :: String.t()
@@ -31,11 +32,11 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
 
   # Get configured repositories
   defp repo do
-    Cadence.Ports.Repository.Organizations.MembershipRepository.impl()
+    MembershipRepository.impl()
   end
 
   defp org_repo do
-    Cadence.Ports.Repository.Organizations.OrganizationRepository.impl()
+    OrganizationRepository.impl()
   end
 
   @doc """

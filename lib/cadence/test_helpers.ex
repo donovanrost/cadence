@@ -136,8 +136,8 @@ defmodule Cadence.TestHelpers do
         {:ok, target}
 
       {:error, changeset} ->
-        IO.puts("❌ Failed to create target: #{identifier}")
-        IO.inspect(changeset.errors)
+        require Logger
+        Logger.error("Failed to create target: #{identifier}, errors: #{inspect(changeset.errors)}")
         {:error, changeset}
     end
   end

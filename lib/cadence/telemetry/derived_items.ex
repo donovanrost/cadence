@@ -207,13 +207,6 @@ defmodule Cadence.Telemetry.DerivedItems do
     {:ok, final_bindings}
   end
 
-  # Legacy 2-arg version for backward compatibility (tests, etc.)
-  @doc false
-  @spec compute_with_sorted_defs(item_values(), [map()]) :: {:ok, item_values()}
-  def compute_with_sorted_defs(converted_items, sorted_defs) do
-    compute_with_sorted_defs(converted_items, sorted_defs, "legacy")
-  end
-
   # Compute a single derived item - optimized path with pre-parsed AST
   # Uses pre-extracted required_vars and pre-parsed AST to avoid parsing in hot path
   # Fast path for pure expressions (no stateful functions)

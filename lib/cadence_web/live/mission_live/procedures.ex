@@ -69,16 +69,6 @@ defmodule CadenceWeb.MissionLive.Procedures do
     |> assign(:import_preview, nil)
   end
 
-  defp parse_tag_params(nil), do: []
-  defp parse_tag_params(""), do: []
-
-  defp parse_tag_params(tags) when is_binary(tags) do
-    tags
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-  end
-
   defp apply_action(socket, :new, _params) do
     socket = apply_action(socket, :index, %{})
 
@@ -166,6 +156,16 @@ defmodule CadenceWeb.MissionLive.Procedures do
     |> assign(:page_title, "Execute #{procedure.name}")
     |> assign(:execution_params, %{})
     |> assign(:parameters_schema, parameters_schema)
+  end
+
+  defp parse_tag_params(nil), do: []
+  defp parse_tag_params(""), do: []
+
+  defp parse_tag_params(tags) when is_binary(tags) do
+    tags
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp get_execution_counts(mission_id) do

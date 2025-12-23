@@ -46,8 +46,8 @@ defmodule Cadence.Application do
       # Notification Dispatcher - subscribes to outbox events and creates notifications
       Cadence.Notifications.Dispatcher,
 
-      # Mission Supervisor - manages all mission supervision trees
-      Cadence.Missions.MissionSupervisor,
+      # Mission Supervisor - manages all mission supervision trees (Data Plane)
+      Cadence.Runtime.Missions.MissionSupervisor,
 
       # Oban - background job processing and scheduled tasks
       {Oban, Application.fetch_env!(:cadence, Oban)},

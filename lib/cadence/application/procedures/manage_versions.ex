@@ -21,9 +21,10 @@ defmodule Cadence.Application.Procedures.ManageVersions do
       {:ok, version} = ManageVersions.update_parameters(version_id, new_params)
   """
 
-  alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Application.Procedures.ProcedureQueries
+  alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type version_id :: String.t()
   @type procedure_id :: String.t()
@@ -49,7 +50,7 @@ defmodule Cadence.Application.Procedures.ManageVersions do
 
   # Get configured event recorder
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 
   @doc """

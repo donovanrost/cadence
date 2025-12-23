@@ -6,7 +6,6 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
   """
 
   alias Cadence.Domain.DashboardLayouts.Entities.DashboardLayout
-  alias Cadence.Application.DashboardLayouts.DashboardLayoutQueries
 
   # Get configured repository
   defp repo do

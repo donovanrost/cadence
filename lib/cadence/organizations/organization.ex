@@ -47,7 +47,8 @@ defmodule Cadence.Organizations.Organization do
 
     # Associations
     has_many :missions, Cadence.Missions.Mission
-    has_many :users, Cadence.Accounts.User
+    has_many :organization_memberships, Cadence.Organizations.OrganizationMembership
+    has_many :users, through: [:organization_memberships, :user]
 
     timestamps(type: :utc_datetime)
   end

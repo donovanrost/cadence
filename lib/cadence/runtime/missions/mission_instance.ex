@@ -1,4 +1,4 @@
-defmodule Cadence.Missions.MissionInstance do
+defmodule Cadence.Runtime.Missions.MissionInstance do
   @moduledoc """
   Supervisor for a single mission instance.
 
@@ -10,13 +10,21 @@ defmodule Cadence.Missions.MissionInstance do
   - Limits monitor
 
   Each mission instance is registered in the MissionRegistry with its mission_id.
+
+  ## Data Plane
+
+  This module is part of the Data Plane - it manages runtime processes and
+  does not make database calls. Configuration is received via domain entities
+  at startup and updated via PubSub events.
   """
 
   use Supervisor
 
   require Logger
 
+  # Accept both Ecto schema and domain entity
   alias Cadence.Missions.Mission
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Telemetry.CurrentValueTable
   alias Cadence.Telemetry.PipelineV2
   alias Cadence.Telemetry.Limits.StateTracker
@@ -30,54 +38,62 @@ defmodule Cadence.Missions.MissionInstance do
 
   def start_link(opts) do
     mission = Keyword.fetch!(opts, :mission)
-    Supervisor.start_link(__MODULE__, mission, name: via_tuple(mission.id))
+    mission_id = get_mission_id(mission)
+    Supervisor.start_link(__MODULE__, mission, name: via_tuple(mission_id))
   end
 
   @impl true
   def init(%Mission{} = mission) do
+    do_init(mission.id, mission.name, mission.organization_id)
+  end
+
+  def init(%MissionEntity{} = entity) do
+    do_init(entity.id, entity.name, entity.organization_id)
+  end
+
+  defp do_init(mission_id, mission_name, organization_id) do
     Logger.info(
-      "Initializing mission instance for mission_id=#{mission.id}, name=#{mission.name}"
+      "Initializing mission instance for mission_id=#{mission_id}, name=#{mission_name}"
     )
 
     # Check which pipeline version to use
     pipeline_version = Application.get_env(:cadence, :pipeline_version, :v1)
 
-    pipeline_children = pipeline_children(pipeline_version, mission.id)
+    pipeline_children = pipeline_children(pipeline_version, mission_id)
 
     children =
       [
         # Current Value Table - stores latest telemetry values
-        {CurrentValueTable, mission_id: mission.id},
+        {CurrentValueTable, mission_id: mission_id},
 
         # Packet Identifier - ETS-based packet type lookup
-        {Cadence.Telemetry.PacketIdentifier, mission_id: mission.id},
+        {Cadence.Telemetry.PacketIdentifier, mission_id: mission_id},
 
         # Limits State Tracker - tracks limit states and persistence counting
-        {StateTracker, mission_id: mission.id},
+        {StateTracker, mission_id: mission_id},
 
         # Staleness Monitor - detects stale telemetry and transitions to :blue
-        {StalenessMonitor, mission_id: mission.id},
+        {StalenessMonitor, mission_id: mission_id},
 
         # Alarm Manager - processes limit events and manages alarms
-        {AlarmManager, mission_id: mission.id, organization_id: mission.organization_id}
+        {AlarmManager, mission_id: mission_id, organization_id: organization_id}
       ] ++
         pipeline_children ++
         [
           # Protocol Chain Supervisor - manages protocol chains (isolated from interfaces)
-          {Cadence.Telemetry.ProtocolChainSupervisor, mission_id: mission.id},
+          {Cadence.Telemetry.ProtocolChainSupervisor, mission_id: mission_id},
 
           # Interface Supervisor - manages TCP/UDP/Serial connections
-          {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission.id},
+          {Cadence.Interfaces.InterfaceSupervisor, mission_id: mission_id},
 
           # Target Pipeline Supervisor - manages per-target command queues and dispatchers
-          {TargetPipelineSupervisor, mission_id: mission.id},
+          {TargetPipelineSupervisor, mission_id: mission_id},
 
           # Procedure Execution Coordinator - manages procedure executions
-          {ExecutionCoordinator,
-           mission_id: mission.id, organization_id: mission.organization_id},
+          {ExecutionCoordinator, mission_id: mission_id, organization_id: organization_id},
 
           # Automation Manager - processes events and triggers automations
-          {AutomationManager, mission_id: mission.id, organization_id: mission.organization_id}
+          {AutomationManager, mission_id: mission_id, organization_id: organization_id}
         ]
 
     # Strategy: one_for_one means if a child crashes, only restart that child
@@ -150,4 +166,9 @@ defmodule Cadence.Missions.MissionInstance do
   def via_tuple(mission_id) when is_binary(mission_id) do
     {:via, Registry, {Cadence.MissionRegistry, mission_id}}
   end
+
+  # Helper to extract mission_id from either type
+  defp get_mission_id(%Mission{id: id}), do: id
+  defp get_mission_id(%MissionEntity{id: id}), do: id
 end
+

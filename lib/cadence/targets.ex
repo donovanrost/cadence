@@ -27,7 +27,7 @@ defmodule Cadence.Targets do
   alias Cadence.Targets.Target, as: TargetSchema
   alias Cadence.Application.Targeting.{TargetQueries, TargetOperations}
   alias Cadence.Missions.Mission
-  alias Cadence.Missions.MissionInstance
+  alias Cadence.Runtime.Missions.MissionInstance
   alias Cadence.Commands.TargetPipelineSupervisor
   alias Cadence.Repo
 
@@ -37,11 +37,14 @@ defmodule Cadence.Targets do
   # Query Operations
   # ===========================================================================
 
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+
   @doc """
   Returns the list of targets for a mission.
   """
-  @spec list_targets(Mission.t() | String.t()) :: [Target.t()]
+  @spec list_targets(Mission.t() | MissionEntity.t() | String.t()) :: [Target.t()]
   def list_targets(%Mission{id: mission_id}), do: list_targets(mission_id)
+  def list_targets(%MissionEntity{id: mission_id}), do: list_targets(mission_id)
 
   def list_targets(mission_id) when is_binary(mission_id) do
     TargetQueries.list(mission_id)
@@ -53,8 +56,9 @@ defmodule Cadence.Targets do
   Returns Ecto schemas (not domain entities) for use in views that need
   association data like `target.definition_set.database.name`.
   """
-  @spec list_targets_with_preloads(Mission.t() | String.t()) :: [TargetSchema.t()]
+  @spec list_targets_with_preloads(Mission.t() | MissionEntity.t() | String.t()) :: [TargetSchema.t()]
   def list_targets_with_preloads(%Mission{id: mission_id}), do: list_targets_with_preloads(mission_id)
+  def list_targets_with_preloads(%MissionEntity{id: mission_id}), do: list_targets_with_preloads(mission_id)
 
   def list_targets_with_preloads(mission_id) when is_binary(mission_id) do
     from(t in TargetSchema,

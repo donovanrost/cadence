@@ -10,14 +10,34 @@ defmodule Cadence.Missions do
 
   Persistence is delegated to the MissionsRepository port, allowing for
   different storage implementations (Ecto, in-memory for tests, etc.).
+
+  ## Hexagonal Architecture
+
+  This facade delegates to the application layer services:
+  - `Cadence.Application.Missions.MissionQueries` - Read operations
+  - `Cadence.Application.Missions.MissionOperations` - Write operations
+  - `Cadence.Application.Missions.MembershipOperations` - Membership management
+
+  Domain entities are returned for new code, while Ecto schemas are still
+  supported for backward compatibility with LiveView forms and existing code.
   """
 
   import Ecto.Query, warn: false
   alias Cadence.Repo
 
-  alias Cadence.Missions.{Mission, MissionMembership, MissionSupervisor}
+  alias Cadence.Missions.{Mission, MissionMembership}
+  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Organizations.Organization
   alias Cadence.Ports.Repository.Missions.MissionsRepository
+
+  # Application layer services
+  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Missions.MissionOperations
+  alias Cadence.Application.Missions.MembershipOperations
+
+  # Domain entities
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Domain.Missions.Entities.MissionMembership, as: MembershipEntity
 
   # Repository accessor
   defp repo, do: MissionsRepository.impl()
@@ -312,5 +332,77 @@ defmodule Cadence.Missions do
       {k, v}, acc when is_binary(k) -> Map.put(acc, String.to_existing_atom(k), v)
       {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
     end)
+  end
+
+  # ===========================================================================
+  # Hexagonal Architecture API (Domain Entities)
+  # ===========================================================================
+  # These functions return domain entities and delegate to the application layer.
+  # Use these for new code that doesn't need Ecto changesets.
+
+  @doc """
+  Gets a mission as a domain entity.
+
+  Returns `{:ok, mission_entity}` or `{:error, :not_found}`.
+  """
+  @spec get_mission_entity(String.t(), String.t()) ::
+          {:ok, MissionEntity.t()} | {:error, :not_found}
+  def get_mission_entity(mission_id, organization_id) do
+    MissionQueries.find_by_org(mission_id, organization_id)
+  end
+
+  @doc """
+  Lists missions as domain entities for an organization.
+  """
+  @spec list_mission_entities(String.t(), keyword()) :: [MissionEntity.t()]
+  def list_mission_entities(organization_id, opts \\ []) do
+    MissionQueries.list(organization_id, opts)
+  end
+
+  @doc """
+  Creates a mission with bucket integration.
+
+  This creates both the mission and its associated bucket for recording context.
+  Returns `{:ok, mission_entity}` or `{:error, reason}`.
+  """
+  @spec create_mission_with_bucket(String.t(), map()) ::
+          {:ok, MissionEntity.t()} | {:error, term()}
+  def create_mission_with_bucket(organization_id, attrs) do
+    MissionOperations.create(organization_id, attrs)
+  end
+
+  @doc """
+  Deletes a mission and its associated bucket.
+
+  Returns `:ok` or `{:error, reason}`.
+  """
+  @spec delete_mission_with_bucket(String.t(), String.t()) :: :ok | {:error, term()}
+  def delete_mission_with_bucket(mission_id, organization_id) do
+    MissionOperations.delete(mission_id, organization_id)
+  end
+
+  @doc """
+  Adds a member to a mission using domain entities.
+  """
+  @spec add_mission_member(String.t(), String.t(), atom() | nil) ::
+          {:ok, MembershipEntity.t()} | {:error, term()}
+  def add_mission_member(mission_id, user_id, role \\ nil) do
+    MembershipOperations.add_member(mission_id, user_id, role)
+  end
+
+  @doc """
+  Checks if a user can send commands in a mission.
+  """
+  @spec user_can_command?(String.t(), String.t()) :: boolean()
+  def user_can_command?(user_id, mission_id) do
+    MissionQueries.can_command?(user_id, mission_id)
+  end
+
+  @doc """
+  Checks if a mission runtime is running.
+  """
+  @spec mission_running?(String.t()) :: boolean()
+  def mission_running?(mission_id) do
+    MissionQueries.running?(mission_id)
   end
 end

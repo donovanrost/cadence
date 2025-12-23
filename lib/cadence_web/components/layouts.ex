@@ -268,10 +268,6 @@ defmodule CadenceWeb.Layouts do
         Targets
       </.sidebar_nav_item>
 
-      <.sidebar_nav_item navigate={~p"/team"} active={String.contains?(@current_path, "/team")}>
-        <:icon><.icon name="hero-user-group" class="h-5 w-5" /></:icon>
-        Team
-      </.sidebar_nav_item>
 
       <.sidebar_nav_group
         label="Settings"
@@ -329,26 +325,6 @@ defmodule CadenceWeb.Layouts do
         </div>
       </:trigger>
       
-    <!-- Organizations Section -->
-      <%= if @all_orgs != [] do %>
-        <li class="menu-title px-4 py-2">
-          <span class="text-xs uppercase tracking-wide text-base-content/50">Organizations</span>
-        </li>
-        <%= for org <- @all_orgs do %>
-          <li>
-            <.link navigate={~p"/org/#{org.slug}"} class="hover-glow-cyan transition-glow">
-              <div class="flex items-center justify-between w-full">
-                <span>{org.name}</span>
-                <%= if @current_org && org.id == @current_org.id do %>
-                  <.icon name="hero-check" class="h-4 w-4 text-primary" />
-                <% end %>
-              </div>
-            </.link>
-          </li>
-        <% end %>
-        <li class="border-t border-base-300 my-1"></li>
-      <% end %>
-      
     <!-- User Actions -->
       <li>
         <.link navigate={~p"/profile"} class="hover-glow-cyan transition-glow">
@@ -376,9 +352,9 @@ defmodule CadenceWeb.Layouts do
       <li class="border-t border-base-300 my-1"></li>
 
       <li>
-        <a href={~p"/users/log_out"} data-method="delete" class="hover-glow-cyan transition-glow">
+        <.link href={~p"/users/log-out"} method="delete" class="hover-glow-cyan transition-glow">
           <.icon name="hero-arrow-right-on-rectangle" class="h-4 w-4" /> Sign Out
-        </a>
+        </.link>
       </li>
     </.dropdown>
     """

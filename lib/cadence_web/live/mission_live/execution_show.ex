@@ -12,6 +12,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
 
   alias Cadence.Procedures
   alias Cadence.Procedures.Dag.Validator
+  alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
   alias Cadence.Procedures.Events.StepEvent
   alias Cadence.Procedures.ProcedureLog
@@ -353,7 +354,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
   def handle_event("pause", _, socket) do
     execution = socket.assigns.execution
 
-    case Procedures.Engine.ExecutionCoordinator.pause(execution.mission_id, execution.id) do
+    case ExecutionCoordinator.pause(execution.mission_id, execution.id) do
       :ok ->
         {:noreply, put_flash(socket, :info, "Pause signal sent")}
 
@@ -365,7 +366,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
   def handle_event("resume", _, socket) do
     execution = socket.assigns.execution
 
-    case Procedures.Engine.ExecutionCoordinator.resume(execution.mission_id, execution.id) do
+    case ExecutionCoordinator.resume(execution.mission_id, execution.id) do
       :ok ->
         {:noreply, put_flash(socket, :info, "Resume signal sent")}
 
@@ -377,7 +378,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
   def handle_event("abort", _, socket) do
     execution = socket.assigns.execution
 
-    case Procedures.Engine.ExecutionCoordinator.abort(execution.mission_id, execution.id) do
+    case ExecutionCoordinator.abort(execution.mission_id, execution.id) do
       :ok ->
         {:noreply, put_flash(socket, :info, "Abort signal sent")}
 
@@ -399,7 +400,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
     case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
       :ok ->
         # Re-run with the same version and parameters
-        case Procedures.Engine.ExecutionCoordinator.start_execution(
+        case ExecutionCoordinator.start_execution(
                mission.id,
                execution.procedure_id,
                version_id: execution.procedure_version_id,
@@ -441,7 +442,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
         # Start a new execution with the completed steps pre-loaded
         # The ExecutionProcess will derive state from outbox events,
         # so we need to copy the step events to the new execution
-        case Procedures.Engine.ExecutionCoordinator.start_execution(
+        case ExecutionCoordinator.start_execution(
                mission.id,
                execution.procedure_id,
                version_id: execution.procedure_version_id,

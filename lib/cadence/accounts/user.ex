@@ -15,8 +15,6 @@ defmodule Cadence.Accounts.User do
     field :system_admin, :boolean, default: false
 
     # Associations
-    # organization_id is deprecated - kept for backward compatibility during migration
-    belongs_to :organization, Cadence.Organizations.Organization
     has_many :organization_memberships, Cadence.Organizations.OrganizationMembership
     has_many :organizations, through: [:organization_memberships, :organization]
     has_many :mission_memberships, Cadence.Missions.MissionMembership
@@ -38,20 +36,9 @@ defmodule Cadence.Accounts.User do
   """
   def email_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :organization_id, :role, :system_admin])
-    |> validate_organization_id_for_regular_users()
+    |> cast(attrs, [:email, :role, :system_admin])
     |> validate_inclusion(:role, ["owner", "admin", "member"])
-    |> foreign_key_constraint(:organization_id)
     |> validate_email(opts)
-  end
-
-  defp validate_organization_id_for_regular_users(changeset) do
-    # System admins don't need an organization_id
-    if get_field(changeset, :system_admin) == true do
-      changeset
-    else
-      validate_required(changeset, [:organization_id])
-    end
   end
 
   defp validate_email(changeset, opts) do

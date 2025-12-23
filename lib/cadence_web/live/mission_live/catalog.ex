@@ -66,6 +66,22 @@ defmodule CadenceWeb.MissionLive.Catalog do
     |> assign(:expanded_items, MapSet.new())
   end
 
+  defp apply_action(socket, :new_derived, _params) do
+    socket
+    |> apply_action(:index, %{})
+    |> assign(:page_title, "New Derived Item")
+    |> assign(:derived_item, %DerivedItem{})
+  end
+
+  defp apply_action(socket, :edit_derived, %{"derived_id" => id}) do
+    derived_item = DerivedItem.get!(id)
+
+    socket
+    |> apply_action(:index, %{})
+    |> assign(:page_title, "Edit Derived Item")
+    |> assign(:derived_item, derived_item)
+  end
+
   # Build a flat list of definition sets with their database info for the selector
   defp build_available_definition_sets(databases_with_stats) do
     databases_with_stats
@@ -82,22 +98,6 @@ defmodule CadenceWeb.MissionLive.Catalog do
       end)
     end)
     |> Enum.sort_by(fn ds -> {ds.database_name, ds.version} end)
-  end
-
-  defp apply_action(socket, :new_derived, _params) do
-    socket
-    |> apply_action(:index, %{})
-    |> assign(:page_title, "New Derived Item")
-    |> assign(:derived_item, %DerivedItem{})
-  end
-
-  defp apply_action(socket, :edit_derived, %{"derived_id" => id}) do
-    derived_item = DerivedItem.get!(id)
-
-    socket
-    |> apply_action(:index, %{})
-    |> assign(:page_title, "Edit Derived Item")
-    |> assign(:derived_item, derived_item)
   end
 
   @impl true

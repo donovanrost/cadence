@@ -143,20 +143,6 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
     {:ok, %{level: level, message: message}}
   end
 
-  defp safe_to_atom(str) when is_binary(str) do
-    case str do
-      "debug" -> :debug
-      "info" -> :info
-      "warn" -> :warn
-      "warning" -> :warn
-      "error" -> :error
-      _ -> :info
-    end
-  end
-
-  defp safe_to_atom(atom) when is_atom(atom), do: atom
-  defp safe_to_atom(_), do: :info
-
   def execute_step(step_name, %{"type" => "set"} = step, context, _opts) do
     var_name = Map.get(step, "name")
     value = resolve_value(Map.get(step, "value"), context)
@@ -196,6 +182,24 @@ defmodule Cadence.Procedures.Dag.StepExecutor do
     Logger.warning("DAG step '#{step_name}': Invalid step definition: #{inspect(step)}")
     {:error, "Invalid step definition"}
   end
+
+  # ============================================================================
+  # Private Helpers
+  # ============================================================================
+
+  defp safe_to_atom(str) when is_binary(str) do
+    case str do
+      "debug" -> :debug
+      "info" -> :info
+      "warn" -> :warn
+      "warning" -> :warn
+      "error" -> :error
+      _ -> :info
+    end
+  end
+
+  defp safe_to_atom(atom) when is_atom(atom), do: atom
+  defp safe_to_atom(_), do: :info
 
   # ============================================================================
   # Condition Evaluation

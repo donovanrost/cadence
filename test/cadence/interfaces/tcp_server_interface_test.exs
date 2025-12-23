@@ -1,8 +1,9 @@
 defmodule Cadence.Interfaces.TcpServerInterfaceTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.TcpServerInterface
-  alias Cadence.Missions.MissionSupervisor
+  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.TestHelpers
 
   @moduletag :integration
@@ -22,31 +23,35 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
     # Pick a random port to avoid conflicts
     port = Enum.random(10000..60000)
 
-    config = %{
-      bind_port: port,
-      bind_address: "127.0.0.1",
-      target_ids: [target.identifier],
-      max_clients: 10
-    }
-
     on_exit(fn ->
       MissionSupervisor.stop_mission(mission.id)
     end)
 
-    {:ok, mission: mission, target: target, config: config, port: port}
+    {:ok, mission: mission, target: target, port: port}
+  end
+
+  # Helper to build an Interface entity for testing
+  defp build_interface(mission_id, port, target_ids, opts \\ []) do
+    max_clients = Keyword.get(opts, :max_clients, 10)
+
+    %Interface{
+      id: Ecto.UUID.generate(),
+      mission_id: mission_id,
+      name: "test-tcp-server",
+      connection_type: :tcp_server,
+      bind_address: "127.0.0.1",
+      bind_port: port,
+      target_ids: target_ids,
+      config: %{max_clients: max_clients},
+      protocols: []
+    }
   end
 
   describe "TCP Server Interface" do
-    test "starts and listens on configured port", %{mission: mission, config: config} do
-      interface_id = Ecto.UUID.generate()
+    test "starts and listens on configured port", %{mission: mission, target: target, port: port} do
+      interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: config
-        )
+      {:ok, pid} = TcpServerInterface.start_link(interface)
 
       # Give it a moment to start listening
       Process.sleep(100)
@@ -54,22 +59,16 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       stats = TcpServerInterface.stats(pid)
 
       assert stats.listening == true
-      assert stats.bind_port == config.bind_port
+      assert stats.bind_port == port
       assert stats.connected_clients == 0
 
       GenServer.stop(pid)
     end
 
-    test "accepts client connections", %{mission: mission, config: config, port: port} do
-      interface_id = Ecto.UUID.generate()
+    test "accepts client connections", %{mission: mission, target: target, port: port} do
+      interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, server_pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: config
-        )
+      {:ok, server_pid} = TcpServerInterface.start_link(interface)
 
       # Give server time to start listening
       Process.sleep(100)
@@ -89,16 +88,10 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       GenServer.stop(server_pid)
     end
 
-    test "accepts multiple client connections", %{mission: mission, config: config, port: port} do
-      interface_id = Ecto.UUID.generate()
+    test "accepts multiple client connections", %{mission: mission, target: target, port: port} do
+      interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, server_pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: config
-        )
+      {:ok, server_pid} = TcpServerInterface.start_link(interface)
 
       # Give server time to start listening
       Process.sleep(100)
@@ -132,16 +125,10 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       GenServer.stop(server_pid)
     end
 
-    test "handles client disconnections", %{mission: mission, config: config, port: port} do
-      interface_id = Ecto.UUID.generate()
+    test "handles client disconnections", %{mission: mission, target: target, port: port} do
+      interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, server_pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: config
-        )
+      {:ok, server_pid} = TcpServerInterface.start_link(interface)
 
       # Give server time to start listening
       Process.sleep(100)
@@ -168,16 +155,10 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       GenServer.stop(server_pid)
     end
 
-    test "receives and tracks data from clients", %{mission: mission, config: config, port: port} do
-      interface_id = Ecto.UUID.generate()
+    test "receives and tracks data from clients", %{mission: mission, target: target, port: port} do
+      interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, server_pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: config
-        )
+      {:ok, server_pid} = TcpServerInterface.start_link(interface)
 
       # Give server time to start listening
       Process.sleep(100)
@@ -201,18 +182,11 @@ defmodule Cadence.Interfaces.TcpServerInterfaceTest do
       GenServer.stop(server_pid)
     end
 
-    test "enforces max_clients limit", %{mission: mission, config: config, port: port} do
+    test "enforces max_clients limit", %{mission: mission, target: target, port: port} do
       # Set max clients to 2
-      limited_config = Map.put(config, :max_clients, 2)
-      interface_id = Ecto.UUID.generate()
+      interface = build_interface(mission.id, port, [target.identifier], max_clients: 2)
 
-      {:ok, server_pid} =
-        TcpServerInterface.start_link(
-          mission_id: mission.id,
-          interface_id: interface_id,
-          name: "test-tcp-server",
-          config: limited_config
-        )
+      {:ok, server_pid} = TcpServerInterface.start_link(interface)
 
       Process.sleep(100)
 

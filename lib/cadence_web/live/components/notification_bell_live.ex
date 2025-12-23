@@ -43,37 +43,7 @@ defmodule CadenceWeb.NotificationBellLive do
     end
   end
 
-  @impl true
-  def handle_event("view_notification", %{"id" => id}, socket) do
-    notification = Enum.find(socket.assigns.notifications, &(&1.id == id))
-
-    if notification do
-      # Mark as read
-      Notifications.mark_read(notification)
-
-      # Navigate to the action URL
-      if notification.action_url do
-        {:noreply, push_navigate(socket, to: notification.action_url)}
-      else
-        {:noreply, socket}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("mark_all_notifications_read", _params, socket) do
-    user_id = socket.assigns.current_user.id
-    Notifications.mark_all_read(user_id)
-
-    {:noreply,
-     socket
-     |> assign(:unread_count, 0)
-     |> assign(:notifications, mark_all_read_local(socket.assigns.notifications))}
-  end
-
   # Handle PubSub messages forwarded from parent LiveView
-  @impl true
   def update(%{notification_event: {:notification_created, notification}}, socket) do
     notifications = [notification | socket.assigns.notifications] |> Enum.take(7)
     unread_count = socket.assigns.unread_count + 1
@@ -100,6 +70,35 @@ defmodule CadenceWeb.NotificationBellLive do
 
   def update(%{notification_event: {:all_notifications_read, _mission_id}}, socket) do
     {:ok,
+     socket
+     |> assign(:unread_count, 0)
+     |> assign(:notifications, mark_all_read_local(socket.assigns.notifications))}
+  end
+
+  @impl true
+  def handle_event("view_notification", %{"id" => id}, socket) do
+    notification = Enum.find(socket.assigns.notifications, &(&1.id == id))
+
+    if notification do
+      # Mark as read
+      Notifications.mark_read(notification)
+
+      # Navigate to the action URL
+      if notification.action_url do
+        {:noreply, push_navigate(socket, to: notification.action_url)}
+      else
+        {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("mark_all_notifications_read", _params, socket) do
+    user_id = socket.assigns.current_user.id
+    Notifications.mark_all_read(user_id)
+
+    {:noreply,
      socket
      |> assign(:unread_count, 0)
      |> assign(:notifications, mark_all_read_local(socket.assigns.notifications))}

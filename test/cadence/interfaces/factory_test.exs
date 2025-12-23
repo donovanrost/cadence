@@ -1,127 +1,112 @@
 defmodule Cadence.Interfaces.FactoryTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Interfaces
+  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Factory
-  alias Cadence.TestHelpers
+  alias Cadence.Interfaces.TcpClientInterface
+  alias Cadence.Interfaces.TcpServerInterface
 
-  describe "Factory with target associations" do
-    test "builds tcp_client config with associated targets" do
-      # Setup mission and targets
-      setup_result = TestHelpers.full_test_setup()
-      mission = setup_result.mission
-      target = hd(setup_result.targets)
-
-      # Create a TCP client interface
-      {:ok, interface} =
-        Interfaces.create_interface(%{
-          mission_id: mission.id,
-          name: "test-tcp-client",
-          connection_type: "tcp_client",
-          host: "192.168.1.100",
-          port: 8080
-        })
-
-      # Associate target with interface
-      {:ok, _assoc} = Interfaces.add_target_to_interface(target, interface, "read")
+  describe "Factory with domain entities" do
+    test "builds tcp_client child spec from domain entity" do
+      interface = %Interface{
+        id: Ecto.UUID.generate(),
+        mission_id: Ecto.UUID.generate(),
+        name: "test-tcp-client",
+        connection_type: :tcp_client,
+        host: "192.168.1.100",
+        port: 8080,
+        target_ids: ["SAT-1"],
+        protocols: []
+      }
 
       # Build child spec using Factory
-      {module, opts} = Factory.child_spec_for(interface)
+      {module, entity} = Factory.child_spec_for(interface)
 
       # Verify module is correct
-      assert module == Cadence.Interfaces.TcpClientInterface
+      assert module == TcpClientInterface
 
-      # Verify config has target_id from association
-      config = Keyword.get(opts, :config)
-      assert config.target_id == target.identifier
-      assert config.host == "192.168.1.100"
-      assert config.port == 8080
+      # Verify entity is passed directly (no more config map)
+      assert entity == interface
+      assert entity.target_ids == ["SAT-1"]
+      assert entity.host == "192.168.1.100"
+      assert entity.port == 8080
     end
 
-    test "builds tcp_server config with associated targets" do
-      # Setup mission and targets
-      setup_result = TestHelpers.full_test_setup()
-      mission = setup_result.mission
-      targets = setup_result.targets
-
-      # Create a TCP server interface
-      {:ok, interface} =
-        Interfaces.create_interface(%{
-          mission_id: mission.id,
-          name: "test-tcp-server",
-          connection_type: "tcp_server",
-          bind_address: "0.0.0.0",
-          bind_port: 9000
-        })
-
-      # Associate multiple targets with interface
-      Enum.each(targets, fn target ->
-        {:ok, _assoc} = Interfaces.add_target_to_interface(target, interface, "read")
-      end)
+    test "builds tcp_server child spec from domain entity" do
+      interface = %Interface{
+        id: Ecto.UUID.generate(),
+        mission_id: Ecto.UUID.generate(),
+        name: "test-tcp-server",
+        connection_type: :tcp_server,
+        bind_address: "0.0.0.0",
+        bind_port: 9000,
+        target_ids: ["SAT-1", "SAT-2", "SAT-3"],
+        config: %{max_clients: 50},
+        protocols: []
+      }
 
       # Build child spec using Factory
-      {module, opts} = Factory.child_spec_for(interface)
+      {module, entity} = Factory.child_spec_for(interface)
 
       # Verify module is correct
-      assert module == Cadence.Interfaces.TcpServerInterface
+      assert module == TcpServerInterface
 
-      # Verify config has target_ids from associations
-      config = Keyword.get(opts, :config)
-      assert is_list(config.target_ids)
-      assert length(config.target_ids) == 3
-
-      # Verify all target identifiers are present
-      target_identifiers = Enum.map(targets, & &1.identifier)
-      assert Enum.all?(target_identifiers, fn id -> id in config.target_ids end)
-
-      assert config.bind_address == "0.0.0.0"
-      assert config.bind_port == 9000
+      # Verify entity is passed directly
+      assert entity == interface
+      assert length(entity.target_ids) == 3
+      assert entity.bind_address == "0.0.0.0"
+      assert entity.bind_port == 9000
     end
 
-    test "builds tcp_client config with unknown when no targets associated" do
-      # Setup mission
-      setup_result = TestHelpers.full_test_setup()
-      mission = setup_result.mission
-
-      # Create a TCP client interface without associating targets
-      {:ok, interface} =
-        Interfaces.create_interface(%{
-          mission_id: mission.id,
-          name: "test-tcp-client-no-targets",
-          connection_type: "tcp_client",
-          host: "localhost",
-          port: 8081
-        })
-
-      # Build child spec using Factory
-      {_module, opts} = Factory.child_spec_for(interface)
-
-      # Verify config uses "unknown" as fallback
-      config = Keyword.get(opts, :config)
-      assert config.target_id == "unknown"
+    test "module_for_connection_type returns correct module for atoms" do
+      assert Factory.module_for_connection_type(:tcp_client) == TcpClientInterface
+      assert Factory.module_for_connection_type(:tcp_server) == TcpServerInterface
     end
 
-    test "builds tcp_server config with unknown when no targets associated" do
-      # Setup mission
-      setup_result = TestHelpers.full_test_setup()
-      mission = setup_result.mission
+    test "module_for_connection_type returns correct module for strings" do
+      assert Factory.module_for_connection_type("tcp_client") == TcpClientInterface
+      assert Factory.module_for_connection_type("tcp_server") == TcpServerInterface
+    end
 
-      # Create a TCP server interface without associating targets
-      {:ok, interface} =
-        Interfaces.create_interface(%{
-          mission_id: mission.id,
-          name: "test-tcp-server-no-targets",
-          connection_type: "tcp_server",
-          bind_address: "127.0.0.1",
-          bind_port: 9001
-        })
+    test "connection_type_implemented? returns true for implemented types" do
+      assert Factory.connection_type_implemented?(:tcp_client) == true
+      assert Factory.connection_type_implemented?(:tcp_server) == true
+      assert Factory.connection_type_implemented?("tcp_client") == true
+      assert Factory.connection_type_implemented?("tcp_server") == true
+    end
 
-      # Build child spec using Factory
-      {_module, opts} = Factory.child_spec_for(interface)
+    test "connection_type_implemented? returns false for unimplemented types" do
+      assert Factory.connection_type_implemented?(:udp_client) == false
+      assert Factory.connection_type_implemented?(:serial) == false
+      assert Factory.connection_type_implemented?("udp_server") == false
+    end
 
-      # Verify config uses ["unknown"] as fallback
-      config = Keyword.get(opts, :config)
-      assert config.target_ids == ["unknown"]
+    test "raises for unknown connection type" do
+      interface = %Interface{
+        id: Ecto.UUID.generate(),
+        mission_id: Ecto.UUID.generate(),
+        name: "test-unknown",
+        connection_type: :unknown_type,
+        protocols: []
+      }
+
+      assert_raise ArgumentError, ~r/Unknown connection_type/, fn ->
+        Factory.child_spec_for(interface)
+      end
+    end
+
+    test "raises for unimplemented connection type" do
+      interface = %Interface{
+        id: Ecto.UUID.generate(),
+        mission_id: Ecto.UUID.generate(),
+        name: "test-udp",
+        connection_type: :udp_client,
+        protocols: []
+      }
+
+      assert_raise RuntimeError, ~r/not yet implemented/, fn ->
+        Factory.child_spec_for(interface)
+      end
     end
   end
 end

@@ -18,7 +18,8 @@ defmodule Cadence.Ports.Repository.Missions.MissionsRepository do
   concerns and remain in the Missions context. This repository only handles persistence.
   """
 
-  alias Cadence.Missions.{Mission, MissionMembership}
+  alias Cadence.Domain.Missions.Entities.Mission
+  alias Cadence.Domain.Missions.Entities.MissionMembership
 
   @type id :: String.t()
   @type organization_id :: String.t()

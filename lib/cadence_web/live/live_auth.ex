@@ -157,14 +157,9 @@ defmodule CadenceWeb.LiveAuth do
     end
   end
 
-  @doc """
-  Subscribes to user notifications and loads initial notification data.
-
-  This hook:
-  - Subscribes to the user's notification PubSub topic
-  - Loads initial unread notifications
-  - Assigns notification data to socket for use in layouts
-  """
+  # Subscribes to user notifications and loads initial notification data.
+  # This hook subscribes to the user's notification PubSub topic,
+  # loads initial unread notifications, and assigns data to socket.
   def on_mount(:subscribe_notifications, _params, _session, socket) do
     alias Cadence.Notifications
 

@@ -26,6 +26,7 @@ defmodule Cadence.Application.Interfaces.RoutingOperations do
   """
 
   alias Cadence.Domain.Interfaces.Entities.TargetInterface
+  alias Cadence.Ports.Repository.Interfaces.TargetInterfaceRepository
 
   @type routing_id :: String.t()
   @type target_id :: String.t()
@@ -34,7 +35,7 @@ defmodule Cadence.Application.Interfaces.RoutingOperations do
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Interfaces.TargetInterfaceRepository.impl()
+    TargetInterfaceRepository.impl()
   end
 
   # ===========================================================================

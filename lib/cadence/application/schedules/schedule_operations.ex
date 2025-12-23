@@ -24,6 +24,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
 
   alias Cadence.Domain.Schedules.Entities.Schedule
   alias Cadence.Application.Schedules.ScheduleQueries
+  alias Cadence.Schedules.Workers.ExecuteScheduleWorker
 
   @type schedule_id :: String.t()
   @type organization_id :: String.t()
@@ -200,7 +201,7 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
   @spec enqueue(Schedule.t()) :: {:ok, Oban.Job.t()} | {:error, term()}
   def enqueue(%Schedule{} = schedule) do
     %{schedule_id: schedule.id}
-    |> Cadence.Schedules.Workers.ExecuteScheduleWorker.new()
+    |> ExecuteScheduleWorker.new()
     |> Oban.insert()
   end
 

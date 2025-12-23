@@ -37,7 +37,6 @@ defmodule Cadence.Organizations do
 
   alias Cadence.Organizations.Organization
   alias Cadence.Organizations.OrganizationMembership
-  alias Cadence.Accounts.User
 
   # Application services
   alias Cadence.Application.Organizations.OrganizationQueries
@@ -114,29 +113,6 @@ defmodule Cadence.Organizations do
   # ===========================================================================
   # Organization Membership (Legacy API - Returns Ecto Schemas)
   # ===========================================================================
-
-  @doc """
-  Lists all users in an organization.
-
-  Returns Ecto schemas for backward compatibility.
-  """
-  def list_organization_users(%Organization{id: org_id}) do
-    User
-    |> where([u], u.organization_id == ^org_id)
-    |> order_by([u], [u.role, u.email])
-    |> Repo.all()
-  end
-
-  @doc """
-  Gets a user by email within an organization.
-
-  Returns Ecto schema for backward compatibility.
-  """
-  def get_organization_user_by_email(%Organization{id: org_id}, email) do
-    User
-    |> where([u], u.organization_id == ^org_id and u.email == ^email)
-    |> Repo.one()
-  end
 
   @doc """
   Lists all organization memberships for an organization.

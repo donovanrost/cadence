@@ -28,9 +28,10 @@ defmodule Cadence.Application.Procedures.ApprovalWorkflow do
       {:ok, version} = ApprovalWorkflow.withdraw(version_id)
   """
 
-  alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Application.Procedures.ProcedureQueries
+  alias Cadence.Domain.Procedures.Entities.ProcedureVersion
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type version_id :: String.t()
   @type user_id :: String.t()
@@ -46,7 +47,7 @@ defmodule Cadence.Application.Procedures.ApprovalWorkflow do
 
   # Get configured event recorder
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 
   @doc """

@@ -48,7 +48,7 @@ defmodule Cadence.Missions.AuthorizationTest do
 
       assert length(memberships) == 1
       assert hd(memberships).user_id == user.id
-      assert hd(memberships).role == "admin"
+      assert hd(memberships).role in ["admin", :admin]
     end
 
     test "user can create mission and gets mission_membership", %{user: user, org: org} do
@@ -71,7 +71,7 @@ defmodule Cadence.Missions.AuthorizationTest do
       memberships = Missions.list_mission_memberships(mission)
       assert length(memberships) == 1
       assert hd(memberships).user_id == user.id
-      assert hd(memberships).role == "admin"
+      assert hd(memberships).role in ["admin", :admin]
     end
 
     test "user can view their own mission", %{user: user, org: org} do

@@ -234,7 +234,8 @@ defmodule CadenceWeb.AlarmRuleLive.CoverageReportComponent do
     Map.get(socket.assigns, :subscribed_mission_id) == mission_id
   end
 
-  @impl true
+  # Note: handle_info works in LiveComponents when they have a parent LiveView
+  # that forwards messages via send_update or when subscribed to PubSub
   def handle_info({:alarm_rule_changed, _event_type, _rule}, socket) do
     # Refresh coverage analysis when rules change
     socket =

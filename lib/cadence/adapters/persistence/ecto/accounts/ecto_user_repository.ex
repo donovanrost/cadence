@@ -189,7 +189,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository do
       confirmed_at: schema.confirmed_at,
       role: role,
       system_admin: schema.system_admin || false,
-      organization_id: schema.organization_id,
+      organization_id: nil,
       created_at: schema.inserted_at,
       updated_at: schema.updated_at
     }
@@ -204,7 +204,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository do
       email: entity.email,
       role: Atom.to_string(entity.role),
       system_admin: entity.system_admin,
-      organization_id: entity.organization_id,
       confirmed_at: entity.confirmed_at
     }
   end

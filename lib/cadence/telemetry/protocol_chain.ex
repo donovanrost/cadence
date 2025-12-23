@@ -2,6 +2,12 @@ defmodule Cadence.Telemetry.ProtocolChain do
   @moduledoc """
   GenServer that manages protocol chain state for an interface.
 
+  ## Data Plane Architecture
+
+  This GenServer receives protocol configurations at startup - no database calls
+  are made during runtime. Protocols are injected from the Interface entity via
+  InterfaceSupervisor.
+
   Responsibilities:
   - Owns protocol state (buffers, configuration)
   - Processes incoming bytes into packets
@@ -16,11 +22,11 @@ defmodule Cadence.Telemetry.ProtocolChain do
 
   ## Usage
 
-      # Start a protocol chain for an interface
+      # Start a protocol chain for an interface (protocols REQUIRED)
       {:ok, pid} = ProtocolChain.start_link(
         interface_id: interface_id,
         mission_id: mission_id,
-        protocols: protocol_configs
+        protocols: interface.protocols  # Required - from Interface entity
       )
 
       # Process incoming data
@@ -43,7 +49,6 @@ defmodule Cadence.Telemetry.ProtocolChain do
   require Logger
 
   alias Cadence.Telemetry.ProtocolChain.Processor
-  alias Cadence.Interfaces
 
   defmodule State do
     @moduledoc false
@@ -66,8 +71,12 @@ defmodule Cadence.Telemetry.ProtocolChain do
   Options:
   - `:interface_id` - Required. The interface this chain belongs to.
   - `:mission_id` - Required. The mission context.
-  - `:protocols` - Optional. List of InterfaceProtocol configs. If not provided,
-    will be loaded from database.
+  - `:protocols` - Required. List of InterfaceProtocol entities from the Interface.
+
+  ## Data Plane
+
+  Protocols MUST be provided - this GenServer does not make database calls.
+  Get protocols from the Interface entity's `protocols` field.
   """
   def start_link(opts) do
     interface_id = Keyword.fetch!(opts, :interface_id)
@@ -149,6 +158,22 @@ defmodule Cadence.Telemetry.ProtocolChain do
     GenServer.call(chain, :clone)
   end
 
+  @doc """
+  Updates the protocol chain with new protocol configurations.
+
+  This is used for hot reload when protocol configuration changes.
+  Clears all buffers and reinitializes the chain with new protocols.
+
+  ## Hot Reload
+
+  This allows protocol changes without restarting the interface.
+  Note that any buffered data will be lost during the update.
+  """
+  @spec update_protocols(pid() | GenServer.name(), [map() | struct()]) :: :ok
+  def update_protocols(chain, protocols) do
+    GenServer.call(chain, {:update_protocols, protocols})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -156,11 +181,9 @@ defmodule Cadence.Telemetry.ProtocolChain do
     interface_id = Keyword.fetch!(opts, :interface_id)
     mission_id = Keyword.fetch!(opts, :mission_id)
 
-    # Load protocols from opts or database
-    protocol_configs =
-      Keyword.get_lazy(opts, :protocols, fn ->
-        Interfaces.list_protocols(interface_id)
-      end)
+    # Protocols are REQUIRED - no database fallback
+    # Get protocols from the Interface entity's protocols field
+    protocol_configs = Keyword.fetch!(opts, :protocols)
 
     # Initialize read and write chains
     read_chain = Processor.init_chain(protocol_configs, "read")
@@ -170,10 +193,11 @@ defmodule Cadence.Telemetry.ProtocolChain do
     format = Processor.chain_format(read_chain)
 
     # Store original configs for cloning
+    # Handle both domain entities (atom types) and legacy schemas (string types)
     configs_for_clone =
       protocol_configs
-      |> Enum.filter(fn config -> config.protocol_direction in ["read", "read_write"] end)
-      |> Enum.map(fn config -> {config.protocol_type, config.protocol_config} end)
+      |> Enum.filter(&handles_read?/1)
+      |> Enum.map(&extract_clone_config/1)
 
     Logger.info(
       "ProtocolChain started for interface_id=#{interface_id}, " <>
@@ -192,6 +216,28 @@ defmodule Cadence.Telemetry.ProtocolChain do
 
     {:ok, state}
   end
+
+  # Check if protocol handles read direction (supports both atom and string)
+  defp handles_read?(%{protocol_direction: dir}) when is_atom(dir) do
+    dir in [:read, :read_write]
+  end
+
+  defp handles_read?(%{protocol_direction: dir}) when is_binary(dir) do
+    dir in ["read", "read_write"]
+  end
+
+  defp handles_read?(_), do: false
+
+  # Extract config for cloning (supports both domain entity and legacy schema)
+  defp extract_clone_config(config) do
+    protocol_type = normalize_protocol_type(config.protocol_type)
+    protocol_config = Map.get(config, :config) || Map.get(config, :protocol_config) || %{}
+    {protocol_type, protocol_config}
+  end
+
+  # Normalize protocol type to string for cloning
+  defp normalize_protocol_type(type) when is_atom(type), do: Atom.to_string(type)
+  defp normalize_protocol_type(type) when is_binary(type), do: type
 
   @impl true
   def handle_call({:process_read, data, metadata}, _from, state) do
@@ -237,6 +283,41 @@ defmodule Cadence.Telemetry.ProtocolChain do
   def handle_call(:clone, _from, state) do
     cloned_chain = Processor.clone_chain(state.protocol_configs)
     {:reply, {:ok, cloned_chain}, state}
+  end
+
+  def handle_call({:update_protocols, protocol_configs}, _from, state) do
+    Logger.info(
+      "Hot reload: Updating protocol chain for interface_id=#{state.interface_id}"
+    )
+
+    # Reinitialize read and write chains with new protocols
+    read_chain = Processor.init_chain(protocol_configs, "read")
+    write_chain = Processor.init_chain(protocol_configs, "write")
+
+    # Determine format based on read chain
+    format = Processor.chain_format(read_chain)
+
+    # Store new configs for cloning
+    configs_for_clone =
+      protocol_configs
+      |> Enum.filter(&handles_read?/1)
+      |> Enum.map(&extract_clone_config/1)
+
+    Logger.info(
+      "Hot reload: Protocol chain updated for interface_id=#{state.interface_id}, " <>
+        "read_protocols=#{length(read_chain)}, write_protocols=#{length(write_chain)}, " <>
+        "format=#{format}"
+    )
+
+    new_state = %{
+      state
+      | read_chain: read_chain,
+        write_chain: write_chain,
+        format: format,
+        protocol_configs: configs_for_clone
+    }
+
+    {:reply, :ok, new_state}
   end
 
   @impl true

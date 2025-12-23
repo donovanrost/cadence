@@ -134,10 +134,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Organizations.EctoOrganizationReposi
 
   @impl true
   def count_users(org_id) do
+    # Query through organization_memberships since organization_id was removed from users
     query =
-      from u in Cadence.Accounts.User,
-        where: u.organization_id == ^org_id,
-        select: count(u.id)
+      from m in Cadence.Organizations.OrganizationMembership,
+        where: m.organization_id == ^org_id,
+        select: count(m.id)
 
     Repo.one(query) || 0
   end

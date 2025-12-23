@@ -101,7 +101,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistenceTest do
             where: e.event_type == "procedure_execution_running"
         )
 
-      assert length(events) == 0
+      assert events == []
     end
 
     test "broadcasts status change after commit", %{execution: execution} do
@@ -224,8 +224,10 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistenceTest do
       assert_receive {:log, :info, "Step completed: step_1"}
     end
 
-    # Note: Idempotency key support requires a unique index on outbox_events.idempotency_key
-    # If the index doesn't exist, this test verifies the feature works when it does
+    # Skipped: Partial unique index requires special handling in Ecto
+    # The index is: WHERE idempotency_key IS NOT NULL
+    # Ecto's conflict_target doesn't automatically work with partial indexes
+    # TODO: Use index name explicitly or switch to ON CONFLICT ON CONSTRAINT syntax
     @tag :skip
     test "handles idempotent inserts with idempotency_key", %{execution: execution} do
       key = "resume:#{execution.id}:step_1:completed"

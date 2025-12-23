@@ -40,7 +40,7 @@ defmodule Cadence.Interfaces.TargetInterface do
 
   schema "target_interfaces" do
     belongs_to :target, Cadence.Targets.Target
-    belongs_to :interface, Cadence.Interfaces.Interface
+    belongs_to :interface, Cadence.Interfaces.InterfaceSchema
 
     field :direction, :string
 

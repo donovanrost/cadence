@@ -19,33 +19,45 @@ defmodule Cadence.Missions.Policy do
   import Ecto.Query
   alias Cadence.Accounts.{User, Scope}
   alias Cadence.Missions.{Mission, MissionMembership}
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Repo
 
   # System admins can do anything
   def authorize(_action, %Scope{system_admin?: true}, %Mission{}), do: :ok
+  def authorize(_action, %Scope{system_admin?: true}, %MissionEntity{}), do: :ok
   def authorize(_action, %User{system_admin: true}, %Mission{}), do: :ok
+  def authorize(_action, %User{system_admin: true}, %MissionEntity{}), do: :ok
 
-  # Check scope-based authorization
+  # Check scope-based authorization - Ecto schema
   def authorize(action, %Scope{} = scope, %Mission{} = mission) do
     if scope.user do
-      authorize_user(action, scope.user, mission, scope.current_organization)
+      authorize_user(action, scope.user, mission.id, mission.organization_id, scope.current_organization)
     else
       :error
     end
   end
 
-  # Legacy User-based authorization
+  # Check scope-based authorization - Domain entity
+  def authorize(action, %Scope{} = scope, %MissionEntity{} = entity) do
+    if scope.user do
+      authorize_user(action, scope.user, entity.id, entity.organization_id, scope.current_organization)
+    else
+      :error
+    end
+  end
+
+  # Legacy User-based authorization - Ecto schema
   def authorize(action, %User{} = user, %Mission{} = mission) do
-    authorize_user(action, user, mission, nil)
+    authorize_user(action, user, mission.id, mission.organization_id, nil)
+  end
+
+  # Legacy User-based authorization - Domain entity
+  def authorize(action, %User{} = user, %MissionEntity{} = entity) do
+    authorize_user(action, user, entity.id, entity.organization_id, nil)
   end
 
   # Organization owners/admins can do anything to missions in their org
-  defp authorize_user(
-         _action,
-         user,
-         %Mission{id: mission_id, organization_id: mission_org_id} = _mission,
-         current_org
-       ) do
+  defp authorize_user(_action, user, mission_id, mission_org_id, current_org) do
     cond do
       # Check if user is org owner/admin via organization_memberships
       has_org_admin_access?(user, mission_org_id) ->

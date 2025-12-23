@@ -34,6 +34,7 @@ defmodule Cadence.Settings do
   """
 
   alias Cadence.Missions.Mission
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
   alias Cadence.Settings.Setting
@@ -56,6 +57,11 @@ defmodule Cadence.Settings do
   If no setting is stored at either level, returns the definition default.
   """
   @spec get(Mission.t(), atom(), atom()) :: any()
+  def get(%MissionEntity{id: id, organization_id: org_id}, namespace, key) do
+    mission = Cadence.Missions.get_mission!(id, org_id)
+    get(mission, namespace, key)
+  end
+
   def get(%Mission{} = mission, namespace, key) do
     mission = ensure_organization_loaded(mission)
     definition = get_definition(namespace, key)
@@ -80,6 +86,11 @@ defmodule Cadence.Settings do
   Returns a map of key => value for all settings in the namespace.
   """
   @spec all(Mission.t(), atom()) :: map()
+  def all(%MissionEntity{id: id, organization_id: org_id}, namespace) do
+    mission = Cadence.Missions.get_mission!(id, org_id)
+    all(mission, namespace)
+  end
+
   def all(%Mission{} = mission, namespace) do
     definitions = list_definitions(namespace)
 
@@ -115,7 +126,15 @@ defmodule Cadence.Settings do
   Returns nil if no mission-level override exists.
   """
   @spec get_mission_override(Mission.t(), atom(), atom()) :: any() | nil
+  def get_mission_override(%MissionEntity{id: mission_id}, namespace, key) do
+    get_mission_override_by_id(mission_id, namespace, key)
+  end
+
   def get_mission_override(%Mission{id: mission_id}, namespace, key) do
+    get_mission_override_by_id(mission_id, namespace, key)
+  end
+
+  defp get_mission_override_by_id(mission_id, namespace, key) do
     get_stored_value(mission_id, "mission", namespace, key)
   end
 
@@ -157,6 +176,11 @@ defmodule Cadence.Settings do
           | {:error, :less_restrictive_than_org, map()}
           | {:error, :org_only_setting}
           | {:error, :invalid_value}
+  def set_mission(%MissionEntity{id: id, organization_id: org_id}, namespace, key, value) do
+    mission = Cadence.Missions.get_mission!(id, org_id)
+    set_mission(mission, namespace, key, value)
+  end
+
   def set_mission(%Mission{} = mission, namespace, key, value) do
     mission = ensure_organization_loaded(mission)
     definition = get_definition(namespace, key)
@@ -189,7 +213,15 @@ defmodule Cadence.Settings do
   """
   @spec clear_mission_override(Mission.t(), atom(), atom()) ::
           {:ok, Setting.t()} | {:error, :not_found}
+  def clear_mission_override(%MissionEntity{id: mission_id}, namespace, key) do
+    clear_mission_override_by_id(mission_id, namespace, key)
+  end
+
   def clear_mission_override(%Mission{id: mission_id}, namespace, key) do
+    clear_mission_override_by_id(mission_id, namespace, key)
+  end
+
+  defp clear_mission_override_by_id(mission_id, namespace, key) do
     case settings_repo().delete(mission_id, "mission", to_string(namespace), to_string(key)) do
       {:ok, 0} -> {:error, :not_found}
       {:ok, _count} -> :ok
@@ -258,7 +290,13 @@ defmodule Cadence.Settings do
   Gets all settings for a mission with org defaults, overrides, and constraints.
   Useful for rendering mission settings UI with override support.
   """
-  @spec get_all_mission_settings(Mission.t(), atom()) :: [map()]
+  @spec get_all_mission_settings(Mission.t() | MissionEntity.t(), atom()) :: [map()]
+  def get_all_mission_settings(%MissionEntity{id: id, organization_id: org_id}, namespace) do
+    # Load the Ecto schema for preloading organization
+    mission = Cadence.Missions.get_mission!(id, org_id)
+    get_all_mission_settings(mission, namespace)
+  end
+
   def get_all_mission_settings(%Mission{} = mission, namespace) do
     mission = ensure_organization_loaded(mission)
 
@@ -327,6 +365,11 @@ defmodule Cadence.Settings do
   """
   @spec can_mission_override?(Mission.t(), atom(), atom(), any()) ::
           :ok | {:error, :less_restrictive_than_org, map()} | {:error, :unknown_setting}
+  def can_mission_override?(%MissionEntity{id: id, organization_id: org_id}, namespace, key, value) do
+    mission = Cadence.Missions.get_mission!(id, org_id)
+    can_mission_override?(mission, namespace, key, value)
+  end
+
   def can_mission_override?(%Mission{} = mission, namespace, key, value) do
     mission = ensure_organization_loaded(mission)
     definition = get_definition(namespace, key)

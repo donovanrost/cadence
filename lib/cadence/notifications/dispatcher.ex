@@ -12,6 +12,7 @@ defmodule Cadence.Notifications.Dispatcher do
 
   alias Cadence.Notifications
   alias Cadence.Notifications.NotificationBuilder
+  alias Cadence.Notifications.EmailWorker
   alias Cadence.Outbox
 
   @notification_event_types ~w(
@@ -89,7 +90,7 @@ defmodule Cadence.Notifications.Dispatcher do
         "immediate" ->
           # Schedule immediate email delivery via Oban
           %{notification_id: notification.id}
-          |> Cadence.Notifications.EmailWorker.new()
+          |> EmailWorker.new()
           |> Oban.insert()
 
         "daily_digest" ->

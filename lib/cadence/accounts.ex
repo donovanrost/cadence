@@ -39,6 +39,7 @@ defmodule Cadence.Accounts do
   alias Cadence.Repo
 
   alias Cadence.Accounts.{User, UserToken, UserNotifier}
+  alias Cadence.Organizations.OrganizationMembership
 
   # Application services for new hexagonal architecture
   alias Cadence.Application.Accounts.UserQueries
@@ -154,8 +155,8 @@ defmodule Cadence.Accounts do
           # Determine role: "owner" if they're creating the org, "admin" otherwise
           role = Map.get(attrs, "role") || Map.get(attrs, :role) || "admin"
 
-          %Cadence.Organizations.OrganizationMembership{}
-          |> Cadence.Organizations.OrganizationMembership.changeset(%{
+          %OrganizationMembership{}
+          |> OrganizationMembership.changeset(%{
             user_id: user.id,
             organization_id: org_id,
             role: role

@@ -12,6 +12,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   use CadenceWeb, :live_view
 
   alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts}
+  alias Cadence.Alarms.Alarm
   alias Cadence.DashboardLayouts.DashboardLayout
 
   @impl true
@@ -584,8 +585,6 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   end
 
   def handle_info({:add_widget, widget}, socket) do
-    IO.inspect(widget, label: "[OpsConsole] Pushing add_widget event")
-
     {:noreply,
      socket
      |> assign(:show_widget_palette, false)
@@ -653,7 +652,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
   def handle_info({:alarm_updated, alarm}, socket) do
     active_alarms =
-      if Cadence.Alarms.Alarm.active?(alarm) do
+      if Alarm.active?(alarm) do
         # Update existing or add if not present
         case Enum.find_index(socket.assigns.active_alarms, &(&1.id == alarm.id)) do
           nil -> [alarm | socket.assigns.active_alarms]

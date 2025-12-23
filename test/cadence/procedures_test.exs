@@ -380,7 +380,7 @@ defmodule Cadence.ProceduresTest do
       pending = Procedures.list_executions(status: :pending)
       running = Procedures.list_executions(status: :running)
 
-      assert length(pending) == 0
+      assert pending == []
       assert length(running) == 1
     end
 

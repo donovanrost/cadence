@@ -13,8 +13,9 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   use CadenceWeb, :live_view
 
   alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts, Procedures, Commands, Outbox, Timeline}
+  alias Cadence.Alarms.Alarm
   alias Cadence.DashboardLayouts.DashboardLayout
-  alias Cadence.MissionDatabase.{Database, MetaCommand}
+  alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -334,12 +335,6 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       </.simple_form>
     </.modal>
     """
-  end
-
-  # Clock tick handler
-  @impl true
-  def handle_info(:tick, socket) do
-    {:noreply, assign(socket, :current_time, DateTime.utc_now())}
   end
 
   # Delegate to existing OpsConsoleLive event handlers
@@ -1037,38 +1032,6 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     {:noreply, refresh_all_queue_entries(socket)}
   end
 
-  # Helper to refresh all queue entries and push to frontend
-  defp refresh_all_queue_entries(socket) do
-    mission_id = socket.assigns.mission.id
-
-    # Refresh both queue entry sets
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
-
-    all_queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing, :completed, :failed, :cancelled, :expired],
-        preload: [:target],
-        limit: 200
-      )
-
-    # Get server-side aggregated metrics (accurate counts regardless of limit)
-    metrics = Commands.get_mission_queue_metrics(mission_id)
-
-    socket
-    |> assign(:queue_entries, queue_entries)
-    |> assign(:all_queue_entries, all_queue_entries)
-    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
-    |> push_event("update_queue_entries", %{
-      entries: Enum.map(all_queue_entries, &queue_entry_json/1)
-    })
-    |> push_event("queue_metrics", %{metrics: metrics})
-  end
-
   # ============================================================================
   # Command Staging Event Handlers
   # ============================================================================
@@ -1268,6 +1231,12 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
+  # Clock tick handler
+  @impl true
+  def handle_info(:tick, socket) do
+    {:noreply, assign(socket, :current_time, DateTime.utc_now())}
+  end
+
   # PubSub handlers for alarms
   def handle_info({:alarm_triggered, alarm}, socket) do
     active_alarms = [alarm | socket.assigns.active_alarms]
@@ -1295,7 +1264,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   def handle_info({:alarm_updated, alarm}, socket) do
     active_alarms =
-      if Cadence.Alarms.Alarm.active?(alarm) do
+      if Alarm.active?(alarm) do
         case Enum.find_index(socket.assigns.active_alarms, &(&1.id == alarm.id)) do
           nil -> [alarm | socket.assigns.active_alarms]
           idx -> List.replace_at(socket.assigns.active_alarms, idx, alarm)
@@ -1438,6 +1407,38 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # Private functions
+
+  # Helper to refresh all queue entries and push to frontend
+  defp refresh_all_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+
+    # Refresh both queue entry sets
+    queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        preload: [:target],
+        limit: 50
+      )
+
+    all_queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing, :completed, :failed, :cancelled, :expired],
+        preload: [:target],
+        limit: 200
+      )
+
+    # Get server-side aggregated metrics (accurate counts regardless of limit)
+    metrics = Commands.get_mission_queue_metrics(mission_id)
+
+    socket
+    |> assign(:queue_entries, queue_entries)
+    |> assign(:all_queue_entries, all_queue_entries)
+    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+    |> push_event("update_queue_entries", %{
+      entries: Enum.map(all_queue_entries, &queue_entry_json/1)
+    })
+    |> push_event("queue_metrics", %{metrics: metrics})
+  end
 
   defp calculate_alarm_counts(alarms) do
     alarms
@@ -1771,7 +1772,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
     # Find first published definition set for this mission
     definition_set =
-      from(ds in Cadence.MissionDatabase.DefinitionSet,
+      from(ds in DefinitionSet,
         join: db in Database, on: ds.database_id == db.id,
         where: db.mission_id == ^mission_id,
         where: not is_nil(ds.published_at),

@@ -14,7 +14,7 @@ defmodule Cadence.Telemetry.IntegrationTest do
   use Cadence.DataCase
 
   alias Cadence.{Organizations, Missions}
-  alias Cadence.Missions.MissionSupervisor
+  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Simulator.PacketSimulator
   alias Cadence.Telemetry.{CurrentValueTable, Pipeline}
 

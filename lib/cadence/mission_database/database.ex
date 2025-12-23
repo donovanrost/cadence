@@ -29,6 +29,7 @@ defmodule Cadence.MissionDatabase.Database do
   import Ecto.Changeset
   import Ecto.Query
 
+  alias Cadence.MissionDatabase.DefinitionSet
   alias Cadence.Repo
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -42,7 +43,7 @@ defmodule Cadence.MissionDatabase.Database do
     field :description, :string
     field :metadata, :map, default: %{}
 
-    has_many :definition_sets, Cadence.MissionDatabase.DefinitionSet
+    has_many :definition_sets, DefinitionSet
 
     timestamps(type: :utc_datetime)
   end
@@ -133,7 +134,7 @@ defmodule Cadence.MissionDatabase.Database do
   def with_definition_sets(%__MODULE__{} = database) do
     Repo.preload(database,
       definition_sets:
-        from(ds in Cadence.MissionDatabase.DefinitionSet,
+        from(ds in DefinitionSet,
           order_by: [desc: ds.inserted_at]
         )
     )
@@ -143,14 +144,14 @@ defmodule Cadence.MissionDatabase.Database do
   Returns the latest published definition set for a database.
   """
   def latest_published(%__MODULE__{id: id}) do
-    Cadence.MissionDatabase.DefinitionSet.get_latest_published(id)
+    DefinitionSet.get_latest_published(id)
   end
 
   @doc """
   Returns the count of definition sets for a database.
   """
   def version_count(%__MODULE__{id: id}) do
-    from(ds in Cadence.MissionDatabase.DefinitionSet,
+    from(ds in DefinitionSet,
       where: ds.database_id == ^id,
       select: count(ds.id)
     )

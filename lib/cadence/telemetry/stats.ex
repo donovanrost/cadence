@@ -359,7 +359,7 @@ defmodule Cadence.Telemetry.Stats do
         _ -> []
       end
 
-    if length(samples) == 0 do
+    if samples == [] do
       %{
         avg_us: 0,
         median_us: 0,

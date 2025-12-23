@@ -16,15 +16,16 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
       {:ok, org} = OrganizationOperations.suspend(org_id)
   """
 
-  alias Cadence.Domain.Organizations.Entities.Organization
   alias Cadence.Application.Organizations.OrganizationQueries
+  alias Cadence.Domain.Organizations.Entities.Organization
+  alias Cadence.Ports.Repository.Organizations.OrganizationRepository
 
   @type org_id :: String.t()
   @type attrs :: map()
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Organizations.OrganizationRepository.impl()
+    OrganizationRepository.impl()
   end
 
   @doc """

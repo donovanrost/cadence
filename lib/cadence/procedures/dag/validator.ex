@@ -191,6 +191,10 @@ defmodule Cadence.Procedures.Dag.Validator do
     validate_step_type_fields(errors, name, step)
   end
 
+  defp validate_step_definition(errors, name, _step) do
+    ["Step '#{name}' must be a map" | errors]
+  end
+
   defp validate_step_type_fields(errors, name, %{"type" => "command"} = step) do
     if is_nil(step["name"]) or step["name"] == "" do
       ["Step '#{name}' (command): missing required field 'name'" | errors]
@@ -259,10 +263,6 @@ defmodule Cadence.Procedures.Dag.Validator do
   # Unknown types - no additional validation
   defp validate_step_type_fields(errors, _name, _step), do: errors
 
-  defp validate_step_definition(errors, name, _step) do
-    ["Step '#{name}' must be a map" | errors]
-  end
-
   defp validate_dependencies_exist(errors, steps) do
     all_names = MapSet.new(Map.keys(steps))
 
@@ -308,8 +308,7 @@ defmodule Cadence.Procedures.Dag.Validator do
         {:cycle, cycle} ->
           {:halt, cycle}
 
-        {:ok, new_state} ->
-          # Merge visited sets for next iteration
+        {:ok, _new_state} ->
           {:cont, nil}
       end
     end)

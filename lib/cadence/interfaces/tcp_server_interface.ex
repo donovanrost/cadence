@@ -6,6 +6,11 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   TCP client connections. Protocol processing is delegated to ProtocolChain processes
   managed by the ProtocolChainSupervisor.
 
+  ## Data Plane Architecture
+
+  This GenServer receives a domain entity at startup - no database calls are made
+  during runtime. Configuration changes are handled via PubSub events.
+
   ## Features
 
   - Accepts multiple concurrent client connections
@@ -14,9 +19,8 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   - Statistics tracking per client and overall
   - Integration with Phoenix.PubSub telemetry pipeline
 
-  ## Configuration
+  ## Configuration (via Interface Entity)
 
-  The interface is configured via the database with:
   - `bind_port` - Port to listen on (required)
   - `bind_address` - Address to bind to (default: "0.0.0.0")
   - `config.max_clients` - Maximum concurrent clients (default: 100)
@@ -34,6 +38,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   use GenServer
   require Logger
 
+  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Telemetry.Packet
   alias Cadence.Telemetry.ProtocolChain
@@ -44,10 +49,8 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   defmodule State do
     @moduledoc false
     defstruct [
-      :mission_id,
+      :interface,
       :target_ids,
-      :interface_id,
-      :interface_name,
       :listen_socket,
       :bind_address,
       :bind_port,
@@ -79,27 +82,13 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   ## Client API
 
   @doc """
-  Starts the TCP server interface.
+  Starts the TCP server interface with the given Interface entity.
 
-  ## Options
-
-  - `:mission_id` - Mission UUID (required)
-  - `:interface_id` - Interface UUID (required)
-  - `:name` - Interface name (required)
-  - `:config` - Configuration map (required)
-    - `:bind_port` - Port to listen on
-    - `:bind_address` - Address to bind to (default: "0.0.0.0")
-    - `:target_ids` - List of target identifiers (default: ["unknown"])
-    - `:max_clients` - Max concurrent clients (default: 100)
-    - `:client_timeout` - Client timeout in ms (default: 300000)
+  The entity contains all configuration - no database lookups are performed.
   """
-  def start_link(opts) do
-    mission_id = Keyword.fetch!(opts, :mission_id)
-    interface_id = Keyword.fetch!(opts, :interface_id)
-    config = Keyword.fetch!(opts, :config)
-
-    name = {:via, Registry, {@registry, {:interface, mission_id, interface_id}}}
-    GenServer.start_link(__MODULE__, {mission_id, interface_id, config}, name: name)
+  def start_link(%Interface{} = interface) do
+    name = {:via, Registry, {@registry, {:interface, interface.mission_id, interface.id}}}
+    GenServer.start_link(__MODULE__, interface, name: name)
   end
 
   @doc """
@@ -133,31 +122,42 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   ## Server Callbacks
 
   @impl true
-  def init({mission_id, interface_id, config}) do
-    target_ids = Map.get(config, :target_ids, ["unknown"])
+  def init(%Interface{} = interface) do
+    # Use target_ids from entity, or fallback to ["unknown"]
+    target_ids =
+      if Enum.empty?(interface.target_ids), do: ["unknown"], else: interface.target_ids
+
+    # Extract max_clients and client_timeout from config map
+    max_clients =
+      get_in(interface.config, ["max_clients"]) ||
+        get_in(interface.config, [:max_clients]) ||
+        100
+
+    client_timeout =
+      get_in(interface.config, ["client_timeout"]) ||
+        get_in(interface.config, [:client_timeout]) ||
+        300_000
 
     Logger.info("""
-    Starting TCP Server Interface:
-      mission_id: #{mission_id}
-      interface_id: #{interface_id}
-      bind_address: #{Map.get(config, :bind_address, "0.0.0.0")}
-      bind_port: #{Map.fetch!(config, :bind_port)}
+    Starting TCP Server Interface #{interface.name}:
+      mission_id: #{interface.mission_id}
+      interface_id: #{interface.id}
+      bind_address: #{interface.bind_address || "0.0.0.0"}
+      bind_port: #{interface.bind_port}
       target_ids: #{inspect(target_ids)}
     """)
 
-    # Start the shared protocol chain for this interface
+    # Start the shared protocol chain for this interface with injected protocols
     # Clients will clone from this template
-    start_protocol_chain(mission_id, interface_id)
+    start_protocol_chain(interface.mission_id, interface.id, interface.protocols)
 
     state = %State{
-      mission_id: mission_id,
+      interface: interface,
       target_ids: target_ids,
-      interface_id: interface_id,
-      interface_name: Map.get(config, :name),
-      bind_address: Map.get(config, :bind_address, "0.0.0.0"),
-      bind_port: Map.fetch!(config, :bind_port),
-      max_clients: Map.get(config, :max_clients, 100),
-      client_timeout: Map.get(config, :client_timeout, 300_000),
+      bind_address: interface.bind_address || "0.0.0.0",
+      bind_port: interface.bind_port,
+      max_clients: max_clients,
+      client_timeout: client_timeout,
       clients: %{}
     }
 
@@ -207,7 +207,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
           {:noreply, state}
         else
           # Clone the protocol chain for this client
-          protocol_chain = clone_protocol_chain_for_client(state.interface_id)
+          protocol_chain = clone_protocol_chain_for_client(state.interface.id)
 
           client_state = %ClientState{
             socket: client_socket,
@@ -268,11 +268,11 @@ defmodule Cadence.Interfaces.TcpServerInterface do
               target_id = List.first(state.target_ids) || "unknown"
 
               metadata = %{
-                mission_id: state.mission_id,
+                mission_id: state.interface.mission_id,
                 stored: false,
                 target_id: target_id,
                 received_at: DateTime.utc_now(),
-                interface_id: state.interface_id,
+                interface_id: state.interface.id,
                 client_address: client_state.remote_address,
                 client_port: client_state.remote_port
               }
@@ -282,7 +282,7 @@ defmodule Cadence.Interfaces.TcpServerInterface do
 
               Phoenix.PubSub.broadcast(
                 Cadence.PubSub,
-                "mission:#{state.mission_id}:telemetry:raw",
+                "mission:#{state.interface.mission_id}:telemetry:raw",
                 {:telemetry_packet, packet, metadata}
               )
             end)
@@ -342,8 +342,8 @@ defmodule Cadence.Interfaces.TcpServerInterface do
   @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
-      mission_id: state.mission_id,
-      interface_id: state.interface_id,
+      mission_id: state.interface.mission_id,
+      interface_id: state.interface.id,
       listening: state.listening,
       bind_port: state.bind_port,
       connected_clients: map_size(state.clients),
@@ -457,15 +457,15 @@ defmodule Cadence.Interfaces.TcpServerInterface do
     if state.listen_socket, do: :gen_tcp.close(state.listen_socket)
 
     # Stop the protocol chain
-    ProtocolChainSupervisor.stop_chain(state.mission_id, state.interface_id)
+    ProtocolChainSupervisor.stop_chain(state.interface.mission_id, state.interface.id)
 
     :ok
   end
 
   ## Private Functions
 
-  defp start_protocol_chain(mission_id, interface_id) do
-    case ProtocolChainSupervisor.start_chain(mission_id, interface_id) do
+  defp start_protocol_chain(mission_id, interface_id, protocols) do
+    case ProtocolChainSupervisor.start_chain(mission_id, interface_id, protocols: protocols) do
       {:ok, pid} ->
         Logger.debug("Started protocol chain #{inspect(pid)} for interface #{interface_id}")
         {:ok, pid}
@@ -541,9 +541,9 @@ defmodule Cadence.Interfaces.TcpServerInterface do
 
     event =
       InterfaceConnectionEvent.new(%{
-        mission_id: state.mission_id,
-        interface_id: state.interface_id,
-        interface_name: state.interface_name,
+        mission_id: state.interface.mission_id,
+        interface_id: state.interface.id,
+        interface_name: state.interface.name,
         previous_state: previous_state,
         new_state: new_state,
         client_count: map_size(state.clients),
