@@ -216,12 +216,24 @@ defmodule Cadence.MissionDatabase.Algorithm do
 
   def apply(_, raw_value), do: raw_value
 
+  # Fast-path for common polynomial sizes (avoids :math.pow overhead)
+  # Linear: y = c0 + c1*x
+  defp apply_polynomial([c0], _x), do: c0
+  defp apply_polynomial([c0, c1], x), do: c0 + c1 * x
+  # Quadratic: y = c0 + c1*x + c2*x^2
+  defp apply_polynomial([c0, c1, c2], x), do: c0 + c1 * x + c2 * x * x
+  # Cubic: y = c0 + c1*x + c2*x^2 + c3*x^3
+  defp apply_polynomial([c0, c1, c2, c3], x) do
+    x2 = x * x
+    c0 + c1 * x + c2 * x2 + c3 * x2 * x
+  end
+
+  # Higher order: use Horner's method (more numerically stable, fewer multiplies)
+  # Horner's: c0 + x*(c1 + x*(c2 + x*c3)) instead of c0 + c1*x + c2*x^2 + c3*x^3
   defp apply_polynomial(coefficients, x) do
     coefficients
-    |> Enum.with_index()
-    |> Enum.reduce(0.0, fn {coeff, power}, acc ->
-      acc + coeff * :math.pow(x, power)
-    end)
+    |> Enum.reverse()
+    |> Enum.reduce(0.0, fn coeff, acc -> coeff + x * acc end)
   end
 
   defp apply_spline(points, order, extrapolate, x) do

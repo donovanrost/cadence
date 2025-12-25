@@ -38,7 +38,9 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.ConversionStage do
 
   alias Cadence.Telemetry.Conversions
 
-  @parallel_threshold 50
+  # Raised threshold: with optimized polynomial eval (~50ns/item),
+  # Task.async_stream overhead (~10-50μs) only pays off for very large packets
+  @parallel_threshold 500
 
   @impl true
   def stage_name, do: :convert

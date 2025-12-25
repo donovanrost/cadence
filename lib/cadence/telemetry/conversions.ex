@@ -36,15 +36,24 @@ defmodule Cadence.Telemetry.Conversions do
 
   def convert(value, :polynomial, config) when is_number(value) do
     coefficients = Map.get(config, :coefficients, [])
+    {:ok, apply_polynomial(coefficients, value)}
+  end
 
-    result =
-      coefficients
-      |> Enum.with_index()
-      |> Enum.reduce(0.0, fn {coef, power}, acc ->
-        acc + coef * :math.pow(value, power)
-      end)
+  # Fast-path for common polynomial sizes (avoids :math.pow overhead)
+  defp apply_polynomial([], _x), do: 0.0
+  defp apply_polynomial([c0], _x), do: c0
+  defp apply_polynomial([c0, c1], x), do: c0 + c1 * x
+  defp apply_polynomial([c0, c1, c2], x), do: c0 + c1 * x + c2 * x * x
+  defp apply_polynomial([c0, c1, c2, c3], x) do
+    x2 = x * x
+    c0 + c1 * x + c2 * x2 + c3 * x2 * x
+  end
 
-    {:ok, result}
+  # Higher order: use Horner's method
+  defp apply_polynomial(coefficients, x) do
+    coefficients
+    |> Enum.reverse()
+    |> Enum.reduce(0.0, fn coeff, acc -> coeff + x * acc end)
   end
 
   def convert(value, :linear, config) when is_number(value) do
