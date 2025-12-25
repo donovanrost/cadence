@@ -33,6 +33,10 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--scenario` - Path to YAML scenario file for deterministic testing
     * `--definitions` - Path to YAML packet definitions for proper encoding
     * `--provider` - Provider: basic (default) or scenario
+    * `--parallel` - Enable parallel mode for high throughput
+    * `--generators` - Number of generator workers (default: CPU cores)
+    * `--batch-timeout` - Send buffer flush interval in ms (default: 10)
+    * `--batch-size` - Send buffer flush size in bytes (default: 32768)
 
   ## Scenarios
 
@@ -68,7 +72,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
   @default_rate 1.0
   @default_duration 0
   @default_target "SIM-1"
-  @max_rate 15_000
+  @max_rate 50_000
 
   @impl Mix.Task
   def run(args) do
@@ -86,6 +90,10 @@ defmodule Mix.Tasks.Cadence.Simulate do
           definitions: :string,
           provider: :string,
           start_mission: :boolean,
+          parallel: :boolean,
+          generators: :integer,
+          batch_timeout: :integer,
+          batch_size: :integer,
           help: :boolean
         ],
         aliases: [
@@ -94,6 +102,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
           r: :rate,
           d: :duration,
           s: :scenario,
+          p: :parallel,
           h: :help
         ]
       )
@@ -118,7 +127,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
       scenario_path: opts[:scenario],
       definitions_path: opts[:definitions],
       provider: parse_provider(opts[:provider]),
-      start_mission: opts[:start_mission] || false
+      start_mission: opts[:start_mission] || false,
+      parallel_mode: if(opts[:parallel], do: :parallel, else: :sequential),
+      generator_count: opts[:generators],
+      send_batch_timeout: opts[:batch_timeout],
+      send_batch_size: opts[:batch_size]
     }
 
     # Start the application with reconcilers disabled.
@@ -151,7 +164,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
       mission_id: config.mission_id,
       target_id: config.target_id,
       rate_hz: config.rate_hz,
-      output: config.output
+      output: config.output,
+      parallel_mode: config.parallel_mode
     ]
 
     # Add scenario if provided
@@ -170,8 +184,18 @@ defmodule Mix.Tasks.Cadence.Simulate do
         opts
       end
 
+    # Add parallel mode options if provided
+    opts =
+      opts
+      |> maybe_add_opt(:generator_count, config.generator_count)
+      |> maybe_add_opt(:send_batch_timeout, config.send_batch_timeout)
+      |> maybe_add_opt(:send_batch_size, config.send_batch_size)
+
     opts
   end
+
+  defp maybe_add_opt(opts, _key, nil), do: opts
+  defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
   defp parse_provider(nil), do: :basic
   defp parse_provider("basic"), do: :basic
@@ -288,6 +312,14 @@ defmodule Mix.Tasks.Cadence.Simulate do
         "hardcoded (legacy)"
       end
 
+    parallel_info =
+      if config.parallel_mode == :parallel do
+        gen_count = config.generator_count || System.schedulers_online()
+        "parallel (#{gen_count} workers)"
+      else
+        "sequential"
+      end
+
     Mix.shell().info("""
 
     ╔═══════════════════════════════════════════════════════════════╗
@@ -300,6 +332,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       Provider:      #{provider_info}
       Definitions:   #{definitions_info}
       Rate:          #{config.rate_hz} Hz (#{mode} mode: #{mode_detail})
+      Mode:          #{parallel_info}
       Output:        #{format_output(config.output)}
       Duration:      #{format_duration(config.duration)}
 
@@ -371,12 +404,29 @@ defmodule Mix.Tasks.Cadence.Simulate do
     # Calculate actual rate
     actual_rate = if elapsed > 0, do: stats.packet_count / elapsed, else: 0.0
 
-    Mix.shell().info(
+    base_info =
       "[#{format_elapsed(elapsed)}] " <>
         "Packets: #{format_number(stats.packet_count)} | " <>
         "Rate: #{format_rate(actual_rate)} pkt/s | " <>
         "Steps: #{format_number(stats.step)}"
-    )
+
+    # Add parallel mode metrics if available
+    output =
+      case stats[:send_buffer_stats] do
+        nil ->
+          base_info
+
+        buffer_stats ->
+          sent = buffer_stats[:packets_sent] || 0
+          bytes = buffer_stats[:bytes_sent] || 0
+          sent_rate = if elapsed > 0, do: sent / elapsed, else: 0.0
+          mbps = if elapsed > 0, do: bytes * 8 / elapsed / 1_000_000, else: 0.0
+
+          base_info <>
+            " | Sent: #{format_number(sent)} (#{format_rate(sent_rate)} pkt/s, #{Float.round(mbps, 2)} Mbps)"
+      end
+
+    Mix.shell().info(output)
   end
 
   defp cleanup(pid, start_time) do
@@ -458,6 +508,12 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --start-mission            Start the mission runtime (interfaces, pipeline)
       --help, -h                 Show this help
 
+    Parallel Mode (for high-throughput testing):
+      --parallel, -p             Enable parallel mode with multiple workers
+      --generators <count>       Number of generator workers (default: CPU cores)
+      --batch-timeout <ms>       Send buffer flush interval (default: 10)
+      --batch-size <bytes>       Send buffer flush size (default: 32768)
+
     Providers:
       basic     - Generates sinusoidal telemetry values (default)
       scenario  - Executes YAML-defined scenarios for alarm testing
@@ -483,8 +539,12 @@ defmodule Mix.Tasks.Cadence.Simulate do
         --definitions ~/mission/telemetry.yaml \\
         --output tcp:localhost:9999
 
-      # High-rate stress test
+      # High-rate stress test with sequential mode
       mix cadence.simulate -m <uuid> -r 100 --output tcp:localhost:9999
+
+      # Maximum throughput with parallel mode
+      mix cadence.simulate -m <uuid> -r 10000 --parallel \\
+        --generators 8 --output tcp:localhost:9999
     """)
   end
 end

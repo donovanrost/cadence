@@ -28,6 +28,16 @@ defmodule Cadence.Simulator.Coordinator do
         definitions_path: "path/to/telemetry.yaml"
       )
 
+      # Start in parallel mode for high throughput
+      {:ok, pid} = Coordinator.start_link(
+        mission_id: "mission-123",
+        target_id: "SIM-1",
+        output: {:tcp, "localhost", 9999},
+        rate_hz: 10000.0,
+        parallel_mode: :parallel,
+        generator_count: 8
+      )
+
       # Stop
       Coordinator.stop(pid)
 
@@ -41,17 +51,34 @@ defmodule Cadence.Simulator.Coordinator do
   - `:provider_config` - Config passed to provider init
   - `:definitions_path` - Path to YAML packet definitions
   - `:scenario_path` - Path to scenario file (for ScenarioProvider)
+
+  ## Parallel Mode Options
+
+  - `:parallel_mode` - `:sequential` (default) or `:parallel`
+  - `:generator_count` - Number of worker processes (default: System.schedulers_online())
+  - `:send_batch_timeout` - Batch flush interval in ms (default: 10)
+  - `:send_batch_size` - Batch flush size in bytes (default: 32768)
   """
 
   use GenServer
 
   require Logger
 
-  alias Cadence.Simulator.PacketEncoder
+  alias Cadence.Simulator.{
+    GeneratorWorker,
+    PacketEncoder,
+    SendBuffer,
+    SequenceAllocator,
+    SimulatorMetrics
+  }
+
   alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
 
   @default_rate_hz 1.0
   @default_target_id "SIM-1"
+  @default_generator_count System.schedulers_online()
+  @default_send_batch_timeout 10
+  @default_send_batch_size 32_768
 
   defstruct [
     :mission_id,
@@ -63,6 +90,11 @@ defmodule Cadence.Simulator.Coordinator do
     :socket,
     :rate_hz,
     :timer_ref,
+    # Parallel mode fields
+    :parallel_mode,
+    :generator_pool,
+    :sequence_allocator,
+    :send_buffer,
     step: 0,
     packet_count: 0
   ]
@@ -111,6 +143,7 @@ defmodule Cadence.Simulator.Coordinator do
     target_id = Keyword.get(opts, :target_id, @default_target_id)
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
+    parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
 
     # Determine provider based on options
     {provider_module, provider_config} = determine_provider(opts)
@@ -129,11 +162,20 @@ defmodule Cadence.Simulator.Coordinator do
           encoder: encoder,
           output: output,
           rate_hz: rate_hz,
+          parallel_mode: parallel_mode,
           socket: nil
         }
 
-        # Connect output if needed
-        state = connect_output(state)
+        # Initialize based on parallel mode
+        state =
+          case parallel_mode do
+            :parallel ->
+              init_parallel_mode(state, opts)
+
+            :sequential ->
+              # Connect output for sequential mode
+              connect_output(state)
+          end
 
         Logger.info("""
         Simulator Coordinator started:
@@ -142,11 +184,12 @@ defmodule Cadence.Simulator.Coordinator do
           provider: #{inspect(provider_module)}
           rate_hz: #{rate_hz}
           output: #{inspect(output)}
+          parallel_mode: #{parallel_mode}
           encoder: #{if encoder, do: "loaded", else: "none (using hardcoded encoding)"}
         """)
 
         # Schedule first generation
-        interval_ms = trunc(1000 / rate_hz)
+        interval_ms = max(trunc(1000 / rate_hz), 1)
         timer_ref = Process.send_after(self(), :generate, interval_ms)
 
         {:ok, %{state | timer_ref: timer_ref}}
@@ -156,8 +199,100 @@ defmodule Cadence.Simulator.Coordinator do
     end
   end
 
+  # Initialize parallel mode with workers, send buffer, and sequence allocator
+  defp init_parallel_mode(state, opts) do
+    generator_count = Keyword.get(opts, :generator_count, @default_generator_count)
+    batch_timeout = Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout)
+    batch_size = Keyword.get(opts, :send_batch_size, @default_send_batch_size)
+
+    # Initialize metrics
+    SimulatorMetrics.init(state.mission_id)
+
+    # Create sequence allocator with known APIDs
+    apids =
+      if state.encoder do
+        PacketEncoder.apids(state.encoder)
+      else
+        [100, 101, 102]
+      end
+
+    sequence_allocator = SequenceAllocator.new(apids)
+
+    # Start send buffer
+    {:ok, send_buffer} =
+      SendBuffer.start_link(
+        output: state.output,
+        batch_timeout: batch_timeout,
+        batch_size: batch_size
+      )
+
+    # Start generator workers
+    generator_pool =
+      for worker_id <- 0..(generator_count - 1) do
+        {:ok, pid} =
+          GeneratorWorker.start_link(
+            worker_id: worker_id,
+            coordinator_id: state.mission_id,
+            provider_module: state.provider_module,
+            provider_state: state.provider_state,
+            encoder: state.encoder,
+            target_id: state.target_id,
+            sequence_allocator: sequence_allocator,
+            send_buffer: send_buffer,
+            name: nil
+          )
+
+        pid
+      end
+
+    Logger.info("Started #{generator_count} generator workers for parallel mode")
+
+    %{
+      state
+      | sequence_allocator: sequence_allocator,
+        send_buffer: send_buffer,
+        generator_pool: generator_pool
+    }
+  end
+
   @impl true
+  def handle_info(:generate, %{parallel_mode: :parallel} = state) do
+    # Parallel mode: dispatch to workers in round-robin
+    # Use burst mode for high rates (>1000 Hz) - dispatch multiple steps per tick
+    worker_count = length(state.generator_pool)
+
+    {steps_per_tick, interval_ms} =
+      if state.rate_hz <= 1000 do
+        # Standard mode: 1 step per interval
+        {1, max(trunc(1000 / state.rate_hz), 1)}
+      else
+        # Burst mode: multiple steps per 1ms tick
+        {ceil(state.rate_hz / 1000), 1}
+      end
+
+    # Dispatch steps to workers
+    Enum.each(0..(steps_per_tick - 1), fn offset ->
+      step = state.step + offset
+      worker_index = rem(step, worker_count)
+      worker = Enum.at(state.generator_pool, worker_index)
+      GeneratorWorker.generate(worker, step)
+    end)
+
+    # Schedule next tick
+    timer_ref = Process.send_after(self(), :generate, interval_ms)
+
+    new_state = %{
+      state
+      | timer_ref: timer_ref,
+        step: state.step + steps_per_tick,
+        packet_count: state.packet_count + steps_per_tick
+    }
+
+    {:noreply, new_state}
+  end
+
   def handle_info(:generate, state) do
+    # Sequential mode: original behavior
     # Generate values from provider
     {values, provider_state} =
       case state.provider_module.generate_values(state.provider_state, state.step) do
@@ -173,7 +308,7 @@ defmodule Cadence.Simulator.Coordinator do
     state = send_telemetry(state, values)
 
     # Schedule next generation
-    interval_ms = trunc(1000 / state.rate_hz)
+    interval_ms = max(trunc(1000 / state.rate_hz), 1)
     timer_ref = Process.send_after(self(), :generate, interval_ms)
 
     new_state = %{
@@ -189,17 +324,34 @@ defmodule Cadence.Simulator.Coordinator do
 
   @impl true
   def handle_call(:get_stats, _from, state) do
-    stats = %{
+    base_stats = %{
       mission_id: state.mission_id,
       target_id: state.target_id,
       provider: state.provider_module,
       rate_hz: state.rate_hz,
       step: state.step,
       packet_count: state.packet_count,
-      uptime_seconds: state.step / state.rate_hz,
+      uptime_seconds: state.step / max(state.rate_hz, 0.001),
       output: format_output(state.output),
-      encoder_loaded: state.encoder != nil
+      encoder_loaded: state.encoder != nil,
+      parallel_mode: state.parallel_mode
     }
+
+    # Add parallel mode specific stats
+    stats =
+      case state.parallel_mode do
+        :parallel ->
+          parallel_stats = %{
+            generator_count: length(state.generator_pool),
+            send_buffer_stats: SendBuffer.stats(state.send_buffer),
+            metrics: SimulatorMetrics.get_stats(state.mission_id)
+          }
+
+          Map.merge(base_stats, parallel_stats)
+
+        :sequential ->
+          base_stats
+      end
 
     {:reply, stats, state}
   end
@@ -219,7 +371,29 @@ defmodule Cadence.Simulator.Coordinator do
   @impl true
   def terminate(_reason, state) do
     if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
-    if state.socket, do: close_socket(state)
+
+    # Clean up based on mode
+    case state.parallel_mode do
+      :parallel ->
+        # Stop all generator workers
+        if state.generator_pool do
+          Enum.each(state.generator_pool, fn pid ->
+            if Process.alive?(pid), do: GeneratorWorker.stop(pid)
+          end)
+        end
+
+        # Stop send buffer
+        if state.send_buffer && Process.alive?(state.send_buffer) do
+          SendBuffer.stop(state.send_buffer)
+        end
+
+        # Clean up metrics
+        SimulatorMetrics.cleanup(state.mission_id)
+
+      :sequential ->
+        if state.socket, do: close_socket(state)
+    end
+
     :ok
   end
 
@@ -332,18 +506,13 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp send_telemetry(%{encoder: encoder} = state, values) do
     # Use encoder for proper packet construction
-    case PacketEncoder.encode(encoder, state.target_id, values) do
-      {:ok, packets, updated_encoder} ->
-        Enum.each(packets, fn {_packet_name, binary} ->
-          send_packet(state, binary)
-        end)
+    {:ok, packets, updated_encoder} = PacketEncoder.encode(encoder, state.target_id, values)
 
-        %{state | encoder: updated_encoder}
+    Enum.each(packets, fn {_packet_name, binary} ->
+      send_packet(state, binary)
+    end)
 
-      {:error, reason} ->
-        Logger.error("Encoding failed: #{inspect(reason)}")
-        state
-    end
+    %{state | encoder: updated_encoder}
   end
 
   # Legacy hardcoded packet encoding (for backwards compatibility)

@@ -149,6 +149,136 @@ defmodule Cadence.Simulator.PacketEncoder do
     Map.keys(encoder.items_by_qualified_name)
   end
 
+  @doc """
+  Returns the list of APIDs from packet definitions.
+  """
+  @spec apids(t()) :: [non_neg_integer()]
+  def apids(encoder) do
+    encoder.packets
+    |> Map.values()
+    |> Enum.map(& &1.apid)
+    |> Enum.filter(&(&1 != nil))
+    |> Enum.uniq()
+  end
+
+  @doc """
+  Encodes telemetry values with external sequence number allocation.
+
+  Unlike `encode/3`, this function does not maintain internal sequence counts.
+  Instead, the caller provides a sequence number allocator function that is
+  called for each packet's APID.
+
+  This is designed for parallel encoding where sequence numbers must be
+  allocated atomically from a shared source.
+
+  ## Parameters
+
+  - `encoder` - The encoder struct
+  - `target_id` - Target identifier for the packet
+  - `values` - Map of qualified item names to values
+  - `sequence_fn` - Function that takes an APID and returns the next sequence number
+
+  ## Example
+
+      allocator = SequenceAllocator.new([100, 101])
+
+      {:ok, packets} = PacketEncoder.encode_with_sequence(
+        encoder,
+        "SIM-1",
+        %{"HEALTH.cpu_temp" => 25.5},
+        fn apid -> SequenceAllocator.next(allocator, apid) end
+      )
+  """
+  @spec encode_with_sequence(t(), String.t(), %{String.t() => any()}, (non_neg_integer() -> non_neg_integer())) ::
+          {:ok, [{String.t(), binary()}]} | {:error, term()}
+  def encode_with_sequence(encoder, target_id, values, sequence_fn) when is_function(sequence_fn, 1) do
+    # Group values by packet name
+    values_by_packet =
+      values
+      |> Enum.group_by(fn {qualified_name, _value} ->
+        case String.split(qualified_name, ".", parts: 2) do
+          [packet_name, _item_name] -> packet_name
+          _ -> nil
+        end
+      end)
+      |> Map.delete(nil)
+
+    # Encode each packet
+    packets =
+      Enum.reduce(values_by_packet, [], fn {packet_name, items}, acc ->
+        case encode_packet_with_sequence(encoder, packet_name, target_id, items, sequence_fn) do
+          {:ok, binary} ->
+            [{packet_name, binary} | acc]
+
+          {:error, reason} ->
+            Logger.warning("Failed to encode packet #{packet_name}: #{inspect(reason)}")
+            acc
+        end
+      end)
+
+    {:ok, Enum.reverse(packets)}
+  end
+
+  # Encode a single packet with external sequence number
+  defp encode_packet_with_sequence(encoder, packet_name, target_id, items, sequence_fn) do
+    case Map.get(encoder.packets, packet_name) do
+      nil ->
+        {:error, {:unknown_packet, packet_name}}
+
+      packet_def ->
+        # Convert items list to map of item_name => value
+        item_values =
+          items
+          |> Enum.map(fn {qualified_name, value} ->
+            [_packet, item_name] = String.split(qualified_name, ".", parts: 2)
+            {item_name, value}
+          end)
+          |> Map.new()
+
+        # Get sequence from external allocator
+        apid = packet_def.apid || 0
+        seq = sequence_fn.(apid)
+
+        # Encode to binary with provided sequence
+        binary = encode_packet_binary_with_seq(encoder, packet_def, target_id, item_values, seq)
+
+        {:ok, binary}
+    end
+  end
+
+  # Encode packet binary with explicit sequence number
+  defp encode_packet_binary_with_seq(_encoder, packet_def, target_id, item_values, sequence) do
+    # Calculate packet size from item definitions
+    max_bit =
+      packet_def.items
+      |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
+      |> Enum.max(fn -> 0 end)
+
+    # Round up to byte boundary
+    payload_size = div(max_bit + 7, 8)
+
+    # Start with zeroed payload
+    payload = :binary.copy(<<0>>, payload_size)
+
+    # Pack each item into the payload
+    payload =
+      Enum.reduce(packet_def.items, payload, fn item_def, acc ->
+        case Map.get(item_values, item_def.name) do
+          nil ->
+            acc
+
+          value ->
+            # Apply reverse conversion if needed
+            raw_value = reverse_convert(value, item_def.conversion)
+            pack_value(acc, item_def, raw_value)
+        end
+      end)
+
+    # Build CCSDS packet with provided sequence
+    apid = packet_def.apid || 0
+    build_ccsds_packet(apid, sequence, target_id, payload)
+  end
+
   # Build encoder from parsed YAML
   defp build_encoder(parsed) do
     packets = parsed["packets"] || []

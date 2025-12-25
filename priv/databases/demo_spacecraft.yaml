@@ -809,6 +809,907 @@ packets:
           red_high: 30.0
 
   # ---------------------------------------------------------------------------
+  # SCIENCE_DATA - Large science data packet for throughput testing
+  # ---------------------------------------------------------------------------
+  - name: SCIENCE_DATA
+    apid: 100
+    description: "Science data dump - 4KB payload for throughput testing"
+    items:
+      - name: sequence
+        bit_offset: 0
+        bit_size: 32
+        data_type: uint
+        description: "Sequence counter"
+
+      - name: timestamp
+        bit_offset: 32
+        bit_size: 64
+        data_type: uint
+        description: "Collection timestamp"
+
+      - name: data_block
+        bit_offset: 96
+        bit_size: 32672
+        data_type: binary
+        description: "Raw science data (~4KB)"
+
+  # ---------------------------------------------------------------------------
+  # STRESS_TEST - High item count packet for pipeline stress testing
+  # 64 items with calibrations and limits = real CPU work per packet
+  # ---------------------------------------------------------------------------
+  - name: STRESS_TEST
+    apid: 101
+    description: "Stress test packet - 64 sensors with calibrations and limits"
+    items:
+      # Batch 1: Temperature sensors (16 items) - polynomial calibration + limits
+      - name: temp_sensor_00
+        bit_offset: 0
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_01
+        bit_offset: 16
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_02
+        bit_offset: 32
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_03
+        bit_offset: 48
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_04
+        bit_offset: 64
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_05
+        bit_offset: 80
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_06
+        bit_offset: 96
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_07
+        bit_offset: 112
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_08
+        bit_offset: 128
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_09
+        bit_offset: 144
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_10
+        bit_offset: 160
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_11
+        bit_offset: 176
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_12
+        bit_offset: 192
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_13
+        bit_offset: 208
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_14
+        bit_offset: 224
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      - name: temp_sensor_15
+        bit_offset: 240
+        bit_size: 16
+        data_type: uint
+        units: "degC"
+        conversion:
+          type: polynomial
+          coefficients: [-40.0, 0.01]
+        limits:
+          red_low: -30.0
+          yellow_low: -10.0
+          yellow_high: 60.0
+          red_high: 80.0
+
+      # Batch 2: Voltage sensors (16 items) - polynomial calibration + limits
+      - name: voltage_sensor_00
+        bit_offset: 256
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_01
+        bit_offset: 272
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_02
+        bit_offset: 288
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_03
+        bit_offset: 304
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_04
+        bit_offset: 320
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_05
+        bit_offset: 336
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_06
+        bit_offset: 352
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_07
+        bit_offset: 368
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_08
+        bit_offset: 384
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_09
+        bit_offset: 400
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_10
+        bit_offset: 416
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_11
+        bit_offset: 432
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_12
+        bit_offset: 448
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_13
+        bit_offset: 464
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_14
+        bit_offset: 480
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      - name: voltage_sensor_15
+        bit_offset: 496
+        bit_size: 16
+        data_type: uint
+        units: "V"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.001]
+        limits:
+          red_low: 3.0
+          yellow_low: 3.2
+          yellow_high: 3.4
+          red_high: 3.6
+
+      # Batch 3: Current sensors (16 items) - polynomial calibration + limits
+      - name: current_sensor_00
+        bit_offset: 512
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_01
+        bit_offset: 528
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_02
+        bit_offset: 544
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_03
+        bit_offset: 560
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_04
+        bit_offset: 576
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_05
+        bit_offset: 592
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_06
+        bit_offset: 608
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_07
+        bit_offset: 624
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_08
+        bit_offset: 640
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_09
+        bit_offset: 656
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_10
+        bit_offset: 672
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_11
+        bit_offset: 688
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_12
+        bit_offset: 704
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_13
+        bit_offset: 720
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_14
+        bit_offset: 736
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      - name: current_sensor_15
+        bit_offset: 752
+        bit_size: 16
+        data_type: int
+        units: "A"
+        conversion:
+          type: polynomial
+          coefficients: [0.0, 0.0001]
+        limits:
+          red_low: -5.0
+          yellow_low: -2.0
+          yellow_high: 2.0
+          red_high: 5.0
+
+      # Batch 4: Status flags with state tables (16 items)
+      - name: status_flag_00
+        bit_offset: 768
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_01
+        bit_offset: 776
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_02
+        bit_offset: 784
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_03
+        bit_offset: 792
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_04
+        bit_offset: 800
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_05
+        bit_offset: 808
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_06
+        bit_offset: 816
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_07
+        bit_offset: 824
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_08
+        bit_offset: 832
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_09
+        bit_offset: 840
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_10
+        bit_offset: 848
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_11
+        bit_offset: 856
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_12
+        bit_offset: 864
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_13
+        bit_offset: 872
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_14
+        bit_offset: 880
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+      - name: status_flag_15
+        bit_offset: 888
+        bit_size: 8
+        data_type: uint
+        conversion:
+          type: state_table
+          states:
+            0: "OFF"
+            1: "NOMINAL"
+            2: "WARNING"
+            3: "FAULT"
+
+  # ---------------------------------------------------------------------------
   # DEBUG - Debug/diagnostic packet (little endian, signed integers)
   # ---------------------------------------------------------------------------
   - name: DEBUG
