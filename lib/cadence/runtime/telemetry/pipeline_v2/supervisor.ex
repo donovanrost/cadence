@@ -4,8 +4,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
 
   Starts and supervises:
   - PartitionRouter (PubSub subscriber, event distributor)
-  - PartitionSupervisors (one per partition, each with 4 stages)
-  - CVTBatcher (collects from all partitions, batches CVT writes)
+  - PartitionSupervisors (one per partition, each with 5 stages including CVTBatcher)
 
   ## Architecture
 
@@ -16,12 +15,15 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
   │   ├── IdentifyStage_0
   │   ├── DecommutationStage_0
   │   ├── ConversionStage_0
-  │   └── DeriveStage_0
+  │   ├── DeriveStage_0
+  │   └── CVTBatcher_0 (per-partition consumer)
   ├── PartitionSupervisor_1
   │   └── ...
-  ├── ... (N partitions)
-  └── CVTBatcher (consumer)
+  └── ... (N partitions)
   ```
+
+  Each partition has its own CVTBatcher, eliminating fan-in bottleneck
+  and enabling parallel ETS writes.
 
   ## Configuration
 
@@ -35,7 +37,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
   use Supervisor
   require Logger
 
-  alias Cadence.Runtime.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor, CVTBatcher}
+  alias Cadence.Runtime.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
 
   @default_partition_count 16
 
@@ -57,10 +59,9 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
     )
 
     router_name = router_name(mission_id)
-    batcher_name = batcher_name(mission_id)
 
     # Build children list
-    # Each child needs a unique ID in the supervisor
+    # Each PartitionSupervisor includes its own CVTBatcher (no fan-in)
     partition_children =
       for partition <- 0..(partition_count - 1) do
         %{
@@ -72,6 +73,9 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
                  mission_id: mission_id,
                  partition: partition,
                  router_pid: router_name,
+                 batch_size: batch_size,
+                 batch_timeout: batch_timeout,
+                 broadcast_enabled: true,
                  name: partition_supervisor_name(mission_id, partition)
                ]
              ]},
@@ -79,7 +83,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
         }
       end
 
-    # 2. Start PartitionSupervisors for each partition (with unique IDs)
+    # Start PartitionRouter first, then all PartitionSupervisors
     children =
       [
         # 1. Start the PartitionRouter (producer)
@@ -89,43 +93,10 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
            partition_count: partition_count,
            name: router_name
          ]}
-      ] ++
-        partition_children ++
-        [
-          # 3. Start the CVTBatcher (consumer)
-          {CVTBatcher,
-           [
-             mission_id: mission_id,
-             partition_count: partition_count,
-             batch_size: batch_size,
-             batch_timeout: batch_timeout,
-             broadcast_enabled: true,
-             name: batcher_name
-           ]}
-        ]
+      ] ++ partition_children
 
-    # Use rest_for_one: if router fails, restart all partitions and batcher
+    # Use rest_for_one: if router fails, restart all partitions
     Supervisor.init(children, strategy: :rest_for_one)
-  end
-
-  @doc """
-  Called after all children are started to wire up CVTBatcher subscriptions.
-
-  This is called from the parent supervisor's init callback or manually.
-  Note: CVTBatcher now auto-subscribes via scheduled message, so this is optional.
-  """
-  def subscribe_batcher(mission_id) do
-    batcher = batcher_name(mission_id)
-
-    case GenServer.whereis(batcher) do
-      nil ->
-        Logger.warning("CVTBatcher not found for mission #{mission_id}")
-        :error
-
-      pid ->
-        CVTBatcher.subscribe_to_partitions(pid)
-        :ok
-    end
   end
 
   @doc """
@@ -142,10 +113,6 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Supervisor do
 
   defp router_name(mission_id) do
     {:via, Registry, {Cadence.MissionRegistry, {:pipeline_v2, mission_id, :router}}}
-  end
-
-  defp batcher_name(mission_id) do
-    {:via, Registry, {Cadence.MissionRegistry, {:pipeline_v2, mission_id, :batcher}}}
   end
 
   defp partition_supervisor_name(mission_id, partition) do

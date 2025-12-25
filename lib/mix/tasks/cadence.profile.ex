@@ -413,34 +413,44 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.shell().info("CVT: #{inspect(other)}")
     end
 
-    # Stats (from ETS counters - works with Broadway)
+    # Stats - handle both V1 (Stats) and V2 (PipelineMetrics) formats
     case snapshot[:stats] do
-      %{
-        packets_received: recv,
-        packets_processed: proc,
-        packets_failed: failed,
-        items_processed: items
-      } ->
+      %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats ->
+        # V1 uses packets_failed, V2 uses packets_dropped
+        failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+
         delta =
           case prev do
             %{stats: %{packets_processed: prev_proc}} ->
-              " (+#{proc - prev_proc})"
+              " (+#{proc - prev_proc}/s)"
 
             _ ->
               ""
           end
 
-        pending = recv - proc - failed
-
         Mix.shell().info(
-          "Packets: #{proc} processed#{delta}, #{recv} received, #{pending} pending, #{failed} failed"
+          "Packets: #{proc} processed#{delta}, #{failed} dropped"
         )
 
         Mix.shell().info("Items: #{items} processed")
 
+        # Show throughput if available (V2 pipeline with bitrate)
+        case stats do
+          %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
+            mbps = Float.round(bps * 8 / 1_000_000, 1)
+            mb_per_sec = Float.round(bps / 1_000_000, 2)
+            Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+
+          %{packets_per_sec: pps} when pps > 0 ->
+            Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec")
+
+          _ ->
+            :ok
+        end
+
         # Show timing if available (with percentiles)
-        case snapshot[:stats] do
-          %{timing: timing} when is_map(timing) ->
+        case stats do
+          %{timing: timing} when is_map(timing) and map_size(timing) > 0 ->
             percentiles = snapshot[:percentiles]
             print_timing(timing, percentiles)
 
@@ -450,7 +460,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
         # Show stage errors if any
         case snapshot[:stage_errors] do
-          errors when is_map(errors) ->
+          errors when is_map(errors) and map_size(errors) > 0 ->
             print_stage_errors(errors)
 
           _ ->
@@ -562,10 +572,19 @@ defmodule Mix.Tasks.Cadence.Profile do
       end)
 
     if length(stages_with_data) > 0 do
-      if percentiles && is_map(percentiles) do
-        Mix.shell().info("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
+      # Detect V1 vs V2 format based on presence of min_us
+      first_stage_data = timing |> Map.values() |> List.first()
+      is_v1_format = first_stage_data && Map.has_key?(first_stage_data, :min_us)
+
+      if is_v1_format do
+        if percentiles && is_map(percentiles) do
+          Mix.shell().info("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
+        else
+          Mix.shell().info("Timing (μs):  avg / min / max")
+        end
       else
-        Mix.shell().info("Timing (μs):  avg / min / max")
+        Mix.shell().info("")
+        Mix.shell().info("Timing (μs):          avg   /  samples")
       end
 
       # V1 Broadway stages + V2 GenStage stages
@@ -590,6 +609,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
       Enum.each(all_stages, fn stage ->
         case Map.get(timing, stage) do
+          # V1 format with min/max
           %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
             stage_name = stage |> to_string() |> String.pad_trailing(14)
             basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
@@ -608,6 +628,11 @@ defmodule Mix.Tasks.Cadence.Profile do
               end
 
             Mix.shell().info(line)
+
+          # V2 format (avg + count only)
+          %{avg_us: avg, count: count} when count > 0 ->
+            stage_name = stage |> to_string() |> String.pad_trailing(16)
+            Mix.shell().info("  #{stage_name} #{format_us(avg)}  /  #{count}")
 
           _ ->
             :ok
@@ -641,6 +666,19 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp format_us(_), do: String.pad_leading("-", 8)
 
+  # Format large numbers with commas for readability
+  defp format_number(n) when is_integer(n) and n >= 1000 do
+    n
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.graphemes()
+    |> Enum.chunk_every(3)
+    |> Enum.join(",")
+    |> String.reverse()
+  end
+
+  defp format_number(n), do: to_string(n)
+
   defp print_summary(initial, final, duration_ms) do
     Mix.shell().info("""
 
@@ -650,8 +688,12 @@ defmodule Mix.Tasks.Cadence.Profile do
     """)
 
     case {initial[:stats], final[:stats]} do
-      {%{packets_processed: p1, items_processed: i1, packets_received: r1, packets_failed: f1},
-       %{packets_processed: p2, items_processed: i2, packets_received: r2, packets_failed: f2}} ->
+      {%{packets_processed: p1, items_processed: i1, packets_received: r1} = stats1,
+       %{packets_processed: p2, items_processed: i2, packets_received: r2} = stats2} ->
+        # V1 uses packets_failed, V2 uses packets_dropped
+        f1 = Map.get(stats1, :packets_failed) || Map.get(stats1, :packets_dropped, 0)
+        f2 = Map.get(stats2, :packets_failed) || Map.get(stats2, :packets_dropped, 0)
+
         packets = p2 - p1
         items = i2 - i1
         received = r2 - r1
@@ -665,18 +707,32 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.shell().info("Processed: #{packets} packets (#{pps}/sec)")
         Mix.shell().info("Items:     #{items} (#{ips}/sec)")
 
-        if failed > 0 do
-          Mix.shell().info("Failed:    #{failed} packets")
+        # Show bitrate if available (V2)
+        case {Map.get(stats1, :bytes_received, 0), Map.get(stats2, :bytes_received, 0)} do
+          {b1, b2} when b2 > b1 ->
+            bytes = b2 - b1
+            bytes_per_sec = bytes / duration_sec
+            mbps = Float.round(bytes_per_sec * 8 / 1_000_000, 1)
+            mb_per_sec = Float.round(bytes_per_sec / 1_000_000, 2)
+            Mix.shell().info("Bitrate:   #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+
+          _ ->
+            :ok
         end
 
-        # V2-specific stats
-        case {initial[:stats], final[:stats]} do
-          {%{stage_errors: se1, packets_dropped: pd1}, %{stage_errors: se2, packets_dropped: pd2}} ->
-            stage_errors = (se2 || 0) - (se1 || 0)
-            dropped = (pd2 || 0) - (pd1 || 0)
+        if failed > 0 do
+          Mix.shell().info("Dropped:   #{failed} packets")
+        end
 
-            if stage_errors > 0 or dropped > 0 do
-              Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
+        # V2-specific errors from errors map
+        case {Map.get(stats1, :errors), Map.get(stats2, :errors)} do
+          {e1, e2} when is_map(e1) and is_map(e2) ->
+            total_errors1 = Enum.reduce(e1, 0, fn {_, v}, acc -> acc + v end)
+            total_errors2 = Enum.reduce(e2, 0, fn {_, v}, acc -> acc + v end)
+            stage_errors = total_errors2 - total_errors1
+
+            if stage_errors > 0 do
+              Mix.shell().info("V2 Errors: #{stage_errors} stage errors")
             end
 
           _ ->

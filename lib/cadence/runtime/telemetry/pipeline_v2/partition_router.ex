@@ -27,7 +27,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionRouter do
   require Logger
 
   alias Cadence.Runtime.Telemetry.PipelineV2.PipelineEvent
-  alias Cadence.Telemetry.Stats
+  alias Cadence.Telemetry.PipelineMetrics
 
   @default_partition_count 16
   # Increased default for high-throughput telemetry (was 10,000)
@@ -55,8 +55,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionRouter do
       "PartitionRouter starting for mission_id=#{mission_id} with #{partition_count} partitions, queue_depth=#{max_queue_depth}"
     )
 
-    # Initialize stats for this mission
-    Stats.init(mission_id)
+    # Initialize metrics for this mission (one counter array per partition)
+    PipelineMetrics.init(mission_id, partition_count)
 
     # Subscribe to raw telemetry topic
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:telemetry:raw")
@@ -85,10 +85,14 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionRouter do
 
   @impl GenStage
   def handle_info({:telemetry_packet, packet, metadata}, state) do
-    Stats.increment(state.mission_id, :packets_received)
-
-    # Transform to PipelineEvent
+    # Transform to PipelineEvent (determines partition)
     event = PipelineEvent.new(packet, metadata, state.mission_id, state.partition_count)
+
+    # Increment counter for the appropriate partition
+    PipelineMetrics.inc(state.mission_id, event.partition, :packets_received)
+
+    # Record packet size for bitrate calculation (byte_size is O(1) on binaries)
+    PipelineMetrics.inc(state.mission_id, event.partition, :bytes_received, byte_size(packet.raw))
 
     # Check queue depth before adding
     queue_depth = :queue.len(state.queue)

@@ -27,6 +27,7 @@ defmodule Cadence.Telemetry.Profiler do
   """
 
   alias Cadence.Telemetry.Stats
+  alias Cadence.Telemetry.PipelineMetrics
   alias Cadence.Runtime.Telemetry.{BroadwayPubSub, Pipeline}
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
@@ -300,17 +301,45 @@ defmodule Cadence.Telemetry.Profiler do
   Returns a snapshot of all observable metrics for a mission.
   """
   def snapshot(mission_id) do
+    # Check if V2 pipeline is running
+    v2_active = v2_pipeline_active?(mission_id)
+
+    # Use PipelineMetrics for V2, Stats for V1 (Broadway)
+    stats =
+      if v2_active do
+        safe_call(fn -> PipelineMetrics.get_stats(mission_id) end)
+      else
+        safe_call(fn -> Stats.get(mission_id) end)
+      end
+
     %{
       timestamp: DateTime.utc_now(),
-      stats: safe_call(fn -> Stats.get(mission_id) end),
-      percentiles: safe_call(fn -> Stats.get_all_percentiles(mission_id) end),
-      stage_errors: safe_call(fn -> Stats.get_stage_errors(mission_id) end),
+      stats: stats,
+      # Percentiles only available for V1 (Stats keeps raw samples)
+      percentiles: unless(v2_active, do: safe_call(fn -> Stats.get_all_percentiles(mission_id) end)),
+      stage_errors:
+        if v2_active do
+          # V2 errors are in stats.errors
+          Map.get(stats, :errors, %{})
+        else
+          safe_call(fn -> Stats.get_stage_errors(mission_id) end)
+        end,
       cvt: safe_call(fn -> CurrentValueTable.stats(mission_id) end),
       pipeline: safe_call(fn -> Pipeline.stats(mission_id) end),
       broadway: broadway_stats(mission_id),
       pipeline_v2: pipeline_v2_stats(mission_id),
-      process_queues: check_queues(mission_id)
+      process_queues: check_queues(mission_id),
+      pipeline_version: if(v2_active, do: :v2, else: :v1)
     }
+  end
+
+  defp v2_pipeline_active?(mission_id) do
+    router_key = {:pipeline_v2, mission_id, :router}
+
+    case Registry.lookup(Cadence.MissionRegistry, router_key) do
+      [{_pid, _}] -> true
+      [] -> false
+    end
   end
 
   @doc """
@@ -730,7 +759,7 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp print_snapshot(snapshot, prev) do
-    IO.puts("--- #{snapshot.timestamp} ---")
+    IO.puts("--- #{format_time(snapshot.timestamp)} ---")
 
     # CVT stats
     case snapshot.cvt do
@@ -741,32 +770,51 @@ defmodule Cadence.Telemetry.Profiler do
         IO.puts("CVT: #{inspect(other)}")
     end
 
-    # Stats (from ETS counters - works with Broadway)
+    # Stats - handle both V1 (Stats) and V2 (PipelineMetrics) formats
     case snapshot.stats do
-      %{
-        packets_received: recv,
-        packets_processed: proc,
-        packets_failed: failed,
-        items_processed: items
-      } ->
+      %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats ->
+        # V1 uses packets_failed, V2 uses packets_dropped
+        failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+
         delta =
           case prev do
             %{stats: %{packets_processed: prev_proc}} ->
-              " (+#{proc - prev_proc})"
+              " (+#{proc - prev_proc}/s)"
 
             _ ->
               ""
           end
 
-        pending = recv - proc - failed
-
         IO.puts(
-          "Packets: #{proc} processed#{delta}, #{recv} received, #{pending} pending, #{failed} failed"
+          "Packets: #{proc} processed#{delta}, #{failed} dropped, 0 failed"
         )
 
         IO.puts("Items: #{items} processed")
 
-        # Show producer queue depth if available
+        # Show throughput if available (V2 pipeline with bitrate)
+        case stats do
+          %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
+            mbps = Float.round(bps * 8 / 1_000_000, 1)
+            mb_per_sec = Float.round(bps / 1_000_000, 2)
+            IO.puts("Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+
+          %{packets_per_sec: pps} when pps > 0 ->
+            IO.puts("Throughput: #{format_number(round(pps))} packets/sec")
+
+          _ ->
+            :ok
+        end
+
+        # Show router queue depth for V2
+        case snapshot.pipeline_v2 do
+          %{router_queue: depth} when is_integer(depth) and depth > 0 ->
+            IO.puts("Router queue: #{depth} pending")
+
+          _ ->
+            :ok
+        end
+
+        # Show producer queue depth for V1 (Broadway)
         case snapshot.broadway do
           %{producer_queue_depth: depth} when is_integer(depth) and depth > 0 ->
             IO.puts("Producer queue: #{depth} waiting")
@@ -775,11 +823,19 @@ defmodule Cadence.Telemetry.Profiler do
             :ok
         end
 
-        # Show timing breakdown if available (with percentiles)
-        case snapshot.stats do
+        # Show timing breakdown if available
+        case stats do
           %{timing: timing} when is_map(timing) and map_size(timing) > 0 ->
             percentiles = Map.get(snapshot, :percentiles)
-            print_timing(timing, percentiles)
+
+            # Detect V1 vs V2 format based on presence of min_us
+            first_stage_data = timing |> Map.values() |> List.first()
+
+            if first_stage_data && Map.has_key?(first_stage_data, :min_us) do
+              print_timing(timing, percentiles)
+            else
+              print_timing_v2(timing, percentiles)
+            end
 
           _ ->
             :ok
@@ -787,7 +843,7 @@ defmodule Cadence.Telemetry.Profiler do
 
         # Show stage errors if any
         case Map.get(snapshot, :stage_errors) do
-          errors when is_map(errors) ->
+          errors when is_map(errors) and map_size(errors) > 0 ->
             print_stage_errors(errors)
 
           _ ->
@@ -814,6 +870,40 @@ defmodule Cadence.Telemetry.Profiler do
     IO.puts("")
   end
 
+  defp format_time(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%H:%M:%S")
+  end
+
+  defp format_time(other), do: inspect(other)
+
+  # V2 timing format: %{stage => %{avg_us: float, count: integer}}
+  defp print_timing_v2(timing, _percentiles) do
+    stages_with_data =
+      timing
+      |> Enum.filter(fn {_stage, data} ->
+        is_map(data) && Map.get(data, :count, 0) > 0
+      end)
+
+    if length(stages_with_data) > 0 do
+      IO.puts("")
+      IO.puts("Timing (μs):          avg   /  samples")
+
+      stages = [:identify, :decom, :convert, :derive, :limits, :cvt_batch, :ets_write]
+
+      Enum.each(stages, fn stage ->
+        case Map.get(timing, stage) do
+          %{avg_us: avg, count: count} when count > 0 ->
+            stage_name = stage |> to_string() |> String.pad_trailing(16)
+            IO.puts("  #{stage_name} #{format_us(avg)}  /  #{count}")
+
+          _ ->
+            :ok
+        end
+      end)
+    end
+  end
+
+  # V1 timing format: %{stage => %{avg_us, min_us, max_us, count}}
   defp print_timing(timing, percentiles) do
     # Only print if we have data
     stages_with_data = Enum.filter(timing, fn {_stage, data} -> data.count > 0 end)
@@ -898,6 +988,19 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp format_us(_), do: String.pad_leading("-", 8)
+
+  # Format large numbers with commas for readability
+  defp format_number(n) when is_integer(n) and n >= 1000 do
+    n
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.graphemes()
+    |> Enum.chunk_every(3)
+    |> Enum.join(",")
+    |> String.reverse()
+  end
+
+  defp format_number(n), do: to_string(n)
 
   defp print_summary(initial, final, duration_ms) do
     IO.puts("=== Summary ===")

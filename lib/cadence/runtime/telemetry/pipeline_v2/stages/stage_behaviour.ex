@@ -80,7 +80,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour do
       @behaviour Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour
 
       alias Cadence.Runtime.Telemetry.PipelineV2.PipelineEvent
-      alias Cadence.Telemetry.Stats
+      alias Cadence.Telemetry.PipelineMetrics
 
       # Increased defaults for high-throughput telemetry (was 10/5)
       @default_max_demand 500
@@ -164,11 +164,11 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour do
             # Record timing in the event
             timed_event = PipelineEvent.record_timing(updated_event, stage, start_time)
 
-            # Sample stats recording to reduce ETS overhead at high throughput
+            # Sample stats recording to reduce overhead at high throughput
             # At 10khz with 1% sampling, still get 100 samples/sec (statistically sufficient)
             if :rand.uniform(@timing_sample_rate) == 1 do
               duration = System.monotonic_time(:microsecond) - start_time
-              Stats.record_timing(state.mission_id, stage, duration)
+              PipelineMetrics.record_timing(state.mission_id, state.partition, stage, duration)
             end
 
             timed_event
@@ -190,8 +190,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour do
               partition: state.partition
             )
 
-            # Track error per-stage (also increments aggregate :stage_errors)
-            Stats.increment_stage_error(state.mission_id, stage)
+            # Track error per-stage
+            PipelineMetrics.record_error(state.mission_id, state.partition, stage)
             nil
         end
       end

@@ -3,10 +3,12 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
   Supervisor for a single partition's processing stages.
 
   Each partition has its own isolated pipeline of stages:
-  IdentifyStage → DecommutationStage → ConversionStage → DeriveStage
+  IdentifyStage → DecommutationStage → ConversionStage → DeriveStage → CVTBatcher
 
   Events flow through these stages sequentially within the partition,
   maintaining order for packets with the same (target_id, apid).
+
+  Each partition has its own CVTBatcher, eliminating fan-in bottleneck.
 
   ## Process Naming
 
@@ -24,6 +26,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
     DeriveStage
   }
 
+  alias Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher
+
   def start_link(opts) do
     name = Keyword.get(opts, :name)
     Supervisor.start_link(__MODULE__, opts, name: name)
@@ -35,6 +39,11 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
     partition = Keyword.fetch!(opts, :partition)
     router_pid = Keyword.fetch!(opts, :router_pid)
 
+    # CVTBatcher config (passed from top-level supervisor)
+    batch_size = Keyword.get(opts, :batch_size, 50)
+    batch_timeout = Keyword.get(opts, :batch_timeout, 100)
+    broadcast_enabled = Keyword.get(opts, :broadcast_enabled, false)
+
     Logger.debug("Starting PartitionSupervisor for partition #{partition}")
 
     # Stage names for this partition
@@ -42,6 +51,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
     decom_name = stage_name(mission_id, partition, :decom)
     convert_name = stage_name(mission_id, partition, :convert)
     derive_name = stage_name(mission_id, partition, :derive)
+    batcher_name = batcher_name(mission_id, partition)
 
     children = [
       # IdentifyStage subscribes to PartitionRouter (which uses PartitionDispatcher)
@@ -79,6 +89,18 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
          partition: partition,
          upstream: convert_name,
          name: derive_name
+       ]},
+
+      # CVTBatcher subscribes to DeriveStage (per-partition, no fan-in)
+      {CVTBatcher,
+       [
+         mission_id: mission_id,
+         partition: partition,
+         upstream: derive_name,
+         batch_size: batch_size,
+         batch_timeout: batch_timeout,
+         broadcast_enabled: broadcast_enabled,
+         name: batcher_name
        ]}
     ]
 
@@ -100,5 +122,13 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
   """
   def get_output_stage(mission_id, partition) do
     stage_name(mission_id, partition, :derive)
+  end
+
+  @doc """
+  Returns the registered name for the CVTBatcher in a partition.
+  """
+  def batcher_name(mission_id, partition) do
+    {:via, Registry,
+     {Cadence.MissionRegistry, {:pipeline_v2, mission_id, {:batcher, partition}}}}
   end
 end
