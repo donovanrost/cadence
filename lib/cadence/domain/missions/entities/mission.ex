@@ -38,6 +38,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
           phase: MissionPhase.t(),
           config: map(),
           metadata: map(),
+          config_generation: integer(),
           start_date: DateTime.t() | nil,
           end_date: DateTime.t() | nil,
           created_at: DateTime.t() | nil,
@@ -57,7 +58,8 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
     :created_at,
     :updated_at,
     config: %{},
-    metadata: %{}
+    metadata: %{},
+    config_generation: 1
   ]
 
   @doc """
@@ -98,6 +100,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
          phase: phase,
          config: attrs[:config] || %{},
          metadata: attrs[:metadata] || %{},
+         config_generation: attrs[:config_generation] || 1,
          start_date: attrs[:start_date],
          end_date: attrs[:end_date],
          created_at: attrs[:created_at],

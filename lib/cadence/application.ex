@@ -10,7 +10,8 @@ defmodule Cadence.Application do
     # Initialize ETS tables that need to exist before supervision tree starts
     Cadence.Config.VersionRegistry.init()
 
-    children = [
+    # Base children always started
+    base_children = [
       CadenceWeb.Telemetry,
       Cadence.Repo,
       {DNSCluster, query: Application.get_env(:cadence, :dns_cluster_query) || :ignore},
@@ -49,15 +50,35 @@ defmodule Cadence.Application do
       # Notification Dispatcher - subscribes to outbox events and creates notifications
       Cadence.Notifications.Dispatcher,
 
-      # Mission Supervisor - manages all mission supervision trees (Data Plane)
-      Cadence.Runtime.Missions.MissionSupervisor,
+      # Mission Tracker - Phoenix.Tracker for data plane state advertisement
+      {Cadence.Runtime.Missions.MissionTracker, pubsub_server: Cadence.PubSub},
 
+      # Mission Supervisor - manages all mission supervision trees (Data Plane)
+      Cadence.Runtime.Missions.MissionSupervisor
+    ]
+
+    # Reconcilers are disabled for CLI tools like mix cadence.simulate that
+    # only need to send telemetry to a running Cadence instance
+    reconciler_children =
+      if Application.get_env(:cadence, :start_reconcilers, true) do
+        [
+          # Reconciliation Supervisor - control plane reconcilers (manages missions via periodic reconciliation)
+          Cadence.Runtime.Reconciliation.Supervisor
+        ]
+      else
+        []
+      end
+
+    # Final children: Oban and web endpoint always last
+    final_children = [
       # Oban - background job processing and scheduled tasks
       {Oban, Application.fetch_env!(:cadence, Oban)},
 
       # Start to serve requests, typically the last entry
       CadenceWeb.Endpoint
     ]
+
+    children = base_children ++ reconciler_children ++ final_children
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

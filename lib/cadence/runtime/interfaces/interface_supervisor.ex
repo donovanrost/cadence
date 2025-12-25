@@ -261,7 +261,15 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   @impl true
   def terminate(_reason, state) do
     Logger.info("Shutting down InterfaceSupervisor for mission #{state.mission_id}")
-    # DynamicSupervisor will terminate its children automatically
+
+    # DynamicSupervisor traps exits and ignores EXIT signals from non-child processes.
+    # Since we started it via start_link in init (making us a linked non-child process),
+    # it will NOT terminate when we die - we must explicitly stop it.
+    # See: https://elixirforum.com/t/dynamicsupervisor-why-does-it-ignore-exit-signals-from-non-child-processes/73469
+    if state.dynamic_sup && Process.alive?(state.dynamic_sup) do
+      Supervisor.stop(state.dynamic_sup, :shutdown, 5_000)
+    end
+
     :ok
   end
 

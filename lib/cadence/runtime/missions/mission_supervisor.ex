@@ -23,9 +23,10 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
 
   require Logger
 
-  # Accept both Ecto schema and domain entity for backwards compatibility
+  # Accept Ecto schema, domain entity, or MissionConfig
   alias Cadence.Missions.Mission
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Application.Missions.MissionConfig
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
@@ -39,24 +40,27 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
   @doc """
   Starts a mission's supervision tree.
 
-  Accepts either an Ecto schema or a domain entity.
+  Accepts a MissionConfig (preferred), Ecto schema, or domain entity.
   Returns `{:ok, pid}` on success or `{:error, reason}` on failure.
   """
+  def start_mission(%MissionConfig{} = config) do
+    do_start_mission(config.mission_id, config)
+  end
+
   def start_mission(%Mission{} = mission) do
-    do_start_mission(mission.id, mission.name, mission)
+    do_start_mission(mission.id, mission)
   end
 
   def start_mission(%MissionEntity{} = entity) do
-    # Convert domain entity to a map that MissionInstance can use
-    do_start_mission(entity.id, entity.name, entity)
+    do_start_mission(entity.id, entity)
   end
 
-  defp do_start_mission(mission_id, _mission_name, mission_data) do
+  defp do_start_mission(mission_id, config_or_mission) do
     Logger.info("Starting mission supervision tree for mission_id=#{mission_id}")
 
     child_spec = {
       Cadence.Runtime.Missions.MissionInstance,
-      mission: mission_data
+      config: config_or_mission
     }
 
     case DynamicSupervisor.start_child(__MODULE__, child_spec) do
@@ -72,7 +76,7 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
           "Mission supervision tree already running for mission_id=#{mission_id}, pid=#{inspect(pid)}"
         )
 
-        {:ok, pid}
+        {:error, {:already_started, pid}}
 
       {:error, reason} = error ->
         Logger.error(

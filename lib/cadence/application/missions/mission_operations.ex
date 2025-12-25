@@ -24,7 +24,6 @@ defmodule Cadence.Application.Missions.MissionOperations do
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Missions.Entities.MissionMembership
   alias Cadence.Ports.Repository.Missions.MissionsRepository
-  alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Buckets
   alias Cadence.Repo
 
@@ -68,7 +67,12 @@ defmodule Cadence.Application.Missions.MissionOperations do
   """
   @spec create(org_id(), attrs()) :: {:ok, Mission.t()} | {:error, term()}
   def create(org_id, attrs) do
-    mission_attrs = Map.put(attrs, :organization_id, org_id)
+    # Atomize string keys from form params
+    mission_attrs =
+      attrs
+      |> atomize_keys()
+      |> Map.put(:organization_id, org_id)
+
     creator_user_id = attrs[:creator_user_id] || attrs["creator_user_id"]
 
     Repo.transaction(fn ->
@@ -80,6 +84,23 @@ defmodule Cadence.Application.Missions.MissionOperations do
       else
         {:error, reason} -> Repo.rollback(reason)
       end
+    end)
+  end
+
+  # Atomize string keys for domain entity compatibility
+  # Only converts known mission attribute keys to atoms
+  @known_keys ~w(name slug description status phase config metadata start_date end_date creator_user_id organization_id)
+
+  defp atomize_keys(map) when is_map(map) do
+    Map.new(map, fn
+      {key, value} when is_binary(key) and key in @known_keys ->
+        {String.to_atom(key), value}
+
+      {key, value} when is_atom(key) ->
+        {key, value}
+
+      {key, value} ->
+        {key, value}
     end)
   end
 
@@ -106,8 +127,11 @@ defmodule Cadence.Application.Missions.MissionOperations do
   """
   @spec update(mission_id(), org_id(), attrs()) :: {:ok, Mission.t()} | {:error, term()}
   def update(mission_id, org_id, attrs) do
+    # Atomize string keys from form params
+    atomized_attrs = atomize_keys(attrs)
+
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, updated} <- Mission.update(mission, attrs),
+         {:ok, updated} <- Mission.update(mission, atomized_attrs),
          {:ok, saved} <- repo().save(updated) do
       {:ok, saved}
     end
@@ -116,15 +140,20 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @doc """
   Starts the mission runtime.
 
-  This activates the mission's supervision tree, CVT, and telemetry processing.
-  Updates the mission status to :active and starts the MissionSupervisor tree.
+  This updates the mission status to :active in the database.
+  The OrgReconciler will detect this change and start the MissionSupervisor tree.
+
+  ## Declarative Model
+
+  This function only updates the desired state (database). The reconciler
+  handles the actual runtime start, providing self-healing if events are missed.
   """
   @spec start(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def start(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
          {:ok, started} <- Mission.start(mission),
-         {:ok, saved} <- repo().save(started),
-         {:ok, _pid} <- MissionSupervisor.start_mission(saved) do
+         {:ok, saved} <- repo().save(started) do
+      # Reconciler will detect the status change and start the runtime
       {:ok, saved}
     end
   end
@@ -132,24 +161,21 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @doc """
   Stops the mission runtime.
 
-  This gracefully shuts down the mission's supervision tree and updates
-  the mission status to :inactive.
+  This updates the mission status to :inactive in the database.
+  The OrgReconciler will detect this change and stop the MissionSupervisor tree.
+
+  ## Declarative Model
+
+  This function only updates the desired state (database). The reconciler
+  handles the actual runtime stop, providing self-healing if events are missed.
   """
   @spec stop(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def stop(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         :ok <- stop_runtime(mission_id),
          {:ok, stopped} <- Mission.stop(mission),
          {:ok, saved} <- repo().save(stopped) do
+      # Reconciler will detect the status change and stop the runtime
       {:ok, saved}
-    end
-  end
-
-  defp stop_runtime(mission_id) do
-    case MissionSupervisor.stop_mission(mission_id) do
-      :ok -> :ok
-      {:error, :not_found} -> :ok
-      error -> error
     end
   end
 

@@ -205,6 +205,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository do
       phase: parse_phase(schema.phase),
       config: schema.config || %{},
       metadata: schema.metadata || %{},
+      config_generation: schema.config_generation || 1,
       start_date: schema.start_date,
       end_date: schema.end_date,
       created_at: schema.inserted_at,

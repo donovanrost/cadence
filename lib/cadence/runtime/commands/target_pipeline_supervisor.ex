@@ -232,6 +232,13 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   @impl true
   def terminate(_reason, state) do
     Logger.info("Shutting down TargetPipelineSupervisor for mission #{state.mission_id}")
+
+    # DynamicSupervisor traps exits and ignores EXIT signals from non-child processes.
+    # We must explicitly stop it to ensure children terminate gracefully.
+    if state.dynamic_sup && Process.alive?(state.dynamic_sup) do
+      Supervisor.stop(state.dynamic_sup, :shutdown, 5_000)
+    end
+
     :ok
   end
 

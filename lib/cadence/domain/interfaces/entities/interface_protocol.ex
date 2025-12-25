@@ -101,9 +101,13 @@ defmodule Cadence.Domain.Interfaces.Entities.InterfaceProtocol do
 
   @doc """
   Reconstructs a protocol entity from persisted data.
+
+  If already an entity struct, returns it as-is (idempotent).
   """
-  @spec from_persistence(map()) :: t()
-  def from_persistence(attrs) do
+  @spec from_persistence(map() | t()) :: t()
+  def from_persistence(%__MODULE__{} = entity), do: entity
+
+  def from_persistence(attrs) when is_map(attrs) do
     %__MODULE__{
       id: attrs[:id],
       interface_id: attrs[:interface_id],

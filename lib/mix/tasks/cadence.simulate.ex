@@ -121,7 +121,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
       start_mission: opts[:start_mission] || false
     }
 
-    # Start the application (needed for supervision tree, PubSub, etc.)
+    # Start the application with reconcilers disabled.
+    # The simulator only needs to SEND telemetry to a running Cadence instance,
+    # not run its own mission infrastructure. Without this, the reconciler would
+    # try to start missions/interfaces, conflicting with the main Cadence process.
+    Application.put_env(:cadence, :start_reconcilers, false)
     Mix.Task.run("app.start")
 
     # Start the mission if requested (starts interfaces, pipeline, etc.)

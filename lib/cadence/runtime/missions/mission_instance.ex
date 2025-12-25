@@ -14,17 +14,29 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   ## Data Plane
 
   This module is part of the Data Plane - it manages runtime processes and
-  does not make database calls. Configuration is received via domain entities
-  at startup and updated via PubSub events.
+  does not make database calls. Configuration is received via MissionConfig
+  at startup and updated via `{:apply_config, config}` messages.
+
+  ## Config Injection
+
+  When started with a MissionConfig, the full configuration is passed to
+  child processes at startup. This eliminates ETS-based caches in favor of
+  GenServer state for config data.
+
+  ## Hot Reload
+
+  Config changes are pushed via `{:apply_config, config}` messages from the
+  OrgReconciler. Each child component handles its own config update logic.
   """
 
   use Supervisor
 
   require Logger
 
-  # Accept both Ecto schema and domain entity
+  # Accept Ecto schema, domain entity, or MissionConfig
   alias Cadence.Missions.Mission
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.PipelineV2
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
@@ -35,16 +47,33 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Automations.Engine.AutomationManager
   alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Runtime.Missions.CacheWarmer
+  alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Runtime.Missions.MissionStatus
 
   @default_partition_count 16
 
   def start_link(opts) do
-    mission = Keyword.fetch!(opts, :mission)
-    mission_id = get_mission_id(mission)
-    Supervisor.start_link(__MODULE__, mission, name: via_tuple(mission_id))
+    config = Keyword.fetch!(opts, :config)
+    {mission_id, org_id, config_generation} = extract_ids(config)
+
+    result = Supervisor.start_link(__MODULE__, config, name: via_tuple(mission_id))
+
+    # Track in Phoenix.Tracker after supervisor starts
+    case result do
+      {:ok, _pid} ->
+        track_mission(mission_id, org_id, config_generation)
+        result
+
+      error ->
+        error
+    end
   end
 
   @impl true
+  def init(%MissionConfig{} = config) do
+    do_init(config.mission_id, config.mission.name, config.organization_id)
+  end
+
   def init(%Mission{} = mission) do
     do_init(mission.id, mission.name, mission.organization_id)
   end
@@ -176,8 +205,33 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
     {:via, Registry, {Cadence.MissionRegistry, mission_id}}
   end
 
-  # Helper to extract mission_id from either type
-  defp get_mission_id(%Mission{id: id}), do: id
-  defp get_mission_id(%MissionEntity{id: id}), do: id
-end
+  # ===========================================================================
+  # Private Helpers
+  # ===========================================================================
 
+  # Extract mission_id, org_id, and config_generation from config
+  defp extract_ids(%MissionConfig{} = config) do
+    {config.mission_id, config.organization_id, config.config_generation}
+  end
+
+  defp extract_ids(%Mission{} = mission) do
+    {mission.id, mission.organization_id, mission.config_generation || 1}
+  end
+
+  defp extract_ids(%MissionEntity{} = entity) do
+    {entity.id, entity.organization_id, entity.config_generation || 1}
+  end
+
+  # Track mission in Phoenix.Tracker
+  defp track_mission(mission_id, org_id, config_generation) do
+    status = MissionStatus.new(mission_id, config_generation)
+
+    case MissionTracker.track(mission_id, org_id, MissionStatus.to_tracker_meta(status)) do
+      {:ok, _ref} ->
+        Logger.debug("Tracked mission #{mission_id} in MissionTracker")
+
+      {:error, reason} ->
+        Logger.warning("Failed to track mission #{mission_id}: #{inspect(reason)}")
+    end
+  end
+end

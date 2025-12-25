@@ -442,7 +442,8 @@ defmodule Cadence.Targets do
         :ok
 
       _pid ->
-        case TargetPipelineSupervisor.start_pipeline(target.mission_id, target.id) do
+        # Use start_pipeline_by_id which loads the target with definition_set
+        case TargetPipelineSupervisor.start_pipeline_by_id(target.mission_id, target.id) do
           {:ok, _pid} -> :ok
           {:error, {:already_started, _pid}} -> :ok
 

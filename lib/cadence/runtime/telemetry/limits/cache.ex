@@ -357,8 +357,8 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   end
 
   defp load_limits_data(mission_id, target_id) do
-    # Get target's active limit set
-    active_limit_set = get_target_active_limit_set(target_id)
+    # Get target's active limit set (scoped to mission)
+    active_limit_set = get_target_active_limit_set(mission_id, target_id)
 
     # Load all packet definitions with items for this mission
     packet_defs =
@@ -389,14 +389,17 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
       {:error, Exception.message(e)}
   end
 
-  defp get_target_active_limit_set(target_identifier) do
+  defp get_target_active_limit_set(mission_id, target_identifier) do
     # target_identifier is the string identifier (e.g., "SAT-1"), not UUID
-    case Repo.get_by(Target, identifier: target_identifier) do
-      nil ->
-        "NOMINAL"
+    # Must scope by mission_id since identifiers are only unique within a mission
+    query =
+      from t in Target,
+        where: t.mission_id == ^mission_id and t.identifier == ^target_identifier,
+        select: t.active_limit_set
 
-      target ->
-        target.active_limit_set || "NOMINAL"
+    case Repo.one(query) do
+      nil -> "NOMINAL"
+      active_limit_set -> active_limit_set || "NOMINAL"
     end
   end
 

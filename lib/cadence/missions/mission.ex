@@ -27,6 +27,7 @@ defmodule Cadence.Missions.Mission do
           phase: String.t(),
           config: map(),
           metadata: map(),
+          config_generation: integer(),
           start_date: DateTime.t() | nil,
           end_date: DateTime.t() | nil,
           inserted_at: DateTime.t(),
@@ -43,6 +44,9 @@ defmodule Cadence.Missions.Mission do
     # Configuration
     field :config, :map, default: %{}
     field :metadata, :map, default: %{}
+
+    # Config generation - monotonically increasing version number for reconciliation
+    field :config_generation, :integer, default: 1
 
     # Operational windows
     field :start_date, :utc_datetime
