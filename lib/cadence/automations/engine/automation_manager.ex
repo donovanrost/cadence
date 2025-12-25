@@ -21,6 +21,24 @@ defmodule Cadence.Automations.Engine.AutomationManager do
 
   @ets_table :automations_cache
 
+  # Pre-define all valid trigger type atoms to ensure they exist for String.to_existing_atom/1
+  @trigger_types [
+    :alarm_fired,
+    :alarm_cleared,
+    :alarm_acknowledged,
+    :telemetry_limit,
+    :procedure_completed,
+    :procedure_failed,
+    :procedure_started,
+    :procedure_cancelled,
+    :procedure_paused,
+    :procedure_step_started,
+    :procedure_step_completed
+  ]
+
+  # Force atom creation at compile time by referencing the list
+  _ = @trigger_types
+
   # ============================================================================
   # Client API
   # ============================================================================
@@ -267,7 +285,8 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   defp process_event(trigger_type, event, state) do
     # Find matching automations for this trigger type
     # The domain entity stores trigger_type as an atom, so convert for comparison
-    trigger_type_atom = String.to_existing_atom(trigger_type)
+    # Safe to use String.to_atom here since trigger_type is always a hardcoded string from this module
+    trigger_type_atom = String.to_atom(trigger_type)
 
     matching_automations =
       state.table

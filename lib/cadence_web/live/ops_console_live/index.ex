@@ -706,6 +706,39 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
      |> push_event("alarm_update", %{type: "unshelved", alarm: alarm_json(alarm)})}
   end
 
+  # Handle map-format alarm events from AlarmOperations (application layer)
+  # This is different from the tuple format sent by runtime AlarmManager
+  def handle_info(%{type: :alarm_changed, event: event_type, alarm_id: alarm_id}, socket) do
+    case Cadence.Alarms.get_alarm(alarm_id) do
+      %Cadence.Alarms.Alarm{} = alarm ->
+        # Map short event names to full handler names
+        handler_event = map_event_type(event_type)
+        # Delegate to the appropriate tuple-format handler
+        handle_info({handler_event, alarm}, socket)
+
+      nil when event_type == :cleared ->
+        # Alarm was deleted, just remove from list
+        active_alarms = Enum.reject(socket.assigns.active_alarms, &(&1.id == alarm_id))
+
+        {:noreply,
+         socket
+         |> assign(:active_alarms, active_alarms)}
+
+      nil ->
+        {:noreply, socket}
+    end
+  end
+
+  # Map AlarmOperations event types to tuple-handler event names
+  defp map_event_type(:triggered), do: :alarm_triggered
+  defp map_event_type(:created), do: :alarm_created
+  defp map_event_type(:updated), do: :alarm_updated
+  defp map_event_type(:cleared), do: :alarm_cleared
+  defp map_event_type(:acknowledged), do: :alarm_acknowledged
+  defp map_event_type(:shelved), do: :alarm_shelved
+  defp map_event_type(:unshelved), do: :alarm_unshelved
+  defp map_event_type(other), do: other
+
   # Helper to update an alarm in the active alarms list
   defp update_alarm_in_list(alarms, updated_alarm) do
     case Enum.find_index(alarms, &(&1.id == updated_alarm.id)) do
