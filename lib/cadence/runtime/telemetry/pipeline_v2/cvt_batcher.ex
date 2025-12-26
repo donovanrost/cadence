@@ -26,7 +26,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher do
 
   # Increased batch size for high-throughput (was 50)
   @default_batch_size 500
-  @default_batch_timeout 100
+  @default_batch_timeout 10
   # Align with stage_behaviour.ex defaults for consistent backpressure
   @default_max_demand 500
   @default_min_demand 250

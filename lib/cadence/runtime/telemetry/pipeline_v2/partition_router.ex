@@ -38,6 +38,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionRouter do
     GenStage.start_link(__MODULE__, opts, name: name)
   end
 
+  @spec queue_depth(atom() | pid() | {atom(), any()} | {:via, atom(), any()}) :: any()
   @doc """
   Returns the current queue depth of the router.
   """

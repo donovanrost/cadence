@@ -109,10 +109,16 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
       end)
 
     # Single batched ETS insert
-    ets_start = System.monotonic_time(:microsecond)
+    # Sample timing at 1% to avoid overhead in hot path
+    should_time = :rand.uniform(100) == 1
+
+    ets_start = if should_time, do: System.monotonic_time(:microsecond)
     :ets.insert(table_name, ets_entries)
-    ets_duration = System.monotonic_time(:microsecond) - ets_start
-    Stats.record_timing(mission_id, :ets_write, ets_duration)
+
+    if should_time do
+      ets_duration = System.monotonic_time(:microsecond) - ets_start
+      Stats.record_timing(mission_id, :ets_write, ets_duration)
+    end
 
     # Return entries for broadcasting (caller decides how to broadcast)
     ets_entries
@@ -235,7 +241,8 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
         :named_table,
         :public,
         read_concurrency: true,
-        write_concurrency: true
+        write_concurrency: true,
+        decentralized_counters: true
       ])
 
     {:ok, %{mission_id: mission_id, table_name: table_name}}
