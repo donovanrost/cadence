@@ -286,7 +286,7 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
     end
   end
 
-  describe "is_dag_format?/1" do
+  describe "dag_format?/1" do
     test "returns true for DAG format (steps as map)" do
       source = %{
         "steps" => %{
@@ -294,7 +294,7 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
         }
       }
 
-      assert Validator.is_dag_format?(source)
+      assert Validator.dag_format?(source)
     end
 
     test "returns false for linear format (steps as list)" do
@@ -304,11 +304,11 @@ defmodule Cadence.Procedures.Dag.ValidatorTest do
         ]
       }
 
-      refute Validator.is_dag_format?(source)
+      refute Validator.dag_format?(source)
     end
 
     test "returns false for missing steps key" do
-      refute Validator.is_dag_format?(%{"code" => "print('hello')"})
+      refute Validator.dag_format?(%{"code" => "print('hello')"})
     end
   end
 

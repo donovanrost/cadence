@@ -13,8 +13,8 @@ defmodule Cadence.Telemetry.Packet.PacketItem do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Telemetry.Packet.PacketDefinition
   alias Cadence.Telemetry.Conversions.Conversion
+  alias Cadence.Telemetry.Packet.PacketDefinition
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

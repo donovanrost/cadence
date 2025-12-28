@@ -7,11 +7,12 @@ defmodule Cadence.Timeline.Event do
   Timeline Mode.
   """
 
-  alias Cadence.Recordings.Recording
   alias Cadence.Recordings.Recordable
+  alias Cadence.Recordings.Recording
 
   @type event_type :: :command | :alarm | :procedure | :automation | :system
-  @type status :: :pending | :success | :error | :active | :cleared | :running | :completed | :failed
+  @type status ::
+          :pending | :success | :error | :active | :cleared | :running | :completed | :failed
 
   @type t :: %__MODULE__{
           id: binary(),
@@ -190,7 +191,11 @@ defmodule Cadence.Timeline.Event do
   defp map_status_string("rejected"), do: :error
   defp map_status_string(_), do: :pending
 
-  defp build_procedure_description(%{status: :completed, completed_at: completed_at, started_at: started_at})
+  defp build_procedure_description(%{
+         status: :completed,
+         completed_at: completed_at,
+         started_at: started_at
+       })
        when not is_nil(completed_at) and not is_nil(started_at) do
     delta_ms = DateTime.diff(completed_at, started_at, :millisecond)
     "Completed in #{format_duration(delta_ms)}"

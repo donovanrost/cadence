@@ -214,6 +214,82 @@ const DownloadHook = {
 }
 
 /**
+ * ProcedureNav hook for procedure execution navigation
+ * Handles scroll-spy to track visible steps and scroll-to functionality
+ */
+const ProcedureNavHook = {
+  mounted() {
+    this.observer = null
+    this.setupScrollSpy()
+    this.scrollToActive()
+
+    // Listen for scroll_to events from LiveView
+    this.handleEvent("scroll_to", ({ target }) => {
+      const el = document.getElementById(target)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+  },
+
+  updated() {
+    // Re-setup observer if steps have changed
+    this.setupScrollSpy()
+  },
+
+  destroyed() {
+    if (this.observer) {
+      this.observer.disconnect()
+    }
+  },
+
+  setupScrollSpy() {
+    // Disconnect previous observer if exists
+    if (this.observer) {
+      this.observer.disconnect()
+    }
+
+    // Create intersection observer for scroll-spy
+    this.observer = new IntersectionObserver((entries) => {
+      // Find the most visible entry
+      let mostVisible = null
+      let maxRatio = 0
+
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+          mostVisible = entry
+          maxRatio = entry.intersectionRatio
+        }
+      })
+
+      if (mostVisible && mostVisible.target.dataset.stepId) {
+        this.pushEvent("step_visible", { id: mostVisible.target.dataset.stepId })
+      }
+    }, {
+      root: this.el,
+      threshold: [0, 0.25, 0.5, 0.75, 1.0],
+      rootMargin: '-10% 0px -60% 0px' // Focus on upper-middle portion of viewport
+    })
+
+    // Observe all step elements
+    this.el.querySelectorAll('[data-step-id]').forEach(el => {
+      this.observer.observe(el)
+    })
+  },
+
+  scrollToActive() {
+    // Scroll to the active step on mount
+    const active = this.el.querySelector('[data-step-status="active"]')
+    if (active) {
+      // Small delay to ensure layout is complete
+      setTimeout(() => {
+        active.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
+    }
+  }
+}
+
+/**
  * LogFilter hook for client-side log filtering
  * Filters log entries by level without server round-trips
  * Uses MutationObserver to catch DOM changes from LiveView updates
@@ -292,7 +368,8 @@ export const Hooks = {
   DagEditor: DagEditorHook,
   DagViewer: DagViewerHook,
   ExecutionChannel: ExecutionChannelHook,
-  Download: DownloadHook
+  Download: DownloadHook,
+  ProcedureNav: ProcedureNavHook
 }
 
 export default Hooks

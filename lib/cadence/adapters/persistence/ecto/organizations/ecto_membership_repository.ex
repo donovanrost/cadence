@@ -21,9 +21,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Organizations.EctoMembershipReposito
 
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Organizations.OrganizationMembership, as: MembershipSchema
   alias Cadence.Domain.Organizations.Entities.OrganizationMembership, as: MembershipEntity
+  alias Cadence.Organizations.OrganizationMembership, as: MembershipSchema
+  alias Cadence.Repo
 
   # ===========================================================================
   # Membership CRUD Operations

@@ -13,11 +13,11 @@ defmodule Cadence.Telemetry.IntegrationTest do
 
   use Cadence.DataCase
 
-  alias Cadence.{Organizations, Missions}
+  alias Cadence.{Missions, Organizations}
   alias Cadence.Runtime.Missions.MissionSupervisor
-  alias Cadence.Simulator.PacketSimulator
-  alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.Pipeline
+  alias Cadence.Simulator.PacketSimulator
 
   describe "end-to-end telemetry flow" do
     setup do

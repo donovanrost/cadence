@@ -31,14 +31,14 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
 
   import Ecto.Query
 
-  alias Cadence.Repo
+  alias Cadence.Domain.Procedures.Entities.Procedure, as: ProcedureEntity
+  alias Cadence.Domain.Procedures.Entities.ProcedureVersion, as: ProcedureVersionEntity
   alias Cadence.Procedures.Procedure, as: ProcedureSchema
-  alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
   alias Cadence.Procedures.ProcedureApproval, as: ProcedureApprovalSchema
   alias Cadence.Procedures.ProcedureExecution, as: ProcedureExecutionSchema
   alias Cadence.Procedures.ProcedureLog, as: ProcedureLogSchema
-  alias Cadence.Domain.Procedures.Entities.Procedure, as: ProcedureEntity
-  alias Cadence.Domain.Procedures.Entities.ProcedureVersion, as: ProcedureVersionEntity
+  alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
+  alias Cadence.Repo
 
   # ===========================================================================
   # Procedure Operations
@@ -254,7 +254,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
             comment: comment
           }
 
-          case %ProcedureApprovalSchema{} |> ProcedureApprovalSchema.changeset(approval_attrs) |> Repo.insert() do
+          case %ProcedureApprovalSchema{}
+               |> ProcedureApprovalSchema.changeset(approval_attrs)
+               |> Repo.insert() do
             {:ok, _approval} ->
               # Reload with approvals
               version = Repo.preload(version, :approvals, force: true)
@@ -451,7 +453,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
 
   # Private helpers for execution/log filtering
   defp apply_execution_filter(query, _field, nil), do: query
-  defp apply_execution_filter(query, field, value), do: where(query, [e], field(e, ^field) == ^value)
+
+  defp apply_execution_filter(query, field, value),
+    do: where(query, [e], field(e, ^field) == ^value)
 
   defp apply_log_filter(query, _field, nil), do: query
   defp apply_log_filter(query, field, value), do: where(query, [l], field(l, ^field) == ^value)

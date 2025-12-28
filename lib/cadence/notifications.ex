@@ -15,11 +15,11 @@ defmodule Cadence.Notifications do
 
   alias Cadence.Application.Notifications.NotificationOperations
   alias Cadence.Application.Notifications.NotificationQueries
+  alias Cadence.Missions
+  alias Cadence.Notifications.{Notification, NotificationPreference}
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Ports.Repository.Notifications.NotificationRepository
   alias Cadence.Repo
-  alias Cadence.Notifications.{Notification, NotificationPreference}
-  alias Cadence.Missions
 
   # ============================================================================
   # Notification CRUD - Delegated to Application Layer

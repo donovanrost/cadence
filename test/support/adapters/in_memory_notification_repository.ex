@@ -172,19 +172,28 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
     Agent.get_and_update(__MODULE__, fn state ->
       {updated_notifications, count} =
         state.notifications
-        |> Enum.reduce({state.notifications, 0}, fn {id, n}, {acc, cnt} ->
-          if n.user_id == user_id &&
-               is_nil(n.read_at) &&
-               is_nil(n.archived_at) &&
-               (is_nil(mission_id) || n.mission_id == mission_id) do
-            {Map.put(acc, id, Map.put(n, :read_at, now)), cnt + 1}
-          else
-            {acc, cnt}
-          end
+        |> Enum.reduce({state.notifications, 0}, fn {id, notification}, acc ->
+          mark_notification_read({id, notification}, user_id, mission_id, now, acc)
         end)
 
       {{:ok, count}, %{state | notifications: updated_notifications}}
     end)
+  end
+
+  defp mark_notification_read({id, notification}, user_id, mission_id, now, {acc, cnt}) do
+    if unread_for_scope?(notification, user_id, mission_id) do
+      updated = Map.put(notification, :read_at, now)
+      {Map.put(acc, id, updated), cnt + 1}
+    else
+      {acc, cnt}
+    end
+  end
+
+  defp unread_for_scope?(notification, user_id, mission_id) do
+    notification.user_id == user_id &&
+      is_nil(notification.read_at) &&
+      is_nil(notification.archived_at) &&
+      (is_nil(mission_id) || notification.mission_id == mission_id)
   end
 
   @impl true
@@ -278,8 +287,11 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
   def delete_preference(id) do
     Agent.get_and_update(__MODULE__, fn state ->
       case Map.pop(state.preferences, id) do
-        {nil, _} -> {{:error, :not_found}, state}
-        {preference, new_preferences} -> {{:ok, preference}, %{state | preferences: new_preferences}}
+        {nil, _} ->
+          {{:error, :not_found}, state}
+
+        {preference, new_preferences} ->
+          {{:ok, preference}, %{state | preferences: new_preferences}}
       end
     end)
   end

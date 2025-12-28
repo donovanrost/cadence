@@ -182,33 +182,31 @@ defmodule Cadence.Outbox.Processor do
   end
 
   defp process_event(%Event{} = event) do
-    try do
-      # TODO: Write to audit_logs table here
-      # For now, we just broadcast and mark processed
-      # In the future, this would be:
-      #   {:ok, _audit_log} = AuditLogs.create_from_outbox_event(event)
+    # TODO: Write to audit_logs table here
+    # For now, we just broadcast and mark processed
+    # In the future, this would be:
+    #   {:ok, _audit_log} = AuditLogs.create_from_outbox_event(event)
 
-      # Broadcast to PubSub
-      Outbox.broadcast(event)
+    # Broadcast to PubSub
+    Outbox.broadcast(event)
 
-      # Mark as processed
-      case Outbox.mark_processed(event) do
-        {:ok, _event} ->
-          :ok
+    # Mark as processed
+    case Outbox.mark_processed(event) do
+      {:ok, _event} ->
+        :ok
 
-        {:error, changeset} ->
-          Logger.error("Failed to mark outbox event as processed: #{inspect(changeset.errors)}")
-          {:error, :mark_failed}
-      end
-    rescue
-      e ->
-        Logger.error("Error processing outbox event #{event.id}: #{Exception.message(e)}")
-        handle_processing_error(event, e)
-    catch
-      kind, reason ->
-        Logger.error("Error processing outbox event #{event.id}: #{inspect({kind, reason})}")
-        handle_processing_error(event, {kind, reason})
+      {:error, changeset} ->
+        Logger.error("Failed to mark outbox event as processed: #{inspect(changeset.errors)}")
+        {:error, :mark_failed}
     end
+  rescue
+    e ->
+      Logger.error("Error processing outbox event #{event.id}: #{Exception.message(e)}")
+      handle_processing_error(event, e)
+  catch
+    kind, reason ->
+      Logger.error("Error processing outbox event #{event.id}: #{inspect({kind, reason})}")
+      handle_processing_error(event, {kind, reason})
   end
 
   defp handle_processing_error(event, error) do

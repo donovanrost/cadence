@@ -14,10 +14,10 @@ defmodule Cadence.Telemetry.ProtocolsTest do
   import Bitwise
 
   alias Cadence.Telemetry.Protocols.{
+    FixedProtocol,
     LengthProtocol,
     TemplateProtocol,
-    TerminatedProtocol,
-    FixedProtocol
+    TerminatedProtocol
   }
 
   @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>

@@ -4,8 +4,8 @@ defmodule Cadence.TargetsTest do
   import Cadence.OrganizationsFixtures
   import Cadence.MissionDatabaseFixtures
 
-  alias Cadence.{Targets, Missions}
   alias Cadence.Domain.Targeting.Entities.Target
+  alias Cadence.{Missions, Targets}
 
   setup do
     org = organization_fixture()

@@ -44,6 +44,7 @@ defmodule Cadence.Telemetry.Conversions do
   defp apply_polynomial([c0], _x), do: c0
   defp apply_polynomial([c0, c1], x), do: c0 + c1 * x
   defp apply_polynomial([c0, c1, c2], x), do: c0 + c1 * x + c2 * x * x
+
   defp apply_polynomial([c0, c1, c2, c3], x) do
     x2 = x * x
     c0 + c1 * x + c2 * x2 + c3 * x2 * x

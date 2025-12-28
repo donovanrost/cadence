@@ -20,7 +20,7 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DecommutationStage do
 
   use Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour
 
-  alias Cadence.Telemetry.{Packet, Decommutation}
+  alias Cadence.Telemetry.{Decommutation, Packet}
 
   @impl true
   def stage_name, do: :decom

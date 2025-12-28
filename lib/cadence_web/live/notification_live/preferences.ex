@@ -200,8 +200,8 @@ defmodule CadenceWeb.NotificationLive.Preferences do
             <span class="label-text">In-app</span>
           </label>
         </div>
-
-        <!-- Email toggle -->
+        
+    <!-- Email toggle -->
         <div class="flex items-center gap-2">
           <label class="label cursor-pointer gap-2 p-0">
             <input
@@ -215,8 +215,8 @@ defmodule CadenceWeb.NotificationLive.Preferences do
             <span class="label-text">Email</span>
           </label>
         </div>
-
-        <!-- Email frequency dropdown -->
+        
+    <!-- Email frequency dropdown -->
         <div class={["flex items-center gap-2", !@email_enabled && "opacity-50"]}>
           <span class="text-sm text-base-content/60">Frequency:</span>
           <select

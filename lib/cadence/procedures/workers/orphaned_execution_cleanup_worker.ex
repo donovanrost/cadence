@@ -7,17 +7,25 @@ defmodule Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker do
   - The node restarts while executions were running
   - The status is `:pausing` but the process is no longer alive
 
-  ## Detection Strategy
+  ## V1 vs V2 Executions
 
-  1. Query all executions in non-terminal states (pending, running, pausing, paused)
+  This worker only applies to **V1 (DAG) executions**. V2 executions are excluded
+  because they are user-driven and always recoverable:
+  - V2 persists all state to DB (steps, blocks, signoffs)
+  - Users can return at any time and resume via `start_or_attach/2`
+  - Only explicit user action (complete/cancel/fail) ends a V2 execution
+
+  ## Detection Strategy (V1 only)
+
+  1. Query all V1 executions in non-terminal states (pending, running, pausing)
   2. For each execution, check if there's a live `ExecutionProcess`
   3. If no live process and execution is stale (updated > threshold ago), mark as orphaned
 
   ## Recovery Actions
 
-  - `:pending` - Can be restarted
-  - `:running` - Mark as failed with "Process died unexpectedly"
-  - `:pausing` - Mark as failed with "Pausing interrupted"
+  - `:pending` - Mark as failed ("Execution never started")
+  - `:running` - Mark as failed ("Process died unexpectedly")
+  - `:pausing` - Mark as failed ("Pausing interrupted")
   - `:paused` - Leave as-is (valid state, can be resumed manually)
 
   ## Configuration
@@ -35,9 +43,9 @@ defmodule Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker do
 
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Procedures.ProcedureExecution
   alias Cadence.Procedures.Engine.ExecutionProcess
+  alias Cadence.Procedures.ProcedureExecution
+  alias Cadence.Repo
 
   # How long an execution must be stale before considered orphaned (2 minutes)
   @staleness_threshold_seconds 120
@@ -62,15 +70,19 @@ defmodule Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker do
   Returns list of executions in non-terminal states where:
   - No live ExecutionProcess exists
   - Last updated more than staleness threshold ago
+  - NOT a V2 execution (V2 executions are always recoverable)
   """
   def find_orphaned_executions do
     threshold = DateTime.add(DateTime.utc_now(), -@staleness_threshold_seconds, :second)
 
-    # Query all non-terminal executions that haven't been updated recently
+    # Query all non-terminal V1 executions that haven't been updated recently
+    # V2 executions are excluded - they are user-driven and always recoverable
     query =
       from(e in ProcedureExecution,
         where: e.status in [:pending, :running, :pausing],
         where: e.updated_at < ^threshold,
+        # Skip V2 executions - they persist all state to DB and can be resumed anytime
+        where: e.execution_version != :v2 or is_nil(e.execution_version),
         preload: [:procedure]
       )
 
@@ -120,7 +132,7 @@ defmodule Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker do
     # Update with error_message override
     attrs = %{
       status: :failed,
-      completed_at: DateTime.utc_now(),
+      completed_at: DateTime.utc_now() |> DateTime.truncate(:second),
       error_message: error_message,
       completed_steps: result.completed_steps,
       skipped_steps: result.skipped_steps,

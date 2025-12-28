@@ -84,54 +84,42 @@ defmodule Cadence.Procedures.TriggerContext do
   def build(type, arg)
 
   def build(:manual, nil) do
-    %{
-      type: :manual,
-      source_id: nil,
-      source_name: "system",
-      triggered_at: DateTime.utc_now(),
-      data: %{}
-    }
+    build_context(:manual, nil, "system", DateTime.utc_now(), %{})
   end
 
   def build(:manual, user) do
-    %{
-      type: :manual,
-      source_id: user.id,
-      source_name: user.email || "unknown",
-      triggered_at: DateTime.utc_now(),
-      data: %{
-        user_id: user.id,
-        user_email: user.email
-      }
-    }
+    build_context(:manual, user.id, user.email || "unknown", DateTime.utc_now(), %{
+      user_id: user.id,
+      user_email: user.email
+    })
   end
 
   def build(:schedule, schedule) do
-    %{
-      type: :schedule,
-      source_id: schedule.id,
-      source_name: schedule.name || "Scheduled Execution",
-      triggered_at: DateTime.utc_now(),
-      data: %{
+    build_context(
+      :schedule,
+      schedule.id,
+      schedule.name || "Scheduled Execution",
+      DateTime.utc_now(),
+      %{
         schedule_id: schedule.id,
         schedule_name: schedule.name,
         cron_expression: Map.get(schedule, :cron_expression),
         schedule_type: Map.get(schedule, :type, :cron)
       }
-    }
+    )
   end
 
   def build(:alarm, alarm_event) do
     alarm = Map.get(alarm_event, :alarm, %{})
 
-    %{
-      type: :alarm,
-      source_id: alarm_event[:alarm_id] || alarm_event[:id],
-      source_name: alarm[:name] || alarm_event[:alarm_name] || "Unknown Alarm",
-      triggered_at: alarm_event[:timestamp] || DateTime.utc_now(),
-      data: %{
-        alarm_id: alarm_event[:alarm_id] || alarm_event[:id],
-        alarm_name: alarm[:name] || alarm_event[:alarm_name],
+    build_context(
+      :alarm,
+      alarm_source_id(alarm_event),
+      alarm_source_name(alarm_event, alarm),
+      alarm_event[:timestamp] || DateTime.utc_now(),
+      %{
+        alarm_id: alarm_source_id(alarm_event),
+        alarm_name: alarm_source_name(alarm_event, alarm),
         severity: alarm[:severity] || alarm_event[:severity],
         state: alarm_event[:new_state] || alarm_event[:state],
         previous_state: alarm_event[:previous_state],
@@ -140,16 +128,16 @@ defmodule Cadence.Procedures.TriggerContext do
         item_name: alarm_event[:telemetry_item] || alarm_event[:item_name],
         rule_id: alarm_event[:rule_id]
       }
-    }
+    )
   end
 
   def build(:telemetry_event, event) do
-    %{
-      type: :telemetry_event,
-      source_id: event[:id] || Ecto.UUID.generate(),
-      source_name: event[:item_name] || "Telemetry Event",
-      triggered_at: event[:timestamp] || DateTime.utc_now(),
-      data: %{
+    build_context(
+      :telemetry_event,
+      event[:id] || Ecto.UUID.generate(),
+      event[:item_name] || "Telemetry Event",
+      event[:timestamp] || DateTime.utc_now(),
+      %{
         item_name: event[:item_name],
         packet_name: event[:packet_name],
         value: event[:value],
@@ -157,7 +145,7 @@ defmodule Cadence.Procedures.TriggerContext do
         timestamp: event[:timestamp],
         target_id: event[:target_id]
       }
-    }
+    )
   end
 
   @doc """
@@ -169,25 +157,25 @@ defmodule Cadence.Procedures.TriggerContext do
   @spec build(map()) :: t()
   def build(%{type: type} = context)
       when type in [:manual, :schedule, :alarm, :telemetry_event] do
-    %{
-      type: type,
-      source_id: context[:source_id],
-      source_name: context[:source_name] || to_string(type),
-      triggered_at: context[:triggered_at] || DateTime.utc_now(),
-      data: context[:data] || %{}
-    }
+    build_context(
+      type,
+      context[:source_id],
+      context[:source_name] || to_string(type),
+      context[:triggered_at] || DateTime.utc_now(),
+      context[:data] || %{}
+    )
   end
 
   def build(context) when is_map(context) do
     type = context[:type] || context["type"] || :manual
 
-    %{
-      type: normalize_type(type),
-      source_id: context[:source_id] || context["source_id"],
-      source_name: context[:source_name] || context["source_name"] || to_string(type),
-      triggered_at: normalize_timestamp(context[:triggered_at] || context["triggered_at"]),
-      data: context[:data] || context["data"] || %{}
-    }
+    build_context(
+      normalize_type(type),
+      context[:source_id] || context["source_id"],
+      context[:source_name] || context["source_name"] || to_string(type),
+      normalize_timestamp(context[:triggered_at] || context["triggered_at"]),
+      context[:data] || context["data"] || %{}
+    )
   end
 
   @doc """
@@ -212,6 +200,24 @@ defmodule Cadence.Procedures.TriggerContext do
 
   def from_map(map) when is_map(map) do
     build(map)
+  end
+
+  defp build_context(type, source_id, source_name, triggered_at, data) do
+    %{
+      type: type,
+      source_id: source_id,
+      source_name: source_name,
+      triggered_at: triggered_at,
+      data: data
+    }
+  end
+
+  defp alarm_source_id(alarm_event) do
+    alarm_event[:alarm_id] || alarm_event[:id]
+  end
+
+  defp alarm_source_name(alarm_event, alarm) do
+    alarm[:name] || alarm_event[:alarm_name] || "Unknown Alarm"
   end
 
   # ============================================================================

@@ -21,9 +21,9 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
   use GenServer
   require Logger
 
-  alias Cadence.Targets
-  alias Cadence.Runtime.Telemetry.Limits.Cache, as: LimitsCache
   alias Cadence.Runtime.Telemetry.DerivedItems.Cache, as: DerivedItemsCache
+  alias Cadence.Runtime.Telemetry.Limits.Cache, as: LimitsCache
+  alias Cadence.Targets
 
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)

@@ -33,15 +33,12 @@ defmodule Cadence.Missions do
   These are clearly marked in the documentation.
   """
 
+  # Application services
+  alias Cadence.Application.Missions.MembershipOperations
+  alias Cadence.Application.Missions.MissionOperations
+  alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Domain.Missions.Entities.MissionMembership, as: MembershipEntity
-
-  # Application services
-  alias Cadence.Application.Missions.MissionQueries
-  alias Cadence.Application.Missions.MissionOperations
-  alias Cadence.Application.Missions.MembershipOperations
-
-  # Ecto schemas needed for form helpers
   alias Cadence.Missions.Mission, as: MissionSchema
 
   # ============================================================================

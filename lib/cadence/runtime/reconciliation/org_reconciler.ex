@@ -35,8 +35,9 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Application.Missions.MissionQueries
-  alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Runtime.Missions.MissionInstance
   alias Cadence.Runtime.Missions.MissionSupervisor
+  alias Cadence.Runtime.Missions.MissionTracker
 
   @reconcile_interval :timer.seconds(10)
   @max_concurrent_reconciles 5
@@ -147,9 +148,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
         stop_mission_if_running(mission_id, org_id)
 
       {:error, reason} ->
-        Logger.warning(
-          "Failed to reconcile mission #{mission_id}: #{inspect(reason)}"
-        )
+        Logger.warning("Failed to reconcile mission #{mission_id}: #{inspect(reason)}")
     end
   end
 
@@ -200,7 +199,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
   defp get_actual_state(mission_id, org_id) do
     case MissionTracker.get_mission(mission_id, org_id) do
       {:ok, meta} ->
-        pid = Cadence.Runtime.Missions.MissionInstance.whereis(mission_id)
+        pid = MissionInstance.whereis(mission_id)
 
         {:ok,
          %{
@@ -211,7 +210,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
 
       {:error, :not_found} ->
         # Check if process exists but isn't tracked yet
-        case Cadence.Runtime.Missions.MissionInstance.whereis(mission_id) do
+        case MissionInstance.whereis(mission_id) do
           nil -> {:ok, nil}
           pid -> {:ok, %{pid: pid, observed_generation: 0, status: :unknown}}
         end
@@ -266,7 +265,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
   end
 
   defp push_config_to_mission(mission_id, config) do
-    case Cadence.Runtime.Missions.MissionInstance.whereis(mission_id) do
+    case MissionInstance.whereis(mission_id) do
       nil ->
         {:error, :not_running}
 

@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OrganizationLive.Show do
   use CadenceWeb, :live_view
 
-  alias Cadence.{Organizations, Missions}
+  alias Cadence.{Missions, Organizations}
 
   @impl true
   def mount(_params, _session, socket) do

@@ -4,14 +4,14 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
   alias Cadence.MissionDatabase.YamlImporter
 
   alias Cadence.MissionDatabase.{
-    DataType,
     Algorithm,
-    Unit,
+    Argument,
     Container,
     ContainerEntry,
-    Parameter,
+    DataType,
     MetaCommand,
-    Argument
+    Parameter,
+    Unit
   }
 
   import Cadence.MissionDatabaseFixtures

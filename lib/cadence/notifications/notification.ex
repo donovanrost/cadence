@@ -10,8 +10,8 @@ defmodule Cadence.Notifications.Notification do
   import Ecto.Changeset
 
   alias Cadence.Accounts.User
-  alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
   alias Cadence.Outbox.Event
 
   @primary_key {:id, :binary_id, autogenerate: true}

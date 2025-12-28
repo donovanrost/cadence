@@ -26,9 +26,9 @@ defmodule Cadence.Runtime.Telemetry.Pipeline do
   use GenServer
   require Logger
 
-  alias Cadence.Telemetry.Decommutation
-  alias Cadence.Runtime.Telemetry.PacketIdentifier
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.PacketIdentifier
+  alias Cadence.Telemetry.Decommutation
 
   defmodule State do
     @moduledoc false
@@ -212,29 +212,16 @@ defmodule Cadence.Runtime.Telemetry.Pipeline do
     # Update each item in the CVT (skip if stored packet)
     items_count =
       Enum.reduce(items, 0, fn {item_name, raw_value}, count ->
-        # Skip metadata fields like received_time
-        if item_name not in [:received_time] do
-          # TODO: Apply conversions here when we have conversion configs
-          converted_value = raw_value
-
-          # Only update CVT if this is NOT a stored (historical) packet
-          # Stored packets don't update current values
-          unless is_stored do
-            CurrentValueTable.set(
-              state.mission_id,
-              target_id,
-              packet_name,
-              to_string(item_name),
-              converted_value,
-              received_time: received_time,
-              limits_state: :green
-            )
-          end
-
-          count + 1
-        else
-          count
-        end
+        count +
+          maybe_update_cvt_item(
+            state.mission_id,
+            target_id,
+            packet_name,
+            item_name,
+            raw_value,
+            received_time,
+            is_stored
+          )
       end)
 
     %{
@@ -242,5 +229,31 @@ defmodule Cadence.Runtime.Telemetry.Pipeline do
       | packets_processed: state.packets_processed + 1,
         items_processed: state.items_processed + items_count
     }
+  end
+
+  defp maybe_update_cvt_item(_mission_id, _target_id, _packet_name, item_name, _raw_value, _time, _stored)
+       when item_name in [:received_time] do
+    0
+  end
+
+  defp maybe_update_cvt_item(mission_id, target_id, packet_name, item_name, raw_value, time, stored) do
+    # TODO: Apply conversions here when we have conversion configs
+    converted_value = raw_value
+
+    # Only update CVT if this is NOT a stored (historical) packet
+    # Stored packets don't update current values
+    unless stored do
+      CurrentValueTable.set(
+        mission_id,
+        target_id,
+        packet_name,
+        to_string(item_name),
+        converted_value,
+        received_time: time,
+        limits_state: :green
+      )
+    end
+
+    1
   end
 end

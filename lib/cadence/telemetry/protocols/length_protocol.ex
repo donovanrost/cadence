@@ -136,28 +136,25 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
     length_byte_size = div(state.length_bit_size, 8)
     length_total_bytes = length_byte_offset + length_byte_size
 
-    cond do
+    if byte_size(buffer) < length_total_bytes do
       # Not enough data for length field
-      byte_size(buffer) < length_total_bytes ->
-        return_packets(acc, %{state | buffer: buffer})
+      return_packets(acc, %{state | buffer: buffer})
+    else
+      <<_skip::binary-size(length_byte_offset), length_bytes::binary-size(length_byte_size),
+        _after_length::binary>> = buffer
 
-      # Have length field, extract it
-      true ->
-        <<_skip::binary-size(length_byte_offset), length_bytes::binary-size(length_byte_size),
-          _after_length::binary>> = buffer
+      # Decode length field
+      length_value = decode_length(length_bytes, state)
 
-        # Decode length field
-        length_value = decode_length(length_bytes, state)
+      # Calculate total packet size
+      # Length can be:
+      # 1. Just payload size (length_value_offset = 0)
+      # 2. Payload - 1 (CCSDS: length_value_offset = 1)
+      # 3. In units other than bytes (length_bytes_per_count != 1)
+      payload_size = length_value * state.length_bytes_per_count + state.length_value_offset
 
-        # Calculate total packet size
-        # Length can be:
-        # 1. Just payload size (length_value_offset = 0)
-        # 2. Payload - 1 (CCSDS: length_value_offset = 1)
-        # 3. In units other than bytes (length_bytes_per_count != 1)
-        payload_size = length_value * state.length_bytes_per_count + state.length_value_offset
-
-        # Total packet includes length header + payload
-        total_packet_size = length_total_bytes + payload_size
+      # Total packet includes length header + payload
+      total_packet_size = length_total_bytes + payload_size
 
         # Check if we have complete packet
         if byte_size(buffer) >= total_packet_size do

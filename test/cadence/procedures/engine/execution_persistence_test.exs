@@ -13,9 +13,9 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistenceTest do
 
   import Cadence.ProceduresFixtures
 
+  alias Cadence.Outbox.Event, as: OutboxEvent
   alias Cadence.Procedures.Engine.ExecutionPersistence
   alias Cadence.Procedures.ProcedureLog
-  alias Cadence.Outbox.Event, as: OutboxEvent
   alias Cadence.Repo
 
   import Ecto.Query

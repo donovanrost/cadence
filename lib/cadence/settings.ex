@@ -222,13 +222,25 @@ defmodule Cadence.Settings do
   """
   @spec can_mission_override?(Mission.t() | MissionEntity.t(), atom(), atom(), any()) ::
           :ok | {:error, :less_restrictive_than_org, map()} | {:error, :unknown_setting}
-  def can_mission_override?(%MissionEntity{id: mission_id, organization_id: org_id}, namespace, key, value) do
+  def can_mission_override?(
+        %MissionEntity{id: mission_id, organization_id: org_id},
+        namespace,
+        key,
+        value
+      ) do
     SettingOperations.can_set_mission_value?(mission_id, org_id, namespace, key, value)
   end
 
   def can_mission_override?(%Mission{} = mission, namespace, key, value) do
     mission = ensure_organization_loaded(mission)
-    SettingOperations.can_set_mission_value?(mission.id, mission.organization_id, namespace, key, value)
+
+    SettingOperations.can_set_mission_value?(
+      mission.id,
+      mission.organization_id,
+      namespace,
+      key,
+      value
+    )
   end
 
   ## Private Functions

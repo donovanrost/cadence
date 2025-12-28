@@ -17,6 +17,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
 
   alias Cadence.Alarms
   alias Cadence.Runtime.Alarms.AlarmManager
+  alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -28,7 +29,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
 
   setup do
     # Use shared sandbox mode for GenServer database access
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
 
     org = organization_fixture()
     mission = mission_fixture(organization: org)

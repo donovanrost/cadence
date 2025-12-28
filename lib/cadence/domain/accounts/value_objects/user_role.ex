@@ -58,12 +58,14 @@ defmodule Cadence.Domain.Accounts.ValueObjects.UserRole do
   """
   @spec validate(term()) :: {:ok, t()} | {:error, :invalid_role}
   def validate(role) when role in @roles, do: {:ok, role}
+
   def validate(role) when is_binary(role) do
     case parse(role) do
       {:ok, parsed} -> {:ok, parsed}
       :error -> {:error, :invalid_role}
     end
   end
+
   def validate(_), do: {:error, :invalid_role}
 
   @doc """
@@ -122,6 +124,7 @@ defmodule Cadence.Domain.Accounts.ValueObjects.UserRole do
   """
   @spec can_manage?(t(), t()) :: boolean()
   def can_manage?(:system_admin, _target_role), do: true
+
   def can_manage?(actor_role, target_role) when actor_role in @roles and target_role in @roles do
     hierarchy_level(actor_role) > hierarchy_level(target_role)
   end

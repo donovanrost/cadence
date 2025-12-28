@@ -69,7 +69,9 @@ defmodule CadenceWeb.AlarmRuleLive.FormComponent do
           <div class="bg-base-200/50 border border-base-300 rounded-sm p-4 space-y-4">
             <div>
               <label class="hud-label block mb-1">Limit States</label>
-              <p class="text-xs text-base-content/50 mb-2">Which limit states should trigger this rule?</p>
+              <p class="text-xs text-base-content/50 mb-2">
+                Which limit states should trigger this rule?
+              </p>
               <div class="flex flex-wrap gap-3">
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input

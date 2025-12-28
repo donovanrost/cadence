@@ -366,34 +366,42 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
   def describe(%__MODULE__{} = event) do
     proc_name = event.procedure_name || "Unknown procedure"
 
-    case event.event_type do
-      :started ->
-        "#{proc_name} execution started"
+    describe_event(event, proc_name)
+  end
 
-      :completed ->
-        "#{proc_name} execution completed successfully"
+  defp describe_event(%__MODULE__{event_type: :started}, proc_name) do
+    "#{proc_name} execution started"
+  end
 
-      :failed ->
-        error = if event.error_message, do: ": #{event.error_message}", else: ""
-        "#{proc_name} execution failed#{error}"
+  defp describe_event(%__MODULE__{event_type: :completed}, proc_name) do
+    "#{proc_name} execution completed successfully"
+  end
 
-      :paused ->
-        "#{proc_name} execution paused at step #{event.step_index}"
+  defp describe_event(%__MODULE__{event_type: :failed} = event, proc_name) do
+    error = if event.error_message, do: ": #{event.error_message}", else: ""
+    "#{proc_name} execution failed#{error}"
+  end
 
-      :resumed ->
-        "#{proc_name} execution resumed"
+  defp describe_event(%__MODULE__{event_type: :paused} = event, proc_name) do
+    "#{proc_name} execution paused at step #{event.step_index}"
+  end
 
-      :cancelled ->
-        "#{proc_name} execution cancelled"
+  defp describe_event(%__MODULE__{event_type: :resumed}, proc_name) do
+    "#{proc_name} execution resumed"
+  end
 
-      :step_started ->
-        step_type = safe_get_in(event.step_info, [:type]) || "step"
-        "#{proc_name} step #{event.step_index} (#{step_type}) started"
+  defp describe_event(%__MODULE__{event_type: :cancelled}, proc_name) do
+    "#{proc_name} execution cancelled"
+  end
 
-      :step_completed ->
-        step_type = safe_get_in(event.step_info, [:type]) || "step"
-        "#{proc_name} step #{event.step_index} (#{step_type}) completed"
-    end
+  defp describe_event(%__MODULE__{event_type: :step_started} = event, proc_name) do
+    step_type = safe_get_in(event.step_info, [:type]) || "step"
+    "#{proc_name} step #{event.step_index} (#{step_type}) started"
+  end
+
+  defp describe_event(%__MODULE__{event_type: :step_completed} = event, proc_name) do
+    step_type = safe_get_in(event.step_info, [:type]) || "step"
+    "#{proc_name} step #{event.step_index} (#{step_type}) completed"
   end
 
   defp generate_id do

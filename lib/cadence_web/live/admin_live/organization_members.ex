@@ -11,7 +11,7 @@ defmodule CadenceWeb.AdminLive.OrganizationMembers do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Organizations, Accounts}
+  alias Cadence.{Accounts, Organizations}
 
   @impl true
   def mount(%{"id" => org_id}, _session, socket) do

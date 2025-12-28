@@ -57,7 +57,16 @@ defmodule CadenceWeb.Schemas.MissionForm do
   """
   def changeset(form \\ %__MODULE__{}, attrs \\ %{}) do
     form
-    |> cast(attrs, [:name, :slug, :description, :phase, :start_date, :end_date, :config, :metadata])
+    |> cast(attrs, [
+      :name,
+      :slug,
+      :description,
+      :phase,
+      :start_date,
+      :end_date,
+      :config,
+      :metadata
+    ])
     |> validate_required([:name, :slug])
     |> validate_format(:slug, ~r/^[a-z0-9-]+$/,
       message: "must be lowercase alphanumeric with hyphens"

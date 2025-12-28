@@ -11,8 +11,8 @@ defmodule Cadence.Accounts.UserNotifier do
 
   import Swoosh.Email
 
-  alias Cadence.Mailer
   alias Cadence.Accounts.User
+  alias Cadence.Mailer
   alias Cadence.Notifications.Notification
   alias Cadence.Repo
 
@@ -170,10 +170,7 @@ defmodule Cadence.Accounts.UserNotifier do
   end
 
   defp build_digest_body(notifications, period_text) do
-    notification_list =
-      notifications
-      |> Enum.map(fn n -> "- #{n.title}" end)
-      |> Enum.join("\n")
+    notification_list = Enum.map_join(notifications, "\n", fn n -> "- #{n.title}" end)
 
     """
 

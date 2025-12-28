@@ -33,16 +33,13 @@ defmodule Cadence.Organizations do
   """
 
   import Ecto.Query, warn: false
-  alias Cadence.Repo
-
+  alias Cadence.Application.Organizations.MembershipOperations
+  alias Cadence.Application.Organizations.OrganizationOperations
+  alias Cadence.Application.Organizations.OrganizationQueries
+  alias Cadence.Application.Organizations.QuotaService
   alias Cadence.Organizations.Organization
   alias Cadence.Organizations.OrganizationMembership
-
-  # Application services
-  alias Cadence.Application.Organizations.OrganizationQueries
-  alias Cadence.Application.Organizations.OrganizationOperations
-  alias Cadence.Application.Organizations.MembershipOperations
-  alias Cadence.Application.Organizations.QuotaService
+  alias Cadence.Repo
 
   # ===========================================================================
   # Organization CRUD (Legacy API - Returns Ecto Schemas)

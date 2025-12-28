@@ -393,8 +393,10 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
     # For queue ordering, higher priority should come first (before, :lt)
     case Priority.compare(a.priority, b.priority) do
       :eq -> compare_sequence(a, b)
-      :gt -> :lt  # Higher priority comes first in queue
-      :lt -> :gt  # Lower priority comes later in queue
+      # Higher priority comes first in queue
+      :gt -> :lt
+      # Lower priority comes later in queue
+      :lt -> :gt
     end
   end
 

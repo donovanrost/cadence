@@ -21,10 +21,11 @@ defmodule Cadence.Procedures.DagExecutionTest do
 
   alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionProcess
+  alias Ecto.Adapters.SQL.Sandbox
 
   setup do
     # Use shared sandbox mode for process spawning tests
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
     :ok
   end
 

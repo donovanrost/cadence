@@ -53,7 +53,6 @@ defmodule Cadence.OrganizationsTest do
       assert {:ok, %Organization{}} = Organizations.delete_organization(org)
       assert_raise Ecto.NoResultsError, fn -> Organizations.get_organization!(org.id) end
     end
-
   end
 
   describe "quota management" do

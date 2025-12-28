@@ -32,9 +32,9 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.AlarmRule
-  alias Cadence.Runtime.Alarms.RuleCache
   alias Cadence.Alarms.Notifications.Dispatcher
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
+  alias Cadence.Runtime.Alarms.RuleCache
 
   @type handle_result ::
           {:created, Alarm.t(), AlarmRule.t() | nil}
@@ -145,7 +145,8 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
   end
 
   defp create_default_alarm(%InterfaceConnectionEvent{} = event, organization_id) do
-    message = "Interface #{event.interface_name || event.interface_id} disconnected - no clients connected"
+    message =
+      "Interface #{event.interface_name || event.interface_id} disconnected - no clients connected"
 
     attrs = build_alarm_attrs(event, organization_id, :warning, message, nil)
 

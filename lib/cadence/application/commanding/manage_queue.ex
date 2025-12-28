@@ -24,8 +24,9 @@ defmodule Cadence.Application.Commanding.ManageQueue do
       {:ok, count} = ManageQueue.cancel_all_pending(target_id)
   """
 
-  alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.Application.Commanding.CommandQueries
+  alias Cadence.Domain.Commanding.Entities.QueuedCommand
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type target_id :: String.t()
   @type entry_id :: String.t()
@@ -50,7 +51,7 @@ defmodule Cadence.Application.Commanding.ManageQueue do
 
   # Get configured event recorder
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 
   # ===========================================================================
@@ -236,9 +237,8 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   @spec set_priority(entry_id(), 0..5) :: {:ok, QueuedCommand.t()} | {:error, term()}
   def set_priority(entry_id, priority) do
     with {:ok, entry} <- CommandQueries.find(entry_id),
-         {:ok, updated} <- QueuedCommand.set_priority(entry, priority),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- QueuedCommand.set_priority(entry, priority) do
+      repo().save(updated)
     end
   end
 

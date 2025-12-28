@@ -74,7 +74,7 @@ config :tailwind,
 # Configures Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id]
+  metadata: [:request_id, :mission_id, :target_id, :command, :partition]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
@@ -108,15 +108,42 @@ config :cadence, Oban,
 # Repository adapters (persistence)
 # Defaults to Ecto implementations - override in test.exs with in-memory adapters
 config :cadence, :alarm_repository, Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository
-config :cadence, :queue_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository
-config :cadence, :commands_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoCommandsRepository
-config :cadence, :procedure_repository, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
-config :cadence, :approval_operations, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
-config :cadence, :execution_operations, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
-config :cadence, :missions_repository, Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository
-config :cadence, :settings_repository, Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository
-config :cadence, :notification_repository, Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationRepository
-config :cadence, :target_repository, Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository
+
+config :cadence,
+       :queue_repository,
+       Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository
+
+config :cadence,
+       :commands_repository,
+       Cadence.Adapters.Persistence.Ecto.Commanding.EctoCommandsRepository
+
+config :cadence,
+       :procedure_repository,
+       Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+
+config :cadence,
+       :approval_operations,
+       Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+
+config :cadence,
+       :execution_operations,
+       Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+
+config :cadence,
+       :missions_repository,
+       Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository
+
+config :cadence,
+       :settings_repository,
+       Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository
+
+config :cadence,
+       :notification_repository,
+       Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationRepository
+
+config :cadence,
+       :target_repository,
+       Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository
 
 # Messaging adapters
 config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender

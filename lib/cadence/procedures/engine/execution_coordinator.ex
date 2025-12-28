@@ -46,8 +46,8 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
   use GenServer
   require Logger
 
-  alias Cadence.Procedures
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionProcess
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
 

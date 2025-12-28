@@ -102,15 +102,12 @@ defmodule Cadence.Runtime.Missions.MissionTracker do
   """
   @spec get_mission(String.t(), String.t()) :: {:ok, map()} | {:error, :not_found}
   def get_mission(mission_id, org_id) when is_binary(mission_id) and is_binary(org_id) do
-    case list_missions_for_org(org_id) do
-      missions when is_list(missions) ->
-        case Enum.find(missions, fn {id, _meta} -> id == mission_id end) do
-          {_id, meta} -> {:ok, meta}
-          nil -> {:error, :not_found}
-        end
-
-      _ ->
-        {:error, :not_found}
+    org_id
+    |> list_missions_for_org()
+    |> Enum.find(fn {id, _meta} -> id == mission_id end)
+    |> case do
+      {_id, meta} -> {:ok, meta}
+      nil -> {:error, :not_found}
     end
   end
 

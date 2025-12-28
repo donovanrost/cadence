@@ -97,7 +97,8 @@ defmodule Cadence.Ports.Repository.Missions.MissionsRepository do
 
   Returns `{:ok, membership}` with the persisted entity, or `{:error, reason}` on failure.
   """
-  @callback save_membership(MissionMembership.t()) :: {:ok, MissionMembership.t()} | {:error, error()}
+  @callback save_membership(MissionMembership.t()) ::
+              {:ok, MissionMembership.t()} | {:error, error()}
 
   @doc """
   Deletes a mission membership by ID.

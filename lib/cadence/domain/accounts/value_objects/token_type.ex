@@ -50,12 +50,14 @@ defmodule Cadence.Domain.Accounts.ValueObjects.TokenType do
   """
   @spec validate(term()) :: {:ok, t()} | {:error, :invalid_token_type}
   def validate(type) when type in @types, do: {:ok, type}
+
   def validate(type) when is_binary(type) do
     case parse(type) do
       {:ok, parsed} -> {:ok, parsed}
       :error -> {:error, :invalid_token_type}
     end
   end
+
   def validate(_), do: {:error, :invalid_token_type}
 
   @doc """
@@ -81,6 +83,7 @@ defmodule Cadence.Domain.Accounts.ValueObjects.TokenType do
   def to_context(:session, _opts), do: "session"
   def to_context(:login, _opts), do: "login"
   def to_context(:reset_password, _opts), do: "reset_password"
+
   def to_context(:change_email, opts) do
     case Keyword.get(opts, :email) do
       nil -> "change_email"

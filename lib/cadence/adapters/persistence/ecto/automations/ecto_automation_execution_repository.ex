@@ -9,9 +9,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Automations.EctoAutomationExecutionR
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Automations.AutomationExecution, as: ExecutionSchema
   alias Cadence.Domain.Automations.Entities.AutomationExecution, as: ExecutionEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # AutomationExecutionRepository Implementation

@@ -356,7 +356,7 @@ defmodule Cadence.Telemetry.Packet do
 
     # Calculate DateTime
     # Add days as seconds, then add milliseconds
-    DateTime.add(epoch, days * 86400 + div(ms_of_day, 1000), :second)
+    DateTime.add(epoch, days * 86_400 + div(ms_of_day, 1000), :second)
   end
 
   defp parse_ccsds_timestamp(_), do: nil

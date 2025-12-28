@@ -8,9 +8,9 @@ defmodule Cadence.Application.Commanding.ManageQueueTest do
 
   alias Cadence.Application.Commanding.ManageQueue
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
-  alias Cadence.Test.Adapters.InMemoryQueueRepository
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryEventRecorder
+  alias Cadence.Test.Adapters.InMemoryQueueRepository
 
   setup do
     # Start fake adapters

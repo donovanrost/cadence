@@ -20,8 +20,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoCommandsRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.MissionDatabase.MetaCommand
+  alias Cadence.Repo
 
   # ============================================================================
   # MetaCommand Lookup Operations

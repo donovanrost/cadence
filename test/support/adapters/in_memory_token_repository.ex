@@ -22,8 +22,8 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
 
   @behaviour Cadence.Ports.Repository.Accounts.TokenRepository
 
-  alias Cadence.Domain.Accounts.Entities.UserToken
   alias Cadence.Domain.Accounts.Entities.User
+  alias Cadence.Domain.Accounts.Entities.UserToken
 
   # ============================================================================
   # Agent Lifecycle
@@ -149,19 +149,10 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
   @impl true
   def find_user_by_session_token(token) do
     Agent.get(__MODULE__, fn state ->
-      case Map.get(state.token_index, {token, "session"}) do
-        nil ->
-          {:error, :not_found}
-
-        token_entity ->
-          if UserToken.valid_session_token?(token_entity) do
-            case Map.get(state.users, token_entity.user_id) do
-              nil -> {:error, :not_found}
-              user -> {:ok, user, token_entity.authenticated_at}
-            end
-          else
-            {:error, :expired}
-          end
+      with {:ok, token_entity} <- fetch_token(state, token, "session"),
+           :ok <- ensure_valid_session_token(token_entity),
+           {:ok, user} <- fetch_user(state, token_entity.user_id) do
+        {:ok, user, token_entity.authenticated_at}
       end
     end)
   end
@@ -207,27 +198,11 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
   @impl true
   def find_user_by_login_token(hashed_token) do
     Agent.get(__MODULE__, fn state ->
-      case Map.get(state.token_index, {hashed_token, "login"}) do
-        nil ->
-          {:error, :not_found}
-
-        token_entity ->
-          if UserToken.valid_login_token?(token_entity) do
-            case Map.get(state.users, token_entity.user_id) do
-              nil ->
-                {:error, :not_found}
-
-              user ->
-                # Verify sent_to matches user email
-                if token_entity.sent_to == user.email do
-                  {:ok, user}
-                else
-                  {:error, :not_found}
-                end
-            end
-          else
-            {:error, :expired}
-          end
+      with {:ok, token_entity} <- fetch_token(state, hashed_token, "login"),
+           :ok <- ensure_valid_login_token(token_entity),
+           {:ok, user} <- fetch_user(state, token_entity.user_id),
+           :ok <- ensure_token_sent_to_user(token_entity, user) do
+        {:ok, user}
       end
     end)
   end
@@ -260,18 +235,41 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
   @impl true
   def find_change_email_token(hashed_token, context) do
     Agent.get(__MODULE__, fn state ->
-      case Map.get(state.token_index, {hashed_token, context}) do
-        nil ->
-          {:error, :not_found}
-
-        token_entity ->
-          if UserToken.valid_change_email_token?(token_entity) do
-            {:ok, token_entity}
-          else
-            {:error, :expired}
-          end
+      with {:ok, token_entity} <- fetch_token(state, hashed_token, context),
+           :ok <- ensure_valid_change_email_token(token_entity) do
+        {:ok, token_entity}
       end
     end)
+  end
+
+  defp fetch_token(state, token, context) do
+    case Map.get(state.token_index, {token, context}) do
+      nil -> {:error, :not_found}
+      token_entity -> {:ok, token_entity}
+    end
+  end
+
+  defp fetch_user(state, user_id) do
+    case Map.get(state.users, user_id) do
+      nil -> {:error, :not_found}
+      user -> {:ok, user}
+    end
+  end
+
+  defp ensure_valid_session_token(token_entity) do
+    if UserToken.valid_session_token?(token_entity), do: :ok, else: {:error, :expired}
+  end
+
+  defp ensure_valid_login_token(token_entity) do
+    if UserToken.valid_login_token?(token_entity), do: :ok, else: {:error, :expired}
+  end
+
+  defp ensure_valid_change_email_token(token_entity) do
+    if UserToken.valid_change_email_token?(token_entity), do: :ok, else: {:error, :expired}
+  end
+
+  defp ensure_token_sent_to_user(token_entity, user) do
+    if token_entity.sent_to == user.email, do: :ok, else: {:error, :not_found}
   end
 
   @impl true

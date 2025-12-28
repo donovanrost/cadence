@@ -92,7 +92,11 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
                     Remove
                   </button>
                 </div>
-                <progress value={entry.progress} max="100" class="progress progress-primary w-full h-1 mt-2">
+                <progress
+                  value={entry.progress}
+                  max="100"
+                  class="progress progress-primary w-full h-1 mt-2"
+                >
                   {entry.progress}%
                 </progress>
                 <%= for err <- upload_errors(@uploads.yaml_file, entry) do %>
@@ -134,7 +138,10 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
         </div>
 
         <div class="mt-6 flex items-center justify-end gap-x-6">
-          <.link patch={@patch} class="text-sm font-semibold leading-6 text-base-content hover:text-primary">
+          <.link
+            patch={@patch}
+            class="text-sm font-semibold leading-6 text-base-content hover:text-primary"
+          >
             Cancel
           </.link>
           <.button

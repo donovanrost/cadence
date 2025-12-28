@@ -17,8 +17,13 @@ defmodule Cadence.Alarms do
   - `ManageAlarmRules` - Rule CRUD and matching
   """
 
-  alias Cadence.Application.Alerting.{AlarmQueries, AlarmOperations, TriggerAlarm, ManageAlarmRules}
   alias Cadence.Alarms.{Alarm, AlarmRule}
+  alias Cadence.Application.Alerting.{
+    AlarmOperations,
+    AlarmQueries,
+    ManageAlarmRules,
+    TriggerAlarm
+  }
   alias Cadence.Runtime.Alarms.AlarmManager
 
   # ============================================================================
@@ -73,7 +78,9 @@ defmodule Cadence.Alarms do
   """
   @spec disable_rule(AlarmRule.t(), String.t() | nil, String.t() | nil) ::
           {:ok, AlarmRule.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate disable_rule(rule, user_id \\ nil, reason \\ nil), to: ManageAlarmRules, as: :disable
+  defdelegate disable_rule(rule, user_id \\ nil, reason \\ nil),
+    to: ManageAlarmRules,
+    as: :disable
 
   @doc """
   Deletes an alarm rule.
@@ -248,7 +255,12 @@ defmodule Cadence.Alarms do
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def shelve_alarm(alarm, user_id, duration_minutes, reason \\ nil)
 
-  def shelve_alarm(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, user_id, duration_minutes, reason) do
+  def shelve_alarm(
+        %Cadence.Domain.Alerting.Entities.Alarm{} = entity,
+        user_id,
+        duration_minutes,
+        reason
+      ) do
     shelve_alarm(entity_to_schema(entity), user_id, duration_minutes, reason)
   end
 
@@ -364,7 +376,13 @@ defmodule Cadence.Alarms do
           {:ok, Alarm.t()} | {:error, Ecto.Changeset.t()}
   def update_alarm_value(alarm, value, limit_state, new_severity, message \\ nil)
 
-  def update_alarm_value(%Cadence.Domain.Alerting.Entities.Alarm{} = entity, value, limit_state, new_severity, message) do
+  def update_alarm_value(
+        %Cadence.Domain.Alerting.Entities.Alarm{} = entity,
+        value,
+        limit_state,
+        new_severity,
+        message
+      ) do
     update_alarm_value(entity_to_schema(entity), value, limit_state, new_severity, message)
   end
 

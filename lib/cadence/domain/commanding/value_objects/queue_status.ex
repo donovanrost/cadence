@@ -46,7 +46,8 @@ defmodule Cadence.Domain.Commanding.ValueObjects.QueueStatus do
   @valid_transitions %{
     pending: [:executing, :cancelled, :expired],
     executing: [:completed, :failed],
-    failed: [:pending, :cancelled],  # retry goes back to pending
+    # retry goes back to pending
+    failed: [:pending, :cancelled],
     completed: [],
     cancelled: [],
     expired: []

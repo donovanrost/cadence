@@ -62,9 +62,8 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
   @spec create(attrs()) :: {:ok, OrganizationMembership.t()} | {:error, term()}
   def create(attrs) do
     with :ok <- check_user_quota(attrs[:organization_id]),
-         {:ok, membership} <- OrganizationMembership.new(attrs),
-         {:ok, saved} <- repo().save(membership) do
-      {:ok, saved}
+         {:ok, membership} <- OrganizationMembership.new(attrs) do
+      repo().save(membership)
     end
   end
 
@@ -79,9 +78,8 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
           {:ok, OrganizationMembership.t()} | {:error, term()}
   def change_role(membership_id, new_role) do
     with {:ok, membership} <- repo().find(membership_id),
-         {:ok, updated} <- OrganizationMembership.change_role(membership, new_role),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- OrganizationMembership.change_role(membership, new_role) do
+      repo().save(updated)
     end
   end
 
@@ -94,9 +92,8 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
           {:ok, OrganizationMembership.t()} | {:error, term()}
   def promote(membership_id, new_role) do
     with {:ok, membership} <- repo().find(membership_id),
-         {:ok, promoted} <- OrganizationMembership.promote(membership, new_role),
-         {:ok, saved} <- repo().save(promoted) do
-      {:ok, saved}
+         {:ok, promoted} <- OrganizationMembership.promote(membership, new_role) do
+      repo().save(promoted)
     end
   end
 
@@ -109,9 +106,8 @@ defmodule Cadence.Application.Organizations.MembershipOperations do
           {:ok, OrganizationMembership.t()} | {:error, term()}
   def demote(membership_id, new_role) do
     with {:ok, membership} <- repo().find(membership_id),
-         {:ok, demoted} <- OrganizationMembership.demote(membership, new_role),
-         {:ok, saved} <- repo().save(demoted) do
-      {:ok, saved}
+         {:ok, demoted} <- OrganizationMembership.demote(membership, new_role) do
+      repo().save(demoted)
     end
   end
 

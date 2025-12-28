@@ -2,11 +2,11 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commands
-  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
-  alias Cadence.Organizations.Organization
+  alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
   alias Cadence.Targets.Target
-  alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand, Argument}
 
   # Setup creates an org, mission, target, and commands for testing
   setup do

@@ -38,9 +38,10 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   use GenServer
   require Logger
 
-  alias Cadence.{Missions, Targets}
-  alias Cadence.Runtime.Commands.TargetPipeline
   alias Cadence.Domain.Targeting.Entities.Target
+  alias Cadence.Missions
+  alias Cadence.Runtime.Commands.TargetPipeline
+  alias Cadence.Targets
 
   @registry Cadence.MissionRegistry
 
@@ -249,7 +250,9 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   end
 
   defp handle_target_event(:created, target, state) do
-    Logger.info("Hot reload: Starting new pipeline for target #{target.identifier} (#{target.id})")
+    Logger.info(
+      "Hot reload: Starting new pipeline for target #{target.identifier} (#{target.id})"
+    )
 
     case do_start_pipeline(target, state) do
       {:ok, pid} ->
@@ -258,7 +261,10 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
         %{state | targets: targets}
 
       {:error, reason} ->
-        Logger.error("Hot reload: Failed to start pipeline for #{target.identifier}: #{inspect(reason)}")
+        Logger.error(
+          "Hot reload: Failed to start pipeline for #{target.identifier}: #{inspect(reason)}"
+        )
+
         state
     end
   end
@@ -284,7 +290,10 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
     case do_restart_pipeline(target, state) do
       {:ok, pid} ->
-        Logger.info("Hot reload: Pipeline for #{target.identifier} restarted, pid: #{inspect(pid)}")
+        Logger.info(
+          "Hot reload: Pipeline for #{target.identifier} restarted, pid: #{inspect(pid)}"
+        )
+
         targets = Map.put(state.targets, target.id, target)
         %{state | targets: targets}
 
@@ -294,17 +303,26 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
         case do_start_pipeline(target, state) do
           {:ok, pid} ->
-            Logger.info("Hot reload: Pipeline for #{target.identifier} started, pid: #{inspect(pid)}")
+            Logger.info(
+              "Hot reload: Pipeline for #{target.identifier} started, pid: #{inspect(pid)}"
+            )
+
             targets = Map.put(state.targets, target.id, target)
             %{state | targets: targets}
 
           {:error, reason} ->
-            Logger.error("Hot reload: Failed to start pipeline for #{target.identifier}: #{inspect(reason)}")
+            Logger.error(
+              "Hot reload: Failed to start pipeline for #{target.identifier}: #{inspect(reason)}"
+            )
+
             state
         end
 
       {:error, reason} ->
-        Logger.error("Hot reload: Failed to restart pipeline for #{target.identifier}: #{inspect(reason)}")
+        Logger.error(
+          "Hot reload: Failed to restart pipeline for #{target.identifier}: #{inspect(reason)}"
+        )
+
         state
     end
   end
@@ -329,9 +347,8 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   end
 
   defp do_restart_pipeline(%Target{} = target, state) do
-    with :ok <- do_stop_pipeline(target.id, state),
-         {:ok, pid} <- do_start_pipeline(target, state) do
-      {:ok, pid}
+    with :ok <- do_stop_pipeline(target.id, state) do
+      do_start_pipeline(target, state)
     end
   end
 
@@ -360,18 +377,21 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
             Logger.info(
               "Started TargetPipeline for target #{target.identifier} (#{target.id}), pid: #{inspect(pid)}"
             )
+
             Map.put(acc, target.id, target)
 
           {:error, {:already_started, pid}} ->
             Logger.debug(
               "TargetPipeline for target #{target.identifier} (#{target.id}) already started, pid: #{inspect(pid)}"
             )
+
             Map.put(acc, target.id, target)
 
           {:error, reason} ->
             Logger.error(
               "Failed to start TargetPipeline for target #{target.identifier} (#{target.id}): #{inspect(reason)}"
             )
+
             acc
         end
       end)

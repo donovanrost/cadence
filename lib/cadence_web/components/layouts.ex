@@ -122,7 +122,7 @@ defmodule CadenceWeb.Layouts do
               />
               <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
             </div>
-
+            
     <!-- Page content -->
             <div class="p-6">
               {@inner_content}
@@ -130,7 +130,7 @@ defmodule CadenceWeb.Layouts do
           </main>
         </div>
       </div>
-
+      
     <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
@@ -155,7 +155,7 @@ defmodule CadenceWeb.Layouts do
               </div>
             </.link>
           </div>
-
+          
     <!-- Navigation -->
           <nav class="flex-1 overflow-y-auto py-2">
             <div class="px-3 mb-2 sidebar-expanded-only">
@@ -165,7 +165,7 @@ defmodule CadenceWeb.Layouts do
               <.sidebar_navigation current_scope={@current_scope} current_path={@current_path} />
             </ul>
           </nav>
-
+          
     <!-- Toggle Button -->
           <button
             type="button"
@@ -267,7 +267,6 @@ defmodule CadenceWeb.Layouts do
         <:icon><.icon name="hero-signal" class="h-5 w-5" /></:icon>
         Targets
       </.sidebar_nav_item>
-
 
       <.sidebar_nav_group
         label="Settings"
@@ -459,7 +458,7 @@ defmodule CadenceWeb.Layouts do
               <.user_org_menu id="user-org-menu-mobile" current_scope={@current_scope} />
             </div>
           </div>
-
+          
     <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: User menu in top-right -->
@@ -499,7 +498,7 @@ defmodule CadenceWeb.Layouts do
               </span>
             </.link>
           </div>
-
+          
     <!-- Back to missions link -->
           <div class="py-2 border-b border-primary/20 sidebar-back-link">
             <.link
@@ -510,7 +509,7 @@ defmodule CadenceWeb.Layouts do
               <span class="sidebar-label">All Missions</span>
             </.link>
           </div>
-
+          
     <!-- Mission Header -->
           <%= if @mission do %>
             <div class="px-3 py-2 border-b border-primary/20 sidebar-expanded-only">
@@ -521,14 +520,14 @@ defmodule CadenceWeb.Layouts do
               </div>
             </div>
           <% end %>
-
+          
     <!-- Mission Navigation -->
           <nav class="flex-1 overflow-y-auto py-2">
             <ul class="menu menu-sm space-y-0.5">
               <.mission_navigation mission={@mission} current_path={@current_path} />
             </ul>
           </nav>
-
+          
     <!-- Toggle Button -->
           <button
             type="button"
@@ -743,26 +742,25 @@ defmodule CadenceWeb.Layouts do
             <div class="flex-1 text-center font-semibold text-lg">Profile Settings</div>
             <div class="w-10"></div>
           </div>
-
-          <!-- Main content area -->
+          
+    <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
             <!-- Desktop: Back link in top-right -->
             <div class="hidden lg:flex items-center justify-end p-4 border-b border-base-300">
               <.link navigate={~p"/missions"} class="btn btn-ghost btn-sm gap-2">
-                <.icon name="hero-arrow-left" class="h-4 w-4" />
-                Back to Cadence
+                <.icon name="hero-arrow-left" class="h-4 w-4" /> Back to Cadence
               </.link>
             </div>
-
-            <!-- Page content -->
+            
+    <!-- Page content -->
             <div class="p-6">
               {@inner_content}
             </div>
           </main>
         </div>
       </div>
-
-      <!-- Sidebar - HUD Mission Control Style -->
+      
+    <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="profile-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
         <div
@@ -779,8 +777,8 @@ defmodule CadenceWeb.Layouts do
               <span class="sidebar-label">Back to Cadence</span>
             </.link>
           </div>
-
-          <!-- User header -->
+          
+    <!-- User header -->
           <div class="p-3 border-b border-primary/20 sidebar-expanded-only">
             <div class="flex items-center gap-2">
               <.avatar email={@current_scope.user.email} size="sm" />
@@ -790,20 +788,20 @@ defmodule CadenceWeb.Layouts do
               </div>
             </div>
           </div>
-
-          <!-- Collapsed avatar - visible only when collapsed -->
+          
+    <!-- Collapsed avatar - visible only when collapsed -->
           <div class="p-2 border-b border-primary/20 sidebar-collapsed-only flex justify-center">
             <.avatar email={@current_scope.user.email} size="sm" />
           </div>
-
-          <!-- Navigation -->
+          
+    <!-- Navigation -->
           <nav class="flex-1 overflow-y-auto py-2">
             <ul class="menu menu-sm space-y-0.5">
               <.profile_navigation current_path={@current_path} />
             </ul>
           </nav>
-
-          <!-- Toggle Button -->
+          
+    <!-- Toggle Button -->
           <button
             type="button"
             class="sidebar-toggle-btn hidden lg:flex"

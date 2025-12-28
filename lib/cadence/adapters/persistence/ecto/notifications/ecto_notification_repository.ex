@@ -20,9 +20,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Notifications.Notification
   alias Cadence.Notifications.NotificationPreference
+  alias Cadence.Repo
 
   # ===========================================================================
   # NotificationRepository Implementation
@@ -64,7 +64,12 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
         offset: ^offset,
         preload: [:actor, :mission]
 
-    query = apply_filters(query, mission_id: mission_id, unread_only: unread_only, include_archived: include_archived)
+    query =
+      apply_filters(query,
+        mission_id: mission_id,
+        unread_only: unread_only,
+        include_archived: include_archived
+      )
 
     Repo.all(query)
   end
@@ -225,7 +230,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
         where: p.user_id == ^user_id,
         order_by: [asc: p.notification_type]
 
-    query = apply_preference_filters(query, mission_id: mission_id, include_mission_prefs: include_mission_prefs)
+    query =
+      apply_preference_filters(query,
+        mission_id: mission_id,
+        include_mission_prefs: include_mission_prefs
+      )
 
     Repo.all(query)
   end

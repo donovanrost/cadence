@@ -198,62 +198,12 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   end
 
   defp load_and_cache(mission_id) do
-    alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
-
     # Load from database
     derived_items = DerivedItem.list_enabled(mission_id)
     derived_defs = Enum.map(derived_items, &DerivedItem.to_compute_format/1)
 
-    # Sort by dependencies
-    case DerivedItems.sort_by_dependencies(derived_defs) do
-      {:ok, sorted_defs} ->
-        # Pre-extract required variables and pre-parse AST (avoids parsing in hot path)
-        # Also assign topological order index for maintaining sort after filtering
-        alias Cadence.Telemetry.DerivedItems.ExpressionParser
-
-        enriched_defs =
-          sorted_defs
-          |> Enum.with_index()
-          |> Enum.map(fn {def, topo_order} ->
-            expression = get_in(def.derived_config, ["expression"]) || ""
-
-            required_vars =
-              case ExpressionEvaluator.extract_variables(expression) do
-                {:ok, vars} -> vars
-                {:error, _} -> []
-              end
-
-            # Pre-parse the expression to AST (huge performance win - avoids parsing per evaluation)
-            parsed_ast =
-              case ExpressionParser.parse(expression) do
-                {:ok, ast} -> ast
-                {:error, _} -> nil
-              end
-
-            # Pre-compute whether expression has stateful functions
-            # This allows skipping stateful evaluation overhead for pure expressions
-            has_stateful =
-              if parsed_ast do
-                ExpressionParser.ast_has_stateful?(parsed_ast)
-              else
-                ExpressionParser.has_stateful_functions?(expression)
-              end
-
-            def
-            |> Map.put(:required_vars, required_vars)
-            |> Map.put(:topo_order, topo_order)
-            |> Map.put(:parsed_ast, parsed_ast)
-            |> Map.put(:has_stateful, has_stateful)
-          end)
-
-        # Compute root packets for each item (which raw telemetry packets it depends on)
-        derived_names = MapSet.new(enriched_defs, & &1.name)
-        enriched_defs = compute_root_packets(enriched_defs, derived_names)
-
-        # Build packet index for O(1) lookup
-        packet_index = build_packet_index(enriched_defs)
-
-        # Cache the enriched definitions and index
+    case build_enriched_defs(derived_defs) do
+      {:ok, {enriched_defs, packet_index}} ->
         cached_at = System.monotonic_time(:millisecond)
         :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
 
@@ -266,7 +216,6 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
       {:error, reason} = error ->
         Logger.error("Failed to sort derived items for mission #{mission_id}: #{inspect(reason)}")
-
         error
     end
   end
@@ -325,59 +274,63 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
   # Load without caching (fallback when cache not started)
   defp load_without_cache(mission_id) do
-    alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
-
     derived_items = DerivedItem.list_enabled(mission_id)
     derived_defs = Enum.map(derived_items, &DerivedItem.to_compute_format/1)
 
+    build_enriched_defs(derived_defs)
+  end
+
+  defp build_enriched_defs(derived_defs) do
     case DerivedItems.sort_by_dependencies(derived_defs) do
       {:ok, sorted_defs} ->
-        # Enrich with required variables, topological order, and pre-parsed AST
-        alias Cadence.Telemetry.DerivedItems.ExpressionParser
-
-        enriched_defs =
-          sorted_defs
-          |> Enum.with_index()
-          |> Enum.map(fn {def, topo_order} ->
-            expression = get_in(def.derived_config, ["expression"]) || ""
-
-            required_vars =
-              case ExpressionEvaluator.extract_variables(expression) do
-                {:ok, vars} -> vars
-                {:error, _} -> []
-              end
-
-            parsed_ast =
-              case ExpressionParser.parse(expression) do
-                {:ok, ast} -> ast
-                {:error, _} -> nil
-              end
-
-            # Pre-compute whether expression has stateful functions
-            has_stateful =
-              if parsed_ast do
-                ExpressionParser.ast_has_stateful?(parsed_ast)
-              else
-                ExpressionParser.has_stateful_functions?(expression)
-              end
-
-            def
-            |> Map.put(:required_vars, required_vars)
-            |> Map.put(:topo_order, topo_order)
-            |> Map.put(:parsed_ast, parsed_ast)
-            |> Map.put(:has_stateful, has_stateful)
-          end)
-
-        # Compute root packets and build index
+        enriched_defs = enrich_defs(sorted_defs)
         derived_names = MapSet.new(enriched_defs, & &1.name)
         enriched_defs = compute_root_packets(enriched_defs, derived_names)
         packet_index = build_packet_index(enriched_defs)
-
         {:ok, {enriched_defs, packet_index}}
 
       error ->
         error
     end
+  end
+
+  defp enrich_defs(sorted_defs) do
+    sorted_defs
+    |> Enum.with_index()
+    |> Enum.map(fn {def, topo_order} -> enrich_def(def, topo_order) end)
+  end
+
+  defp enrich_def(def, topo_order) do
+    alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
+    alias Cadence.Telemetry.DerivedItems.ExpressionParser
+
+    expression = get_in(def.derived_config, ["expression"]) || ""
+
+    required_vars =
+      case ExpressionEvaluator.extract_variables(expression) do
+        {:ok, vars} -> vars
+        {:error, _} -> []
+      end
+
+    parsed_ast =
+      case ExpressionParser.parse(expression) do
+        {:ok, ast} -> ast
+        {:error, _} -> nil
+      end
+
+    # Pre-compute whether expression has stateful functions
+    has_stateful =
+      if parsed_ast do
+        ExpressionParser.ast_has_stateful?(parsed_ast)
+      else
+        ExpressionParser.has_stateful_functions?(expression)
+      end
+
+    def
+    |> Map.put(:required_vars, required_vars)
+    |> Map.put(:topo_order, topo_order)
+    |> Map.put(:parsed_ast, parsed_ast)
+    |> Map.put(:has_stateful, has_stateful)
   end
 
   defp schedule_cleanup do

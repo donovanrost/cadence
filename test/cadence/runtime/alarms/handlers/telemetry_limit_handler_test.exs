@@ -9,9 +9,10 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandlerTest do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
+  alias Cadence.Recordings
   alias Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandler
   alias Cadence.Runtime.Alarms.RuleCache
-  alias Cadence.Recordings
+  alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -21,7 +22,7 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandlerTest do
 
   setup do
     # Use shared mode so RuleCache GenServer can access the sandbox
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
 
     org = organization_fixture()
     mission = mission_fixture(organization: org)

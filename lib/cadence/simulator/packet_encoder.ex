@@ -189,9 +189,11 @@ defmodule Cadence.Simulator.PacketEncoder do
         fn apid -> SequenceAllocator.next(allocator, apid) end
       )
   """
-  @spec encode_with_sequence(t(), String.t(), %{String.t() => any()}, (non_neg_integer() -> non_neg_integer())) ::
+  @spec encode_with_sequence(t(), String.t(), %{String.t() => any()}, (non_neg_integer() ->
+                                                                         non_neg_integer())) ::
           {:ok, [{String.t(), binary()}]} | {:error, term()}
-  def encode_with_sequence(encoder, target_id, values, sequence_fn) when is_function(sequence_fn, 1) do
+  def encode_with_sequence(encoder, target_id, values, sequence_fn)
+      when is_function(sequence_fn, 1) do
     # Group values by packet name
     values_by_packet =
       values

@@ -134,12 +134,10 @@ defmodule CadenceWeb.NotificationComponents do
 
   def notification_card(assigns) do
     ~H"""
-    <div
-      class={[
-        "card card-compact bg-base-100 border border-base-300 hover:border-base-400 transition-colors group",
-        is_nil(@notification.read_at) && "border-l-4 border-l-primary"
-      ]}
-    >
+    <div class={[
+      "card card-compact bg-base-100 border border-base-300 hover:border-base-400 transition-colors group",
+      is_nil(@notification.read_at) && "border-l-4 border-l-primary"
+    ]}>
       <div class="card-body">
         <div class="flex items-start justify-between gap-4">
           <div class="flex items-start gap-3 flex-1 min-w-0">
@@ -223,8 +221,8 @@ defmodule CadenceWeb.NotificationComponents do
     cond do
       diff_seconds < 60 -> "just now"
       diff_seconds < 3600 -> "#{div(diff_seconds, 60)}m ago"
-      diff_seconds < 86400 -> "#{div(diff_seconds, 3600)}h ago"
-      diff_seconds < 604_800 -> "#{div(diff_seconds, 86400)}d ago"
+      diff_seconds < 86_400 -> "#{div(diff_seconds, 3600)}h ago"
+      diff_seconds < 604_800 -> "#{div(diff_seconds, 86_400)}d ago"
       true -> Calendar.strftime(datetime, "%b %d")
     end
   end

@@ -20,8 +20,8 @@ defmodule Cadence.Domain.Organizations.Entities.Organization do
   """
 
   alias Cadence.Domain.Organizations.ValueObjects.OrganizationStatus
-  alias Cadence.Domain.Organizations.ValueObjects.SubscriptionTier
   alias Cadence.Domain.Organizations.ValueObjects.Quotas
+  alias Cadence.Domain.Organizations.ValueObjects.SubscriptionTier
 
   @type t :: %__MODULE__{
           id: String.t() | nil,

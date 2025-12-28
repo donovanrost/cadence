@@ -10,9 +10,9 @@ defmodule Cadence.DashboardLayouts do
   - `Cadence.Application.DashboardLayouts.DashboardLayoutOperations` for write operations
   """
 
-  alias Cadence.Domain.DashboardLayouts.Entities.DashboardLayout
-  alias Cadence.Application.DashboardLayouts.DashboardLayoutQueries
   alias Cadence.Application.DashboardLayouts.DashboardLayoutOperations
+  alias Cadence.Application.DashboardLayouts.DashboardLayoutQueries
+  alias Cadence.Domain.DashboardLayouts.Entities.DashboardLayout
 
   # ============================================================================
   # Query Operations

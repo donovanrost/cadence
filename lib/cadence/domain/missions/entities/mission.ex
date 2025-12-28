@@ -25,8 +25,8 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
       {:ok, mission} = Mission.advance_phase(mission, :testing)
   """
 
-  alias Cadence.Domain.Missions.ValueObjects.MissionStatus
   alias Cadence.Domain.Missions.ValueObjects.MissionPhase
+  alias Cadence.Domain.Missions.ValueObjects.MissionStatus
 
   @type t :: %__MODULE__{
           id: String.t() | nil,

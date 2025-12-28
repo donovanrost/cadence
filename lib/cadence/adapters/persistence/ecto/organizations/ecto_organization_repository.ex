@@ -21,10 +21,10 @@ defmodule Cadence.Adapters.Persistence.Ecto.Organizations.EctoOrganizationReposi
 
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Organizations.Organization, as: OrganizationSchema
   alias Cadence.Domain.Organizations.Entities.Organization, as: OrganizationEntity
   alias Cadence.Domain.Organizations.ValueObjects.Quotas
+  alias Cadence.Organizations.Organization, as: OrganizationSchema
+  alias Cadence.Repo
 
   # ===========================================================================
   # Organization CRUD Operations
@@ -167,12 +167,13 @@ defmodule Cadence.Adapters.Persistence.Ecto.Organizations.EctoOrganizationReposi
     tier = parse_tier(schema.subscription_tier)
 
     # Build quotas from schema fields
-    quotas = Quotas.from_map(%{
-      max_missions: schema.max_missions,
-      max_targets_per_mission: schema.max_targets_per_mission,
-      max_users: schema.max_users,
-      storage_quota_gb: schema.storage_quota_gb
-    })
+    quotas =
+      Quotas.from_map(%{
+        max_missions: schema.max_missions,
+        max_targets_per_mission: schema.max_targets_per_mission,
+        max_users: schema.max_users,
+        storage_quota_gb: schema.storage_quota_gb
+      })
 
     %OrganizationEntity{
       id: schema.id,

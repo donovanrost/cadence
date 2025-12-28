@@ -9,9 +9,9 @@ defmodule Cadence.Notifications.DigestWorker do
 
   import Ecto.Query
 
-  alias Cadence.Notifications.{Notification, NotificationPreference}
-  alias Cadence.Accounts.UserNotifier
   alias Cadence.Accounts
+  alias Cadence.Accounts.UserNotifier
+  alias Cadence.Notifications.{Notification, NotificationPreference}
   alias Cadence.Repo
 
   @impl Oban.Worker

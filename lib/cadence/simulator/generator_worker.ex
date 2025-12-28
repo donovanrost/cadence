@@ -32,7 +32,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
   use GenServer
   require Logger
 
-  alias Cadence.Simulator.{PacketEncoder, SequenceAllocator, SendBuffer, SimulatorMetrics}
+  alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
 
   defstruct [
     :worker_id,
@@ -69,7 +69,14 @@ defmodule Cadence.Simulator.GeneratorWorker do
   """
   def start_link(opts) do
     worker_id = Keyword.fetch!(opts, :worker_id)
-    name = Keyword.get(opts, :name, {:via, Registry, {Cadence.MissionRegistry, {:generator_worker, worker_id}}})
+
+    name =
+      Keyword.get(
+        opts,
+        :name,
+        {:via, Registry, {Cadence.MissionRegistry, {:generator_worker, worker_id}}}
+      )
+
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
@@ -207,7 +214,10 @@ defmodule Cadence.Simulator.GeneratorWorker do
         :ok
 
       {:error, reason, _new_provider_state} ->
-        Logger.warning("GeneratorWorker #{state.worker_id} generation error at step #{step}: #{inspect(reason)}")
+        Logger.warning(
+          "GeneratorWorker #{state.worker_id} generation error at step #{step}: #{inspect(reason)}"
+        )
+
         {:error, reason}
     end
   end

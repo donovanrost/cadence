@@ -23,13 +23,13 @@ defmodule Cadence.Targets do
   - `get_target_schema_unscoped/1` / `get_target_schema_unscoped!/1` - Returns Ecto schema
   """
 
+  alias Cadence.Application.Targeting.{TargetOperations, TargetQueries}
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.Targets.Target, as: TargetSchema
-  alias Cadence.Application.Targeting.{TargetQueries, TargetOperations}
   alias Cadence.Missions.Mission
-  alias Cadence.Runtime.Missions.MissionInstance
-  alias Cadence.Runtime.Commands.TargetPipelineSupervisor
   alias Cadence.Repo
+  alias Cadence.Runtime.Commands.TargetPipelineSupervisor
+  alias Cadence.Runtime.Missions.MissionInstance
+  alias Cadence.Targets.Target, as: TargetSchema
 
   import Ecto.Query, only: [from: 2]
 
@@ -56,9 +56,14 @@ defmodule Cadence.Targets do
   Returns Ecto schemas (not domain entities) for use in views that need
   association data like `target.definition_set.database.name`.
   """
-  @spec list_targets_with_preloads(Mission.t() | MissionEntity.t() | String.t()) :: [TargetSchema.t()]
-  def list_targets_with_preloads(%Mission{id: mission_id}), do: list_targets_with_preloads(mission_id)
-  def list_targets_with_preloads(%MissionEntity{id: mission_id}), do: list_targets_with_preloads(mission_id)
+  @spec list_targets_with_preloads(Mission.t() | MissionEntity.t() | String.t()) :: [
+          TargetSchema.t()
+        ]
+  def list_targets_with_preloads(%Mission{id: mission_id}),
+    do: list_targets_with_preloads(mission_id)
+
+  def list_targets_with_preloads(%MissionEntity{id: mission_id}),
+    do: list_targets_with_preloads(mission_id)
 
   def list_targets_with_preloads(mission_id) when is_binary(mission_id) do
     from(t in TargetSchema,
@@ -304,7 +309,8 @@ defmodule Cadence.Targets do
   - `:definition_set_id` - Definition set ID
   - `:bucket_id` - Bucket ID
   """
-  @spec update_target(Target.t() | TargetSchema.t(), map()) :: {:ok, Target.t()} | {:error, term()}
+  @spec update_target(Target.t() | TargetSchema.t(), map()) ::
+          {:ok, Target.t()} | {:error, term()}
   def update_target(%Target{} = target, attrs) do
     normalized_attrs = normalize_attrs(attrs)
     TargetOperations.update(target, normalized_attrs)
@@ -444,8 +450,11 @@ defmodule Cadence.Targets do
       _pid ->
         # Use start_pipeline_by_id which loads the target with definition_set
         case TargetPipelineSupervisor.start_pipeline_by_id(target.mission_id, target.id) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
+          {:ok, _pid} ->
+            :ok
+
+          {:error, {:already_started, _pid}} ->
+            :ok
 
           {:error, reason} ->
             require Logger
@@ -462,8 +471,11 @@ defmodule Cadence.Targets do
 
       _pid ->
         case TargetPipelineSupervisor.stop_pipeline(target.mission_id, target.id) do
-          :ok -> :ok
-          {:error, :not_found} -> :ok
+          :ok ->
+            :ok
+
+          {:error, :not_found} ->
+            :ok
 
           {:error, reason} ->
             require Logger
@@ -474,8 +486,8 @@ defmodule Cadence.Targets do
   end
 
   defp cleanup_target_commands(%Target{} = target) do
-    alias Cadence.Runtime.Commands.TargetQueue
     alias Cadence.Ports.Repository.Commanding.QueueRepository
+    alias Cadence.Runtime.Commands.TargetQueue
 
     case TargetQueue.whereis(target.mission_id, target.id) do
       nil ->

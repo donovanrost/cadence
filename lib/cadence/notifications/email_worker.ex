@@ -5,9 +5,9 @@ defmodule Cadence.Notifications.EmailWorker do
 
   use Oban.Worker, queue: :notifications, max_attempts: 3
 
+  alias Cadence.Accounts.UserNotifier
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
-  alias Cadence.Accounts.UserNotifier
   alias Cadence.Repo
 
   @impl Oban.Worker

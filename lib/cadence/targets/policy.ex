@@ -9,9 +9,9 @@ defmodule Cadence.Targets.Policy do
   @behaviour Bodyguard.Policy
 
   alias Cadence.Accounts.User
-  alias Cadence.Targets.Target
   alias Cadence.Missions.Mission
   alias Cadence.Repo
+  alias Cadence.Targets.Target
 
   # Authorize based on mission-level permissions
   def authorize(action, %User{} = user, %Target{mission_id: mission_id}) do

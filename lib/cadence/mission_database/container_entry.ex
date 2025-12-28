@@ -50,7 +50,7 @@ defmodule Cadence.MissionDatabase.ContainerEntry do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.MissionDatabase.{Container, Parameter, MatchCriteria}
+  alias Cadence.MissionDatabase.{Container, MatchCriteria, Parameter}
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

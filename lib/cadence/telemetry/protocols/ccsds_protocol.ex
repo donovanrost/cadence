@@ -396,7 +396,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
     new_state = %{
       state
       | packets_written: state.packets_written + 1,
-        sequence_count: rem(state.sequence_count + 1, 16384)
+        sequence_count: rem(state.sequence_count + 1, 16_384)
     }
 
     {:ok, [framed], new_state}

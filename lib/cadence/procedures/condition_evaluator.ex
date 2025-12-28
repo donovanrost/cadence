@@ -122,27 +122,31 @@ defmodule Cadence.Procedures.ConditionEvaluator do
     target_id = context[:target_id]
 
     # Item path format: "PACKET.item" or "TARGET.PACKET.item"
-    parts = String.split(item_path, ".")
-
-    {effective_target, packet_name, item_name} =
-      case parts do
-        [target, packet, item] -> {target, packet, item}
-        [packet, item] -> {target_id, packet, item}
-        _ -> {nil, nil, nil}
-      end
-
-    if packet_name && item_name do
-      case CVT.get(mission_id, effective_target, packet_name, item_name) do
-        {:ok, %{value: value}} -> {:ok, value}
-        {:ok, value} when not is_map(value) -> {:ok, value}
-        {:error, :not_found} -> {:error, :not_found}
-        _ -> {:error, :cvt_error}
-      end
+    with {:ok, effective_target, packet_name, item_name} <- parse_item_path(item_path, target_id),
+         {:ok, value} <- fetch_cvt_value(mission_id, effective_target, packet_name, item_name) do
+      {:ok, value}
     else
-      {:error, :invalid_item_format}
+      {:error, reason} -> {:error, reason}
     end
   rescue
     _ -> {:error, :cvt_error}
+  end
+
+  defp parse_item_path(item_path, default_target) do
+    case String.split(item_path, ".") do
+      [target, packet, item] -> {:ok, target, packet, item}
+      [packet, item] -> {:ok, default_target, packet, item}
+      _ -> {:error, :invalid_item_format}
+    end
+  end
+
+  defp fetch_cvt_value(mission_id, target_id, packet_name, item_name) do
+    case CVT.get(mission_id, target_id, packet_name, item_name) do
+      {:ok, %{value: value}} -> {:ok, value}
+      {:ok, value} when not is_map(value) -> {:ok, value}
+      {:error, :not_found} -> {:error, :not_found}
+      _ -> {:error, :cvt_error}
+    end
   end
 
   # ============================================================================
@@ -286,34 +290,51 @@ defmodule Cadence.Procedures.ConditionEvaluator do
   defp parse_value(str) when is_binary(str) do
     str = String.trim(str)
 
-    cond do
-      str == "true" ->
-        true
-
-      str == "false" ->
-        false
-
-      str == "nil" ->
-        nil
-
-      String.starts_with?(str, "\"") and String.ends_with?(str, "\"") ->
-        String.slice(str, 1..-2//1)
-
-      String.starts_with?(str, "'") and String.ends_with?(str, "'") ->
-        String.slice(str, 1..-2//1)
-
-      String.match?(str, ~r/^-?\d+$/) ->
-        String.to_integer(str)
-
-      String.match?(str, ~r/^-?\d+\.\d+$/) ->
-        String.to_float(str)
-
-      true ->
-        str
+    case parse_literal_value(str) do
+      {:ok, value} -> value
+      :error -> parse_string_or_number(str)
     end
   end
 
   defp parse_value(value), do: value
+
+  defp parse_literal_value("true"), do: {:ok, true}
+  defp parse_literal_value("false"), do: {:ok, false}
+  defp parse_literal_value("nil"), do: {:ok, nil}
+  defp parse_literal_value(_), do: :error
+
+  defp parse_string_or_number(str) do
+    case parse_quoted_string(str) do
+      {:ok, value} -> value
+      :error -> parse_number_or_default(str)
+    end
+  end
+
+  defp parse_quoted_string(str) do
+    cond do
+      String.starts_with?(str, "\"") and String.ends_with?(str, "\"") ->
+        {:ok, String.slice(str, 1..-2//1)}
+
+      String.starts_with?(str, "'") and String.ends_with?(str, "'") ->
+        {:ok, String.slice(str, 1..-2//1)}
+
+      true ->
+        :error
+    end
+  end
+
+  defp parse_number_or_default(str) do
+    case Float.parse(str) do
+      {num, ""} ->
+        num
+
+      _ ->
+        case Integer.parse(str) do
+          {num, ""} -> num
+          _ -> str
+        end
+    end
+  end
 
   defp get_nested_value(value, []), do: value
   defp get_nested_value(nil, _), do: nil

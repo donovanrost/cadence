@@ -286,9 +286,7 @@ defmodule Cadence.Telemetry.ProtocolChain do
   end
 
   def handle_call({:update_protocols, protocol_configs}, _from, state) do
-    Logger.info(
-      "Hot reload: Updating protocol chain for interface_id=#{state.interface_id}"
-    )
+    Logger.info("Hot reload: Updating protocol chain for interface_id=#{state.interface_id}")
 
     # Reinitialize read and write chains with new protocols
     read_chain = Processor.init_chain(protocol_configs, "read")

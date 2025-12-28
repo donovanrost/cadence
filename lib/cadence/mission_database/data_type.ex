@@ -61,12 +61,12 @@ defmodule Cadence.MissionDatabase.DataType do
   import Ecto.Changeset
 
   alias Cadence.MissionDatabase.{
-    DataEncoding,
-    EnumerationValue,
     AggregateMember,
-    ArrayDimensions,
     AlarmDefinition,
     Algorithm,
+    ArrayDimensions,
+    DataEncoding,
+    EnumerationValue,
     Unit
   }
 

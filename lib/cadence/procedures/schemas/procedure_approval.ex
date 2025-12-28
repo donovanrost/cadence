@@ -15,8 +15,8 @@ defmodule Cadence.Procedures.ProcedureApproval do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Procedures.ProcedureVersion
   alias Cadence.Accounts.User
+  alias Cadence.Procedures.ProcedureVersion
 
   @type t :: %__MODULE__{}
 

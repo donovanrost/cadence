@@ -27,9 +27,9 @@ defmodule Cadence.Alarms.CoverageReport do
   operators with visibility into alarm coverage gaps.
   """
 
-  alias Cadence.Repo
   alias Cadence.Alarms.CoverageAnalyzer
   alias Cadence.MissionDatabase.DefinitionSet
+  alias Cadence.Repo
 
   @type report :: %{
           generated_at: DateTime.t(),
@@ -175,8 +175,8 @@ defmodule Cadence.Alarms.CoverageReport do
     # CoverageAnalyzer to accept a definition_set directly
     import Ecto.Query
 
+    alias Cadence.MissionDatabase.{Container, ContainerEntry, DataType, Parameter}
     alias Cadence.Repo
-    alias Cadence.MissionDatabase.{Container, ContainerEntry, Parameter, DataType}
 
     query =
       from c in Container,

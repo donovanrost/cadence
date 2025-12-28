@@ -6,10 +6,11 @@ defmodule Cadence.Missions.MissionLifecycleTest do
   alias Cadence.Missions
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Ecto.Adapters.SQL.Sandbox
 
   # Allow mission supervisor spawned processes to access the database
   setup do
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
     :ok
   end
 

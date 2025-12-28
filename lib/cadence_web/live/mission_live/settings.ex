@@ -72,14 +72,12 @@ defmodule CadenceWeb.MissionLive.Settings do
 
     # Extract key from _target (the field that triggered the change) or find non-internal key
     key =
-      cond do
-        Map.has_key?(params, "_target") ->
-          List.first(params["_target"])
-
-        true ->
-          params
-          |> Map.keys()
-          |> Enum.find(fn k -> is_binary(k) and not String.starts_with?(k, "_") end) || ""
+      if Map.has_key?(params, "_target") do
+        List.first(params["_target"])
+      else
+        params
+        |> Map.keys()
+        |> Enum.find(fn k -> is_binary(k) and not String.starts_with?(k, "_") end) || ""
       end
 
     value = Map.get(params, key, "")

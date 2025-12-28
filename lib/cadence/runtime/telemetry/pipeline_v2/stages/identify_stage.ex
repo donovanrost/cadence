@@ -21,8 +21,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.IdentifyStage do
 
   use Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour
 
-  alias Cadence.Telemetry.Packet
   alias Cadence.Runtime.Telemetry.PacketIdentifier
+  alias Cadence.Telemetry.Packet
 
   @impl true
   def stage_name, do: :identify

@@ -35,10 +35,10 @@ defmodule Cadence.Accounts do
   alias Cadence.Domain.Accounts.Entities.UserToken, as: UserTokenEntity
 
   # Application services
-  alias Cadence.Application.Accounts.UserQueries
-  alias Cadence.Application.Accounts.UserOperations
-  alias Cadence.Application.Accounts.SessionOperations
   alias Cadence.Application.Accounts.MagicLinkOperations
+  alias Cadence.Application.Accounts.SessionOperations
+  alias Cadence.Application.Accounts.UserOperations
+  alias Cadence.Application.Accounts.UserQueries
 
   # Ecto schemas needed for form helpers and email delivery
   alias Cadence.Accounts.User, as: UserSchema
@@ -211,8 +211,11 @@ defmodule Cadence.Accounts do
   Accepts domain entities, Ecto schemas, or user IDs.
   """
   @spec generate_user_session_token(UserEntity.t() | UserSchema.t() | String.t()) :: binary()
-  def generate_user_session_token(%UserEntity{id: user_id}), do: generate_user_session_token(user_id)
-  def generate_user_session_token(%UserSchema{id: user_id}), do: generate_user_session_token(user_id)
+  def generate_user_session_token(%UserEntity{id: user_id}),
+    do: generate_user_session_token(user_id)
+
+  def generate_user_session_token(%UserSchema{id: user_id}),
+    do: generate_user_session_token(user_id)
 
   def generate_user_session_token(user_id) when is_binary(user_id) do
     case SessionOperations.create_session_token(user_id) do
@@ -300,7 +303,11 @@ defmodule Cadence.Accounts do
       {:ok, encoded_token} ->
         # Need to work with schema for email delivery
         user_schema = domain_to_schema(user)
-        UserNotifier.deliver_update_email_instructions(user_schema, update_email_url_fun.(encoded_token))
+
+        UserNotifier.deliver_update_email_instructions(
+          user_schema,
+          update_email_url_fun.(encoded_token)
+        )
 
       error ->
         error
@@ -378,6 +385,7 @@ defmodule Cadence.Accounts do
       {k, v}, acc when is_binary(k) ->
         atom_key = String.to_existing_atom(k)
         Map.put(acc, atom_key, v)
+
       {k, v}, acc when is_atom(k) ->
         Map.put(acc, k, v)
     end)

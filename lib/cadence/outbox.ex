@@ -64,8 +64,8 @@ defmodule Cadence.Outbox do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Outbox.Event
+  alias Cadence.Repo
   alias Ecto.Multi
 
   @pubsub Cadence.PubSub

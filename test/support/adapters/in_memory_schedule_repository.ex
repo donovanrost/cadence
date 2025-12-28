@@ -84,7 +84,11 @@ defmodule Cadence.Test.Adapters.InMemoryScheduleRepository do
       state
       |> Map.values()
       |> Enum.filter(&(&1.organization_id == organization_id))
-      |> apply_filters(mission_id: mission_id, procedure_id: procedure_id, enabled_only: enabled_only)
+      |> apply_filters(
+        mission_id: mission_id,
+        procedure_id: procedure_id,
+        enabled_only: enabled_only
+      )
       |> Enum.sort_by(& &1.name)
       |> Enum.drop(offset)
       |> maybe_take(limit)
@@ -141,17 +145,21 @@ defmodule Cadence.Test.Adapters.InMemoryScheduleRepository do
     now = DateTime.utc_now()
     updated_schedule = %{schedule | updated_at: now}
 
-    case Agent.get_and_update(name, fn state ->
-           if Map.has_key?(state, id) do
-             {{:ok, updated_schedule}, Map.put(state, id, updated_schedule)}
-           else
-             {{:error, :not_found}, state}
-           end
-         end) do
-      {:ok, schedule} -> {:ok, schedule}
-      {:error, :not_found} -> {:error, :not_found}
+    name
+    |> Agent.get_and_update(&update_existing_schedule(&1, id, updated_schedule))
+    |> normalize_save_result()
+  end
+
+  defp update_existing_schedule(state, id, updated_schedule) do
+    if Map.has_key?(state, id) do
+      {{:ok, updated_schedule}, Map.put(state, id, updated_schedule)}
+    else
+      {{:error, :not_found}, state}
     end
   end
+
+  defp normalize_save_result({:ok, schedule}), do: {:ok, schedule}
+  defp normalize_save_result({:error, :not_found}), do: {:error, :not_found}
 
   @impl true
   def delete(%Schedule{id: id}, name \\ __MODULE__) do

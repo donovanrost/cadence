@@ -54,9 +54,8 @@ defmodule Cadence.Application.Missions.MembershipOperations do
              mission_id: mission_id,
              user_id: user_id,
              role: role
-           }),
-         {:ok, saved} <- repo().save_membership(membership) do
-      {:ok, saved}
+           }) do
+      repo().save_membership(membership)
     end
   end
 
@@ -71,9 +70,8 @@ defmodule Cadence.Application.Missions.MembershipOperations do
           {:ok, MissionMembership.t()} | {:error, term()}
   def change_role(membership_id, new_role) do
     with {:ok, membership} <- repo().find_membership(membership_id),
-         {:ok, updated} <- MissionMembership.update_role(membership, new_role),
-         {:ok, saved} <- repo().save_membership(updated) do
-      {:ok, saved}
+         {:ok, updated} <- MissionMembership.update_role(membership, new_role) do
+      repo().save_membership(updated)
     end
   end
 

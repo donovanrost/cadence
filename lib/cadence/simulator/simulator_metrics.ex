@@ -135,49 +135,54 @@ defmodule Cadence.Simulator.SimulatorMetrics do
         empty_stats()
 
       ref ->
-        started_at = get_started_at(coordinator_id)
-        duration_ms = System.monotonic_time(:millisecond) - started_at
-        duration_sec = max(duration_ms / 1000, 0.001)
+        build_stats(ref, coordinator_id)
+    end
+  end
 
-        packets_generated = :counters.get(ref, @slots[:packets_generated])
-        packets_encoded = :counters.get(ref, @slots[:packets_encoded])
-        packets_sent = :counters.get(ref, @slots[:packets_sent])
-        bytes_sent = :counters.get(ref, @slots[:bytes_sent])
-        packets_dropped = :counters.get(ref, @slots[:packets_dropped])
+  defp build_stats(ref, coordinator_id) do
+    started_at = get_started_at(coordinator_id)
+    duration_ms = System.monotonic_time(:millisecond) - started_at
+    duration_sec = max(duration_ms / 1000, 0.001)
 
-        # Build timing stats
-        timing =
-          Enum.reduce(@timing_stages, %{}, fn stage, acc ->
-            sum_key = :"latency_sum_#{stage}"
-            count_key = :"latency_count_#{stage}"
+    %{
+      packets_generated: :counters.get(ref, @slots[:packets_generated]),
+      packets_encoded: :counters.get(ref, @slots[:packets_encoded]),
+      packets_sent: :counters.get(ref, @slots[:packets_sent]),
+      bytes_sent: :counters.get(ref, @slots[:bytes_sent]),
+      packets_dropped: :counters.get(ref, @slots[:packets_dropped]),
+      timing: build_timing_stats(ref),
+      duration_ms: duration_ms,
+      duration_sec: duration_sec,
+      packets_per_sec: Float.round(:counters.get(ref, @slots[:packets_sent]) / duration_sec, 1),
+      bytes_per_sec: Float.round(:counters.get(ref, @slots[:bytes_sent]) / duration_sec, 1),
+      mbps:
+        Float.round(
+          :counters.get(ref, @slots[:bytes_sent]) * 8 / duration_sec / 1_000_000,
+          2
+        )
+    }
+  end
 
-            sum_slot = Map.get(@slots, sum_key)
-            count_slot = Map.get(@slots, count_key)
+  defp build_timing_stats(ref) do
+    Enum.reduce(@timing_stages, %{}, fn stage, acc ->
+      case stage_timing_stats(ref, stage) do
+        nil -> acc
+        stats -> Map.put(acc, stage, stats)
+      end
+    end)
+  end
 
-            if sum_slot && count_slot do
-              sum = :counters.get(ref, sum_slot)
-              count = :counters.get(ref, count_slot)
-              avg = if count > 0, do: Float.round(sum / count, 1), else: 0.0
+  defp stage_timing_stats(ref, stage) do
+    sum_slot = Map.get(@slots, :"latency_sum_#{stage}")
+    count_slot = Map.get(@slots, :"latency_count_#{stage}")
 
-              Map.put(acc, stage, %{avg_us: avg, count: count})
-            else
-              acc
-            end
-          end)
-
-        %{
-          packets_generated: packets_generated,
-          packets_encoded: packets_encoded,
-          packets_sent: packets_sent,
-          bytes_sent: bytes_sent,
-          packets_dropped: packets_dropped,
-          timing: timing,
-          duration_ms: duration_ms,
-          duration_sec: duration_sec,
-          packets_per_sec: Float.round(packets_sent / duration_sec, 1),
-          bytes_per_sec: Float.round(bytes_sent / duration_sec, 1),
-          mbps: Float.round(bytes_sent * 8 / duration_sec / 1_000_000, 2)
-        }
+    if sum_slot && count_slot do
+      sum = :counters.get(ref, sum_slot)
+      count = :counters.get(ref, count_slot)
+      avg = if count > 0, do: Float.round(sum / count, 1), else: 0.0
+      %{avg_us: avg, count: count}
+    else
+      nil
     end
   end
 
@@ -195,7 +200,10 @@ defmodule Cadence.Simulator.SimulatorMetrics do
           :counters.sub(ref, slot, current)
         end
 
-        :ets.insert(@table_name, {{coordinator_id, :started_at}, System.monotonic_time(:millisecond)})
+        :ets.insert(
+          @table_name,
+          {{coordinator_id, :started_at}, System.monotonic_time(:millisecond)}
+        )
     end
 
     :ok

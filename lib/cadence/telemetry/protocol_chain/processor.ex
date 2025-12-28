@@ -13,10 +13,10 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   alias Cadence.Telemetry.Protocols.{
     CCSDSProtocol,
     CRCProtocol,
+    FixedProtocol,
     LengthProtocol,
     TemplateProtocol,
-    TerminatedProtocol,
-    FixedProtocol
+    TerminatedProtocol
   }
 
   @type protocol_instance :: {module(), map()}

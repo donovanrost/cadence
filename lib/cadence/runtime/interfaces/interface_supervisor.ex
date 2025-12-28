@@ -199,7 +199,9 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
         Logger.info("Hot reload: Interface #{interface.name} started, pid: #{inspect(pid)}")
 
       {:error, reason} ->
-        Logger.error("Hot reload: Failed to start interface #{interface.name}: #{inspect(reason)}")
+        Logger.error(
+          "Hot reload: Failed to start interface #{interface.name}: #{inspect(reason)}"
+        )
     end
 
     {:noreply, state}
@@ -208,7 +210,9 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   # Hot reload: Interface updated or protocols updated
   def handle_info({event, %Interface{} = interface}, state)
       when event in [:interface_updated, :interface_protocols_updated] do
-    Logger.info("Hot reload: Restarting interface #{interface.name} (#{interface.id}) due to #{event}")
+    Logger.info(
+      "Hot reload: Restarting interface #{interface.name} (#{interface.id}) due to #{event}"
+    )
 
     case do_restart_interface(interface, state) do
       {:ok, pid} ->
@@ -299,9 +303,8 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   end
 
   defp do_restart_interface(%Interface{} = interface, state) do
-    with :ok <- do_stop_interface(interface.id, state),
-         {:ok, pid} <- do_start_interface(interface, state) do
-      {:ok, pid}
+    with :ok <- do_stop_interface(interface.id, state) do
+      do_start_interface(interface, state)
     end
   end
 

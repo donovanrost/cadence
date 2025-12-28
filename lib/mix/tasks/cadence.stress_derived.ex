@@ -30,8 +30,8 @@ defmodule Mix.Tasks.Cadence.StressDerived do
     mission_id = opts[:mission_id] || raise "Missing --mission-id"
     count = opts[:count] || 10
 
-    alias Cadence.Repo
     alias Cadence.Missions.Mission
+    alias Cadence.Repo
     alias Cadence.Telemetry.Database.DerivedItem
     import Ecto.Query
 

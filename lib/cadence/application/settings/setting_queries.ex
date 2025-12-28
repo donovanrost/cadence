@@ -95,7 +95,9 @@ defmodule Cadence.Application.Settings.SettingQueries do
           nil -> nil
           definition -> definition.default
         end
-      value -> value
+
+      value ->
+        value
     end
   end
 
@@ -159,8 +161,18 @@ defmodule Cadence.Application.Settings.SettingQueries do
         validate: definition.validate,
         scope: definition.scope,
         # Computed constraints for UI
-        min_value: SettingRestrictiveness.min_value(definition.restrictiveness, org_value, definition.validate),
-        max_value: SettingRestrictiveness.max_value(definition.restrictiveness, org_value, definition.validate),
+        min_value:
+          SettingRestrictiveness.min_value(
+            definition.restrictiveness,
+            org_value,
+            definition.validate
+          ),
+        max_value:
+          SettingRestrictiveness.max_value(
+            definition.restrictiveness,
+            org_value,
+            definition.validate
+          ),
         can_override: SettingRestrictiveness.can_override?(definition.restrictiveness, org_value)
       }
     end)

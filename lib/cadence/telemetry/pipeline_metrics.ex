@@ -101,7 +101,16 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   @min_sentinel 999_999_999
 
   # Timing stages we track
-  @timing_stages [:identify, :decom, :convert, :derive, :limits, :cvt_batch, :ets_write, :end_to_end]
+  @timing_stages [
+    :identify,
+    :decom,
+    :convert,
+    :derive,
+    :limits,
+    :cvt_batch,
+    :ets_write,
+    :end_to_end
+  ]
 
   # Error stages we track
   @error_stages [:identify, :decom, :convert, :derive, :batcher]
@@ -168,7 +177,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     slot = Map.fetch!(@slots, counter)
 
     case get_counter_ref(mission_id, partition) do
-      nil -> :ok  # Mission not initialized, silently ignore
+      # Mission not initialized, silently ignore
+      nil -> :ok
       ref -> :counters.add(ref, slot, amount)
     end
   end
@@ -186,23 +196,36 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     min_slot = Map.get(@minmax_slots, :"min_#{stage}")
     max_slot = Map.get(@minmax_slots, :"max_#{stage}")
 
-    if sum_slot && count_slot do
-      case get_counter_ref(mission_id, partition) do
-        nil -> :ok
-        ref ->
-          :counters.add(ref, sum_slot, duration_us)
-          :counters.add(ref, count_slot, 1)
-      end
-    end
+    update_sum_and_count(mission_id, partition, sum_slot, count_slot, duration_us)
+    update_min_and_max(mission_id, partition, min_slot, max_slot, duration_us)
+  end
 
-    # Update min/max using atomics CAS
-    if min_slot && max_slot do
-      case get_atomics_ref(mission_id, partition) do
-        nil -> :ok
-        ref ->
-          update_min(ref, min_slot, duration_us)
-          update_max(ref, max_slot, duration_us)
-      end
+  defp update_sum_and_count(_mission_id, _partition, nil, _count_slot, _duration_us), do: :ok
+  defp update_sum_and_count(_mission_id, _partition, _sum_slot, nil, _duration_us), do: :ok
+
+  defp update_sum_and_count(mission_id, partition, sum_slot, count_slot, duration_us) do
+    case get_counter_ref(mission_id, partition) do
+      nil ->
+        :ok
+
+      ref ->
+        :counters.add(ref, sum_slot, duration_us)
+        :counters.add(ref, count_slot, 1)
+    end
+  end
+
+  # Update min/max using atomics CAS
+  defp update_min_and_max(_mission_id, _partition, nil, _max_slot, _duration_us), do: :ok
+  defp update_min_and_max(_mission_id, _partition, _min_slot, nil, _duration_us), do: :ok
+
+  defp update_min_and_max(mission_id, partition, min_slot, max_slot, duration_us) do
+    case get_atomics_ref(mission_id, partition) do
+      nil ->
+        :ok
+
+      ref ->
+        update_min(ref, min_slot, duration_us)
+        update_max(ref, max_slot, duration_us)
     end
   end
 
@@ -370,33 +393,43 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     partition_count = get_partition_count(mission_id)
 
     for partition <- 0..(partition_count - 1) do
-      # Reset counters
-      case get_counter_ref(mission_id, partition) do
-        nil -> :ok
-        ref ->
-          for slot <- 1..@slot_count do
-            current = :counters.get(ref, slot)
-            :counters.sub(ref, slot, current)
-          end
-      end
-
-      # Reset atomics (min back to sentinel, max back to 0)
-      case get_atomics_ref(mission_id, partition) do
-        nil -> :ok
-        ref ->
-          for stage <- @timing_stages do
-            min_slot = Map.get(@minmax_slots, :"min_#{stage}")
-            max_slot = Map.get(@minmax_slots, :"max_#{stage}")
-            if min_slot, do: :atomics.put(ref, min_slot, @min_sentinel)
-            if max_slot, do: :atomics.put(ref, max_slot, 0)
-          end
-      end
+      reset_partition_counters(mission_id, partition)
+      reset_partition_atomics(mission_id, partition)
     end
 
     # Reset start time
     :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
 
     :ok
+  end
+
+  defp reset_partition_counters(mission_id, partition) do
+    case get_counter_ref(mission_id, partition) do
+      nil ->
+        :ok
+
+      ref ->
+        for slot <- 1..@slot_count do
+          current = :counters.get(ref, slot)
+          :counters.sub(ref, slot, current)
+        end
+    end
+  end
+
+  # Reset atomics (min back to sentinel, max back to 0)
+  defp reset_partition_atomics(mission_id, partition) do
+    case get_atomics_ref(mission_id, partition) do
+      nil ->
+        :ok
+
+      ref ->
+        for stage <- @timing_stages do
+          min_slot = Map.get(@minmax_slots, :"min_#{stage}")
+          max_slot = Map.get(@minmax_slots, :"max_#{stage}")
+          if min_slot, do: :atomics.put(ref, min_slot, @min_sentinel)
+          if max_slot, do: :atomics.put(ref, max_slot, 0)
+        end
+    end
   end
 
   @doc """
@@ -473,26 +506,28 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     # For min: take minimum across partitions
     # For max: take maximum across partitions
     Enum.reduce(0..(partition_count - 1), %{}, fn partition, acc ->
-      case get_atomics_ref(mission_id, partition) do
-        nil ->
-          acc
+      merge_partition_minmax(mission_id, partition, acc)
+    end)
+  end
 
-        ref ->
-          Enum.reduce(@minmax_slots, acc, fn {name, slot}, inner_acc ->
-            value = :atomics.get(ref, slot)
+  defp merge_partition_minmax(mission_id, partition, acc) do
+    case get_atomics_ref(mission_id, partition) do
+      nil ->
+        acc
 
-            # Determine if this is a min or max slot
-            is_min = String.starts_with?(Atom.to_string(name), "min_")
+      ref ->
+        Enum.reduce(@minmax_slots, acc, fn {name, slot}, inner_acc ->
+          update_minmax_slot(inner_acc, ref, name, slot)
+        end)
+    end
+  end
 
-            Map.update(inner_acc, name, value, fn existing ->
-              if is_min do
-                min(existing, value)
-              else
-                max(existing, value)
-              end
-            end)
-          end)
-      end
+  defp update_minmax_slot(acc, ref, name, slot) do
+    value = :atomics.get(ref, slot)
+    is_min = String.starts_with?(Atom.to_string(name), "min_")
+
+    Map.update(acc, name, value, fn existing ->
+      if is_min, do: min(existing, value), else: max(existing, value)
     end)
   end
 end

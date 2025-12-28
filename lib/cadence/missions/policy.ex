@@ -16,10 +16,10 @@ defmodule Cadence.Missions.Policy do
 
   @behaviour Bodyguard.Policy
 
-  alias Cadence.Accounts.{User, Scope}
-  alias Cadence.Missions.Mission
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Accounts.{Scope, User}
   alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Missions.Mission
 
   # System admins can do anything
   def authorize(_action, %Scope{system_admin?: true}, %Mission{}), do: :ok
@@ -30,7 +30,13 @@ defmodule Cadence.Missions.Policy do
   # Check scope-based authorization - Ecto schema
   def authorize(action, %Scope{} = scope, %Mission{} = mission) do
     if scope.user do
-      authorize_user(action, scope.user, mission.id, mission.organization_id, scope.current_organization)
+      authorize_user(
+        action,
+        scope.user,
+        mission.id,
+        mission.organization_id,
+        scope.current_organization
+      )
     else
       :error
     end
@@ -39,7 +45,13 @@ defmodule Cadence.Missions.Policy do
   # Check scope-based authorization - Domain entity
   def authorize(action, %Scope{} = scope, %MissionEntity{} = entity) do
     if scope.user do
-      authorize_user(action, scope.user, entity.id, entity.organization_id, scope.current_organization)
+      authorize_user(
+        action,
+        scope.user,
+        entity.id,
+        entity.organization_id,
+        scope.current_organization
+      )
     else
       :error
     end

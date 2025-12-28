@@ -35,7 +35,8 @@ defmodule Cadence.Ports.Repository.Procedures.ProcedureRepository do
   @doc """
   Finds a procedure by slug within a mission.
   """
-  @callback find_by_slug(mission_id(), slug :: String.t()) :: {:ok, Procedure.t()} | {:error, :not_found}
+  @callback find_by_slug(mission_id(), slug :: String.t()) ::
+              {:ok, Procedure.t()} | {:error, :not_found}
 
   @doc """
   Persists a procedure (insert or update).
@@ -86,13 +87,18 @@ defmodule Cadence.Ports.Repository.Procedures.ProcedureRepository do
   @doc """
   Gets the current (approved) version of a procedure.
   """
-  @callback get_current_version(procedure_id :: id()) :: {:ok, ProcedureVersion.t()} | {:error, :not_found}
+  @callback get_current_version(procedure_id :: id()) ::
+              {:ok, ProcedureVersion.t()} | {:error, :not_found}
 
   @doc """
   Returns the configured procedure repository implementation.
   """
   @spec impl() :: module()
   def impl do
-    Application.get_env(:cadence, :procedure_repository, Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository)
+    Application.get_env(
+      :cadence,
+      :procedure_repository,
+      Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository
+    )
   end
 end

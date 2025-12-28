@@ -50,7 +50,10 @@ defmodule CadenceWeb.ProfileLive.Email do
 
         {:noreply,
          socket
-         |> put_flash(:info, "A link to confirm your email change has been sent to the new address.")
+         |> put_flash(
+           :info,
+           "A link to confirm your email change has been sent to the new address."
+         )
          |> assign(:email_form, to_form(Accounts.change_user_email(user)))}
 
       changeset ->
@@ -72,7 +75,8 @@ defmodule CadenceWeb.ProfileLive.Email do
           <div class="card-body">
             <h3 class="card-title text-base">Change Email Address</h3>
             <p class="text-sm text-base-content/60 mb-4">
-              Your current email address is <span class="font-medium">{@email_form_current_email}</span>
+              Your current email address is
+              <span class="font-medium">{@email_form_current_email}</span>
             </p>
 
             <.simple_form

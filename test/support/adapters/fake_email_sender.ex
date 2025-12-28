@@ -127,12 +127,14 @@ defmodule Cadence.Test.Adapters.FakeEmailSender do
   """
   def find_emails(criteria, pid \\ __MODULE__) do
     Agent.get(pid, fn emails ->
-      Enum.filter(emails, fn email ->
-        Enum.all?(criteria, fn {key, value} ->
-          email_value = Map.get(email, key)
-          matches?(email_value, value)
-        end)
-      end)
+      Enum.filter(emails, &email_matches?(&1, criteria))
+    end)
+  end
+
+  defp email_matches?(email, criteria) do
+    Enum.all?(criteria, fn {key, value} ->
+      email_value = Map.get(email, key)
+      matches?(email_value, value)
     end)
   end
 

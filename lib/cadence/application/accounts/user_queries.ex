@@ -17,6 +17,7 @@ defmodule Cadence.Application.Accounts.UserQueries do
   """
 
   alias Cadence.Domain.Accounts.Entities.User
+  alias Cadence.Ports.Repository.Accounts.UserRepository
 
   @type user_id :: String.t()
   @type org_id :: String.t()
@@ -25,7 +26,7 @@ defmodule Cadence.Application.Accounts.UserQueries do
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Accounts.UserRepository.impl()
+    UserRepository.impl()
   end
 
   # ===========================================================================

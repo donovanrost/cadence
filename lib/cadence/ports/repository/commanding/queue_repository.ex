@@ -135,6 +135,10 @@ defmodule Cadence.Ports.Repository.Commanding.QueueRepository do
   """
   @spec impl() :: module()
   def impl do
-    Application.get_env(:cadence, :queue_repository, Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository)
+    Application.get_env(
+      :cadence,
+      :queue_repository,
+      Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository
+    )
   end
 end

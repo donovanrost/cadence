@@ -10,9 +10,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Automations.EctoAutomationRepository
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Automations.Automation, as: AutomationSchema
   alias Cadence.Domain.Automations.Entities.Automation, as: AutomationEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # AutomationRepository Implementation

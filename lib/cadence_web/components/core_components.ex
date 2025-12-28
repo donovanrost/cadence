@@ -29,6 +29,9 @@ defmodule CadenceWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: CadenceWeb.Gettext
 
+  alias Phoenix.Component
+  alias Phoenix.HTML.Form
+  alias Phoenix.HTML.FormField
   alias Phoenix.LiveView.JS
 
   @doc """
@@ -168,7 +171,7 @@ defmodule CadenceWeb.CoreComponents do
     values: ~w(checkbox color date datetime-local email file month number password
                search select tel text textarea time url week)
 
-  attr :field, Phoenix.HTML.FormField,
+  attr :field, FormField,
     doc: "a form field struct retrieved from the form, for example: @form[:email]"
 
   attr :errors, :list, default: []
@@ -184,7 +187,7 @@ defmodule CadenceWeb.CoreComponents do
                 multiple pattern placeholder readonly required rows size step)
 
   def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do
-    errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
+    errors = if Component.used_input?(field), do: field.errors, else: []
 
     assigns
     |> assign(field: nil, id: assigns.id || field.id)
@@ -197,7 +200,7 @@ defmodule CadenceWeb.CoreComponents do
   def input(%{type: "checkbox"} = assigns) do
     assigns =
       assign_new(assigns, :checked, fn ->
-        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+        Form.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""
@@ -306,7 +309,10 @@ defmodule CadenceWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4 mb-6 border-b border-primary/20"]}>
+    <header class={[
+      @actions != [] && "flex items-center justify-between gap-6",
+      "pb-4 mb-6 border-b border-primary/20"
+    ]}>
       <div>
         <h1 class="text-base font-semibold leading-8 tracking-wide uppercase text-base-content">
           {render_slot(@inner_block)}
@@ -359,8 +365,16 @@ defmodule CadenceWeb.CoreComponents do
         {render_slot(@inner_block)}
       </div>
       <!-- Bottom corners (CSS handles top corners) -->
-      <div :if={@corners} class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60"></div>
-      <div :if={@corners} class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60"></div>
+      <div
+        :if={@corners}
+        class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60"
+      >
+      </div>
+      <div
+        :if={@corners}
+        class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60"
+      >
+      </div>
     </div>
     """
   end
@@ -463,7 +477,11 @@ defmodule CadenceWeb.CoreComponents do
             </tr>
           </thead>
           <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-            <tr :for={row <- @rows} id={@row_id && @row_id.(row)} class="hover:bg-primary/5 transition-colors">
+            <tr
+              :for={row <- @rows}
+              id={@row_id && @row_id.(row)}
+              class="hover:bg-primary/5 transition-colors"
+            >
               <td
                 :for={col <- @col}
                 phx-click={@row_click && @row_click.(row)}
@@ -661,8 +679,10 @@ defmodule CadenceWeb.CoreComponents do
                 {render_slot(@inner_block)}
               </div>
               <!-- Bottom corners -->
-              <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60"></div>
-              <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60"></div>
+              <div class="absolute bottom-0 left-0 w-3 h-3 border-l-2 border-b-2 border-primary/60">
+              </div>
+              <div class="absolute bottom-0 right-0 w-3 h-3 border-r-2 border-b-2 border-primary/60">
+              </div>
             </.focus_wrap>
           </div>
         </div>
@@ -725,7 +745,9 @@ defmodule CadenceWeb.CoreComponents do
         {@database.name, nil}
       ]} />
   """
-  attr :items, :list, required: true, doc: "List of {label, path} tuples. Last item path should be nil."
+  attr :items, :list,
+    required: true,
+    doc: "List of {label, path} tuples. Last item path should be nil."
 
   def breadcrumb(assigns) do
     ~H"""
@@ -792,8 +814,7 @@ defmodule CadenceWeb.CoreComponents do
         assigns.name
         |> String.split()
         |> Enum.take(2)
-        |> Enum.map(&String.first/1)
-        |> Enum.join()
+        |> Enum.map_join("", &String.first/1)
         |> String.upcase()
       else
         assigns.email
@@ -909,18 +930,23 @@ defmodule CadenceWeb.CoreComponents do
         patch={@patch}
         class={[
           "flex items-center gap-2 px-3 py-2 transition-all text-xs tracking-wide",
-          @active && [
-            "bg-primary/10 text-primary border-l-2 border-primary",
-            "shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
-          ],
-          !@active && [
-            "text-base-content/60 border-l-2 border-transparent",
-            "hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
-          ],
+          @active &&
+            [
+              "bg-primary/10 text-primary border-l-2 border-primary",
+              "shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+            ],
+          !@active &&
+            [
+              "text-base-content/60 border-l-2 border-transparent",
+              "hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+            ],
           @class
         ]}
       >
-        <span :if={@icon != []} class="opacity-80 flex-shrink-0 w-5 h-5 flex items-center justify-center">
+        <span
+          :if={@icon != []}
+          class="opacity-80 flex-shrink-0 w-5 h-5 flex items-center justify-center"
+        >
           {render_slot(@icon)}
         </span>
         <span class="flex-1 uppercase font-medium sidebar-label">{render_slot(@inner_block)}</span>

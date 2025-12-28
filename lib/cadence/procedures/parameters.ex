@@ -223,30 +223,37 @@ defmodule Cadence.Procedures.Parameters do
   defp validate_param(value, %{"type" => "array"} = param_def, context) do
     with :ok <- validate_is_list(value),
          :ok <- validate_min_items(value, param_def["min_items"]),
-         :ok <- validate_max_items(value, param_def["max_items"]),
-         {:ok, validated_items} <- validate_array_items(value, param_def["items"], context) do
-      {:ok, validated_items}
+         :ok <- validate_max_items(value, param_def["max_items"]) do
+      validate_array_items(value, param_def["items"], context)
     end
   end
 
   defp validate_param(value, %{"type" => "target"}, context) do
-    with :ok <- validate_is_string(value) do
-      if target_exists?(context.mission_id, value) do
-        {:ok, value}
-      else
-        {:error, "is not a valid target for this mission"}
-      end
+    case validate_is_string(value) do
+      :ok ->
+        if target_exists?(context.mission_id, value) do
+          {:ok, value}
+        else
+          {:error, "is not a valid target for this mission"}
+        end
+
+      {:error, _} = error ->
+        error
     end
   end
 
   defp validate_param(value, %{"type" => "telemetry_item"}, _context) do
     # For now, just validate it's a string in the format PACKET.item
-    with :ok <- validate_is_string(value) do
-      if String.contains?(value, ".") do
-        {:ok, value}
-      else
-        {:error, "must be in format PACKET.item"}
-      end
+    case validate_is_string(value) do
+      :ok ->
+        if String.contains?(value, ".") do
+          {:ok, value}
+        else
+          {:error, "must be in format PACKET.item"}
+        end
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -406,42 +413,33 @@ defmodule Cadence.Procedures.Parameters do
   # ============================================================================
 
   defp validate_param_def(param, index) do
-    errors = []
-
-    errors =
-      if is_map(param) do
-        errors
-      else
-        ["Parameter #{index}: must be a map" | errors]
-      end
-
-    errors =
-      if is_map(param) and Map.has_key?(param, "name") and is_binary(param["name"]) do
-        errors
-      else
-        ["Parameter #{index}: must have a 'name' string" | errors]
-      end
-
-    errors =
-      if is_map(param) and Map.has_key?(param, "type") and param["type"] in @supported_types do
-        errors
-      else
-        [
-          "Parameter #{index}: must have a valid 'type' (#{Enum.join(@supported_types, ", ")})"
-          | errors
-        ]
-      end
-
-    errors =
-      if is_map(param) and param["type"] == "enum" and
-           (not Map.has_key?(param, "options") or not is_list(param["options"])) do
-        ["Parameter #{index}: enum type requires 'options' list" | errors]
-      else
-        errors
-      end
-
-    errors
+    []
+    |> maybe_add_error(not is_map(param), "Parameter #{index}: must be a map")
+    |> maybe_add_error(not valid_param_name?(param), "Parameter #{index}: must have a 'name' string")
+    |> maybe_add_error(
+      not valid_param_type?(param),
+      "Parameter #{index}: must have a valid 'type' (#{Enum.join(@supported_types, ", ")})"
+    )
+    |> maybe_add_error(
+      enum_missing_options?(param),
+      "Parameter #{index}: enum type requires 'options' list"
+    )
   end
+
+  defp maybe_add_error(errors, true, message), do: [message | errors]
+  defp maybe_add_error(errors, false, _message), do: errors
+
+  defp valid_param_name?(param) when is_map(param), do: is_binary(param["name"])
+  defp valid_param_name?(_param), do: false
+
+  defp valid_param_type?(param) when is_map(param), do: param["type"] in @supported_types
+  defp valid_param_type?(_param), do: false
+
+  defp enum_missing_options?(param) when is_map(param) do
+    param["type"] == "enum" and not is_list(param["options"])
+  end
+
+  defp enum_missing_options?(_param), do: false
 
   # ============================================================================
   # Helpers

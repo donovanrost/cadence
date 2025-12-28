@@ -175,8 +175,11 @@ defmodule Cadence.Test.Adapters.InMemoryMissionsRepository do
   def delete_membership(id) do
     Agent.get_and_update(__MODULE__, fn state ->
       case Map.pop(state.memberships, id) do
-        {nil, _} -> {{:error, :not_found}, state}
-        {membership, new_memberships} -> {{:ok, membership}, %{state | memberships: new_memberships}}
+        {nil, _} ->
+          {{:error, :not_found}, state}
+
+        {membership, new_memberships} ->
+          {{:ok, membership}, %{state | memberships: new_memberships}}
       end
     end)
   end

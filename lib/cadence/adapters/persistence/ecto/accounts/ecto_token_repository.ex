@@ -21,10 +21,10 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoTokenRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Accounts.UserToken, as: TokenSchema
-  alias Cadence.Domain.Accounts.Entities.UserToken, as: TokenEntity
   alias Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository
+  alias Cadence.Domain.Accounts.Entities.UserToken, as: TokenEntity
+  alias Cadence.Repo
 
   # Token validity periods (matching domain entity)
   @session_validity_days 14

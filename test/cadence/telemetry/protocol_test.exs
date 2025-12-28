@@ -12,10 +12,10 @@ defmodule Cadence.Telemetry.ProtocolTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Telemetry.Protocols.{
-    LengthProtocol,
-    TerminatedProtocol,
     FixedProtocol,
-    TemplateProtocol
+    LengthProtocol,
+    TemplateProtocol,
+    TerminatedProtocol
   }
 
   # CCSDS sync pattern (standard)

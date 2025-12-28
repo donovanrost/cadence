@@ -25,6 +25,7 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
   """
 
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type enqueue_attrs :: %{
           required(:organization_id) => String.t(),
@@ -64,7 +65,7 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
 
   # Get configured event recorder
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 
   @doc """

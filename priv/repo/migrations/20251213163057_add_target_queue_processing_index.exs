@@ -19,9 +19,10 @@ defmodule Cadence.Repo.Migrations.AddTargetQueueProcessingIndex do
   def change do
     # Index for target-scoped queue processing
     # Supports efficient per-target command retrieval in priority order
-    create index(:command_queue_entries,
-      [:target_id, :status, :priority, :sequence_number],
-      name: :command_queue_entries_target_processing
-    )
+    create index(
+             :command_queue_entries,
+             [:target_id, :status, :priority, :sequence_number],
+             name: :command_queue_entries_target_processing
+           )
   end
 end

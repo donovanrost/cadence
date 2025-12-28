@@ -52,8 +52,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DeriveStage do
 
   use Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour
 
-  alias Cadence.Telemetry.DerivedItems
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Telemetry.DerivedItems
   alias Cadence.Telemetry.Stats
 
   @impl true

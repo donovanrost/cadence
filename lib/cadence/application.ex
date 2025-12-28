@@ -5,10 +5,12 @@ defmodule Cadence.Application do
 
   use Application
 
+  alias Cadence.Config.VersionRegistry
+
   @impl true
   def start(_type, _args) do
     # Initialize ETS tables that need to exist before supervision tree starts
-    Cadence.Config.VersionRegistry.init()
+    VersionRegistry.init()
 
     # Base children always started
     base_children = [
@@ -25,6 +27,9 @@ defmodule Cadence.Application do
 
       # Procedure Registry - registers procedure execution processes
       {Registry, keys: :unique, name: Cadence.ProcedureRegistry},
+
+      # V2 Execution Registry - registers V2 procedure execution processes by execution_id
+      {Registry, keys: :unique, name: Cadence.Procedures.V2.ExecutionRegistry},
 
       # Automation Registry - registers automation managers by mission_id
       {Registry, keys: :unique, name: Cadence.AutomationRegistry},

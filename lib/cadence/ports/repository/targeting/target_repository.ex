@@ -44,7 +44,8 @@ defmodule Cadence.Ports.Repository.Targeting.TargetRepository do
 
   The identifier is a unique string like "SAT-1" or "GROUND-01".
   """
-  @callback find_by_identifier(mission_id(), target_identifier()) :: {:ok, Target.t()} | {:error, :not_found}
+  @callback find_by_identifier(mission_id(), target_identifier()) ::
+              {:ok, Target.t()} | {:error, :not_found}
 
   @doc """
   Persists a target (insert or update).
@@ -107,7 +108,8 @@ defmodule Cadence.Ports.Repository.Targeting.TargetRepository do
   @doc """
   Gets the definition set ID for a target by mission and identifier.
   """
-  @callback get_definition_set_id(mission_id(), target_identifier()) :: {:ok, id()} | {:error, :not_found}
+  @callback get_definition_set_id(mission_id(), target_identifier()) ::
+              {:ok, id()} | {:error, :not_found}
 
   @doc """
   Gets the definition set ID for a target by target ID.

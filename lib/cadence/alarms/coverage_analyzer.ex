@@ -43,11 +43,11 @@ defmodule Cadence.Alarms.CoverageAnalyzer do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Alarms.AlarmRule
+  alias Cadence.MissionDatabase.{Container, ContainerEntry, DataType, DefinitionSet, Parameter}
+  alias Cadence.Repo
   alias Cadence.Targets
   alias Cadence.Targets.Target
-  alias Cadence.MissionDatabase.{DefinitionSet, Container, ContainerEntry, Parameter, DataType}
 
   @type parameter_with_limits :: %{
           qualified_name: String.t(),

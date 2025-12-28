@@ -38,8 +38,8 @@ defmodule Cadence.Telemetry.DerivedItems do
 
   require Logger
 
-  alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
   alias Cadence.Runtime.Telemetry.DerivedItems.Cache
+  alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
 
   @type item_value :: {String.t(), number() | nil}
   @type item_values :: %{String.t() => number() | nil}

@@ -13,8 +13,8 @@ defmodule Cadence.Ports.Repository.Accounts.TokenRepository do
   - `Cadence.Test.Adapters.InMemoryTokenRepository` - In-memory for tests
   """
 
-  alias Cadence.Domain.Accounts.Entities.UserToken
   alias Cadence.Domain.Accounts.Entities.User
+  alias Cadence.Domain.Accounts.Entities.UserToken
 
   @type id :: String.t()
   @type user_id :: String.t()

@@ -59,14 +59,10 @@ defmodule Cadence.AlarmsHelpers do
   end
 
   defp do_assert_eventually(fun, deadline, interval, message) do
-    try do
-      if fun.() do
-        :ok
-      else
-        maybe_retry_eventually(fun, deadline, interval, message)
-      end
-    rescue
-      _ -> maybe_retry_eventually(fun, deadline, interval, message)
+    if safe_condition?(fun) do
+      :ok
+    else
+      maybe_retry_eventually(fun, deadline, interval, message)
     end
   end
 
@@ -77,6 +73,12 @@ defmodule Cadence.AlarmsHelpers do
       Process.sleep(interval)
       do_assert_eventually(fun, deadline, interval, message)
     end
+  end
+
+  defp safe_condition?(fun) do
+    fun.()
+  rescue
+    _ -> false
   end
 
   @doc """

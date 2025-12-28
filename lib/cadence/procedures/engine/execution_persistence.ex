@@ -24,11 +24,11 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   require Logger
 
   alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Repo
   alias Cadence.Procedures
-  alias Cadence.Procedures.ProcedureLog
-  alias Cadence.Procedures.Events.StepEvent
   alias Cadence.Procedures.Events.ExecutionEvent
+  alias Cadence.Procedures.Events.StepEvent
+  alias Cadence.Procedures.ProcedureLog
+  alias Cadence.Repo
   alias Ecto.Multi
 
   @doc """

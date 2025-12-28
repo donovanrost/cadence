@@ -82,7 +82,7 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
 
       # Click increment button
       view
-      |> element("button[phx-click=\"increment_setting\"][phx-value-name=\"required_approvals\"]")
+      |> element(~S(button[phx-click="increment_setting"][phx-value-name="required_approvals"]))
       |> render_click()
 
       # Default is 1, should now be 2
@@ -97,7 +97,7 @@ defmodule CadenceWeb.SettingsLive.IndexTest do
 
       # Click decrement button
       view
-      |> element("button[phx-click=\"decrement_setting\"][phx-value-name=\"required_approvals\"]")
+      |> element(~S(button[phx-click="decrement_setting"][phx-value-name="required_approvals"]))
       |> render_click()
 
       assert Settings.get_org(org, :procedures, :required_approvals) == 4

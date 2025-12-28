@@ -23,7 +23,13 @@ defmodule Cadence.Repo.Migrations.ConvertQueueEntryStatusToEnum do
     """
 
     # 2. Drop indexes that include the status column
-    drop_if_exists index(:command_queue_entries, [:mission_id, :status, :priority, :sequence_number])
+    drop_if_exists index(:command_queue_entries, [
+                     :mission_id,
+                     :status,
+                     :priority,
+                     :sequence_number
+                   ])
+
     drop_if_exists index(:command_queue_entries, [:target_id, :status])
     drop_if_exists index(:command_queue_entries, [:mission_id, :status, :scheduled_at])
     drop_if_exists index(:command_queue_entries, [:status, :expires_at])
@@ -56,7 +62,13 @@ defmodule Cadence.Repo.Migrations.ConvertQueueEntryStatusToEnum do
 
   def down do
     # 1. Drop indexes
-    drop_if_exists index(:command_queue_entries, [:mission_id, :status, :priority, :sequence_number])
+    drop_if_exists index(:command_queue_entries, [
+                     :mission_id,
+                     :status,
+                     :priority,
+                     :sequence_number
+                   ])
+
     drop_if_exists index(:command_queue_entries, [:target_id, :status])
     drop_if_exists index(:command_queue_entries, [:mission_id, :status, :scheduled_at])
     drop_if_exists index(:command_queue_entries, [:status, :expires_at])

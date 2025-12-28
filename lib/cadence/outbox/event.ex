@@ -47,8 +47,8 @@ defmodule Cadence.Outbox.Event do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
   alias Cadence.Recordings.Recording
 
   @primary_key {:id, :binary_id, autogenerate: true}

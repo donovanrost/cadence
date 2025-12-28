@@ -83,7 +83,8 @@ defmodule Cadence.Ports.Repository.Schedules.ScheduleRepository do
 
   Updates last_run_at, next_run_at, and increments run_count.
   """
-  @callback record_run(Schedule.t(), DateTime.t() | nil) :: {:ok, Schedule.t()} | {:error, error()}
+  @callback record_run(Schedule.t(), DateTime.t() | nil) ::
+              {:ok, Schedule.t()} | {:error, error()}
 
   @doc """
   Enables a schedule.

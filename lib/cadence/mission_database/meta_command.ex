@@ -40,11 +40,11 @@ defmodule Cadence.MissionDatabase.MetaCommand do
   import Ecto.Changeset
 
   alias Cadence.MissionDatabase.{
-    CommandInterlock,
     Argument,
-    TransmissionConstraint,
+    CommandContainer,
+    CommandInterlock,
     CommandVerifier,
-    CommandContainer
+    TransmissionConstraint
   }
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -151,8 +151,8 @@ defmodule Cadence.MissionDatabase.MetaCommand do
   defp validate_opcode(changeset) do
     opcode = get_field(changeset, :opcode)
 
-    if not is_nil(opcode) and (opcode < 0 or opcode > 65535) do
-      add_error(changeset, :opcode, "must be between 0 and 65535")
+    if not is_nil(opcode) and (opcode < 0 or opcode > 65_535) do
+      add_error(changeset, :opcode, "must be between 0 and 65_535")
     else
       changeset
     end

@@ -26,12 +26,12 @@ defmodule Cadence.Telemetry.Profiler do
       Cadence.Telemetry.Profiler.analyze(mission_id)
   """
 
-  alias Cadence.Telemetry.Stats
-  alias Cadence.Telemetry.PipelineMetrics
   alias Cadence.Runtime.Telemetry.{BroadwayPubSub, Pipeline}
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.Limits.{Cache, StateTracker}
   alias Cadence.Runtime.Telemetry.PipelineV2.{PartitionRouter, PartitionSupervisor}
-  alias Cadence.Runtime.Telemetry.Limits.{StateTracker, Cache}
+  alias Cadence.Telemetry.PipelineMetrics
+  alias Cadence.Telemetry.Stats
 
   @doc """
   Analyzes timing data to detect warmup effects and GC spikes.
@@ -87,7 +87,7 @@ defmodule Cadence.Telemetry.Profiler do
 
     # Warmup analysis
     if length(data.warmup_samples) > 0 do
-      warmup_str = data.warmup_samples |> Enum.map(&format_us_compact/1) |> Enum.join(", ")
+      warmup_str = Enum.map_join(data.warmup_samples, ", ", &format_us_compact/1)
       IO.puts("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
 
       # Check if first packet is an outlier
@@ -316,7 +316,8 @@ defmodule Cadence.Telemetry.Profiler do
       timestamp: DateTime.utc_now(),
       stats: stats,
       # Percentiles only available for V1 (Stats keeps raw samples)
-      percentiles: unless(v2_active, do: safe_call(fn -> Stats.get_all_percentiles(mission_id) end)),
+      percentiles:
+        unless(v2_active, do: safe_call(fn -> Stats.get_all_percentiles(mission_id) end)),
       stage_errors:
         if v2_active do
           # V2 errors are in stats.errors
@@ -652,8 +653,7 @@ defmodule Cadence.Telemetry.Profiler do
         warmup_str =
           analysis.warmup_samples
           |> Enum.take(5)
-          |> Enum.map(&format_us_compact/1)
-          |> Enum.join(", ")
+          |> Enum.map_join(", ", &format_us_compact/1)
 
         IO.puts("   Warmup:        [#{warmup_str}...]")
       end
@@ -668,13 +668,11 @@ defmodule Cadence.Telemetry.Profiler do
   # Private helpers
 
   defp safe_call(fun) do
-    try do
-      fun.()
-    rescue
-      e -> %{error: Exception.message(e)}
-    catch
-      :exit, reason -> %{error: inspect(reason)}
-    end
+    fun.()
+  rescue
+    e -> %{error: Exception.message(e)}
+  catch
+    :exit, reason -> %{error: inspect(reason)}
   end
 
   defp find_mission_processes(mission_id) do
@@ -785,9 +783,7 @@ defmodule Cadence.Telemetry.Profiler do
               ""
           end
 
-        IO.puts(
-          "Packets: #{proc} processed#{delta}, #{failed} dropped, 0 failed"
-        )
+        IO.puts("Packets: #{proc} processed#{delta}, #{failed} dropped, 0 failed")
 
         IO.puts("Items: #{items} processed")
 
@@ -796,7 +792,10 @@ defmodule Cadence.Telemetry.Profiler do
           %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
             mbps = Float.round(bps * 8 / 1_000_000, 1)
             mb_per_sec = Float.round(bps / 1_000_000, 2)
-            IO.puts("Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+
+            IO.puts(
+              "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
+            )
 
           %{packets_per_sec: pps} when pps > 0 ->
             IO.puts("Throughput: #{format_number(round(pps))} packets/sec")

@@ -12,7 +12,7 @@ defmodule Cadence.Organizations.Policy do
 
   @behaviour Bodyguard.Policy
 
-  alias Cadence.Accounts.{User, Scope}
+  alias Cadence.Accounts.{Scope, User}
   alias Cadence.Organizations.Organization
 
   # System admins can do anything

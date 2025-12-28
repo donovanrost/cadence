@@ -11,8 +11,8 @@ defmodule Cadence.Notifications.Dispatcher do
   require Logger
 
   alias Cadence.Notifications
-  alias Cadence.Notifications.NotificationBuilder
   alias Cadence.Notifications.EmailWorker
+  alias Cadence.Notifications.NotificationBuilder
   alias Cadence.Outbox
 
   @notification_event_types ~w(
@@ -55,9 +55,7 @@ defmodule Cadence.Notifications.Dispatcher do
         dispatch_notifications(notifications_attrs, event)
 
       {:error, reason} ->
-        Logger.warning(
-          "Failed to build notifications from event #{event.id}: #{inspect(reason)}"
-        )
+        Logger.warning("Failed to build notifications from event #{event.id}: #{inspect(reason)}")
     end
   end
 

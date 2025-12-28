@@ -53,9 +53,9 @@ defmodule Cadence.Procedures.Dag.Validator do
   @doc """
   Checks if a steps definition is in DAG format (map) vs linear format (list).
   """
-  @spec is_dag_format?(map()) :: boolean()
-  def is_dag_format?(%{"steps" => steps}) when is_map(steps), do: true
-  def is_dag_format?(_), do: false
+  @spec dag_format?(map()) :: boolean()
+  def dag_format?(%{"steps" => steps}) when is_map(steps), do: true
+  def dag_format?(_), do: false
 
   @doc """
   Returns the dependency graph as an adjacency list.

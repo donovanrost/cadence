@@ -137,9 +137,8 @@ defmodule Cadence.Application.Procedures.ManageVersions do
   @spec update_steps(version_id(), map()) :: {:ok, ProcedureVersion.t()} | {:error, term()}
   def update_steps(version_id, steps) do
     with {:ok, version} <- ProcedureQueries.find_version(version_id),
-         {:ok, updated} <- ProcedureVersion.update_steps(version, steps),
-         {:ok, saved} <- repo().save_version(updated) do
-      {:ok, saved}
+         {:ok, updated} <- ProcedureVersion.update_steps(version, steps) do
+      repo().save_version(updated)
     end
   end
 
@@ -160,9 +159,8 @@ defmodule Cadence.Application.Procedures.ManageVersions do
   @spec update_parameters(version_id(), map()) :: {:ok, ProcedureVersion.t()} | {:error, term()}
   def update_parameters(version_id, parameters) do
     with {:ok, version} <- ProcedureQueries.find_version(version_id),
-         {:ok, updated} <- ProcedureVersion.update_parameters(version, parameters),
-         {:ok, saved} <- repo().save_version(updated) do
-      {:ok, saved}
+         {:ok, updated} <- ProcedureVersion.update_parameters(version, parameters) do
+      repo().save_version(updated)
     end
   end
 
@@ -184,9 +182,8 @@ defmodule Cadence.Application.Procedures.ManageVersions do
           {:ok, ProcedureVersion.t()} | {:error, term()}
   def update_description(version_id, description) do
     with {:ok, version} <- ProcedureQueries.find_version(version_id),
-         {:ok, updated} <- ProcedureVersion.update_description(version, description),
-         {:ok, saved} <- repo().save_version(updated) do
-      {:ok, saved}
+         {:ok, updated} <- ProcedureVersion.update_description(version, description) do
+      repo().save_version(updated)
     end
   end
 

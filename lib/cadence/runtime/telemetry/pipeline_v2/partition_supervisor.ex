@@ -20,10 +20,10 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
   require Logger
 
   alias Cadence.Runtime.Telemetry.PipelineV2.Stages.{
-    IdentifyStage,
-    DecommutationStage,
     ConversionStage,
-    DeriveStage
+    DecommutationStage,
+    DeriveStage,
+    IdentifyStage
   }
 
   alias Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher
@@ -128,7 +128,6 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.PartitionSupervisor do
   Returns the registered name for the CVTBatcher in a partition.
   """
   def batcher_name(mission_id, partition) do
-    {:via, Registry,
-     {Cadence.MissionRegistry, {:pipeline_v2, mission_id, {:batcher, partition}}}}
+    {:via, Registry, {Cadence.MissionRegistry, {:pipeline_v2, mission_id, {:batcher, partition}}}}
   end
 end

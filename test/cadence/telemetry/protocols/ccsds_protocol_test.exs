@@ -3,8 +3,8 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
 
   import Bitwise
 
-  alias Cadence.Telemetry.Protocols.CCSDSProtocol
   alias Cadence.Telemetry.CRC
+  alias Cadence.Telemetry.Protocols.CCSDSProtocol
 
   @default_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
   @header_size 6
@@ -319,7 +319,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     end
 
     test "wraps sequence counter at 16384" do
-      state = %{CCSDSProtocol.new([]) | sequence_count: 16383}
+      state = %{CCSDSProtocol.new([]) | sequence_count: 16_383}
 
       {:ok, _, state} = CCSDSProtocol.write_data("payload", state)
       assert state.sequence_count == 0
@@ -463,7 +463,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocolTest do
     test "handles large payload" do
       state = CCSDSProtocol.new([])
       # Create ~64KB payload (near CCSDS max)
-      payload = :crypto.strong_rand_bytes(65535)
+      payload = :crypto.strong_rand_bytes(65_535)
       packet = build_packet(100, 1, payload)
 
       assert {:ok, [extracted], _state} = CCSDSProtocol.read_data(packet, state)

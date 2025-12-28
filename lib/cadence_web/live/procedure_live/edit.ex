@@ -73,23 +73,29 @@ defmodule CadenceWeb.ProcedureLive.Edit do
   end
 
   defp load_procedure_source(procedure) do
-    if procedure.current_version_id do
-      case Procedures.get_version(procedure.current_version_id) do
-        nil ->
-          {%{}, %{}, "abort", :dag}
-
-        version ->
-          source = version.source || %{}
-          steps = source["steps"] || %{}
-          on_step_failure = source["on_step_failure"] || "abort"
-          # Convert from storage format to editor format
-          inputs = params_schema_to_editor_format(version.parameters_schema)
-          format = if is_map(steps), do: :dag, else: :linear
-          {steps, inputs, on_step_failure, format}
-      end
-    else
-      {%{}, %{}, "abort", :dag}
+    case procedure.current_version_id do
+      nil -> default_procedure_source()
+      version_id -> load_version_source(version_id)
     end
+  end
+
+  defp default_procedure_source, do: {%{}, %{}, "abort", :dag}
+
+  defp load_version_source(version_id) do
+    case Procedures.get_version(version_id) do
+      nil -> default_procedure_source()
+      version -> build_source_from_version(version)
+    end
+  end
+
+  defp build_source_from_version(version) do
+    source = version.source || %{}
+    steps = source["steps"] || %{}
+    on_step_failure = source["on_step_failure"] || "abort"
+    inputs = params_schema_to_editor_format(version.parameters_schema)
+    format = if is_map(steps), do: :dag, else: :linear
+
+    {steps, inputs, on_step_failure, format}
   end
 
   # Convert from storage format {"parameters" => [...]} to editor format {"name" => {...}}

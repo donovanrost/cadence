@@ -18,8 +18,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
       {:ok, _pid} = MissionSupervisor.start_mission(config)
   """
 
-  alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Interfaces.InterfaceQueries
+  alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
 
   require Logger

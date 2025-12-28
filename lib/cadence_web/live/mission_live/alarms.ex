@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionLive.Alarms do
   """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, Targets, MissionDatabase}
+  alias Cadence.{Alarms, MissionDatabase, Targets}
   alias Cadence.Alarms.AlarmRule
 
   @impl true

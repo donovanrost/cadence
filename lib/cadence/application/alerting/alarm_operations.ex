@@ -23,8 +23,9 @@ defmodule Cadence.Application.Alerting.AlarmOperations do
       {:ok, alarm} = AlarmOperations.clear(alarm_id)
   """
 
-  alias Cadence.Domain.Alerting.Entities.Alarm
   alias Cadence.Application.Alerting.AlarmQueries
+  alias Cadence.Domain.Alerting.Entities.Alarm
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type alarm_id :: String.t()
   @type user_id :: String.t()
@@ -49,7 +50,7 @@ defmodule Cadence.Application.Alerting.AlarmOperations do
 
   # Get configured event recorder
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 
   @doc """

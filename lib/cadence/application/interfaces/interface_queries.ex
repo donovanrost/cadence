@@ -17,6 +17,8 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
   """
 
   alias Cadence.Domain.Interfaces.Entities.Interface
+  alias Cadence.Ports.Repository.Interfaces.InterfaceRepository
+  alias Cadence.Ports.Repository.Interfaces.TargetInterfaceRepository
 
   @type interface_id :: String.t()
   @type mission_id :: String.t()
@@ -24,11 +26,11 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
 
   # Get configured repositories
   defp interface_repo do
-    Cadence.Ports.Repository.Interfaces.InterfaceRepository.impl()
+    InterfaceRepository.impl()
   end
 
   defp target_interface_repo do
-    Cadence.Ports.Repository.Interfaces.TargetInterfaceRepository.impl()
+    TargetInterfaceRepository.impl()
   end
 
   # ===========================================================================

@@ -403,12 +403,14 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
                 Logger.debug(
                   "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
                 )
+
                 {ok + 1, err}
 
               {:error, reason} ->
                 Logger.warning(
                   "Failed to send to #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)}"
                 )
+
                 {ok, err + 1}
             end
           end)

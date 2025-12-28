@@ -161,22 +161,28 @@ defmodule Cadence.Test.Adapters.InMemoryDashboardLayoutRepository do
   @impl true
   def unset_other_defaults(user_id, mission_id, exclude_id) do
     Agent.get_and_update(__MODULE__, fn state ->
-      {count, new_layouts} =
-        state.layouts
-        |> Enum.reduce({0, state.layouts}, fn {id, layout}, {count, layouts} ->
-          if layout.user_id == user_id &&
-               layout.mission_id == mission_id &&
-               id != exclude_id &&
-               layout.is_default do
-            updated = %{layout | is_default: false}
-            {count + 1, Map.put(layouts, id, updated)}
-          else
-            {count, layouts}
-          end
-        end)
+      {count, new_layouts} = unset_defaults(state.layouts, user_id, mission_id, exclude_id)
 
       {{:ok, count}, %{state | layouts: new_layouts}}
     end)
+  end
+
+  defp unset_defaults(layouts, user_id, mission_id, exclude_id) do
+    Enum.reduce(layouts, {0, layouts}, fn {id, layout}, {count, acc} ->
+      if unset_default?(layout, id, user_id, mission_id, exclude_id) do
+        updated = %{layout | is_default: false}
+        {count + 1, Map.put(acc, id, updated)}
+      else
+        {count, acc}
+      end
+    end)
+  end
+
+  defp unset_default?(layout, id, user_id, mission_id, exclude_id) do
+    layout.user_id == user_id &&
+      layout.mission_id == mission_id &&
+      id != exclude_id &&
+      layout.is_default
   end
 
   # ============================================================================

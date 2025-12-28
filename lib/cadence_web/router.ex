@@ -146,7 +146,7 @@ defmodule CadenceWeb.Router do
 
       # Procedures
       live "/missions/:id/procedures", MissionLive.Procedures, :index
-      live "/missions/:id/procedures/new", ProcedureLive.Edit, :new
+      live "/missions/:id/procedures/new", MissionLive.Procedures, :new
       live "/missions/:id/procedures/:procedure_id", MissionLive.Procedures, :show
       live "/missions/:id/procedures/:procedure_id/edit", ProcedureLive.Edit, :edit
       live "/missions/:id/procedures/:procedure_id/execute", MissionLive.Procedures, :execute
@@ -154,6 +154,15 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/procedures/:procedure_id/executions/:execution_id",
            MissionLive.ExecutionShow,
            :show
+
+      # Procedures V2 - Block-based editor
+      live "/missions/:id/procedures-v2/:procedure_id/versions/:version_id/edit",
+           ProcedureV2Live.VersionEdit,
+           :edit_version
+
+      live "/missions/:id/procedures-v2/:procedure_id/executions/:execution_id",
+           ProcedureV2Live.ExecutionShow,
+           :show_execution
 
       # Automations
       live "/missions/:id/automations", MissionLive.Automations, :index

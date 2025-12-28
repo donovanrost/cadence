@@ -40,16 +40,15 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
 
   alias Broadway.Message
 
-  alias Cadence.Telemetry.{
-    Packet,
-    Decommutation,
-    Conversions,
-    DerivedItems,
-    Stats
-  }
-
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.PacketIdentifier
+  alias Cadence.Telemetry.{
+    Conversions,
+    Decommutation,
+    DerivedItems,
+    Packet,
+    Stats
+  }
 
   # Tunable parameters for throughput optimization
   @producer_concurrency 1
@@ -60,7 +59,7 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
   @batch_timeout 100
   # Rate limit: packets per second (set high to find true processing ceiling)
   # Note: 1000 was the original limit, 500 Hz ceiling was due to this
-  @rate_limit 50000
+  @rate_limit 50_000
 
   ## Client API
 
@@ -320,33 +319,37 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
 
   defp apply_conversions(raw_items, packet_items) do
     # Apply conversions to each item based on its definition
-    Enum.map(raw_items, fn {item_name, raw_value} ->
-      # Find the item definition
-      item_def = Enum.find(packet_items, fn item -> to_string(item.name) == item_name end)
-
-      converted_value =
-        case item_def do
-          %{conversion: conversion} when not is_nil(conversion) ->
-            case Conversions.apply_db_conversion(raw_value, conversion) do
-              {:ok, value} ->
-                value
-
-              {:error, reason} ->
-                Logger.warning(
-                  "Conversion failed for #{item_name}: #{inspect(reason)}, using raw value"
-                )
-
-                raw_value
-            end
-
-          _ ->
-            # No conversion defined
-            raw_value
-        end
-
-      {item_name, converted_value}
+    raw_items
+    |> Enum.map(fn {item_name, raw_value} ->
+      {item_name, convert_item(item_name, raw_value, packet_items)}
     end)
     |> Enum.into(%{})
+  end
+
+  defp convert_item(item_name, raw_value, packet_items) do
+    item_def = Enum.find(packet_items, fn item -> to_string(item.name) == item_name end)
+
+    case item_def do
+      %{conversion: conversion} when not is_nil(conversion) ->
+        apply_conversion(item_name, raw_value, conversion)
+
+      _ ->
+        raw_value
+    end
+  end
+
+  defp apply_conversion(item_name, raw_value, conversion) do
+    case Conversions.apply_db_conversion(raw_value, conversion) do
+      {:ok, value} ->
+        value
+
+      {:error, reason} ->
+        Logger.warning(
+          "Conversion failed for #{item_name}: #{inspect(reason)}, using raw value"
+        )
+
+        raw_value
+    end
   end
 
   defp update_cvt_batch(mission_id, packet_def, metadata, items_with_limits) do

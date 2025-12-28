@@ -12,7 +12,17 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, MissionDatabase, Targets, DashboardLayouts, Procedures, Commands, Outbox, Timeline}
+  alias Cadence.{
+    Alarms,
+    Commands,
+    DashboardLayouts,
+    MissionDatabase,
+    Outbox,
+    Procedures,
+    Targets,
+    Timeline
+  }
+
   alias Cadence.Alarms.Alarm
   alias Cadence.DashboardLayouts.DashboardLayout
   alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand}
@@ -157,9 +167,15 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       data-targets={Jason.encode!(Enum.map(@targets, &target_json/1))}
       data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
       data-alarms={Jason.encode!(Enum.map(@active_alarms, &alarm_json/1))}
-      data-commands={Jason.encode!(Enum.map(@queue_entries, &queue_entry_json/1))}
-      data-queue-entries={Jason.encode!(Enum.map(@all_queue_entries, &queue_entry_json/1))}
-      data-command-definitions={Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))}
+      data-commands={
+        Jason.encode!(Enum.map(@queue_entries, &queue_entry_json(&1, targets_map(@targets))))
+      }
+      data-queue-entries={
+        Jason.encode!(Enum.map(@all_queue_entries, &queue_entry_json(&1, targets_map(@targets))))
+      }
+      data-command-definitions={
+        Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))
+      }
       data-target-groups={Jason.encode!([])}
       data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
       data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
@@ -177,8 +193,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
         running_procedures={@running_procedures}
         current_time={@current_time}
       />
-
-      <!-- Main Content Area -->
+      
+    <!-- Main Content Area -->
       <div id="ops-console-v2" phx-update="ignore" class="flex-1 min-h-0">
         <!-- Custom panel layout renders here -->
       </div>
@@ -745,10 +761,14 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
                 limit: 50
               )
 
+            targets = targets_map(socket.assigns.targets)
+
             {:noreply,
              socket
              |> assign(:queue_entries, queue_entries)
-             |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+             |> push_event("update_commands", %{
+               commands: Enum.map(queue_entries, &queue_entry_json(&1, targets))
+             })
              |> put_flash(:info, "Command cancelled")}
 
           {:error, reason} ->
@@ -794,10 +814,14 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
           limit: 50
         )
 
+      targets = targets_map(socket.assigns.targets)
+
       socket =
         socket
         |> assign(:queue_entries, queue_entries)
-        |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+        |> push_event("update_commands", %{
+          commands: Enum.map(queue_entries, &queue_entry_json(&1, targets))
+        })
 
       cond do
         failures == 0 ->
@@ -812,8 +836,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
           {:noreply, put_flash(socket, :error, "Failed to dispatch commands")}
 
         true ->
-          {:noreply,
-           put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
+          {:noreply, put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
       end
     else
       {:noreply, put_flash(socket, :error, "Command not found")}
@@ -872,10 +895,14 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
           limit: 50
         )
 
+      targets = targets_map(socket.assigns.targets)
+
       socket =
         socket
         |> assign(:queue_entries, queue_entries)
-        |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+        |> push_event("update_commands", %{
+          commands: Enum.map(queue_entries, &queue_entry_json(&1, targets))
+        })
 
       cond do
         failures == 0 ->
@@ -890,8 +917,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
           {:noreply, put_flash(socket, :error, "Failed to dispatch parameterized commands")}
 
         true ->
-          {:noreply,
-           put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
+          {:noreply, put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
       end
     else
       {:noreply, put_flash(socket, :error, "Command not found")}
@@ -975,7 +1001,11 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # Cancel a single queued command
-  def handle_event("queue_cancel_entry", %{"entry_id" => entry_id, "target_id" => target_id}, socket) do
+  def handle_event(
+        "queue_cancel_entry",
+        %{"entry_id" => entry_id, "target_id" => target_id},
+        socket
+      ) do
     mission_id = socket.assigns.mission.id
 
     case Commands.cancel_queued(mission_id, target_id, entry_id) do
@@ -1375,7 +1405,10 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   # Handle procedure execution events for timeline
-  def handle_info({:procedure_event, %Cadence.Procedures.Events.ProcedureExecutionEvent{} = event}, socket) do
+  def handle_info(
+        {:procedure_event, %Cadence.Procedures.Events.ProcedureExecutionEvent{} = event},
+        socket
+      ) do
     # Convert to timeline event and push to frontend
     {:noreply, push_timeline_procedure_event(socket, event)}
   end
@@ -1465,12 +1498,16 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     # Get server-side aggregated metrics (accurate counts regardless of limit)
     metrics = Commands.get_mission_queue_metrics(mission_id)
 
+    targets = targets_map(socket.assigns.targets)
+
     socket
     |> assign(:queue_entries, queue_entries)
     |> assign(:all_queue_entries, all_queue_entries)
-    |> push_event("update_commands", %{commands: Enum.map(queue_entries, &queue_entry_json/1)})
+    |> push_event("update_commands", %{
+      commands: Enum.map(queue_entries, &queue_entry_json(&1, targets))
+    })
     |> push_event("update_queue_entries", %{
-      entries: Enum.map(all_queue_entries, &queue_entry_json/1)
+      entries: Enum.map(all_queue_entries, &queue_entry_json(&1, targets))
     })
     |> push_event("queue_metrics", %{metrics: metrics})
   end
@@ -1574,7 +1611,13 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     }
   end
 
-  defp queue_entry_json(entry) do
+  defp targets_map(targets) do
+    Map.new(targets, fn t -> {t.id, t} end)
+  end
+
+  defp queue_entry_json(entry, targets_map) do
+    target = Map.get(targets_map, entry.target_id)
+
     %{
       id: entry.id,
       command_name: entry.command_name,
@@ -1582,10 +1625,10 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       priority: entry.priority,
       sequence_number: entry.sequence_number,
       target_id: entry.target_id,
-      target_name: entry.target && entry.target.name,
+      target_name: target && target.name,
       parameters: entry.parameters,
       scheduled_at: entry.scheduled_at && DateTime.to_iso8601(entry.scheduled_at),
-      created_at: entry.inserted_at && DateTime.to_iso8601(entry.inserted_at),
+      created_at: entry.created_at && DateTime.to_iso8601(entry.created_at),
       attempts: entry.attempts,
       max_attempts: entry.max_attempts,
       last_error: entry.last_error
@@ -1643,17 +1686,23 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   # Push timeline command event from outbox (pipeable)
   # Construct the event directly from the outbox data (like alarms) to avoid database queries
-  defp maybe_push_timeline_command_event(socket, %{event_type: event_type, payload: payload} = event) do
-    command_name = Map.get(payload, "command_name") || Map.get(payload, :command_name) || "Command"
+  defp maybe_push_timeline_command_event(
+         socket,
+         %{event_type: event_type, payload: payload} = event
+       ) do
+    command_name =
+      Map.get(payload, "command_name") || Map.get(payload, :command_name) || "Command"
+
     target_id = Map.get(payload, "target_id") || Map.get(payload, :target_id)
     status = Map.get(payload, "status") || Map.get(payload, :status)
 
     # Use recording_id if available, otherwise use aggregate_id for uniqueness
-    event_id = if event.recording_id do
-      "rec-#{event.recording_id}"
-    else
-      "cmd-#{event.aggregate_id}-#{System.unique_integer([:positive])}"
-    end
+    event_id =
+      if event.recording_id do
+        "rec-#{event.recording_id}"
+      else
+        "cmd-#{event.aggregate_id}-#{System.unique_integer([:positive])}"
+      end
 
     timeline_event = %Cadence.Timeline.Event{
       id: event_id,
@@ -1684,10 +1733,18 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   defp maybe_push_timeline_command_event(socket, _event), do: socket
 
   defp format_command_event_description("command_enqueued", _), do: "Command queued"
-  defp format_command_event_description("command_status_changed", "completed"), do: "Command completed"
+
+  defp format_command_event_description("command_status_changed", "completed"),
+    do: "Command completed"
+
   defp format_command_event_description("command_status_changed", "failed"), do: "Command failed"
-  defp format_command_event_description("command_status_changed", "executing"), do: "Command executing"
-  defp format_command_event_description("command_status_changed", "pending"), do: "Command pending"
+
+  defp format_command_event_description("command_status_changed", "executing"),
+    do: "Command executing"
+
+  defp format_command_event_description("command_status_changed", "pending"),
+    do: "Command pending"
+
   defp format_command_event_description("command_cancelled", _), do: "Command cancelled"
   defp format_command_event_description(_, status) when is_binary(status), do: "Command #{status}"
   defp format_command_event_description(_, _), do: "Command"
@@ -1700,7 +1757,10 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   defp map_command_event_status(_, _), do: :pending
 
   defp format_command_status_label("command_enqueued", _), do: "QUEUED"
-  defp format_command_status_label("command_status_changed", status) when is_binary(status), do: String.upcase(status)
+
+  defp format_command_status_label("command_status_changed", status) when is_binary(status),
+    do: String.upcase(status)
+
   defp format_command_status_label("command_cancelled", _), do: "CANCELLED"
   defp format_command_status_label(_, _), do: "PENDING"
 
@@ -1746,7 +1806,10 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   defp map_alarm_status(_), do: :active
 
   # Push timeline procedure event (pipeable)
-  defp push_timeline_procedure_event(socket, %Cadence.Procedures.Events.ProcedureExecutionEvent{} = proc_event) do
+  defp push_timeline_procedure_event(
+         socket,
+         %Cadence.Procedures.Events.ProcedureExecutionEvent{} = proc_event
+       ) do
     event = %Cadence.Timeline.Event{
       id: "proc-#{proc_event.execution_id}-#{proc_event.event_type}",
       type: :procedure,
@@ -1778,15 +1841,28 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
 
   defp format_procedure_event_description(%{event_type: :started}), do: "Execution started"
   defp format_procedure_event_description(%{event_type: :completed}), do: "Completed successfully"
-  defp format_procedure_event_description(%{event_type: :failed, error_message: msg}) when is_binary(msg), do: "Failed: #{msg}"
+
+  defp format_procedure_event_description(%{event_type: :failed, error_message: msg})
+       when is_binary(msg),
+       do: "Failed: #{msg}"
+
   defp format_procedure_event_description(%{event_type: :failed}), do: "Execution failed"
-  defp format_procedure_event_description(%{event_type: :paused, step_index: idx}) when is_integer(idx), do: "Paused at step #{idx + 1}"
+
+  defp format_procedure_event_description(%{event_type: :paused, step_index: idx})
+       when is_integer(idx),
+       do: "Paused at step #{idx + 1}"
+
   defp format_procedure_event_description(%{event_type: :paused}), do: "Paused"
   defp format_procedure_event_description(%{event_type: :pausing}), do: "Pausing..."
   defp format_procedure_event_description(%{event_type: :resumed}), do: "Resumed"
   defp format_procedure_event_description(%{event_type: :cancelled}), do: "Cancelled"
-  defp format_procedure_event_description(%{event_type: :step_started, step_index: idx}), do: "Step #{idx + 1} started"
-  defp format_procedure_event_description(%{event_type: :step_completed, step_index: idx}), do: "Step #{idx + 1} completed"
+
+  defp format_procedure_event_description(%{event_type: :step_started, step_index: idx}),
+    do: "Step #{idx + 1} started"
+
+  defp format_procedure_event_description(%{event_type: :step_completed, step_index: idx}),
+    do: "Step #{idx + 1} completed"
+
   defp format_procedure_event_description(_), do: nil
 
   defp map_procedure_event_status(:started), do: :running
@@ -1808,7 +1884,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     # Find first published definition set for this mission
     definition_set =
       from(ds in DefinitionSet,
-        join: db in Database, on: ds.database_id == db.id,
+        join: db in Database,
+        on: ds.database_id == db.id,
         where: db.mission_id == ^mission_id,
         where: not is_nil(ds.published_at),
         where: is_nil(ds.superseded_at),

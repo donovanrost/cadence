@@ -3,8 +3,8 @@ defmodule Cadence.AlarmsFixtures do
   Test helpers for creating Alarm entities.
   """
 
-  alias Cadence.Repo
   alias Cadence.Alarms.{Alarm, AlarmRule}
+  alias Cadence.Repo
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

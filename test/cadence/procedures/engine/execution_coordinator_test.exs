@@ -3,6 +3,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinatorTest do
 
   alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Repo
+  alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -13,7 +14,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinatorTest do
 
   setup do
     # Allow spawned processes to use the test database connection
-    Ecto.Adapters.SQL.Sandbox.mode(Repo, {:shared, self()})
+    Sandbox.mode(Repo, {:shared, self()})
     :ok
   end
 

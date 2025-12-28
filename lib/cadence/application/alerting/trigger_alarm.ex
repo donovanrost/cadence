@@ -25,8 +25,9 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
       {:ok, alarm, :existing} = TriggerAlarm.from_telemetry(...)
   """
 
-  alias Cadence.Domain.Alerting.Entities.Alarm
   alias Cadence.Application.Alerting.AlarmQueries
+  alias Cadence.Domain.Alerting.Entities.Alarm
+  alias Cadence.Ports.Recordings.EventRecorder
 
   @type trigger_attrs :: %{
           required(:organization_id) => String.t(),
@@ -72,11 +73,12 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
   """
   @spec from_telemetry(trigger_attrs()) :: trigger_result()
   def from_telemetry(attrs) do
-    attrs = Map.merge(attrs, %{
-      alarm_type: attrs[:alarm_type] || "telemetry_limit",
-      source_type: attrs[:source_type] || "telemetry_item",
-      triggered_at: DateTime.utc_now()
-    })
+    attrs =
+      Map.merge(attrs, %{
+        alarm_type: attrs[:alarm_type] || "telemetry_limit",
+        source_type: attrs[:source_type] || "telemetry_item",
+        triggered_at: DateTime.utc_now()
+      })
 
     find_or_create(attrs)
   end
@@ -92,11 +94,12 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
   """
   @spec from_interface_event(trigger_attrs()) :: trigger_result()
   def from_interface_event(attrs) do
-    attrs = Map.merge(attrs, %{
-      alarm_type: attrs[:alarm_type] || "interface_connection",
-      source_type: "interface",
-      triggered_at: DateTime.utc_now()
-    })
+    attrs =
+      Map.merge(attrs, %{
+        alarm_type: attrs[:alarm_type] || "interface_connection",
+        source_type: "interface",
+        triggered_at: DateTime.utc_now()
+      })
 
     find_or_create(attrs)
   end
@@ -111,11 +114,12 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
   """
   @spec manual(trigger_attrs(), String.t()) :: trigger_result()
   def manual(attrs, user_id) do
-    attrs = Map.merge(attrs, %{
-      source_origin: :manual,
-      triggered_at: DateTime.utc_now(),
-      metadata: Map.merge(attrs[:metadata] || %{}, %{"created_by" => user_id})
-    })
+    attrs =
+      Map.merge(attrs, %{
+        source_origin: :manual,
+        triggered_at: DateTime.utc_now(),
+        metadata: Map.merge(attrs[:metadata] || %{}, %{"created_by" => user_id})
+      })
 
     find_or_create(attrs)
   end
@@ -128,13 +132,15 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
   """
   @spec from_mission_db(trigger_attrs(), String.t()) :: trigger_result()
   def from_mission_db(attrs, definition_set_id) do
-    attrs = Map.merge(attrs, %{
-      source_origin: :mission_db,
-      triggered_at: DateTime.utc_now(),
-      metadata: Map.merge(attrs[:metadata] || %{}, %{
-        "source_definition_set_id" => definition_set_id
+    attrs =
+      Map.merge(attrs, %{
+        source_origin: :mission_db,
+        triggered_at: DateTime.utc_now(),
+        metadata:
+          Map.merge(attrs[:metadata] || %{}, %{
+            "source_definition_set_id" => definition_set_id
+          })
       })
-    })
 
     find_or_create(attrs)
   end
@@ -192,6 +198,7 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
         Enum.any?(messages, fn msg ->
           is_binary(msg) and String.contains?(msg, "already exists")
         end)
+
       _ ->
         false
     end)
@@ -202,6 +209,6 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
   end
 
   defp recorder do
-    Cadence.Ports.Recordings.EventRecorder.impl()
+    EventRecorder.impl()
   end
 end

@@ -4,9 +4,9 @@ defmodule Cadence.SettingsTest do
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
 
+  alias Cadence.Domain.Settings.Entities.Setting, as: SettingEntity
   alias Cadence.Settings
   alias Cadence.Settings.Setting
-  alias Cadence.Domain.Settings.Entities.Setting, as: SettingEntity
 
   describe "definitions" do
     test "get_definition/2 returns definition for known settings" do

@@ -204,14 +204,16 @@ defmodule Cadence.Test.Adapters.FakeEventPublisher do
   """
   def find_events(criteria, pid \\ __MODULE__) do
     Agent.get(pid, fn state ->
-      Enum.filter(state.events, fn entry ->
-        Enum.all?(criteria, fn
-          {:topic, topic} -> entry.topic == topic
-          {:event_type, type} -> elem(entry.event, 0) == type
-        end)
-      end)
+      Enum.filter(state.events, &matches_criteria?(&1, criteria))
     end)
   end
+
+  defp matches_criteria?(entry, criteria) do
+    Enum.all?(criteria, &criteria_match?(&1, entry))
+  end
+
+  defp criteria_match?({:topic, topic}, entry), do: entry.topic == topic
+  defp criteria_match?({:event_type, type}, entry), do: elem(entry.event, 0) == type
 
   @doc """
   Asserts that an event was published matching the criteria.

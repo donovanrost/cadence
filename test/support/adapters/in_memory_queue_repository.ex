@@ -209,13 +209,8 @@ defmodule Cadence.Test.Adapters.InMemoryQueueRepository do
     Agent.get_and_update(__MODULE__, fn state ->
       {count, new_entries} =
         state.entries
-        |> Enum.reduce({0, state.entries}, fn {id, entry}, {count, entries} ->
-          if entry.target_id == target_id && entry.status == :pending do
-            cancelled = %{entry | status: :cancelled}
-            {count + 1, Map.put(entries, id, cancelled)}
-          else
-            {count, entries}
-          end
+        |> Enum.reduce({0, state.entries}, fn {id, entry}, acc ->
+          cancel_pending_entry({id, entry}, target_id, acc)
         end)
 
       {{:ok, count}, %{state | entries: new_entries}}
@@ -227,36 +222,59 @@ defmodule Cadence.Test.Adapters.InMemoryQueueRepository do
     Agent.get_and_update(__MODULE__, fn state ->
       {count, new_entries} =
         state.entries
-        |> Enum.reduce({0, state.entries}, fn {id, entry}, {count, entries} ->
-          if entry.status == :pending &&
-               entry.expires_at != nil &&
-               DateTime.compare(entry.expires_at, cutoff_time) == :lt do
-            expired = %{entry | status: :expired}
-            {count + 1, Map.put(entries, id, expired)}
-          else
-            {count, entries}
-          end
+        |> Enum.reduce({0, state.entries}, fn {id, entry}, acc ->
+          expire_entry_if_needed({id, entry}, cutoff_time, acc)
         end)
 
       {{:ok, count}, %{state | entries: new_entries}}
     end)
   end
 
+  defp cancel_pending_entry({id, entry}, target_id, {count, entries}) do
+    if pending_for_target?(entry, target_id) do
+      cancelled = %{entry | status: :cancelled}
+      {count + 1, Map.put(entries, id, cancelled)}
+    else
+      {count, entries}
+    end
+  end
+
+  defp expire_entry_if_needed({id, entry}, cutoff_time, {count, entries}) do
+    if expired_pending_entry?(entry, cutoff_time) do
+      expired = %{entry | status: :expired}
+      {count + 1, Map.put(entries, id, expired)}
+    else
+      {count, entries}
+    end
+  end
+
+  defp pending_for_target?(entry, target_id) do
+    entry.target_id == target_id and entry.status == :pending
+  end
+
+  defp expired_pending_entry?(entry, cutoff_time) do
+    entry.status == :pending &&
+      entry.expires_at != nil &&
+      DateTime.compare(entry.expires_at, cutoff_time) == :lt
+  end
+
   @impl true
   def reorder(reorder_list) do
     Agent.update(__MODULE__, fn state ->
-      new_entries =
-        Enum.reduce(reorder_list, state.entries, fn {id, new_seq}, entries ->
-          case Map.get(entries, id) do
-            nil -> entries
-            entry -> Map.put(entries, id, %{entry | sequence_number: new_seq})
-          end
-        end)
-
+      new_entries = apply_reorder(state.entries, reorder_list)
       %{state | entries: new_entries}
     end)
 
     :ok
+  end
+
+  defp apply_reorder(entries, reorder_list) do
+    Enum.reduce(reorder_list, entries, fn {id, new_seq}, acc ->
+      case Map.get(acc, id) do
+        nil -> acc
+        entry -> Map.put(acc, id, %{entry | sequence_number: new_seq})
+      end
+    end)
   end
 
   @impl true

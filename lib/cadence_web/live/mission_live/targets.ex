@@ -93,7 +93,11 @@ defmodule CadenceWeb.MissionLive.Targets do
       Enum.map(socket.assigns.targets, fn target ->
         if target.id == updated_target.id do
           # Merge status fields from the domain entity into the schema
-          %{target | status: updated_target.status, circuit_breaker_status: updated_target.circuit_breaker_status}
+          %{
+            target
+            | status: updated_target.status,
+              circuit_breaker_status: updated_target.circuit_breaker_status
+          }
         else
           target
         end
@@ -123,16 +127,16 @@ defmodule CadenceWeb.MissionLive.Targets do
 
                 {:noreply,
                  socket
-               |> put_flash(:info, "Target deleted successfully")
-               |> assign(:targets, targets)}
+                 |> put_flash(:info, "Target deleted successfully")
+                 |> assign(:targets, targets)}
 
-            {:error, _changeset} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete target")}
-          end
+              {:error, _changeset} ->
+                {:noreply, put_flash(socket, :error, "Failed to delete target")}
+            end
 
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
-      end
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
+        end
     end
   end
 

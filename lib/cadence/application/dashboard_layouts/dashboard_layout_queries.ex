@@ -49,7 +49,9 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutQueries do
 
       {:error, :not_found} ->
         # Return a new unsaved layout
-        {:ok, layout} = DashboardLayout.new(%{name: "Default", user_id: user_id, mission_id: mission_id})
+        {:ok, layout} =
+          DashboardLayout.new(%{name: "Default", user_id: user_id, mission_id: mission_id})
+
         layout
     end
   end

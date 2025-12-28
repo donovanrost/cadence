@@ -29,7 +29,7 @@ defmodule Cadence.ProceduresBuilders do
       ])
   """
 
-  alias Cadence.Procedures.{Procedure, ProcedureVersion, ProcedureExecution, ProcedureLog}
+  alias Cadence.Procedures.{Procedure, ProcedureExecution, ProcedureLog, ProcedureVersion}
 
   # ============================================================================
   # Execution Builders

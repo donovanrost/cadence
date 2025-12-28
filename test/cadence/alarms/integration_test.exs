@@ -11,9 +11,10 @@ defmodule Cadence.Alarms.IntegrationTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Alarms
+  alias Cadence.Recordings
   alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Runtime.Alarms.RuleCache
-  alias Cadence.Recordings
+  alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -25,7 +26,7 @@ defmodule Cadence.Alarms.IntegrationTest do
 
   setup do
     # Use shared sandbox mode for GenServer database access
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
 
     org = organization_fixture()
     mission = mission_fixture(organization: org)

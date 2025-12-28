@@ -243,7 +243,8 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         <.status_badge status={interface.status} />
       </:col>
       <:col :let={interface} label="Connection">
-        <% conn_status = Map.get(@interface_connection_status, interface.id, %{state: :disconnected, client_count: 0}) %>
+        <% conn_status =
+          Map.get(@interface_connection_status, interface.id, %{state: :disconnected, client_count: 0}) %>
         <%= case conn_status.state do %>
           <% :connected -> %>
             <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
@@ -252,8 +253,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
             </span>
           <% :disconnected -> %>
             <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-              <span class="mr-1.5 h-2 w-2 rounded-full bg-gray-400"></span>
-              Disconnected
+              <span class="mr-1.5 h-2 w-2 rounded-full bg-gray-400"></span> Disconnected
             </span>
           <% _ -> %>
             <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">

@@ -40,8 +40,8 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandler do
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.AlarmRule
-  alias Cadence.Runtime.Alarms.{Matcher, RuleCache}
   alias Cadence.Alarms.Notifications.Dispatcher
+  alias Cadence.Runtime.Alarms.{Matcher, RuleCache}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   @type handle_result ::

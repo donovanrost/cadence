@@ -242,14 +242,8 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     Agent.update(__MODULE__, fn state ->
       new_versions =
         state.versions
-        |> Enum.map(fn {id, version} ->
-          if version.procedure_id == procedure_id &&
-               version.id != except_version_id &&
-               version.status == :approved do
-            {id, %{version | status: :deprecated}}
-          else
-            {id, version}
-          end
+        |> Enum.map(fn entry ->
+          maybe_deprecate_version(entry, procedure_id, except_version_id)
         end)
         |> Map.new()
 
@@ -305,7 +299,8 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
 
     approval = %{
       id: id,
-      procedure_version_id: Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
+      procedure_version_id:
+        Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
       user_id: Map.get(attrs, :user_id) || Map.get(attrs, "user_id"),
       decision: Map.get(attrs, :decision) || Map.get(attrs, "decision"),
       comment: Map.get(attrs, :comment) || Map.get(attrs, "comment"),
@@ -381,14 +376,16 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     execution = %{
       id: id,
       procedure_id: Map.get(attrs, :procedure_id) || Map.get(attrs, "procedure_id"),
-      procedure_version_id: Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
+      procedure_version_id:
+        Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
       organization_id: Map.get(attrs, :organization_id) || Map.get(attrs, "organization_id"),
       mission_id: Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id"),
       target_id: Map.get(attrs, :target_id) || Map.get(attrs, "target_id"),
       parameters: Map.get(attrs, :parameters) || Map.get(attrs, "parameters") || %{},
       status: Map.get(attrs, :status) || Map.get(attrs, "status") || :pending,
       triggered_by: Map.get(attrs, :triggered_by) || Map.get(attrs, "triggered_by") || :manual,
-      triggered_by_user_id: Map.get(attrs, :triggered_by_user_id) || Map.get(attrs, "triggered_by_user_id"),
+      triggered_by_user_id:
+        Map.get(attrs, :triggered_by_user_id) || Map.get(attrs, "triggered_by_user_id"),
       inserted_at: now,
       updated_at: now
     }
@@ -403,22 +400,40 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
   @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
   def update_execution(id, attrs) do
     Agent.get_and_update(__MODULE__, fn state ->
-      case Map.get(state.executions, id) do
-        nil ->
-          {{:error, :not_found}, state}
-
-        execution ->
-          updated =
-            attrs
-            |> Enum.reduce(execution, fn {key, value}, acc ->
-              Map.put(acc, key, value)
-            end)
-            |> Map.put(:updated_at, DateTime.utc_now())
-
-          new_executions = Map.put(state.executions, id, updated)
-          {{:ok, updated}, %{state | executions: new_executions}}
-      end
+      update_execution_in_state(state, id, attrs)
     end)
+  end
+
+  defp maybe_deprecate_version({id, version}, procedure_id, except_version_id) do
+    if deprecated_candidate?(version, procedure_id, except_version_id) do
+      {id, %{version | status: :deprecated}}
+    else
+      {id, version}
+    end
+  end
+
+  defp deprecated_candidate?(version, procedure_id, except_version_id) do
+    version.procedure_id == procedure_id &&
+      version.id != except_version_id &&
+      version.status == :approved
+  end
+
+  defp update_execution_in_state(state, id, attrs) do
+    case Map.get(state.executions, id) do
+      nil ->
+        {{:error, :not_found}, state}
+
+      execution ->
+        updated =
+          attrs
+          |> Enum.reduce(execution, fn {key, value}, acc ->
+            Map.put(acc, key, value)
+          end)
+          |> Map.put(:updated_at, DateTime.utc_now())
+
+        new_executions = Map.put(state.executions, id, updated)
+        {{:ok, updated}, %{state | executions: new_executions}}
+    end
   end
 
   @impl Cadence.Ports.Repository.Procedures.ExecutionOperations

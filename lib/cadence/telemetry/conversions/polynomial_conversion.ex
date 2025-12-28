@@ -58,18 +58,23 @@ defmodule Cadence.Telemetry.Conversions.PolynomialConversion do
         changeset
 
       coefficients when is_list(coefficients) ->
-        if Enum.empty?(coefficients) do
-          add_error(changeset, :coefficients, "must have at least one coefficient")
-        else
-          if Enum.all?(coefficients, &is_number/1) do
-            changeset
-          else
-            add_error(changeset, :coefficients, "all coefficients must be numbers")
-          end
-        end
+        validate_coefficients_list(changeset, coefficients)
 
       _ ->
         add_error(changeset, :coefficients, "must be a list of numbers")
+    end
+  end
+
+  defp validate_coefficients_list(changeset, coefficients) do
+    cond do
+      Enum.empty?(coefficients) ->
+        add_error(changeset, :coefficients, "must have at least one coefficient")
+
+      Enum.all?(coefficients, &is_number/1) ->
+        changeset
+
+      true ->
+        add_error(changeset, :coefficients, "all coefficients must be numbers")
     end
   end
 end

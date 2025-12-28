@@ -1,10 +1,10 @@
 defmodule CadenceWeb.DerivedItemLive.FormComponent do
   use CadenceWeb, :live_component
 
-  alias Cadence.Telemetry.Database.DerivedItem
-  alias Cadence.Telemetry.Packet.PacketDefinition
-  alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
   alias Cadence.Repo
+  alias Cadence.Telemetry.Database.DerivedItem
+  alias Cadence.Telemetry.DerivedItems.ExpressionEvaluator
+  alias Cadence.Telemetry.Packet.PacketDefinition
   import Ecto.Query
 
   @impl true
@@ -82,7 +82,9 @@ defmodule CadenceWeb.DerivedItemLive.FormComponent do
             <span class="text-sm font-medium text-zinc-700">Source items: </span>
             <div class="flex flex-wrap gap-1 mt-1">
               <%= for item <- @source_items do %>
-                <.badge variant={if item_exists?(item, @available_items), do: "success", else: "warning"}>
+                <.badge variant={
+                  if item_exists?(item, @available_items), do: "success", else: "warning"
+                }>
                   {item}
                   <span
                     :if={!item_exists?(item, @available_items)}

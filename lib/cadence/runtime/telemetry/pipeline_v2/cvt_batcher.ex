@@ -21,8 +21,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher do
   use GenStage
   require Logger
 
-  alias Cadence.Telemetry.PipelineMetrics
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Telemetry.PipelineMetrics
 
   # Increased batch size for high-throughput (was 50)
   @default_batch_size 500
@@ -103,7 +103,10 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher do
 
     case GenServer.whereis(upstream) do
       nil ->
-        Logger.warning("Upstream DeriveStage for partition #{partition} not found, retrying in 100ms")
+        Logger.warning(
+          "Upstream DeriveStage for partition #{partition} not found, retrying in 100ms"
+        )
+
         Process.send_after(self(), :subscribe_to_upstream, 100)
 
       _pid ->
@@ -148,7 +151,12 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher do
   defp flush_batch(%{batch: []} = state), do: state
 
   defp flush_batch(state) do
-    %{mission_id: mission_id, partition: partition, batch: batch, broadcast_enabled: broadcast_enabled} = state
+    %{
+      mission_id: mission_id,
+      partition: partition,
+      batch: batch,
+      broadcast_enabled: broadcast_enabled
+    } = state
 
     # Sample timing at 1 in 10 batches (batches are already 500x less frequent than packets)
     should_time = :rand.uniform(@timing_sample_rate) == 1
@@ -233,45 +241,44 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.CVTBatcher do
   # With newest-first ordering, we only process first occurrence of each packet type
   defp aggregate_batch_items(events) do
     events
-    |> Enum.reduce({%{}, MapSet.new(), 0}, fn event, {items_map, seen_packets, count} ->
-      %{
-        packet: packet,
-        packet_def: packet_def,
-        metadata: metadata,
-        items_with_limits: items_with_limits
-      } = event
+    |> Enum.reduce({%{}, MapSet.new(), 0}, &aggregate_event/2)
+    |> then(fn {items_map, _seen, count} -> {Map.values(items_map), count} end)
+  end
 
-      # Skip stored (historical) packets
-      is_stored = metadata[:stored] || packet.stored || false
-      item_count = length(items_with_limits)
+  defp aggregate_event(event, {items_map, seen_packets, count}) do
+    item_count = length(event.items_with_limits)
 
-      if is_stored do
+    if stored_packet?(event) do
+      {items_map, seen_packets, count + item_count}
+    else
+      packet_key = {event.target_id, event.packet_def.name}
+
+      if MapSet.member?(seen_packets, packet_key) do
         {items_map, seen_packets, count + item_count}
       else
-        target_id = event.target_id
-        packet_name = packet_def.name
-        packet_key = {target_id, packet_name}
-
-        if MapSet.member?(seen_packets, packet_key) do
-          # Already processed a newer version of this packet, skip entirely
-          {items_map, seen_packets, count + item_count}
-        else
-          # First (newest) occurrence of this packet type - process all items
-          prefix_len = byte_size(packet_name) + 1
-
-          new_items =
-            items_with_limits
-            |> Enum.reduce(items_map, fn {qualified_name, value, limits_state}, acc ->
-              item_name = extract_item_name(qualified_name, prefix_len)
-              key = {target_id, packet_name, item_name}
-              Map.put(acc, key, {target_id, packet_name, item_name, value, limits_state})
-            end)
-
-          {new_items, MapSet.put(seen_packets, packet_key), count + item_count}
-        end
+        {new_items, new_seen} = add_packet_items(event, items_map, seen_packets, packet_key)
+        {new_items, new_seen, count + item_count}
       end
-    end)
-    |> then(fn {items_map, _seen, count} -> {Map.values(items_map), count} end)
+    end
+  end
+
+  defp stored_packet?(%{metadata: metadata, packet: packet}) do
+    metadata[:stored] || packet.stored || false
+  end
+
+  defp add_packet_items(event, items_map, seen_packets, packet_key) do
+    packet_name = event.packet_def.name
+    prefix_len = byte_size(packet_name) + 1
+
+    new_items =
+      event.items_with_limits
+      |> Enum.reduce(items_map, fn {qualified_name, value, limits_state}, acc ->
+        item_name = extract_item_name(qualified_name, prefix_len)
+        key = {event.target_id, packet_name, item_name}
+        Map.put(acc, key, {event.target_id, packet_name, item_name, value, limits_state})
+      end)
+
+    {new_items, MapSet.put(seen_packets, packet_key)}
   end
 
   # Extract item name from qualified name using pre-computed prefix length

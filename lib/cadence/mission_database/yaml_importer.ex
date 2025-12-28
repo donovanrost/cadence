@@ -77,19 +77,18 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   require Logger
 
   alias Cadence.Config.VersionRegistry
-  alias Cadence.Repo
-
   alias Cadence.MissionDatabase.{
-    DefinitionSet,
-    DataType,
     Algorithm,
-    Unit,
+    Argument,
     Container,
     ContainerEntry,
-    Parameter,
+    DataType,
+    DefinitionSet,
     MetaCommand,
-    Argument
+    Parameter,
+    Unit
   }
+  alias Cadence.Repo
 
   @doc """
   Imports a YAML file and creates a DefinitionSet with all definitions.

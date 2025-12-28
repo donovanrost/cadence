@@ -5,8 +5,8 @@ defmodule Cadence.TestHelpers do
   These functions make it easy to set up test data without building full UI.
   """
 
-  alias Cadence.{Repo, Targets, Missions}
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
+  alias Cadence.{Missions, Repo, Targets}
 
   @doc """
   Creates standard test targets for a mission.
@@ -138,7 +138,11 @@ defmodule Cadence.TestHelpers do
 
       {:error, changeset} ->
         require Logger
-        Logger.error("Failed to create target: #{identifier}, errors: #{inspect(changeset.errors)}")
+
+        Logger.error(
+          "Failed to create target: #{identifier}, errors: #{inspect(changeset.errors)}"
+        )
+
         {:error, changeset}
     end
   end

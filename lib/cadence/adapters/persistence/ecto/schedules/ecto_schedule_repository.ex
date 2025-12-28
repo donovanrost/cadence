@@ -20,9 +20,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Schedules.EctoScheduleRepository do
 
   import Ecto.Query
 
+  alias Cadence.Domain.Schedules.Entities.Schedule, as: ScheduleEntity
   alias Cadence.Repo
   alias Cadence.Schedules.Schedule, as: ScheduleSchema
-  alias Cadence.Domain.Schedules.Entities.Schedule, as: ScheduleEntity
 
   # ===========================================================================
   # ScheduleRepository Implementation
@@ -62,7 +62,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Schedules.EctoScheduleRepository do
         order_by: [asc: s.name]
 
     query =
-      apply_filters(query, mission_id: mission_id, procedure_id: procedure_id, enabled_only: enabled_only)
+      apply_filters(query,
+        mission_id: mission_id,
+        procedure_id: procedure_id,
+        enabled_only: enabled_only
+      )
 
     query = if limit, do: from(s in query, limit: ^limit, offset: ^offset), else: query
 

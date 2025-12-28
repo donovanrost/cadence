@@ -24,9 +24,9 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
   require Logger
 
   # Accept Ecto schema, domain entity, or MissionConfig
-  alias Cadence.Missions.Mission
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Application.Missions.MissionConfig
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Missions.Mission
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
@@ -121,4 +121,3 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
     end
   end
 end
-

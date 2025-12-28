@@ -39,9 +39,9 @@ defmodule Cadence.Shifts do
 
   import Ecto.Query, warn: false
 
+  alias Cadence.Buckets
   alias Cadence.Repo
   alias Cadence.Shifts.Shift
-  alias Cadence.Buckets
 
   # ============================================================================
   # Shift CRUD
@@ -305,7 +305,8 @@ defmodule Cadence.Shifts do
   @spec remove_operator(Shift.t(), String.t()) :: {:ok, struct()} | {:error, term()}
   def remove_operator(%Shift{} = shift, user_id) do
     with bucket when not is_nil(bucket) <- Buckets.get_bucket_by_bucketable("Shift", shift.id),
-         membership when not is_nil(membership) <- Buckets.get_active_membership(bucket.id, user_id) do
+         membership when not is_nil(membership) <-
+           Buckets.get_active_membership(bucket.id, user_id) do
       Buckets.end_membership(membership)
     else
       nil -> {:error, :not_found}

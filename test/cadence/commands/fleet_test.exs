@@ -3,10 +3,10 @@ defmodule Cadence.Commands.FleetTest do
 
   alias Cadence.Commands
   alias Cadence.Commands.{TargetDispatcher, TargetQueue}
-  alias Cadence.Organizations.Organization
+  alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
   alias Cadence.Targets.Target
-  alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand, Argument}
 
   # Setup creates an org, mission, multiple targets, and commands for testing
   setup do

@@ -289,10 +289,11 @@ defmodule Cadence.Telemetry.DecommutationTest do
   describe "binary decommutation (full packet)" do
     test "decommutates realistic CCSDS health packet" do
       # CCSDS health packet layout (after sync and headers):
-      # [timestamp:48][target_hash:16][cpu_temp:float32][voltage:float32][current:float32][battery_pct:uint8][uptime:uint32][memory:uint16]
+      # [timestamp:48][target_hash:16][cpu_temp:float32][voltage:float32]
+      # [current:float32][battery_pct:uint8][uptime:uint32][memory:uint16]
 
       timestamp = 1_700_000_000
-      target_hash = 12345
+      target_hash = 12_345
       cpu_temp = 25.5
       voltage = 14.2
       current = 2.3
@@ -302,8 +303,14 @@ defmodule Cadence.Telemetry.DecommutationTest do
 
       packet =
         <<timestamp::48, target_hash::16>> <>
-          <<cpu_temp::float-32, voltage::float-32, current::float-32, battery_pct::8, uptime::32,
-            memory::16>>
+          <<
+            cpu_temp::float-32,
+            voltage::float-32,
+            current::float-32,
+            battery_pct::8,
+            uptime::32,
+            memory::16
+          >>
 
       # Build field_specs for binary extraction (the new required format)
       field_specs = [

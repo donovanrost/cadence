@@ -141,8 +141,13 @@ defmodule Cadence.Repo.Migrations.CleanupLegacyCommandTables do
     # Recreate definition_sets table
     create_if_not_exists table(:definition_sets, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :version, :string, null: false
       add :description, :text
       add :is_active, :boolean, default: false
@@ -153,9 +158,15 @@ defmodule Cadence.Repo.Migrations.CleanupLegacyCommandTables do
     # Recreate command_definitions table
     create_if_not_exists table(:command_definitions, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :organization_id, references(:organizations, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :mission_id, references(:missions, type: :binary_id, on_delete: :nilify_all)
-      add :definition_set_id, references(:mdb_definition_sets, type: :binary_id, on_delete: :cascade)
+
+      add :definition_set_id,
+          references(:mdb_definition_sets, type: :binary_id, on_delete: :cascade)
+
       add :name, :string, null: false
       add :description, :text
       add :opcode, :integer
@@ -172,7 +183,11 @@ defmodule Cadence.Repo.Migrations.CleanupLegacyCommandTables do
     # Recreate command_parameters table
     create_if_not_exists table(:command_parameters, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :command_definition_id, references(:command_definitions, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :command_definition_id,
+          references(:command_definitions, type: :binary_id, on_delete: :delete_all),
+          null: false
+
       add :name, :string, null: false
       add :description, :text
       add :data_type, :string, null: false

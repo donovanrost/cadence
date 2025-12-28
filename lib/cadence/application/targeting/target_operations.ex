@@ -179,9 +179,8 @@ defmodule Cadence.Application.Targeting.TargetOperations do
   """
   @spec increment_failures(Target.t()) :: {:ok, Target.t()} | {:error, term()}
   def increment_failures(%Target{} = target) do
-    with {:ok, updated} <- Target.increment_failures(target),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+    with {:ok, updated} <- Target.increment_failures(target) do
+      repo().save(updated)
     end
   end
 

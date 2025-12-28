@@ -30,8 +30,8 @@ defmodule Cadence.Buckets do
 
   import Ecto.Query, warn: false
 
+  alias Cadence.Buckets.{Bucket, Bucketable, BucketMembership}
   alias Cadence.Repo
-  alias Cadence.Buckets.{Bucket, BucketMembership, Bucketable}
 
   # ============================================================================
   # Bucket CRUD

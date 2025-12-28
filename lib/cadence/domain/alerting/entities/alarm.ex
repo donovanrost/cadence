@@ -42,7 +42,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
       {:ok, cleared} = Alarm.clear(shelved)
   """
 
-  alias Cadence.Domain.Alerting.ValueObjects.{Severity, AlarmStatus}
+  alias Cadence.Domain.Alerting.ValueObjects.{AlarmStatus, Severity}
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -447,7 +447,8 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
     Severity.validate(severity)
   end
 
-  defp validate_source_origin(%{source_origin: origin}) when origin in [:rule, :mission_db, :manual] do
+  defp validate_source_origin(%{source_origin: origin})
+       when origin in [:rule, :mission_db, :manual] do
     :ok
   end
 

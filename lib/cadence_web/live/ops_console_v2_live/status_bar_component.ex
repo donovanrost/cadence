@@ -29,8 +29,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </.link>
-
-        <!-- Mission name -->
+        
+    <!-- Mission name -->
         <div class="flex items-center gap-2">
           <span class="mc-label-subsystem text-base-content/40">MISSION</span>
           <span class="font-semibold text-sm text-primary tracking-wide">
@@ -41,8 +41,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
           </span>
         </div>
       </div>
-
-      <!-- Center section: Fleet and Alarms -->
+      
+    <!-- Center section: Fleet and Alarms -->
       <div class="flex items-center gap-6">
         <!-- Fleet health -->
         <div class="flex items-center gap-2" title="Fleet Health">
@@ -64,8 +64,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
             </span>
           </div>
         </div>
-
-        <!-- Alarm counts -->
+        
+    <!-- Alarm counts -->
         <div class="flex items-center gap-3" title="Active Alarms">
           <span class="mc-label-subsystem text-base-content/40">ALARMS</span>
           <div class="flex items-center gap-2">
@@ -106,20 +106,23 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
             </div>
           </div>
         </div>
-
-        <!-- Running procedures -->
+        
+    <!-- Running procedures -->
         <div class="flex items-center gap-2" title="Running Procedures">
           <span class="mc-label-subsystem text-base-content/40">PROCS</span>
           <span class={[
             "font-mono text-sm",
-            if(length(@running_procedures) > 0, do: "text-accent font-medium", else: "text-base-content/50")
+            if(length(@running_procedures) > 0,
+              do: "text-accent font-medium",
+              else: "text-base-content/50"
+            )
           ]}>
             {length(@running_procedures)}
           </span>
         </div>
       </div>
-
-      <!-- Right section: Time displays -->
+      
+    <!-- Right section: Time displays -->
       <div class="flex items-center gap-4">
         <!-- UTC Time -->
         <div class="flex items-center gap-2">
@@ -128,16 +131,16 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
             {format_utc_time(@current_time)}
           </span>
         </div>
-
-        <!-- MET (Mission Elapsed Time) - placeholder -->
+        
+    <!-- MET (Mission Elapsed Time) - placeholder -->
         <div class="flex items-center gap-2">
           <span class="mc-label-subsystem text-base-content/40">MET</span>
           <span class="font-mono text-sm text-base-content/70">
             {format_met(@mission)}
           </span>
         </div>
-
-        <!-- Connection status indicator -->
+        
+    <!-- Connection status indicator -->
         <div class="flex items-center gap-1.5" title="Connection Status">
           <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
           <span class="mc-label-subsystem text-success">LIVE</span>
@@ -176,8 +179,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
         if diff < 0 do
           "T-#{format_countdown(-diff)}"
         else
-          days = div(diff, 86400)
-          hours = div(rem(diff, 86400), 3600)
+          days = div(diff, 86_400)
+          hours = div(rem(diff, 86_400), 3600)
           minutes = div(rem(diff, 3600), 60)
           seconds = rem(diff, 60)
 
@@ -188,8 +191,8 @@ defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
   end
 
   defp format_countdown(seconds) do
-    days = div(seconds, 86400)
-    hours = div(rem(seconds, 86400), 3600)
+    days = div(seconds, 86_400)
+    hours = div(rem(seconds, 86_400), 3600)
     minutes = div(rem(seconds, 3600), 60)
     secs = rem(seconds, 60)
 

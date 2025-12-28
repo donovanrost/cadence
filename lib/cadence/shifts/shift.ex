@@ -27,8 +27,8 @@ defmodule Cadence.Shifts.Shift do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

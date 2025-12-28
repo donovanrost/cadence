@@ -214,7 +214,6 @@ defmodule CadenceWeb.ProtocolLive.Index do
     end
   end
 
-
   defp protocol_config_summary(protocol) do
     case protocol.protocol_type do
       "length" ->

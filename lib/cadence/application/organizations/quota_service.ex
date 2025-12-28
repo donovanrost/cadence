@@ -17,8 +17,8 @@ defmodule Cadence.Application.Organizations.QuotaService do
       :ok = QuotaService.check_user_quota(org_id)
   """
 
-  alias Cadence.Domain.Organizations.Entities.Organization
   alias Cadence.Application.Organizations.OrganizationQueries
+  alias Cadence.Domain.Organizations.Entities.Organization
 
   @type org_id :: String.t()
   @type mission_id :: String.t()
@@ -146,7 +146,9 @@ defmodule Cadence.Application.Organizations.QuotaService do
   def check_quota_health(org_id, threshold \\ 0.8) do
     with {:ok, usage} <- get_quota_usage(org_id) do
       at_limit = Enum.filter(usage, fn {_k, v} -> v >= 100.0 end) |> Keyword.keys()
-      near_limit = Enum.filter(usage, fn {_k, v} -> v >= threshold * 100 and v < 100 end) |> Keyword.keys()
+
+      near_limit =
+        Enum.filter(usage, fn {_k, v} -> v >= threshold * 100 and v < 100 end) |> Keyword.keys()
 
       cond do
         length(at_limit) > 0 -> {:error, at_limit}

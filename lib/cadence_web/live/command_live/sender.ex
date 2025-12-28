@@ -457,10 +457,7 @@ defmodule CadenceWeb.CommandLive.Sender do
            end)}
 
         {:error, :validation_failed, errors} ->
-          error_msg =
-            errors
-            |> Enum.map(fn {field, msg} -> "#{field}: #{msg}" end)
-            |> Enum.join(", ")
+          error_msg = Enum.map_join(errors, ", ", fn {field, msg} -> "#{field}: #{msg}" end)
 
           result = %{
             success: false,

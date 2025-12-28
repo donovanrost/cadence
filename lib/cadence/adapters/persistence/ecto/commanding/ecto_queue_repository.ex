@@ -21,9 +21,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Commands.QueueEntry, as: QueueEntrySchema
   alias Cadence.Domain.Commanding.Entities.QueuedCommand, as: QueuedCommandEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # QueueRepository Implementation
@@ -382,14 +382,29 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
 
   defp apply_filters(query, filters) do
     Enum.reduce(filters, query, fn
-      {:status, nil}, q -> q
-      {:status, statuses}, q when is_list(statuses) -> from(e in q, where: e.status in ^statuses)
-      {:status, status}, q -> from(e in q, where: e.status == ^status)
-      {:target_id, nil}, q -> q
-      {:target_id, target_id}, q -> from(e in q, where: e.target_id == ^target_id)
-      {:priority, nil}, q -> q
-      {:priority, priorities}, q when is_list(priorities) -> from(e in q, where: e.priority in ^priorities)
-      {:priority, priority}, q -> from(e in q, where: e.priority == ^priority)
+      {:status, nil}, q ->
+        q
+
+      {:status, statuses}, q when is_list(statuses) ->
+        from(e in q, where: e.status in ^statuses)
+
+      {:status, status}, q ->
+        from(e in q, where: e.status == ^status)
+
+      {:target_id, nil}, q ->
+        q
+
+      {:target_id, target_id}, q ->
+        from(e in q, where: e.target_id == ^target_id)
+
+      {:priority, nil}, q ->
+        q
+
+      {:priority, priorities}, q when is_list(priorities) ->
+        from(e in q, where: e.priority in ^priorities)
+
+      {:priority, priority}, q ->
+        from(e in q, where: e.priority == ^priority)
     end)
   end
 end

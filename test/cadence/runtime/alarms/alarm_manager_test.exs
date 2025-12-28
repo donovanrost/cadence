@@ -1,8 +1,8 @@
 defmodule Cadence.Runtime.Alarms.AlarmManagerTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Alarms.Alarm
+  alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   import Cadence.OrganizationsFixtures

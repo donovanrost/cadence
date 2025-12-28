@@ -22,8 +22,8 @@ defmodule Cadence.Application.Schedules.ScheduleOperations do
       {:ok, schedule} = ScheduleOperations.record_run(schedule, next_run_at)
   """
 
-  alias Cadence.Domain.Schedules.Entities.Schedule
   alias Cadence.Application.Schedules.ScheduleQueries
+  alias Cadence.Domain.Schedules.Entities.Schedule
   alias Cadence.Schedules.Workers.ExecuteScheduleWorker
 
   @type schedule_id :: String.t()

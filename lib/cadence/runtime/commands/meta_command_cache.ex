@@ -132,9 +132,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
   def init(mission_id) do
     table_name = table_name(mission_id)
 
-    Logger.info(
-      "Creating MetaCommand cache table: #{table_name} for mission_id=#{mission_id}"
-    )
+    Logger.info("Creating MetaCommand cache table: #{table_name} for mission_id=#{mission_id}")
 
     # Create ETS table for fast lookups
     _table =
@@ -204,12 +202,12 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
     )
 
     # Only load this specific definition_set if not already loaded
-    if definition_set_id not in state.definition_sets_loaded do
+    if definition_set_id in state.definition_sets_loaded do
+      {:noreply, state}
+    else
       count = load_for_definition_set(state.table_name, definition_set_id)
 
-      Logger.info(
-        "Loaded #{count} commands for new definition_set=#{definition_set_id}"
-      )
+      Logger.info("Loaded #{count} commands for new definition_set=#{definition_set_id}")
 
       new_state = %{
         state
@@ -218,24 +216,26 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
       }
 
       {:noreply, new_state}
-    else
-      {:noreply, state}
     end
   end
 
   def handle_info({:target_created, target}, state) do
     # New target added - ensure its definition_set is loaded
-    if target.definition_set_id && target.definition_set_id not in state.definition_sets_loaded do
-      Logger.debug("Target created with new definition_set, loading commands")
-      count = load_for_definition_set(state.table_name, target.definition_set_id)
+    if target.definition_set_id do
+      if target.definition_set_id in state.definition_sets_loaded do
+        {:noreply, state}
+      else
+        Logger.debug("Target created with new definition_set, loading commands")
+        count = load_for_definition_set(state.table_name, target.definition_set_id)
 
-      new_state = %{
-        state
-        | commands_loaded: state.commands_loaded + count,
-          definition_sets_loaded: [target.definition_set_id | state.definition_sets_loaded]
-      }
+        new_state = %{
+          state
+          | commands_loaded: state.commands_loaded + count,
+            definition_sets_loaded: [target.definition_set_id | state.definition_sets_loaded]
+        }
 
-      {:noreply, new_state}
+        {:noreply, new_state}
+      end
     else
       {:noreply, state}
     end
@@ -265,9 +265,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
 
       new_versions = Map.put(state.definition_set_versions, definition_set_id, new_version)
 
-      Logger.info(
-        "Reloaded #{count} commands for definition_set=#{definition_set_id}"
-      )
+      Logger.info("Reloaded #{count} commands for definition_set=#{definition_set_id}")
 
       {:noreply, %{state | definition_set_versions: new_versions}}
     else
@@ -360,9 +358,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
       end
     end)
 
-    Logger.debug(
-      "Loaded #{length(commands)} commands for definition_set=#{definition_set_id}"
-    )
+    Logger.debug("Loaded #{length(commands)} commands for definition_set=#{definition_set_id}")
 
     length(commands)
   end

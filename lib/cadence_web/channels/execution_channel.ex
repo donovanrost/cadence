@@ -70,12 +70,9 @@ defmodule CadenceWeb.ExecutionChannel do
   defp load_user(nil), do: {:error, :user_not_found}
 
   defp load_user(user_id) do
-    try do
-      user = Accounts.get_user_with_memberships!(user_id)
-      {:ok, user}
-    rescue
-      Ecto.NoResultsError -> {:error, :user_not_found}
-    end
+    {:ok, Accounts.get_user_with_memberships!(user_id)}
+  rescue
+    Ecto.NoResultsError -> {:error, :user_not_found}
   end
 
   defp get_execution(execution_id) do

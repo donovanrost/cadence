@@ -39,8 +39,8 @@ defmodule Cadence.Commands.VerificationRunner do
 
   require Logger
 
-  alias Cadence.MissionDatabase.CommandVerifier
   alias Cadence.Commands.Verification
+  alias Cadence.MissionDatabase.CommandVerifier
   alias Cadence.Runtime.Telemetry.CurrentValueTable
 
   @stage_order [
@@ -91,9 +91,10 @@ defmodule Cadence.Commands.VerificationRunner do
 
   def new(command_log_id, mission_id, target_id, verifiers) do
     # Sort verifiers by stage order
-    sorted = Enum.sort_by(verifiers, fn v ->
-      Enum.find_index(@stage_order, &(&1 == v.stage)) || 999
-    end)
+    sorted =
+      Enum.sort_by(verifiers, fn v ->
+        Enum.find_index(@stage_order, &(&1 == v.stage)) || 999
+      end)
 
     runner = %__MODULE__{
       command_log_id: command_log_id,
@@ -154,10 +155,11 @@ defmodule Cadence.Commands.VerificationRunner do
         nil
       end
 
-    updated_runner = %{runner |
-      started_at: DateTime.utc_now(),
-      initial_value: initial_value,
-      timeout_ref: nil
+    updated_runner = %{
+      runner
+      | started_at: DateTime.utc_now(),
+        initial_value: initial_value,
+        timeout_ref: nil
     }
 
     {:ok, updated_runner}
@@ -174,11 +176,13 @@ defmodule Cadence.Commands.VerificationRunner do
     verifier = current_verifier(runner)
 
     if verifier && verifier.timeout_ms do
-      timeout_ref = Process.send_after(
-        dispatcher_pid,
-        {:verification_stage_timeout, runner.command_log_id, verifier.stage},
-        verifier.timeout_ms
-      )
+      timeout_ref =
+        Process.send_after(
+          dispatcher_pid,
+          {:verification_stage_timeout, runner.command_log_id, verifier.stage},
+          verifier.timeout_ms
+        )
+
       %{runner | timeout_ref: timeout_ref}
     else
       runner
@@ -241,16 +245,18 @@ defmodule Cadence.Commands.VerificationRunner do
       "continue" ->
         Logger.warning(
           "Verification stage #{verifier.stage} timeout, continuing to next stage " <>
-          "(command_log_id=#{runner.command_log_id})"
+            "(command_log_id=#{runner.command_log_id})"
         )
+
         updated_runner = advance_stage(runner, {:timeout, :continued})
         {:continue, updated_runner}
 
       "retry" ->
         Logger.warning(
           "Verification stage #{verifier.stage} timeout, retrying " <>
-          "(command_log_id=#{runner.command_log_id})"
+            "(command_log_id=#{runner.command_log_id})"
         )
+
         # Reset started_at for fresh timeout
         {:retry, %{runner | started_at: DateTime.utc_now(), timeout_ref: nil}}
 
@@ -258,8 +264,9 @@ defmodule Cadence.Commands.VerificationRunner do
         # Default: abort
         Logger.warning(
           "Verification stage #{verifier.stage} timeout, aborting " <>
-          "(command_log_id=#{runner.command_log_id})"
+            "(command_log_id=#{runner.command_log_id})"
         )
+
         {:abort, runner}
     end
   end
@@ -312,6 +319,7 @@ defmodule Cadence.Commands.VerificationRunner do
     case result do
       :satisfied ->
         updated_runner = advance_stage(runner, :passed)
+
         if complete?(updated_runner) do
           {:all_complete, updated_runner}
         else
@@ -343,10 +351,10 @@ defmodule Cadence.Commands.VerificationRunner do
         end
 
       :not_equal ->
-        if not values_match?(value, verifier.expected_value) do
-          :satisfied
-        else
+        if values_match?(value, verifier.expected_value) do
           :pending
+        else
+          :satisfied
         end
 
       :greater ->
@@ -397,11 +405,12 @@ defmodule Cadence.Commands.VerificationRunner do
     # Cancel any pending timeout
     runner = cancel_timeout(runner)
 
-    %{runner |
-      current_index: runner.current_index + 1,
-      stage_results: Map.put(runner.stage_results, verifier.stage, result),
-      started_at: nil,
-      initial_value: nil
+    %{
+      runner
+      | current_index: runner.current_index + 1,
+        stage_results: Map.put(runner.stage_results, verifier.stage, result),
+        started_at: nil,
+        initial_value: nil
     }
   end
 
@@ -432,7 +441,9 @@ defmodule Cadence.Commands.VerificationRunner do
 
   defp parse_number(value) when is_binary(value) do
     case Float.parse(value) do
-      {num, _} -> num
+      {num, _} ->
+        num
+
       :error ->
         case Integer.parse(value) do
           {num, _} -> num

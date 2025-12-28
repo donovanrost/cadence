@@ -23,6 +23,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
 
   alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionProcess
+  alias Ecto.Adapters.SQL.Sandbox
 
   # Note: Some Postgrex disconnection errors may appear during these tests.
   # These are expected - they occur when the sandbox connection is rolled back
@@ -31,7 +32,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
 
   setup do
     # Use shared sandbox mode for process spawning tests
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
     :ok
   end
 
@@ -634,7 +635,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
       # Should not crash
       send(pid, {:unknown_message, "data"})
       send(pid, "random string")
-      send(pid, 12345)
+      send(pid, 12_345)
 
       # Process should still be alive
       Process.sleep(100)
@@ -752,7 +753,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
 
       source = %{
         "steps" => %{
-          "step_1" => %{"type" => "wait", "duration" => 10000, "depends_on" => []}
+          "step_1" => %{"type" => "wait", "duration" => 10_000, "depends_on" => []}
         }
       }
 

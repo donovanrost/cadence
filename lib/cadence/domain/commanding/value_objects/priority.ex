@@ -105,7 +105,8 @@ defmodule Cadence.Domain.Commanding.ValueObjects.Priority do
   @spec compare(t(), t()) :: :lt | :eq | :gt
   def compare(a, b) when a in @values and b in @values do
     cond do
-      a < b -> :gt  # Lower number = higher priority
+      # Lower number = higher priority
+      a < b -> :gt
       a > b -> :lt
       true -> :eq
     end

@@ -14,12 +14,12 @@ defmodule Cadence.Timeline do
   """
 
   import Ecto.Query
-  alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Repo
-  alias Cadence.Timeline.Event
   alias Cadence.Commands.QueueEntry
+  alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Recordings
   alias Cadence.Recordings.Recording
+  alias Cadence.Repo
+  alias Cadence.Timeline.Event
 
   # Event publisher accessor
   defp event_publisher, do: EventPublisher.impl()

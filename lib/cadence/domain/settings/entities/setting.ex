@@ -75,7 +75,15 @@ defmodule Cadence.Domain.Settings.Entities.Setting do
   """
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(attrs) when is_map(attrs) do
-    with :ok <- validate_required(attrs, [:scope_type, :scope_id, :namespace, :key, :value, :value_type]),
+    with :ok <-
+           validate_required(attrs, [
+             :scope_type,
+             :scope_id,
+             :namespace,
+             :key,
+             :value,
+             :value_type
+           ]),
          {:ok, scope_type} <- parse_scope_type(attrs[:scope_type]),
          {:ok, value_type} <- parse_value_type(attrs[:value_type]),
          :ok <- SettingType.validate_value(value_type, attrs[:value]) do

@@ -47,7 +47,7 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
 
           # Load version to check if DAG format
           version = Procedures.get_version!(execution.procedure_version_id)
-          is_dag = Validator.is_dag_format?(version.source)
+          is_dag = Validator.dag_format?(version.source)
           dag_steps = if is_dag, do: version.source["steps"], else: %{}
 
           # Generate socket token for channel connection
@@ -675,7 +675,10 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             <div>
               <div class="hud-data-label">STATUS</div>
               <div class="mt-1">
-                <.status_badge status={@execution.status} class={@execution.status == :pausing && "animate-pulse"} />
+                <.status_badge
+                  status={@execution.status}
+                  class={@execution.status == :pausing && "animate-pulse"}
+                />
               </div>
             </div>
             <div>
@@ -690,15 +693,21 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             </div>
             <div>
               <div class="hud-data-label">CURRENT STEP</div>
-              <div class="mt-1 text-sm font-mono text-base-content">{@execution.current_step_index || 0}</div>
+              <div class="mt-1 text-sm font-mono text-base-content">
+                {@execution.current_step_index || 0}
+              </div>
             </div>
             <div>
               <div class="hud-data-label">STARTED AT</div>
-              <div class="mt-1 text-sm font-mono text-base-content">{format_datetime(@execution.started_at)}</div>
+              <div class="mt-1 text-sm font-mono text-base-content">
+                {format_datetime(@execution.started_at)}
+              </div>
             </div>
             <div>
               <div class="hud-data-label">COMPLETED AT</div>
-              <div class="mt-1 text-sm font-mono text-base-content">{format_datetime(@execution.completed_at)}</div>
+              <div class="mt-1 text-sm font-mono text-base-content">
+                {format_datetime(@execution.completed_at)}
+              </div>
             </div>
             <%= if @execution.error_message do %>
               <div class="col-span-2">
@@ -823,8 +832,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
                 <option value="error">Error</option>
               </select>
             </div>
-
-            <!-- Auto-scroll toggle -->
+            
+    <!-- Auto-scroll toggle -->
             <button
               type="button"
               phx-click="toggle_auto_scroll"
@@ -836,8 +845,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             >
               Auto-scroll: {if @auto_scroll, do: "On", else: "Off"}
             </button>
-
-            <!-- Refresh button for terminal states -->
+            
+    <!-- Refresh button for terminal states -->
             <%= if terminal_status?(@execution.status) do %>
               <button
                 type="button"
@@ -849,8 +858,8 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
             <% end %>
           </div>
         </div>
-
-        <!-- Log entries -->
+        
+    <!-- Log entries -->
         <div
           id="log-container"
           data-log-container
@@ -863,18 +872,26 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
               <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-base-content/20" />
               <p class="mt-2">No logs yet</p>
               <%= if not terminal_status?(@execution.status) do %>
-                <p class="text-sm text-base-content/30">Logs will appear here as the procedure executes.</p>
+                <p class="text-sm text-base-content/30">
+                  Logs will appear here as the procedure executes.
+                </p>
               <% end %>
             </div>
           <% else %>
             <div>
               <%= for log <- @logs do %>
                 <% level = normalize_level(log.level) %>
-                <div data-log-level={level} class={["flex gap-3 px-3 py-1.5 border-b", log_row_classes(level)]}>
+                <div
+                  data-log-level={level}
+                  class={["flex gap-3 px-3 py-1.5 border-b", log_row_classes(level)]}
+                >
                   <div class="flex-shrink-0 w-20 text-base-content/40">
                     <div class="text-[11px] tabular-nums">{format_timestamp(log.timestamp)}</div>
                     <div class="flex items-center gap-1.5 mt-0.5">
-                      <span class={["font-medium text-[10px] uppercase tracking-wide", log_level_color(level)]}>
+                      <span class={[
+                        "font-medium text-[10px] uppercase tracking-wide",
+                        log_level_color(level)
+                      ]}>
                         {format_level(level)}
                       </span>
                       <%= if log.step_index do %>

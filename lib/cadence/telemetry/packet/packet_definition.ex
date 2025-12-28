@@ -10,10 +10,10 @@ defmodule Cadence.Telemetry.Packet.PacketDefinition do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
-  alias Cadence.Missions.Mission
-  alias Cadence.Telemetry.Packet.PacketItem
   alias Cadence.MissionDatabase.DefinitionSet
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
+  alias Cadence.Telemetry.Packet.PacketItem
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

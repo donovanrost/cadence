@@ -201,8 +201,8 @@ defmodule CadenceWeb.NotificationLive.Index do
             </button>
           </div>
         </div>
-
-        <!-- Notification List -->
+        
+    <!-- Notification List -->
         <div class="space-y-3">
           <%= if Enum.empty?(@notifications) do %>
             <div class="card bg-base-100 border border-base-300 p-12">

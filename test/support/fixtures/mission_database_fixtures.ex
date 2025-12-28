@@ -476,7 +476,7 @@ defmodule Cadence.MissionDatabaseFixtures do
         definition_set_id: ds.id,
         name: "command-#{System.unique_integer([:positive])}",
         description: "Test command",
-        opcode: System.unique_integer([:positive]) |> rem(65536)
+        opcode: System.unique_integer([:positive]) |> rem(65_536)
       })
 
     %MetaCommand{}
@@ -565,7 +565,7 @@ defmodule Cadence.MissionDatabaseFixtures do
         stage: :complete,
         telemetry_item_ref: "CMD_STATUS.ACK_COUNT",
         comparison: :changed,
-        timeout_ms: 10000
+        timeout_ms: 10_000
       })
 
     %CommandVerifier{}

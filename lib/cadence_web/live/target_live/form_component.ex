@@ -1,7 +1,7 @@
 defmodule CadenceWeb.TargetLive.FormComponent do
   use CadenceWeb, :live_component
 
-  alias Cadence.{Interfaces, Targets, MissionDatabase}
+  alias Cadence.{Interfaces, MissionDatabase, Targets}
   alias Cadence.MissionDatabase.DefinitionSet
   alias Cadence.Targets.Target
 
@@ -498,9 +498,9 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
   defp format_domain_error(%{} = errors) when is_map(errors) do
     # Handle validation error maps from Ecto
-    errors
-    |> Enum.map(fn {field, messages} -> "#{humanize_field(field)}: #{Enum.join(messages, ", ")}" end)
-    |> Enum.join("; ")
+    Enum.map_join(errors, "; ", fn {field, messages} ->
+      "#{humanize_field(field)}: #{Enum.join(messages, ", ")}"
+    end)
   end
 
   defp format_domain_error(error) when is_binary(error), do: error

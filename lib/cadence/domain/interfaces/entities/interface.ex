@@ -33,8 +33,8 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
       })
   """
 
-  alias Cadence.Domain.Interfaces.ValueObjects.ConnectionType
   alias Cadence.Domain.Interfaces.Entities.InterfaceProtocol
+  alias Cadence.Domain.Interfaces.ValueObjects.ConnectionType
 
   @type t :: %__MODULE__{
           id: String.t() | nil,

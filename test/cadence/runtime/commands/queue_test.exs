@@ -3,11 +3,11 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
 
   alias Cadence.Commands
   alias Cadence.Commands.QueueEntry
-  alias Cadence.Runtime.Commands.TargetQueue
-  alias Cadence.Organizations.Organization
-  alias Cadence.Missions.Mission
-  alias Cadence.Targets.Target
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
+  alias Cadence.Runtime.Commands.TargetQueue
+  alias Cadence.Targets.Target
 
   setup do
     # Create organization

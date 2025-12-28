@@ -33,7 +33,7 @@ defmodule Cadence.MissionDatabase.ContextAlarm do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.MissionDatabase.{DataType, MatchCriteria, AlarmDefinition}
+  alias Cadence.MissionDatabase.{AlarmDefinition, DataType, MatchCriteria}
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

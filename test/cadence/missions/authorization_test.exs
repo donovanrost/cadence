@@ -1,7 +1,7 @@
 defmodule Cadence.Missions.AuthorizationTest do
   use Cadence.DataCase
 
-  alias Cadence.{Accounts, Organizations, Missions}
+  alias Cadence.{Accounts, Missions, Organizations}
   alias Cadence.Accounts.Scope
 
   describe "mission authorization flow" do

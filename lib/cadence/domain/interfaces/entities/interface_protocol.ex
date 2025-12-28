@@ -18,8 +18,8 @@ defmodule Cadence.Domain.Interfaces.Entities.InterfaceProtocol do
       })
   """
 
-  alias Cadence.Domain.Interfaces.ValueObjects.ProtocolType
   alias Cadence.Domain.Interfaces.ValueObjects.DataDirection
+  alias Cadence.Domain.Interfaces.ValueObjects.ProtocolType
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -84,7 +84,8 @@ defmodule Cadence.Domain.Interfaces.Entities.InterfaceProtocol do
   """
   @spec update(t(), map()) :: {:ok, t()} | {:error, term()}
   def update(%__MODULE__{} = protocol, attrs) do
-    with {:ok, direction} <- maybe_parse_direction(attrs[:protocol_direction], protocol.protocol_direction),
+    with {:ok, direction} <-
+           maybe_parse_direction(attrs[:protocol_direction], protocol.protocol_direction),
          {:ok, order} <- maybe_validate_order(attrs[:order], protocol.order),
          config <- Map.merge(protocol.config, attrs[:config] || %{}),
          :ok <- validate_config(protocol.protocol_type, config) do
@@ -196,7 +197,10 @@ defmodule Cadence.Domain.Interfaces.Entities.InterfaceProtocol do
   defp validate_order(_), do: {:error, :invalid_order}
 
   defp maybe_validate_order(nil, current), do: {:ok, current}
-  defp maybe_validate_order(order, _current) when is_integer(order) and order >= 0, do: {:ok, order}
+
+  defp maybe_validate_order(order, _current) when is_integer(order) and order >= 0,
+    do: {:ok, order}
+
   defp maybe_validate_order(_, _), do: {:error, :invalid_order}
 
   defp validate_config(protocol_type, config) do

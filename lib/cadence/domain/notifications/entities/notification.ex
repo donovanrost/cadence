@@ -22,8 +22,8 @@ defmodule Cadence.Domain.Notifications.Entities.Notification do
       {:ok, notification} = Notification.archive(notification)
   """
 
-  alias Cadence.Domain.Notifications.ValueObjects.NotificationType
   alias Cadence.Domain.Notifications.ValueObjects.NotificationSeverity
+  alias Cadence.Domain.Notifications.ValueObjects.NotificationType
 
   @type t :: %__MODULE__{
           id: String.t() | nil,

@@ -51,7 +51,8 @@ defmodule Cadence.Simulator.SendBuffer do
     flushes: 0
   ]
 
-  @type output :: {:tcp, String.t(), non_neg_integer()} | {:udp, String.t(), non_neg_integer()} | nil
+  @type output ::
+          {:tcp, String.t(), non_neg_integer()} | {:udp, String.t(), non_neg_integer()} | nil
 
   # ============================================================================
   # Client API
@@ -128,7 +129,9 @@ defmodule Cadence.Simulator.SendBuffer do
     # Schedule first flush timer
     state = schedule_flush(state)
 
-    Logger.debug("SendBuffer started: output=#{inspect(output)}, timeout=#{batch_timeout}ms, size=#{batch_size}")
+    Logger.debug(
+      "SendBuffer started: output=#{inspect(output)}, timeout=#{batch_timeout}ms, size=#{batch_size}"
+    )
 
     {:ok, state}
   end
@@ -220,7 +223,9 @@ defmodule Cadence.Simulator.SendBuffer do
         }
 
       {:error, reason} ->
-        Logger.warning("SendBuffer flush failed: #{inspect(reason)}, dropping #{packets_buffered} packets")
+        Logger.warning(
+          "SendBuffer flush failed: #{inspect(reason)}, dropping #{packets_buffered} packets"
+        )
 
         %{
           state

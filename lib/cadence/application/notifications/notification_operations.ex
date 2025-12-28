@@ -22,8 +22,8 @@ defmodule Cadence.Application.Notifications.NotificationOperations do
       {:ok, count} = NotificationOperations.mark_all_read(user_id)
   """
 
-  alias Cadence.Notifications.Notification
   alias Cadence.Application.Notifications.NotificationQueries
+  alias Cadence.Notifications.Notification
 
   @type notification_id :: String.t()
   @type user_id :: String.t()

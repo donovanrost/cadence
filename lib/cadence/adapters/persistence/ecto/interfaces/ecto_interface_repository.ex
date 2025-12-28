@@ -21,12 +21,12 @@ defmodule Cadence.Adapters.Persistence.Ecto.Interfaces.EctoInterfaceRepository d
 
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Interfaces.InterfaceSchema
-  alias Cadence.Interfaces.InterfaceProtocol, as: ProtocolSchema
-  alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
   alias Cadence.Domain.Interfaces.Entities.Interface, as: InterfaceEntity
   alias Cadence.Domain.Interfaces.Entities.InterfaceProtocol, as: ProtocolEntity
+  alias Cadence.Interfaces.InterfaceProtocol, as: ProtocolSchema
+  alias Cadence.Interfaces.InterfaceSchema
+  alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
+  alias Cadence.Repo
 
   # ===========================================================================
   # Interface CRUD Operations

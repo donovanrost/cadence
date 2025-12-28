@@ -54,9 +54,7 @@ defmodule Cadence.Repo.Migrations.CreateNotifications do
            )
 
     # Mission-scoped notifications
-    create index(:notifications, [:mission_id, :inserted_at],
-             where: "archived_at IS NULL"
-           )
+    create index(:notifications, [:mission_id, :inserted_at], where: "archived_at IS NULL")
 
     # Lookup by resource for deduplication
     create index(:notifications, [:user_id, :resource_type, :resource_id, :type])

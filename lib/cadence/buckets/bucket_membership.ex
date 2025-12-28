@@ -23,8 +23,8 @@ defmodule Cadence.Buckets.BucketMembership do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Buckets.Bucket
   alias Cadence.Accounts.User
+  alias Cadence.Buckets.Bucket
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

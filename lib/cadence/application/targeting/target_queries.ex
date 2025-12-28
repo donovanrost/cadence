@@ -82,7 +82,8 @@ defmodule Cadence.Application.Targeting.TargetQueries do
 
   The identifier is a unique string like "SAT_001" or "GROUND_01".
   """
-  @spec find_by_identifier(mission_id(), target_identifier()) :: {:ok, Target.t()} | {:error, :not_found}
+  @spec find_by_identifier(mission_id(), target_identifier()) ::
+          {:ok, Target.t()} | {:error, :not_found}
   def find_by_identifier(mission_id, identifier) do
     repo().find_by_identifier(mission_id, identifier)
   end
@@ -160,7 +161,8 @@ defmodule Cadence.Application.Targeting.TargetQueries do
   @doc """
   Gets the definition set ID for a target by mission and identifier.
   """
-  @spec get_definition_set_id(mission_id(), target_identifier()) :: {:ok, id()} | {:error, :not_found}
+  @spec get_definition_set_id(mission_id(), target_identifier()) ::
+          {:ok, id()} | {:error, :not_found}
   def get_definition_set_id(mission_id, identifier) do
     repo().get_definition_set_id(mission_id, identifier)
   end

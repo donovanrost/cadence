@@ -9,6 +9,8 @@ defmodule Cadence.Domain.Schedules.Entities.Schedule do
   This is a pure domain entity with no Ecto dependencies.
   """
 
+  alias Oban.Plugins.Cron
+
   @type schedule_type :: :cron | :once
 
   @type t :: %__MODULE__{
@@ -226,7 +228,7 @@ defmodule Cadence.Domain.Schedules.Entities.Schedule do
     cron = Map.get(attrs, :cron_expression)
 
     if cron && cron != "" do
-      case Oban.Plugins.Cron.parse(cron) do
+      case Cron.parse(cron) do
         {:ok, _} -> :ok
         {:error, _} -> {:error, {:invalid, :cron_expression}}
       end

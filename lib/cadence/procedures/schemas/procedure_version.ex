@@ -48,12 +48,22 @@ defmodule Cadence.Procedures.ProcedureVersion do
   @foreign_key_type :binary_id
 
   @statuses [:draft, :in_review, :approved, :deprecated]
+  @execution_modes [:manual, :assisted, :automatic]
 
   schema "procedure_versions" do
     field :version_number, :integer
     field :source, :map
     field :parameters_schema, :map, default: %{}
     field :status, Ecto.Enum, values: @statuses, default: :draft
+
+    # V2 execution mode:
+    # - :manual - Operator must manually trigger each step
+    # - :assisted - System suggests next step, operator confirms
+    # - :automatic - Steps execute automatically when dependencies met
+    field :execution_mode, Ecto.Enum, values: @execution_modes, default: :manual
+
+    # When true, operators can propose changes during execution (redlines)
+    field :allow_suggested_edits, :boolean, default: true
 
     # When true, commands sent by this procedure bypass hazardous confirmation.
     # This should only be enabled for procedures that are designed to execute
@@ -88,6 +98,8 @@ defmodule Cadence.Procedures.ProcedureVersion do
     :created_by_id,
     :change_summary,
     :allow_hazardous_commands,
+    :execution_mode,
+    :allow_suggested_edits,
     :submitted_at,
     :submitted_by_id,
     :rejected_at,
@@ -167,4 +179,5 @@ defmodule Cadence.Procedures.ProcedureVersion do
   end
 
   def statuses, do: @statuses
+  def execution_modes, do: @execution_modes
 end

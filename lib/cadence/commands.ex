@@ -33,20 +33,16 @@ defmodule Cadence.Commands do
       :ok = Commands.validate_arguments(cmd, %{"target_temp" => 25.0})
   """
 
-  alias Cadence.MissionDatabase.{MetaCommand, Argument}
-
   alias Cadence.Commands.{QueueEntry, Staging}
-  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue, TargetPipelineSupervisor}
-
-  alias Cadence.Recordings
-
-  alias Cadence.{Missions, Targets}
-
-  alias Cadence.Runtime.Telemetry.CurrentValueTable
-
+  alias Cadence.Domain.Commanding.Entities.QueuedCommand
+  alias Cadence.MissionDatabase.{Argument, MetaCommand}
+  alias Cadence.Missions
   alias Cadence.Ports.Repository.Commanding.CommandsRepository
   alias Cadence.Ports.Repository.Commanding.QueueRepository
-  alias Cadence.Domain.Commanding.Entities.QueuedCommand
+  alias Cadence.Recordings
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetPipelineSupervisor, TargetQueue}
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Targets
 
   # Repository accessor for MetaCommand lookups
   defp commands_repo, do: CommandsRepository.impl()
@@ -464,7 +460,9 @@ defmodule Cadence.Commands do
   Gets command history for a specific bucket.
   """
   def get_bucket_command_history(bucket_id, opts \\ []) do
-    Recordings.list_aggregate_recordings("Command", nil,
+    Recordings.list_aggregate_recordings(
+      "Command",
+      nil,
       Keyword.merge(opts, bucket_id: bucket_id)
     )
   end
@@ -977,7 +975,9 @@ defmodule Cadence.Commands do
     expired = Map.get(status_counts, :expired, 0)
 
     total_attempted = completed + failed
-    success_rate = if total_attempted > 0, do: Float.round(completed / total_attempted * 100, 1), else: 100.0
+
+    success_rate =
+      if total_attempted > 0, do: Float.round(completed / total_attempted * 100, 1), else: 100.0
 
     %{
       pending: pending,
@@ -1030,7 +1030,9 @@ defmodule Cadence.Commands do
   Updates the parameters for a specific staged target entry.
   See `Cadence.Commands.Staging.update_target_params/2`.
   """
-  defdelegate update_staged_target_params(entry_id, params), to: Staging, as: :update_target_params
+  defdelegate update_staged_target_params(entry_id, params),
+    to: Staging,
+    as: :update_target_params
 
   @doc """
   Updates the priority for a staged command.

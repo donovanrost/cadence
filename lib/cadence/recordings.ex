@@ -30,8 +30,8 @@ defmodule Cadence.Recordings do
   """
 
   import Ecto.Query
+  alias Cadence.Recordings.{Recordable, Recording}
   alias Cadence.Repo
-  alias Cadence.Recordings.{Recording, Recordable}
   alias Ecto.Multi
 
   # ============================================
@@ -252,49 +252,50 @@ defmodule Cadence.Recordings do
 
     query =
       Recording
-      |> order_by([r], [desc: :timestamp, desc: :id])
+      |> order_by([r], desc: :timestamp, desc: :id)
       |> limit(^limit)
-
-    query =
-      if cursor && cursor.timestamp do
-        if cursor.id do
-          query
-          |> where(
-            [r],
-            r.timestamp < ^cursor.timestamp or
-              (r.timestamp == ^cursor.timestamp and r.id < ^cursor.id)
-          )
-        else
-          query
-          |> where([r], r.timestamp < ^cursor.timestamp)
-        end
-      else
-        query
-      end
-
-    query =
-      if organization_id,
-        do: where(query, [r], r.organization_id == ^organization_id),
-        else: query
-
-    query =
-      if path_prefix do
-        query
-        |> join(:inner, [r], b in Cadence.Buckets.Bucket, on: r.bucket_id == b.id)
-        |> where([r, b], like(b.path, ^"#{path_prefix}%"))
-      else
-        query
-      end
-
-    query = if bucket_id, do: where(query, [r], r.bucket_id == ^bucket_id), else: query
-
-    query =
-      if aggregate_types,
-        do: where(query, [r], r.aggregate_type in ^aggregate_types),
-        else: query
+      |> apply_cursor_filter(cursor)
+      |> apply_org_filter(organization_id)
+      |> apply_path_prefix_filter(path_prefix)
+      |> apply_bucket_filter(bucket_id)
+      |> apply_aggregate_filter(aggregate_types)
 
     Repo.all(query)
   end
+
+  defp apply_cursor_filter(query, %{timestamp: timestamp, id: id})
+       when not is_nil(timestamp) and not is_nil(id) do
+    where(
+      query,
+      [r],
+      r.timestamp < ^timestamp or (r.timestamp == ^timestamp and r.id < ^id)
+    )
+  end
+
+  defp apply_cursor_filter(query, %{timestamp: timestamp}) when not is_nil(timestamp) do
+    where(query, [r], r.timestamp < ^timestamp)
+  end
+
+  defp apply_cursor_filter(query, _cursor), do: query
+
+  defp apply_org_filter(query, nil), do: query
+  defp apply_org_filter(query, organization_id),
+    do: where(query, [r], r.organization_id == ^organization_id)
+
+  defp apply_path_prefix_filter(query, nil), do: query
+
+  defp apply_path_prefix_filter(query, path_prefix) do
+    query
+    |> join(:inner, [r], b in Cadence.Buckets.Bucket, on: r.bucket_id == b.id)
+    |> where([r, b], like(b.path, ^"#{path_prefix}%"))
+  end
+
+  defp apply_bucket_filter(query, nil), do: query
+  defp apply_bucket_filter(query, bucket_id), do: where(query, [r], r.bucket_id == ^bucket_id)
+
+  defp apply_aggregate_filter(query, nil), do: query
+  defp apply_aggregate_filter(query, aggregate_types),
+    do: where(query, [r], r.aggregate_type in ^aggregate_types)
 
   @doc """
   Lists recordings with their recordables, batch loaded by type.

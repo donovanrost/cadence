@@ -31,9 +31,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
   """
   @spec create(map()) :: {:ok, DashboardLayout.t()} | {:error, term()}
   def create(attrs) do
-    with {:ok, layout} <- DashboardLayout.new(attrs),
-         {:ok, saved} <- repo().save(layout) do
-      {:ok, saved}
+    with {:ok, layout} <- DashboardLayout.new(attrs) do
+      repo().save(layout)
     end
   end
 
@@ -81,9 +80,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
   @spec update_frame_layout(DashboardLayout.t(), map()) ::
           {:ok, DashboardLayout.t()} | {:error, term()}
   def update_frame_layout(%DashboardLayout{} = layout, frame_layout) do
-    with {:ok, updated} <- DashboardLayout.update_frame_layout(layout, frame_layout),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+    with {:ok, updated} <- DashboardLayout.update_frame_layout(layout, frame_layout) do
+      repo().save(updated)
     end
   end
 
@@ -103,9 +101,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
   @spec update_widgets(DashboardLayout.t(), [map()]) ::
           {:ok, DashboardLayout.t()} | {:error, term()}
   def update_widgets(%DashboardLayout{} = layout, widgets) do
-    with {:ok, updated} <- DashboardLayout.update_widgets(layout, widgets),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+    with {:ok, updated} <- DashboardLayout.update_widgets(layout, widgets) do
+      repo().save(updated)
     end
   end
 
@@ -133,9 +130,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
     {:ok, _count} = repo().unset_other_defaults(layout.user_id, layout.mission_id, layout.id)
 
     # Set this one as default
-    with {:ok, updated} <- DashboardLayout.set_default(layout, true),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+    with {:ok, updated} <- DashboardLayout.set_default(layout, true) do
+      repo().save(updated)
     end
   end
 
@@ -176,9 +172,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
   @spec duplicate(DashboardLayout.t(), String.t()) ::
           {:ok, DashboardLayout.t()} | {:error, term()}
   def duplicate(%DashboardLayout{} = layout, new_name) do
-    with {:ok, new_layout} <- DashboardLayout.duplicate(layout, new_name),
-         {:ok, saved} <- repo().save(new_layout) do
-      {:ok, saved}
+    with {:ok, new_layout} <- DashboardLayout.duplicate(layout, new_name) do
+      repo().save(new_layout)
     end
   end
 
@@ -204,7 +199,8 @@ defmodule Cadence.Application.DashboardLayouts.DashboardLayoutOperations do
 
   defp maybe_update_widgets(result, _), do: result
 
-  defp maybe_update_default({:ok, layout}, %{is_default: is_default}) when is_boolean(is_default) do
+  defp maybe_update_default({:ok, layout}, %{is_default: is_default})
+       when is_boolean(is_default) do
     DashboardLayout.set_default(layout, is_default)
   end
 

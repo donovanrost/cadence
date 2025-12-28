@@ -129,7 +129,9 @@ defmodule Cadence.Application.Settings.SettingOperations do
 
   defp get_definition(namespace, key) do
     case find_definition_module(namespace) do
-      nil -> {:error, :unknown_setting}
+      nil ->
+        {:error, :unknown_setting}
+
       module ->
         case module.get_definition(key) do
           nil -> {:error, :unknown_setting}
@@ -169,10 +171,10 @@ defmodule Cadence.Application.Settings.SettingOperations do
         _ -> false
       end
 
-    if not type_valid do
-      {:error, :invalid_value}
-    else
+    if type_valid do
       validate_rule(value, definition.validate)
+    else
+      {:error, :invalid_value}
     end
   end
 

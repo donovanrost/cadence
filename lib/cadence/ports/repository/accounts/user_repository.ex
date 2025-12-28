@@ -86,7 +86,8 @@ defmodule Cadence.Ports.Repository.Accounts.UserRepository do
   @doc """
   Finds a user by email within an organization.
   """
-  @callback find_by_email_in_organization(org_id(), email()) :: {:ok, User.t()} | {:error, :not_found}
+  @callback find_by_email_in_organization(org_id(), email()) ::
+              {:ok, User.t()} | {:error, :not_found}
 
   # ============================================================================
   # Email Uniqueness

@@ -82,8 +82,7 @@ defmodule Cadence.Notifications.NotificationBuilder do
             mission_id: event.mission_id,
             type: "procedure_approved",
             title: "Your procedure was approved",
-            body:
-              "#{approver_name} approved \"#{procedure.name}\" v#{version.version_number}.",
+            body: "#{approver_name} approved \"#{procedure.name}\" v#{version.version_number}.",
             severity: "info",
             resource_type: "procedure_version",
             resource_id: version.id,

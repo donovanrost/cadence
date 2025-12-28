@@ -13,9 +13,9 @@ defmodule Cadence.Schedules do
   - `Cadence.Application.Schedules.ScheduleOperations` for write operations
   """
 
-  alias Cadence.Domain.Schedules.Entities.Schedule
-  alias Cadence.Application.Schedules.ScheduleQueries
   alias Cadence.Application.Schedules.ScheduleOperations
+  alias Cadence.Application.Schedules.ScheduleQueries
+  alias Cadence.Domain.Schedules.Entities.Schedule
 
   # ============================================================================
   # Schedule Queries

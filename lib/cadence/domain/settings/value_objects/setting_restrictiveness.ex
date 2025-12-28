@@ -64,7 +64,8 @@ defmodule Cadence.Domain.Settings.ValueObjects.SettingRestrictiveness do
   @spec check(t(), any(), any()) :: :ok | {:error, map()}
   def check(:none, _org_value, _mission_value), do: :ok
 
-  def check(:higher, org_value, mission_value) when is_number(org_value) and is_number(mission_value) do
+  def check(:higher, org_value, mission_value)
+      when is_number(org_value) and is_number(mission_value) do
     if mission_value >= org_value do
       :ok
     else
@@ -72,7 +73,8 @@ defmodule Cadence.Domain.Settings.ValueObjects.SettingRestrictiveness do
     end
   end
 
-  def check(:lower, org_value, mission_value) when is_number(org_value) and is_number(mission_value) do
+  def check(:lower, org_value, mission_value)
+      when is_number(org_value) and is_number(mission_value) do
     if mission_value <= org_value do
       :ok
     else
@@ -86,7 +88,12 @@ defmodule Cadence.Domain.Settings.ValueObjects.SettingRestrictiveness do
     if not mission_value or org_value do
       :ok
     else
-      {:error, %{org_value: org_value, mission_value: mission_value, reason: "cannot enable when disabled at org level"}}
+      {:error,
+       %{
+         org_value: org_value,
+         mission_value: mission_value,
+         reason: "cannot enable when disabled at org level"
+       }}
     end
   end
 

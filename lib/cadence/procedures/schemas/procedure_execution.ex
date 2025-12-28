@@ -85,7 +85,7 @@ defmodule Cadence.Procedures.ProcedureExecution do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Procedures.{Procedure, ProcedureVersion}
+  alias Cadence.Procedures.{Procedure, ProcedureVersion, StepExecution}
 
   @type t :: %__MODULE__{}
 
@@ -94,6 +94,7 @@ defmodule Cadence.Procedures.ProcedureExecution do
 
   @statuses [:pending, :running, :pausing, :paused, :completed, :failed, :cancelled]
   @triggers [:manual, :schedule, :event]
+  @execution_versions [:v1, :v2]
 
   schema "procedure_executions" do
     field :status, Ecto.Enum, values: @statuses, default: :pending
@@ -112,6 +113,9 @@ defmodule Cadence.Procedures.ProcedureExecution do
     field :trigger_event_id, :binary_id
     field :trigger_context, :map
 
+    # Execution engine version - v1 (DAG) or v2 (user-driven)
+    field :execution_version, Ecto.Enum, values: @execution_versions, default: :v1
+
     # DAG execution tracking (for non-linear procedures)
     field :completed_steps, {:array, :string}, default: []
     field :skipped_steps, {:array, :string}, default: []
@@ -125,6 +129,8 @@ defmodule Cadence.Procedures.ProcedureExecution do
     belongs_to :mission, Cadence.Missions.Mission
     belongs_to :target, Cadence.Targets.Target
     belongs_to :triggered_by_user, Cadence.Accounts.User
+
+    has_many :step_executions, StepExecution
 
     timestamps(type: :utc_datetime)
   end
@@ -144,6 +150,7 @@ defmodule Cadence.Procedures.ProcedureExecution do
     :triggered_by_user_id,
     :trigger_event_id,
     :trigger_context,
+    :execution_version,
     :completed_steps,
     :skipped_steps,
     :failed_steps,
@@ -224,43 +231,42 @@ defmodule Cadence.Procedures.ProcedureExecution do
     new_status = get_change(changeset, :status)
 
     case new_status do
-      :running ->
-        # started_at should be set when transitioning to running
-        # (either from pending or from paused on resume)
-        old_status = changeset.data.status
-
-        if old_status == :pending do
-          # First time running - must have started_at
-          if is_nil(get_field(changeset, :started_at)) and
-               is_nil(get_change(changeset, :started_at)) do
-            add_error(changeset, :started_at, "must be set when starting execution")
-          else
-            changeset
-          end
-        else
-          # Resume - started_at already set
-          changeset
-        end
-
-      :completed ->
-        # completed_at is required for completion
-        validate_required(changeset, [:completed_at])
-
-      :failed ->
-        # error_message is strongly recommended for failures
-        # We add it as a warning via Logger rather than blocking the transition
-        # since some crash scenarios might not have a message ready
-        if is_nil(get_change(changeset, :error_message)) and
-             is_nil(get_field(changeset, :error_message)) do
-          require Logger
-          Logger.warning("Execution transitioning to failed without error_message")
-        end
-
-        changeset
-
-      _ ->
-        changeset
+      :running -> validate_running_requirements(changeset)
+      :completed -> validate_required(changeset, [:completed_at])
+      :failed -> validate_failed_requirements(changeset)
+      _ -> changeset
     end
+  end
+
+  defp validate_running_requirements(changeset) do
+    # started_at should be set when transitioning to running
+    # (either from pending or from paused on resume)
+    case changeset.data.status do
+      :pending -> ensure_started_at(changeset)
+      _ -> changeset
+    end
+  end
+
+  defp ensure_started_at(changeset) do
+    if has_field_value?(changeset, :started_at) do
+      changeset
+    else
+      add_error(changeset, :started_at, "must be set when starting execution")
+    end
+  end
+
+  defp validate_failed_requirements(changeset) do
+    if has_field_value?(changeset, :error_message) do
+      changeset
+    else
+      require Logger
+      Logger.warning("Execution transitioning to failed without error_message")
+      changeset
+    end
+  end
+
+  defp has_field_value?(changeset, field) do
+    not is_nil(get_change(changeset, field)) or not is_nil(get_field(changeset, field))
   end
 
   def statuses, do: @statuses

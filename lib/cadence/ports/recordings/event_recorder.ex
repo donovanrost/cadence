@@ -25,8 +25,8 @@ defmodule Cadence.Ports.Recordings.EventRecorder do
       end
   """
 
+  # Alarm events
   @type event_type ::
-          # Alarm events
           :alarm_triggered
           | :alarm_acknowledged
           | :alarm_cleared

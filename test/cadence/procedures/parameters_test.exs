@@ -189,7 +189,7 @@ defmodule Cadence.Procedures.ParametersTest do
     test "validates duration type", %{context: context} do
       schema = %{
         "parameters" => [
-          %{"name" => "timeout", "type" => "duration", "min" => 1000, "max" => 60000}
+          %{"name" => "timeout", "type" => "duration", "min" => 1000, "max" => 60_000}
         ]
       }
 

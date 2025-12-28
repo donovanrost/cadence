@@ -10,8 +10,8 @@ defmodule Cadence.Application.Alerting.AlarmOperationsTest do
 
   alias Cadence.Application.Alerting.AlarmOperations
   alias Cadence.Domain.Alerting.Entities.Alarm
-  alias Cadence.Test.Adapters.InMemoryAlarmRepository
   alias Cadence.Test.Adapters.FakeEventPublisher
+  alias Cadence.Test.Adapters.InMemoryAlarmRepository
   alias Cadence.Test.Adapters.InMemoryEventRecorder
 
   setup do

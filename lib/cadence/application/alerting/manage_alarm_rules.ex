@@ -35,9 +35,9 @@ defmodule Cadence.Application.Alerting.ManageAlarmRules do
   """
 
   import Ecto.Query, warn: false
-  alias Cadence.Repo
   alias Cadence.Alarms.AlarmRule
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Repo
 
   @type organization_id :: String.t()
   @type rule_id :: String.t()

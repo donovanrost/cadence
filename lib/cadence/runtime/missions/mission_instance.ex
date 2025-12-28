@@ -34,21 +34,21 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   require Logger
 
   # Accept Ecto schema, domain entity, or MissionConfig
-  alias Cadence.Missions.Mission
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.Runtime.Telemetry.CurrentValueTable
-  alias Cadence.Runtime.Telemetry.PipelineV2
-  alias Cadence.Runtime.Telemetry.Limits.StateTracker
-  alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
+  alias Cadence.Automations.Engine.AutomationManager
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
+  alias Cadence.Missions.Mission
+  alias Cadence.Procedures.Engine.ExecutionCoordinator
+  alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
-  alias Cadence.Runtime.Alarms.AlarmManager
-  alias Cadence.Automations.Engine.AutomationManager
-  alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Runtime.Missions.CacheWarmer
-  alias Cadence.Runtime.Missions.MissionTracker
   alias Cadence.Runtime.Missions.MissionStatus
+  alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
+  alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Runtime.Telemetry.PipelineV2
 
   @default_partition_count 16
 

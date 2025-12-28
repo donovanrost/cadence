@@ -21,9 +21,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Alarms.Alarm, as: AlarmSchema
   alias Cadence.Domain.Alerting.Entities.Alarm, as: AlarmEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # AlarmRepository Implementation

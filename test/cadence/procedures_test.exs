@@ -688,8 +688,14 @@ defmodule Cadence.ProceduresTest do
       assert export["procedure"]["type"] == "dag"
       assert export["procedure"]["tags"] == ["safety", "recovery"]
       assert export["procedure"]["version"]["version_number"] == 1
-      assert export["procedure"]["version"]["source"] == %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Hello"}}}
-      assert export["procedure"]["version"]["parameters_schema"] == %{"param1" => %{"type" => "string"}}
+
+      assert export["procedure"]["version"]["source"] == %{
+               "steps" => %{"step_1" => %{"type" => "log", "message" => "Hello"}}
+             }
+
+      assert export["procedure"]["version"]["parameters_schema"] == %{
+               "param1" => %{"type" => "string"}
+             }
     end
 
     test "exports procedure without version when none exists" do
@@ -759,7 +765,11 @@ defmodule Cadence.ProceduresTest do
       version = Procedures.get_version!(procedure.current_version_id)
       assert version.status == :draft
       assert version.version_number == 1
-      assert version.source == %{"steps" => %{"step_1" => %{"type" => "log", "message" => "Imported"}}}
+
+      assert version.source == %{
+               "steps" => %{"step_1" => %{"type" => "log", "message" => "Imported"}}
+             }
+
       assert version.parameters_schema == %{"temp" => %{"type" => "number"}}
     end
 
@@ -832,7 +842,10 @@ defmodule Cadence.ProceduresTest do
                Procedures.import_procedure(
                  org.id,
                  mission.id,
-                 %{"export_version" => "2.0.0", "procedure" => %{"name" => "Test", "type" => "dag"}},
+                 %{
+                   "export_version" => "2.0.0",
+                   "procedure" => %{"name" => "Test", "type" => "dag"}
+                 },
                  user_id: user.id
                )
 

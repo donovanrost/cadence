@@ -22,7 +22,14 @@ defmodule Cadence.Recordings.Recordables.CommandQueued do
   end
 
   @required_fields [:command_name]
-  @optional_fields [:parameters, :priority, :scheduled_at, :expires_at, :max_attempts, :dispatch_opts]
+  @optional_fields [
+    :parameters,
+    :priority,
+    :scheduled_at,
+    :expires_at,
+    :max_attempts,
+    :dispatch_opts
+  ]
 
   def changeset(recordable, attrs) do
     recordable

@@ -14,10 +14,10 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   require Logger
 
   alias Cadence.Automations
-  alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Automations.Engine.ActionExecutor
-  alias Cadence.Procedures.Events.ProcedureExecutionEvent
+  alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Ports.Recordings.EventRecorder
+  alias Cadence.Procedures.Events.ProcedureExecutionEvent
 
   @ets_table :automations_cache
 
@@ -388,34 +388,41 @@ defmodule Cadence.Automations.Engine.AutomationManager do
 
   # Extract a unique identifier from the event
   defp extract_event_id(event) when is_map(event) do
-    # Priority order for event identification:
-    # 1. Explicit event_id
-    # 2. Alarm-specific: alarm_id + state change hash
-    # 3. Procedure-specific: execution_id + event_type
-    # 4. Hash of the entire event
+    event_id = fetch_event_id(event)
+
     cond do
-      Map.has_key?(event, :event_id) ->
-        event.event_id
+      event_id ->
+        event_id
 
-      Map.has_key?(event, "event_id") ->
-        event["event_id"]
+      alarm_id = Map.get(event, :alarm_id) ->
+        alarm_event_id(alarm_id, event)
 
-      Map.has_key?(event, :alarm_id) ->
-        # For alarms, include state to distinguish fired vs cleared
-        state = Map.get(event, :state) || Map.get(event, "state") || "unknown"
-        "alarm:#{event.alarm_id}:#{state}"
-
-      Map.has_key?(event, :execution_id) ->
-        # For procedure events, include event_type
-        event_type = Map.get(event, :event_type) || Map.get(event, "event_type") || "unknown"
-        "proc:#{event.execution_id}:#{event_type}"
+      execution_id = Map.get(event, :execution_id) ->
+        procedure_event_id(execution_id, event)
 
       true ->
-        # Fallback: hash the event
-        :crypto.hash(:sha256, :erlang.term_to_binary(event))
-        |> Base.encode16(case: :lower)
-        |> String.slice(0, 32)
+        hash_event(event)
     end
+  end
+
+  defp fetch_event_id(event) do
+    Map.get(event, :event_id) || Map.get(event, "event_id")
+  end
+
+  defp alarm_event_id(alarm_id, event) do
+    state = Map.get(event, :state) || Map.get(event, "state") || "unknown"
+    "alarm:#{alarm_id}:#{state}"
+  end
+
+  defp procedure_event_id(execution_id, event) do
+    event_type = Map.get(event, :event_type) || Map.get(event, "event_type") || "unknown"
+    "proc:#{execution_id}:#{event_type}"
+  end
+
+  defp hash_event(event) do
+    :crypto.hash(:sha256, :erlang.term_to_binary(event))
+    |> Base.encode16(case: :lower)
+    |> String.slice(0, 32)
   end
 
   # ============================================================================

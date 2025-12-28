@@ -16,9 +16,10 @@ defmodule Cadence.Application.Accounts.SessionOperations do
       :ok = SessionOperations.delete_session(token)
   """
 
+  alias Cadence.Application.Accounts.UserQueries
   alias Cadence.Domain.Accounts.Entities.User
   alias Cadence.Domain.Accounts.Entities.UserToken
-  alias Cadence.Application.Accounts.UserQueries
+  alias Cadence.Ports.Repository.Accounts.TokenRepository
   alias Cadence.Ports.Security.PasswordHasher
 
   @type user_id :: String.t()
@@ -26,7 +27,7 @@ defmodule Cadence.Application.Accounts.SessionOperations do
 
   # Get configured repository
   defp token_repo do
-    Cadence.Ports.Repository.Accounts.TokenRepository.impl()
+    TokenRepository.impl()
   end
 
   # ===========================================================================

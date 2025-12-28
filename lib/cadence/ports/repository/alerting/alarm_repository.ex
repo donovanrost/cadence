@@ -99,6 +99,10 @@ defmodule Cadence.Ports.Repository.Alerting.AlarmRepository do
   """
   @spec impl() :: module()
   def impl do
-    Application.get_env(:cadence, :alarm_repository, Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository)
+    Application.get_env(
+      :cadence,
+      :alarm_repository,
+      Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository
+    )
   end
 end

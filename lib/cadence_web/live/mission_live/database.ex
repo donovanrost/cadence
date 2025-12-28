@@ -194,8 +194,8 @@ defmodule CadenceWeb.MissionLive.Database do
           {@selected_database.name, nil}
         ]} />
       <% end %>
-
-      <!-- Header -->
+      
+    <!-- Header -->
       <.header>
         Database Catalog
         <:subtitle>Manage command and telemetry database definitions</:subtitle>

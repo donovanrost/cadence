@@ -74,6 +74,10 @@ defmodule Cadence.Ports.Messaging.EventPublisher do
   """
   @spec impl() :: module()
   def impl do
-    Application.get_env(:cadence, :event_publisher, Cadence.Adapters.Messaging.PhoenixEventPublisher)
+    Application.get_env(
+      :cadence,
+      :event_publisher,
+      Cadence.Adapters.Messaging.PhoenixEventPublisher
+    )
   end
 end

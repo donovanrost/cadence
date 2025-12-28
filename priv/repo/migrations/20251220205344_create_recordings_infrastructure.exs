@@ -60,7 +60,8 @@ defmodule Cadence.Repo.Migrations.CreateRecordingsInfrastructure do
           references(:organizations, type: :binary_id, on_delete: :delete_all),
           null: false
 
-      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all), null: false
+      add :mission_id, references(:missions, type: :binary_id, on_delete: :delete_all),
+        null: false
 
       add :name, :string
       add :shift_type, :string

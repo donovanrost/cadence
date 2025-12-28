@@ -22,9 +22,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.DashboardLayouts.EctoDashboardLayout
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.DashboardLayouts.DashboardLayout, as: DashboardLayoutSchema
   alias Cadence.Domain.DashboardLayouts.Entities.DashboardLayout, as: DashboardLayoutEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # DashboardLayoutRepository Implementation

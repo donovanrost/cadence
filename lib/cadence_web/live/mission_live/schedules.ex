@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionLive.Schedules do
   """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Schedules, Procedures}
+  alias Cadence.{Procedures, Schedules}
   # Use Ecto schema for form handling (changesets), domain entity for operations
   alias Cadence.Schedules.Schedule, as: ScheduleSchema
 

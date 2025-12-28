@@ -61,8 +61,8 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
   import Ecto.Query
 
   alias Cadence.Config.VersionRegistry
-  alias Cadence.Repo
   alias Cadence.MissionDatabase.Database
+  alias Cadence.Repo
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

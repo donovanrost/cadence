@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Runtime.Alarms.RuleCache
+  alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -13,7 +14,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
 
   setup do
     # Use shared sandbox mode since RuleCache GenServer accesses DB
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, {:shared, self()})
+    Sandbox.mode(Cadence.Repo, {:shared, self()})
 
     org = organization_fixture()
     mission = mission_fixture(organization: org)

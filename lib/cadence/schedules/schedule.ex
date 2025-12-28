@@ -9,6 +9,8 @@ defmodule Cadence.Schedules.Schedule do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Oban.Plugins.Cron
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -99,7 +101,7 @@ defmodule Cadence.Schedules.Schedule do
     cron = get_field(changeset, :cron_expression)
 
     if cron && cron != "" do
-      case Oban.Plugins.Cron.parse(cron) do
+      case Cron.parse(cron) do
         {:ok, _} -> changeset
         {:error, _} -> add_error(changeset, :cron_expression, "is not a valid cron expression")
       end

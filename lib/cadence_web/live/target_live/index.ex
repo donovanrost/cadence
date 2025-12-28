@@ -1,7 +1,7 @@
 defmodule CadenceWeb.TargetLive.Index do
   use CadenceWeb, :live_view
 
-  alias Cadence.{Targets, Missions}
+  alias Cadence.{Missions, Targets}
 
   @impl true
   def mount(_params, _session, socket) do

@@ -210,7 +210,9 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
     step = Map.get(steps, step_name, %{})
     deps = step["depends_on"] || []
 
-    if dep_name not in deps do
+    if dep_name in deps do
+      {:noreply, socket}
+    else
       step = Map.put(step, "depends_on", [dep_name | deps])
       steps = Map.put(steps, step_name, step)
 
@@ -219,8 +221,6 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
        |> assign(:steps, steps)
        |> notify_change()
        |> validate_dag()}
-    else
-      {:noreply, socket}
     end
   end
 
@@ -257,54 +257,58 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
   end
 
   defp build_step_from_params(params) do
-    step = %{"type" => params["type"] || "log"}
-
-    step =
-      case params["type"] do
-        "check" ->
-          step
-          |> Map.put("condition", params["condition"] || "true")
-          |> Map.put("message", params["message"])
-          |> Map.put("on_fail", params["on_fail"] || "abort")
-
-        "command" ->
-          step
-          |> Map.put("name", params["command_name"])
-          |> maybe_put_args(params["args"])
-
-        "wait" ->
-          Map.put(step, "duration", parse_int(params["duration"], 1000))
-
-        "wait_for" ->
-          step
-          |> Map.put("item", params["item"])
-          |> Map.put("operator", params["operator"] || "==")
-          |> Map.put("value", params["value"])
-          |> Map.put("timeout", parse_int(params["timeout"], 30000))
-
-        "log" ->
-          step
-          |> Map.put("level", params["level"] || "info")
-          |> Map.put("message", params["message"] || "")
-
-        "set" ->
-          step
-          |> Map.put("name", params["var_name"])
-          |> Map.put("value", params["value"])
-
-        "assert" ->
-          step
-          |> Map.put("condition", params["condition"] || "true")
-          |> Map.put("message", params["message"])
-
-        _ ->
-          step
-      end
+    step_type = params["type"] || "log"
+    step = apply_step_type(%{"type" => step_type}, step_type, params)
 
     # Add dependencies if present
     deps = parse_dependencies(params["depends_on"])
     if deps != [], do: Map.put(step, "depends_on", deps), else: step
   end
+
+  defp apply_step_type(step, "check", params) do
+    step
+    |> Map.put("condition", params["condition"] || "true")
+    |> Map.put("message", params["message"])
+    |> Map.put("on_fail", params["on_fail"] || "abort")
+  end
+
+  defp apply_step_type(step, "command", params) do
+    step
+    |> Map.put("name", params["command_name"])
+    |> maybe_put_args(params["args"])
+  end
+
+  defp apply_step_type(step, "wait", params) do
+    Map.put(step, "duration", parse_int(params["duration"], 1000))
+  end
+
+  defp apply_step_type(step, "wait_for", params) do
+    step
+    |> Map.put("item", params["item"])
+    |> Map.put("operator", params["operator"] || "==")
+    |> Map.put("value", params["value"])
+    |> Map.put("timeout", parse_int(params["timeout"], 30_000))
+  end
+
+  defp apply_step_type(step, "log", params) do
+    step
+    |> Map.put("level", params["level"] || "info")
+    |> Map.put("message", params["message"] || "")
+  end
+
+  defp apply_step_type(step, "set", params) do
+    step
+    |> Map.put("name", params["var_name"])
+    |> Map.put("value", params["value"])
+  end
+
+  defp apply_step_type(step, "assert", params) do
+    step
+    |> Map.put("condition", params["condition"] || "true")
+    |> Map.put("message", params["message"])
+  end
+
+  defp apply_step_type(step, _type, _params), do: step
 
   defp maybe_put_args(step, nil), do: step
   defp maybe_put_args(step, ""), do: step
@@ -340,16 +344,18 @@ defmodule CadenceWeb.ProcedureLive.DagEditorComponent do
 
   defp update_step_references(steps, old_name, new_name) do
     Map.new(steps, fn {name, step} ->
-      deps = step["depends_on"] || []
-
-      updated_deps =
-        Enum.map(deps, fn dep ->
-          if dep == old_name, do: new_name, else: dep
-        end)
-
-      {name, Map.put(step, "depends_on", updated_deps)}
+      {name, update_step_dependencies(step, old_name, new_name)}
     end)
   end
+
+  defp update_step_dependencies(step, old_name, new_name) do
+    deps = step["depends_on"] || []
+    updated_deps = Enum.map(deps, &replace_dependency(&1, old_name, new_name))
+    Map.put(step, "depends_on", updated_deps)
+  end
+
+  defp replace_dependency(dep, old_name, new_name) when dep == old_name, do: new_name
+  defp replace_dependency(dep, _old_name, _new_name), do: dep
 
   defp notify_change(socket) do
     send(self(), {__MODULE__, {:steps_changed, socket.assigns.steps}})

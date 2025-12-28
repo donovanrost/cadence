@@ -14,16 +14,19 @@ defmodule Cadence.Application.Accounts.MagicLinkOperations do
       {:ok, user} = MagicLinkOperations.verify(url_token)
   """
 
+  alias Cadence.Application.Accounts.SessionOperations
+  alias Cadence.Application.Accounts.UserOperations
+  alias Cadence.Application.Accounts.UserQueries
   alias Cadence.Domain.Accounts.Entities.User
   alias Cadence.Domain.Accounts.Entities.UserToken
-  alias Cadence.Application.Accounts.UserQueries
+  alias Cadence.Ports.Repository.Accounts.TokenRepository
 
   @type user_id :: String.t()
   @type url_token :: String.t()
 
   # Get configured repository
   defp token_repo do
-    Cadence.Ports.Repository.Accounts.TokenRepository.impl()
+    TokenRepository.impl()
   end
 
   # ===========================================================================
@@ -167,8 +170,6 @@ defmodule Cadence.Application.Accounts.MagicLinkOperations do
 
   defp handle_login(%User{confirmed_at: nil} = user) do
     # Unconfirmed user without password - confirm and delete all tokens
-    alias Cadence.Application.Accounts.{UserOperations, SessionOperations}
-
     with {:ok, confirmed_user} <- UserOperations.confirm(user.id),
          {:ok, expired_tokens} <- SessionOperations.delete_all_tokens(user.id) do
       {:ok, {confirmed_user, expired_tokens}}
@@ -198,7 +199,8 @@ defmodule Cadence.Application.Accounts.MagicLinkOperations do
           {:ok, url_token()} | {:error, term()}
   def generate_change_email_token(user_id, current_email, new_email) do
     with {:ok, _user} <- UserQueries.find(user_id) do
-      {url_token, token_entity} = UserToken.build_change_email_token(user_id, current_email, new_email)
+      {url_token, token_entity} =
+        UserToken.build_change_email_token(user_id, current_email, new_email)
 
       case token_repo().save(token_entity) do
         {:ok, _saved} -> {:ok, url_token}

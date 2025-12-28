@@ -40,14 +40,14 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Commands.QueueEntry
-  alias Cadence.Runtime.Commands.TargetDispatcher
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
   alias Cadence.Outbox
   alias Cadence.Recordings
-  alias Cadence.Recordings.Recordables.{CommandQueued, CommandDequeued}
+  alias Cadence.Recordings.Recordables.{CommandDequeued, CommandQueued}
+  alias Cadence.Repo
+  alias Cadence.Runtime.Commands.TargetDispatcher
   alias Ecto.Multi
 
   # Fallback poll interval - used as safety net for scheduled commands and missed events
@@ -524,7 +524,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
         updated_entry = %{entry | status: :pending}
         new_pending = insert_sorted(state.pending_entries, updated_entry)
         new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
-        new_counts = %{state.counts | pending: state.counts.pending + 1, failed: max(0, state.counts.failed - 1)}
+
+        new_counts = %{
+          state.counts
+          | pending: state.counts.pending + 1,
+            failed: max(0, state.counts.failed - 1)
+        }
 
         new_state = %{
           state
@@ -536,7 +541,9 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
         # Persist async
         persist_async(fn ->
           case Repo.get(QueueEntry, entry_id) do
-            nil -> :ok
+            nil ->
+              :ok
+
             db_entry ->
               db_entry
               |> QueueEntry.execution_changeset(%{status: :pending})
@@ -556,9 +563,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     target_id = Map.get(payload, "target_id") || Map.get(payload, :target_id)
 
     if target_id == state.target_id do
-      Logger.debug(
-        "TargetQueue received command_enqueued event for target_id=#{state.target_id}"
-      )
+      Logger.debug("TargetQueue received command_enqueued event for target_id=#{state.target_id}")
 
       notify_dispatcher(state.mission_id, state.target_id)
     end
@@ -787,7 +792,9 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
               persist_async(fn ->
                 case Repo.get(QueueEntry, entry_id) do
-                  nil -> :ok
+                  nil ->
+                    :ok
+
                   db_entry ->
                     db_entry
                     |> QueueEntry.execution_changeset(%{
@@ -814,7 +821,9 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
               persist_async(fn ->
                 case Repo.get(QueueEntry, entry_id) do
-                  nil -> :ok
+                  nil ->
+                    :ok
+
                   db_entry ->
                     db_entry
                     |> QueueEntry.execution_changeset(%{status: :pending})
@@ -825,22 +834,37 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
               publish_status_changed(updated_entry, :pending, state)
               Logger.debug("Queue entry #{entry_id} returned to pending (dispatcher paused)")
 
-              %{state | pending_entries: new_pending, entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
+              %{
+                state
+                | pending_entries: new_pending,
+                  entries_by_id: new_entries_by_id,
+                  executing: nil,
+                  counts: new_counts
+              }
 
             {:error, :requires_confirmation, _info} ->
               # Hazardous command - mark as failed, don't retry
-              updated_entry = %{entry | status: :failed, last_error: "Hazardous command requires confirmation - cannot execute from queue"}
+              updated_entry = %{
+                entry
+                | status: :failed,
+                  last_error:
+                    "Hazardous command requires confirmation - cannot execute from queue"
+              }
+
               new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
               new_counts = %{state.counts | executing: 0, failed: state.counts.failed + 1}
 
               persist_async(fn ->
                 case Repo.get(QueueEntry, entry_id) do
-                  nil -> :ok
+                  nil ->
+                    :ok
+
                   db_entry ->
                     db_entry
                     |> QueueEntry.execution_changeset(%{
                       status: :failed,
-                      last_error: "Hazardous command requires confirmation - cannot execute from queue"
+                      last_error:
+                        "Hazardous command requires confirmation - cannot execute from queue"
                     })
                     |> Repo.update()
                 end
@@ -878,7 +902,9 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
     persist_async(fn ->
       case Repo.get(QueueEntry, entry_id) do
-        nil -> :ok
+        nil ->
+          :ok
+
         db_entry ->
           db_entry
           |> QueueEntry.execution_changeset(%{status: :pending})
@@ -889,7 +915,13 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     publish_status_changed(updated_entry, :pending, state)
     Logger.info("Queue entry #{entry_id} returned to pending (#{reason})")
 
-    %{state | pending_entries: new_pending, entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
+    %{
+      state
+      | pending_entries: new_pending,
+        entries_by_id: new_entries_by_id,
+        executing: nil,
+        counts: new_counts
+    }
   end
 
   # Handle failure with local state
@@ -904,7 +936,9 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
       persist_async(fn ->
         case Repo.get(QueueEntry, entry_id) do
-          nil -> :ok
+          nil ->
+            :ok
+
           db_entry ->
             db_entry
             |> QueueEntry.execution_changeset(%{status: :failed, last_error: error_msg})
@@ -919,13 +953,20 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
       %{state | entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
     else
       # Max attempts reached - remove from tracking
-      updated_entry = %{entry | status: :failed, last_error: "Max attempts reached. Last error: #{error_msg}"}
+      updated_entry = %{
+        entry
+        | status: :failed,
+          last_error: "Max attempts reached. Last error: #{error_msg}"
+      }
+
       new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
       new_counts = %{state.counts | executing: 0, failed: state.counts.failed + 1}
 
       persist_async(fn ->
         case Repo.get(QueueEntry, entry_id) do
-          nil -> :ok
+          nil ->
+            :ok
+
           db_entry ->
             db_entry
             |> QueueEntry.execution_changeset(%{
@@ -1063,15 +1104,14 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
       |> Repo.update_all(
         set: [
           status: :failed,
-          last_error: "Stale entry recovery - execution timed out after #{@stale_executing_timeout_ms}ms",
+          last_error:
+            "Stale entry recovery - execution timed out after #{@stale_executing_timeout_ms}ms",
           updated_at: DateTime.utc_now()
         ]
       )
 
     if count > 0 do
-      Logger.warning(
-        "Recovered #{count} stale executing entries for target_id=#{target_id}"
-      )
+      Logger.warning("Recovered #{count} stale executing entries for target_id=#{target_id}")
     end
 
     count

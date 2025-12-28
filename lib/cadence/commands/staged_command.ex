@@ -34,11 +34,11 @@ defmodule Cadence.Commands.StagedCommand do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
-  alias Cadence.Missions.Mission
   alias Cadence.Accounts.User
-  alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Commands.StagedCommandTarget
+  alias Cadence.MissionDatabase.MetaCommand
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

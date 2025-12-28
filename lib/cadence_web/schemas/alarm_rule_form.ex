@@ -215,7 +215,11 @@ defmodule CadenceWeb.Schemas.AlarmRuleForm do
     if has_limit_states || has_item_name || has_pattern do
       changeset
     else
-      add_error(changeset, :limit_states, "at least one condition is required (limit states, item name, or pattern)")
+      add_error(
+        changeset,
+        :limit_states,
+        "at least one condition is required (limit states, item name, or pattern)"
+      )
     end
   end
 end

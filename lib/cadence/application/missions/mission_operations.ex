@@ -21,10 +21,10 @@ defmodule Cadence.Application.Missions.MissionOperations do
   """
 
   alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Buckets
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Missions.Entities.MissionMembership
   alias Cadence.Ports.Repository.Missions.MissionsRepository
-  alias Cadence.Buckets
   alias Cadence.Repo
 
   @type mission_id :: String.t()
@@ -131,9 +131,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
     atomized_attrs = atomize_keys(attrs)
 
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, updated} <- Mission.update(mission, atomized_attrs),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- Mission.update(mission, atomized_attrs) do
+      repo().save(updated)
     end
   end
 
@@ -151,10 +150,9 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @spec start(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def start(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, started} <- Mission.start(mission),
-         {:ok, saved} <- repo().save(started) do
+         {:ok, started} <- Mission.start(mission) do
       # Reconciler will detect the status change and start the runtime
-      {:ok, saved}
+      repo().save(started)
     end
   end
 
@@ -172,10 +170,9 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @spec stop(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def stop(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, stopped} <- Mission.stop(mission),
-         {:ok, saved} <- repo().save(stopped) do
+         {:ok, stopped} <- Mission.stop(mission) do
       # Reconciler will detect the status change and stop the runtime
-      {:ok, saved}
+      repo().save(stopped)
     end
   end
 
@@ -187,9 +184,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @spec suspend(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def suspend(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, suspended} <- Mission.suspend(mission),
-         {:ok, saved} <- repo().save(suspended) do
-      {:ok, saved}
+         {:ok, suspended} <- Mission.suspend(mission) do
+      repo().save(suspended)
     end
   end
 
@@ -199,9 +195,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @spec resume(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
   def resume(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, resumed} <- Mission.resume(mission),
-         {:ok, saved} <- repo().save(resumed) do
-      {:ok, saved}
+         {:ok, resumed} <- Mission.resume(mission) do
+      repo().save(resumed)
     end
   end
 
@@ -216,9 +211,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
   @spec advance_phase(mission_id(), org_id(), atom()) :: {:ok, Mission.t()} | {:error, term()}
   def advance_phase(mission_id, org_id, new_phase) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
-         {:ok, advanced} <- Mission.advance_phase(mission, new_phase),
-         {:ok, saved} <- repo().save(advanced) do
-      {:ok, saved}
+         {:ok, advanced} <- Mission.advance_phase(mission, new_phase) do
+      repo().save(advanced)
     end
   end
 

@@ -37,9 +37,9 @@ defmodule Cadence.Telemetry.Database.DerivedItem do
   import Ecto.Changeset
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Organizations.Organization
   alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
+  alias Cadence.Repo
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

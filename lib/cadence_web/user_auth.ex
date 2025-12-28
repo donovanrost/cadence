@@ -1,4 +1,6 @@
 defmodule CadenceWeb.UserAuth do
+  @moduledoc false
+
   use CadenceWeb, :verified_routes
 
   import Plug.Conn

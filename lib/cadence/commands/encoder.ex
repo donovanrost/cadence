@@ -20,7 +20,7 @@ defmodule Cadence.Commands.Encoder do
       # => <<0x00, 0x01, ...payload...>>
   """
 
-  alias Cadence.MissionDatabase.{MetaCommand, Argument}
+  alias Cadence.MissionDatabase.{Argument, MetaCommand}
 
   # Valid data types that can be safely converted to atoms
   @valid_data_types %{

@@ -69,7 +69,11 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   """
   @spec build_session_token(String.t(), DateTime.t() | nil) :: {binary(), t()}
   def build_session_token(user_id, authenticated_at \\ nil) do
-    build_session_token_with_bytes(user_id, authenticated_at, :crypto.strong_rand_bytes(@rand_size))
+    build_session_token_with_bytes(
+      user_id,
+      authenticated_at,
+      :crypto.strong_rand_bytes(@rand_size)
+    )
   end
 
   @doc """
@@ -77,7 +81,8 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
 
   Useful for testing with deterministic tokens.
   """
-  @spec build_session_token_with_bytes(String.t(), DateTime.t() | nil, binary()) :: {binary(), t()}
+  @spec build_session_token_with_bytes(String.t(), DateTime.t() | nil, binary()) ::
+          {binary(), t()}
   def build_session_token_with_bytes(user_id, authenticated_at, random_bytes) do
     token = random_bytes
     dt = authenticated_at || DateTime.utc_now() |> DateTime.truncate(:second)
@@ -125,13 +130,19 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   """
   @spec build_change_email_token(String.t(), String.t(), String.t()) :: {String.t(), t()}
   def build_change_email_token(user_id, current_email, new_email) do
-    build_change_email_token_with_bytes(user_id, current_email, new_email, :crypto.strong_rand_bytes(@rand_size))
+    build_change_email_token_with_bytes(
+      user_id,
+      current_email,
+      new_email,
+      :crypto.strong_rand_bytes(@rand_size)
+    )
   end
 
   @doc """
   Builds a change email token with provided random bytes.
   """
-  @spec build_change_email_token_with_bytes(String.t(), String.t(), String.t(), binary()) :: {String.t(), t()}
+  @spec build_change_email_token_with_bytes(String.t(), String.t(), String.t(), binary()) ::
+          {String.t(), t()}
   def build_change_email_token_with_bytes(user_id, current_email, new_email, random_bytes) do
     context = "change:#{current_email}"
     build_hashed_token(user_id, context, new_email, random_bytes)
@@ -202,7 +213,8 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   Extracts the new email from a change email token's sent_to field.
   """
   @spec extract_new_email(t()) :: {:ok, String.t()} | :error
-  def extract_new_email(%__MODULE__{context: "change:" <> _, sent_to: email}) when is_binary(email) do
+  def extract_new_email(%__MODULE__{context: "change:" <> _, sent_to: email})
+      when is_binary(email) do
     {:ok, email}
   end
 

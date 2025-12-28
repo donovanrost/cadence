@@ -34,9 +34,9 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   require Logger
 
   alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Telemetry.Limits.Evaluator
   alias Cadence.Runtime.Telemetry.Limits.Cache
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
+  alias Cadence.Telemetry.Limits.Evaluator
 
   @type state_entry :: %{
           current_state: Evaluator.limit_state(),
@@ -477,21 +477,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     if :ets.whereis(table_name) != :undefined do
       :ets.foldl(
         fn {{target_id, item_name}, entry}, acc ->
-          # Support both old (last_update DateTime) and new (last_update_mono) formats
-          time_since_update =
-            case Map.get(entry, :last_update_mono) do
-              nil ->
-                # Legacy: use DateTime field
-                case Map.get(entry, :last_update) do
-                  nil -> 0
-                  dt -> DateTime.diff(DateTime.utc_now(), dt, :millisecond)
-                end
-
-              mono ->
-                now_mono - mono
-            end
-
-          if time_since_update >= entry.stale_timeout_ms and entry.current_state != :blue do
+          if stale_entry?(entry, now_mono) do
             [{target_id, item_name, entry} | acc]
           else
             acc
@@ -502,6 +488,26 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
       )
     else
       []
+    end
+  end
+
+  defp stale_entry?(entry, now_mono) do
+    time_since_update = time_since_update_ms(entry, now_mono)
+    time_since_update >= entry.stale_timeout_ms and entry.current_state != :blue
+  end
+
+  # Support both old (last_update DateTime) and new (last_update_mono) formats
+  defp time_since_update_ms(entry, now_mono) do
+    case Map.get(entry, :last_update_mono) do
+      nil -> legacy_time_since_update_ms(entry)
+      mono -> now_mono - mono
+    end
+  end
+
+  defp legacy_time_since_update_ms(entry) do
+    case Map.get(entry, :last_update) do
+      nil -> 0
+      dt -> DateTime.diff(DateTime.utc_now(), dt, :millisecond)
     end
   end
 
@@ -648,7 +654,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     normalized_state = Evaluator.normalize_state(raw_state)
 
     # Ensure table exists (might be called before GenServer starts in tests)
-    unless :ets.whereis(table_name) != :undefined do
+    if :ets.whereis(table_name) == :undefined do
       {:ok, normalized_state, false}
     else
       case :ets.lookup(table_name, key) do

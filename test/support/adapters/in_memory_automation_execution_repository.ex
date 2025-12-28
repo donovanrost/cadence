@@ -86,28 +86,15 @@ defmodule Cadence.Test.Adapters.InMemoryAutomationExecutionRepository do
   def save(%AutomationExecution{id: nil} = execution) do
     # Check for duplicate idempotency key
     if execution.idempotency_key do
-      Agent.get_and_update(__MODULE__, fn state ->
-        if MapSet.member?(state.idempotency_keys, execution.idempotency_key) do
-          {{:error, :duplicate}, state}
-        else
-          now = DateTime.utc_now()
+      Agent.get_and_update(__MODULE__, &save_with_idempotency(&1, execution))
+    else
+      {:ok, save_without_idempotency(execution)}
+    end
+  end
 
-          execution = %{
-            execution
-            | id: Ecto.UUID.generate(),
-              created_at: now,
-              updated_at: now
-          }
-
-          new_state = %{
-            state
-            | executions: Map.put(state.executions, execution.id, execution),
-              idempotency_keys: MapSet.put(state.idempotency_keys, execution.idempotency_key)
-          }
-
-          {{:ok, execution}, new_state}
-        end
-      end)
+  defp save_with_idempotency(state, execution) do
+    if MapSet.member?(state.idempotency_keys, execution.idempotency_key) do
+      {{:error, :duplicate}, state}
     else
       now = DateTime.utc_now()
 
@@ -118,12 +105,31 @@ defmodule Cadence.Test.Adapters.InMemoryAutomationExecutionRepository do
           updated_at: now
       }
 
-      Agent.update(__MODULE__, fn state ->
-        %{state | executions: Map.put(state.executions, execution.id, execution)}
-      end)
+      new_state = %{
+        state
+        | executions: Map.put(state.executions, execution.id, execution),
+          idempotency_keys: MapSet.put(state.idempotency_keys, execution.idempotency_key)
+      }
 
-      {:ok, execution}
+      {{:ok, execution}, new_state}
     end
+  end
+
+  defp save_without_idempotency(execution) do
+    now = DateTime.utc_now()
+
+    execution = %{
+      execution
+      | id: Ecto.UUID.generate(),
+        created_at: now,
+        updated_at: now
+    }
+
+    Agent.update(__MODULE__, fn state ->
+      %{state | executions: Map.put(state.executions, execution.id, execution)}
+    end)
+
+    execution
   end
 
   def save(%AutomationExecution{id: id} = execution) do

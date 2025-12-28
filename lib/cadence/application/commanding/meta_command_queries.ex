@@ -20,8 +20,8 @@ defmodule Cadence.Application.Commanding.MetaCommandQueries do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.MissionDatabase.MetaCommand
+  alias Cadence.Repo
 
   @type definition_set_id :: String.t()
 

@@ -275,7 +275,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
 
       assert html =~ "toggle"
       assert html =~ "Organization default"
-      assert html =~ "Enabled"  # Org value
+      # Org value
+      assert html =~ "Enabled"
     end
 
     test "shows error message when provided" do

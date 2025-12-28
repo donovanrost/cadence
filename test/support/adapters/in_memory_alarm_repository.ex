@@ -214,22 +214,27 @@ defmodule Cadence.Test.Adapters.InMemoryAlarmRepository do
   # ============================================================================
 
   defp filter_by_status(alarms, nil), do: alarms
+
   defp filter_by_status(alarms, statuses) when is_list(statuses) do
     Enum.filter(alarms, &(&1.status in statuses))
   end
+
   defp filter_by_status(alarms, status) when is_atom(status) do
     Enum.filter(alarms, &(&1.status == status))
   end
 
   defp filter_by_severity(alarms, nil), do: alarms
+
   defp filter_by_severity(alarms, severities) when is_list(severities) do
     Enum.filter(alarms, &(&1.severity in severities))
   end
+
   defp filter_by_severity(alarms, severity) when is_atom(severity) do
     Enum.filter(alarms, &(&1.severity == severity))
   end
 
   defp filter_by_target(alarms, nil), do: alarms
+
   defp filter_by_target(alarms, target_id) do
     Enum.filter(alarms, &(&1.target_id == target_id))
   end

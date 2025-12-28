@@ -61,6 +61,16 @@ defmodule Cadence.Telemetry.Protocols.CRCProtocol do
 
   @supported_algorithms [:crc32, :crc16_ccitt, :crc16_xmodem, :crc8, :xor_checksum]
   @supported_on_failure [:disconnect, :skip, :pass]
+  @algorithm_aliases %{
+    "crc32" => :crc32,
+    "crc16_ccitt" => :crc16_ccitt,
+    "crc16-ccitt" => :crc16_ccitt,
+    "crc16_xmodem" => :crc16_xmodem,
+    "crc16-xmodem" => :crc16_xmodem,
+    "crc8" => :crc8,
+    "xor_checksum" => :xor_checksum,
+    "xor" => :xor_checksum
+  }
 
   defstruct [
     :algorithm,
@@ -177,17 +187,8 @@ defmodule Cadence.Telemetry.Protocols.CRCProtocol do
   defp normalize_algorithm(algorithm) when is_atom(algorithm), do: algorithm
 
   defp normalize_algorithm(algorithm) when is_binary(algorithm) do
-    case algorithm do
-      "crc32" -> :crc32
-      "crc16_ccitt" -> :crc16_ccitt
-      "crc16-ccitt" -> :crc16_ccitt
-      "crc16_xmodem" -> :crc16_xmodem
-      "crc16-xmodem" -> :crc16_xmodem
-      "crc8" -> :crc8
-      "xor_checksum" -> :xor_checksum
-      "xor" -> :xor_checksum
-      other -> raise ArgumentError, "Unknown CRC algorithm: #{inspect(other)}"
-    end
+    Map.get(@algorithm_aliases, algorithm) ||
+      raise ArgumentError, "Unknown CRC algorithm: #{inspect(algorithm)}"
   end
 
   defp normalize_endian(endian) when endian in [:big, :little], do: endian

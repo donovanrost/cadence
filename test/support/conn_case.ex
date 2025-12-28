@@ -17,6 +17,9 @@ defmodule CadenceWeb.ConnCase do
 
   use ExUnit.CaseTemplate
 
+  alias Cadence.Accounts.Scope
+  alias Phoenix.ConnTest
+
   using do
     quote do
       # The default endpoint for testing
@@ -33,7 +36,7 @@ defmodule CadenceWeb.ConnCase do
 
   setup tags do
     Cadence.DataCase.setup_sandbox(tags)
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    {:ok, conn: ConnTest.build_conn()}
   end
 
   @doc """
@@ -46,7 +49,7 @@ defmodule CadenceWeb.ConnCase do
   """
   def register_and_log_in_user(%{conn: conn} = context) do
     user = Cadence.AccountsFixtures.user_fixture()
-    scope = Cadence.Accounts.Scope.for_user(user)
+    scope = Scope.for_user(user)
 
     opts =
       context
@@ -67,7 +70,7 @@ defmodule CadenceWeb.ConnCase do
     maybe_set_token_authenticated_at(token, opts[:token_authenticated_at])
 
     conn
-    |> Phoenix.ConnTest.init_test_session(%{})
+    |> ConnTest.init_test_session(%{})
     |> Plug.Conn.put_session(:user_token, token)
   end
 

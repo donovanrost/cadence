@@ -21,9 +21,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
   alias Cadence.Accounts.User, as: UserSchema
   alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
+  alias Cadence.Repo
 
   # ===========================================================================
   # User CRUD Operations

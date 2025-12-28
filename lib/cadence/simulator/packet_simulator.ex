@@ -528,7 +528,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     # Bits 2-15: Sequence count (0-16383)
     sequence_flags = 3
     # unsegmented
-    sequence_count = rem(packet_count, 16384)
+    sequence_count = rem(packet_count, 16_384)
     seq_control = sequence_flags <<< 14 ||| sequence_count
 
     # Data length (2 bytes) - length of (secondary header + user data - 1)
@@ -560,7 +560,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
 
     sequence_flags = 3
-    sequence_count = rem(packet_count, 16384)
+    sequence_count = rem(packet_count, 16_384)
     seq_control = sequence_flags <<< 14 ||| sequence_count
 
     # CCSDS data_length = payload_size - 1 (CCSDSProtocol will add CRC size if needed)
@@ -578,7 +578,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     timestamp_sec = DateTime.to_unix(data.received_time)
 
     # Target ID hash (2 bytes)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
 
     secondary_header = <<timestamp_sec::48, target_hash::16>>
 
@@ -606,7 +606,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   defp encode_telemetry_binary(:attitude, target_id, data) do
     timestamp_sec = DateTime.to_unix(data.received_time)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
     secondary_header = <<timestamp_sec::48, target_hash::16>>
 
     # User data - attitude telemetry (24 bytes)
@@ -632,7 +632,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   defp encode_telemetry_binary(:power, target_id, data) do
     timestamp_sec = DateTime.to_unix(data.received_time)
-    target_hash = :erlang.phash2(target_id, 65536)
+    target_hash = :erlang.phash2(target_id, 65_536)
     secondary_header = <<timestamp_sec::48, target_hash::16>>
 
     # Power mode encoding

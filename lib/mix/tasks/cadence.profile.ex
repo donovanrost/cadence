@@ -273,7 +273,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
     # Warmup analysis
     if length(data.warmup_samples) > 0 do
-      warmup_str = data.warmup_samples |> Enum.map(&format_us_compact/1) |> Enum.join(", ")
+      warmup_str = Enum.map_join(data.warmup_samples, ", ", &format_us_compact/1)
       Mix.shell().info("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
 
       # Check if first packet is an outlier
@@ -428,9 +428,7 @@ defmodule Mix.Tasks.Cadence.Profile do
               ""
           end
 
-        Mix.shell().info(
-          "Packets: #{proc} processed#{delta}, #{failed} dropped"
-        )
+        Mix.shell().info("Packets: #{proc} processed#{delta}, #{failed} dropped")
 
         Mix.shell().info("Items: #{items} processed")
 
@@ -439,7 +437,10 @@ defmodule Mix.Tasks.Cadence.Profile do
           %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
             mbps = Float.round(bps * 8 / 1_000_000, 1)
             mb_per_sec = Float.round(bps / 1_000_000, 2)
-            Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+
+            Mix.shell().info(
+              "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
+            )
 
           %{packets_per_sec: pps} when pps > 0 ->
             Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec")

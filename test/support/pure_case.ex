@@ -161,8 +161,8 @@ defmodule Cadence.PureCase do
         :minutes -> amount * 60
         :hour -> amount * 3600
         :hours -> amount * 3600
-        :day -> amount * 86400
-        :days -> amount * 86400
+        :day -> amount * 86_400
+        :days -> amount * 86_400
       end
 
     DateTime.add(DateTime.utc_now(), -seconds, :second)
@@ -185,8 +185,8 @@ defmodule Cadence.PureCase do
         :minutes -> amount * 60
         :hour -> amount * 3600
         :hours -> amount * 3600
-        :day -> amount * 86400
-        :days -> amount * 86400
+        :day -> amount * 86_400
+        :days -> amount * 86_400
       end
 
     DateTime.add(DateTime.utc_now(), seconds, :second)

@@ -41,9 +41,9 @@ defmodule Cadence.Alarms.RuleSuggester do
   - No notification channels (operator must configure)
   """
 
-  alias Cadence.Repo
   alias Cadence.Alarms.{AlarmRule, CoverageAnalyzer}
   alias Cadence.Missions.Mission
+  alias Cadence.Repo
 
   @default_strategy Cadence.Alarms.SuggestionStrategy.Semantic
 

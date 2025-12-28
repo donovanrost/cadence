@@ -12,9 +12,9 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
 
   require Logger
 
-  alias Cadence.Schedules
   alias Cadence.Procedures
   alias Cadence.Procedures.Engine.ExecutionCoordinator
+  alias Cadence.Schedules
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"schedule_id" => schedule_id}}) do
@@ -30,37 +30,41 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
 
   defp execute_schedule(schedule) do
     if schedule.enabled do
-      Logger.info("Executing scheduled procedure: #{schedule.name}")
+      start_scheduled_execution(schedule)
+    else
+      Logger.debug("Schedule #{schedule.id} is disabled, skipping")
+      :ok
+    end
+  end
 
-      procedure = Procedures.get_procedure(schedule.procedure_id)
+  defp start_scheduled_execution(schedule) do
+    Logger.info("Executing scheduled procedure: #{schedule.name}")
 
-      if procedure do
+    case Procedures.get_procedure(schedule.procedure_id) do
+      nil ->
+        Logger.warning("Procedure #{schedule.procedure_id} not found for schedule #{schedule.id}")
+        {:error, :procedure_not_found}
+
+      procedure ->
         case start_procedure_execution(schedule, procedure) do
           {:ok, execution} ->
             Logger.info("Started scheduled execution #{execution.id} for #{schedule.name}")
-
-            # Update schedule tracking
-            next_run = calculate_next_run(schedule)
-            Schedules.record_run(schedule, next_run)
-
-            # Disable one-time schedules after execution
-            if schedule.schedule_type == :once do
-              Schedules.disable_schedule(schedule)
-            end
-
+            finalize_schedule_run(schedule)
             :ok
 
           {:error, reason} ->
             Logger.error("Failed to start scheduled execution: #{inspect(reason)}")
             {:error, reason}
         end
-      else
-        Logger.warning("Procedure #{schedule.procedure_id} not found for schedule #{schedule.id}")
-        {:error, :procedure_not_found}
-      end
-    else
-      Logger.debug("Schedule #{schedule.id} is disabled, skipping")
-      :ok
+    end
+  end
+
+  defp finalize_schedule_run(schedule) do
+    next_run = calculate_next_run(schedule)
+    Schedules.record_run(schedule, next_run)
+
+    if schedule.schedule_type == :once do
+      Schedules.disable_schedule(schedule)
     end
   end
 

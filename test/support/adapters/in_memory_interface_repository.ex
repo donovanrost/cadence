@@ -166,14 +166,7 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
         |> Enum.drop(offset)
         |> maybe_limit(limit)
 
-      if preload_protocols do
-        Enum.map(interfaces, fn interface ->
-          protocols = Map.get(state.protocols, interface.id, [])
-          %{interface | protocols: Enum.sort_by(protocols, & &1.order)}
-        end)
-      else
-        interfaces
-      end
+      attach_protocols_if_needed(interfaces, state, preload_protocols)
     end)
   end
 
@@ -195,14 +188,7 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
         |> Enum.drop(offset)
         |> maybe_limit(limit)
 
-      if preload_protocols do
-        Enum.map(interfaces, fn interface ->
-          protocols = Map.get(state.protocols, interface.id, [])
-          %{interface | protocols: Enum.sort_by(protocols, & &1.order)}
-        end)
-      else
-        interfaces
-      end
+      attach_protocols_if_needed(interfaces, state, preload_protocols)
     end)
   end
 
@@ -312,22 +298,31 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
     attrs_list
     |> Enum.with_index()
     |> Enum.map(fn {attrs, idx} ->
-      case InterfaceProtocol.new(
-             Map.merge(attrs, %{interface_id: interface_id, order: idx})
-           ) do
-        {:ok, protocol} ->
-          if protocol.id do
-            protocol
-          else
-            %{protocol | id: Ecto.UUID.generate()}
-          end
-
-        {:error, _} ->
-          nil
-      end
+      attrs
+      |> Map.merge(%{interface_id: interface_id, order: idx})
+      |> build_protocol()
     end)
     |> Enum.reject(&is_nil/1)
   end
+
+  defp attach_protocols_if_needed(interfaces, _state, false), do: interfaces
+
+  defp attach_protocols_if_needed(interfaces, state, true) do
+    Enum.map(interfaces, fn interface ->
+      protocols = Map.get(state.protocols, interface.id, [])
+      %{interface | protocols: Enum.sort_by(protocols, & &1.order)}
+    end)
+  end
+
+  defp build_protocol(attrs) do
+    case InterfaceProtocol.new(attrs) do
+      {:ok, protocol} -> ensure_protocol_id(protocol)
+      {:error, _} -> nil
+    end
+  end
+
+  defp ensure_protocol_id(%{id: nil} = protocol), do: %{protocol | id: Ecto.UUID.generate()}
+  defp ensure_protocol_id(protocol), do: protocol
 
   defp filter_by_mission(interfaces, nil), do: interfaces
 

@@ -2,7 +2,7 @@ defmodule Cadence.Commands.EncoderTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Commands.Encoder
-  alias Cadence.MissionDatabase.{MetaCommand, Argument}
+  alias Cadence.MissionDatabase.{Argument, MetaCommand}
 
   describe "encode/2" do
     test "encodes a simple command with no arguments" do

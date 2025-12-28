@@ -32,7 +32,9 @@
     <div class="flex items-center gap-2">
       <.status_badge status={@target.circuit_breaker_status} />
       <%= if @target.circuit_breaker_failures > 0 do %>
-        <span class="text-xs text-base-content/50">({@target.circuit_breaker_failures} failures)</span>
+        <span class="text-xs text-base-content/50">
+          ({@target.circuit_breaker_failures} failures)
+        </span>
       <% end %>
     </div>
   </div>
@@ -40,7 +42,10 @@
   <div class="hud-panel p-4">
     <div class="hud-label mb-1">Mission</div>
     <div>
-      <.link navigate={~p"/missions/#{@mission}"} class="text-primary hover:text-primary/80 font-medium">
+      <.link
+        navigate={~p"/missions/#{@mission}"}
+        class="text-primary hover:text-primary/80 font-medium"
+      >
         {@mission.name}
       </.link>
     </div>
@@ -49,7 +54,10 @@
 
 <!-- Config & Metadata side by side if both exist -->
 <%= if @target.config != %{} or @target.metadata != %{} do %>
-  <div class={["grid gap-4 mt-6", @target.config != %{} && @target.metadata != %{} && "md:grid-cols-2"]}>
+  <div class={[
+    "grid gap-4 mt-6",
+    @target.config != %{} && @target.metadata != %{} && "md:grid-cols-2"
+  ]}>
     <%= if @target.config != %{} do %>
       <div class="hud-panel p-4">
         <div class="hud-label mb-2">Configuration</div>
@@ -89,4 +97,3 @@
     </.table>
   <% end %>
 </div>
-

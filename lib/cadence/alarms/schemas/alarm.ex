@@ -52,12 +52,12 @@ defmodule Cadence.Alarms.Alarm do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Organizations.Organization
-  alias Cadence.Missions.Mission
-  alias Cadence.Targets.Target
   alias Cadence.Accounts.User
   alias Cadence.Alarms.AlarmRule
   alias Cadence.MissionDatabase.DefinitionSet
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations.Organization
+  alias Cadence.Targets.Target
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

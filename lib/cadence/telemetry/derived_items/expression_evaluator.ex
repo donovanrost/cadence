@@ -88,9 +88,8 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluator do
   """
   @spec evaluate(String.t(), bindings()) :: eval_result()
   def evaluate(expression, bindings) when is_binary(expression) and is_map(bindings) do
-    with {:ok, ast} <- ExpressionParser.parse(expression),
-         {:ok, result} <- eval_ast(ast, bindings) do
-      {:ok, result}
+    with {:ok, ast} <- ExpressionParser.parse(expression) do
+      eval_ast(ast, bindings)
     end
   end
 

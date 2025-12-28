@@ -78,7 +78,11 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
       assert html =~ "name=\"required_approvals\""
     end
 
-    test "changing value creates override automatically", %{conn: conn, mission: mission, org: org} do
+    test "changing value creates override automatically", %{
+      conn: conn,
+      mission: mission,
+      org: org
+    } do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
@@ -254,7 +258,11 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
       assert Settings.get(mission, :procedures, :required_approvals) == 5
     end
 
-    test "setting value equal to org default still works", %{conn: conn, mission: mission, org: org} do
+    test "setting value equal to org default still works", %{
+      conn: conn,
+      mission: mission,
+      org: org
+    } do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 3)
       mission = Cadence.Repo.preload(mission, :organization)
       {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 5)

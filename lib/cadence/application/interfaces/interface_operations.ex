@@ -36,8 +36,9 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
       })
   """
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Application.Interfaces.InterfaceQueries
+  alias Cadence.Domain.Interfaces.Entities.Interface
+  alias Cadence.Ports.Repository.Interfaces.InterfaceRepository
 
   @type interface_id :: String.t()
   @type mission_id :: String.t()
@@ -45,7 +46,7 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Interfaces.InterfaceRepository.impl()
+    InterfaceRepository.impl()
   end
 
   # ===========================================================================

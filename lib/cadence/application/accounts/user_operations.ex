@@ -20,8 +20,9 @@ defmodule Cadence.Application.Accounts.UserOperations do
       {:ok, user} = UserOperations.update_password(user_id, current_password, new_password)
   """
 
-  alias Cadence.Domain.Accounts.Entities.User
   alias Cadence.Application.Accounts.UserQueries
+  alias Cadence.Domain.Accounts.Entities.User
+  alias Cadence.Ports.Repository.Accounts.UserRepository
   alias Cadence.Ports.Security.PasswordHasher
 
   @type user_id :: String.t()
@@ -29,7 +30,7 @@ defmodule Cadence.Application.Accounts.UserOperations do
 
   # Get configured repository
   defp repo do
-    Cadence.Ports.Repository.Accounts.UserRepository.impl()
+    UserRepository.impl()
   end
 
   # ===========================================================================
@@ -113,9 +114,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
   @spec update_email(user_id(), String.t()) :: {:ok, User.t()} | {:error, term()}
   def update_email(user_id, new_email) do
     with {:ok, user} <- UserQueries.find(user_id),
-         {:ok, updated} <- User.update_email(user, new_email),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.update_email(user, new_email) do
+      repo().save(updated)
     end
   end
 
@@ -130,9 +130,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
          :ok <- verify_current_password(user, current_password),
          :ok <- User.validate_password(new_password),
          hashed <- PasswordHasher.hash(new_password),
-         {:ok, updated} <- User.set_hashed_password(user, hashed),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.set_hashed_password(user, hashed) do
+      repo().save(updated)
     end
   end
 
@@ -146,9 +145,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
     with {:ok, user} <- UserQueries.find(user_id),
          :ok <- User.validate_password(new_password),
          hashed <- PasswordHasher.hash(new_password),
-         {:ok, updated} <- User.set_hashed_password(user, hashed),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.set_hashed_password(user, hashed) do
+      repo().save(updated)
     end
   end
 
@@ -158,9 +156,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
   @spec update_role(user_id(), atom()) :: {:ok, User.t()} | {:error, term()}
   def update_role(user_id, new_role) do
     with {:ok, user} <- UserQueries.find(user_id),
-         {:ok, updated} <- User.update_role(user, new_role),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.update_role(user, new_role) do
+      repo().save(updated)
     end
   end
 
@@ -174,9 +171,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
   @spec confirm(user_id()) :: {:ok, User.t()} | {:error, term()}
   def confirm(user_id) do
     with {:ok, user} <- UserQueries.find(user_id),
-         {:ok, confirmed} <- User.confirm(user),
-         {:ok, saved} <- repo().save(confirmed) do
-      {:ok, saved}
+         {:ok, confirmed} <- User.confirm(user) do
+      repo().save(confirmed)
     end
   end
 
@@ -190,9 +186,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
   @spec make_system_admin(user_id()) :: {:ok, User.t()} | {:error, term()}
   def make_system_admin(user_id) do
     with {:ok, user} <- UserQueries.find(user_id),
-         {:ok, updated} <- User.make_system_admin(user),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.make_system_admin(user) do
+      repo().save(updated)
     end
   end
 
@@ -202,9 +197,8 @@ defmodule Cadence.Application.Accounts.UserOperations do
   @spec revoke_system_admin(user_id()) :: {:ok, User.t()} | {:error, term()}
   def revoke_system_admin(user_id) do
     with {:ok, user} <- UserQueries.find(user_id),
-         {:ok, updated} <- User.revoke_system_admin(user),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- User.revoke_system_admin(user) do
+      repo().save(updated)
     end
   end
 
@@ -245,18 +239,16 @@ defmodule Cadence.Application.Accounts.UserOperations do
              hashed_password: hashed_password,
              system_admin: true,
              confirmed_at: now
-           }),
-         {:ok, saved} <- repo().save(user) do
-      {:ok, saved}
+           }) do
+      repo().save(user)
     end
   end
 
   defp update_existing_system_admin(user, password) do
     with {:ok, hashed_password} <- maybe_hash_password(password),
          {:ok, updated} <- User.set_hashed_password(user, hashed_password),
-         {:ok, admin} <- User.make_system_admin(updated),
-         {:ok, saved} <- repo().save(admin) do
-      {:ok, saved}
+         {:ok, admin} <- User.make_system_admin(updated) do
+      repo().save(admin)
     end
   end
 

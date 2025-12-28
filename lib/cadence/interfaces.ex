@@ -47,18 +47,16 @@ defmodule Cadence.Interfaces do
   """
 
   import Ecto.Query, warn: false
-  alias Cadence.Repo
-
-  alias Cadence.Interfaces.InterfaceSchema
+  # Application services for new hexagonal architecture
+  alias Cadence.Application.Interfaces.InterfaceOperations
+  alias Cadence.Application.Interfaces.InterfaceQueries
+  alias Cadence.Application.Interfaces.RoutingOperations
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Interfaces.InterfaceProtocol
+  alias Cadence.Interfaces.InterfaceSchema
   alias Cadence.Interfaces.TargetInterface
   alias Cadence.Missions.Mission
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-
-  # Application services for new hexagonal architecture
-  alias Cadence.Application.Interfaces.InterfaceQueries
-  alias Cadence.Application.Interfaces.InterfaceOperations
-  alias Cadence.Application.Interfaces.RoutingOperations
+  alias Cadence.Repo
 
   ## Interface CRUD
 

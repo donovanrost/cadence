@@ -7,9 +7,9 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
   use Cadence.PureCase, async: false
 
   alias Cadence.Application.Commanding.EnqueueCommand
-  alias Cadence.Test.Adapters.InMemoryQueueRepository
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryEventRecorder
+  alias Cadence.Test.Adapters.InMemoryQueueRepository
 
   setup do
     # Start fake adapters

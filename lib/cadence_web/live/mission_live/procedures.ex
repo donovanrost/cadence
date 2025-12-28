@@ -7,6 +7,7 @@ defmodule CadenceWeb.MissionLive.Procedures do
   alias Cadence.Procedures
   alias Cadence.Procedures.Procedure
   alias Cadence.Procedures.Runtime
+  alias Cadence.Procedures.V2
 
   @impl true
   def mount(_params, _session, socket) do
@@ -103,36 +104,19 @@ defmodule CadenceWeb.MissionLive.Procedures do
     socket = apply_action(socket, :index, %{})
     mission = socket.assigns.mission
 
-    case Procedures.get_procedure(procedure_id) do
-      nil ->
-        socket
-        |> put_flash(:error, "Procedure not found")
-        |> push_patch(to: ~p"/missions/#{mission}/procedures")
-
-      procedure when procedure.mission_id == mission.id ->
-        # Load versions and executions for this procedure
-        versions = Procedures.list_versions(procedure.id)
-        executions = Procedures.list_executions(procedure_id: procedure.id, limit: 10)
-
-        # Load approval status for in_review versions
-        versions_with_status =
-          Enum.map(versions, fn version ->
-            if version.status == :in_review do
-              Map.put(version, :approval_status, Procedures.get_approval_status(version))
-            else
-              version
-            end
-          end)
+    case load_procedure_for_mission(mission, procedure_id) do
+      {:ok, procedure} ->
+        {versions, executions} = load_versions_and_executions(procedure)
 
         socket
         |> assign(:page_title, procedure.name)
         |> assign(:selected_procedure, procedure)
-        |> assign(:versions, versions_with_status)
+        |> assign(:versions, versions)
         |> assign(:recent_executions, executions)
 
-      _procedure ->
+      {:error, message} ->
         socket
-        |> put_flash(:error, "Procedure not found in this mission")
+        |> put_flash(:error, message)
         |> push_patch(to: ~p"/missions/#{mission}/procedures")
     end
   end
@@ -141,21 +125,44 @@ defmodule CadenceWeb.MissionLive.Procedures do
     socket = apply_action(socket, :show, %{"procedure_id" => procedure_id})
     procedure = socket.assigns.selected_procedure
 
-    # Get the current version's parameter schema
-    parameters_schema =
-      if procedure.current_version_id do
-        case Procedures.get_version(procedure.current_version_id) do
-          nil -> nil
-          version -> version.parameters_schema
-        end
-      else
-        nil
-      end
-
     socket
     |> assign(:page_title, "Execute #{procedure.name}")
     |> assign(:execution_params, %{})
-    |> assign(:parameters_schema, parameters_schema)
+    |> assign(:parameters_schema, load_parameters_schema(procedure))
+  end
+
+  defp load_procedure_for_mission(mission, procedure_id) do
+    case Procedures.get_procedure(procedure_id) do
+      nil -> {:error, "Procedure not found"}
+      %Procedure{mission_id: mission_id} = procedure when mission_id == mission.id -> {:ok, procedure}
+      _procedure -> {:error, "Procedure not found in this mission"}
+    end
+  end
+
+  defp load_versions_and_executions(procedure) do
+    versions = Procedures.list_versions(procedure.id)
+    executions = Procedures.list_executions(procedure_id: procedure.id, limit: 10)
+
+    {attach_approval_statuses(versions), executions}
+  end
+
+  defp attach_approval_statuses(versions) do
+    Enum.map(versions, &maybe_attach_approval_status/1)
+  end
+
+  defp maybe_attach_approval_status(%{status: :in_review} = version) do
+    Map.put(version, :approval_status, Procedures.get_approval_status(version))
+  end
+
+  defp maybe_attach_approval_status(version), do: version
+
+  defp load_parameters_schema(%Procedure{current_version_id: nil}), do: nil
+
+  defp load_parameters_schema(%Procedure{current_version_id: version_id}) do
+    case Procedures.get_version(version_id) do
+      nil -> nil
+      version -> version.parameters_schema
+    end
   end
 
   defp parse_tag_params(nil), do: []
@@ -215,38 +222,87 @@ defmodule CadenceWeb.MissionLive.Procedures do
      push_patch(socket, to: ~p"/missions/#{mission}/procedures/#{procedure_id}/execute")}
   end
 
+  def handle_event("new_procedure", _params, socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    # Generate a default name based on timestamp
+    default_name = "New Procedure #{Calendar.strftime(DateTime.utc_now(), "%Y%m%d-%H%M%S")}"
+
+    attrs = %{
+      name: default_name,
+      description: "",
+      tags: [],
+      organization_id: mission.organization_id,
+      mission_id: mission.id
+    }
+
+    case Procedures.create_procedure_v2(attrs, user_id: scope.user.id) do
+      {:ok, {procedure, version}} ->
+        {:noreply,
+         socket
+         |> push_navigate(
+           to: ~p"/missions/#{mission}/procedures-v2/#{procedure}/versions/#{version}/edit"
+         )}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to create procedure: #{inspect(reason)}")}
+    end
+  end
+
   def handle_event("start_execution", %{"procedure_id" => procedure_id} = params, socket) do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
     # Parse parameters from form
     parameters = params["parameters"] || %{}
+    procedure = Procedures.get_procedure!(procedure_id)
+
+    # Extract target from parameters if provided
+    target_id = parameters["target"] || parameters["target_id"]
 
     case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
       :ok ->
-        case Runtime.start_execution(mission.id, procedure_id,
-               parameters: parameters,
-               user_id: scope.user.id
-             ) do
-          {:ok, _execution} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Procedure execution started")
-             |> push_patch(to: ~p"/missions/#{mission}/procedures/#{procedure_id}")}
+        {version, v2?} = load_version_and_mode(procedure)
 
-          {:error, :mission_not_running} ->
-            {:noreply, put_flash(socket, :error, "Mission is not currently active")}
-
-          {:error, :at_concurrency_limit} ->
-            {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
-        end
+        start_execution_for_procedure(mission, procedure, version, v2?, parameters, scope.user.id, target_id)
+        |> handle_start_execution_result(socket, mission, procedure_id, v2?)
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
     end
+  end
+
+  defp handle_start_execution_result({:ok, execution}, socket, mission, procedure_id, true) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "V2 procedure execution started")
+     |> push_navigate(
+       to: ~p"/missions/#{mission}/procedures-v2/#{procedure_id}/executions/#{execution.id}"
+     )}
+  end
+
+  defp handle_start_execution_result({:ok, _execution}, socket, mission, procedure_id, false) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "Procedure execution started")
+     |> push_patch(to: ~p"/missions/#{mission}/procedures/#{procedure_id}")}
+  end
+
+  defp handle_start_execution_result({:error, :mission_not_running}, socket, _mission, _procedure_id, _v2?) do
+    {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+  end
+
+  defp handle_start_execution_result({:error, :at_concurrency_limit}, socket, _mission, _procedure_id, _v2?) do
+    {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
+  end
+
+  defp handle_start_execution_result({:error, reason}, socket, _mission, _procedure_id, true) do
+    {:noreply, put_flash(socket, :error, "Failed to start V2 execution: #{inspect(reason)}")}
+  end
+
+  defp handle_start_execution_result({:error, reason}, socket, _mission, _procedure_id, false) do
+    {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
   end
 
   def handle_event("pause_execution", %{"id" => execution_id}, socket) do
@@ -358,36 +414,45 @@ defmodule CadenceWeb.MissionLive.Procedures do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
       :ok ->
-        version = Procedures.get_version!(version_id)
-        decision_atom = String.to_existing_atom(decision)
-        comment = params["comment"]
-
-        case Procedures.add_approval(version, scope.user.id, decision_atom, comment: comment) do
-          {:ok, %{version: _version}} ->
-            message =
-              if decision_atom == :approved,
-                do: "Approval recorded",
-                else: "Rejection recorded - version returned to draft"
-
-            reload_versions_and_procedure(socket, message)
-
-          {:error, :invalid_status} ->
-            {:noreply, put_flash(socket, :error, "Can only review versions in review status")}
-
-          {:error, :cannot_approve_own_work} ->
-            {:noreply, put_flash(socket, :error, "You cannot approve your own work")}
-
-          {:error, :already_submitted_decision} ->
-            {:noreply, put_flash(socket, :error, "You have already submitted a decision")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to add approval: #{inspect(reason)}")}
-        end
+        handle_add_approval(socket, version_id, decision, params, scope.user.id)
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to approve versions")}
     end
   end
+
+  defp handle_add_approval(socket, version_id, decision, params, user_id) do
+    version = Procedures.get_version!(version_id)
+    decision_atom = String.to_existing_atom(decision)
+    comment = params["comment"]
+
+    Procedures.add_approval(version, user_id, decision_atom, comment: comment)
+    |> handle_add_approval_result(socket, decision_atom)
+  end
+
+  defp handle_add_approval_result({:ok, %{version: _version}}, socket, decision_atom) do
+    reload_versions_and_procedure(socket, approval_message(decision_atom))
+  end
+
+  defp handle_add_approval_result({:error, :invalid_status}, socket, _decision_atom) do
+    {:noreply, put_flash(socket, :error, "Can only review versions in review status")}
+  end
+
+  defp handle_add_approval_result({:error, :cannot_approve_own_work}, socket, _decision_atom) do
+    {:noreply, put_flash(socket, :error, "You cannot approve your own work")}
+  end
+
+  defp handle_add_approval_result({:error, :already_submitted_decision}, socket, _decision_atom) do
+    {:noreply, put_flash(socket, :error, "You have already submitted a decision")}
+  end
+
+  defp handle_add_approval_result({:error, reason}, socket, _decision_atom) do
+    {:noreply, put_flash(socket, :error, "Failed to add approval: #{inspect(reason)}")}
+  end
+
+  defp approval_message(:approved), do: "Approval recorded"
+  defp approval_message(:rejected), do: "Rejection recorded - version returned to draft"
+  defp approval_message(_), do: "Review recorded"
 
   def handle_event("approve_version", %{"version_id" => version_id}, socket) do
     mission = socket.assigns.mission
@@ -468,35 +533,73 @@ defmodule CadenceWeb.MissionLive.Procedures do
     end
   end
 
+  def handle_event(
+        "run_version_v2",
+        %{"version_id" => version_id, "procedure_id" => procedure_id},
+        socket
+      ) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
+      :ok ->
+        version = Procedures.get_version!(version_id)
+
+        case V2.start_execution(version, %{}, user_id: scope.user.id, mission_id: mission.id) do
+          {:ok, execution} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "V2 procedure execution started")
+             |> push_navigate(
+               to:
+                 ~p"/missions/#{mission}/procedures-v2/#{procedure_id}/executions/#{execution.id}"
+             )}
+
+          {:error, reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Failed to start V2 execution: #{inspect(reason)}")}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
+    end
+  end
+
   def handle_event("delete", %{"id" => procedure_id}, socket) do
     mission = socket.assigns.mission
     scope = socket.assigns.current_scope
 
     case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
       :ok ->
-        procedure = Procedures.get_procedure(procedure_id)
-
-        if procedure do
-          case Procedures.delete_procedure(procedure) do
-            {:ok, _} ->
-              procedures =
-                Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Procedure deleted")
-               |> assign(:procedures, procedures)}
-
-            {:error, _changeset} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete procedure")}
-          end
-        else
-          {:noreply, put_flash(socket, :error, "Procedure not found")}
-        end
+        handle_delete_procedure(socket, mission, procedure_id)
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to delete procedures")}
     end
+  end
+
+  defp handle_delete_procedure(socket, mission, procedure_id) do
+    case Procedures.get_procedure(procedure_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Procedure not found")}
+
+      procedure ->
+        Procedures.delete_procedure(procedure)
+        |> handle_delete_result(socket, mission)
+    end
+  end
+
+  defp handle_delete_result({:ok, _}, socket, mission) do
+    procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Procedure deleted")
+     |> assign(:procedures, procedures)}
+  end
+
+  defp handle_delete_result({:error, _changeset}, socket, _mission) do
+    {:noreply, put_flash(socket, :error, "Failed to delete procedure")}
   end
 
   def handle_event("export_procedure", %{"id" => procedure_id}, socket) do
@@ -656,6 +759,21 @@ defmodule CadenceWeb.MissionLive.Procedures do
     {:noreply, assign(socket, :active_executions, active_executions)}
   end
 
+  # Handle V2 procedure creation - redirect to V2 editor
+  def handle_info(
+        {CadenceWeb.ProcedureLive.FormComponent, {:saved, procedure, version}},
+        socket
+      ) do
+    mission = socket.assigns.mission
+
+    {:noreply,
+     socket
+     |> push_navigate(
+       to: ~p"/missions/#{mission}/procedures-v2/#{procedure}/versions/#{version}/edit"
+     )}
+  end
+
+  # Handle legacy procedure updates (edit mode)
   def handle_info({CadenceWeb.ProcedureLive.FormComponent, {:saved, _procedure}}, socket) do
     mission = socket.assigns.mission
     procedures = Procedures.list_procedures(mission.organization_id, mission_id: mission.id)
@@ -674,33 +792,16 @@ defmodule CadenceWeb.MissionLive.Procedures do
     scope = socket.assigns.current_scope
     procedure = socket.assigns.selected_procedure
 
+    # Extract target from parameters if provided
+    target_id = params["target"] || params["target_id"]
+
     case Bodyguard.permit(Cadence.Missions.Policy, :send_command, scope, mission) do
       :ok ->
-        case Runtime.start_execution(mission.id, procedure.id,
-               parameters: params,
-               user_id: scope.user.id
-             ) do
-          {:ok, execution} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Procedure execution started")
-             |> push_navigate(
-               to: ~p"/missions/#{mission}/procedures/#{procedure.id}/executions/#{execution}"
-             )}
+        {version, v2?} = load_version_and_mode(procedure)
 
-          {:error, :mission_not_running} ->
-            {:noreply, put_flash(socket, :error, "Mission is not currently active")}
-
-          {:error, :at_concurrency_limit} ->
-            {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
-
-          {:error, {:validation_failed, errors}} ->
-            error_msg = Enum.map_join(errors, ", ", fn {k, v} -> "#{k}: #{v}" end)
-            {:noreply, put_flash(socket, :error, "Parameter validation failed: #{error_msg}")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
-        end
+        mission
+        |> start_execution_for_procedure(procedure, version, v2?, params, scope.user.id, target_id)
+        |> handle_execution_start_result(socket, mission, procedure, v2?)
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
@@ -719,6 +820,71 @@ defmodule CadenceWeb.MissionLive.Procedures do
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp load_version_and_mode(procedure) do
+    version =
+      case procedure.current_version_id do
+        nil -> nil
+        version_id -> Procedures.get_version(version_id)
+      end
+
+    {version, v2_procedure?(version)}
+  end
+
+  defp v2_procedure?(nil), do: false
+
+  defp v2_procedure?(version) do
+    version.id
+    |> V2.list_sections()
+    |> Enum.any?()
+  end
+
+  defp start_execution_for_procedure(_mission, _procedure, version, true, params, user_id, target_id) do
+    V2.start_execution(version, params, user_id: user_id, target_id: target_id)
+  end
+
+  defp start_execution_for_procedure(mission, procedure, _version, false, params, user_id, target_id) do
+    Runtime.start_execution(mission.id, procedure.id,
+      parameters: params,
+      user_id: user_id,
+      target_id: target_id
+    )
+  end
+
+  defp handle_execution_start_result({:ok, execution}, socket, mission, procedure, v2?) do
+    execution_id = if is_map(execution), do: execution.id, else: execution
+    route = execution_route(mission, procedure, v2?, execution_id)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Procedure execution started")
+     |> push_navigate(to: route)}
+  end
+
+  defp handle_execution_start_result({:error, :mission_not_running}, socket, _mission, _procedure, _v2?) do
+    {:noreply, put_flash(socket, :error, "Mission is not currently active")}
+  end
+
+  defp handle_execution_start_result({:error, :at_concurrency_limit}, socket, _mission, _procedure, _v2?) do
+    {:noreply, put_flash(socket, :error, "Too many procedures running. Please wait.")}
+  end
+
+  defp handle_execution_start_result({:error, {:validation_failed, errors}}, socket, _mission, _procedure, _v2?) do
+    error_msg = Enum.map_join(errors, ", ", fn {k, v} -> "#{k}: #{v}" end)
+    {:noreply, put_flash(socket, :error, "Parameter validation failed: #{error_msg}")}
+  end
+
+  defp handle_execution_start_result({:error, reason}, socket, _mission, _procedure, _v2?) do
+    {:noreply, put_flash(socket, :error, "Failed to start: #{inspect(reason)}")}
+  end
+
+  defp execution_route(mission, procedure, true, execution_id) do
+    ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/executions/#{execution_id}"
+  end
+
+  defp execution_route(mission, procedure, false, execution_id) do
+    ~p"/missions/#{mission}/procedures/#{procedure.id}/executions/#{execution_id}"
+  end
 
   defp update_count(counts, key, delta) do
     Map.update(counts, key, delta, &(&1 + delta))
@@ -757,11 +923,9 @@ defmodule CadenceWeb.MissionLive.Procedures do
           <.button phx-click="show_import_modal" class="btn-ghost btn-sm">
             <.icon name="hero-arrow-down-tray" class="h-4 w-4 mr-1" /> Import
           </.button>
-          <.link patch={~p"/missions/#{@mission}/procedures/new"}>
-            <.button class="btn-primary btn-sm">
-              <.icon name="hero-plus" class="h-4 w-4 mr-1" /> New Procedure
-            </.button>
-          </.link>
+          <.button phx-click="new_procedure" class="btn-primary btn-sm">
+            <.icon name="hero-plus" class="h-4 w-4 mr-1" /> New Procedure
+          </.button>
         </div>
       </div>
       
@@ -942,11 +1106,23 @@ defmodule CadenceWeb.MissionLive.Procedures do
                         >
                           <.icon name="hero-play" class="h-3 w-3" />
                         </.button>
-                        <.link patch={~p"/missions/#{@mission}/procedures/#{procedure.id}/edit"}>
+                        <.link
+                          :if={procedure.current_version_id}
+                          navigate={
+                            ~p"/missions/#{@mission}/procedures-v2/#{procedure}/versions/#{procedure.current_version_id}/edit"
+                          }
+                        >
                           <.button class="btn-ghost btn-xs">
                             <.icon name="hero-pencil" class="h-3 w-3" />
                           </.button>
                         </.link>
+                        <.button
+                          :if={is_nil(procedure.current_version_id)}
+                          class="btn-ghost btn-xs"
+                          disabled
+                        >
+                          <.icon name="hero-pencil" class="h-3 w-3" />
+                        </.button>
                         <.button
                           phx-click="delete"
                           phx-value-id={procedure.id}
@@ -1047,14 +1223,23 @@ defmodule CadenceWeb.MissionLive.Procedures do
                   </span>
                   <button
                     type="button"
-                    phx-click="run_version"
+                    phx-click="run_version_v2"
                     phx-value-version_id={version.id}
                     phx-value-procedure_id={@selected_procedure.id}
-                    class="btn btn-xs btn-ghost"
-                    title="Run this version"
+                    class="btn btn-xs btn-success"
+                    title="Execute this version"
                   >
                     <.icon name="hero-play" class="h-3 w-3" />
                   </button>
+                  <.link
+                    navigate={
+                      ~p"/missions/#{@mission}/procedures-v2/#{@selected_procedure}/versions/#{version}/edit"
+                    }
+                    class="btn btn-xs btn-ghost"
+                    title="Edit procedure"
+                  >
+                    <.icon name="hero-pencil" class="h-3 w-3" />
+                  </.link>
                 </div>
               </div>
               
@@ -1268,8 +1453,8 @@ defmodule CadenceWeb.MissionLive.Procedures do
                 phx-debounce="300"
               ><%= @import_form[:json].value %></textarea>
             </div>
-
-            <!-- Import Preview -->
+            
+    <!-- Import Preview -->
             <div :if={@import_preview} class="bg-base-200 rounded-lg p-4">
               <h4 class="font-medium mb-2">Preview</h4>
               <dl class="space-y-1 text-sm">
@@ -1288,7 +1473,10 @@ defmodule CadenceWeb.MissionLive.Procedures do
                 <div :if={length(@import_preview["procedure"]["tags"] || []) > 0} class="flex gap-2">
                   <dt class="text-base-content/60">Tags:</dt>
                   <dd>
-                    <span :for={tag <- @import_preview["procedure"]["tags"]} class="badge badge-sm badge-outline mr-1">
+                    <span
+                      :for={tag <- @import_preview["procedure"]["tags"]}
+                      class="badge badge-sm badge-outline mr-1"
+                    >
                       {tag}
                     </span>
                   </dd>

@@ -71,24 +71,23 @@ defmodule Cadence.Telemetry.Conversions.StateTableConversion do
         changeset
 
       states when is_map(states) ->
-        if map_size(states) == 0 do
-          add_error(changeset, :states, "must have at least one state mapping")
-        else
-          # Validate that all values are strings
-          invalid_values =
-            states
-            |> Map.values()
-            |> Enum.reject(&is_binary/1)
-
-          if Enum.empty?(invalid_values) do
-            changeset
-          else
-            add_error(changeset, :states, "all state values must be strings")
-          end
-        end
+        validate_state_map(changeset, states)
 
       _ ->
         add_error(changeset, :states, "must be a map")
+    end
+  end
+
+  defp validate_state_map(changeset, states) do
+    cond do
+      map_size(states) == 0 ->
+        add_error(changeset, :states, "must have at least one state mapping")
+
+      Enum.any?(Map.values(states), &(not is_binary(&1))) ->
+        add_error(changeset, :states, "all state values must be strings")
+
+      true ->
+        changeset
     end
   end
 end

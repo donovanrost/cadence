@@ -10,10 +10,10 @@ defmodule Cadence.Automations do
   - `Cadence.Application.Automations.AutomationOperations` for write operations
   """
 
+  alias Cadence.Application.Automations.AutomationOperations
+  alias Cadence.Application.Automations.AutomationQueries
   alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Domain.Automations.Entities.AutomationExecution
-  alias Cadence.Application.Automations.AutomationQueries
-  alias Cadence.Application.Automations.AutomationOperations
 
   # ============================================================================
   # Automation Queries

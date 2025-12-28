@@ -1,8 +1,8 @@
 defmodule Cadence.Telemetry.Protocols.CRCProtocolTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.Telemetry.Protocols.CRCProtocol
   alias Cadence.Telemetry.CRC
+  alias Cadence.Telemetry.Protocols.CRCProtocol
 
   describe "new/1" do
     test "creates protocol with default options" do

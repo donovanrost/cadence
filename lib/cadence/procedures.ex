@@ -13,22 +13,25 @@ defmodule Cadence.Procedures do
     ProcedureApproval,
     ProcedureExecution,
     ProcedureLog,
-    ProcedureVersion
+    ProcedureVersion,
+    V2
   }
 
-  alias Cadence.Repo
-  alias Cadence.Settings
   alias Cadence.Outbox
   alias Cadence.Recordings
+  alias Cadence.Repo
+  alias Cadence.Settings
+
   alias Cadence.Recordings.Recordables.{
-    ProcedureVersionCreated,
-    ProcedureVersionSubmitted,
-    ProcedureVersionWithdrawn,
     ProcedureApprovalAdded,
+    ProcedureStarted,
     ProcedureVersionApproved,
+    ProcedureVersionCreated,
     ProcedureVersionRejected,
-    ProcedureStarted
+    ProcedureVersionSubmitted,
+    ProcedureVersionWithdrawn
   }
+
   alias Ecto.Multi
 
   # ============================================================================
@@ -141,6 +144,85 @@ defmodule Cadence.Procedures do
   end
 
   @doc """
+  Creates a new V2 procedure with initial block-based structure.
+
+  This creates:
+  - Procedure record
+  - Initial ProcedureVersion (draft, manual execution mode)
+  - Default ProcedureSection named "Main"
+  - Starter ProcedureStep
+  - Welcome text block
+
+  Returns `{:ok, {procedure, version}}` on success.
+
+  ## Options
+
+  - `:user_id` - User creating the procedure (required)
+  """
+  def create_procedure_v2(attrs, opts \\ []) do
+    user_id = Keyword.fetch!(opts, :user_id)
+
+    Repo.transaction(fn ->
+      # 1. Create procedure
+      procedure_attrs =
+        attrs
+        |> Map.take([:name, :description, :tags, :organization_id, :mission_id])
+        |> Map.put(:type, :dag)
+
+      procedure =
+        %Procedure{}
+        |> Procedure.changeset(procedure_attrs)
+        |> Repo.insert!()
+
+      # 2. Create initial version (empty source - V2 uses sections/steps/blocks)
+      version_attrs = %{
+        procedure_id: procedure.id,
+        version_number: 1,
+        source: %{},
+        execution_mode: :manual,
+        created_by_id: user_id
+      }
+
+      version =
+        %ProcedureVersion{}
+        |> ProcedureVersion.changeset(version_attrs)
+        |> Repo.insert!()
+
+      # Update procedure with current version
+      procedure =
+        procedure
+        |> Procedure.changeset(%{current_version_id: version.id})
+        |> Repo.update!()
+
+      # 3. Create default section
+      {:ok, section} =
+        V2.create_section(version.id, %{
+          name: "Main",
+          position: 0
+        })
+
+      # 4. Create starter step
+      {:ok, step} =
+        V2.create_step(section.id, %{
+          name: "start",
+          title: "Getting Started",
+          position: 0,
+          requires_signoff: true
+        })
+
+      # 5. Create welcome block
+      {:ok, _block} =
+        V2.create_block(step.id, %{
+          block_type: :text,
+          position: 0,
+          content: %{"markdown" => "Add your procedure steps here."}
+        })
+
+      {procedure, version}
+    end)
+  end
+
+  @doc """
   Updates a procedure's metadata (not source - use create_version for that).
   """
   def update_procedure(%Procedure{} = procedure, attrs) do
@@ -201,62 +283,75 @@ defmodule Cadence.Procedures do
     procedure = get_procedure!(procedure_id)
     user_id = Keyword.get(opts, :user_id)
 
-    # Get next version number
-    max_version =
-      ProcedureVersion
-      |> where([v], v.procedure_id == ^procedure_id)
-      |> select([v], max(v.version_number))
-      |> Repo.one() || 0
+    version_number = next_version_number(procedure_id)
+    version_attrs = build_version_attrs(attrs, procedure_id, version_number, user_id)
+    version_created_attrs = build_version_created_attrs(attrs, procedure_id, version_number)
 
-    version_number = max_version + 1
+    Multi.new()
+    |> Multi.insert(:version, ProcedureVersion.changeset(%ProcedureVersion{}, version_attrs))
+    |> Recordings.append(:created, ProcedureVersionCreated, version_created_attrs, fn %{version: v} ->
+      version_recording_attrs(procedure, user_id, v.id)
+    end)
+    |> Repo.transaction()
+    |> normalize_version_result()
+  end
 
-    # Build version attrs, preserving any passed-in values but ensuring required fields
-    version_attrs =
-      attrs
-      |> Map.put(:procedure_id, procedure_id)
-      |> Map.put(:version_number, version_number)
-      |> Map.put_new(:status, :draft)
-
-    # Only set created_by_id from opts if not already in attrs
-    version_attrs =
-      case user_id do
-        nil -> version_attrs
-        uid -> Map.put_new(version_attrs, :created_by_id, uid)
-      end
-
-    # Recordable attrs for ProcedureVersionCreated
-    source_code = get_in(attrs, [:source]) || get_in(attrs, ["source"])
-    source_snippet = if is_map(source_code), do: Jason.encode!(source_code) |> String.slice(0, 500), else: nil
-
-    version_created_attrs = %{
-      procedure_id: procedure_id,
-      version_number: version_number,
-      source_code: source_snippet
-    }
-
-    result =
-      Multi.new()
-      |> Multi.insert(:version, ProcedureVersion.changeset(%ProcedureVersion{}, version_attrs))
-      |> Recordings.append(:created, ProcedureVersionCreated, version_created_attrs, fn %{version: v} ->
-        %{
-          organization_id: procedure.organization_id,
-          mission_id: procedure.mission_id,
-          bucket_id: get_mission_bucket_id(procedure.mission_id),
-          aggregate_type: "ProcedureVersion",
-          aggregate_id: v.id,
-          actor_id: user_id,
-          actor_type: if(user_id, do: "user", else: "system"),
-          timestamp: DateTime.utc_now()
-        }
-      end)
-      |> Repo.transaction()
-
-    case result do
-      {:ok, %{version: version}} -> {:ok, version}
-      {:error, :version, changeset, _} -> {:error, changeset}
-      {:error, _, changeset, _} -> {:error, changeset}
+  defp next_version_number(procedure_id) do
+    ProcedureVersion
+    |> where([v], v.procedure_id == ^procedure_id)
+    |> select([v], max(v.version_number))
+    |> Repo.one()
+    |> case do
+      nil -> 1
+      max_version -> max_version + 1
     end
   end
+
+  defp build_version_attrs(attrs, procedure_id, version_number, user_id) do
+    attrs
+    |> Map.put(:procedure_id, procedure_id)
+    |> Map.put(:version_number, version_number)
+    |> Map.put_new(:status, :draft)
+    |> maybe_put_created_by(user_id)
+  end
+
+  defp maybe_put_created_by(attrs, nil), do: attrs
+  defp maybe_put_created_by(attrs, user_id), do: Map.put_new(attrs, :created_by_id, user_id)
+
+  defp build_version_created_attrs(attrs, procedure_id, version_number) do
+    source_code = get_in(attrs, [:source]) || get_in(attrs, ["source"])
+
+    %{
+      procedure_id: procedure_id,
+      version_number: version_number,
+      source_code: snippet_source(source_code)
+    }
+  end
+
+  defp snippet_source(source_code) when is_map(source_code) do
+    source_code
+    |> Jason.encode!()
+    |> String.slice(0, 500)
+  end
+
+  defp snippet_source(_source_code), do: nil
+
+  defp version_recording_attrs(procedure, user_id, version_id) do
+    %{
+      organization_id: procedure.organization_id,
+      mission_id: procedure.mission_id,
+      bucket_id: get_mission_bucket_id(procedure.mission_id),
+      aggregate_type: "ProcedureVersion",
+      aggregate_id: version_id,
+      actor_id: user_id,
+      actor_type: if(user_id, do: "user", else: "system"),
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  defp normalize_version_result({:ok, %{version: version}}), do: {:ok, version}
+  defp normalize_version_result({:error, :version, changeset, _}), do: {:error, changeset}
+  defp normalize_version_result({:error, _step, changeset, _}), do: {:error, changeset}
 
   @doc """
   Approves a version.
@@ -421,7 +516,8 @@ defmodule Cadence.Procedures do
         updated_version = handle_approval_decision(version, user_id, decision, comment)
 
         # Emit outbox event for the approval/rejection
-        event_type = if decision == :approved, do: "procedure_approved", else: "procedure_rejected"
+        event_type =
+          if decision == :approved, do: "procedure_approved", else: "procedure_rejected"
 
         {:ok, _} =
           Outbox.insert(%{
@@ -500,7 +596,9 @@ defmodule Cadence.Procedures do
   def list_version_events(version_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
 
-    Recordings.list_aggregate_recordings("ProcedureVersion", nil,
+    Recordings.list_aggregate_recordings(
+      "ProcedureVersion",
+      nil,
       Keyword.merge(opts, aggregate_id: version_id, limit: limit)
     )
     |> Recordings.load_recordables_for_recordings()
@@ -610,7 +708,12 @@ defmodule Cadence.Procedures do
     |> Repo.aggregate(:count)
   end
 
-  defp record_version_event(%ProcedureVersion{} = version, user_id, recordable_module, recordable_attrs) do
+  defp record_version_event(
+         %ProcedureVersion{} = version,
+         user_id,
+         recordable_module,
+         recordable_attrs
+       ) do
     version = Repo.preload(version, :procedure)
 
     # Look up the mission's bucket (procedures are scoped to missions)
@@ -628,7 +731,8 @@ defmodule Cadence.Procedures do
 
     case Recordings.create(recordable_module, recordable_attrs, recording_attrs) do
       {:ok, _} -> :ok
-      {:error, _, _, _} -> :ok  # Don't fail for recording errors
+      # Don't fail for recording errors
+      {:error, _, _, _} -> :ok
     end
   end
 
@@ -777,7 +881,10 @@ defmodule Cadence.Procedures do
 
       result =
         Multi.new()
-        |> Multi.insert(:execution, ProcedureExecution.changeset(%ProcedureExecution{}, execution_attrs))
+        |> Multi.insert(
+          :execution,
+          ProcedureExecution.changeset(%ProcedureExecution{}, execution_attrs)
+        )
         |> Recordings.append(:started, ProcedureStarted, started_attrs, fn %{execution: exec} ->
           %{
             organization_id: procedure.organization_id,
@@ -911,7 +1018,8 @@ defmodule Cadence.Procedures do
     name_override = Keyword.get(opts, :name)
 
     with {:ok, validated} <- validate_export_format(export_data),
-         {:ok, name} <- resolve_import_name(organization_id, mission_id, validated, name_override),
+         {:ok, name} <-
+           resolve_import_name(organization_id, mission_id, validated, name_override),
          {:ok, version_data} <- extract_version_data(validated) do
       procedure_attrs = %{
         name: name,

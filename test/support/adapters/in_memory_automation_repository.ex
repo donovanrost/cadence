@@ -125,8 +125,11 @@ defmodule Cadence.Test.Adapters.InMemoryAutomationRepository do
   def delete(%Automation{id: id}) do
     Agent.get_and_update(__MODULE__, fn state ->
       case Map.pop(state.automations, id) do
-        {nil, _} -> {{:error, :not_found}, state}
-        {automation, new_automations} -> {{:ok, automation}, %{state | automations: new_automations}}
+        {nil, _} ->
+          {{:error, :not_found}, state}
+
+        {automation, new_automations} ->
+          {{:ok, automation}, %{state | automations: new_automations}}
       end
     end)
   end

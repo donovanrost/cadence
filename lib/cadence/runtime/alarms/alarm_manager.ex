@@ -44,9 +44,9 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
-  alias Cadence.Runtime.Alarms.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Ports.Messaging.EventPublisher
+  alias Cadence.Runtime.Alarms.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   @shelve_check_interval :timer.seconds(30)

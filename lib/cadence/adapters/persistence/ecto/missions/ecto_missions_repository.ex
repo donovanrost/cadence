@@ -21,11 +21,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository do
 
   import Ecto.Query
 
-  alias Cadence.Repo
-  alias Cadence.Missions.Mission, as: MissionSchema
-  alias Cadence.Missions.MissionMembership, as: MembershipSchema
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Domain.Missions.Entities.MissionMembership, as: MembershipEntity
+  alias Cadence.Missions.Mission, as: MissionSchema
+  alias Cadence.Missions.MissionMembership, as: MembershipSchema
+  alias Cadence.Repo
 
   # ===========================================================================
   # Mission Operations

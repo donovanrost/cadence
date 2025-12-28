@@ -31,9 +31,9 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
 
   require Logger
 
-  alias Cadence.Runtime.Commands.{TargetQueue, TargetDispatcher}
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
 
   @registry Cadence.MissionRegistry
 
@@ -49,9 +49,7 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
   def start_link(opts) do
     {mission, target} = extract_mission_and_target(opts)
 
-    Supervisor.start_link(__MODULE__, {mission, target},
-      name: via_tuple(mission.id, target.id)
-    )
+    Supervisor.start_link(__MODULE__, {mission, target}, name: via_tuple(mission.id, target.id))
   end
 
   @doc """

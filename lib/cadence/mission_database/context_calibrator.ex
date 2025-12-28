@@ -30,7 +30,7 @@ defmodule Cadence.MissionDatabase.ContextCalibrator do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.MissionDatabase.{DataType, Algorithm, MatchCriteria}
+  alias Cadence.MissionDatabase.{Algorithm, DataType, MatchCriteria}
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

@@ -641,7 +641,7 @@ defmodule Cadence.MissionDatabaseTest do
           name: "power_check",
           suspendable: true,
           on_failure: :warn,
-          timeout_ms: 10000,
+          timeout_ms: 10_000,
           match_criteria: %{
             parameter_ref: "POWER.STATUS",
             comparison: :not_equal,

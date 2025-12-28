@@ -1,4 +1,6 @@
 defmodule Cadence.Organizations.OrganizationMembership do
+  @moduledoc false
+
   use Ecto.Schema
   import Ecto.Changeset
 

@@ -17,7 +17,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
   import Bitwise
 
-  alias Cadence.{Organizations, Missions}
+  alias Cadence.{Missions, Organizations}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Simulator.PacketSimulator
   alias Cadence.Telemetry.{CurrentValueTable, Pipeline}

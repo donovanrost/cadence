@@ -21,9 +21,9 @@ defmodule Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository do
 
   import Ecto.Query
 
+  alias Cadence.Domain.Targeting.Entities.Target, as: TargetEntity
   alias Cadence.Repo
   alias Cadence.Targets.Target, as: TargetSchema
-  alias Cadence.Domain.Targeting.Entities.Target, as: TargetEntity
 
   # ===========================================================================
   # TargetRepository Implementation
@@ -141,7 +141,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository do
         attrs = %{
           circuit_breaker_status: Map.get(changes, :status, schema.circuit_breaker_status),
           circuit_breaker_failures: Map.get(changes, :failures, schema.circuit_breaker_failures),
-          circuit_breaker_opened_at: Map.get(changes, :opened_at, schema.circuit_breaker_opened_at)
+          circuit_breaker_opened_at:
+            Map.get(changes, :opened_at, schema.circuit_breaker_opened_at)
         }
 
         schema

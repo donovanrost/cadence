@@ -117,7 +117,11 @@ defmodule Cadence.Ports.Repository.Notifications.NotificationRepository do
 
   Returns `{:ok, preference}` if found, `{:error, :not_found}` otherwise.
   """
-  @callback find_preference(user_id(), notification_type :: String.t(), mission_id :: String.t() | nil) ::
+  @callback find_preference(
+              user_id(),
+              notification_type :: String.t(),
+              mission_id :: String.t() | nil
+            ) ::
               {:ok, NotificationPreference.t()} | {:error, :not_found}
 
   @doc """

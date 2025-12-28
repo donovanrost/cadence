@@ -29,8 +29,8 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   import Ecto.Query
 
   alias Cadence.Config.VersionRegistry
-  alias Cadence.Repo
   alias Cadence.MissionDatabase.Container
+  alias Cadence.Repo
 
   defmodule State do
     @moduledoc false
@@ -75,27 +75,13 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     table_name = table_name(mission_id)
 
     # For simulator format: [packet_type:8][target_id_len:8][target_id][json_payload]
-    case binary_packet do
-      <<packet_type_byte::8, target_id_len::8, rest::binary>> ->
-        if byte_size(rest) >= target_id_len do
-          <<target_id::binary-size(target_id_len), _payload::binary>> = rest
-
-          # Get cached definition_set_id for this target (O(1) ETS lookup)
-          definition_set_id = get_cached_definition_set_id(table_name, mission_id, target_id)
-
-          case lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
-            {:ok, packet_def} ->
-              {:ok, Map.put(packet_def, :target_id, target_id)}
-
-            :not_found ->
-              {:error, :unknown_packet}
-          end
-        else
-          {:error, :malformed_packet}
-        end
-
-      _ ->
-        {:error, :malformed_packet}
+    with {:ok, packet_type_byte, target_id} <- decode_simulator_packet(binary_packet),
+         definition_set_id <- get_cached_definition_set_id(table_name, mission_id, target_id),
+         {:ok, packet_def} <- lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
+      {:ok, Map.put(packet_def, :target_id, target_id)}
+    else
+      :not_found -> {:error, :unknown_packet}
+      {:error, :malformed_packet} -> {:error, :malformed_packet}
     end
   end
 
@@ -112,24 +98,12 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     definition_set_id = get_cached_definition_set_id(table_name, mission_id, target_identifier)
 
     # For simulator format: [packet_type:8][target_id_len:8][target_id][json_payload]
-    case binary_packet do
-      <<packet_type_byte::8, target_id_len::8, rest::binary>> ->
-        if byte_size(rest) >= target_id_len do
-          <<target_id::binary-size(target_id_len), _payload::binary>> = rest
-
-          case lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
-            {:ok, packet_def} ->
-              {:ok, Map.put(packet_def, :target_id, target_id)}
-
-            :not_found ->
-              {:error, :unknown_packet}
-          end
-        else
-          {:error, :malformed_packet}
-        end
-
-      _ ->
-        {:error, :malformed_packet}
+    with {:ok, packet_type_byte, target_id} <- decode_simulator_packet(binary_packet),
+         {:ok, packet_def} <- lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
+      {:ok, Map.put(packet_def, :target_id, target_id)}
+    else
+      :not_found -> {:error, :unknown_packet}
+      {:error, :malformed_packet} -> {:error, :malformed_packet}
     end
   end
 
@@ -314,9 +288,7 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
 
       new_versions = Map.put(state.definition_set_versions, definition_set_id, new_version)
 
-      Logger.info(
-        "Reloaded #{count} packets for definition_set=#{definition_set_id}"
-      )
+      Logger.info("Reloaded #{count} packets for definition_set=#{definition_set_id}")
 
       {:noreply, %{state | definition_set_versions: new_versions}}
     else
@@ -438,30 +410,54 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
       |> preload(container_entries: [parameter: [data_type: [:default_calibrator, :unit]]])
       |> Repo.all()
 
-    if Enum.empty?(containers) do
-      Logger.debug("No containers found for definition_set_id=#{definition_set_id}")
-      0
-    else
-      # Convert and insert into ETS
-      Enum.each(containers, fn container ->
-        packet_map = build_packet_map_from_container(container, definition_set_id)
+    case containers do
+      [] ->
+        Logger.debug("No containers found for definition_set_id=#{definition_set_id}")
+        0
 
-        # Index by type byte (simulator format) - scoped by definition_set_id
-        if container.packet_type do
-          :ets.insert(
-            table_name,
-            {{definition_set_id, :type_byte, container.packet_type}, packet_map}
-          )
-        end
+      _ ->
+        Enum.each(containers, fn container ->
+          insert_container_packet(table_name, definition_set_id, container)
+        end)
 
-        # Index by APID if present (CCSDS format) - scoped by definition_set_id
-        if container.apid do
-          :ets.insert(table_name, {{definition_set_id, :apid, container.apid}, packet_map})
-        end
-      end)
-
-      length(containers)
+        length(containers)
     end
+  end
+
+  defp decode_simulator_packet(
+         <<packet_type_byte::8, target_id_len::8, rest::binary>>
+       ) do
+    if byte_size(rest) >= target_id_len do
+      <<target_id::binary-size(target_id_len), _payload::binary>> = rest
+      {:ok, packet_type_byte, target_id}
+    else
+      {:error, :malformed_packet}
+    end
+  end
+
+  defp decode_simulator_packet(_), do: {:error, :malformed_packet}
+
+  defp insert_container_packet(table_name, definition_set_id, container) do
+    packet_map = build_packet_map_from_container(container, definition_set_id)
+    maybe_insert_packet_type(table_name, definition_set_id, container, packet_map)
+    maybe_insert_packet_apid(table_name, definition_set_id, container, packet_map)
+  end
+
+  defp maybe_insert_packet_type(_table_name, _definition_set_id, %{packet_type: nil}, _packet_map),
+    do: :ok
+
+  defp maybe_insert_packet_type(table_name, definition_set_id, container, packet_map) do
+    :ets.insert(
+      table_name,
+      {{definition_set_id, :type_byte, container.packet_type}, packet_map}
+    )
+  end
+
+  defp maybe_insert_packet_apid(_table_name, _definition_set_id, %{apid: nil}, _packet_map),
+    do: :ok
+
+  defp maybe_insert_packet_apid(table_name, definition_set_id, container, packet_map) do
+    :ets.insert(table_name, {{definition_set_id, :apid, container.apid}, packet_map})
   end
 
   # Normalize endianness strings to atoms expected by BinaryExtractor
@@ -538,28 +534,24 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   defp get_base_type_atom(%{base_type: nil, encoding: encoding}),
     do: encoding_to_extractor_type(encoding)
 
-  defp get_base_type_atom(%{base_type: base_type, encoding: encoding}) do
-    # Map MDB base types to BinaryExtractor types
-    case base_type do
-      :integer -> if encoding && encoding.signed, do: :int, else: :uint
-      :float -> :float
-      :string -> :string
-      :binary -> :block
-      # Boolean is typically 1 bit unsigned
-      :boolean -> :uint
-      # Enums are unsigned integers
-      :enumerated -> :uint
-      # Aggregates are raw binary
-      :aggregate -> :block
-      # Arrays are raw binary
-      :array -> :block
-      # Time is typically unsigned integer
-      :absolute_time -> :uint
-      # Duration is typically unsigned integer
-      :relative_time -> :uint
-      # Default to unsigned integer
-      _ -> :uint
-    end
+  @base_type_map %{
+    float: :float,
+    string: :string,
+    binary: :block,
+    boolean: :uint,
+    enumerated: :uint,
+    aggregate: :block,
+    array: :block,
+    absolute_time: :uint,
+    relative_time: :uint
+  }
+
+  defp get_base_type_atom(%{base_type: :integer, encoding: encoding}) do
+    if encoding && encoding.signed, do: :int, else: :uint
+  end
+
+  defp get_base_type_atom(%{base_type: base_type}) do
+    Map.get(@base_type_map, base_type, :uint)
   end
 
   defp encoding_to_extractor_type(nil), do: :uint

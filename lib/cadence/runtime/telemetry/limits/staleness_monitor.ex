@@ -38,8 +38,8 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
   use GenServer
   require Logger
 
-  alias Cadence.Runtime.Telemetry.Limits.StateTracker
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.Limits.StateTracker
 
   @default_check_interval_ms 5_000
 

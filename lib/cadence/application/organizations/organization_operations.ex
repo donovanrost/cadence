@@ -59,9 +59,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   """
   @spec create(attrs()) :: {:ok, Organization.t()} | {:error, term()}
   def create(attrs) do
-    with {:ok, org} <- Organization.new(attrs),
-         {:ok, saved} <- repo().save(org) do
-      {:ok, saved}
+    with {:ok, org} <- Organization.new(attrs) do
+      repo().save(org)
     end
   end
 
@@ -75,9 +74,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   @spec update(org_id(), attrs()) :: {:ok, Organization.t()} | {:error, term()}
   def update(org_id, attrs) do
     with {:ok, org} <- OrganizationQueries.find(org_id),
-         {:ok, updated} <- Organization.update(org, attrs),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- Organization.update(org, attrs) do
+      repo().save(updated)
     end
   end
 
@@ -94,9 +92,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   @spec update_quotas(org_id(), attrs()) :: {:ok, Organization.t()} | {:error, term()}
   def update_quotas(org_id, quota_attrs) do
     with {:ok, org} <- OrganizationQueries.find(org_id),
-         {:ok, updated} <- Organization.update_quotas(org, quota_attrs),
-         {:ok, saved} <- repo().save(updated) do
-      {:ok, saved}
+         {:ok, updated} <- Organization.update_quotas(org, quota_attrs) do
+      repo().save(updated)
     end
   end
 
@@ -108,9 +105,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   @spec suspend(org_id()) :: {:ok, Organization.t()} | {:error, term()}
   def suspend(org_id) do
     with {:ok, org} <- OrganizationQueries.find(org_id),
-         {:ok, suspended} <- Organization.suspend(org),
-         {:ok, saved} <- repo().save(suspended) do
-      {:ok, saved}
+         {:ok, suspended} <- Organization.suspend(org) do
+      repo().save(suspended)
     end
   end
 
@@ -120,9 +116,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   @spec reactivate(org_id()) :: {:ok, Organization.t()} | {:error, term()}
   def reactivate(org_id) do
     with {:ok, org} <- OrganizationQueries.find(org_id),
-         {:ok, reactivated} <- Organization.reactivate(org),
-         {:ok, saved} <- repo().save(reactivated) do
-      {:ok, saved}
+         {:ok, reactivated} <- Organization.reactivate(org) do
+      repo().save(reactivated)
     end
   end
 
@@ -134,9 +129,8 @@ defmodule Cadence.Application.Organizations.OrganizationOperations do
   @spec terminate(org_id()) :: {:ok, Organization.t()} | {:error, term()}
   def terminate(org_id) do
     with {:ok, org} <- OrganizationQueries.find(org_id),
-         {:ok, terminated} <- Organization.terminate(org),
-         {:ok, saved} <- repo().save(terminated) do
-      {:ok, saved}
+         {:ok, terminated} <- Organization.terminate(org) do
+      repo().save(terminated)
     end
   end
 

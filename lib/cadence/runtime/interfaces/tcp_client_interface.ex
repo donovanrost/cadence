@@ -33,8 +33,8 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Telemetry.Packet
   alias Cadence.Telemetry.ProtocolChain
-  alias Cadence.Telemetry.ProtocolChainSupervisor
   alias Cadence.Telemetry.ProtocolChain.Processor
+  alias Cadence.Telemetry.ProtocolChainSupervisor
 
   defmodule State do
     @moduledoc false
