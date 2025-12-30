@@ -26,6 +26,7 @@ defmodule Cadence.Procedures.DagExecutionTest do
   setup do
     # Use shared sandbox mode for process spawning tests
     Sandbox.mode(Cadence.Repo, {:shared, self()})
+    on_exit(fn -> stop_execution_processes() end)
     :ok
   end
 
@@ -46,6 +47,7 @@ defmodule Cadence.Procedures.DagExecutionTest do
 
     # Start the execution process
     {:ok, pid} = ExecutionProcess.start_link(execution_id: execution.id)
+    :ok = ExecutionProcess.start_execution(execution.id)
 
     {:ok, execution, pid}
   end
@@ -361,10 +363,10 @@ defmodule Cadence.Procedures.DagExecutionTest do
     end
 
     test "cancels execution on abort signal", %{org: org, mission: mission} do
-      # Long-running DAG to give us time to abort
+      # Short-running DAG to give us time to abort
       source = %{
         "steps" => %{
-          "step_1" => %{"type" => "wait", "duration" => 5000, "depends_on" => []}
+          "step_1" => %{"type" => "wait", "duration" => 500, "depends_on" => []}
         }
       }
 

@@ -214,32 +214,39 @@ defmodule Cadence.Telemetry.Stats do
         maybe_record_warmup_sample(mission_id, stage, duration_us, new_total)
 
         {new_samples, new_sample_count} =
-          if sample_count < @default_sample_limit do
-            # Under limit: add at next index
-            {Map.put(samples_map, sample_count, duration_us), sample_count + 1}
-          else
-            # At limit: reservoir sampling - randomly decide whether to include
-            # Probability of inclusion: sample_limit / total_count
-            if :rand.uniform(new_total) <= @default_sample_limit do
-              # Replace a random existing sample (O(1) map update)
-              replace_idx = :rand.uniform(@default_sample_limit) - 1
-              {Map.put(samples_map, replace_idx, duration_us), sample_count}
-            else
-              {samples_map, sample_count}
-            end
-          end
+          update_samples(samples_map, sample_count, new_total, duration_us)
 
         :ets.insert(@table_name, {key, {new_samples, new_sample_count, new_total}})
 
       # Handle legacy format or empty
       [{^key, {[], 0}}] ->
-        maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
-        :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
+        record_first_sample(key, mission_id, stage, duration_us)
 
       [] ->
-        maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
-        :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
+        record_first_sample(key, mission_id, stage, duration_us)
     end
+  end
+
+  defp update_samples(samples_map, sample_count, new_total, duration_us) do
+    if sample_count < @default_sample_limit do
+      {Map.put(samples_map, sample_count, duration_us), sample_count + 1}
+    else
+      maybe_replace_sample(samples_map, sample_count, new_total, duration_us)
+    end
+  end
+
+  defp maybe_replace_sample(samples_map, sample_count, new_total, duration_us) do
+    if :rand.uniform(new_total) <= @default_sample_limit do
+      replace_idx = :rand.uniform(@default_sample_limit) - 1
+      {Map.put(samples_map, replace_idx, duration_us), sample_count}
+    else
+      {samples_map, sample_count}
+    end
+  end
+
+  defp record_first_sample(key, mission_id, stage, duration_us) do
+    maybe_record_warmup_sample(mission_id, stage, duration_us, 1)
+    :ets.insert(@table_name, {key, {%{0 => duration_us}, 1, 1}})
   end
 
   # Record warmup samples (first N) for analysis

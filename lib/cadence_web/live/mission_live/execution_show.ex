@@ -28,59 +28,42 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
     execution_id = params["execution_id"]
     procedure_id = params["procedure_id"]
 
-    case Bodyguard.permit(Cadence.Missions.Policy, :view, socket.assigns.current_scope, mission) do
-      :ok ->
-        execution = Procedures.get_execution!(execution_id)
+    with :ok <- authorize_view(socket, mission),
+         {:ok, execution} <- fetch_execution(execution_id),
+         :ok <- validate_execution(execution, procedure_id, mission.id) do
+      subscribe_to_execution(socket, execution_id, mission.id)
+      logs = Procedures.list_logs(execution_id, limit: 500)
+      {is_dag, dag_steps} = load_dag_steps(execution.procedure_version_id)
+      socket_token = generate_socket_token(socket.assigns.current_scope.user)
 
-        if execution.procedure_id == procedure_id and execution.mission_id == mission.id do
-          # Subscribe to real-time updates
-          if connected?(socket) do
-            require Logger
-            Logger.info("ExecutionShow subscribing to procedure:#{execution_id}")
-            # Subscribe to execution-specific topic (logs, step events)
-            Phoenix.PubSub.subscribe(Cadence.PubSub, "procedure:#{execution_id}")
-            # Subscribe to mission procedures topic (status changes from coordinator)
-            Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:procedures")
-          end
-
-          logs = Procedures.list_logs(execution_id, limit: 500)
-
-          # Load version to check if DAG format
-          version = Procedures.get_version!(execution.procedure_version_id)
-          is_dag = Validator.dag_format?(version.source)
-          dag_steps = if is_dag, do: version.source["steps"], else: %{}
-
-          # Generate socket token for channel connection
-          socket_token = generate_socket_token(socket.assigns.current_scope.user)
-
-          {:noreply,
-           socket
-           |> assign(:page_title, "Execution Details")
-           |> assign(:execution, execution)
-           |> assign(:procedure, execution.procedure)
-           |> assign(:logs, logs)
-           |> assign(:auto_scroll, true)
-           |> assign(:is_dag, is_dag)
-           |> assign(:dag_steps, dag_steps)
-           |> assign(:socket_token, socket_token)
-           |> assign(:step_progress, %{})
-           # Derive step state from outbox events (source of truth)
-           |> assign_step_state_from_events(execution_id)
-           # Clear running steps if execution is in terminal state
-           # (no steps are actually running after abort/complete/fail)
-           |> maybe_clear_running_steps(execution.status)}
-        else
-          {:noreply,
-           socket
-           |> put_flash(:error, "Execution not found")
-           |> push_navigate(to: ~p"/missions/#{mission}/procedures")}
-        end
-
-      {:error, _} ->
+      {:noreply,
+       socket
+       |> assign(:page_title, "Execution Details")
+       |> assign(:execution, execution)
+       |> assign(:procedure, execution.procedure)
+       |> assign(:logs, logs)
+       |> assign(:auto_scroll, true)
+       |> assign(:is_dag, is_dag)
+       |> assign(:dag_steps, dag_steps)
+       |> assign(:socket_token, socket_token)
+       |> assign(:step_progress, %{})
+       # Derive step state from outbox events (source of truth)
+       |> assign_step_state_from_events(execution_id)
+       # Clear running steps if execution is in terminal state
+       # (no steps are actually running after abort/complete/fail)
+       |> maybe_clear_running_steps(execution.status)}
+    else
+      {:error, :unauthorized} ->
         {:noreply,
          socket
          |> put_flash(:error, "You don't have permission to view this execution")
          |> push_navigate(to: ~p"/missions")}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Execution not found")
+         |> push_navigate(to: ~p"/missions/#{mission}/procedures")}
     end
   end
 
@@ -473,6 +456,43 @@ defmodule CadenceWeb.MissionLive.ExecutionShow do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "You don't have permission to execute procedures")}
     end
+  end
+
+  defp authorize_view(socket, mission) do
+    case Bodyguard.permit(Cadence.Missions.Policy, :view, socket.assigns.current_scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp fetch_execution(execution_id) do
+    {:ok, Procedures.get_execution!(execution_id)}
+  rescue
+    _ -> {:error, :not_found}
+  end
+
+  defp validate_execution(execution, procedure_id, mission_id) do
+    if execution.procedure_id == procedure_id and execution.mission_id == mission_id do
+      :ok
+    else
+      {:error, :not_found}
+    end
+  end
+
+  defp subscribe_to_execution(socket, execution_id, mission_id) do
+    if connected?(socket) do
+      require Logger
+      Logger.info("ExecutionShow subscribing to procedure:#{execution_id}")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "procedure:#{execution_id}")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:procedures")
+    end
+  end
+
+  defp load_dag_steps(version_id) do
+    version = Procedures.get_version!(version_id)
+    is_dag = Validator.dag_format?(version.source)
+    dag_steps = if is_dag, do: version.source["steps"], else: %{}
+    {is_dag, dag_steps}
   end
 
   defp maybe_add_status_log(socket, _status_or_event_type) do

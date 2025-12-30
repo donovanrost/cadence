@@ -239,24 +239,35 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
   # ============================================================================
 
   defp do_start_execution(procedure_id, opts, state) do
-    # Check concurrency limit
+    with :ok <- check_concurrency(state),
+         {:ok, procedure} <- fetch_procedure(procedure_id),
+         {:ok, version_id} <- resolve_version_id(procedure, opts) do
+      start_execution_process(procedure, version_id, opts, state)
+    end
+  end
+
+  defp check_concurrency(state) do
     if map_size(state.active_executions) >= state.max_concurrent do
       {:error, :at_concurrency_limit}
     else
-      case Procedures.get_procedure(procedure_id) do
-        nil ->
-          {:error, :procedure_not_found}
+      :ok
+    end
+  end
 
-        procedure ->
-          # Determine which version to use
-          version_id = opts[:version_id] || procedure.current_version_id
+  defp fetch_procedure(procedure_id) do
+    case Procedures.get_procedure(procedure_id) do
+      nil -> {:error, :procedure_not_found}
+      procedure -> {:ok, procedure}
+    end
+  end
 
-          if is_nil(version_id) do
-            {:error, :no_approved_version}
-          else
-            start_execution_process(procedure, version_id, opts, state)
-          end
-      end
+  defp resolve_version_id(procedure, opts) do
+    version_id = opts[:version_id] || procedure.current_version_id
+
+    if is_nil(version_id) do
+      {:error, :no_approved_version}
+    else
+      {:ok, version_id}
     end
   end
 
@@ -318,45 +329,44 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinator do
         {:error, :not_found}
 
       %{execution: execution} = entry ->
-        case signal do
-          :pause ->
-            # Optimistically update to :pausing immediately so the UI updates
-            # even if the execution process is blocked in a long-running step.
-            # The execution process will later transition to :paused when it
-            # actually pauses at the next checkpoint.
-            if execution.status == :running do
-              case Procedures.update_execution_status(execution, %{status: :pausing}) do
-                {:ok, updated_execution} ->
-                  # Update our local cache
-                  updated_entry = %{entry | execution: updated_execution}
+        handle_control_signal(signal, execution_id, execution, entry, state)
+    end
+  end
 
-                  new_active =
-                    Map.put(state.active_executions, execution_id, updated_entry)
+  defp handle_control_signal(:pause, execution_id, execution, entry, state) do
+    maybe_mark_pausing(execution_id, execution, entry, state)
+    ExecutionProcess.pause(execution_id)
+  end
 
-                  # Broadcast the status change for immediate UI update
-                  event = ProcedureExecutionEvent.pausing(updated_execution)
-                  broadcast(%{state | active_executions: new_active}, {:procedure_event, event})
+  defp handle_control_signal(:resume, execution_id, _execution, _entry, _state) do
+    ExecutionProcess.resume(execution_id)
+  end
 
-                  # Also broadcast on the execution-specific topic
-                  event_publisher().publish(
-                    "procedure:#{execution_id}",
-                    {:status_changed, :pausing, updated_execution}
-                  )
+  defp handle_control_signal(:abort, execution_id, _execution, _entry, _state) do
+    ExecutionProcess.abort(execution_id)
+  end
 
-                {:error, _} ->
-                  :ok
-              end
-            end
+  defp maybe_mark_pausing(execution_id, execution, entry, state) do
+    if execution.status == :running do
+      update_pausing_state(execution_id, execution, entry, state)
+    end
+  end
 
-            # Send the pause signal to the execution process
-            ExecutionProcess.pause(execution_id)
+  defp update_pausing_state(execution_id, execution, entry, state) do
+    case Procedures.update_execution_status(execution, %{status: :pausing}) do
+      {:ok, updated_execution} ->
+        updated_entry = %{entry | execution: updated_execution}
+        new_active = Map.put(state.active_executions, execution_id, updated_entry)
+        event = ProcedureExecutionEvent.pausing(updated_execution)
+        broadcast(%{state | active_executions: new_active}, {:procedure_event, event})
 
-          :resume ->
-            ExecutionProcess.resume(execution_id)
+        event_publisher().publish(
+          "procedure:#{execution_id}",
+          {:status_changed, :pausing, updated_execution}
+        )
 
-          :abort ->
-            ExecutionProcess.abort(execution_id)
-        end
+      {:error, _} ->
+        :ok
     end
   end
 

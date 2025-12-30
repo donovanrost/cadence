@@ -739,9 +739,17 @@ defmodule Cadence.Procedures.V2 do
   Inserts a snippet into a section as a new step.
   """
   def insert_snippet(%Snippet{snippet_type: :step} = snippet, section_id, position) do
+    Repo.transaction(fn ->
+      {:ok, step} = create_step(section_id, build_step_attrs(snippet, section_id, position))
+      insert_blocks(step, snippet.content)
+      Repo.preload(step, :blocks)
+    end)
+  end
+
+  defp build_step_attrs(snippet, section_id, position) do
     content = snippet.content
 
-    step_attrs = %{
+    %{
       section_id: section_id,
       name: content["name"],
       title: content["title"],
@@ -754,28 +762,26 @@ defmodule Cadence.Procedures.V2 do
       condition: content["condition"],
       on_fail: String.to_existing_atom(content["on_fail"] || "abort")
     }
+  end
 
-    Repo.transaction(fn ->
-      {:ok, step} = create_step(section_id, step_attrs)
+  defp insert_blocks(step, content) do
+    content
+    |> Map.get("blocks", [])
+    |> Enum.each(&create_step_block(step, &1))
+  end
 
-      blocks = content["blocks"] || []
+  defp create_step_block(step, block_data) do
+    block_attrs = %{
+      step_id: step.id,
+      block_type: String.to_existing_atom(block_data["block_type"]),
+      position: block_data["position"] || 0,
+      name: block_data["name"],
+      label: block_data["label"],
+      required: block_data["required"] || false,
+      content: block_data["content"] || %{}
+    }
 
-      Enum.each(blocks, fn block_data ->
-        block_attrs = %{
-          step_id: step.id,
-          block_type: String.to_existing_atom(block_data["block_type"]),
-          position: block_data["position"] || 0,
-          name: block_data["name"],
-          label: block_data["label"],
-          required: block_data["required"] || false,
-          content: block_data["content"] || %{}
-        }
-
-        create_block(step.id, block_attrs)
-      end)
-
-      Repo.preload(step, :blocks)
-    end)
+    create_block(step.id, block_attrs)
   end
 
   # ============================================================================

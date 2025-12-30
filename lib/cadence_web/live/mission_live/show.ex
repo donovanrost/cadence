@@ -105,14 +105,15 @@ defmodule CadenceWeb.MissionLive.Show do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.start_mission(mission.id, mission.organization_id) do
+        case Missions.request_start(mission.id, mission.organization_id) do
           {:ok, _mission} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Mission started successfully")}
+             |> put_flash(:info, "Mission start requested successfully")}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to start mission: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(socket, :error, "Failed to request mission start: #{inspect(reason)}")}
         end
 
       {:error, _} ->
@@ -127,14 +128,15 @@ defmodule CadenceWeb.MissionLive.Show do
 
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.stop_mission(mission.id, mission.organization_id) do
+        case Missions.request_stop(mission.id, mission.organization_id) do
           {:ok, _mission} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Mission stopped successfully")}
+             |> put_flash(:info, "Mission stop requested successfully")}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to stop mission: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(socket, :error, "Failed to request mission stop: #{inspect(reason)}")}
         end
 
       {:error, _} ->

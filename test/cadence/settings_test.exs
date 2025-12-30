@@ -1,12 +1,24 @@
 defmodule Cadence.SettingsTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: false
 
-  import Cadence.OrganizationsFixtures
-  import Cadence.MissionsFixtures
-
+  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Domain.Settings.Entities.Setting, as: SettingEntity
+  alias Cadence.Organizations.Organization
   alias Cadence.Settings
   alias Cadence.Settings.Setting
+  alias Cadence.Test.Adapters.InMemorySettingsRepository
+
+  setup do
+    {:ok, _} = InMemorySettingsRepository.start_link()
+    Application.put_env(:cadence, :settings_repository, InMemorySettingsRepository)
+
+    on_exit(fn ->
+      Application.delete_env(:cadence, :settings_repository)
+      InMemorySettingsRepository.stop()
+    end)
+
+    :ok
+  end
 
   describe "definitions" do
     test "get_definition/2 returns definition for known settings" do
@@ -47,8 +59,8 @@ defmodule Cadence.SettingsTest do
 
   describe "get/3 - getting effective values" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -61,7 +73,6 @@ defmodule Cadence.SettingsTest do
     test "returns org value when only org setting exists", %{org: org, mission: mission} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 3)
 
-      mission = Cadence.Repo.preload(mission, :organization)
       assert Settings.get(mission, :procedures, :required_approvals) == 3
     end
 
@@ -69,7 +80,6 @@ defmodule Cadence.SettingsTest do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
       {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 3)
 
-      mission = Cadence.Repo.preload(mission, :organization)
       assert Settings.get(mission, :procedures, :required_approvals) == 3
     end
 
@@ -81,8 +91,8 @@ defmodule Cadence.SettingsTest do
 
   describe "all/2 - getting all settings for a namespace" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -97,7 +107,6 @@ defmodule Cadence.SettingsTest do
     test "returns org values when set", %{org: org, mission: mission} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 5)
 
-      mission = Cadence.Repo.preload(mission, :organization)
       all = Settings.all(mission, :procedures)
 
       assert all[:required_approvals] == 5
@@ -106,12 +115,12 @@ defmodule Cadence.SettingsTest do
 
   describe "get_org/3 - getting org-level values" do
     test "returns definition default when not stored" do
-      org = organization_fixture()
+      org = build_org()
       assert Settings.get_org(org, :procedures, :required_approvals) == 1
     end
 
     test "returns stored value when set" do
-      org = organization_fixture()
+      org = build_org()
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 4)
 
       assert Settings.get_org(org, :procedures, :required_approvals) == 4
@@ -120,8 +129,8 @@ defmodule Cadence.SettingsTest do
 
   describe "get_mission_override/3" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -138,7 +147,7 @@ defmodule Cadence.SettingsTest do
 
   describe "set_org/4 - setting org-level values" do
     test "creates setting when it doesn't exist" do
-      org = organization_fixture()
+      org = build_org()
 
       assert {:ok, %SettingEntity{} = setting} =
                Settings.set_org(org, :procedures, :required_approvals, 2)
@@ -151,7 +160,7 @@ defmodule Cadence.SettingsTest do
     end
 
     test "updates setting when it already exists" do
-      org = organization_fixture()
+      org = build_org()
 
       {:ok, setting1} = Settings.set_org(org, :procedures, :required_approvals, 2)
       {:ok, setting2} = Settings.set_org(org, :procedures, :required_approvals, 3)
@@ -161,7 +170,7 @@ defmodule Cadence.SettingsTest do
     end
 
     test "validates value against definition" do
-      org = organization_fixture()
+      org = build_org()
 
       # required_approvals must be 1-10
       assert {:error, :invalid_value} =
@@ -176,7 +185,7 @@ defmodule Cadence.SettingsTest do
     end
 
     test "returns error for unknown settings" do
-      org = organization_fixture()
+      org = build_org()
 
       assert {:error, :unknown_setting} =
                Settings.set_org(org, :procedures, :unknown_key, 1)
@@ -185,8 +194,8 @@ defmodule Cadence.SettingsTest do
 
   describe "set_mission/4 - setting mission-level overrides" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -214,8 +223,8 @@ defmodule Cadence.SettingsTest do
 
   describe "restrictiveness - :higher (mission value must be >= org value)" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
       %{org: org, mission: mission}
     end
@@ -239,8 +248,8 @@ defmodule Cadence.SettingsTest do
 
   describe "restrictiveness - :false_is_stricter (false is more restrictive than true)" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -275,8 +284,8 @@ defmodule Cadence.SettingsTest do
 
   describe "allow_withdrawal - :false_is_stricter" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -305,8 +314,8 @@ defmodule Cadence.SettingsTest do
 
   describe "can_mission_override?/4" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
       %{org: org, mission: mission}
     end
@@ -323,8 +332,8 @@ defmodule Cadence.SettingsTest do
 
   describe "clear_mission_override/3" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 3)
       %{org: org, mission: mission}
     end
@@ -347,7 +356,7 @@ defmodule Cadence.SettingsTest do
 
   describe "get_all_org_settings/2" do
     test "returns all settings with values and metadata" do
-      org = organization_fixture()
+      org = build_org()
       settings = Settings.get_all_org_settings(org, :procedures)
 
       assert length(settings) == 3
@@ -360,7 +369,7 @@ defmodule Cadence.SettingsTest do
     end
 
     test "returns stored org values instead of defaults" do
-      org = organization_fixture()
+      org = build_org()
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 5)
 
       settings = Settings.get_all_org_settings(org, :procedures)
@@ -371,7 +380,7 @@ defmodule Cadence.SettingsTest do
     end
 
     test "includes description and validate fields" do
-      org = organization_fixture()
+      org = build_org()
       settings = Settings.get_all_org_settings(org, :procedures)
 
       approvals = Enum.find(settings, &(&1.key == :required_approvals))
@@ -382,8 +391,8 @@ defmodule Cadence.SettingsTest do
 
   describe "get_all_mission_settings/2" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
       %{org: org, mission: mission}
     end
 
@@ -526,5 +535,22 @@ defmodule Cadence.SettingsTest do
       refute changeset.valid?
       assert {"is invalid", _} = changeset.errors[:scope_type]
     end
+  end
+
+  defp build_org do
+    %Organization{
+      id: random_id(),
+      name: unique_string("org"),
+      slug: unique_string("org")
+    }
+  end
+
+  defp build_mission(%Organization{id: org_id}) do
+    %MissionEntity{
+      id: random_id(),
+      organization_id: org_id,
+      name: unique_string("mission"),
+      slug: unique_string("mission")
+    }
   end
 end

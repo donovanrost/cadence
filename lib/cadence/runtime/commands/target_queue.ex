@@ -20,74 +20,43 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   1. Priority (lower number = higher priority)
   2. Sequence number (FIFO within same priority)
   3. Scheduled time (only process if scheduled_at <= now)
-
-  ## Example
-
-      # Enqueue a command
-      {:ok, entry} = TargetQueue.enqueue(mission_id, target_id, "SET_MODE", %{mode: 1},
-        priority: 2
-      )
-
-      # List pending entries
-      entries = TargetQueue.list_pending(mission_id, target_id)
-
-      # Cancel a queued command
-      {:ok, entry} = TargetQueue.cancel(mission_id, target_id, entry_id)
   """
 
   use GenServer
   require Logger
 
-  import Ecto.Query
-
-  alias Cadence.Commands.QueueEntry
+  alias Cadence.Application.Commanding.QueuePersistence
+  alias Cadence.Application.Commanding.QueueSnapshot
+  alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.Outbox
-  alias Cadence.Recordings
-  alias Cadence.Recordings.Recordables.{CommandDequeued, CommandQueued}
-  alias Cadence.Repo
   alias Cadence.Runtime.Commands.TargetDispatcher
-  alias Ecto.Multi
 
   # Fallback poll interval - used as safety net for scheduled commands and missed events
-  # Primary wakeup is via PubSub from outbox events
   @fallback_poll_interval_ms 10_000
   @retry_delay_ms 1_000
-  # Stale executing entries older than this are recovered as failed
-  @stale_executing_timeout_ms 120_000
 
   defmodule State do
     @moduledoc """
     In-memory queue state for O(1) operations.
 
-    ## Data Plane Optimization
-
     The queue maintains local state to avoid DB queries in the hot path:
     - `pending_entries` - Sorted list of pending entries (by priority, sequence)
     - `entries_by_id` - Map for O(1) lookup by entry_id
     - `counts` - Local counters for status queries
-
-    DB persistence happens asynchronously after local state is updated.
-    On restart, state is recovered from DB.
     """
+
     defstruct [
       :mission_id,
       :target_id,
       :organization_id,
       :target,
-      # In-memory queue: list of entries sorted by {priority, sequence_number}
       pending_entries: [],
-      # Map of entry_id -> entry for O(1) lookup
       entries_by_id: %{},
-      # Currently executing entry (or nil)
       executing: nil,
-      # Local counters - updated synchronously with local state
       counts: %{pending: 0, executing: 0, completed: 0, failed: 0},
-      # Sequence counter for ordering
       sequence_counter: 0,
       process_timer: nil,
-      # Cached paused state from dispatcher - updated via cast to avoid deadlocks
       dispatcher_paused: false
     ]
   end
@@ -97,13 +66,19 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   @doc """
   Starts the queue for a target.
 
-  Accepts either:
-  - Entity-based: `mission: mission_entity, target: target_entity` (preferred, no DB calls)
-  - ID-based: `mission_id: id, target_id: id` (legacy, makes DB calls)
+  Requires:
+  - `mission: mission_entity`
+  - `target: target_entity`
+
+  Optional:
+  - `queue_snapshot: %QueueSnapshot{}`
   """
   def start_link(opts) do
-    {mission, target} = extract_mission_and_target(opts)
-    GenServer.start_link(__MODULE__, {mission, target}, name: via_tuple(mission.id, target.id))
+    {mission, target, snapshot} = extract_mission_target_snapshot(opts)
+
+    GenServer.start_link(__MODULE__, {mission, target, snapshot},
+      name: via_tuple(mission.id, target.id)
+    )
   end
 
   @doc """
@@ -124,21 +99,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Enqueues a command for execution.
-
-  ## Options
-
-  - `:priority` - Priority level 0-5 (default: 3)
-  - `:scheduled_at` - Execute at or after this time
-  - `:expires_at` - Cancel if not executed by this time
-  - `:max_attempts` - Max retry attempts (default: 3)
-  - `:user_id` - User performing the action
-  - `:interface_id` - Specific interface to use
-
-  ## Returns
-
-  - `{:ok, queue_entry}` - Command queued successfully
-  - `{:error, reason}` - Enqueue failed
+  Enqueues a command for execution (in-memory). Control plane persistence is
+  notified asynchronously.
   """
   def enqueue(mission_id, target_id, command_name, params, opts \\ []) do
     GenServer.call(via_tuple(mission_id, target_id), {:enqueue, command_name, params, opts})
@@ -146,9 +108,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   @doc """
   Gets the next command ready for dispatch.
-
-  Called by TargetDispatcher when it's ready to send a command.
-  Returns nil if no commands are ready (paused, empty, or all scheduled for future).
   """
   def next(mission_id, target_id) do
     GenServer.call(via_tuple(mission_id, target_id), :next)
@@ -162,9 +121,17 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Reports execution result for a queue entry.
+  Attaches a command log ID to an executing entry.
+  """
+  def attach_command_log(mission_id, target_id, entry_id, command_log_id) do
+    GenServer.cast(
+      via_tuple(mission_id, target_id),
+      {:attach_command_log, entry_id, command_log_id}
+    )
+  end
 
-  Called by TargetDispatcher after attempting to send a command.
+  @doc """
+  Reports execution result for a queue entry.
   """
   def complete(mission_id, target_id, entry_id, result) do
     GenServer.cast(via_tuple(mission_id, target_id), {:complete, entry_id, result})
@@ -193,8 +160,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   @doc """
   Updates the cached dispatcher paused state.
-
-  Called by TargetDispatcher via cast to avoid synchronous dependency.
   """
   def set_dispatcher_paused(mission_id, target_id, paused) do
     GenServer.cast(via_tuple(mission_id, target_id), {:set_dispatcher_paused, paused})
@@ -202,8 +167,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   @doc """
   Manually triggers the dispatcher to check for queued commands.
-
-  Useful for debugging or forcing immediate processing of pending commands.
   """
   def trigger_check(mission_id, target_id) do
     GenServer.call(via_tuple(mission_id, target_id), :trigger_check)
@@ -217,7 +180,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Moves a command to a different position in the queue.
+  Moves a command to a different position in the queue (priority change).
   """
   def reorder(mission_id, target_id, entry_id, new_priority) do
     GenServer.call(via_tuple(mission_id, target_id), {:reorder, entry_id, new_priority})
@@ -226,119 +189,24 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   ## Server Callbacks
 
   @impl true
-  def init({%Mission{} = mission, %Target{} = target}) do
+  def init({%Mission{} = mission, %Target{} = target, snapshot}) do
     Logger.info(
       "Starting TargetQueue for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
 
-    # Subscribe to outbox events for this target
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:outbox")
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "target:#{target.id}:queue")
 
-    # Load existing entries into memory for O(1) operations
-    # This DB call is necessary for crash recovery - entries persist across restarts
-    {pending_entries, entries_by_id, counts, sequence_counter} =
-      load_entries_from_db(target.id)
+    state = build_state_from_snapshot(mission, target, snapshot)
 
-    state = %State{
-      mission_id: mission.id,
-      target_id: target.id,
-      organization_id: mission.organization_id,
-      target: target,
-      pending_entries: pending_entries,
-      entries_by_id: entries_by_id,
-      counts: counts,
-      sequence_counter: sequence_counter
-    }
-
-    Logger.info(
-      "TargetQueue loaded #{counts.pending} pending entries for target=#{target.identifier} (#{target.id})"
-    )
-
-    # Start fallback processing loop
     {:ok, schedule_process(state)}
-  end
-
-  # Load all entries from DB into memory state on startup
-  # This is only called once at init - all subsequent operations use local state
-  defp load_entries_from_db(target_id) do
-    # Get all pending/executing entries for this target
-    entries =
-      from(e in QueueEntry,
-        where: e.target_id == ^target_id,
-        where: e.status in [:pending, :executing],
-        order_by: [asc: e.priority, asc: e.sequence_number]
-      )
-      |> Repo.all()
-
-    # Recover any stale executing entries as failed
-    {entries, recovered_count} = recover_stale_on_load(entries)
-
-    if recovered_count > 0 do
-      Logger.warning(
-        "Recovered #{recovered_count} stale executing entries on startup for target_id=#{target_id}"
-      )
-    end
-
-    # Separate pending entries (sorted) from executing
-    pending_entries =
-      entries
-      |> Enum.filter(&(&1.status == :pending))
-      |> Enum.sort_by(&{&1.priority, &1.sequence_number})
-
-    # Build lookup map
-    entries_by_id = Map.new(entries, &{&1.id, &1})
-
-    # Count statuses
-    counts = %{
-      pending: length(pending_entries),
-      executing: Enum.count(entries, &(&1.status == :executing)),
-      completed: 0,
-      failed: 0
-    }
-
-    # Get max sequence
-    sequence_counter =
-      case Enum.max_by(entries, & &1.sequence_number, fn -> nil end) do
-        nil -> get_max_sequence(target_id) || 0
-        entry -> entry.sequence_number
-      end
-
-    {pending_entries, entries_by_id, counts, sequence_counter}
-  end
-
-  # Recover stale executing entries on startup (crash recovery)
-  defp recover_stale_on_load(entries) do
-    now = DateTime.utc_now()
-    stale_threshold = DateTime.add(now, -@stale_executing_timeout_ms, :millisecond)
-
-    {recovered, normal} =
-      Enum.split_with(entries, fn entry ->
-        entry.status == :executing &&
-          entry.last_attempt_at &&
-          DateTime.compare(entry.last_attempt_at, stale_threshold) == :lt
-      end)
-
-    # Mark stale entries as failed in DB (async)
-    Enum.each(recovered, fn entry ->
-      Task.start(fn ->
-        entry
-        |> QueueEntry.execution_changeset(%{
-          status: :failed,
-          last_error: "Stale entry recovery on startup - execution timed out"
-        })
-        |> Repo.update()
-      end)
-    end)
-
-    {normal, length(recovered)}
   end
 
   @impl true
   def handle_call({:enqueue, command_name, params, opts}, _from, state) do
     case do_enqueue(command_name, params, opts, state) do
       {:ok, entry, new_state} ->
-        # Notify dispatcher to wake up
         notify_dispatcher(state.mission_id, state.target_id)
+        QueuePersistence.notify({:enqueue, entry})
         {:reply, {:ok, entry}, new_state}
 
       {:error, reason} ->
@@ -347,26 +215,19 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   def handle_call(:next, _from, state) do
-    # Check cached dispatcher paused state to avoid synchronous call
     if state.dispatcher_paused do
       {:reply, nil, state}
     else
-      # Expire old entries first (updates local state)
       state = expire_old_entries_local(state)
 
-      # Get next ready entry from local queue (O(1))
       case fetch_next_ready_local(state) do
-        nil ->
-          {:reply, nil, state}
-
-        entry ->
-          {:reply, entry, state}
+        nil -> {:reply, nil, state}
+        entry -> {:reply, entry, state}
       end
     end
   end
 
   def handle_call({:mark_executing, entry_id}, _from, state) do
-    # Use local state for lookup (O(1))
     case Map.get(state.entries_by_id, entry_id) do
       nil ->
         {:reply, {:error, :not_found}, state}
@@ -374,7 +235,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
       entry ->
         now = DateTime.utc_now()
 
-        # Update local state first
         updated_entry = %{
           entry
           | status: :executing,
@@ -382,41 +242,26 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
             last_attempt_at: now
         }
 
-        # Remove from pending, add to executing
         new_pending = Enum.reject(state.pending_entries, &(&1.id == entry_id))
         new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
-        new_counts = %{state.counts | pending: state.counts.pending - 1, executing: 1}
 
         new_state = %{
           state
           | pending_entries: new_pending,
             entries_by_id: new_entries_by_id,
-            executing: updated_entry,
-            counts: new_counts
+            executing: updated_entry
         }
 
-        # Persist async - fire and forget
-        persist_async(fn ->
-          entry
-          |> QueueEntry.execution_changeset(%{
-            status: :executing,
-            attempts: entry.attempts + 1,
-            last_attempt_at: now
-          })
-          |> Repo.update()
-        end)
-
-        publish_status_changed(updated_entry, :executing, new_state)
-        {:reply, {:ok, updated_entry}, new_state}
+        QueuePersistence.notify({:mark_executing, entry_id, updated_entry.attempts, now})
+        {:reply, {:ok, updated_entry}, refresh_counts(new_state)}
     end
   end
 
   def handle_call({:cancel, entry_id}, _from, state) do
-    case do_cancel(entry_id, state.target_id) do
-      {:ok, entry} ->
-        # Create CommandDequeued recording for cancellation
-        record_command_dequeued(entry, "cancelled", nil, state)
-        {:reply, {:ok, entry}, state}
+    case do_cancel(entry_id, state) do
+      {:ok, entry, new_state} ->
+        QueuePersistence.notify({:cancel, entry_id})
+        {:reply, {:ok, entry}, new_state}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -424,12 +269,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   def handle_call(:clear, _from, state) do
-    count = do_clear(state.target_id)
-    {:reply, {:ok, count}, state}
+    {count, new_state} = do_clear(state)
+    QueuePersistence.notify({:clear_pending, state.target_id})
+    {:reply, {:ok, count}, new_state}
   end
 
   def handle_call(:status, _from, state) do
-    # Use local counters (O(1)) instead of DB queries
     status = %{
       mission_id: state.mission_id,
       target_id: state.target_id,
@@ -445,7 +290,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   def handle_call(:trigger_check, _from, state) do
     Logger.info("Manual trigger_check for target_id=#{state.target_id}")
 
-    # Check if there are ready entries (O(1) local check)
     has_entries = has_ready_entries_local?(state)
     Logger.info("  has_ready_entries? = #{has_entries}")
     Logger.info("  dispatcher_paused = #{state.dispatcher_paused}")
@@ -474,16 +318,19 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   def handle_call({:list_pending, opts}, _from, state) do
-    # Use local state (O(1)) instead of DB query
     limit = Keyword.get(opts, :limit, 100)
     entries = Enum.take(state.pending_entries, limit)
     {:reply, entries, state}
   end
 
   def handle_call({:reorder, entry_id, new_priority}, _from, state) do
-    case do_reorder(entry_id, new_priority, state.target_id) do
-      {:ok, entry} -> {:reply, {:ok, entry}, state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+    case do_reorder(entry_id, new_priority, state) do
+      {:ok, entry, new_state} ->
+        QueuePersistence.notify({:priority_changed, entry_id, new_priority})
+        {:reply, {:ok, entry}, new_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -493,17 +340,24 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     {:noreply, new_state}
   end
 
+  def handle_cast({:attach_command_log, entry_id, command_log_id}, state) do
+    {new_state, updated} = update_entry_local(state, entry_id, %{command_log_id: command_log_id})
+
+    if updated do
+      QueuePersistence.notify({:attach_command_log, entry_id, command_log_id})
+    end
+
+    {:noreply, new_state}
+  end
+
   def handle_cast({:set_dispatcher_paused, paused}, state) do
     {:noreply, %{state | dispatcher_paused: paused}}
   end
 
   @impl true
   def handle_info(:process_queue, state) do
-    # Expire old entries (updates local state)
     state = expire_old_entries_local(state)
 
-    # Periodic check - notify dispatcher if there's work
-    # Use local state to check (O(1))
     if not state.dispatcher_paused do
       if has_ready_entries_local?(state) do
         notify_dispatcher(state.mission_id, state.target_id)
@@ -514,66 +368,69 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   def handle_info({:retry_command, entry_id}, state) do
-    # Re-mark as pending using local state
     case Map.get(state.entries_by_id, entry_id) do
       nil ->
         {:noreply, state}
 
       entry ->
-        # Update local state
         updated_entry = %{entry | status: :pending}
         new_pending = insert_sorted(state.pending_entries, updated_entry)
         new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
 
-        new_counts = %{
-          state.counts
-          | pending: state.counts.pending + 1,
-            failed: max(0, state.counts.failed - 1)
-        }
-
         new_state = %{
           state
           | pending_entries: new_pending,
-            entries_by_id: new_entries_by_id,
-            counts: new_counts
+            entries_by_id: new_entries_by_id
         }
 
-        # Persist async
-        persist_async(fn ->
-          case Repo.get(QueueEntry, entry_id) do
-            nil ->
-              :ok
-
-            db_entry ->
-              db_entry
-              |> QueueEntry.execution_changeset(%{status: :pending})
-              |> Repo.update()
-          end
-        end)
-
-        # Notify dispatcher there's work
+        QueuePersistence.notify({:return_to_pending, entry_id, entry.last_error})
         notify_dispatcher(state.mission_id, state.target_id)
-        {:noreply, new_state}
+        {:noreply, refresh_counts(new_state)}
     end
   end
 
-  # Handle outbox events - wake up when a command is enqueued for this target
-  def handle_info({:outbox_event, %{event_type: "command_enqueued", payload: payload}}, state) do
-    # Check if this event is for our target
-    target_id = Map.get(payload, "target_id") || Map.get(payload, :target_id)
-
-    if target_id == state.target_id do
-      Logger.debug("TargetQueue received command_enqueued event for target_id=#{state.target_id}")
-
+  def handle_info({:command_enqueued, %QueuedCommand{} = entry}, state) do
+    if entry.target_id == state.target_id do
+      new_state = add_entry_local(state, entry)
       notify_dispatcher(state.mission_id, state.target_id)
+      {:noreply, new_state}
+    else
+      {:noreply, state}
     end
-
-    {:noreply, state}
   end
 
-  def handle_info({:outbox_event, _event}, state) do
-    # Ignore other outbox event types
-    {:noreply, state}
+  def handle_info({:command_cancelled, %QueuedCommand{} = entry}, state) do
+    {:noreply, remove_entry_local(state, entry.id)}
+  end
+
+  def handle_info({:command_completed, %QueuedCommand{} = entry}, state) do
+    {:noreply, remove_entry_local(state, entry.id)}
+  end
+
+  def handle_info({:command_failed, %QueuedCommand{} = entry}, state) do
+    {:noreply, update_failed_local(state, entry)}
+  end
+
+  def handle_info({:command_retried, %QueuedCommand{} = entry}, state) do
+    {:noreply, add_entry_local(state, %{entry | status: :pending})}
+  end
+
+  def handle_info({:command_reordered, %QueuedCommand{} = entry}, state) do
+    {new_state, _} = update_entry_local(state, entry.id, %{priority: entry.priority})
+    {:noreply, new_state}
+  end
+
+  def handle_info({:commands_cleared, target_id}, state) do
+    if target_id == state.target_id do
+      {_count, new_state} = do_clear(state)
+      {:noreply, new_state}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:command_claimed, %QueuedCommand{} = entry}, state) do
+    {:noreply, update_claimed_local(state, entry)}
   end
 
   def handle_info(_msg, state) do
@@ -581,6 +438,35 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   ## Private Functions
+
+  defp build_state_from_snapshot(
+         %Mission{} = mission,
+         %Target{} = target,
+         %QueueSnapshot{} = snapshot
+       ) do
+    pending_entries = snapshot.pending_entries || []
+    entries_by_id = Map.new(pending_entries, &{&1.id, &1})
+
+    %State{
+      mission_id: mission.id,
+      target_id: target.id,
+      organization_id: mission.organization_id,
+      target: target,
+      pending_entries: Enum.sort_by(pending_entries, &{&1.priority, &1.sequence_number}),
+      entries_by_id: entries_by_id,
+      counts: %{pending: length(pending_entries), executing: 0, completed: 0, failed: 0},
+      sequence_counter: snapshot.sequence_counter
+    }
+  end
+
+  defp build_state_from_snapshot(%Mission{} = mission, %Target{} = target, nil) do
+    %State{
+      mission_id: mission.id,
+      target_id: target.id,
+      organization_id: mission.organization_id,
+      target: target
+    }
+  end
 
   defp do_enqueue(command_name, params, opts, state) do
     sequence = state.sequence_counter + 1
@@ -592,9 +478,11 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     dispatch_opts = opts_to_map(opts)
 
     entry_attrs = %{
+      id: Ecto.UUID.generate(),
       organization_id: state.organization_id,
       mission_id: state.mission_id,
       target_id: state.target_id,
+      user_id: user_id,
       command_name: command_name,
       parameters: params,
       priority: priority,
@@ -602,63 +490,11 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
       scheduled_at: scheduled_at,
       expires_at: expires_at,
       max_attempts: max_attempts,
-      user_id: user_id,
       dispatch_opts: dispatch_opts
     }
 
-    # Recordable attrs for CommandQueued (computed before Multi since values are known)
-    queued_attrs = %{
-      command_name: command_name,
-      parameters: params,
-      target_id: state.target_id,
-      priority: priority,
-      scheduled_at: scheduled_at,
-      expires_at: expires_at,
-      max_attempts: max_attempts,
-      dispatch_opts: dispatch_opts
-    }
-
-    result =
-      Multi.new()
-      |> Multi.insert(:entry, QueueEntry.changeset(%QueueEntry{}, entry_attrs))
-      |> Outbox.append(:outbox, fn %{entry: entry} ->
-        %{
-          organization_id: state.organization_id,
-          mission_id: state.mission_id,
-          event_type: "command_enqueued",
-          aggregate_type: "command_queue_entry",
-          aggregate_id: entry.id,
-          actor_id: user_id,
-          actor_type: if(user_id, do: "user", else: "system"),
-          payload: %{
-            command_name: command_name,
-            target_id: state.target_id,
-            priority: priority,
-            scheduled_at: scheduled_at
-          }
-        }
-      end)
-      |> Recordings.append(:queued, CommandQueued, queued_attrs, fn %{entry: entry} ->
-        %{
-          organization_id: state.organization_id,
-          mission_id: state.mission_id,
-          bucket_id: state.target.bucket_id,
-          aggregate_type: "QueueEntry",
-          aggregate_id: entry.id,
-          actor_id: user_id,
-          actor_type: if(user_id, do: "user", else: "system"),
-          timestamp: DateTime.utc_now()
-        }
-      end)
-      |> Repo.transaction()
-
-    case result do
-      {:ok, %{entry: entry}} ->
-        Logger.debug(
-          "Enqueued command #{command_name} for target_id=#{state.target_id} as entry_id=#{entry.id}"
-        )
-
-        # Add to local state for O(1) operations
+    case QueuedCommand.new(entry_attrs) do
+      {:ok, entry} ->
         new_pending = insert_sorted(state.pending_entries, entry)
         new_entries_by_id = Map.put(state.entries_by_id, entry.id, entry)
         new_counts = %{state.counts | pending: state.counts.pending + 1}
@@ -673,20 +509,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
         {:ok, entry, new_state}
 
-      {:error, :entry, changeset, _changes} ->
-        {:error, {:validation, changeset}}
-
-      {:error, :outbox, changeset, _changes} ->
-        Logger.error("Failed to create outbox event: #{inspect(changeset.errors)}")
-        {:error, {:outbox_failed, changeset}}
-
-      {:error, :queued_recordable, changeset, _changes} ->
-        Logger.error("Failed to create CommandQueued recordable: #{inspect(changeset.errors)}")
-        {:error, {:recording_failed, changeset}}
-
-      {:error, :queued_recording, changeset, _changes} ->
-        Logger.error("Failed to create recording: #{inspect(changeset.errors)}")
-        {:error, {:recording_failed, changeset}}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -696,484 +520,167 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     |> Map.new(fn {k, v} -> {to_string(k), v} end)
   end
 
-  defp do_cancel(entry_id, target_id) do
-    case Repo.get_by(QueueEntry, id: entry_id, target_id: target_id) do
+  defp do_cancel(entry_id, state) do
+    case Map.get(state.entries_by_id, entry_id) do
       nil ->
         {:error, :not_found}
 
-      %QueueEntry{status: status} when status in [:completed, :cancelled] ->
+      %QueuedCommand{status: status} when status in [:completed, :cancelled] ->
         {:error, :already_finished}
 
-      %QueueEntry{status: :executing} ->
+      %QueuedCommand{status: :executing} ->
         {:error, :currently_executing}
 
       entry ->
-        entry
-        |> QueueEntry.cancel_changeset()
-        |> Repo.update()
+        updated_entry = %{entry | status: :cancelled}
+        new_state = remove_entry_local(state, entry_id)
+        {:ok, updated_entry, new_state}
     end
   end
 
-  defp do_clear(target_id) do
-    {count, _} =
-      from(e in QueueEntry,
-        where: e.target_id == ^target_id,
-        where: e.status == :pending
-      )
-      |> Repo.update_all(set: [status: :cancelled, updated_at: DateTime.utc_now()])
+  defp do_clear(state) do
+    count = length(state.pending_entries)
+    entry_ids = Enum.map(state.pending_entries, & &1.id)
 
-    count
+    new_state = %{
+      state
+      | pending_entries: [],
+        entries_by_id: Map.drop(state.entries_by_id, entry_ids),
+        counts: %{state.counts | pending: 0}
+    }
+
+    {count, refresh_counts(new_state)}
   end
 
-  defp do_list_pending(target_id, opts) do
-    limit = Keyword.get(opts, :limit, 100)
-
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      where: e.status == :pending,
-      order_by: [asc: e.priority, asc: e.sequence_number],
-      limit: ^limit
-    )
-    |> Repo.all()
-  end
-
-  defp do_reorder(entry_id, new_priority, target_id) do
-    case Repo.get_by(QueueEntry, id: entry_id, target_id: target_id, status: :pending) do
+  defp do_reorder(entry_id, new_priority, state) do
+    case Map.get(state.entries_by_id, entry_id) do
       nil ->
         {:error, :not_found}
 
-      entry ->
-        entry
-        |> Ecto.Changeset.change(priority: new_priority)
-        |> Repo.update()
+      %QueuedCommand{status: :pending} = entry ->
+        updated_entry = %{entry | priority: new_priority}
+
+        new_pending =
+          state.pending_entries
+          |> Enum.reject(&(&1.id == entry_id))
+          |> insert_sorted(updated_entry)
+
+        new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
+
+        new_state = %{
+          state
+          | pending_entries: new_pending,
+            entries_by_id: new_entries_by_id
+        }
+
+        {:ok, updated_entry, new_state}
+
+      _ ->
+        {:error, :not_pending}
     end
   end
 
-  defp fetch_next_ready_entry(target_id) do
-    now = DateTime.utc_now()
-
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      where: e.status == :pending,
-      where: is_nil(e.scheduled_at) or e.scheduled_at <= ^now,
-      order_by: [asc: e.priority, asc: e.sequence_number],
-      limit: 1
-    )
-    |> Repo.one()
-  end
-
-  defp has_ready_entries?(target_id) do
-    now = DateTime.utc_now()
-
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      where: e.status == :pending,
-      where: is_nil(e.scheduled_at) or e.scheduled_at <= ^now,
-      limit: 1,
-      select: 1
-    )
-    |> Repo.one() != nil
-  end
-
   defp handle_command_complete(entry_id, result, state) do
-    # Use local state for lookup (O(1))
     case Map.get(state.entries_by_id, entry_id) do
       nil ->
         %{state | executing: nil, counts: %{state.counts | executing: 0}}
 
       entry ->
-        new_state =
-          case result do
-            {:ok, %{aggregate_id: aggregate_id, recording_id: recording_id}} ->
-              # Success - remove from local state, persist async
-              updated_entry = %{entry | status: :completed, command_log_id: aggregate_id}
-              new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
-              new_counts = %{state.counts | executing: 0, completed: state.counts.completed + 1}
-
-              persist_async(fn ->
-                case Repo.get(QueueEntry, entry_id) do
-                  nil ->
-                    :ok
-
-                  db_entry ->
-                    db_entry
-                    |> QueueEntry.execution_changeset(%{
-                      status: :completed,
-                      command_log_id: aggregate_id
-                    })
-                    |> Repo.update()
-                end
-              end)
-
-              # Create CommandDequeued recording for successful execution
-              record_command_dequeued(entry, "executed", aggregate_id, state)
-              publish_status_changed(updated_entry, :completed, recording_id, state)
-              Logger.debug("Queue entry #{entry_id} completed successfully")
-
-              %{state | entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
-
-            {:error, :paused} ->
-              # Dispatcher was paused - put back in queue
-              updated_entry = %{entry | status: :pending}
-              new_pending = insert_sorted(state.pending_entries, updated_entry)
-              new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
-              new_counts = %{state.counts | executing: 0, pending: state.counts.pending + 1}
-
-              persist_async(fn ->
-                case Repo.get(QueueEntry, entry_id) do
-                  nil ->
-                    :ok
-
-                  db_entry ->
-                    db_entry
-                    |> QueueEntry.execution_changeset(%{status: :pending})
-                    |> Repo.update()
-                end
-              end)
-
-              publish_status_changed(updated_entry, :pending, state)
-              Logger.debug("Queue entry #{entry_id} returned to pending (dispatcher paused)")
-
-              %{
-                state
-                | pending_entries: new_pending,
-                  entries_by_id: new_entries_by_id,
-                  executing: nil,
-                  counts: new_counts
-              }
-
-            {:error, :requires_confirmation, _info} ->
-              # Hazardous command - mark as failed, don't retry
-              updated_entry = %{
-                entry
-                | status: :failed,
-                  last_error:
-                    "Hazardous command requires confirmation - cannot execute from queue"
-              }
-
-              new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
-              new_counts = %{state.counts | executing: 0, failed: state.counts.failed + 1}
-
-              persist_async(fn ->
-                case Repo.get(QueueEntry, entry_id) do
-                  nil ->
-                    :ok
-
-                  db_entry ->
-                    db_entry
-                    |> QueueEntry.execution_changeset(%{
-                      status: :failed,
-                      last_error:
-                        "Hazardous command requires confirmation - cannot execute from queue"
-                    })
-                    |> Repo.update()
-                end
-              end)
-
-              publish_status_changed(updated_entry, :failed, state)
-
-              %{state | entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
-
-            {:error, :send_failed, :no_clients_connected} ->
-              # Interface has no connected clients - return to pending
-              return_to_pending_local(entry, entry_id, "no clients connected", state)
-
-            {:error, :interface_not_running} ->
-              # Interface not running - return to pending
-              return_to_pending_local(entry, entry_id, "interface not running", state)
-
-            {:error, reason} ->
-              handle_failure_local(entry, entry_id, reason, state)
-
-            {:error, reason, _details} ->
-              handle_failure_local(entry, entry_id, reason, state)
-          end
-
-        new_state
+        apply_completion_result(entry, entry_id, result, state)
     end
   end
 
-  # Return entry to pending queue (local state version)
+  defp apply_completion_result(_entry, entry_id, {:ok, %{aggregate_id: aggregate_id}}, state) do
+    new_state = remove_entry_local(state, entry_id)
+    QueuePersistence.notify({:complete, entry_id, aggregate_id})
+    %{new_state | executing: nil}
+  end
+
+  defp apply_completion_result(entry, entry_id, {:error, :paused}, state) do
+    return_to_pending_local(entry, entry_id, "dispatcher paused", state)
+  end
+
+  defp apply_completion_result(entry, entry_id, {:error, :requires_confirmation, _info}, state) do
+    updated_entry = %{
+      entry
+      | status: :failed,
+        last_error: "Hazardous command requires confirmation - cannot execute from queue"
+    }
+
+    new_state = remove_entry_local(state, entry_id)
+    QueuePersistence.notify({:failed, entry_id, updated_entry.last_error})
+    %{new_state | executing: nil}
+  end
+
+  defp apply_completion_result(
+         entry,
+         entry_id,
+         {:error, :send_failed, :no_clients_connected},
+         state
+       ) do
+    return_to_pending_local(entry, entry_id, "no clients connected", state)
+  end
+
+  defp apply_completion_result(entry, entry_id, {:error, :interface_not_running}, state) do
+    return_to_pending_local(entry, entry_id, "interface not running", state)
+  end
+
+  defp apply_completion_result(entry, entry_id, {:error, reason}, state) do
+    handle_failure_local(entry, entry_id, reason, state)
+  end
+
+  defp apply_completion_result(entry, entry_id, {:error, reason, _details}, state) do
+    handle_failure_local(entry, entry_id, reason, state)
+  end
+
   defp return_to_pending_local(entry, entry_id, reason, state) do
-    updated_entry = %{entry | status: :pending}
+    updated_entry = %{entry | status: :pending, last_error: reason}
     new_pending = insert_sorted(state.pending_entries, updated_entry)
     new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
-    new_counts = %{state.counts | executing: 0, pending: state.counts.pending + 1}
 
-    persist_async(fn ->
-      case Repo.get(QueueEntry, entry_id) do
-        nil ->
-          :ok
-
-        db_entry ->
-          db_entry
-          |> QueueEntry.execution_changeset(%{status: :pending})
-          |> Repo.update()
-      end
-    end)
-
-    publish_status_changed(updated_entry, :pending, state)
-    Logger.info("Queue entry #{entry_id} returned to pending (#{reason})")
-
-    %{
+    new_state = %{
       state
       | pending_entries: new_pending,
         entries_by_id: new_entries_by_id,
-        executing: nil,
-        counts: new_counts
+        executing: nil
     }
+
+    QueuePersistence.notify({:return_to_pending, entry_id, reason})
+    notify_dispatcher(state.mission_id, state.target_id)
+    refresh_counts(new_state)
   end
 
-  # Handle failure with local state
   defp handle_failure_local(entry, entry_id, reason, state) do
     error_msg = inspect(reason)
 
-    if QueueEntry.retriable?(entry) do
-      # Schedule retry - mark as failed temporarily
+    if QueuedCommand.retriable?(entry) do
       updated_entry = %{entry | status: :failed, last_error: error_msg}
       new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
-      new_counts = %{state.counts | executing: 0, failed: state.counts.failed + 1}
-
-      persist_async(fn ->
-        case Repo.get(QueueEntry, entry_id) do
-          nil ->
-            :ok
-
-          db_entry ->
-            db_entry
-            |> QueueEntry.execution_changeset(%{status: :failed, last_error: error_msg})
-            |> Repo.update()
-        end
-      end)
-
-      publish_status_changed(updated_entry, :failed, state)
+      QueuePersistence.notify({:failed, entry_id, error_msg})
       Process.send_after(self(), {:retry_command, entry_id}, @retry_delay_ms)
-      Logger.warning("Queue entry #{entry_id} failed, will retry: #{error_msg}")
 
-      %{state | entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
+      %{state | entries_by_id: new_entries_by_id, executing: nil}
+      |> refresh_counts()
     else
-      # Max attempts reached - remove from tracking
       updated_entry = %{
         entry
         | status: :failed,
           last_error: "Max attempts reached. Last error: #{error_msg}"
       }
 
-      new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
-      new_counts = %{state.counts | executing: 0, failed: state.counts.failed + 1}
-
-      persist_async(fn ->
-        case Repo.get(QueueEntry, entry_id) do
-          nil ->
-            :ok
-
-          db_entry ->
-            db_entry
-            |> QueueEntry.execution_changeset(%{
-              status: :failed,
-              last_error: "Max attempts reached. Last error: #{error_msg}"
-            })
-            |> Repo.update()
-        end
-      end)
-
-      publish_status_changed(updated_entry, :failed, state)
-      Logger.error("Queue entry #{entry_id} failed permanently: #{error_msg}")
-
-      %{state | entries_by_id: new_entries_by_id, executing: nil, counts: new_counts}
+      new_state = remove_entry_local(state, entry_id)
+      QueuePersistence.notify({:failed, entry_id, updated_entry.last_error})
+      %{new_state | executing: nil}
     end
-  end
-
-  defp handle_failure(entry, reason, state) do
-    error_msg = inspect(reason)
-
-    if QueueEntry.retriable?(entry) do
-      # Schedule retry
-      {:ok, updated_entry} =
-        entry
-        |> QueueEntry.execution_changeset(%{
-          status: :failed,
-          last_error: error_msg
-        })
-        |> Repo.update()
-
-      publish_status_changed(updated_entry, :failed, state)
-      Process.send_after(self(), {:retry_command, entry.id}, @retry_delay_ms)
-      Logger.warning("Queue entry #{entry.id} failed, will retry: #{error_msg}")
-    else
-      # Max attempts reached
-      {:ok, updated_entry} =
-        entry
-        |> QueueEntry.execution_changeset(%{
-          status: :failed,
-          last_error: "Max attempts reached. Last error: #{error_msg}"
-        })
-        |> Repo.update()
-
-      publish_status_changed(updated_entry, :failed, state)
-      Logger.error("Queue entry #{entry.id} failed permanently: #{error_msg}")
-    end
-  end
-
-  defp publish_status_changed(entry, new_status, state) do
-    publish_status_changed(entry, new_status, nil, state)
-  end
-
-  defp publish_status_changed(entry, new_status, recording_id, state) do
-    # Insert to outbox for persistence and audit trail
-    {:ok, event} =
-      Outbox.insert(%{
-        organization_id: state.organization_id,
-        mission_id: state.mission_id,
-        recording_id: recording_id,
-        event_type: "command_status_changed",
-        aggregate_type: "command_queue_entry",
-        aggregate_id: entry.id,
-        actor_type: "system",
-        payload: %{
-          command_name: entry.command_name,
-          target_id: state.target_id,
-          status: to_string(new_status),
-          command_log_id: entry.command_log_id,
-          last_error: entry.last_error
-        }
-      })
-
-    # Broadcast immediately for real-time UI updates
-    # (Processor will also broadcast, but this ensures instant feedback)
-    Outbox.broadcast(event)
-  end
-
-  defp expire_old_entries(target_id) do
-    now = DateTime.utc_now()
-
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      where: e.status == :pending,
-      where: not is_nil(e.expires_at),
-      where: e.expires_at < ^now
-    )
-    |> Repo.update_all(set: [status: :expired, updated_at: now])
-  end
-
-  defp count_by_status(target_id, status) do
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      where: e.status == ^status,
-      select: count(e.id)
-    )
-    |> Repo.one()
-  end
-
-  defp get_max_sequence(target_id) do
-    from(e in QueueEntry,
-      where: e.target_id == ^target_id,
-      select: max(e.sequence_number)
-    )
-    |> Repo.one()
-  end
-
-  defp schedule_process(state) do
-    if state.process_timer do
-      Process.cancel_timer(state.process_timer)
-    end
-
-    timer = Process.send_after(self(), :process_queue, @fallback_poll_interval_ms)
-    %{state | process_timer: timer}
   end
 
   defp notify_dispatcher(mission_id, target_id) do
-    # Send message to dispatcher to check for work
     case TargetDispatcher.whereis(mission_id, target_id) do
       nil -> :ok
       pid -> send(pid, :check_queue)
     end
   end
 
-  defp recover_stale_entries(target_id) do
-    # Find entries stuck in :executing status for longer than the stale timeout
-    # This is a defense-in-depth mechanism - normally Task supervision handles this
-    stale_threshold = DateTime.add(DateTime.utc_now(), -@stale_executing_timeout_ms, :millisecond)
-
-    {count, _} =
-      from(e in QueueEntry,
-        where: e.target_id == ^target_id,
-        where: e.status == :executing,
-        where: e.last_attempt_at < ^stale_threshold
-      )
-      |> Repo.update_all(
-        set: [
-          status: :failed,
-          last_error:
-            "Stale entry recovery - execution timed out after #{@stale_executing_timeout_ms}ms",
-          updated_at: DateTime.utc_now()
-        ]
-      )
-
-    if count > 0 do
-      Logger.warning("Recovered #{count} stale executing entries for target_id=#{target_id}")
-    end
-
-    count
-  end
-
-  # Creates a CommandDequeued recording for queue entry state transitions
-  defp record_command_dequeued(entry, reason, command_aggregate_id, state) do
-    dequeued_attrs = %{
-      reason: reason,
-      command_aggregate_id: command_aggregate_id,
-      attempts: entry.attempts,
-      last_error: entry.last_error
-    }
-
-    recording_attrs = %{
-      organization_id: state.organization_id,
-      mission_id: state.mission_id,
-      bucket_id: state.target.bucket_id,
-      aggregate_type: "QueueEntry",
-      aggregate_id: entry.id,
-      actor_type: "system",
-      timestamp: DateTime.utc_now()
-    }
-
-    case Recordings.create(CommandDequeued, dequeued_attrs, recording_attrs) do
-      {:ok, _} ->
-        :ok
-
-      {:error, step, changeset, _} ->
-        Logger.error(
-          "Failed to create CommandDequeued recording (#{step}): #{inspect(changeset.errors)}"
-        )
-    end
-  end
-
-  # ============================================================================
-  # Local State Helpers (Data Plane Optimization)
-  # ============================================================================
-
-  # Fetch next ready entry from local queue (O(1) for head of sorted list)
-  defp fetch_next_ready_local(%{pending_entries: []}), do: nil
-
-  defp fetch_next_ready_local(%{pending_entries: entries}) do
-    now = DateTime.utc_now()
-
-    Enum.find(entries, fn entry ->
-      is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
-    end)
-  end
-
-  # Check if there are ready entries (O(1))
-  defp has_ready_entries_local?(%{pending_entries: []}), do: false
-
-  defp has_ready_entries_local?(%{pending_entries: entries}) do
-    now = DateTime.utc_now()
-
-    Enum.any?(entries, fn entry ->
-      is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
-    end)
-  end
-
-  # Expire old entries and update local state
   defp expire_old_entries_local(%{pending_entries: []} = state), do: state
 
   defp expire_old_entries_local(state) do
@@ -1187,28 +694,39 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     if expired == [] do
       state
     else
-      # Update local state
       expired_ids = Enum.map(expired, & &1.id)
-      new_entries_by_id = Map.drop(state.entries_by_id, expired_ids)
 
-      # Persist async (batch update)
-      persist_async(fn ->
-        from(e in QueueEntry,
-          where: e.id in ^expired_ids
-        )
-        |> Repo.update_all(set: [status: :expired, updated_at: now])
-      end)
+      QueuePersistence.notify({:expire_entries, expired_ids})
 
       %{
         state
         | pending_entries: remaining,
-          entries_by_id: new_entries_by_id,
-          counts: %{state.counts | pending: length(remaining)}
+          entries_by_id: Map.drop(state.entries_by_id, expired_ids)
       }
+      |> refresh_counts()
     end
   end
 
-  # Insert entry into sorted list maintaining {priority, sequence_number} order
+  defp fetch_next_ready_local(%{pending_entries: []}), do: nil
+
+  defp fetch_next_ready_local(%{pending_entries: entries}) do
+    now = DateTime.utc_now()
+
+    Enum.find(entries, fn entry ->
+      is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
+    end)
+  end
+
+  defp has_ready_entries_local?(%{pending_entries: []}), do: false
+
+  defp has_ready_entries_local?(%{pending_entries: entries}) do
+    now = DateTime.utc_now()
+
+    Enum.any?(entries, fn entry ->
+      is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
+    end)
+  end
+
   defp insert_sorted(entries, entry) do
     {before, after_list} =
       Enum.split_while(entries, fn e ->
@@ -1218,44 +736,145 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     before ++ [entry | after_list]
   end
 
-  # Async persistence - fire and forget
-  # Used for non-critical updates where local state is source of truth
-  defp persist_async(fun) do
-    Task.start(fn ->
-      try do
-        fun.()
-      rescue
-        e ->
-          Logger.error("Async persistence failed: #{inspect(e)}")
-      end
-    end)
+  defp add_entry_local(state, %QueuedCommand{} = entry) do
+    if Map.has_key?(state.entries_by_id, entry.id) do
+      state
+    else
+      new_pending =
+        if entry.status == :pending do
+          insert_sorted(state.pending_entries, entry)
+        else
+          state.pending_entries
+        end
+
+      new_entries_by_id = Map.put(state.entries_by_id, entry.id, entry)
+
+      new_sequence =
+        case entry.sequence_number do
+          nil -> state.sequence_counter
+          sequence_number -> max(state.sequence_counter, sequence_number)
+        end
+
+      %{
+        state
+        | pending_entries: new_pending,
+          entries_by_id: new_entries_by_id,
+          sequence_counter: new_sequence
+      }
+      |> refresh_counts()
+    end
   end
 
-  # Extract mission and target from opts, supporting both entity and ID-based startup
-  defp extract_mission_and_target(opts) do
+  defp remove_entry_local(state, entry_id) do
+    new_pending = Enum.reject(state.pending_entries, &(&1.id == entry_id))
+    new_entries_by_id = Map.delete(state.entries_by_id, entry_id)
+
+    new_executing =
+      if(state.executing && state.executing.id == entry_id, do: nil, else: state.executing)
+
+    %{
+      state
+      | pending_entries: new_pending,
+        entries_by_id: new_entries_by_id,
+        executing: new_executing
+    }
+    |> refresh_counts()
+  end
+
+  defp update_failed_local(state, %QueuedCommand{} = entry) do
+    new_entries_by_id = Map.put(state.entries_by_id, entry.id, entry)
+    new_pending = Enum.reject(state.pending_entries, &(&1.id == entry.id))
+
+    new_executing =
+      if(state.executing && state.executing.id == entry.id, do: nil, else: state.executing)
+
+    %{
+      state
+      | pending_entries: new_pending,
+        entries_by_id: new_entries_by_id,
+        executing: new_executing
+    }
+    |> refresh_counts()
+  end
+
+  defp update_claimed_local(state, %QueuedCommand{} = entry) do
+    new_pending = Enum.reject(state.pending_entries, &(&1.id == entry.id))
+    new_entries_by_id = Map.put(state.entries_by_id, entry.id, entry)
+
+    %{state | pending_entries: new_pending, entries_by_id: new_entries_by_id, executing: entry}
+    |> refresh_counts()
+  end
+
+  defp update_entry_local(state, entry_id, attrs) do
+    case Map.get(state.entries_by_id, entry_id) do
+      nil ->
+        {state, false}
+
+      entry ->
+        updated_entry = struct(entry, attrs)
+        new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
+
+        new_pending =
+          if entry.status == :pending do
+            state.pending_entries
+            |> Enum.reject(&(&1.id == entry_id))
+            |> insert_sorted(updated_entry)
+          else
+            state.pending_entries
+          end
+
+        new_state = %{
+          state
+          | pending_entries: new_pending,
+            entries_by_id: new_entries_by_id,
+            executing:
+              if(state.executing && state.executing.id == entry_id,
+                do: updated_entry,
+                else: state.executing
+              )
+        }
+
+        {refresh_counts(new_state), true}
+    end
+  end
+
+  defp schedule_process(state) do
+    if state.process_timer do
+      Process.cancel_timer(state.process_timer)
+    end
+
+    timer = Process.send_after(self(), :process_queue, @fallback_poll_interval_ms)
+    %{state | process_timer: timer}
+  end
+
+  defp refresh_counts(state) do
+    pending = length(state.pending_entries)
+
+    failed =
+      state.entries_by_id
+      |> Map.values()
+      |> Enum.count(&(&1.status == :failed))
+
+    %{
+      state
+      | counts: %{
+          pending: pending,
+          executing: if(state.executing, do: 1, else: 0),
+          completed: state.counts.completed,
+          failed: failed
+        }
+    }
+  end
+
+  defp extract_mission_target_snapshot(opts) do
     case {Keyword.get(opts, :mission), Keyword.get(opts, :target)} do
       {%Mission{} = mission, %Target{} = target} ->
-        # Entity-based startup (preferred) - no DB calls for mission/target
-        {mission, target}
-
-      {nil, nil} ->
-        # Legacy ID-based startup - makes DB calls
-        mission_id = Keyword.fetch!(opts, :mission_id)
-        target_id = Keyword.fetch!(opts, :target_id)
-
-        Logger.warning(
-          "TargetQueue started with IDs instead of entities. " <>
-            "Consider passing entities to avoid DB calls."
-        )
-
-        mission = Cadence.Missions.get_mission!(mission_id)
-        target = Cadence.Targets.get_target_unscoped!(target_id)
-
-        {mission, target}
+        snapshot = Keyword.get(opts, :queue_snapshot)
+        {mission, target, snapshot}
 
       _ ->
         raise ArgumentError,
-              "TargetQueue requires either (mission: entity, target: entity) or (mission_id: id, target_id: id)"
+              "TargetQueue requires (mission: entity, target: entity)"
     end
   end
 end

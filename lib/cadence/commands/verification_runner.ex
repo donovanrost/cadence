@@ -329,65 +329,57 @@ defmodule Cadence.Commands.VerificationRunner do
       :pending ->
         {:pending, runner}
 
-      {:failed, reason} ->
-        {:failed, runner, reason}
+      other ->
+        {:failed, runner, other}
     end
   end
 
   defp check_simple_condition(verifier, value, initial_value) do
     case verifier.comparison do
       :changed ->
-        if value != initial_value do
-          :satisfied
-        else
-          :pending
-        end
+        compare_changed(value, initial_value)
 
       :equal ->
-        if values_match?(value, verifier.expected_value) do
-          :satisfied
-        else
-          :pending
-        end
+        compare_equal(value, verifier.expected_value)
 
       :not_equal ->
-        if values_match?(value, verifier.expected_value) do
-          :pending
-        else
-          :satisfied
-        end
+        compare_not_equal(value, verifier.expected_value)
 
       :greater ->
-        if is_number(value) and value > parse_number(verifier.expected_value) do
-          :satisfied
-        else
-          :pending
-        end
+        compare_number(value, verifier.expected_value, &>/2)
 
       :less ->
-        if is_number(value) and value < parse_number(verifier.expected_value) do
-          :satisfied
-        else
-          :pending
-        end
+        compare_number(value, verifier.expected_value, &</2)
 
       :greater_equal ->
-        if is_number(value) and value >= parse_number(verifier.expected_value) do
-          :satisfied
-        else
-          :pending
-        end
+        compare_number(value, verifier.expected_value, &>=/2)
 
       :less_equal ->
-        if is_number(value) and value <= parse_number(verifier.expected_value) do
-          :satisfied
-        else
-          :pending
-        end
+        compare_number(value, verifier.expected_value, &<=/2)
 
       _ ->
         # Unknown comparison - any update satisfies
         :satisfied
+    end
+  end
+
+  defp compare_changed(value, initial_value) do
+    if value != initial_value, do: :satisfied, else: :pending
+  end
+
+  defp compare_equal(value, expected) do
+    if values_match?(value, expected), do: :satisfied, else: :pending
+  end
+
+  defp compare_not_equal(value, expected) do
+    if values_match?(value, expected), do: :pending, else: :satisfied
+  end
+
+  defp compare_number(value, expected, comparator) do
+    if is_number(value) and comparator.(value, parse_number(expected)) do
+      :satisfied
+    else
+      :pending
     end
   end
 

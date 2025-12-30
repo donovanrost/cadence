@@ -1,5 +1,5 @@
 defmodule Cadence.Procedures.ParametersTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Procedures.Parameters
 

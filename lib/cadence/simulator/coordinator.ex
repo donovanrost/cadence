@@ -374,24 +374,8 @@ defmodule Cadence.Simulator.Coordinator do
 
     # Clean up based on mode
     case state.parallel_mode do
-      :parallel ->
-        # Stop all generator workers
-        if state.generator_pool do
-          Enum.each(state.generator_pool, fn pid ->
-            if Process.alive?(pid), do: GeneratorWorker.stop(pid)
-          end)
-        end
-
-        # Stop send buffer
-        if state.send_buffer && Process.alive?(state.send_buffer) do
-          SendBuffer.stop(state.send_buffer)
-        end
-
-        # Clean up metrics
-        SimulatorMetrics.cleanup(state.mission_id)
-
-      :sequential ->
-        if state.socket, do: close_socket(state)
+      :parallel -> cleanup_parallel(state)
+      :sequential -> cleanup_sequential(state)
     end
 
     :ok
@@ -403,6 +387,30 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp via_tuple(mission_id) do
     {:via, Registry, {Cadence.MissionRegistry, {mission_id, :simulator_coordinator}}}
+  end
+
+  defp cleanup_parallel(state) do
+    stop_generator_pool(state.generator_pool)
+    stop_send_buffer(state.send_buffer)
+    SimulatorMetrics.cleanup(state.mission_id)
+  end
+
+  defp stop_generator_pool(nil), do: :ok
+
+  defp stop_generator_pool(generator_pool) do
+    Enum.each(generator_pool, fn pid ->
+      if Process.alive?(pid), do: GeneratorWorker.stop(pid)
+    end)
+  end
+
+  defp stop_send_buffer(nil), do: :ok
+
+  defp stop_send_buffer(send_buffer) do
+    if Process.alive?(send_buffer), do: SendBuffer.stop(send_buffer)
+  end
+
+  defp cleanup_sequential(state) do
+    if state.socket, do: close_socket(state)
   end
 
   defp determine_provider(opts) do

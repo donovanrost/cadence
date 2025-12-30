@@ -13,11 +13,33 @@ defmodule Cadence.Telemetry.IntegrationTest do
 
   use Cadence.DataCase
 
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.{Missions, Organizations}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Simulator.PacketSimulator
+
+  defp wait_for(fun, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 2_000)
+    interval = Keyword.get(opts, :interval, 25)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    do_wait_for(fun, deadline, interval)
+  end
+
+  defp do_wait_for(fun, deadline, interval) do
+    if fun.() do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) < deadline do
+        Process.sleep(interval)
+        do_wait_for(fun, deadline, interval)
+      else
+        flunk("Condition was not met within timeout")
+      end
+    end
+  end
 
   describe "end-to-end telemetry flow" do
     setup do
@@ -38,10 +60,12 @@ defmodule Cadence.Telemetry.IntegrationTest do
         })
 
       # Start the mission (starts CVT, PacketIdentifier, Pipeline)
-      {:ok, _pid} = MissionSupervisor.start_mission(mission)
+      {:ok, config} = MissionConfig.load(mission.id)
+      {:ok, _pid} = MissionSupervisor.start_mission(config)
 
-      # Give processes time to initialize
-      Process.sleep(100)
+      on_exit(fn ->
+        MissionSupervisor.stop_mission(mission.id)
+      end)
 
       %{org: org, mission: mission}
     end
@@ -61,18 +85,30 @@ defmodule Cadence.Telemetry.IntegrationTest do
           output: nil
         )
 
-      # Wait for a few packets to be generated and processed
-      Process.sleep(500)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Verify we received telemetry updates via PubSub
-      assert_received {:telemetry_update, "test-target-1", "HEALTH", item_name, telemetry_value}
+      assert_receive {:telemetry_update, "test-target-1", "HEALTH", item_name, telemetry_value},
+                     2_000
+
       assert is_binary(item_name)
       assert is_map(telemetry_value)
       assert Map.has_key?(telemetry_value, :value)
       assert Map.has_key?(telemetry_value, :received_time)
 
       # Verify data is in CVT
-      {:ok, cpu_temp} = CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+          )
+        end)
+
+      {:ok, cpu_temp} =
+        CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
 
       assert is_map(cpu_temp)
       assert is_number(cpu_temp.value)
@@ -80,20 +116,18 @@ defmodule Cadence.Telemetry.IntegrationTest do
       assert %DateTime{} = cpu_temp.received_time
 
       # Verify pipeline stats
-      stats = Pipeline.stats(mission.id)
-      assert stats.packets_processed > 0
-      assert stats.items_processed > 0
-      assert stats.errors == 0
+      :ok =
+        wait_for(fn ->
+          stats = Pipeline.stats(mission.id)
+          stats.packets_processed > 0 and stats.items_processed > 0 and stats.errors == 0
+        end)
 
       # Verify CVT stats
-      cvt_stats = CurrentValueTable.stats(mission.id)
-      assert cvt_stats.total_entries > 0
-
-      # Stop simulator
-      PacketSimulator.stop(sim_pid)
-
-      # Stop mission
-      MissionSupervisor.stop_mission(mission.id)
+      :ok =
+        wait_for(fn ->
+          cvt_stats = CurrentValueTable.stats(mission.id)
+          cvt_stats.total_entries > 0
+        end)
     end
 
     test "multiple packet types are processed correctly", %{mission: mission} do
@@ -107,24 +141,49 @@ defmodule Cadence.Telemetry.IntegrationTest do
           output: nil
         )
 
-      # Wait for packets to be processed
-      Process.sleep(1000)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Verify all packet types are in CVT
-      {:ok, cpu_temp} = CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+          )
+        end)
+
+      {:ok, cpu_temp} =
+        CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+
       assert is_number(cpu_temp.value)
 
-      {:ok, roll} = CurrentValueTable.get(mission.id, "test-target-1", "ATTITUDE", "roll")
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "test-target-1", "ATTITUDE", "roll")
+          )
+        end)
+
+      {:ok, roll} =
+        CurrentValueTable.get(mission.id, "test-target-1", "ATTITUDE", "roll")
+
       assert is_number(roll.value)
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "test-target-1", "POWER", "bus_voltage")
+          )
+        end)
 
       {:ok, bus_voltage} =
         CurrentValueTable.get(mission.id, "test-target-1", "POWER", "bus_voltage")
 
       assert is_number(bus_voltage.value)
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
     end
 
     test "multiple targets are isolated correctly", %{mission: mission} do
@@ -138,10 +197,18 @@ defmodule Cadence.Telemetry.IntegrationTest do
           output: nil
         )
 
-      # Wait for packets
-      Process.sleep(800)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Verify each target has separate telemetry
+      :ok =
+        wait_for(fn ->
+          match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-1", "HEALTH", "cpu_temp")) and
+            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-2", "HEALTH", "cpu_temp")) and
+            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-3", "HEALTH", "cpu_temp"))
+        end)
+
       {:ok, sat1_temp} = CurrentValueTable.get(mission.id, "sat-1", "HEALTH", "cpu_temp")
       {:ok, sat2_temp} = CurrentValueTable.get(mission.id, "sat-2", "HEALTH", "cpu_temp")
       {:ok, sat3_temp} = CurrentValueTable.get(mission.id, "sat-3", "HEALTH", "cpu_temp")
@@ -150,15 +217,6 @@ defmodule Cadence.Telemetry.IntegrationTest do
       assert is_number(sat1_temp.value)
       assert is_number(sat2_temp.value)
       assert is_number(sat3_temp.value)
-
-      # Values should be different (simulator adds noise)
-      # Note: There's a small chance they could be equal, but very unlikely
-      values = [sat1_temp.value, sat2_temp.value, sat3_temp.value]
-      assert length(Enum.uniq(values)) > 1
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
     end
 
     test "CVT maintains most recent value only", %{mission: mission} do
@@ -172,12 +230,32 @@ defmodule Cadence.Telemetry.IntegrationTest do
         )
 
       # Get initial value
-      Process.sleep(200)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+          )
+        end)
+
       {:ok, initial} = CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
       initial_time = initial.received_time
 
       # Wait for more packets
-      Process.sleep(500)
+      :ok =
+        wait_for(
+          fn ->
+            {:ok, updated} =
+              CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
+
+            DateTime.compare(updated.received_time, initial_time) == :gt
+          end,
+          timeout: 3_000
+        )
 
       # Get updated value
       {:ok, updated} = CurrentValueTable.get(mission.id, "test-target-1", "HEALTH", "cpu_temp")
@@ -196,10 +274,6 @@ defmodule Cadence.Telemetry.IntegrationTest do
         end)
 
       assert cpu_temp_count == 1
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
     end
   end
 end

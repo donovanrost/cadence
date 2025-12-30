@@ -424,69 +424,36 @@ defmodule CadenceWeb.CommandLive.Sender do
 
       case Commands.dispatch(socket.assigns.mission.id, command.name, params, opts) do
         {:ok, command_log_id} ->
-          result = %{
-            success: true,
-            command_name: command.name,
-            message: "Command sent (ID: #{String.slice(command_log_id, 0, 8)}...)",
-            sent_at: DateTime.utc_now()
-          }
+          result =
+            command_result(
+              true,
+              command.name,
+              "Command sent (ID: #{String.slice(command_log_id, 0, 8)}...)"
+            )
 
-          {:noreply,
-           socket
-           |> assign(:last_result, result)
-           |> update(:command_history, fn history ->
-             [result | history] |> Enum.take(10)
-           end)}
+          {:noreply, put_command_result(socket, result)}
 
         {:error, :requires_confirmation, info} ->
           {:noreply, assign(socket, :pending_confirmation, info)}
 
         {:error, :not_allowed_in_phase, current_phase} ->
-          result = %{
-            success: false,
-            command_name: command.name,
-            message: "Command not allowed in #{current_phase} phase",
-            sent_at: DateTime.utc_now()
-          }
+          result =
+            command_result(
+              false,
+              command.name,
+              "Command not allowed in #{current_phase} phase"
+            )
 
-          {:noreply,
-           socket
-           |> assign(:last_result, result)
-           |> update(:command_history, fn history ->
-             [result | history] |> Enum.take(10)
-           end)}
+          {:noreply, put_command_result(socket, result)}
 
         {:error, :validation_failed, errors} ->
-          error_msg = Enum.map_join(errors, ", ", fn {field, msg} -> "#{field}: #{msg}" end)
-
-          result = %{
-            success: false,
-            command_name: command.name,
-            message: "Validation failed: #{error_msg}",
-            sent_at: DateTime.utc_now()
-          }
-
-          {:noreply,
-           socket
-           |> assign(:last_result, result)
-           |> update(:command_history, fn history ->
-             [result | history] |> Enum.take(10)
-           end)}
+          error_msg = format_validation_errors(errors)
+          result = command_result(false, command.name, "Validation failed: #{error_msg}")
+          {:noreply, put_command_result(socket, result)}
 
         {:error, reason} ->
-          result = %{
-            success: false,
-            command_name: command.name,
-            message: "Error: #{inspect(reason)}",
-            sent_at: DateTime.utc_now()
-          }
-
-          {:noreply,
-           socket
-           |> assign(:last_result, result)
-           |> update(:command_history, fn history ->
-             [result | history] |> Enum.take(10)
-           end)}
+          result = command_result(false, command.name, "Error: #{inspect(reason)}")
+          {:noreply, put_command_result(socket, result)}
       end
     end
   end
@@ -506,5 +473,26 @@ defmodule CadenceWeb.CommandLive.Sender do
 
   defp format_time(datetime) do
     Calendar.strftime(datetime, "%H:%M:%S")
+  end
+
+  defp command_result(success, command_name, message) do
+    %{
+      success: success,
+      command_name: command_name,
+      message: message,
+      sent_at: DateTime.utc_now()
+    }
+  end
+
+  defp put_command_result(socket, result) do
+    socket
+    |> assign(:last_result, result)
+    |> update(:command_history, fn history ->
+      [result | history] |> Enum.take(10)
+    end)
+  end
+
+  defp format_validation_errors(errors) do
+    Enum.map_join(errors, ", ", fn {field, msg} -> "#{field}: #{msg}" end)
   end
 end

@@ -66,62 +66,35 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
   end
 
   def execute("acknowledge_alarm", config, trigger_event, _context) do
-    case trigger_event[:alarm_id] do
-      nil ->
-        {:error, :no_alarm_in_event}
+    note = config["note"] || "Auto-acknowledged by automation"
 
-      alarm_id ->
-        case Alarms.get_alarm(alarm_id) do
-          nil ->
-            {:error, :alarm_not_found}
-
-          alarm ->
-            note = config["note"] || "Auto-acknowledged by automation"
-
-            case Alarms.acknowledge_alarm(alarm, "automation", note) do
-              {:ok, _updated} ->
-                Logger.info("Acknowledged alarm #{alarm_id} from automation")
-                {:ok, %{action: "acknowledge_alarm", alarm_id: alarm_id}}
-
-              {:error, reason} ->
-                {:error, reason}
-            end
-        end
+    with {:ok, alarm_id} <- fetch_alarm_id(trigger_event),
+         {:ok, alarm} <- fetch_alarm(alarm_id),
+         {:ok, _updated} <- Alarms.acknowledge_alarm(alarm, "automation", note) do
+      Logger.info("Acknowledged alarm #{alarm_id} from automation")
+      {:ok, %{action: "acknowledge_alarm", alarm_id: alarm_id}}
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
 
   def execute("shelve_alarm", config, trigger_event, _context) do
-    case trigger_event[:alarm_id] do
-      nil ->
-        {:error, :no_alarm_in_event}
+    duration_minutes = config["duration_minutes"] || 60
+    reason = config["reason"] || "Auto-shelved by automation"
 
-      alarm_id ->
-        # Duration is in minutes for the Alarms API
-        duration_minutes = config["duration_minutes"] || 60
-        reason = config["reason"] || "Auto-shelved by automation"
+    with {:ok, alarm_id} <- fetch_alarm_id(trigger_event),
+         {:ok, alarm} <- fetch_alarm(alarm_id),
+         {:ok, _updated} <- Alarms.shelve_alarm(alarm, "automation", duration_minutes, reason) do
+      Logger.info("Shelved alarm #{alarm_id} for #{duration_minutes} min from automation")
 
-        case Alarms.get_alarm(alarm_id) do
-          nil ->
-            {:error, :alarm_not_found}
-
-          alarm ->
-            case Alarms.shelve_alarm(alarm, "automation", duration_minutes, reason) do
-              {:ok, _updated} ->
-                Logger.info(
-                  "Shelved alarm #{alarm_id} for #{duration_minutes} min from automation"
-                )
-
-                {:ok,
-                 %{
-                   action: "shelve_alarm",
-                   alarm_id: alarm_id,
-                   duration_minutes: duration_minutes
-                 }}
-
-              {:error, reason} ->
-                {:error, reason}
-            end
-        end
+      {:ok,
+       %{
+         action: "shelve_alarm",
+         alarm_id: alarm_id,
+         duration_minutes: duration_minutes
+       }}
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -144,6 +117,20 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
 
   def execute(unknown_type, _config, _trigger_event, _context) do
     {:error, {:unknown_action_type, unknown_type}}
+  end
+
+  defp fetch_alarm_id(trigger_event) do
+    case trigger_event[:alarm_id] do
+      nil -> {:error, :no_alarm_in_event}
+      alarm_id -> {:ok, alarm_id}
+    end
+  end
+
+  defp fetch_alarm(alarm_id) do
+    case Alarms.get_alarm(alarm_id) do
+      nil -> {:error, :alarm_not_found}
+      alarm -> {:ok, alarm}
+    end
   end
 
   # ============================================================================

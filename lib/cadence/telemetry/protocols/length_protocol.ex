@@ -100,45 +100,30 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
 
   # Recursive packet extraction
   defp extract_packets(buffer, state, acc) do
-    # First, handle sync pattern if configured
-    if state.sync_pattern do
-      case find_sync_pattern(buffer, state.sync_pattern) do
-        {:ok, offset} ->
-          # Skip to sync pattern and continue
-          sync_len = byte_size(state.sync_pattern)
-          <<_skip::binary-size(offset), _sync::binary-size(sync_len), rest::binary>> = buffer
-          extract_packets_after_sync(rest, state, acc)
+    case locate_sync(buffer, state) do
+      {:ok, synced_buffer} ->
+        case extract_packets_after_sync(synced_buffer, state) do
+          {:emit, packet, remaining, new_state} ->
+            extract_packets(remaining, new_state, [packet | acc])
 
-        :not_found ->
-          # Keep last N bytes in case sync is split across reads
-          keep_bytes = max(0, byte_size(state.sync_pattern) - 1)
+          {:need_more, keep} ->
+            return_packets(acc, %{state | buffer: keep})
+        end
 
-          keep =
-            if byte_size(buffer) > keep_bytes do
-              binary_part(buffer, byte_size(buffer) - keep_bytes, keep_bytes)
-            else
-              buffer
-            end
-
-          # Return early - no sync found
-          return_packets(acc, %{state | buffer: keep})
-      end
-    else
-      # No sync pattern - process directly
-      extract_packets_after_sync(buffer, state, acc)
+      {:need_more, keep} ->
+        return_packets(acc, %{state | buffer: keep})
     end
   end
 
   # Continue extraction after sync pattern found (or no sync configured)
-  defp extract_packets_after_sync(buffer, state, acc) do
+  defp extract_packets_after_sync(buffer, state) do
     # Calculate offsets for length field
     length_byte_offset = div(state.length_bit_offset, 8)
     length_byte_size = div(state.length_bit_size, 8)
     length_total_bytes = length_byte_offset + length_byte_size
 
     if byte_size(buffer) < length_total_bytes do
-      # Not enough data for length field
-      return_packets(acc, %{state | buffer: buffer})
+      {:need_more, buffer}
     else
       <<_skip::binary-size(length_byte_offset), length_bytes::binary-size(length_byte_size),
         _after_length::binary>> = buffer
@@ -156,32 +141,59 @@ defmodule Cadence.Telemetry.Protocols.LengthProtocol do
       # Total packet includes length header + payload
       total_packet_size = length_total_bytes + payload_size
 
-        # Check if we have complete packet
-        if byte_size(buffer) >= total_packet_size do
-          # Extract complete packet
-          <<packet::binary-size(total_packet_size), remaining::binary>> = buffer
+      # Check if we have complete packet
+      if byte_size(buffer) >= total_packet_size do
+        # Extract complete packet
+        <<packet::binary-size(total_packet_size), remaining::binary>> = buffer
 
-          # Optionally discard leading bytes (e.g., length header itself)
-          packet =
-            if state.discard_leading_bytes > 0 and
-                 byte_size(packet) > state.discard_leading_bytes do
-              binary_part(
-                packet,
-                state.discard_leading_bytes,
-                byte_size(packet) - state.discard_leading_bytes
-              )
-            else
-              packet
-            end
+        # Optionally discard leading bytes (e.g., length header itself)
+        packet = maybe_discard_leading(packet, state)
 
-          new_state = %{state | packets_extracted: state.packets_extracted + 1}
+        new_state = %{state | packets_extracted: state.packets_extracted + 1}
 
-          # Continue extracting more packets
-          extract_packets(remaining, new_state, [packet | acc])
-        else
-          # Need more data for payload
-          return_packets(acc, %{state | buffer: buffer})
-        end
+        {:emit, packet, remaining, new_state}
+      else
+        {:need_more, buffer}
+      end
+    end
+  end
+
+  defp locate_sync(buffer, %{sync_pattern: nil}), do: {:ok, buffer}
+
+  defp locate_sync(buffer, %{sync_pattern: sync_pattern}) do
+    case find_sync_pattern(buffer, sync_pattern) do
+      {:ok, offset} ->
+        sync_len = byte_size(sync_pattern)
+        <<_skip::binary-size(offset), _sync::binary-size(sync_len), rest::binary>> = buffer
+        {:ok, rest}
+
+      :not_found ->
+        keep_tail(buffer, sync_pattern)
+    end
+  end
+
+  defp keep_tail(buffer, sync_pattern) do
+    keep_bytes = max(0, byte_size(sync_pattern) - 1)
+
+    keep =
+      if byte_size(buffer) > keep_bytes do
+        binary_part(buffer, byte_size(buffer) - keep_bytes, keep_bytes)
+      else
+        buffer
+      end
+
+    {:need_more, keep}
+  end
+
+  defp maybe_discard_leading(packet, state) do
+    if state.discard_leading_bytes > 0 and byte_size(packet) > state.discard_leading_bytes do
+      binary_part(
+        packet,
+        state.discard_leading_bytes,
+        byte_size(packet) - state.discard_leading_bytes
+      )
+    else
+      packet
     end
   end
 

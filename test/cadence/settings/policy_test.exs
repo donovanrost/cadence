@@ -1,58 +1,23 @@
 defmodule Cadence.Settings.PolicyTest do
-  use Cadence.DataCase, async: true
-
-  import Cadence.AccountsFixtures
-  import Cadence.OrganizationsFixtures
-  import Cadence.MissionsFixtures
+  use Cadence.PureCase, async: true
 
   alias Cadence.Accounts.Scope
+  alias Cadence.Accounts.User
+  alias Cadence.Missions.Mission
   alias Cadence.Missions.MissionMembership
+  alias Cadence.Organizations.Organization
   alias Cadence.Organizations.OrganizationMembership
-  alias Cadence.Repo
   alias Cadence.Settings.Policy
 
   describe "organization settings authorization" do
     setup do
-      org = organization_fixture()
-      other_org = organization_fixture()
+      org = build_org()
+      other_org = build_org()
 
-      # Create users with different roles
-      owner = user_fixture()
-      admin = user_fixture()
-      member = user_fixture()
-      non_member = user_fixture()
-
-      # Set up organization memberships
-      Repo.insert!(%OrganizationMembership{
-        user_id: owner.id,
-        organization_id: org.id,
-        role: "owner"
-      })
-
-      Repo.insert!(%OrganizationMembership{
-        user_id: admin.id,
-        organization_id: org.id,
-        role: "admin"
-      })
-
-      Repo.insert!(%OrganizationMembership{
-        user_id: member.id,
-        organization_id: org.id,
-        role: "member"
-      })
-
-      # Non-member belongs to a different org
-      Repo.insert!(%OrganizationMembership{
-        user_id: non_member.id,
-        organization_id: other_org.id,
-        role: "member"
-      })
-
-      # Reload users with memberships
-      owner = Repo.preload(owner, [:organization_memberships], force: true)
-      admin = Repo.preload(admin, [:organization_memberships], force: true)
-      member = Repo.preload(member, [:organization_memberships], force: true)
-      non_member = Repo.preload(non_member, [:organization_memberships], force: true)
+      owner = build_user() |> with_org_membership(org, "owner")
+      admin = build_user() |> with_org_membership(org, "admin")
+      member = build_user() |> with_org_membership(org, "member")
+      non_member = build_user() |> with_org_membership(other_org, "member")
 
       %{
         org: org,
@@ -98,17 +63,9 @@ defmodule Cadence.Settings.PolicyTest do
 
   describe "organization settings with Scope" do
     setup do
-      org = organization_fixture()
-      admin = user_fixture()
-
-      Repo.insert!(%OrganizationMembership{
-        user_id: admin.id,
-        organization_id: org.id,
-        role: "admin"
-      })
-
-      admin = Repo.preload(admin, [:organization_memberships], force: true)
-      scope = Scope.for_user(admin, current_organization_id: org.id)
+      org = build_org()
+      admin = build_user() |> with_org_membership(org, "admin")
+      scope = build_scope(admin, current_org: org)
 
       %{org: org, scope: scope}
     end
@@ -121,73 +78,16 @@ defmodule Cadence.Settings.PolicyTest do
 
   describe "mission settings authorization" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      other_org = organization_fixture()
+      org = build_org()
+      mission = build_mission(org)
+      other_org = build_org()
 
-      # Create users with different roles
-      org_admin = user_fixture()
-      mission_admin = user_fixture()
-      mission_engineer = user_fixture()
-      mission_operator = user_fixture()
-      mission_viewer = user_fixture()
-      non_member = user_fixture()
-
-      # Set up org membership for org admin
-      Repo.insert!(%OrganizationMembership{
-        user_id: org_admin.id,
-        organization_id: org.id,
-        role: "admin"
-      })
-
-      # Set up org membership for mission members (as regular members)
-      for user <- [mission_admin, mission_engineer, mission_operator, mission_viewer] do
-        Repo.insert!(%OrganizationMembership{
-          user_id: user.id,
-          organization_id: org.id,
-          role: "member"
-        })
-      end
-
-      # Non-member in different org
-      Repo.insert!(%OrganizationMembership{
-        user_id: non_member.id,
-        organization_id: other_org.id,
-        role: "member"
-      })
-
-      # Set up mission memberships
-      Repo.insert!(%MissionMembership{
-        user_id: mission_admin.id,
-        mission_id: mission.id,
-        role: "admin"
-      })
-
-      Repo.insert!(%MissionMembership{
-        user_id: mission_engineer.id,
-        mission_id: mission.id,
-        role: "engineer"
-      })
-
-      Repo.insert!(%MissionMembership{
-        user_id: mission_operator.id,
-        mission_id: mission.id,
-        role: "operator"
-      })
-
-      Repo.insert!(%MissionMembership{
-        user_id: mission_viewer.id,
-        mission_id: mission.id,
-        role: "viewer"
-      })
-
-      # Reload users with memberships
-      org_admin = Repo.preload(org_admin, [:organization_memberships], force: true)
-      mission_admin = Repo.preload(mission_admin, [:organization_memberships], force: true)
-      mission_engineer = Repo.preload(mission_engineer, [:organization_memberships], force: true)
-      mission_operator = Repo.preload(mission_operator, [:organization_memberships], force: true)
-      mission_viewer = Repo.preload(mission_viewer, [:organization_memberships], force: true)
-      non_member = Repo.preload(non_member, [:organization_memberships], force: true)
+      org_admin = build_user() |> with_org_membership(org, "admin")
+      mission_admin = build_user() |> with_mission_membership(mission, "admin")
+      mission_engineer = build_user() |> with_mission_membership(mission, "engineer")
+      mission_operator = build_user() |> with_mission_membership(mission, "operator")
+      mission_viewer = build_user() |> with_mission_membership(mission, "viewer")
+      non_member = build_user() |> with_org_membership(other_org, "member")
 
       %{
         org: org,
@@ -267,24 +167,10 @@ defmodule Cadence.Settings.PolicyTest do
 
   describe "mission settings with Scope" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      engineer = user_fixture()
-
-      Repo.insert!(%OrganizationMembership{
-        user_id: engineer.id,
-        organization_id: org.id,
-        role: "member"
-      })
-
-      Repo.insert!(%MissionMembership{
-        user_id: engineer.id,
-        mission_id: mission.id,
-        role: "engineer"
-      })
-
-      engineer = Repo.preload(engineer, [:organization_memberships], force: true)
-      scope = Scope.for_user(engineer, current_organization_id: org.id)
+      org = build_org()
+      mission = build_mission(org)
+      engineer = build_user() |> with_mission_membership(mission, "engineer")
+      scope = build_scope(engineer, current_org: org)
 
       %{mission: mission, scope: scope}
     end
@@ -297,14 +183,18 @@ defmodule Cadence.Settings.PolicyTest do
 
   describe "system admin authorization" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
+      org = build_org()
+      mission = build_mission(org)
 
       # Create a system admin (no org memberships needed)
-      system_admin = user_fixture()
-      system_admin = %{system_admin | system_admin: true}
+      system_admin = build_user(system_admin: true)
 
-      scope = %Scope{user: system_admin, system_admin?: true}
+      scope = %Scope{
+        user: system_admin,
+        current_organization: org,
+        all_organizations: [org],
+        system_admin?: true
+      }
 
       %{org: org, mission: mission, system_admin: system_admin, scope: scope}
     end
@@ -340,5 +230,63 @@ defmodule Cadence.Settings.PolicyTest do
     test "system admin scope can manage mission settings", %{mission: mission, scope: scope} do
       assert :ok = Bodyguard.permit(Policy, :manage_settings, scope, mission)
     end
+  end
+
+  defp build_org do
+    %Organization{
+      id: random_id(),
+      name: unique_string("org"),
+      slug: unique_string("org")
+    }
+  end
+
+  defp build_mission(%Organization{id: org_id}) do
+    %Mission{
+      id: random_id(),
+      organization_id: org_id,
+      name: unique_string("mission"),
+      slug: unique_string("mission")
+    }
+  end
+
+  defp build_user(opts \\ []) do
+    %User{
+      id: random_id(),
+      email: unique_email(),
+      organization_memberships: Keyword.get(opts, :organization_memberships, []),
+      mission_memberships: Keyword.get(opts, :mission_memberships, []),
+      system_admin: Keyword.get(opts, :system_admin, false)
+    }
+  end
+
+  defp build_scope(%User{} = user, opts) do
+    current_org = Keyword.get(opts, :current_org)
+
+    %Scope{
+      user: user,
+      current_organization: current_org,
+      all_organizations: if(current_org, do: [current_org], else: []),
+      system_admin?: user.system_admin
+    }
+  end
+
+  defp with_org_membership(%User{} = user, %Organization{id: org_id}, role) do
+    membership = %OrganizationMembership{
+      user_id: user.id,
+      organization_id: org_id,
+      role: role
+    }
+
+    %{user | organization_memberships: [membership | user.organization_memberships]}
+  end
+
+  defp with_mission_membership(%User{} = user, %Mission{id: mission_id}, role) do
+    membership = %MissionMembership{
+      user_id: user.id,
+      mission_id: mission_id,
+      role: role
+    }
+
+    %{user | mission_memberships: [membership | user.mission_memberships]}
   end
 end

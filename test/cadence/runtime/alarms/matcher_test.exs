@@ -238,7 +238,7 @@ defmodule Cadence.Runtime.Alarms.MatcherTest do
   end
 
   # Helper to build test events
-  defp build_event(attrs \\ []) do
+  defp build_event(attrs) do
     TelemetryLimitEvent.new(%{
       mission_id: Keyword.get(attrs, :mission_id, "mission-123"),
       target_id: Keyword.get(attrs, :target_id, "SAT-1"),

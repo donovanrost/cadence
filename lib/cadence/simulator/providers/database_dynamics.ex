@@ -205,37 +205,37 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
     {value, new_indices}
   end
 
+  defp generate_typed_value(%{data_type: "float"} = item, step, noise_amp) do
+    generate_float(item, step, noise_amp, item.limits || %{})
+  end
+
+  defp generate_typed_value(%{data_type: "uint"} = item, step, _noise_amp) do
+    generate_uint(item, step, item.limits || %{})
+  end
+
+  defp generate_typed_value(%{data_type: "int"} = item, step, _noise_amp) do
+    generate_int(item, step, item.limits || %{})
+  end
+
+  defp generate_typed_value(%{data_type: "boolean"}, step, _noise_amp) do
+    # Toggle every 20 steps
+    rem(div(step, 20), 2) == 0
+  end
+
+  defp generate_typed_value(%{data_type: "string"} = item, step, _noise_amp) do
+    # Return a placeholder string
+    "#{item.packet_name}_#{item.name}_v#{step}"
+  end
+
+  defp generate_typed_value(%{data_type: "binary"} = item, _step, _noise_amp) do
+    # Generate random bytes based on bit_size
+    byte_size = div(item.bit_size || 8, 8)
+    :crypto.strong_rand_bytes(byte_size)
+  end
+
   defp generate_typed_value(item, step, noise_amp) do
-    data_type = item.data_type
-    limits = item.limits || %{}
-
-    case data_type do
-      "float" ->
-        generate_float(item, step, noise_amp, limits)
-
-      "uint" ->
-        generate_uint(item, step, limits)
-
-      "int" ->
-        generate_int(item, step, limits)
-
-      "boolean" ->
-        # Toggle every 20 steps
-        rem(div(step, 20), 2) == 0
-
-      "string" ->
-        # Return a placeholder string
-        "#{item.packet_name}_#{item.name}_v#{step}"
-
-      "binary" ->
-        # Generate random bytes based on bit_size
-        byte_size = div(item.bit_size || 8, 8)
-        :crypto.strong_rand_bytes(byte_size)
-
-      _ ->
-        # Default to float-like behavior
-        generate_float(item, step, noise_amp, limits)
-    end
+    # Default to float-like behavior
+    generate_float(item, step, noise_amp, item.limits || %{})
   end
 
   defp generate_float(item, step, noise_amp, limits) do
@@ -258,40 +258,41 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
   end
 
   defp get_float_range(limits, item) do
-    # Try to extract range from limits
-    min_from_limits =
-      limits["red_low"] || limits["yellow_low"]
-
-    max_from_limits =
-      limits["red_high"] || limits["yellow_high"]
-
-    cond do
-      min_from_limits && max_from_limits ->
-        {min_from_limits, max_from_limits}
-
-      # Guess based on common patterns
-      String.contains?(item.name, "temp") ->
-        {-40.0, 85.0}
-
-      String.contains?(item.name, "voltage") ->
-        {0.0, 50.0}
-
-      String.contains?(item.name, "current") ->
-        {-10.0, 10.0}
-
-      String.contains?(item.name, "percent") || String.contains?(item.name, "soc") ->
-        {0.0, 100.0}
-
-      String.contains?(item.name, "rate") ->
-        {-5.0, 5.0}
-
-      String.contains?(item.name, "angle") || String.contains?(item.name, "roll") ||
-        String.contains?(item.name, "pitch") || String.contains?(item.name, "yaw") ->
-        {-180.0, 180.0}
-
-      true ->
-        {0.0, 100.0}
+    case range_from_limits(limits) do
+      {:ok, range} -> range
+      :error -> infer_float_range(item.name)
     end
+  end
+
+  defp range_from_limits(limits) do
+    min_from_limits = limits["red_low"] || limits["yellow_low"]
+    max_from_limits = limits["red_high"] || limits["yellow_high"]
+
+    if min_from_limits && max_from_limits do
+      {:ok, {min_from_limits, max_from_limits}}
+    else
+      :error
+    end
+  end
+
+  defp infer_float_range(name) do
+    range =
+      Enum.find_value(float_range_keywords(), fn {keywords, range} ->
+        if Enum.any?(keywords, &String.contains?(name, &1)), do: range, else: nil
+      end)
+
+    range || {0.0, 100.0}
+  end
+
+  defp float_range_keywords do
+    [
+      {["temp"], {-40.0, 85.0}},
+      {["voltage"], {0.0, 50.0}},
+      {["current"], {-10.0, 10.0}},
+      {["percent", "soc"], {0.0, 100.0}},
+      {["rate"], {-5.0, 5.0}},
+      {["angle", "roll", "pitch", "yaw"], {-180.0, 180.0}}
+    ]
   end
 
   defp generate_uint(item, step, limits) do

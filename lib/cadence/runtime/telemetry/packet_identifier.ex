@@ -424,9 +424,7 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     end
   end
 
-  defp decode_simulator_packet(
-         <<packet_type_byte::8, target_id_len::8, rest::binary>>
-       ) do
+  defp decode_simulator_packet(<<packet_type_byte::8, target_id_len::8, rest::binary>>) do
     if byte_size(rest) >= target_id_len do
       <<target_id::binary-size(target_id_len), _payload::binary>> = rest
       {:ok, packet_type_byte, target_id}
@@ -443,8 +441,13 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     maybe_insert_packet_apid(table_name, definition_set_id, container, packet_map)
   end
 
-  defp maybe_insert_packet_type(_table_name, _definition_set_id, %{packet_type: nil}, _packet_map),
-    do: :ok
+  defp maybe_insert_packet_type(
+         _table_name,
+         _definition_set_id,
+         %{packet_type: nil},
+         _packet_map
+       ),
+       do: :ok
 
   defp maybe_insert_packet_type(table_name, definition_set_id, container, packet_map) do
     :ets.insert(

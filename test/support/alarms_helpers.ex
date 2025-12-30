@@ -24,7 +24,7 @@ defmodule Cadence.AlarmsHelpers do
 
   import ExUnit.Assertions
 
-  alias Cadence.Alarms.Engine.AlarmManager
+  alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
 
   # ============================================================================

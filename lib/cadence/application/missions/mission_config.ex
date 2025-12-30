@@ -18,9 +18,15 @@ defmodule Cadence.Application.Missions.MissionConfig do
       {:ok, _pid} = MissionSupervisor.start_mission(config)
   """
 
+  alias Cadence.Application.Commanding.QueueSnapshotLoader
   alias Cadence.Application.Interfaces.InterfaceQueries
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
+  alias Cadence.Repo
+  alias Cadence.Telemetry.Database.DerivedItem
+  alias Cadence.Telemetry.Packet.PacketDefinition
+
+  import Ecto.Query
 
   require Logger
 
@@ -31,10 +37,11 @@ defmodule Cadence.Application.Missions.MissionConfig do
           mission: map(),
           interfaces: list(),
           targets: list(),
-          packet_defs: map(),
+          queue_snapshots: map(),
+          packet_defs: list(),
           command_defs: map(),
           limit_defs: map(),
-          derived_item_defs: map(),
+          derived_item_defs: list(),
           alarm_rules: list(),
           automations: list()
         }
@@ -46,10 +53,11 @@ defmodule Cadence.Application.Missions.MissionConfig do
     :mission,
     interfaces: [],
     targets: [],
-    packet_defs: %{},
+    queue_snapshots: %{},
+    packet_defs: [],
     command_defs: %{},
     limit_defs: %{},
-    derived_item_defs: %{},
+    derived_item_defs: [],
     alarm_rules: [],
     automations: []
   ]
@@ -65,6 +73,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     with {:ok, mission} <- load_mission(mission_id),
          {:ok, interfaces} <- load_interfaces(mission_id),
          {:ok, targets} <- load_targets(mission_id),
+         {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
          {:ok, command_defs} <- load_command_definitions(mission_id),
          {:ok, limit_defs} <- load_limit_definitions(mission_id),
@@ -79,6 +88,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          mission: mission,
          interfaces: interfaces,
          targets: targets,
+         queue_snapshots: queue_snapshots,
          packet_defs: packet_defs,
          command_defs: command_defs,
          limit_defs: limit_defs,
@@ -116,10 +126,24 @@ defmodule Cadence.Application.Missions.MissionConfig do
       {:ok, []}
   end
 
-  defp load_packet_definitions(_mission_id) do
-    # TODO: Load packet definitions from definition sets
-    # For now, return empty map - PacketIdentifier ETS cache still works
-    {:ok, %{}}
+  defp load_packet_definitions(mission_id) do
+    # Load packet definitions for this mission, including items for limits config.
+    packet_defs =
+      from(pd in PacketDefinition,
+        where: pd.mission_id == ^mission_id,
+        preload: [:packet_items]
+      )
+      |> Repo.all()
+
+    {:ok, packet_defs}
+  end
+
+  defp load_queue_snapshots(mission_id, targets) do
+    QueueSnapshotLoader.load_for_mission(mission_id, targets)
+  rescue
+    e ->
+      Logger.warning("Failed to load queue snapshots for mission #{mission_id}: #{inspect(e)}")
+      {:ok, %{}}
   end
 
   defp load_command_definitions(_mission_id) do
@@ -129,15 +153,15 @@ defmodule Cadence.Application.Missions.MissionConfig do
   end
 
   defp load_limit_definitions(_mission_id) do
-    # TODO: Load limit definitions
-    # For now, return empty map - Limits.Cache ETS still works
+    # Limits are derived from packet definitions and target active_limit_set.
+    # Cache warming uses MissionConfig.packet_defs + targets, so keep this empty.
     {:ok, %{}}
   end
 
-  defp load_derived_items(_mission_id) do
-    # TODO: Load derived item definitions
-    # For now, return empty map - DerivedItems.Cache ETS still works
-    {:ok, %{}}
+  defp load_derived_items(mission_id) do
+    derived_items = DerivedItem.list_enabled(mission_id)
+    derived_defs = Enum.map(derived_items, &DerivedItem.to_compute_format/1)
+    {:ok, derived_defs}
   end
 
   defp load_alarm_rules(_mission_id) do

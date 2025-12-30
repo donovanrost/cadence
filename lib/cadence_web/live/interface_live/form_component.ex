@@ -164,20 +164,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
     available_targets = Map.get(assigns, :targets, [])
 
     # Load current target associations if editing an existing interface
-    selected_targets =
-      if interface.id do
-        interface
-        |> Interfaces.list_targets_for_interface()
-        |> Enum.map(fn target ->
-          # Get the direction from the join table
-          target_interface = Interfaces.get_target_interface(target, interface)
-          direction = if target_interface, do: target_interface.direction, else: "read_write"
-          {target.id, direction}
-        end)
-        |> Map.new()
-      else
-        %{}
-      end
+    selected_targets = load_selected_targets(interface)
 
     {:ok,
      socket
@@ -186,6 +173,19 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
      |> assign(:available_targets, available_targets)
      |> assign(:selected_targets, selected_targets)
      |> assign_form(changeset)}
+  end
+
+  defp load_selected_targets(%{id: nil}), do: %{}
+
+  defp load_selected_targets(interface) do
+    interface
+    |> Interfaces.list_targets_for_interface()
+    |> Enum.map(fn target ->
+      target_interface = Interfaces.get_target_interface(target, interface)
+      direction = if target_interface, do: target_interface.direction, else: "read_write"
+      {target.id, direction}
+    end)
+    |> Map.new()
   end
 
   @impl true

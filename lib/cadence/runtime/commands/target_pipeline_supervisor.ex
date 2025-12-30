@@ -4,11 +4,11 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
   ## Data Plane Architecture
 
-  This supervisor loads target domain entities ONCE at startup and injects
-  them into GenServers. No database calls happen during runtime operation.
+  This supervisor receives target domain entities from MissionConfig and
+  injects them into GenServers. No database calls happen during runtime.
 
   When a mission starts, this supervisor:
-  1. Loads all target entities with definition_sets preloaded
+  1. Receives targets from MissionConfig
   2. Starts a TargetPipeline (Queue + Dispatcher) for each target
   3. Monitors pipeline health and handles crashes
   4. Subscribes to config change events for hot reload
@@ -26,7 +26,7 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   ## Example
 
       # Started by MissionInstance supervision tree
-      {:ok, pid} = TargetPipelineSupervisor.start_link(mission_id: mission_id)
+      {:ok, pid} = TargetPipelineSupervisor.start_link(config: config)
 
       # Dynamically add a new target's pipeline (with domain entity)
       TargetPipelineSupervisor.start_pipeline(mission_id, target_entity)
@@ -38,28 +38,27 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   use GenServer
   require Logger
 
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.Missions
   alias Cadence.Runtime.Commands.TargetPipeline
-  alias Cadence.Targets
 
   @registry Cadence.MissionRegistry
 
   defmodule State do
     @moduledoc false
-    defstruct [:mission_id, :mission, :dynamic_sup, targets: %{}]
+    defstruct [:mission_id, :mission, :dynamic_sup, :queue_snapshots, targets: %{}]
   end
 
   ## Client API
 
   @doc """
-  Starts the TargetPipelineSupervisor for a mission.
+  Starts the TargetPipelineSupervisor for a mission using MissionConfig.
 
-  Automatically loads and starts pipelines for all targets in the mission.
+  Automatically starts pipelines for all targets in the config.
   """
   def start_link(opts) do
-    mission_id = Keyword.fetch!(opts, :mission_id)
-    GenServer.start_link(__MODULE__, mission_id, name: via_tuple(mission_id))
+    config = Keyword.fetch!(opts, :config)
+    GenServer.start_link(__MODULE__, config, name: via_tuple(config.mission_id))
   end
 
   @doc """
@@ -72,25 +71,6 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   """
   def start_pipeline(mission_id, %Target{} = target) do
     GenServer.call(via_tuple(mission_id), {:start_pipeline, target})
-  end
-
-  @doc """
-  Starts a pipeline for a specific target by ID, loading it from the database.
-
-  This is a convenience function for cases where the entity is not
-  already loaded. For hot reload scenarios, prefer `start_pipeline/2`
-  with a pre-loaded entity.
-
-  Returns `{:ok, pid}` or `{:error, reason}`.
-  """
-  def start_pipeline_by_id(mission_id, target_id) do
-    case Targets.get_target_with_definition_set(target_id) do
-      {:ok, target} ->
-        start_pipeline(mission_id, target)
-
-      {:error, :not_found} ->
-        {:error, :target_not_found}
-    end
   end
 
   @doc """
@@ -119,21 +99,6 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   end
 
   @doc """
-  Restarts a pipeline by ID, reloading from database.
-
-  Convenience function for manual restarts.
-  """
-  def restart_pipeline_by_id(mission_id, target_id) do
-    case Targets.get_target_with_definition_set(target_id) do
-      {:ok, target} ->
-        restart_pipeline(mission_id, target)
-
-      {:error, :not_found} ->
-        {:error, :target_not_found}
-    end
-  end
-
-  @doc """
   Returns the PID of the supervisor for a mission.
   """
   def whereis(mission_id) do
@@ -146,29 +111,28 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   ## Server Callbacks
 
   @impl true
-  def init(mission_id) do
-    Logger.info("Starting TargetPipelineSupervisor for mission #{mission_id}")
+  def init(%MissionConfig{} = config) do
+    Logger.info("Starting TargetPipelineSupervisor for mission #{config.mission_id}")
 
     # Start a DynamicSupervisor for managing pipeline children
     {:ok, dynamic_sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     # Subscribe to target changes for hot reload
-    topic = "targets:#{mission_id}"
+    topic = "targets:#{config.mission_id}"
     Phoenix.PubSub.subscribe(Cadence.PubSub, topic)
     Logger.debug("Subscribed to #{topic} for pipeline hot reload")
 
     # Load mission entity once
-    mission = Missions.get_mission!(mission_id)
-
     state = %State{
-      mission_id: mission_id,
-      mission: mission,
+      mission_id: config.mission_id,
+      mission: config.mission,
       dynamic_sup: dynamic_sup,
+      queue_snapshots: config.queue_snapshots,
       targets: %{}
     }
 
     # Load and start all pipelines asynchronously
-    send(self(), :load_pipelines)
+    send(self(), {:load_pipelines, config.targets})
 
     {:ok, state}
   end
@@ -213,8 +177,8 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   end
 
   @impl true
-  def handle_info(:load_pipelines, state) do
-    new_state = load_and_start_pipelines(state)
+  def handle_info({:load_pipelines, targets}, state) do
+    new_state = load_and_start_pipelines(state, targets)
     {:noreply, new_state}
   end
 
@@ -331,7 +295,11 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
     if target.mission_id != state.mission_id do
       {:error, :target_not_in_mission}
     else
-      child_spec = {TargetPipeline, mission: state.mission, target: target}
+      snapshot = Map.get(state.queue_snapshots || %{}, target.id)
+
+      child_spec =
+        {TargetPipeline, mission: state.mission, target: target, queue_snapshot: snapshot}
+
       DynamicSupervisor.start_child(state.dynamic_sup, child_spec)
     end
   end
@@ -352,26 +320,13 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
     end
   end
 
-  defp load_and_start_pipelines(state) do
+  defp load_and_start_pipelines(state, targets) do
     Logger.info("Loading target pipelines for mission #{state.mission_id}")
-
-    # Load all targets with definition_sets preloaded - this is the ONLY DB call
-    targets = Targets.list_targets(state.mission_id)
-
-    # Load definition_sets for each target
-    targets_with_ds =
-      Enum.map(targets, fn target ->
-        case Targets.get_target_with_definition_set(target.id) do
-          {:ok, t} -> t
-          {:error, _} -> target
-        end
-      end)
-
-    Logger.info("Found #{length(targets_with_ds)} target(s) for mission #{state.mission_id}")
+    Logger.info("Found #{length(targets)} target(s) for mission #{state.mission_id}")
 
     # Start pipelines and collect targets map
     targets_map =
-      Enum.reduce(targets_with_ds, %{}, fn target, acc ->
+      Enum.reduce(targets, %{}, fn target, acc ->
         case do_start_pipeline(target, state) do
           {:ok, pid} ->
             Logger.info(

@@ -195,46 +195,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   def handle_info(:accept, %State{listen_socket: listen_socket} = state) do
     case :gen_tcp.accept(listen_socket, 100) do
       {:ok, client_socket} ->
-        {:ok, {address, port}} = :inet.peername(client_socket)
-        address_str = :inet.ntoa(address) |> to_string()
-
-        Logger.info("New client connected from #{address_str}:#{port}")
-
-        if map_size(state.clients) >= state.max_clients do
-          Logger.warning("Max clients (#{state.max_clients}) reached, rejecting connection")
-          :gen_tcp.close(client_socket)
-          send(self(), :accept)
-          {:noreply, state}
-        else
-          # Clone the protocol chain for this client
-          protocol_chain = clone_protocol_chain_for_client(state.interface.id)
-
-          client_state = %ClientState{
-            socket: client_socket,
-            remote_address: address_str,
-            remote_port: port,
-            protocol_chain: protocol_chain,
-            connected_at: DateTime.utc_now()
-          }
-
-          :inet.setopts(client_socket, active: true)
-
-          new_clients = Map.put(state.clients, client_socket, client_state)
-          send(self(), :accept)
-
-          new_state = %{
-            state
-            | clients: new_clients,
-              total_clients_connected: state.total_clients_connected + 1
-          }
-
-          # Broadcast connection event when first client connects
-          if map_size(state.clients) == 0 do
-            broadcast_connection_event(new_state, :disconnected, :connected, client_state)
-          end
-
-          {:noreply, new_state}
-        end
+        handle_client_accept(client_socket, state)
 
       {:error, :timeout} ->
         send(self(), :accept)
@@ -255,66 +216,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         {:noreply, state}
 
       client_state ->
-        updated_client_state = %{
-          client_state
-          | bytes_received: client_state.bytes_received + byte_size(data)
-        }
-
-        # Process through the client's protocol chain
-        case process_incoming_data(data, updated_client_state, state) do
-          {:ok, packets_with_format, new_chain} ->
-            # Publish packets to PubSub for Broadway to process
-            Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
-              target_id = List.first(state.target_ids) || "unknown"
-
-              metadata = %{
-                mission_id: state.interface.mission_id,
-                stored: false,
-                target_id: target_id,
-                received_at: DateTime.utc_now(),
-                interface_id: state.interface.id,
-                client_address: client_state.remote_address,
-                client_port: client_state.remote_port
-              }
-
-              # Construct Packet struct based on format from protocol chain
-              packet = construct_packet(packet_binary, metadata, format)
-
-              Phoenix.PubSub.broadcast(
-                Cadence.PubSub,
-                "mission:#{state.interface.mission_id}:telemetry:raw",
-                {:telemetry_packet, packet, metadata}
-              )
-            end)
-
-            updated_client_state = %{
-              updated_client_state
-              | protocol_chain: new_chain,
-                packets_received: client_state.packets_received + length(packets_with_format)
-            }
-
-            new_clients = Map.put(state.clients, client_socket, updated_client_state)
-
-            {:noreply,
-             %{
-               state
-               | clients: new_clients,
-                 bytes_received: state.bytes_received + byte_size(data),
-                 packets_received: state.packets_received + length(packets_with_format)
-             }}
-
-          {:stop, new_chain} ->
-            updated_client_state = %{updated_client_state | protocol_chain: new_chain}
-            new_clients = Map.put(state.clients, client_socket, updated_client_state)
-            {:noreply, %{state | clients: new_clients}}
-
-          {:disconnect, reason} ->
-            Logger.warning(
-              "Protocol error for client #{client_state.remote_address}:#{client_state.remote_port}: #{reason}"
-            )
-
-            handle_client_disconnect(client_socket, state)
-        end
+        handle_client_data(client_socket, data, client_state, state)
     end
   end
 
@@ -390,38 +292,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         {:reply, {:error, :no_clients_connected}, state}
 
       count ->
-        if count > 1 do
-          Logger.warning(
-            "Broadcasting command to #{count} clients - target-specific routing not yet implemented"
-          )
-        end
-
-        {successful, failed} =
-          Enum.reduce(state.clients, {0, 0}, fn {socket, client_state}, {ok, err} ->
-            case :gen_tcp.send(socket, data) do
-              :ok ->
-                Logger.debug(
-                  "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
-                )
-
-                {ok + 1, err}
-
-              {:error, reason} ->
-                Logger.warning(
-                  "Failed to send to #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)}"
-                )
-
-                {ok, err + 1}
-            end
-          end)
-
-        new_state = %{state | bytes_sent: state.bytes_sent + byte_size(data) * successful}
-
-        if successful > 0 do
-          {:reply, :ok, new_state}
-        else
-          {:reply, {:error, :all_sends_failed, failed}, state}
-        end
+        warn_if_broadcasting(count)
+        {successful, failed} = send_to_all_clients(state.clients, data)
+        new_state = update_bytes_sent(state, data, successful)
+        reply_for_broadcast(successful, failed, new_state, state)
     end
   end
 
@@ -465,6 +339,179 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   ## Private Functions
+
+  defp handle_client_accept(client_socket, state) do
+    {:ok, {address, port}} = :inet.peername(client_socket)
+    address_str = :inet.ntoa(address) |> to_string()
+
+    Logger.info("New client connected from #{address_str}:#{port}")
+
+    if map_size(state.clients) >= state.max_clients do
+      reject_client(client_socket, state)
+    else
+      accept_client(client_socket, address_str, port, state)
+    end
+  end
+
+  defp reject_client(client_socket, state) do
+    Logger.warning("Max clients (#{state.max_clients}) reached, rejecting connection")
+    :gen_tcp.close(client_socket)
+    send(self(), :accept)
+    {:noreply, state}
+  end
+
+  defp accept_client(client_socket, address_str, port, state) do
+    protocol_chain = clone_protocol_chain_for_client(state.interface.id)
+
+    client_state = %ClientState{
+      socket: client_socket,
+      remote_address: address_str,
+      remote_port: port,
+      protocol_chain: protocol_chain,
+      connected_at: DateTime.utc_now()
+    }
+
+    :inet.setopts(client_socket, active: true)
+
+    new_clients = Map.put(state.clients, client_socket, client_state)
+    send(self(), :accept)
+
+    new_state = %{
+      state
+      | clients: new_clients,
+        total_clients_connected: state.total_clients_connected + 1
+    }
+
+    maybe_broadcast_connect(state, new_state, client_state)
+    {:noreply, new_state}
+  end
+
+  defp maybe_broadcast_connect(state, new_state, client_state) do
+    if map_size(state.clients) == 0 do
+      broadcast_connection_event(new_state, :disconnected, :connected, client_state)
+    end
+  end
+
+  defp handle_client_data(client_socket, data, client_state, state) do
+    updated_client_state = %{
+      client_state
+      | bytes_received: client_state.bytes_received + byte_size(data)
+    }
+
+    case process_incoming_data(data, updated_client_state, state) do
+      {:ok, packets_with_format, new_chain} ->
+        handle_incoming_packets(
+          packets_with_format,
+          new_chain,
+          client_socket,
+          updated_client_state,
+          state,
+          byte_size(data)
+        )
+
+      {:stop, new_chain} ->
+        updated_client_state = %{updated_client_state | protocol_chain: new_chain}
+        new_clients = Map.put(state.clients, client_socket, updated_client_state)
+        {:noreply, %{state | clients: new_clients}}
+
+      {:disconnect, reason} ->
+        Logger.warning(
+          "Protocol error for client #{client_state.remote_address}:#{client_state.remote_port}: #{reason}"
+        )
+
+        handle_client_disconnect(client_socket, state)
+    end
+  end
+
+  defp handle_incoming_packets(
+         packets_with_format,
+         new_chain,
+         client_socket,
+         client_state,
+         state,
+         data_size
+       ) do
+    target_id = List.first(state.target_ids) || "unknown"
+    broadcast_packets(packets_with_format, client_state, state, target_id)
+
+    updated_client_state = %{
+      client_state
+      | protocol_chain: new_chain,
+        packets_received: client_state.packets_received + length(packets_with_format)
+    }
+
+    new_clients = Map.put(state.clients, client_socket, updated_client_state)
+
+    {:noreply,
+     %{
+       state
+       | clients: new_clients,
+         bytes_received: state.bytes_received + data_size,
+         packets_received: state.packets_received + length(packets_with_format)
+     }}
+  end
+
+  defp broadcast_packets(packets_with_format, client_state, state, target_id) do
+    Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
+      metadata = %{
+        mission_id: state.interface.mission_id,
+        stored: false,
+        target_id: target_id,
+        received_at: DateTime.utc_now(),
+        interface_id: state.interface.id,
+        client_address: client_state.remote_address,
+        client_port: client_state.remote_port
+      }
+
+      packet = construct_packet(packet_binary, metadata, format)
+
+      Phoenix.PubSub.broadcast(
+        Cadence.PubSub,
+        "mission:#{state.interface.mission_id}:telemetry:raw",
+        {:telemetry_packet, packet, metadata}
+      )
+    end)
+  end
+
+  defp warn_if_broadcasting(count) when count > 1 do
+    Logger.warning(
+      "Broadcasting command to #{count} clients - target-specific routing not yet implemented"
+    )
+  end
+
+  defp warn_if_broadcasting(_count), do: :ok
+
+  defp send_to_all_clients(clients, data) do
+    Enum.reduce(clients, {0, 0}, fn {socket, client_state}, {ok, err} ->
+      case :gen_tcp.send(socket, data) do
+        :ok ->
+          Logger.debug(
+            "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
+          )
+
+          {ok + 1, err}
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to send to #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)}"
+          )
+
+          {ok, err + 1}
+      end
+    end)
+  end
+
+  defp update_bytes_sent(state, data, successful) do
+    %{state | bytes_sent: state.bytes_sent + byte_size(data) * successful}
+  end
+
+  defp reply_for_broadcast(successful, _failed, new_state, _state) when successful > 0 do
+    {:reply, :ok, new_state}
+  end
+
+  defp reply_for_broadcast(_successful, failed, _new_state, state) do
+    {:reply, {:error, :all_sends_failed, failed}, state}
+  end
 
   defp start_protocol_chain(mission_id, interface_id, protocols) do
     case ProtocolChainSupervisor.start_chain(mission_id, interface_id, protocols: protocols) do

@@ -136,29 +136,41 @@ defmodule Cadence.Simulator.Scenario.Parser do
   end
 
   defp parse_timeline(data) do
-    case Map.get(data, "timeline", []) do
-      timeline when is_list(timeline) ->
-        events =
-          timeline
-          |> Enum.with_index()
-          |> Enum.map(fn {event, idx} -> parse_timeline_event(event, idx) end)
+    timeline = Map.get(data, "timeline", [])
 
-        errors = Enum.filter(events, &match?({:error, _}, &1))
-
-        if Enum.empty?(errors) do
-          sorted_events =
-            events
-            |> Enum.map(fn {:ok, e} -> e end)
-            |> Enum.sort_by(& &1.step)
-
-          {:ok, sorted_events}
-        else
-          {:error, {:timeline_errors, Enum.map(errors, fn {:error, e} -> e end)}}
-        end
-
-      _ ->
-        {:error, {:invalid_timeline, "timeline must be a list"}}
+    if is_list(timeline) do
+      parse_timeline_list(timeline)
+    else
+      {:error, {:invalid_timeline, "timeline must be a list"}}
     end
+  end
+
+  defp parse_timeline_list(timeline) do
+    events =
+      timeline
+      |> Enum.with_index()
+      |> Enum.map(fn {event, idx} -> parse_timeline_event(event, idx) end)
+
+    case timeline_errors(events) do
+      [] -> {:ok, sorted_timeline(events)}
+      errors -> {:error, {:timeline_errors, errors}}
+    end
+  end
+
+  defp timeline_errors(events) do
+    Enum.flat_map(events, fn
+      {:error, error} -> [error]
+      _ -> []
+    end)
+  end
+
+  defp sorted_timeline(events) do
+    events
+    |> Enum.flat_map(fn
+      {:ok, event} -> [event]
+      _ -> []
+    end)
+    |> Enum.sort_by(& &1.step)
   end
 
   defp parse_timeline_event(event, index) when is_map(event) do
@@ -222,5 +234,10 @@ defmodule Cadence.Simulator.Scenario.Parser do
   defp parse_pattern_type("ramp"), do: :ramp
   defp parse_pattern_type("spike"), do: :spike
   defp parse_pattern_type("sine"), do: :sine
-  defp parse_pattern_type(other), do: String.to_atom(other)
+  defp parse_pattern_type(type) when is_atom(type), do: type
+
+  defp parse_pattern_type(other) do
+    Logger.warning("Unknown pattern type: #{inspect(other)}")
+    :unknown
+  end
 end

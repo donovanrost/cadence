@@ -124,35 +124,28 @@ defmodule CadenceWeb.MissionLive.Interfaces do
 
   @impl true
   def handle_event("delete", %{"id" => interface_id}, socket) do
-    interface = Interfaces.get_interface!(interface_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
+    with {:ok, interface} <- fetch_interface(socket, interface_id),
+         :ok <- authorize_manage_interfaces(socket),
+         {:ok, _} <- Interfaces.delete_interface(interface) do
+      interfaces = list_interfaces(socket)
+      interface_protocol_counts = build_protocol_counts(interfaces)
+      interface_targets = build_interface_targets(interfaces)
 
-    if interface.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Interfaces.delete_interface(interface) do
-            {:ok, _} ->
-              interfaces = Interfaces.list_interfaces(mission)
-              interface_protocol_counts = build_protocol_counts(interfaces)
-              interface_targets = build_interface_targets(interfaces)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Interface deleted successfully")
-               |> assign(:interfaces, interfaces)
-               |> assign(:interface_protocol_counts, interface_protocol_counts)
-               |> assign(:interface_targets, interface_targets)}
-
-            {:error, _changeset} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete interface")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete interfaces")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Interface deleted successfully")
+       |> assign(:interfaces, interfaces)
+       |> assign(:interface_protocol_counts, interface_protocol_counts)
+       |> assign(:interface_targets, interface_targets)}
     else
-      {:noreply, put_flash(socket, :error, "Interface not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Interface not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete interfaces")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete interface")}
     end
   end
 
@@ -176,6 +169,36 @@ defmodule CadenceWeb.MissionLive.Interfaces do
       {interface.id, targets}
     end)
     |> Map.new()
+  end
+
+  defp fetch_interface(socket, interface_id) do
+    mission = socket.assigns.mission
+
+    case Interfaces.get_interface(interface_id) do
+      nil ->
+        {:error, :not_found}
+
+      interface ->
+        if interface.mission_id == mission.id do
+          {:ok, interface}
+        else
+          {:error, :not_found}
+        end
+    end
+  end
+
+  defp authorize_manage_interfaces(socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp list_interfaces(socket) do
+    Interfaces.list_interfaces(socket.assigns.mission)
   end
 
   # Build initial connection status - starts as disconnected, updated via PubSub

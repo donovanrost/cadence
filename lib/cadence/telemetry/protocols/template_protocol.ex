@@ -121,85 +121,111 @@ defmodule Cadence.Telemetry.Protocols.TemplateProtocol do
     sync_size = byte_size(state.sync_pattern)
     header_size = state.header_length
 
-    # Search for sync pattern
-    case find_sync_pattern(buffer, state.sync_pattern) do
+    case next_packet(buffer, state, sync_size, header_size) do
+      {:emit, packet, remaining, new_state} ->
+        extract_packets(remaining, new_state, [packet | acc])
+
+      {:need_more, new_buffer, new_state} ->
+        return_packets(acc, %{new_state | buffer: new_buffer})
+
+      {:disconnect, reason} ->
+        {:disconnect, reason}
+    end
+  end
+
+  defp next_packet(buffer, state, sync_size, header_size) do
+    case locate_sync(buffer, state.sync_pattern, sync_size) do
+      {:ok, synced_buffer} ->
+        extract_from_synced(synced_buffer, state, sync_size, header_size)
+
+      {:need_more, new_buffer} ->
+        {:need_more, new_buffer, state}
+    end
+  end
+
+  defp extract_from_synced(synced_buffer, state, sync_size, header_size) do
+    with {:ok, header} <- extract_header(synced_buffer, sync_size, header_size),
+         {:ok, payload_size} <- payload_size_from_header(header, state, header_size),
+         {:ok, packet, remaining} <-
+           extract_packet(synced_buffer, sync_size, header_size, payload_size) do
+      packet = maybe_discard_leading(packet, state)
+      new_state = %{state | packets_extracted: state.packets_extracted + 1}
+      {:emit, packet, remaining, new_state}
+    else
+      {:need_more, new_buffer} ->
+        {:need_more, new_buffer, state}
+
+      {:error, reason} ->
+        {:disconnect, reason}
+
+      {:disconnect, reason} ->
+        {:disconnect, reason}
+    end
+  end
+
+  defp locate_sync(buffer, sync_pattern, sync_size) do
+    case find_sync_pattern(buffer, sync_pattern) do
       {:ok, sync_offset} ->
-        # Found sync, skip to it
-        buffer = binary_part(buffer, sync_offset, byte_size(buffer) - sync_offset)
-
-        # Check if we have complete header
-        if byte_size(buffer) < sync_size + header_size do
-          # Need more data for header
-          return_packets(acc, %{state | buffer: buffer})
-        else
-          # Extract header
-          <<_sync::binary-size(sync_size), header::binary-size(header_size), _rest::binary>> =
-            buffer
-
-          # Parse length field from header
-          length_byte_offset = state.length_offset
-          length_byte_size = div(state.length_bit_size, 8)
-
-          if length_byte_offset + length_byte_size > header_size do
-            # Length field extends beyond header - protocol config error
-            {:disconnect,
-             "length field (offset #{length_byte_offset} + size #{length_byte_size}) extends beyond header (#{header_size} bytes)"}
-          else
-            <<_before::binary-size(length_byte_offset),
-              length_bytes::binary-size(length_byte_size), _after::binary>> = header
-
-            # Decode length field
-            length_value = decode_length(length_bytes, state)
-
-            # Calculate payload size
-            # CCSDS: length field = payload_size - 1, so actual = length + 1
-            payload_size =
-              length_value * state.length_bytes_per_count + state.length_value_offset
-
-            # Total packet size
-            total_size = sync_size + header_size + payload_size
-
-            # Check if we have complete packet
-            if byte_size(buffer) >= total_size do
-              # Extract complete packet
-              <<packet::binary-size(total_size), remaining::binary>> = buffer
-
-              # Optionally discard leading bytes
-              packet =
-                if state.discard_leading_bytes > 0 and
-                     byte_size(packet) > state.discard_leading_bytes do
-                  binary_part(
-                    packet,
-                    state.discard_leading_bytes,
-                    byte_size(packet) - state.discard_leading_bytes
-                  )
-                else
-                  packet
-                end
-
-              new_state = %{state | packets_extracted: state.packets_extracted + 1}
-
-              # Continue extracting more packets
-              extract_packets(remaining, new_state, [packet | acc])
-            else
-              # Need more data for payload
-              return_packets(acc, %{state | buffer: buffer})
-            end
-          end
-        end
+        {:ok, binary_part(buffer, sync_offset, byte_size(buffer) - sync_offset)}
 
       :not_found ->
-        # No sync pattern found
-        # Keep last (sync_size - 1) bytes in case sync is split across reads
         keep_bytes = max(0, sync_size - 1)
 
         if byte_size(buffer) > keep_bytes do
           keep = binary_part(buffer, byte_size(buffer) - keep_bytes, keep_bytes)
-          return_packets(acc, %{state | buffer: keep})
+          {:need_more, keep}
         else
-          # Buffer entire thing
-          return_packets(acc, %{state | buffer: buffer})
+          {:need_more, buffer}
         end
+    end
+  end
+
+  defp extract_header(buffer, sync_size, header_size) do
+    if byte_size(buffer) < sync_size + header_size do
+      {:need_more, buffer}
+    else
+      <<_sync::binary-size(sync_size), header::binary-size(header_size), _rest::binary>> = buffer
+      {:ok, header}
+    end
+  end
+
+  defp extract_packet(buffer, sync_size, header_size, payload_size) do
+    total_size = sync_size + header_size + payload_size
+
+    if byte_size(buffer) >= total_size do
+      <<packet::binary-size(total_size), remaining::binary>> = buffer
+      {:ok, packet, remaining}
+    else
+      {:need_more, buffer}
+    end
+  end
+
+  defp payload_size_from_header(header, state, header_size) do
+    length_byte_offset = state.length_offset
+    length_byte_size = div(state.length_bit_size, 8)
+
+    if length_byte_offset + length_byte_size > header_size do
+      {:error,
+       "length field (offset #{length_byte_offset} + size #{length_byte_size}) extends beyond header (#{header_size} bytes)"}
+    else
+      <<_before::binary-size(length_byte_offset), length_bytes::binary-size(length_byte_size),
+        _after::binary>> = header
+
+      length_value = decode_length(length_bytes, state)
+      payload_size = length_value * state.length_bytes_per_count + state.length_value_offset
+      {:ok, payload_size}
+    end
+  end
+
+  defp maybe_discard_leading(packet, state) do
+    if state.discard_leading_bytes > 0 and byte_size(packet) > state.discard_leading_bytes do
+      binary_part(
+        packet,
+        state.discard_leading_bytes,
+        byte_size(packet) - state.discard_leading_bytes
+      )
+    else
+      packet
     end
   end
 

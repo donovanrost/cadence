@@ -95,12 +95,14 @@ defmodule CadenceWeb.MissionLive.Index do
     # Check if user can manage this mission (start/stop operations)
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.start_mission(id, org_id) do
+        case Missions.request_start(id, org_id) do
           {:ok, _mission} ->
-            {:noreply, put_flash(socket, :info, "Mission #{mission.name} started successfully")}
+            {:noreply,
+             put_flash(socket, :info, "Mission #{mission.name} start requested successfully")}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to start mission: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(socket, :error, "Failed to request mission start: #{inspect(reason)}")}
         end
 
       {:error, _} ->
@@ -117,12 +119,13 @@ defmodule CadenceWeb.MissionLive.Index do
     # Check if user can manage this mission (start/stop operations)
     case Bodyguard.permit(Cadence.Missions.Policy, :manage, scope, mission) do
       :ok ->
-        case Missions.stop_mission(id, org_id) do
+        case Missions.request_stop(id, org_id) do
           {:ok, _mission} ->
-            {:noreply, put_flash(socket, :info, "Mission stopped successfully")}
+            {:noreply, put_flash(socket, :info, "Mission stop requested successfully")}
 
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to stop mission: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(socket, :error, "Failed to request mission stop: #{inspect(reason)}")}
         end
 
       {:error, _} ->

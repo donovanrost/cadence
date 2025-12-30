@@ -100,45 +100,23 @@ defmodule Cadence.Telemetry.Protocols.TerminatedProtocol do
 
   # Recursive packet extraction
   defp extract_packets(buffer, state, acc) do
-    # First, handle sync pattern if configured
-    if state.sync_pattern do
-      case find_sync_pattern(buffer, state.sync_pattern) do
-        {:ok, offset} ->
-          # Skip to sync pattern and continue
-          sync_len = byte_size(state.sync_pattern)
-          <<_skip::binary-size(offset), sync::binary-size(sync_len), rest::binary>> = buffer
+    case locate_sync(buffer, state) do
+      {:ok, synced_buffer, sync_data} ->
+        case extract_packets_after_sync(synced_buffer, sync_data, state) do
+          {:emit, packet, remaining, new_state} ->
+            extract_packets(remaining, new_state, [packet | acc])
 
-          sync_data =
-            if state.fill_sync_pattern do
-              sync
-            else
-              <<>>
-            end
+          {:need_more, keep} ->
+            return_packets(acc, %{state | buffer: keep})
+        end
 
-          extract_packets_after_sync(rest, sync_data, state, acc)
-
-        :not_found ->
-          # Keep last N bytes in case sync is split across reads
-          keep_bytes = max(0, byte_size(state.sync_pattern) - 1)
-
-          keep =
-            if byte_size(buffer) > keep_bytes do
-              binary_part(buffer, byte_size(buffer) - keep_bytes, keep_bytes)
-            else
-              buffer
-            end
-
-          # Return early - no sync found
-          return_packets(acc, %{state | buffer: keep})
-      end
-    else
-      # No sync pattern - process directly
-      extract_packets_after_sync(buffer, <<>>, state, acc)
+      {:need_more, keep} ->
+        return_packets(acc, %{state | buffer: keep})
     end
   end
 
   # Continue extraction after sync pattern found (or no sync configured)
-  defp extract_packets_after_sync(buffer, sync_data, state, acc) do
+  defp extract_packets_after_sync(buffer, sync_data, state) do
     # Search for terminator
     case find_terminator(buffer, state.terminator) do
       {:ok, term_offset} ->
@@ -166,22 +144,44 @@ defmodule Cadence.Telemetry.Protocols.TerminatedProtocol do
 
         new_state = %{state | packets_extracted: state.packets_extracted + 1}
 
-        # Continue extracting more packets
-        extract_packets(remaining, new_state, [packet | acc])
+        {:emit, packet, remaining, new_state}
 
       :not_found ->
-        # No terminator found - buffer for more data
-        # If we extracted sync data, restore it to buffer for next read
-        buffer_to_keep =
-          if byte_size(sync_data) > 0 do
-            sync_data <> buffer
-          else
-            buffer
-          end
-
-        return_packets(acc, %{state | buffer: buffer_to_keep})
+        buffer_to_keep = restore_sync(sync_data, buffer)
+        {:need_more, buffer_to_keep}
     end
   end
+
+  defp locate_sync(buffer, %{sync_pattern: nil}), do: {:ok, buffer, <<>>}
+
+  defp locate_sync(buffer, %{sync_pattern: sync_pattern} = state) do
+    case find_sync_pattern(buffer, sync_pattern) do
+      {:ok, offset} ->
+        sync_len = byte_size(sync_pattern)
+        <<_skip::binary-size(offset), sync::binary-size(sync_len), rest::binary>> = buffer
+        sync_data = if state.fill_sync_pattern, do: sync, else: <<>>
+        {:ok, rest, sync_data}
+
+      :not_found ->
+        keep_tail(buffer, sync_pattern)
+    end
+  end
+
+  defp keep_tail(buffer, sync_pattern) do
+    keep_bytes = max(0, byte_size(sync_pattern) - 1)
+
+    keep =
+      if byte_size(buffer) > keep_bytes do
+        binary_part(buffer, byte_size(buffer) - keep_bytes, keep_bytes)
+      else
+        buffer
+      end
+
+    {:need_more, keep}
+  end
+
+  defp restore_sync(<<>>, buffer), do: buffer
+  defp restore_sync(sync_data, buffer), do: sync_data <> buffer
 
   # Helper to return accumulated packets
   defp return_packets([], state) do

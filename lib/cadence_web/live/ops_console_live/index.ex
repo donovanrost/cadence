@@ -450,65 +450,49 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   end
 
   def handle_event("rename_dashboard", %{"dashboard_id" => id, "name" => name}, socket) do
-    user = socket.assigns.current_scope.user
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, updated_layout} <- DashboardLayouts.save_layout(layout, %{name: name}) do
+      dashboards = update_layout_in_list(socket.assigns.dashboards, updated_layout)
+      current_layout = current_layout_after_update(socket, updated_layout)
 
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.save_layout(layout, %{name: name}) do
-          {:ok, updated_layout} ->
-            dashboards = update_layout_in_list(socket.assigns.dashboards, updated_layout)
-
-            current_layout =
-              if socket.assigns.current_layout.id == updated_layout.id do
-                updated_layout
-              else
-                socket.assigns.current_layout
-              end
-
-            {:noreply,
-             socket
-             |> assign(:dashboards, dashboards)
-             |> assign(:current_layout, current_layout)
-             |> assign(:show_rename_dashboard, nil)
-             |> push_event("update_dashboards", %{
-               dashboards: Enum.map(dashboards, &dashboard_json/1),
-               currentId: current_layout.id
-             })
-             |> put_flash(:info, "Dashboard renamed")}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to rename dashboard")}
-        end
-
+      {:noreply,
+       socket
+       |> assign(:dashboards, dashboards)
+       |> assign(:current_layout, current_layout)
+       |> assign(:show_rename_dashboard, nil)
+       |> push_event("update_dashboards", %{
+         dashboards: Enum.map(dashboards, &dashboard_json/1),
+         currentId: current_layout.id
+       })
+       |> put_flash(:info, "Dashboard renamed")}
+    else
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Dashboard not found")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to rename dashboard")}
     end
   end
 
   def handle_event("duplicate_dashboard", %{"id" => id}, socket) do
-    user = socket.assigns.current_scope.user
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, new_layout} <- DashboardLayouts.duplicate_layout(layout, "#{layout.name} (copy)") do
+      dashboards = [new_layout | socket.assigns.dashboards]
 
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.duplicate_layout(layout, "#{layout.name} (copy)") do
-          {:ok, new_layout} ->
-            dashboards = [new_layout | socket.assigns.dashboards]
-
-            {:noreply,
-             socket
-             |> assign(:dashboards, dashboards)
-             |> push_event("update_dashboards", %{
-               dashboards: Enum.map(dashboards, &dashboard_json/1),
-               currentId: socket.assigns.current_layout.id
-             })
-             |> put_flash(:info, "Dashboard duplicated")}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to duplicate dashboard")}
-        end
-
+      {:noreply,
+       socket
+       |> assign(:dashboards, dashboards)
+       |> push_event("update_dashboards", %{
+         dashboards: Enum.map(dashboards, &dashboard_json/1),
+         currentId: socket.assigns.current_layout.id
+       })
+       |> put_flash(:info, "Dashboard duplicated")}
+    else
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Dashboard not found")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to duplicate dashboard")}
     end
   end
 
@@ -521,56 +505,102 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   end
 
   def handle_event("confirm_delete_dashboard", %{"id" => id}, socket) do
-    user = socket.assigns.current_scope.user
-
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.delete_layout(layout) do
-          {:ok, _} ->
-            dashboards = Enum.reject(socket.assigns.dashboards, &(&1.id == layout.id))
-
-            # If we deleted the current dashboard, switch to another
-            {current_layout, should_load} =
-              if socket.assigns.current_layout.id == layout.id do
-                new_current = List.first(dashboards) || create_default_layout(socket)
-                {new_current, true}
-              else
-                {socket.assigns.current_layout, false}
-              end
-
-            socket =
-              socket
-              |> assign(:dashboards, dashboards)
-              |> assign(:current_layout, current_layout)
-              |> assign(:show_delete_confirm, nil)
-              |> push_event("update_dashboards", %{
-                dashboards: Enum.map(dashboards, &dashboard_json/1),
-                currentId: current_layout.id
-              })
-              |> put_flash(:info, "Dashboard deleted")
-
-            socket =
-              if should_load do
-                push_event(socket, "load_layout", %{
-                  frame_layout:
-                    current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
-                  widgets: current_layout.widgets || []
-                })
-              else
-                socket
-              end
-
-            {:noreply, socket}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to delete dashboard")}
-        end
-
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, _} <- DashboardLayouts.delete_layout(layout) do
+      handle_dashboard_delete(socket, layout)
+    else
       {:error, :not_found} ->
         {:noreply,
          socket
          |> assign(:show_delete_confirm, nil)
          |> put_flash(:error, "Dashboard not found")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete dashboard")}
+    end
+  end
+
+  # Alarm action event handlers
+  def handle_event("acknowledge_alarm", %{"id" => alarm_id}, socket) do
+    user = socket.assigns.current_scope.user
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.acknowledge_alarm(alarm, user.id) do
+      {:ok, updated_alarm} ->
+        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Alarm acknowledged")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to acknowledge alarm")}
+    end
+  end
+
+  def handle_event("open_shelve_modal", %{"id" => alarm_id}, socket) do
+    alarm = Alarms.get_alarm!(alarm_id)
+    {:noreply, assign(socket, :show_shelve_modal, alarm)}
+  end
+
+  def handle_event("close_shelve_modal", _params, socket) do
+    {:noreply, assign(socket, :show_shelve_modal, nil)}
+  end
+
+  def handle_event(
+        "confirm_shelve_alarm",
+        %{"alarm_id" => alarm_id, "duration" => duration, "reason" => reason},
+        socket
+      ) do
+    user = socket.assigns.current_scope.user
+    alarm = Alarms.get_alarm!(alarm_id)
+    duration_minutes = String.to_integer(duration)
+
+    case Alarms.shelve_alarm(alarm, user.id, duration_minutes, reason) do
+      {:ok, updated_alarm} ->
+        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
+
+        {:noreply,
+         socket
+         |> assign(:show_shelve_modal, nil)
+         |> put_flash(:info, "Alarm shelved for #{duration} minutes")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to shelve alarm")}
+    end
+  end
+
+  def handle_event("unshelve_alarm", %{"id" => alarm_id}, socket) do
+    user = socket.assigns.current_scope.user
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.unshelve_alarm(alarm, user.id) do
+      {:ok, updated_alarm} ->
+        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Alarm unshelved")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to unshelve alarm")}
+    end
+  end
+
+  def handle_event("clear_alarm", %{"id" => alarm_id}, socket) do
+    user = socket.assigns.current_scope.user
+    alarm = Alarms.get_alarm!(alarm_id)
+
+    case Alarms.clear_alarm(alarm, user.id) do
+      {:ok, updated_alarm} ->
+        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Alarm cleared")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to clear alarm")}
     end
   end
 
@@ -747,90 +777,6 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     end
   end
 
-  # Alarm action event handlers
-  def handle_event("acknowledge_alarm", %{"id" => alarm_id}, socket) do
-    user = socket.assigns.current_scope.user
-    alarm = Alarms.get_alarm!(alarm_id)
-
-    case Alarms.acknowledge_alarm(alarm, user.id) do
-      {:ok, updated_alarm} ->
-        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
-
-        {:noreply,
-         socket
-         |> put_flash(:info, "Alarm acknowledged")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to acknowledge alarm")}
-    end
-  end
-
-  def handle_event("open_shelve_modal", %{"id" => alarm_id}, socket) do
-    alarm = Alarms.get_alarm!(alarm_id)
-    {:noreply, assign(socket, :show_shelve_modal, alarm)}
-  end
-
-  def handle_event("close_shelve_modal", _params, socket) do
-    {:noreply, assign(socket, :show_shelve_modal, nil)}
-  end
-
-  def handle_event(
-        "confirm_shelve_alarm",
-        %{"alarm_id" => alarm_id, "duration" => duration, "reason" => reason},
-        socket
-      ) do
-    user = socket.assigns.current_scope.user
-    alarm = Alarms.get_alarm!(alarm_id)
-    duration_minutes = String.to_integer(duration)
-
-    case Alarms.shelve_alarm(alarm, user.id, duration_minutes, reason) do
-      {:ok, updated_alarm} ->
-        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
-
-        {:noreply,
-         socket
-         |> assign(:show_shelve_modal, nil)
-         |> put_flash(:info, "Alarm shelved for #{duration} minutes")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to shelve alarm")}
-    end
-  end
-
-  def handle_event("unshelve_alarm", %{"id" => alarm_id}, socket) do
-    user = socket.assigns.current_scope.user
-    alarm = Alarms.get_alarm!(alarm_id)
-
-    case Alarms.unshelve_alarm(alarm, user.id) do
-      {:ok, updated_alarm} ->
-        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
-
-        {:noreply,
-         socket
-         |> put_flash(:info, "Alarm unshelved")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to unshelve alarm")}
-    end
-  end
-
-  def handle_event("clear_alarm", %{"id" => alarm_id}, socket) do
-    user = socket.assigns.current_scope.user
-    alarm = Alarms.get_alarm!(alarm_id)
-
-    case Alarms.clear_alarm(alarm, user.id) do
-      {:ok, updated_alarm} ->
-        broadcast_alarm_update(socket.assigns.mission.id, updated_alarm)
-
-        {:noreply,
-         socket
-         |> put_flash(:info, "Alarm cleared")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to clear alarm")}
-    end
-  end
-
   defp broadcast_alarm_update(mission_id, alarm) do
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
@@ -910,5 +856,55 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       mission_id: mission.id,
       name: "Default"
     }
+  end
+
+  defp fetch_layout(socket, id) do
+    user = socket.assigns.current_scope.user
+    DashboardLayouts.get_layout(id, user.id)
+  end
+
+  defp current_layout_after_update(socket, updated_layout) do
+    if socket.assigns.current_layout.id == updated_layout.id do
+      updated_layout
+    else
+      socket.assigns.current_layout
+    end
+  end
+
+  defp handle_dashboard_delete(socket, layout) do
+    dashboards = Enum.reject(socket.assigns.dashboards, &(&1.id == layout.id))
+    {current_layout, should_load} = next_current_layout(socket, dashboards, layout.id)
+
+    socket =
+      socket
+      |> assign(:dashboards, dashboards)
+      |> assign(:current_layout, current_layout)
+      |> assign(:show_delete_confirm, nil)
+      |> push_event("update_dashboards", %{
+        dashboards: Enum.map(dashboards, &dashboard_json/1),
+        currentId: current_layout.id
+      })
+      |> put_flash(:info, "Dashboard deleted")
+
+    socket =
+      if should_load do
+        push_event(socket, "load_layout", %{
+          frame_layout: current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
+          widgets: current_layout.widgets || []
+        })
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  defp next_current_layout(socket, dashboards, deleted_id) do
+    if socket.assigns.current_layout.id == deleted_id do
+      new_current = List.first(dashboards) || create_default_layout(socket)
+      {new_current, true}
+    else
+      {socket.assigns.current_layout, false}
+    end
   end
 end

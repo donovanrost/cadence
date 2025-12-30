@@ -166,7 +166,7 @@ defmodule CadenceWeb.UserAuthTest do
       %{value: signed_token} = logged_in_conn.resp_cookies[@remember_me_cookie]
 
       offset_user_token(token, -10, :day)
-      {user, _} = Accounts.get_user_by_session_token(token)
+      {user, token_authenticated_at} = Accounts.get_user_by_session_token(token)
 
       conn =
         conn
@@ -176,7 +176,7 @@ defmodule CadenceWeb.UserAuthTest do
         |> UserAuth.fetch_current_scope_for_user([])
 
       assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user.authenticated_at == token_authenticated_at
       assert new_token = get_session(conn, :user_token)
       assert new_token != token
       assert %{value: new_signed_token, max_age: max_age} = conn.resp_cookies[@remember_me_cookie]
@@ -201,8 +201,8 @@ defmodule CadenceWeb.UserAuthTest do
       eleven_minutes_ago = DateTime.utc_now(:second) |> DateTime.add(-11, :minute)
       user = %{user | authenticated_at: eleven_minutes_ago}
       user_token = Accounts.generate_user_session_token(user)
-      {user, token_inserted_at} = Accounts.get_user_by_session_token(user_token)
-      assert DateTime.compare(token_inserted_at, user.authenticated_at) == :gt
+      {_user, token_authenticated_at} = Accounts.get_user_by_session_token(user_token)
+      assert DateTime.compare(token_authenticated_at, user.authenticated_at) == :gt
 
       conn =
         conn

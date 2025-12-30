@@ -1,5 +1,5 @@
 defmodule Cadence.Procedures.V2.AutomationRunnerTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Procedures.V2.AutomationRunner
 
@@ -16,7 +16,7 @@ defmodule Cadence.Procedures.V2.AutomationRunnerTest do
     }
   end
 
-  defp mock_block(type, opts \\ []) do
+  defp mock_block(type, opts) do
     %{
       id: Keyword.get(opts, :id, Ecto.UUID.generate()),
       block_type: type,

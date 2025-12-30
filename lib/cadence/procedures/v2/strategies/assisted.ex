@@ -184,15 +184,20 @@ defmodule Cadence.Procedures.V2.Strategies.Assisted do
     if MapSet.size(block_ids) == 0 do
       true
     else
-      block_execs = step_exec.block_executions || []
+      block_execs_complete?(step_exec, block_ids, completed?)
+    end
+  end
 
-      Enum.all?(block_execs, fn be ->
-        if MapSet.member?(block_ids, be.block_id) do
-          completed?.(be)
-        else
-          true
-        end
-      end)
+  defp block_execs_complete?(step_exec, block_ids, completed?) do
+    block_execs = step_exec.block_executions || []
+    Enum.all?(block_execs, &block_exec_complete?(&1, block_ids, completed?))
+  end
+
+  defp block_exec_complete?(block_exec, block_ids, completed?) do
+    if MapSet.member?(block_ids, block_exec.block_id) do
+      completed?.(block_exec)
+    else
+      true
     end
   end
 

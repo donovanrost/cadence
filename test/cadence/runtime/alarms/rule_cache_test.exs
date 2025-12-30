@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Runtime.Alarms.RuleCache
+  alias Cadence.Runtime.Telemetry.PacketIdentifier
   alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
@@ -22,6 +23,8 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
 
     # Clear any cached rules for this mission
     RuleCache.invalidate_mission(mission.id)
+
+    start_supervised!({PacketIdentifier, mission_id: mission.id})
 
     %{org: org, mission: mission, target: target}
   end
@@ -224,7 +227,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
 
   describe "PubSub invalidation" do
     test "invalidates mission cache on mission rule change", %{org: org, mission: mission} do
-      rule = alarm_rule_fixture(organization: org, mission: mission, enabled: true)
+      _rule = alarm_rule_fixture(organization: org, mission: mission, enabled: true)
       RuleCache.invalidate_mission(mission.id)
 
       # Populate cache

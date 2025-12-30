@@ -5,6 +5,42 @@ defmodule CadenceWeb.SettingsComponentsTest do
   import Phoenix.LiveViewTest
   import CadenceWeb.SettingsComponents
 
+  defp assert_selector(html, selector) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(selector)
+    |> LazyHTML.to_tree()
+    |> case do
+      [] -> flunk("Expected selector #{inspect(selector)} to match")
+      _ -> :ok
+    end
+  end
+
+  defp refute_selector(html, selector) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(selector)
+    |> LazyHTML.to_tree()
+    |> case do
+      [] -> :ok
+      _ -> flunk("Expected selector #{inspect(selector)} to be empty")
+    end
+  end
+
+  defp assert_selector_text(html, selector, text) do
+    content =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.text()
+
+    if String.contains?(content, text) do
+      :ok
+    else
+      flunk("Expected selector #{inspect(selector)} to include #{inspect(text)}")
+    end
+  end
+
   describe "setting_card/1" do
     test "renders label, description, and hint" do
       assigns = %{}
@@ -20,10 +56,10 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.setting_card>
         """)
 
-      assert html =~ "Test Setting"
-      assert html =~ "A test description"
-      assert html =~ "Helpful hint"
-      assert html =~ ~s(type="text")
+      assert_selector_text(html, "div", "Test Setting")
+      assert_selector_text(html, "p", "A test description")
+      assert_selector_text(html, "span", "Helpful hint")
+      assert_selector(html, ~s(input[type="text"]))
     end
 
     test "renders without hint when not provided" do
@@ -39,8 +75,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.setting_card>
         """)
 
-      assert html =~ "Test Setting"
-      assert html =~ "A test description"
+      assert_selector_text(html, "div", "Test Setting")
+      assert_selector_text(html, "p", "A test description")
     end
 
     test "renders error state" do
@@ -57,8 +93,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.setting_card>
         """)
 
-      assert html =~ "Invalid value"
-      assert html =~ "text-error"
+      assert_selector_text(html, "span", "Invalid value")
+      assert_selector(html, ".text-error")
     end
   end
 
@@ -71,11 +107,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_number_input value={5} min={1} max={10} name="test" />
         """)
 
-      assert html =~ ~s(value="5")
-      assert html =~ ~s(min="1")
-      assert html =~ ~s(max="10")
-      assert html =~ ~s(name="test")
-      assert html =~ ~s(type="number")
+      assert_selector(html, ~s(input[type="number"][name="test"][value="5"]))
+      assert_selector(html, ~s(input[type="number"][name="test"][min="1"][max="10"]))
     end
 
     test "renders without min/max when not provided" do
@@ -86,7 +119,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_number_input value={5} name="test" />
         """)
 
-      assert html =~ ~s(value="5")
+      assert_selector(html, ~s(input[type="number"][name="test"][value="5"]))
     end
 
     test "renders with increment/decrement buttons" do
@@ -97,8 +130,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_number_input value={5} min={1} max={10} name="test" />
         """)
 
-      assert html =~ "increment_setting"
-      assert html =~ "decrement_setting"
+      assert_selector(html, ~S(button[phx-click="increment_setting"][phx-value-name="test"]))
+      assert_selector(html, ~S(button[phx-click="decrement_setting"][phx-value-name="test"]))
     end
 
     test "renders disabled decrement button at minimum" do
@@ -109,7 +142,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_number_input value={1} min={1} max={10} name="test" />
         """)
 
-      assert html =~ "disabled"
+      assert_selector(html, ~S(button[phx-click="decrement_setting"][disabled]))
     end
   end
 
@@ -122,9 +155,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_toggle value={true} name="test" />
         """)
 
-      assert html =~ "checked"
-      assert html =~ "Enabled"
-      assert html =~ ~s(name="test")
+      assert_selector(html, ~s(input[type="checkbox"][name="test"][checked]))
+      assert_selector_text(html, "span", "Enabled")
     end
 
     test "renders disabled state" do
@@ -135,8 +167,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_toggle value={false} name="test" />
         """)
 
-      refute html =~ "checked"
-      assert html =~ "Disabled"
+      refute_selector(html, ~s(input[type="checkbox"][name="test"][checked]))
+      assert_selector_text(html, "span", "Disabled")
     end
 
     test "renders custom labels" do
@@ -147,7 +179,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_toggle value={true} name="test" enabled_label="Yes" disabled_label="No" />
         """)
 
-      assert html =~ "Yes"
+      assert_selector_text(html, "span", "Yes")
     end
 
     test "includes hidden field for false value" do
@@ -158,8 +190,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         <.setting_toggle value={true} name="test" />
         """)
 
-      assert html =~ ~s(type="hidden")
-      assert html =~ ~s(value="false")
+      assert_selector(html, ~s(input[type="hidden"][name="test"][value="false"]))
     end
   end
 
@@ -183,10 +214,10 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ "Organization default"
-      assert html =~ "1"
+      assert_selector_text(html, "span", "Organization default:")
+      assert_selector_text(html, "span", "1")
       # Input should always be visible now
-      assert html =~ ~s(type="number")
+      assert_selector(html, ~s(input[type="number"][name="test"]))
     end
 
     test "shows effective value in input" do
@@ -208,8 +239,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ ~s(type="number")
-      assert html =~ ~s(value="3")
+      assert_selector(html, ~s(input[type="number"][name="test"][value="3"]))
     end
 
     test "shows restrictiveness hint for :higher" do
@@ -231,7 +261,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ "Must be at least 2"
+      assert_selector_text(html, "span", "Must be at least 2")
     end
 
     test "shows restrictiveness hint for :lower" do
@@ -253,7 +283,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ "Must be at most 5"
+      assert_selector_text(html, "span", "Must be at most 5")
     end
 
     test "renders boolean toggle when type is boolean" do
@@ -273,10 +303,10 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ "toggle"
-      assert html =~ "Organization default"
+      assert_selector(html, ~s(input.toggle[type="checkbox"][name="test"]))
+      assert_selector_text(html, "span", "Organization default:")
       # Org value
-      assert html =~ "Enabled"
+      assert_selector_text(html, "span", "Enabled")
     end
 
     test "shows error message when provided" do
@@ -299,8 +329,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         />
         """)
 
-      assert html =~ "Must be at least 2"
-      assert html =~ "text-error"
+      assert_selector_text(html, "span", "Must be at least 2")
+      assert_selector(html, ".text-error")
     end
 
     test "disables toggle when can_override is false" do
@@ -321,7 +351,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         """)
 
       # Toggle should be disabled when can_override is false
-      assert html =~ "disabled"
+      assert_selector(html, ~s(input[type="checkbox"][name="test"][disabled]))
     end
 
     test "shows locked message when org disables a :false_is_stricter boolean" do
@@ -342,7 +372,7 @@ defmodule CadenceWeb.SettingsComponentsTest do
         """)
 
       # Should show locked indicator
-      assert html =~ "Locked by organization policy"
+      assert_selector_text(html, "span", "Locked by organization policy")
     end
   end
 
@@ -357,8 +387,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.settings_section>
         """)
 
-      assert html =~ "My Section"
-      assert html =~ "Section content"
+      assert_selector_text(html, "h2", "My Section")
+      assert_selector_text(html, "p", "Section content")
     end
 
     test "renders description when provided" do
@@ -371,8 +401,8 @@ defmodule CadenceWeb.SettingsComponentsTest do
         </.settings_section>
         """)
 
-      assert html =~ "My Section"
-      assert html =~ "A helpful description"
+      assert_selector_text(html, "h2", "My Section")
+      assert_selector_text(html, "p", "A helpful description")
     end
   end
 end

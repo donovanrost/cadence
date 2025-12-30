@@ -33,11 +33,9 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
   require Logger
 
-  # Accept Ecto schema, domain entity, or MissionConfig
+  # Accept MissionConfig only
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Automations.Engine.AutomationManager
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Missions.Mission
   alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Runtime.Commands.MetaCommandCache
@@ -71,18 +69,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
   @impl true
   def init(%MissionConfig{} = config) do
-    do_init(config.mission_id, config.mission.name, config.organization_id)
+    do_init(config.mission_id, config.mission.name, config.organization_id, config)
   end
 
-  def init(%Mission{} = mission) do
-    do_init(mission.id, mission.name, mission.organization_id)
-  end
-
-  def init(%MissionEntity{} = entity) do
-    do_init(entity.id, entity.name, entity.organization_id)
-  end
-
-  defp do_init(mission_id, mission_name, organization_id) do
+  defp do_init(mission_id, mission_name, organization_id, config) do
     Logger.info(
       "Initializing mission instance for mission_id=#{mission_id}, name=#{mission_name}"
     )
@@ -91,6 +81,17 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
     pipeline_version = Application.get_env(:cadence, :pipeline_version, :v1)
 
     pipeline_children = pipeline_children(pipeline_version, mission_id)
+
+    cache_warmer_children =
+      if CacheWarmer.enabled?() do
+        [
+          # Cache Warmer - pre-warms Limits and DerivedItems caches
+          # Must be last to ensure all ETS tables and services are ready
+          {CacheWarmer, config: config}
+        ]
+      else
+        []
+      end
 
     children =
       [
@@ -121,18 +122,15 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
           {Cadence.Runtime.Interfaces.InterfaceSupervisor, mission_id: mission_id},
 
           # Target Pipeline Supervisor - manages per-target command queues and dispatchers
-          {TargetPipelineSupervisor, mission_id: mission_id},
+          {TargetPipelineSupervisor, config: config},
 
           # Procedure Execution Coordinator - manages procedure executions
           {ExecutionCoordinator, mission_id: mission_id, organization_id: organization_id},
 
           # Automation Manager - processes events and triggers automations
-          {AutomationManager, mission_id: mission_id, organization_id: organization_id},
-
-          # Cache Warmer - pre-warms Limits and DerivedItems caches
-          # Must be last to ensure all ETS tables and services are ready
-          {CacheWarmer, mission_id: mission_id}
-        ]
+          {AutomationManager, mission_id: mission_id, organization_id: organization_id}
+        ] ++
+        cache_warmer_children
 
     # Strategy: one_for_one means if a child crashes, only restart that child
     # This is appropriate because the CVT, interfaces, pipeline, etc. are independent
@@ -212,14 +210,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   # Extract mission_id, org_id, and config_generation from config
   defp extract_ids(%MissionConfig{} = config) do
     {config.mission_id, config.organization_id, config.config_generation}
-  end
-
-  defp extract_ids(%Mission{} = mission) do
-    {mission.id, mission.organization_id, mission.config_generation || 1}
-  end
-
-  defp extract_ids(%MissionEntity{} = entity) do
-    {entity.id, entity.organization_id, entity.config_generation || 1}
   end
 
   # Track mission in Phoenix.Tracker

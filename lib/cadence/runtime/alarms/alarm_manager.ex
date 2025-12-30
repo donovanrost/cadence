@@ -344,9 +344,6 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
         remove_from_cache(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_cleared, alarm)
 
-      {:no_rule, _event} ->
-        :ok
-
       {:no_action, _event} ->
         :ok
     end
@@ -361,9 +358,6 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
       {:cleared, alarm} ->
         remove_from_cache(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_cleared, alarm)
-
-      {:no_rule, _event} ->
-        :ok
 
       {:no_action, _event} ->
         :ok

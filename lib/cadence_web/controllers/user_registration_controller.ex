@@ -6,7 +6,7 @@ defmodule CadenceWeb.UserRegistrationController do
 
   def new(conn, _params) do
     changeset = Accounts.change_user_email(%User{})
-    render(conn, :new, changeset: changeset)
+    render(conn, :new, form: Phoenix.Component.to_form(changeset))
   end
 
   def create(conn, %{"user" => user_params}) do
@@ -26,7 +26,16 @@ defmodule CadenceWeb.UserRegistrationController do
         |> redirect(to: ~p"/users/log-in")
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        render(conn, :new, changeset: changeset)
+        changeset = %{changeset | action: :insert}
+        render(conn, :new, form: Phoenix.Component.to_form(changeset))
+
+      {:error, _reason} ->
+        changeset =
+          %User{}
+          |> Accounts.change_user_email(user_params)
+          |> then(&%{&1 | action: :insert})
+
+        render(conn, :new, form: Phoenix.Component.to_form(changeset))
     end
   end
 end

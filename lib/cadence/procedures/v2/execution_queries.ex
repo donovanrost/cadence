@@ -21,6 +21,7 @@ defmodule Cadence.Procedures.V2.ExecutionQueries do
   import Ecto.Query
 
   alias Cadence.Outbox.Event, as: OutboxEvent
+
   alias Cadence.Procedures.{
     BlockExecution,
     ProcedureBlock,

@@ -211,25 +211,8 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   @impl true
   def handle_info(:generate, state) do
-    # Generate packets_per_tick cycles worth of packets
-    # In standard mode (packets_per_tick=1), this generates one cycle
-    # In burst mode (packets_per_tick>1), this generates multiple cycles per tick
-    new_state =
-      Enum.reduce(1..state.packets_per_tick, state, fn _tick, tick_state ->
-        # Generate packets for all targets and all packet types (one full cycle)
-        cycle_state =
-          Enum.reduce(tick_state.targets, tick_state, fn target_id, acc_state ->
-            Enum.reduce(tick_state.packet_types, acc_state, fn packet_type, acc_state2 ->
-              generate_and_send_packet(acc_state2, target_id, packet_type)
-            end)
-          end)
-
-        %{cycle_state | cycle_count: cycle_state.cycle_count + 1}
-      end)
-
-    # Schedule next generation using pre-calculated interval
+    new_state = run_generation_cycles(state)
     timer_ref = Process.send_after(self(), :generate, state.interval_ms)
-
     {:noreply, %{new_state | timer_ref: timer_ref}}
   end
 
@@ -256,6 +239,26 @@ defmodule Cadence.Simulator.PacketSimulator do
     }
 
     {:reply, stats, state}
+  end
+
+  defp run_generation_cycles(state) do
+    Enum.reduce(1..state.packets_per_tick, state, fn _tick, tick_state ->
+      tick_state
+      |> generate_cycle_packets()
+      |> bump_cycle_count()
+    end)
+  end
+
+  defp generate_cycle_packets(state) do
+    Enum.reduce(state.targets, state, fn target_id, acc_state ->
+      Enum.reduce(state.packet_types, acc_state, fn packet_type, acc_state2 ->
+        generate_and_send_packet(acc_state2, target_id, packet_type)
+      end)
+    end)
+  end
+
+  defp bump_cycle_count(state) do
+    %{state | cycle_count: state.cycle_count + 1}
   end
 
   @impl true

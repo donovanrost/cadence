@@ -60,8 +60,13 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DeriveStage do
   def stage_name, do: :derive
 
   @impl true
-  def process(event, state) do
-    %{qualified_items: qualified_items, target_id: target_id} = event
+  def process(%{qualified_items: qualified_items} = _event, _state)
+      when map_size(qualified_items) == 0 do
+    {:skip, :no_items}
+  end
+
+  @impl true
+  def process(%{qualified_items: qualified_items, target_id: target_id} = event, state) do
     mission_id = state.mission_id
 
     # Compute derived items using mission's runtime overlay
@@ -70,8 +75,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DeriveStage do
         {:ok, items} ->
           items
 
-        {:error, reason} ->
-          Logger.warning("Derived items computation failed: #{inspect(reason)}")
+        _ ->
+          Logger.warning("Derived items computation failed, using qualified items")
           qualified_items
       end
 
@@ -85,6 +90,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DeriveStage do
          items_with_limits: items_with_limits
      }}
   end
+
+  def process(_event, _state), do: {:error, :invalid_event}
 
   # Evaluate limits for all items using the StateTracker
   defp evaluate_limits(mission_id, target_id, all_items) do

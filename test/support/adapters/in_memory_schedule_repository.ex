@@ -41,6 +41,19 @@ defmodule Cadence.Test.Adapters.InMemoryScheduleRepository do
   end
 
   @doc """
+  Stops the in-memory repository agent.
+  """
+  def stop(pid \\ __MODULE__) do
+    try do
+      Agent.stop(pid)
+    catch
+      :exit, _ -> :ok
+    end
+
+    :ok
+  end
+
+  @doc """
   Returns all schedules in the repository. Useful for test assertions.
   """
   def all(name \\ __MODULE__) do
@@ -123,7 +136,9 @@ defmodule Cadence.Test.Adapters.InMemoryScheduleRepository do
   end
 
   @impl true
-  def save(%Schedule{id: nil} = schedule, name \\ __MODULE__) do
+  def save(schedule, name \\ __MODULE__)
+
+  def save(%Schedule{id: nil} = schedule, name) do
     id = Ecto.UUID.generate()
     now = DateTime.utc_now()
 

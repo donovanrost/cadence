@@ -370,28 +370,10 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
 
   @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
   def create_execution(attrs) do
-    id = Ecto.UUID.generate()
-    now = DateTime.utc_now()
-
-    execution = %{
-      id: id,
-      procedure_id: Map.get(attrs, :procedure_id) || Map.get(attrs, "procedure_id"),
-      procedure_version_id:
-        Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
-      organization_id: Map.get(attrs, :organization_id) || Map.get(attrs, "organization_id"),
-      mission_id: Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id"),
-      target_id: Map.get(attrs, :target_id) || Map.get(attrs, "target_id"),
-      parameters: Map.get(attrs, :parameters) || Map.get(attrs, "parameters") || %{},
-      status: Map.get(attrs, :status) || Map.get(attrs, "status") || :pending,
-      triggered_by: Map.get(attrs, :triggered_by) || Map.get(attrs, "triggered_by") || :manual,
-      triggered_by_user_id:
-        Map.get(attrs, :triggered_by_user_id) || Map.get(attrs, "triggered_by_user_id"),
-      inserted_at: now,
-      updated_at: now
-    }
+    execution = build_execution(attrs)
 
     Agent.update(__MODULE__, fn state ->
-      %{state | executions: Map.put(state.executions, id, execution)}
+      %{state | executions: Map.put(state.executions, execution.id, execution)}
     end)
 
     {:ok, execution}
@@ -465,23 +447,63 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
 
   @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
   def create_log(attrs) do
-    id = Ecto.UUID.generate()
-
-    log = %{
-      id: id,
-      execution_id: Map.get(attrs, :execution_id) || Map.get(attrs, "execution_id"),
-      timestamp: Map.get(attrs, :timestamp) || Map.get(attrs, "timestamp") || DateTime.utc_now(),
-      level: Map.get(attrs, :level) || Map.get(attrs, "level") || :info,
-      message: Map.get(attrs, :message) || Map.get(attrs, "message"),
-      step_index: Map.get(attrs, :step_index) || Map.get(attrs, "step_index"),
-      metadata: Map.get(attrs, :metadata) || Map.get(attrs, "metadata") || %{}
-    }
+    log = build_log(attrs)
 
     Agent.update(__MODULE__, fn state ->
-      %{state | logs: Map.put(state.logs, id, log)}
+      %{state | logs: Map.put(state.logs, log.id, log)}
     end)
 
     {:ok, log}
+  end
+
+  defp build_execution(attrs) do
+    id = Ecto.UUID.generate()
+    now = DateTime.utc_now()
+    identifiers = execution_identifiers(attrs)
+
+    %{
+      id: id,
+      procedure_id: identifiers.procedure_id,
+      procedure_version_id: identifiers.procedure_version_id,
+      organization_id: identifiers.organization_id,
+      mission_id: identifiers.mission_id,
+      target_id: identifiers.target_id,
+      parameters: Map.get(attrs, :parameters) || Map.get(attrs, "parameters") || %{},
+      status: Map.get(attrs, :status) || Map.get(attrs, "status") || :pending,
+      triggered_by: Map.get(attrs, :triggered_by) || Map.get(attrs, "triggered_by") || :manual,
+      triggered_by_user_id: identifiers.triggered_by_user_id,
+      inserted_at: now,
+      updated_at: now
+    }
+  end
+
+  defp execution_identifiers(attrs) do
+    %{
+      procedure_id: Map.get(attrs, :procedure_id) || Map.get(attrs, "procedure_id"),
+      procedure_version_id:
+        Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
+      organization_id: Map.get(attrs, :organization_id) || Map.get(attrs, "organization_id"),
+      mission_id: Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id"),
+      target_id: Map.get(attrs, :target_id) || Map.get(attrs, "target_id"),
+      triggered_by_user_id:
+        Map.get(attrs, :triggered_by_user_id) || Map.get(attrs, "triggered_by_user_id")
+    }
+  end
+
+  defp build_log(attrs) do
+    %{
+      id: Ecto.UUID.generate(),
+      execution_id: fetch_attr(attrs, :execution_id),
+      timestamp: fetch_attr(attrs, :timestamp, DateTime.utc_now()),
+      level: fetch_attr(attrs, :level, :info),
+      message: fetch_attr(attrs, :message),
+      step_index: fetch_attr(attrs, :step_index),
+      metadata: fetch_attr(attrs, :metadata, %{})
+    }
+  end
+
+  defp fetch_attr(attrs, key, default \\ nil) do
+    Map.get(attrs, key) || Map.get(attrs, to_string(key)) || default
   end
 
   # Private helpers for execution/log filtering

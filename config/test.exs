@@ -44,8 +44,17 @@ config :phoenix_live_view,
 # Disable the outbox processor in tests - tests should manage their own processing
 config :cadence, Cadence.Outbox.Processor, enabled: false
 
+# Disable queue persistence in tests to avoid sandbox ownership issues.
+config :cadence, Cadence.Application.Commanding.QueuePersistence, enabled: false
+
 # Configure Oban for testing - inline execution
 config :cadence, Oban, testing: :inline
+
+# Run TargetQueue persistence inline in tests to avoid leaking DB tasks.
+config :cadence, Cadence.Runtime.Commands.TargetQueue, persist_async?: false
+
+# Disable auto-start in ExecutionProcess; tests can start it explicitly.
+config :cadence, Cadence.Procedures.Engine.ExecutionProcess, autostart_pending?: false
 
 # =============================================================================
 # Ports & Adapters Test Configuration (Hexagonal Architecture)

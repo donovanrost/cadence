@@ -167,32 +167,85 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
        ) do
     case get_limits_from_cache_data(cache_data, item_name) do
       {:ok, limits, persistence, stale_timeout_ms} ->
-        raw_state = Evaluator.evaluate(value, limits)
-
-        if table_exists? do
-          case update_state_batch(
-                 mission_id,
-                 target_id,
-                 item_name,
-                 raw_state,
-                 value,
-                 persistence,
-                 stale_timeout_ms,
-                 table_name,
-                 now
-               ) do
-            {:ok, state, _transition?} -> state
-            _ -> Evaluator.normalize_state(raw_state)
-          end
-        else
-          Evaluator.normalize_state(raw_state)
-        end
+        evaluate_with_limits(%{
+          mission_id: mission_id,
+          target_id: target_id,
+          item_name: item_name,
+          value: value,
+          limits: limits,
+          persistence: persistence,
+          stale_timeout_ms: stale_timeout_ms,
+          table_name: table_name,
+          table_exists?: table_exists?,
+          now: now
+        })
 
       :not_configured ->
         :green
 
       {:error, _reason} ->
         :green
+    end
+  end
+
+  defp evaluate_with_limits(%{
+         mission_id: mission_id,
+         target_id: target_id,
+         item_name: item_name,
+         value: value,
+         limits: limits,
+         persistence: persistence,
+         stale_timeout_ms: stale_timeout_ms,
+         table_name: table_name,
+         table_exists?: table_exists?,
+         now: now
+       }) do
+    raw_state = Evaluator.evaluate(value, limits)
+    normalized_state = Evaluator.normalize_state(raw_state)
+
+    if table_exists? do
+      update_or_fallback(%{
+        mission_id: mission_id,
+        target_id: target_id,
+        qualified_item_name: item_name,
+        raw_state: raw_state,
+        value: value,
+        persistence: persistence,
+        stale_timeout_ms: stale_timeout_ms,
+        table_name: table_name,
+        now_mono: now,
+        fallback_state: normalized_state
+      })
+    else
+      normalized_state
+    end
+  end
+
+  defp update_or_fallback(%{
+         mission_id: mission_id,
+         target_id: target_id,
+         qualified_item_name: qualified_item_name,
+         raw_state: raw_state,
+         value: value,
+         persistence: persistence,
+         stale_timeout_ms: stale_timeout_ms,
+         table_name: table_name,
+         now_mono: now_mono,
+         fallback_state: fallback_state
+       }) do
+    case update_state_batch(%{
+           mission_id: mission_id,
+           target_id: target_id,
+           qualified_item_name: qualified_item_name,
+           raw_state: raw_state,
+           value: value,
+           persistence: persistence,
+           stale_timeout_ms: stale_timeout_ms,
+           table_name: table_name,
+           now_mono: now_mono
+         }) do
+      {:ok, state, _transition?} -> state
+      _ -> fallback_state
     end
   end
 
@@ -221,207 +274,41 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   defp get_limits_from_cache_data(_, _item_name), do: :not_configured
 
   # Optimized state update for batch processing (avoids redundant lookups)
-  defp update_state_batch(
-         mission_id,
-         target_id,
-         qualified_item_name,
-         raw_state,
-         value,
-         persistence,
-         stale_timeout_ms,
-         table_name,
-         now_mono
-       ) do
+  defp update_state_batch(%{
+         mission_id: mission_id,
+         target_id: target_id,
+         qualified_item_name: qualified_item_name,
+         raw_state: raw_state,
+         value: value,
+         persistence: persistence,
+         stale_timeout_ms: stale_timeout_ms,
+         table_name: table_name,
+         now_mono: now_mono
+       }) do
     key = {target_id, qualified_item_name}
     normalized_state = Evaluator.normalize_state(raw_state)
 
+    ctx = %{
+      mission_id: mission_id,
+      target_id: target_id,
+      qualified_item_name: qualified_item_name,
+      table_name: table_name,
+      key: key,
+      raw_state: raw_state,
+      normalized_state: normalized_state,
+      value: value,
+      persistence: persistence,
+      stale_timeout_ms: stale_timeout_ms,
+      timestamp_key: :last_update_mono,
+      timestamp: now_mono
+    }
+
     case :ets.lookup(table_name, key) do
       [{^key, entry}] ->
-        process_state_update_batch(
-          mission_id,
-          target_id,
-          qualified_item_name,
-          table_name,
-          key,
-          entry,
-          raw_state,
-          normalized_state,
-          value,
-          persistence,
-          stale_timeout_ms,
-          now_mono
-        )
+        process_state_update(Map.put(ctx, :entry, entry))
 
       [] ->
-        create_initial_entry_batch(
-          mission_id,
-          target_id,
-          qualified_item_name,
-          table_name,
-          key,
-          raw_state,
-          normalized_state,
-          value,
-          persistence,
-          stale_timeout_ms,
-          now_mono
-        )
-    end
-  end
-
-  defp create_initial_entry_batch(
-         mission_id,
-         target_id,
-         qualified_item_name,
-         table_name,
-         key,
-         raw_state,
-         normalized_state,
-         value,
-         persistence,
-         stale_timeout_ms,
-         now_mono
-       ) do
-    if Evaluator.violation?(raw_state) and persistence > 1 do
-      entry = %{
-        current_state: :green,
-        pending_state: raw_state,
-        violation_count: 1,
-        last_update_mono: now_mono,
-        persistence: persistence,
-        stale_timeout_ms: stale_timeout_ms
-      }
-
-      :ets.insert(table_name, {key, entry})
-      {:ok, :green, false}
-    else
-      entry = %{
-        current_state: normalized_state,
-        pending_state: nil,
-        violation_count: 0,
-        last_update_mono: now_mono,
-        persistence: persistence,
-        stale_timeout_ms: stale_timeout_ms
-      }
-
-      :ets.insert(table_name, {key, entry})
-
-      if Evaluator.violation?(raw_state) do
-        emit_transition_event(
-          mission_id,
-          target_id,
-          qualified_item_name,
-          :green,
-          normalized_state,
-          value
-        )
-      end
-
-      {:ok, normalized_state, Evaluator.violation?(raw_state)}
-    end
-  end
-
-  defp process_state_update_batch(
-         mission_id,
-         target_id,
-         qualified_item_name,
-         table_name,
-         key,
-         entry,
-         raw_state,
-         normalized_state,
-         value,
-         persistence,
-         stale_timeout_ms,
-         now_mono
-       ) do
-    cond do
-      not Evaluator.violation?(raw_state) ->
-        previous_state = entry.current_state
-        transitioned? = previous_state != :green
-
-        new_entry = %{
-          entry
-          | current_state: :green,
-            pending_state: nil,
-            violation_count: 0,
-            last_update_mono: now_mono,
-            persistence: persistence,
-            stale_timeout_ms: stale_timeout_ms
-        }
-
-        :ets.insert(table_name, {key, new_entry})
-
-        if transitioned? do
-          emit_transition_event(
-            mission_id,
-            target_id,
-            qualified_item_name,
-            previous_state,
-            :green,
-            value
-          )
-        end
-
-        {:ok, :green, transitioned?}
-
-      entry.pending_state == raw_state ->
-        new_count = entry.violation_count + 1
-
-        if new_count >= persistence do
-          previous_state = entry.current_state
-          transitioned? = previous_state != normalized_state
-
-          new_entry = %{
-            entry
-            | current_state: normalized_state,
-              pending_state: nil,
-              violation_count: 0,
-              last_update_mono: now_mono,
-              persistence: persistence,
-              stale_timeout_ms: stale_timeout_ms
-          }
-
-          :ets.insert(table_name, {key, new_entry})
-
-          if transitioned? do
-            emit_transition_event(
-              mission_id,
-              target_id,
-              qualified_item_name,
-              previous_state,
-              normalized_state,
-              value
-            )
-          end
-
-          {:ok, normalized_state, transitioned?}
-        else
-          new_entry = %{
-            entry
-            | pending_state: raw_state,
-              violation_count: new_count,
-              last_update_mono: now_mono,
-              persistence: persistence,
-              stale_timeout_ms: stale_timeout_ms
-          }
-
-          :ets.insert(table_name, {key, new_entry})
-          {:ok, Evaluator.normalize_state(entry.current_state), false}
-        end
-
-      true ->
-        new_entry = %{
-          entry
-          | pending_state: raw_state,
-            violation_count: 1,
-            last_update_mono: now_mono,
-            persistence: persistence,
-            stale_timeout_ms: stale_timeout_ms
-        }
-
-        :ets.insert(table_name, {key, new_entry})
-        {:ok, Evaluator.normalize_state(entry.current_state), false}
+        create_initial_entry(ctx)
     end
   end
 
@@ -474,20 +361,22 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     table_name = table_name(mission_id)
     now_mono = System.monotonic_time(:millisecond)
 
+    fetch_stale_items(table_name, now_mono)
+  end
+
+  defp fetch_stale_items(table_name, now_mono) do
     if :ets.whereis(table_name) != :undefined do
-      :ets.foldl(
-        fn {{target_id, item_name}, entry}, acc ->
-          if stale_entry?(entry, now_mono) do
-            [{target_id, item_name, entry} | acc]
-          else
-            acc
-          end
-        end,
-        [],
-        table_name
-      )
+      :ets.foldl(&collect_stale(&1, &2, now_mono), [], table_name)
     else
       []
+    end
+  end
+
+  defp collect_stale({{target_id, item_name}, entry}, acc, now_mono) do
+    if stale_entry?(entry, now_mono) do
+      [{target_id, item_name, entry} | acc]
+    else
+      acc
     end
   end
 
@@ -520,31 +409,40 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   def mark_stale(mission_id, target_id, qualified_item_name) do
     table_name = table_name(mission_id)
 
+    case fetch_entry(table_name, target_id, qualified_item_name) do
+      {:ok, key, entry} ->
+        mark_entry_stale(table_name, mission_id, target_id, qualified_item_name, key, entry)
+
+      :not_found ->
+        {:ok, false}
+    end
+  end
+
+  defp fetch_entry(table_name, target_id, qualified_item_name) do
     if :ets.whereis(table_name) != :undefined do
       case :ets.lookup(table_name, {target_id, qualified_item_name}) do
-        [{key, entry}] ->
-          if entry.current_state != :blue do
-            # Emit transition event
-            emit_transition_event(
-              mission_id,
-              target_id,
-              qualified_item_name,
-              entry.current_state,
-              :blue,
-              nil
-            )
-
-            # Update state
-            new_entry = %{entry | current_state: :blue}
-            :ets.insert(table_name, {key, new_entry})
-            {:ok, true}
-          else
-            {:ok, false}
-          end
-
-        [] ->
-          {:ok, false}
+        [{key, entry}] -> {:ok, key, entry}
+        [] -> :not_found
       end
+    else
+      :not_found
+    end
+  end
+
+  defp mark_entry_stale(table_name, mission_id, target_id, qualified_item_name, key, entry) do
+    if entry.current_state != :blue do
+      emit_transition_event(
+        mission_id,
+        target_id,
+        qualified_item_name,
+        entry.current_state,
+        :blue,
+        nil
+      )
+
+      new_entry = %{entry | current_state: :blue}
+      :ets.insert(table_name, {key, new_entry})
+      {:ok, true}
     else
       {:ok, false}
     end
@@ -653,213 +551,155 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     now = DateTime.utc_now()
     normalized_state = Evaluator.normalize_state(raw_state)
 
+    ctx = %{
+      mission_id: mission_id,
+      target_id: target_id,
+      qualified_item_name: qualified_item_name,
+      table_name: table_name,
+      key: key,
+      raw_state: raw_state,
+      normalized_state: normalized_state,
+      value: value,
+      persistence: persistence,
+      stale_timeout_ms: stale_timeout_ms,
+      timestamp_key: :last_update,
+      timestamp: now
+    }
+
     # Ensure table exists (might be called before GenServer starts in tests)
     if :ets.whereis(table_name) == :undefined do
       {:ok, normalized_state, false}
     else
       case :ets.lookup(table_name, key) do
         [{^key, entry}] ->
-          process_state_update(
-            mission_id,
-            target_id,
-            qualified_item_name,
-            table_name,
-            key,
-            entry,
-            raw_state,
-            normalized_state,
-            value,
-            persistence,
-            stale_timeout_ms,
-            now
-          )
+          process_state_update(Map.put(ctx, :entry, entry))
 
         [] ->
           # First time seeing this item - create initial entry
-          create_initial_entry(
-            mission_id,
-            target_id,
-            qualified_item_name,
-            table_name,
-            key,
-            raw_state,
-            normalized_state,
-            value,
-            persistence,
-            stale_timeout_ms,
-            now
-          )
+          create_initial_entry(ctx)
       end
     end
   end
 
-  defp create_initial_entry(
-         mission_id,
-         target_id,
-         qualified_item_name,
-         table_name,
-         key,
-         raw_state,
-         normalized_state,
-         value,
-         persistence,
-         stale_timeout_ms,
-         now
-       ) do
+  defp create_initial_entry(ctx) do
     # For initial entry, if it's a violation and persistence > 1,
     # start in green with pending violation
-    if Evaluator.violation?(raw_state) and persistence > 1 do
-      entry = %{
-        current_state: :green,
-        pending_state: raw_state,
-        violation_count: 1,
-        last_update: now,
-        persistence: persistence,
-        stale_timeout_ms: stale_timeout_ms
-      }
-
-      :ets.insert(table_name, {key, entry})
+    if Evaluator.violation?(ctx.raw_state) and ctx.persistence > 1 do
+      entry = build_entry(ctx, :green, ctx.raw_state, 1)
+      :ets.insert(ctx.table_name, {ctx.key, entry})
       {:ok, :green, false}
     else
       # Immediate state (green or persistence=1 violation)
-      entry = %{
-        current_state: normalized_state,
-        pending_state: nil,
-        violation_count: 0,
-        last_update: now,
-        persistence: persistence,
-        stale_timeout_ms: stale_timeout_ms
-      }
-
-      :ets.insert(table_name, {key, entry})
+      entry = build_entry(ctx, ctx.normalized_state, nil, 0)
+      :ets.insert(ctx.table_name, {ctx.key, entry})
 
       # Emit event if starting in violation state
-      if Evaluator.violation?(raw_state) do
+      if Evaluator.violation?(ctx.raw_state) do
         emit_transition_event(
-          mission_id,
-          target_id,
-          qualified_item_name,
+          ctx.mission_id,
+          ctx.target_id,
+          ctx.qualified_item_name,
           :green,
-          normalized_state,
-          value
+          ctx.normalized_state,
+          ctx.value
         )
       end
 
-      {:ok, normalized_state, Evaluator.violation?(raw_state)}
+      {:ok, ctx.normalized_state, Evaluator.violation?(ctx.raw_state)}
     end
   end
 
-  defp process_state_update(
-         mission_id,
-         target_id,
-         qualified_item_name,
-         table_name,
-         key,
-         entry,
-         raw_state,
-         normalized_state,
-         value,
-         persistence,
-         stale_timeout_ms,
-         now
-       ) do
+  defp process_state_update(%{entry: entry} = ctx) do
     cond do
       # Green state - immediately transition to green, clear pending
-      not Evaluator.violation?(raw_state) ->
-        previous_state = entry.current_state
-        transitioned? = previous_state != :green
-
-        new_entry = %{
-          entry
-          | current_state: :green,
-            pending_state: nil,
-            violation_count: 0,
-            last_update: now,
-            persistence: persistence,
-            stale_timeout_ms: stale_timeout_ms
-        }
-
-        :ets.insert(table_name, {key, new_entry})
-
-        if transitioned? do
-          emit_transition_event(
-            mission_id,
-            target_id,
-            qualified_item_name,
-            previous_state,
-            :green,
-            value
-          )
-        end
-
-        {:ok, :green, transitioned?}
+      not Evaluator.violation?(ctx.raw_state) ->
+        handle_green_state(ctx)
 
       # Same violation type as pending - increment count
-      entry.pending_state == raw_state ->
-        new_count = entry.violation_count + 1
-
-        if new_count >= persistence do
-          # Persistence threshold reached - transition
-          previous_state = entry.current_state
-          transitioned? = previous_state != normalized_state
-
-          new_entry = %{
-            entry
-            | current_state: normalized_state,
-              pending_state: nil,
-              violation_count: 0,
-              last_update: now,
-              persistence: persistence,
-              stale_timeout_ms: stale_timeout_ms
-          }
-
-          :ets.insert(table_name, {key, new_entry})
-
-          if transitioned? do
-            emit_transition_event(
-              mission_id,
-              target_id,
-              qualified_item_name,
-              previous_state,
-              normalized_state,
-              value
-            )
-          end
-
-          {:ok, normalized_state, transitioned?}
-        else
-          # Still accumulating violations
-          new_entry = %{
-            entry
-            | pending_state: raw_state,
-              violation_count: new_count,
-              last_update: now,
-              persistence: persistence,
-              stale_timeout_ms: stale_timeout_ms
-          }
-
-          :ets.insert(table_name, {key, new_entry})
-
-          # Return current state (not yet transitioned)
-          {:ok, Evaluator.normalize_state(entry.current_state), false}
-        end
+      entry.pending_state == ctx.raw_state ->
+        handle_pending_violation(ctx)
 
       # Different violation type - reset and start counting new violation
       true ->
-        new_entry = %{
-          entry
-          | pending_state: raw_state,
-            violation_count: 1,
-            last_update: now,
-            persistence: persistence,
-            stale_timeout_ms: stale_timeout_ms
-        }
-
-        :ets.insert(table_name, {key, new_entry})
-
-        # Return current state (not yet transitioned)
-        {:ok, Evaluator.normalize_state(entry.current_state), false}
+        handle_new_violation(ctx)
     end
+  end
+
+  defp handle_green_state(%{entry: entry} = ctx) do
+    previous_state = entry.current_state
+    transitioned? = previous_state != :green
+    new_entry = update_entry(ctx, :green, nil, 0)
+
+    :ets.insert(ctx.table_name, {ctx.key, new_entry})
+
+    if transitioned? do
+      emit_transition_event(
+        ctx.mission_id,
+        ctx.target_id,
+        ctx.qualified_item_name,
+        previous_state,
+        :green,
+        ctx.value
+      )
+    end
+
+    {:ok, :green, transitioned?}
+  end
+
+  defp handle_pending_violation(%{entry: entry} = ctx) do
+    new_count = entry.violation_count + 1
+
+    if new_count >= ctx.persistence do
+      # Persistence threshold reached - transition
+      previous_state = entry.current_state
+      transitioned? = previous_state != ctx.normalized_state
+      new_entry = update_entry(ctx, ctx.normalized_state, nil, 0)
+
+      :ets.insert(ctx.table_name, {ctx.key, new_entry})
+
+      if transitioned? do
+        emit_transition_event(
+          ctx.mission_id,
+          ctx.target_id,
+          ctx.qualified_item_name,
+          previous_state,
+          ctx.normalized_state,
+          ctx.value
+        )
+      end
+
+      {:ok, ctx.normalized_state, transitioned?}
+    else
+      # Still accumulating violations
+      new_entry = update_entry(ctx, entry.current_state, ctx.raw_state, new_count)
+
+      :ets.insert(ctx.table_name, {ctx.key, new_entry})
+
+      {:ok, Evaluator.normalize_state(entry.current_state), false}
+    end
+  end
+
+  defp handle_new_violation(%{entry: entry} = ctx) do
+    new_entry = update_entry(ctx, entry.current_state, ctx.raw_state, 1)
+
+    :ets.insert(ctx.table_name, {ctx.key, new_entry})
+
+    {:ok, Evaluator.normalize_state(entry.current_state), false}
+  end
+
+  defp build_entry(ctx, current_state, pending_state, violation_count) do
+    %{
+      current_state: current_state,
+      pending_state: pending_state,
+      violation_count: violation_count,
+      persistence: ctx.persistence,
+      stale_timeout_ms: ctx.stale_timeout_ms
+    }
+    |> Map.put(ctx.timestamp_key, ctx.timestamp)
+  end
+
+  defp update_entry(ctx, current_state, pending_state, violation_count) do
+    Map.merge(ctx.entry, build_entry(ctx, current_state, pending_state, violation_count))
   end
 
   defp emit_transition_event(

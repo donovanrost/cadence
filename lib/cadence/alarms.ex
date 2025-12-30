@@ -18,12 +18,14 @@ defmodule Cadence.Alarms do
   """
 
   alias Cadence.Alarms.{Alarm, AlarmRule}
+
   alias Cadence.Application.Alerting.{
     AlarmOperations,
     AlarmQueries,
     ManageAlarmRules,
     TriggerAlarm
   }
+
   alias Cadence.Runtime.Alarms.AlarmManager
 
   # ============================================================================

@@ -111,9 +111,11 @@ defmodule Cadence.Test.Adapters.FakeEventPublisher do
 
   @impl true
   def subscribe(topic) do
+    pid = self()
+
     Agent.update(__MODULE__, fn state ->
       subscribers = Map.get(state.subscriptions, topic, [])
-      new_subscribers = [self() | subscribers] |> Enum.uniq()
+      new_subscribers = [pid | subscribers] |> Enum.uniq()
       %{state | subscriptions: Map.put(state.subscriptions, topic, new_subscribers)}
     end)
 
@@ -122,9 +124,11 @@ defmodule Cadence.Test.Adapters.FakeEventPublisher do
 
   @impl true
   def unsubscribe(topic) do
+    pid = self()
+
     Agent.update(__MODULE__, fn state ->
       subscribers = Map.get(state.subscriptions, topic, [])
-      new_subscribers = List.delete(subscribers, self())
+      new_subscribers = List.delete(subscribers, pid)
       %{state | subscriptions: Map.put(state.subscriptions, topic, new_subscribers)}
     end)
 

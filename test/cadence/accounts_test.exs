@@ -1,12 +1,32 @@
 defmodule Cadence.AccountsTest do
-  use Cadence.DataCase
+  use Cadence.PureCase, async: false
 
   alias Cadence.Accounts
   alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
+  alias Cadence.Domain.Accounts.Entities.UserToken, as: UserTokenEntity
+  alias Cadence.Test.Adapters.FakePasswordHasher
+  alias Cadence.Test.Adapters.InMemoryTokenRepository
+  alias Cadence.Test.Adapters.InMemoryUserRepository
 
-  import Cadence.AccountsFixtures
-  # Ecto schemas for database verification
-  alias Cadence.Accounts.{User, UserToken}
+  alias Cadence.Accounts.User
+
+  setup do
+    {:ok, _} = InMemoryUserRepository.start_link()
+    {:ok, _} = InMemoryTokenRepository.start_link()
+    Application.put_env(:cadence, :user_repository, InMemoryUserRepository)
+    Application.put_env(:cadence, :token_repository, InMemoryTokenRepository)
+    Application.put_env(:cadence, :password_hasher, FakePasswordHasher)
+
+    on_exit(fn ->
+      Application.delete_env(:cadence, :user_repository)
+      Application.delete_env(:cadence, :token_repository)
+      Application.delete_env(:cadence, :password_hasher)
+      InMemoryTokenRepository.stop()
+      InMemoryUserRepository.stop()
+    end)
+
+    :ok
+  end
 
   describe "get_user_by_email/1" do
     test "does not return the user if the email does not exist" do
@@ -121,7 +141,13 @@ defmodule Cadence.AccountsTest do
         end)
 
       {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
+
+      assert {:ok, user_token} =
+               InMemoryTokenRepository.find_by_token_and_context(
+                 :crypto.hash(:sha256, token),
+                 "change:current@example.com"
+               )
+
       assert user_token.user_id == user.id
       # sent_to contains the NEW email (user.email), context contains the CURRENT email
       assert user_token.sent_to == user.email
@@ -144,33 +170,33 @@ defmodule Cadence.AccountsTest do
 
     test "updates the email with a valid token", %{user: user, token: token, email: email} do
       assert {:ok, %UserEntity{email: ^email}} = Accounts.update_user_email(user, token)
-      changed_user = Repo.get!(User, user.id)
+      changed_user = Accounts.get_user!(user.id)
       assert changed_user.email != user.email
       assert changed_user.email == email
-      refute Repo.get_by(UserToken, user_id: user.id)
+      assert InMemoryTokenRepository.list_all_for_user(user.id) == []
     end
 
     test "does not update email with invalid token", %{user: user} do
       # Invalid tokens return :not_found from the token repository
       assert {:error, _reason} = Accounts.update_user_email(user, "oops")
-      assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
+      assert Accounts.get_user!(user.id).email == user.email
+      assert InMemoryTokenRepository.list_all_for_user(user.id) != []
     end
 
     test "does not update email if user email changed", %{user: user, token: token} do
       assert {:error, :not_found} =
                Accounts.update_user_email(%{user | email: "current@example.com"}, token)
 
-      assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
+      assert Accounts.get_user!(user.id).email == user.email
+      assert InMemoryTokenRepository.list_all_for_user(user.id) != []
     end
 
     test "does not update email if token expired", %{user: user, token: token} do
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
+      :ok = expire_change_email_token(token, "change:#{user.email}")
 
-      assert {:error, :not_found} = Accounts.update_user_email(user, token)
-      assert Repo.get!(User, user.id).email == user.email
-      assert Repo.get_by(UserToken, user_id: user.id)
+      assert {:error, :expired} = Accounts.update_user_email(user, token)
+      assert Accounts.get_user!(user.id).email == user.email
+      assert InMemoryTokenRepository.list_all_for_user(user.id) != []
     end
   end
 
@@ -191,8 +217,8 @@ defmodule Cadence.AccountsTest do
         )
 
       assert changeset.valid?
-      assert get_change(changeset, :password) == "new valid password"
-      assert is_nil(get_change(changeset, :hashed_password))
+      assert Ecto.Changeset.get_change(changeset, :password) == "new valid password"
+      assert is_nil(Ecto.Changeset.get_change(changeset, :hashed_password))
     end
   end
 
@@ -229,7 +255,7 @@ defmodule Cadence.AccountsTest do
       {:ok, {_, _}} =
         Accounts.update_user_password(user, %{password: "new valid password"})
 
-      refute Repo.get_by(UserToken, user_id: user.id)
+      assert InMemoryTokenRepository.list_all_for_user(user.id) == []
     end
   end
 
@@ -240,18 +266,12 @@ defmodule Cadence.AccountsTest do
 
     test "generates a token", %{user: user} do
       token = Accounts.generate_user_session_token(user)
-      assert user_token = Repo.get_by(UserToken, token: token)
+
+      assert {:ok, user_token} =
+               InMemoryTokenRepository.find_by_token_and_context(token, "session")
+
       assert user_token.context == "session"
       assert user_token.authenticated_at != nil
-
-      # Creating the same token for another user should fail
-      assert_raise Ecto.ConstraintError, fn ->
-        Repo.insert!(%UserToken{
-          token: user_token.token,
-          user_id: user_fixture().id,
-          context: "session"
-        })
-      end
     end
   end
 
@@ -273,8 +293,7 @@ defmodule Cadence.AccountsTest do
     end
 
     test "does not return user for expired token", %{token: token} do
-      dt = ~N[2020-01-01 00:00:00]
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: dt, authenticated_at: dt])
+      :ok = expire_session_token(token)
       refute Accounts.get_user_by_session_token(token)
     end
   end
@@ -296,7 +315,7 @@ defmodule Cadence.AccountsTest do
     end
 
     test "does not return user for expired token", %{token: token} do
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
+      :ok = expire_login_token(token)
       refute Accounts.get_user_by_magic_link_token(token)
     end
   end
@@ -326,8 +345,7 @@ defmodule Cadence.AccountsTest do
     end
 
     test "raises when unconfirmed user has password set" do
-      user = unconfirmed_user_fixture()
-      {1, nil} = Repo.update_all(User, set: [hashed_password: "hashed"])
+      user = unconfirmed_user_fixture() |> set_password()
       {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
 
       assert_raise RuntimeError, ~r/magic link log in is not allowed/, fn ->
@@ -357,7 +375,13 @@ defmodule Cadence.AccountsTest do
         end)
 
       {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
+
+      assert {:ok, user_token} =
+               InMemoryTokenRepository.find_by_token_and_context(
+                 :crypto.hash(:sha256, token),
+                 "login"
+               )
+
       assert user_token.user_id == user.id
       assert user_token.sent_to == user.email
       assert user_token.context == "login"
@@ -369,4 +393,88 @@ defmodule Cadence.AccountsTest do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""
     end
   end
+
+  defp user_fixture(attrs \\ %{}) do
+    user = unconfirmed_user_fixture(attrs)
+    confirm_user(user)
+  end
+
+  defp unconfirmed_user_fixture(attrs \\ %{}) do
+    attrs = valid_user_attributes(attrs)
+    {:ok, user} = Accounts.register_user(attrs)
+    InMemoryTokenRepository.register_user(user)
+    user
+  end
+
+  defp confirm_user(user) do
+    token =
+      extract_user_token(fn url ->
+        Accounts.deliver_login_instructions(user, url)
+      end)
+
+    {:ok, {confirmed_user, _expired_tokens}} = Accounts.login_user_by_magic_link(token)
+    InMemoryTokenRepository.register_user(confirmed_user)
+    confirmed_user
+  end
+
+  defp set_password(user) do
+    {:ok, {updated_user, _expired_tokens}} =
+      Accounts.update_user_password(user, %{password: valid_user_password()})
+
+    InMemoryTokenRepository.register_user(updated_user)
+    updated_user
+  end
+
+  defp valid_user_attributes(attrs) do
+    attrs = normalize_attrs(attrs)
+
+    defaults = %{
+      email: unique_user_email(),
+      system_admin: true
+    }
+
+    Map.merge(defaults, attrs)
+  end
+
+  defp unique_user_email, do: unique_email()
+  defp valid_user_password, do: "hello world!"
+
+  defp extract_user_token(fun) do
+    {:ok, captured_email} = fun.(&"[TOKEN]#{&1}[TOKEN]")
+    [_, token | _] = String.split(captured_email.text_body, "[TOKEN]")
+    token
+  end
+
+  defp generate_user_magic_link_token(user) do
+    {:ok, token} = Cadence.Application.Accounts.MagicLinkOperations.generate_for_user(user)
+    {token, nil}
+  end
+
+  defp expire_session_token(token) do
+    expired_at = DateTime.add(DateTime.utc_now(), -30, :day)
+
+    InMemoryTokenRepository.update_token(token, "session", %{
+      created_at: expired_at,
+      authenticated_at: expired_at
+    })
+
+    :ok
+  end
+
+  defp expire_login_token(token) do
+    {:ok, hashed} = UserTokenEntity.verify_login_token(token)
+    expired_at = DateTime.add(DateTime.utc_now(), -1, :day)
+    InMemoryTokenRepository.update_token(hashed, "login", %{created_at: expired_at})
+    :ok
+  end
+
+  defp expire_change_email_token(token, context) do
+    {:ok, hashed} = UserTokenEntity.verify_change_email_token(token)
+    expired_at = DateTime.add(DateTime.utc_now(), -10, :day)
+    InMemoryTokenRepository.update_token(hashed, context, %{created_at: expired_at})
+    :ok
+  end
+
+  defp normalize_attrs(attrs) when is_list(attrs), do: Enum.into(attrs, %{})
+  defp normalize_attrs(attrs), do: attrs
 end

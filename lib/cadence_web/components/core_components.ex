@@ -809,46 +809,11 @@ defmodule CadenceWeb.CoreComponents do
   attr :class, :string, default: nil
 
   def avatar(assigns) do
-    initials =
-      if assigns.name do
-        assigns.name
-        |> String.split()
-        |> Enum.take(2)
-        |> Enum.map_join("", &String.first/1)
-        |> String.upcase()
-      else
-        assigns.email
-        |> String.split("@")
-        |> List.first()
-        |> String.first()
-        |> String.upcase()
-      end
+    initials = avatar_initials(assigns)
+    bg_class = avatar_background_class(assigns.email)
+    size_class = avatar_size_class(assigns.size)
 
-    # Generate consistent color from email hash
-    hash = :crypto.hash(:md5, assigns.email) |> :binary.decode_unsigned()
-    color_index = rem(hash, 5)
-
-    bg_class =
-      case color_index do
-        0 -> "bg-primary text-primary-content"
-        1 -> "bg-secondary text-secondary-content"
-        2 -> "bg-accent text-accent-content"
-        3 -> "bg-info text-info-content"
-        _ -> "bg-success text-success-content"
-      end
-
-    size_class =
-      case assigns.size do
-        "sm" -> "h-8 w-8 text-xs"
-        "md" -> "h-10 w-10 text-sm"
-        "lg" -> "h-12 w-12 text-base"
-      end
-
-    assigns =
-      assigns
-      |> assign(:initials, initials)
-      |> assign(:bg_class, bg_class)
-      |> assign(:size_class, size_class)
+    assigns = assign(assigns, initials: initials, bg_class: bg_class, size_class: size_class)
 
     ~H"""
     <div class={[
@@ -866,6 +831,40 @@ defmodule CadenceWeb.CoreComponents do
     </div>
     """
   end
+
+  defp avatar_initials(%{name: name, email: email}) do
+    name
+    |> display_name(email)
+    |> String.split()
+    |> Enum.take(2)
+    |> Enum.map_join("", &String.first/1)
+    |> String.upcase()
+  end
+
+  defp display_name(nil, email) do
+    email
+    |> String.split("@")
+    |> List.first()
+  end
+
+  defp display_name(name, _email), do: name
+
+  defp avatar_background_class(email) do
+    :crypto.hash(:md5, email)
+    |> :binary.decode_unsigned()
+    |> rem(5)
+    |> color_class()
+  end
+
+  defp color_class(0), do: "bg-primary text-primary-content"
+  defp color_class(1), do: "bg-secondary text-secondary-content"
+  defp color_class(2), do: "bg-accent text-accent-content"
+  defp color_class(3), do: "bg-info text-info-content"
+  defp color_class(_), do: "bg-success text-success-content"
+
+  defp avatar_size_class("sm"), do: "h-8 w-8 text-xs"
+  defp avatar_size_class("md"), do: "h-10 w-10 text-sm"
+  defp avatar_size_class("lg"), do: "h-12 w-12 text-base"
 
   @doc """
   Renders a dropdown menu.

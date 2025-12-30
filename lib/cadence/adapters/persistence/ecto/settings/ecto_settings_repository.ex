@@ -73,36 +73,12 @@ defmodule Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository do
 
   @impl true
   def upsert(attrs) do
-    scope_id = Map.get(attrs, :scope_id) || Map.get(attrs, "scope_id")
-    scope_type = Map.get(attrs, :scope_type) || Map.get(attrs, "scope_type")
-    namespace = Map.get(attrs, :namespace) || Map.get(attrs, "namespace")
-    key = Map.get(attrs, :key) || Map.get(attrs, "key")
+    identifiers = extract_identifiers(attrs)
+    normalized_attrs = normalize_attrs(attrs, identifiers)
 
-    # Normalize attrs to have string namespace/key
-    normalized_attrs =
-      attrs
-      |> Map.put(:namespace, to_string(namespace))
-      |> Map.put(:key, to_string(key))
-
-    # Try to find existing setting
-    query =
-      from s in Setting,
-        where:
-          s.scope_type == ^scope_type and
-            s.scope_id == ^scope_id and
-            s.namespace == ^to_string(namespace) and
-            s.key == ^to_string(key)
-
-    case Repo.one(query) do
-      nil ->
-        %Setting{}
-        |> Setting.changeset(normalized_attrs)
-        |> Repo.insert()
-
-      existing ->
-        existing
-        |> Setting.changeset(normalized_attrs)
-        |> Repo.update()
+    case find_setting(identifiers) do
+      {:ok, setting} -> update_setting(setting, normalized_attrs)
+      {:error, :not_found} -> insert_setting(normalized_attrs)
     end
   end
 
@@ -135,6 +111,53 @@ defmodule Cadence.Adapters.Persistence.Ecto.Settings.EctoSettingsRepository do
   # ===========================================================================
   # Private Helpers
   # ===========================================================================
+
+  defp extract_identifiers(attrs) do
+    %{
+      scope_id: Map.get(attrs, :scope_id) || Map.get(attrs, "scope_id"),
+      scope_type: Map.get(attrs, :scope_type) || Map.get(attrs, "scope_type"),
+      namespace: Map.get(attrs, :namespace) || Map.get(attrs, "namespace"),
+      key: Map.get(attrs, :key) || Map.get(attrs, "key")
+    }
+  end
+
+  defp normalize_attrs(attrs, %{namespace: namespace, key: key}) do
+    attrs
+    |> Map.put(:namespace, to_string(namespace))
+    |> Map.put(:key, to_string(key))
+  end
+
+  defp find_setting(%{
+         scope_id: scope_id,
+         scope_type: scope_type,
+         namespace: namespace,
+         key: key
+       }) do
+    query =
+      from s in Setting,
+        where:
+          s.scope_type == ^scope_type and
+            s.scope_id == ^scope_id and
+            s.namespace == ^to_string(namespace) and
+            s.key == ^to_string(key)
+
+    case Repo.one(query) do
+      nil -> {:error, :not_found}
+      setting -> {:ok, setting}
+    end
+  end
+
+  defp insert_setting(attrs) do
+    %Setting{}
+    |> Setting.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  defp update_setting(setting, attrs) do
+    setting
+    |> Setting.changeset(attrs)
+    |> Repo.update()
+  end
 
   defp apply_filters(query, filters) do
     Enum.reduce(filters, query, fn

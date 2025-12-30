@@ -122,16 +122,21 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
       })
       |> Repo.insert!()
 
+    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+
+    target_entity =
+      Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+
     # Start the target queue and dispatcher for this target
     {:ok, _queue_pid} =
       start_supervised(
-        {TargetQueue, mission_id: mission.id, target_id: target.id},
+        {TargetQueue, mission: mission_entity, target: target_entity},
         id: :target_queue
       )
 
     {:ok, _dispatcher_pid} =
       start_supervised(
-        {TargetDispatcher, mission_id: mission.id, target_id: target.id},
+        {TargetDispatcher, mission: mission_entity, target: target_entity},
         id: :target_dispatcher
       )
 

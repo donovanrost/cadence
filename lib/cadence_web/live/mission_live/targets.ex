@@ -111,32 +111,24 @@ defmodule CadenceWeb.MissionLive.Targets do
 
   @impl true
   def handle_event("delete", %{"id" => target_id}, socket) do
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
+    with {:ok, target} <- fetch_target(socket, target_id),
+         :ok <- authorize_manage_targets(socket),
+         {:ok, _} <- Targets.delete_target(target) do
+      targets = list_targets(socket)
 
-    case Targets.get_target(target_id, mission.id) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Target deleted successfully")
+       |> assign(:targets, targets)}
+    else
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Target not found in this mission")}
 
-      {:ok, target} ->
-        case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-          :ok ->
-            case Targets.delete_target(target) do
-              {:ok, _} ->
-                targets = Targets.list_targets_with_preloads(mission)
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
 
-                {:noreply,
-                 socket
-                 |> put_flash(:info, "Target deleted successfully")
-                 |> assign(:targets, targets)}
-
-              {:error, _changeset} ->
-                {:noreply, put_flash(socket, :error, "Failed to delete target")}
-            end
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "You don't have permission to delete targets")}
-        end
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete target")}
     end
   end
 
@@ -218,5 +210,28 @@ defmodule CadenceWeb.MissionLive.Targets do
       />
     </.modal>
     """
+  end
+
+  defp fetch_target(socket, target_id) do
+    mission = socket.assigns.mission
+
+    case Targets.get_target(target_id, mission.id) do
+      {:ok, target} -> {:ok, target}
+      {:error, :not_found} -> {:error, :not_found}
+    end
+  end
+
+  defp authorize_manage_targets(socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp list_targets(socket) do
+    Targets.list_targets_with_preloads(socket.assigns.mission)
   end
 end

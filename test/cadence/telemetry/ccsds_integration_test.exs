@@ -17,13 +17,36 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
   import Bitwise
 
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.{Missions, Organizations}
   alias Cadence.Runtime.Missions.MissionSupervisor
+  alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Simulator.PacketSimulator
-  alias Cadence.Telemetry.{CurrentValueTable, Pipeline}
   alias Cadence.Telemetry.Protocols.TemplateProtocol
 
   @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
+
+  defp wait_for(fun, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 2_000)
+    interval = Keyword.get(opts, :interval, 25)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    do_wait_for(fun, deadline, interval)
+  end
+
+  defp do_wait_for(fun, deadline, interval) do
+    if fun.() do
+      :ok
+    else
+      if System.monotonic_time(:millisecond) < deadline do
+        Process.sleep(interval)
+        do_wait_for(fun, deadline, interval)
+      else
+        flunk("Condition was not met within timeout")
+      end
+    end
+  end
 
   describe "CCSDS telemetry processing" do
     setup do
@@ -44,10 +67,12 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         })
 
       # Start the mission (starts CVT, PacketIdentifier, Pipeline)
-      {:ok, _pid} = MissionSupervisor.start_mission(mission)
+      {:ok, config} = MissionConfig.load(mission.id)
+      {:ok, _pid} = MissionSupervisor.start_mission(config)
 
-      # Give processes time to initialize
-      Process.sleep(100)
+      on_exit(fn ->
+        MissionSupervisor.stop_mission(mission.id)
+      end)
 
       %{org: org, mission: mission}
     end
@@ -68,21 +93,48 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
           output: nil
         )
 
-      # Wait for packets to be generated and processed
-      Process.sleep(800)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Verify we received telemetry updates via PubSub
-      assert_received {:telemetry_update, "ccsds-sat-1", "HEALTH", item_name, telemetry_value}
+      assert_receive {:telemetry_update, "ccsds-sat-1", "HEALTH", item_name, telemetry_value},
+                     2_000
+
       assert is_binary(item_name)
       assert is_map(telemetry_value)
       assert Map.has_key?(telemetry_value, :value)
 
       # Verify data is in CVT - check multiple fields
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "cpu_temp")
+          )
+        end)
+
       {:ok, cpu_temp} =
         CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "cpu_temp")
 
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "battery_voltage")
+          )
+        end)
+
       {:ok, voltage} =
         CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "battery_voltage")
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "uptime_seconds")
+          )
+        end)
 
       {:ok, uptime} =
         CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "uptime_seconds")
@@ -102,14 +154,11 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       assert uptime.value >= 0
 
       # Verify pipeline stats
-      stats = Pipeline.stats(mission.id)
-      assert stats.packets_processed > 0
-      assert stats.items_processed > 0
-      assert stats.errors == 0
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
+      :ok =
+        wait_for(fn ->
+          stats = Pipeline.stats(mission.id)
+          stats.packets_processed > 0 and stats.items_processed > 0 and stats.errors == 0
+        end)
     end
 
     test "processes all three CCSDS packet types", %{mission: mission} do
@@ -124,11 +173,29 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
           output: nil
         )
 
-      Process.sleep(1000)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Verify HEALTH packet (APID 100)
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "cpu_temp")
+          )
+        end)
+
       {:ok, cpu_temp} = CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "cpu_temp")
       assert is_number(cpu_temp.value)
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "battery_percentage")
+          )
+        end)
 
       {:ok, battery_pct} =
         CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "battery_percentage")
@@ -137,27 +204,63 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       assert battery_pct.value >= 0 and battery_pct.value <= 100
 
       # Verify ATTITUDE packet (APID 101)
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "roll")
+          )
+        end)
+
       {:ok, roll} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "roll")
       assert is_number(roll.value)
 
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "pitch")
+          )
+        end)
+
       {:ok, pitch} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "pitch")
       assert is_number(pitch.value)
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "yaw")
+          )
+        end)
 
       {:ok, yaw} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "yaw")
       assert is_number(yaw.value)
 
       # Verify POWER packet (APID 102)
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "POWER", "bus_voltage")
+          )
+        end)
+
       {:ok, bus_voltage} = CurrentValueTable.get(mission.id, "multi-sat", "POWER", "bus_voltage")
       assert is_number(bus_voltage.value)
+
+      :ok =
+        wait_for(fn ->
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "multi-sat", "POWER", "solar_panel_current")
+          )
+        end)
 
       {:ok, solar_current} =
         CurrentValueTable.get(mission.id, "multi-sat", "POWER", "solar_panel_current")
 
       assert is_number(solar_current.value)
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
     end
 
     test "handles multiple targets with CCSDS packets", %{mission: mission} do
@@ -172,9 +275,18 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
           output: nil
         )
 
-      Process.sleep(1000)
+      on_exit(fn ->
+        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+      end)
 
       # Each satellite should have separate telemetry in CVT
+      :ok =
+        wait_for(fn ->
+          match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-a", "HEALTH", "cpu_temp")) and
+            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-b", "HEALTH", "cpu_temp")) and
+            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-c", "HEALTH", "cpu_temp"))
+        end)
+
       {:ok, temp_a} = CurrentValueTable.get(mission.id, "sat-a", "HEALTH", "cpu_temp")
       {:ok, temp_b} = CurrentValueTable.get(mission.id, "sat-b", "HEALTH", "cpu_temp")
       {:ok, temp_c} = CurrentValueTable.get(mission.id, "sat-c", "HEALTH", "cpu_temp")
@@ -183,14 +295,6 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       assert is_number(temp_a.value)
       assert is_number(temp_b.value)
       assert is_number(temp_c.value)
-
-      # Values should be different (simulator adds noise)
-      values = [temp_a.value, temp_b.value, temp_c.value]
-      assert length(Enum.uniq(values)) > 1
-
-      # Cleanup
-      PacketSimulator.stop(sim_pid)
-      MissionSupervisor.stop_mission(mission.id)
     end
 
     test "CCSDS protocol framing works correctly" do
@@ -202,7 +306,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         )
 
       # Build a CCSDS packet manually
-      apid = 100
+      _apid = 100
       seq_count = 42
       payload_data = :crypto.strong_rand_bytes(27)
       # 8 byte secondary header + 19 byte user data

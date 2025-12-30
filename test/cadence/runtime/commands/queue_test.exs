@@ -2,7 +2,7 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commands
-  alias Cadence.Commands.QueueEntry
+  alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
@@ -67,8 +67,13 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
       })
       |> Repo.insert!()
 
+    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+
+    target_entity =
+      Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+
     # Start the queue for this target
-    {:ok, _pid} = start_supervised({TargetQueue, mission_id: mission.id, target_id: target.id})
+    {:ok, _pid} = start_supervised({TargetQueue, mission: mission_entity, target: target_entity})
 
     %{
       org: org,
@@ -82,7 +87,7 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
     test "enqueues a command successfully", %{mission: mission, target: target} do
       result = Commands.enqueue(mission.id, "SET_MODE", %{mode: 1}, target: target.id)
 
-      assert {:ok, %QueueEntry{} = entry} = result
+      assert {:ok, %QueuedCommand{} = entry} = result
       assert entry.mission_id == mission.id
       assert entry.target_id == target.id
       assert entry.command_name == "SET_MODE"
@@ -184,13 +189,10 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
       {:ok, _} = Commands.enqueue(mission.id, "CMD_1", %{}, target: target.id)
       {:ok, _} = Commands.enqueue(mission.id, "CMD_2", %{}, target: target.id)
 
-      status = TargetQueue.status(mission.id, target.id)
-
-      assert status.mission_id == mission.id
-      assert status.target_id == target.id
-      assert status.pending == 2
-      # executing is 0 when nothing is executing
-      assert status.executing == 0
+      Cadence.PureCase.assert_eventually(fn ->
+        status = TargetQueue.status(mission.id, target.id)
+        status.pending == 2 and status.executing == 0
+      end)
     end
   end
 
@@ -226,9 +228,14 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
         })
         |> Repo.insert!()
 
+      mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+
+      target2_entity =
+        Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target2.id)
+
       # Start queue for second target
       start_supervised!(
-        {TargetQueue, mission_id: mission.id, target_id: target2.id},
+        {TargetQueue, mission: mission_entity, target: target2_entity},
         id: :target2_queue
       )
 
@@ -259,59 +266,143 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
     end
   end
 
-  describe "QueueEntry helpers" do
+  describe "QueuedCommand helpers" do
     test "ready?/1 returns true for pending entry without scheduled time" do
-      entry = %QueueEntry{status: :pending, scheduled_at: nil}
-      assert QueueEntry.ready?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :pending,
+        scheduled_at: nil
+      }
+
+      assert QueuedCommand.ready?(entry)
     end
 
     test "ready?/1 returns true for pending entry with past scheduled time" do
       past = DateTime.add(DateTime.utc_now(), -60, :second)
-      entry = %QueueEntry{status: :pending, scheduled_at: past}
-      assert QueueEntry.ready?(entry)
+
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :pending,
+        scheduled_at: past
+      }
+
+      assert QueuedCommand.ready?(entry)
     end
 
     test "ready?/1 returns false for pending entry with future scheduled time" do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
-      entry = %QueueEntry{status: :pending, scheduled_at: future}
-      refute QueueEntry.ready?(entry)
+
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :pending,
+        scheduled_at: future
+      }
+
+      refute QueuedCommand.ready?(entry)
     end
 
     test "ready?/1 returns false for non-pending entries" do
-      entry = %QueueEntry{status: :executing, scheduled_at: nil}
-      refute QueueEntry.ready?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :executing,
+        scheduled_at: nil
+      }
+
+      refute QueuedCommand.ready?(entry)
     end
 
     test "expired?/1 returns false for entry without expires_at" do
-      entry = %QueueEntry{expires_at: nil}
-      refute QueueEntry.expired?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        expires_at: nil
+      }
+
+      refute QueuedCommand.expired?(entry)
     end
 
     test "expired?/1 returns true for entry past expires_at" do
       past = DateTime.add(DateTime.utc_now(), -60, :second)
-      entry = %QueueEntry{expires_at: past}
-      assert QueueEntry.expired?(entry)
+
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        expires_at: past
+      }
+
+      assert QueuedCommand.expired?(entry)
     end
 
     test "expired?/1 returns false for entry before expires_at" do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
-      entry = %QueueEntry{expires_at: future}
-      refute QueueEntry.expired?(entry)
+
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        expires_at: future
+      }
+
+      refute QueuedCommand.expired?(entry)
     end
 
     test "retriable?/1 returns true for failed entry under max attempts" do
-      entry = %QueueEntry{status: :failed, attempts: 1, max_attempts: 3}
-      assert QueueEntry.retriable?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :failed,
+        attempts: 1,
+        max_attempts: 3
+      }
+
+      assert QueuedCommand.retriable?(entry)
     end
 
     test "retriable?/1 returns false for failed entry at max attempts" do
-      entry = %QueueEntry{status: :failed, attempts: 3, max_attempts: 3}
-      refute QueueEntry.retriable?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :failed,
+        attempts: 3,
+        max_attempts: 3
+      }
+
+      refute QueuedCommand.retriable?(entry)
     end
 
     test "retriable?/1 returns false for non-failed entries" do
-      entry = %QueueEntry{status: :pending, attempts: 0, max_attempts: 3}
-      refute QueueEntry.retriable?(entry)
+      entry = %QueuedCommand{
+        organization_id: "org",
+        mission_id: "mission",
+        target_id: "target",
+        command_name: "CMD",
+        status: :pending,
+        attempts: 0,
+        max_attempts: 3
+      }
+
+      refute QueuedCommand.retriable?(entry)
     end
   end
 end

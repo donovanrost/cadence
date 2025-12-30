@@ -87,72 +87,48 @@ defmodule CadenceWeb.MissionLive.Automations do
 
   @impl true
   def handle_event("toggle", %{"id" => automation_id}, socket) do
-    mission = socket.assigns.mission
-    automation = Automations.get_automation!(automation_id, mission.organization_id)
-    scope = socket.assigns.current_scope
+    with {:ok, automation} <- fetch_automation(socket, automation_id),
+         :ok <- authorize_manage_automations(socket),
+         {:ok, _} <- toggle_automation(automation) do
+      automations = list_automations(socket)
+      action = if automation.enabled, do: "disabled", else: "enabled"
 
-    if automation.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          result =
-            if automation.enabled do
-              Automations.disable_automation(automation)
-            else
-              Automations.enable_automation(automation)
-            end
-
-          case result do
-            {:ok, _} ->
-              automations =
-                Automations.list_automations(mission.organization_id, mission_id: mission.id)
-
-              action = if automation.enabled, do: "disabled", else: "enabled"
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Automation #{action}")
-               |> assign(:automations, automations)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to update automation")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to manage automations")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Automation #{action}")
+       |> assign(:automations, automations)}
     else
-      {:noreply, put_flash(socket, :error, "Automation not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Automation not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to manage automations")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update automation")}
     end
   end
 
   @impl true
   def handle_event("delete", %{"id" => automation_id}, socket) do
-    mission = socket.assigns.mission
-    automation = Automations.get_automation!(automation_id, mission.organization_id)
-    scope = socket.assigns.current_scope
+    with {:ok, automation} <- fetch_automation(socket, automation_id),
+         :ok <- authorize_manage_automations(socket),
+         {:ok, _} <- Automations.delete_automation(automation) do
+      automations = list_automations(socket)
 
-    if automation.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Automations.delete_automation(automation) do
-            {:ok, _} ->
-              automations =
-                Automations.list_automations(mission.organization_id, mission_id: mission.id)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Automation deleted")
-               |> assign(:automations, automations)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete automation")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete automations")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Automation deleted")
+       |> assign(:automations, automations)}
     else
-      {:noreply, put_flash(socket, :error, "Automation not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Automation not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete automations")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete automation")}
     end
   end
 
@@ -240,6 +216,45 @@ defmodule CadenceWeb.MissionLive.Automations do
       />
     </.modal>
     """
+  end
+
+  defp fetch_automation(socket, automation_id) do
+    mission = socket.assigns.mission
+
+    case Automations.get_automation(automation_id, mission.organization_id) do
+      nil ->
+        {:error, :not_found}
+
+      automation ->
+        if automation.mission_id == mission.id do
+          {:ok, automation}
+        else
+          {:error, :not_found}
+        end
+    end
+  end
+
+  defp authorize_manage_automations(socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp toggle_automation(automation) do
+    if automation.enabled do
+      Automations.disable_automation(automation)
+    else
+      Automations.enable_automation(automation)
+    end
+  end
+
+  defp list_automations(socket) do
+    mission = socket.assigns.mission
+    Automations.list_automations(mission.organization_id, mission_id: mission.id)
   end
 
   defp format_trigger_type("alarm_fired"), do: "Alarm Fired"

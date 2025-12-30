@@ -229,46 +229,17 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     available_interfaces = Map.get(assigns, :interfaces, [])
 
     # Load current interface associations if editing an existing target
-    selected_interfaces =
-      if target.id do
-        target
-        |> Interfaces.list_interfaces_for_target()
-        |> Enum.map(fn interface ->
-          # Get the direction from the join table
-          target_interface = Interfaces.get_target_interface(target, interface)
-          direction = if target_interface, do: target_interface.direction, else: "read_write"
-          {interface.id, direction}
-        end)
-        |> Map.new()
-      else
-        %{}
-      end
+    selected_interfaces = load_selected_interfaces(target)
 
     # Load available databases for the mission
     available_databases = MissionDatabase.list_databases(mission.id)
 
     # Determine current database and version selection
     {selected_database_id, selected_definition_set_id} =
-      if target.definition_set_id do
-        # Target has a specific definition set - find its database
-        ds = MissionDatabase.get_definition_set(target.definition_set_id)
-
-        if ds do
-          {ds.database_id, ds.id}
-        else
-          {nil, nil}
-        end
-      else
-        {nil, nil}
-      end
+      load_selected_definition_set(target)
 
     # Load available versions for the selected database
-    available_versions =
-      if selected_database_id do
-        MissionDatabase.list_definition_sets(selected_database_id)
-      else
-        []
-      end
+    available_versions = load_available_versions(selected_database_id)
 
     {:ok,
      socket
@@ -280,6 +251,32 @@ defmodule CadenceWeb.TargetLive.FormComponent do
      |> assign(:selected_definition_set_id, selected_definition_set_id)
      |> assign(:available_versions, available_versions)
      |> assign_form(changeset)}
+  end
+
+  defp load_selected_interfaces(%{id: nil}), do: %{}
+
+  defp load_selected_interfaces(target) do
+    target
+    |> Interfaces.list_interfaces_for_target()
+    |> Enum.map(fn interface ->
+      target_interface = Interfaces.get_target_interface(target, interface)
+      direction = if target_interface, do: target_interface.direction, else: "read_write"
+      {interface.id, direction}
+    end)
+    |> Map.new()
+  end
+
+  defp load_selected_definition_set(%{definition_set_id: nil}), do: {nil, nil}
+
+  defp load_selected_definition_set(target) do
+    ds = MissionDatabase.get_definition_set(target.definition_set_id)
+    if ds, do: {ds.database_id, ds.id}, else: {nil, nil}
+  end
+
+  defp load_available_versions(nil), do: []
+
+  defp load_available_versions(selected_database_id) do
+    MissionDatabase.list_definition_sets(selected_database_id)
   end
 
   @impl true

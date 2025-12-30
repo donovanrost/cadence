@@ -124,12 +124,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
   @impl true
   def save_batch(notifications) do
     Repo.transaction(fn ->
-      Enum.map(notifications, fn notification ->
-        case save(notification) do
-          {:ok, saved} -> saved
-          {:error, reason} -> Repo.rollback(reason)
-        end
-      end)
+      Enum.map(notifications, &persist_notification/1)
     end)
   end
 
@@ -256,6 +251,13 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
   # ===========================================================================
   # Private Helpers
   # ===========================================================================
+
+  defp persist_notification(notification) do
+    case save(notification) do
+      {:ok, saved} -> saved
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
 
   defp apply_preference_filters(query, filters) do
     Enum.reduce(filters, query, fn

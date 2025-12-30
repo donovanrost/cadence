@@ -296,19 +296,6 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     end
   end
 
-  defp format_completion_error(:signoff_requirements_not_met), do: "Signoff requirements not met"
-
-  defp format_completion_error({:step_not_completable, status}),
-    do: "Step is #{status}, cannot complete"
-
-  defp format_completion_error({:incomplete_required_inputs, names}),
-    do: "Missing required inputs: #{Enum.join(names, ", ")}"
-
-  defp format_completion_error({:failed_checks, names}),
-    do: "Failed checks: #{Enum.join(names, ", ")}"
-
-  defp format_completion_error(reason), do: inspect(reason)
-
   def handle_event("skip_step", %{"step_id" => step_id, "reason" => reason}, socket) do
     execution_id = socket.assigns.execution.id
     user_id = socket.assigns.current_scope.user.id
@@ -404,6 +391,19 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         {:noreply, put_flash(socket, :error, "Failed to send command: #{inspect(reason)}")}
     end
   end
+
+  defp format_completion_error(:signoff_requirements_not_met), do: "Signoff requirements not met"
+
+  defp format_completion_error({:step_not_completable, status}),
+    do: "Step is #{status}, cannot complete"
+
+  defp format_completion_error({:incomplete_required_inputs, names}),
+    do: "Missing required inputs: #{Enum.join(names, ", ")}"
+
+  defp format_completion_error({:failed_checks, names}),
+    do: "Failed checks: #{Enum.join(names, ", ")}"
+
+  defp format_completion_error(reason), do: inspect(reason)
 
   # ────────────────────────────────────────────────────────────────────
   # PubSub Handlers
@@ -2287,7 +2287,13 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   attr :step_status, :atom, required: true
 
   defp number_input_block(assigns) do
-    %{min: min_val, max: max_val, unit: unit, pass_criteria: pass_criteria, current_value: current_value} =
+    %{
+      min: min_val,
+      max: max_val,
+      unit: unit,
+      pass_criteria: pass_criteria,
+      current_value: current_value
+    } =
       number_input_values(assigns.block, assigns.block_execution)
 
     validation_result = number_input_validation(current_value, pass_criteria, min_val, max_val)

@@ -1,5 +1,5 @@
 defmodule Cadence.Commands.VerificationTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Commands.Verification
 

@@ -15,6 +15,7 @@ defmodule Cadence.Procedures.Engine.ExecutionCoordinatorTest do
   setup do
     # Allow spawned processes to use the test database connection
     Sandbox.mode(Repo, {:shared, self()})
+    on_exit(fn -> Cadence.ProceduresHelpers.stop_execution_processes() end)
     :ok
   end
 

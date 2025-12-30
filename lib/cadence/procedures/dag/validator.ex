@@ -315,51 +315,65 @@ defmodule Cadence.Procedures.Dag.Validator do
   end
 
   defp dfs_detect_cycle(name, deps_graph, state) do
+    case cycle_state(name, state) do
+      {:cycle, cycle} ->
+        {:cycle, cycle}
+
+      {:visited, updated_state} ->
+        {:ok, updated_state}
+
+      :continue ->
+        visit_dependencies(name, deps_graph, state)
+    end
+  end
+
+  defp cycle_state(name, state) do
     cond do
       MapSet.member?(state.visiting, name) ->
-        # Found a cycle - return the cycle path
         cycle_start = Enum.find_index(state.path, fn n -> n == name end)
         cycle = Enum.slice(state.path, cycle_start..-1//1) ++ [name]
         {:cycle, cycle}
 
       MapSet.member?(state.visited, name) ->
-        # Already fully processed
-        {:ok, state}
+        {:visited, state}
 
       true ->
-        # Mark as visiting
-        state = %{
-          state
-          | visiting: MapSet.put(state.visiting, name),
-            path: state.path ++ [name]
-        }
-
-        # Visit all dependencies
-        deps = Map.get(deps_graph, name, [])
-
-        result =
-          Enum.reduce_while(deps, {:ok, state}, fn dep, {:ok, acc_state} ->
-            case dfs_detect_cycle(dep, deps_graph, acc_state) do
-              {:cycle, _} = cycle -> {:halt, cycle}
-              {:ok, new_state} -> {:cont, {:ok, new_state}}
-            end
-          end)
-
-        case result do
-          {:cycle, _} = cycle ->
-            cycle
-
-          {:ok, final_state} ->
-            # Mark as fully visited
-            {:ok,
-             %{
-               final_state
-               | visiting: MapSet.delete(final_state.visiting, name),
-                 visited: MapSet.put(final_state.visited, name),
-                 path: List.delete(final_state.path, name)
-             }}
-        end
+        :continue
     end
+  end
+
+  defp visit_dependencies(name, deps_graph, state) do
+    state = %{
+      state
+      | visiting: MapSet.put(state.visiting, name),
+        path: state.path ++ [name]
+    }
+
+    deps = Map.get(deps_graph, name, [])
+    result = walk_dependencies(deps, deps_graph, state)
+
+    case result do
+      {:cycle, _} = cycle -> cycle
+      {:ok, final_state} -> {:ok, mark_visited(final_state, name)}
+    end
+  end
+
+  defp walk_dependencies(deps, deps_graph, state) do
+    Enum.reduce_while(deps, {:ok, state}, fn dep, {:ok, acc_state} ->
+      case dfs_detect_cycle(dep, deps_graph, acc_state) do
+        {:cycle, _} = cycle -> {:halt, cycle}
+        {:ok, new_state} -> {:cont, {:ok, new_state}}
+      end
+    end)
+  end
+
+  defp mark_visited(state, name) do
+    %{
+      state
+      | visiting: MapSet.delete(state.visiting, name),
+        visited: MapSet.put(state.visited, name),
+        path: List.delete(state.path, name)
+    }
   end
 
   # ============================================================================
@@ -383,28 +397,35 @@ defmodule Cadence.Procedures.Dag.Validator do
       # Already processed, skip
       do_topological_sort(rest, result, in_degree, dependents, processed)
     else
-      # Add to result and update in-degrees
-      processed = MapSet.put(processed, current)
-      result = [current | result]
+      {new_queue, new_result, new_in_degree, new_processed} =
+        process_topo_node(current, rest, result, in_degree, dependents, processed)
 
-      # Decrement in-degree for all dependents
-      deps_of_current = Map.get(dependents, current, [])
-
-      {new_in_degree, new_ready} =
-        Enum.reduce(deps_of_current, {in_degree, []}, fn dep, {deg_acc, ready_acc} ->
-          new_deg = Map.get(deg_acc, dep, 0) - 1
-          deg_acc = Map.put(deg_acc, dep, new_deg)
-
-          if new_deg == 0 and not MapSet.member?(processed, dep) do
-            {deg_acc, [dep | ready_acc]}
-          else
-            {deg_acc, ready_acc}
-          end
-        end)
-
-      new_queue = rest ++ new_ready
-      do_topological_sort(new_queue, result, new_in_degree, dependents, processed)
+      do_topological_sort(new_queue, new_result, new_in_degree, dependents, new_processed)
     end
+  end
+
+  defp process_topo_node(current, rest, result, in_degree, dependents, processed) do
+    new_processed = MapSet.put(processed, current)
+    new_result = [current | result]
+
+    deps_of_current = Map.get(dependents, current, [])
+    {new_in_degree, new_ready} = update_in_degrees(deps_of_current, in_degree, new_processed)
+
+    new_queue = rest ++ new_ready
+    {new_queue, new_result, new_in_degree, new_processed}
+  end
+
+  defp update_in_degrees(deps_of_current, in_degree, processed) do
+    Enum.reduce(deps_of_current, {in_degree, []}, fn dep, {deg_acc, ready_acc} ->
+      new_deg = Map.get(deg_acc, dep, 0) - 1
+      deg_acc = Map.put(deg_acc, dep, new_deg)
+
+      if new_deg == 0 and not MapSet.member?(processed, dep) do
+        {deg_acc, [dep | ready_acc]}
+      else
+        {deg_acc, ready_acc}
+      end
+    end)
   end
 
   # ============================================================================

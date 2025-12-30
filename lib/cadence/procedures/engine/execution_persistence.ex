@@ -23,8 +23,11 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
 
   require Logger
 
+  @behaviour Cadence.Ports.Persistence.Procedures.ExecutionPersistence
+
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Procedures
+  alias Cadence.Procedures.Engine.ExecutionCore
   alias Cadence.Procedures.Events.ExecutionEvent
   alias Cadence.Procedures.Events.StepEvent
   alias Cadence.Procedures.ProcedureLog
@@ -55,6 +58,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
           keyword()
         ) ::
           {:ok, Cadence.Procedures.ProcedureExecution.t()} | {:error, term()}
+  @impl true
   def update_status_with_log(
         execution,
         new_status,
@@ -117,6 +121,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   """
   @spec create_log_entry(String.t(), atom(), String.t(), integer() | nil) ::
           {:ok, ProcedureLog.t()} | {:error, Ecto.Changeset.t()}
+  @impl true
   def create_log_entry(execution_id, level, message, step_index \\ nil) do
     attrs = %{
       execution_id: execution_id,
@@ -137,6 +142,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   Convenience function that combines persistence and broadcast.
   """
   @spec persist_and_broadcast_log(String.t(), atom(), String.t(), integer() | nil) :: :ok
+  @impl true
   def persist_and_broadcast_log(execution_id, level, message, step_index \\ nil) do
     case create_log_entry(execution_id, level, message, step_index) do
       {:ok, _log} ->
@@ -158,6 +164,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
   """
   @spec save_checkpoint(Cadence.Procedures.ProcedureExecution.t(), integer(), binary() | nil) ::
           {:ok, Cadence.Procedures.ProcedureExecution.t()} | {:error, term()}
+  @impl true
   def save_checkpoint(execution, step_index, checkpoint_state \\ nil) do
     attrs = %{
       current_step_index: step_index,
@@ -192,8 +199,9 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
           term(),
           keyword()
         ) :: :ok | {:error, term()}
+  @impl true
   def persist_step_event(execution, step_name, status, data, opts \\ []) do
-    {level, message} = step_status_to_log(status, step_name, data)
+    {level, message} = ExecutionCore.step_status_to_log(status, step_name, data)
     idempotency_key = Keyword.get(opts, :idempotency_key)
 
     # Build the multi transaction - all inserts are atomic
@@ -265,6 +273,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
           atom(),
           map()
         ) :: {:ok, Cadence.Procedures.ProcedureExecution.t()} | {:error, term()}
+  @impl true
   def persist_dag_result(execution, final_status, result) do
     completed_at = if(final_status in [:completed, :failed, :cancelled], do: DateTime.utc_now())
 
@@ -315,44 +324,14 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
     end
   end
 
+  @impl true
+  def list_step_events(execution_id) do
+    StepEvent.list_for_execution(execution_id)
+  end
+
   # ============================================================================
   # Private Helpers
   # ============================================================================
-
-  defp step_status_to_log(:running, step_name, _data) do
-    {:info, "Step started: #{step_name}"}
-  end
-
-  defp step_status_to_log(:completed, step_name, _data) do
-    {:info, "Step completed: #{step_name}"}
-  end
-
-  defp step_status_to_log(:failed, step_name, data) do
-    reason = extract_error_from_data(data)
-    {:error, "Step failed: #{step_name} - #{reason}"}
-  end
-
-  defp step_status_to_log(:blocked, step_name, _data) do
-    {:warn, "Step blocked: #{step_name}"}
-  end
-
-  defp step_status_to_log(:skipped, step_name, _data) do
-    {:info, "Step skipped: #{step_name}"}
-  end
-
-  defp step_status_to_log(:timed_out, step_name, _data) do
-    {:error, "Step timed out: #{step_name}"}
-  end
-
-  defp step_status_to_log(status, step_name, _data) do
-    {:info, "Step #{status}: #{step_name}"}
-  end
-
-  defp extract_error_from_data(data) when is_map(data) do
-    Map.get(data, :error) || Map.get(data, "error") || inspect(data)
-  end
-
-  defp extract_error_from_data(data), do: inspect(data)
 
   # ============================================================================
   # Broadcasting
@@ -372,22 +351,7 @@ defmodule Cadence.Procedures.Engine.ExecutionPersistence do
 
   defp broadcast_step_event(execution_id, status, step_name, data) do
     topic = "procedure:#{execution_id}"
-    event = dag_status_to_event(status, step_name, data)
+    event = ExecutionCore.dag_status_to_event(status, step_name, data)
     event_publisher().publish(topic, event)
   end
-
-  defp dag_status_to_event(:running, step_name, data), do: {:dag_step_started, step_name, data}
-
-  defp dag_status_to_event(:completed, step_name, data),
-    do: {:dag_step_completed, step_name, data}
-
-  defp dag_status_to_event(:failed, step_name, data), do: {:dag_step_failed, step_name, data}
-  defp dag_status_to_event(:blocked, step_name, data), do: {:dag_step_blocked, step_name, data}
-  defp dag_status_to_event(:skipped, step_name, data), do: {:dag_step_skipped, step_name, data}
-
-  defp dag_status_to_event(:timed_out, step_name, data),
-    do: {:dag_step_timed_out, step_name, data}
-
-  defp dag_status_to_event(status, step_name, data),
-    do: {:dag_step_status, step_name, status, data}
 end

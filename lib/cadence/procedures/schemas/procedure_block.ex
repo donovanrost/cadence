@@ -275,7 +275,11 @@ defmodule Cadence.Procedures.ProcedureBlock do
   end
 
   defp validate_content_for_type(:command, content) do
-    require_any_key(content, [:command_name, "command_name"], "command block requires 'command_name' field")
+    require_any_key(
+      content,
+      [:command_name, "command_name"],
+      "command block requires 'command_name' field"
+    )
   end
 
   defp validate_content_for_type(:select_input, content) do
@@ -283,7 +287,11 @@ defmodule Cadence.Procedures.ProcedureBlock do
   end
 
   defp validate_content_for_type(:procedure_call, content) do
-    require_any_key(content, [:procedure_id, "procedure_id"], "procedure_call block requires 'procedure_id' field")
+    require_any_key(
+      content,
+      [:procedure_id, "procedure_id"],
+      "procedure_call block requires 'procedure_id' field"
+    )
   end
 
   defp validate_content_for_type(:input_reference, content) do

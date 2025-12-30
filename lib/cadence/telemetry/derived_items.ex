@@ -146,21 +146,26 @@ defmodule Cadence.Telemetry.DerivedItems do
     # Collect unique packet names (we already know first_packet)
     packet_names =
       converted_items
-      |> Enum.reduce([first_packet], fn {key, _value}, acc ->
-        case :binary.split(key, ".") do
-          [packet, _rest] ->
-            if packet in acc, do: acc, else: [packet | acc]
-
-          _ ->
-            acc
+      |> Enum.reduce(MapSet.new([first_packet]), fn {key, _value}, acc ->
+        case packet_name_from_key(key) do
+          nil -> acc
+          packet -> MapSet.put(acc, packet)
         end
       end)
+      |> MapSet.to_list()
 
     # Get derived items from all relevant packets
     packet_names
     |> Enum.flat_map(&Map.get(packet_index, &1, []))
     |> Enum.uniq_by(& &1.name)
     |> Enum.sort_by(&Map.get(&1, :topo_order, 0))
+  end
+
+  defp packet_name_from_key(key) do
+    case :binary.split(key, ".") do
+      [packet, _rest] -> packet
+      _ -> nil
+    end
   end
 
   @doc """

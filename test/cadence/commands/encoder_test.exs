@@ -1,5 +1,5 @@
 defmodule Cadence.Commands.EncoderTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Commands.Encoder
   alias Cadence.MissionDatabase.{Argument, MetaCommand}
@@ -263,7 +263,7 @@ defmodule Cadence.Commands.EncoderTest do
     }
   end
 
-  defp build_arg(name, data_type, opts \\ []) do
+  defp build_arg(name, data_type, opts) do
     %Argument{
       name: name,
       data_type_ref: data_type,

@@ -302,45 +302,56 @@ defmodule Cadence.Alarms.CoverageAnalyzer do
     target_ids_using_this_db = Map.get(context, :target_ids_using_database, nil)
 
     rules
-    |> Enum.filter(fn rule ->
-      conditions = rule.conditions || %{}
-
-      cond do
-        # In database view: skip target-specific rules for targets using OTHER databases
-        # These aren't orphaned - they're just not relevant to THIS database
-        target_ids_using_this_db != nil and
-          rule.target_id != nil and
-            not MapSet.member?(target_ids_using_this_db, rule.target_id) ->
-          false
-
-        # Rules without item conditions can't be orphaned (they match everything)
-        not has_item_conditions?(conditions) ->
-          false
-
-        # Check if exact item_name list has any matches
-        Map.has_key?(conditions, "item_name") ->
-          item_names = conditions["item_name"] || []
-          not Enum.any?(item_names, &MapSet.member?(all_qualified_names, &1))
-
-        # Check if pattern matches any parameter
-        Map.has_key?(conditions, "item_name_pattern") ->
-          pattern = conditions["item_name_pattern"]
-          not Enum.any?(all_qualified_names, &matches_pattern?(&1, pattern))
-
-        true ->
-          false
+    |> Enum.flat_map(fn rule ->
+      case orphaned_reason(rule, all_qualified_names, target_ids_using_this_db) do
+        nil -> []
+        reason -> [%{rule: rule, reason: reason}]
       end
     end)
-    |> Enum.map(fn rule ->
-      reason =
-        cond do
-          Map.has_key?(rule.conditions, "item_name") -> :item_not_found
-          Map.has_key?(rule.conditions, "item_name_pattern") -> :pattern_no_matches
-          true -> :unknown
+  end
+
+  defp orphaned_reason(rule, all_qualified_names, target_ids_using_this_db) do
+    conditions = rule.conditions || %{}
+
+    with false <- skip_target_rule?(rule, target_ids_using_this_db),
+         true <- has_item_conditions?(conditions) do
+      check_item_conditions(conditions, all_qualified_names)
+    else
+      _ -> nil
+    end
+  end
+
+  defp check_item_conditions(conditions, all_qualified_names) do
+    cond do
+      Map.has_key?(conditions, "item_name") ->
+        item_names = conditions["item_name"] || []
+
+        if Enum.any?(item_names, &MapSet.member?(all_qualified_names, &1)) do
+          nil
+        else
+          :item_not_found
         end
 
-      %{rule: rule, reason: reason}
-    end)
+      Map.has_key?(conditions, "item_name_pattern") ->
+        pattern = conditions["item_name_pattern"]
+
+        if Enum.any?(all_qualified_names, &matches_pattern?(&1, pattern)) do
+          nil
+        else
+          :pattern_no_matches
+        end
+
+      true ->
+        nil
+    end
+  end
+
+  defp skip_target_rule?(%{target_id: _target_id}, nil), do: false
+
+  defp skip_target_rule?(%{target_id: nil}, _target_ids_using_this_db), do: false
+
+  defp skip_target_rule?(%{target_id: target_id}, target_ids_using_this_db) do
+    not MapSet.member?(target_ids_using_this_db, target_id)
   end
 
   defp calculate_coverage_percentage(covered, uncovered) do

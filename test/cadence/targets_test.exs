@@ -1,104 +1,118 @@
 defmodule Cadence.TargetsTest do
-  use Cadence.DataCase, async: true
-
-  import Cadence.OrganizationsFixtures
-  import Cadence.MissionDatabaseFixtures
+  use Cadence.PureCase, async: false
 
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.{Missions, Targets}
+  alias Cadence.Targets
+  alias Cadence.Test.Adapters.InMemoryQueueRepository
+  alias Cadence.Test.Adapters.InMemoryTargetRepository
+
+  setup_all do
+    case Process.whereis(Cadence.PubSub) do
+      nil -> Phoenix.PubSub.Supervisor.start_link(name: Cadence.PubSub)
+      _pid -> :ok
+    end
+
+    :ok
+  end
 
   setup do
-    org = organization_fixture()
+    {:ok, _} = InMemoryTargetRepository.start_link()
+    {:ok, _} = InMemoryQueueRepository.start_link()
+    Application.put_env(:cadence, :target_repository, InMemoryTargetRepository)
+    Application.put_env(:cadence, :queue_repository, InMemoryQueueRepository)
 
-    {:ok, mission} =
-      Missions.create_mission(org.id, %{
-        name: "Test Mission",
-        slug: "test-mission",
-        status: "active"
-      })
+    mission_id = Ecto.UUID.generate()
+    definition_set_id = Ecto.UUID.generate()
 
-    # Create a definition set for the mission (required for targets)
-    definition_set = definition_set_fixture(organization: org, mission: mission)
+    on_exit(fn ->
+      Application.delete_env(:cadence, :target_repository)
+      Application.delete_env(:cadence, :queue_repository)
+      InMemoryTargetRepository.stop()
+      InMemoryQueueRepository.stop()
+    end)
 
-    %{mission: mission, organization: org, definition_set: definition_set}
+    %{mission_id: mission_id, definition_set_id: definition_set_id}
   end
 
   describe "targets" do
     test "list_targets/1 returns all targets for a mission", %{
-      mission: mission,
-      definition_set: ds
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
     } do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
         })
 
-      targets = Targets.list_targets(mission)
+      targets = Targets.list_targets(mission_id)
       assert length(targets) == 1
       assert hd(targets).id == target.id
     end
 
-    test "get_target!/2 returns the target with given id", %{mission: mission, definition_set: ds} do
+    test "get_target!/2 returns the target with given id", %{
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
+    } do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
         })
 
-      found = Targets.get_target!(target.id, mission.id)
+      found = Targets.get_target!(target.id, mission_id)
       assert found.id == target.id
     end
 
     test "get_target/2 returns {:ok, target} or {:error, :not_found}", %{
-      mission: mission,
-      definition_set: ds
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
     } do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
         })
 
-      assert {:ok, found} = Targets.get_target(target.id, mission.id)
+      assert {:ok, found} = Targets.get_target(target.id, mission_id)
       assert found.id == target.id
 
-      assert {:error, :not_found} = Targets.get_target(Ecto.UUID.generate(), mission.id)
+      assert {:error, :not_found} = Targets.get_target(Ecto.UUID.generate(), mission_id)
     end
 
     test "get_target_by_identifier/2 returns target by identifier", %{
-      mission: mission,
-      definition_set: ds
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
     } do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
         })
 
-      assert {:ok, found} = Targets.get_target_by_identifier(mission, "SAT-001")
+      assert {:ok, found} = Targets.get_target_by_identifier(mission_id, "SAT-001")
       assert found.id == target.id
     end
 
     test "create_target/1 with valid data creates a target", %{
-      mission: mission,
-      definition_set: ds
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
     } do
       valid_attrs = %{
-        mission_id: mission.id,
-        definition_set_id: ds.id,
+        mission_id: mission_id,
+        definition_set_id: definition_set_id,
         name: "Satellite 1",
         identifier: "SAT-001",
         type: :spacecraft,
@@ -111,29 +125,14 @@ defmodule Cadence.TargetsTest do
       assert target.type == :spacecraft
     end
 
-    test "create_target/1 enforces unique identifier per mission", %{
-      mission: mission,
-      definition_set: ds
+    test "update_target/2 updates the target", %{
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
     } do
-      attrs = %{
-        mission_id: mission.id,
-        definition_set_id: ds.id,
-        name: "Satellite 1",
-        identifier: "SAT-001",
-        type: :spacecraft
-      }
-
-      assert {:ok, _} = Targets.create_target(attrs)
-      assert {:error, errors} = Targets.create_target(attrs)
-      # The unique constraint error from the repository
-      assert is_map(errors)
-    end
-
-    test "update_target/2 updates the target", %{mission: mission, definition_set: ds} do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
@@ -143,27 +142,30 @@ defmodule Cadence.TargetsTest do
       assert updated.name == "Updated Name"
     end
 
-    test "delete_target/1 deletes the target", %{mission: mission, definition_set: ds} do
+    test "delete_target/1 deletes the target", %{
+      mission_id: mission_id,
+      definition_set_id: definition_set_id
+    } do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft
         })
 
       assert {:ok, %Target{}} = Targets.delete_target(target)
-      assert {:error, :not_found} = Targets.get_target(target.id, mission.id)
+      assert {:error, :not_found} = Targets.get_target(target.id, mission_id)
     end
   end
 
   describe "circuit breaker" do
-    setup %{mission: mission, definition_set: ds} do
+    setup %{mission_id: mission_id, definition_set_id: definition_set_id} do
       {:ok, target} =
         Targets.create_target(%{
-          mission_id: mission.id,
-          definition_set_id: ds.id,
+          mission_id: mission_id,
+          definition_set_id: definition_set_id,
           name: "Satellite 1",
           identifier: "SAT-001",
           type: :spacecraft

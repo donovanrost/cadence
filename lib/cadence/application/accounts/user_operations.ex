@@ -21,6 +21,7 @@ defmodule Cadence.Application.Accounts.UserOperations do
   """
 
   alias Cadence.Application.Accounts.UserQueries
+  alias Cadence.Application.Organizations.MembershipOperations
   alias Cadence.Domain.Accounts.Entities.User
   alias Cadence.Ports.Repository.Accounts.UserRepository
   alias Cadence.Ports.Security.PasswordHasher
@@ -78,15 +79,13 @@ defmodule Cadence.Application.Accounts.UserOperations do
     else
       role = attrs[:role] || "member"
 
-      # Create organization membership via the Organizations context
-      # This couples Accounts to Organizations, but preserves backward compat
       membership_attrs = %{
         organization_id: org_id,
         user_id: user.id,
         role: role
       }
 
-      case Cadence.Organizations.create_organization_membership(membership_attrs) do
+      case MembershipOperations.create(membership_attrs) do
         {:ok, _membership} -> :ok
         {:error, reason} -> {:error, {:membership_creation_failed, reason}}
       end

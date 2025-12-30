@@ -419,7 +419,8 @@ defmodule Cadence.Procedures.Primitives do
   defp resolve_by_prefix(:telemetry, rest, context), do: resolve_telemetry_value(rest, context)
 
   defp resolve_params_value(param_name, context) do
-    get_in(context, [:params, param_name]) || get_in(context, [:params, String.to_atom(param_name)])
+    get_in(context, [:params, param_name]) ||
+      get_in(context, [:params, String.to_atom(param_name)])
   end
 
   defp resolve_trigger_value(path, context) do
@@ -431,7 +432,8 @@ defmodule Cadence.Procedures.Primitives do
   end
 
   defp resolve_target_value(param_name, context) do
-    get_in(context, [:params, param_name]) || get_in(context, [:params, String.to_atom(param_name)])
+    get_in(context, [:params, param_name]) ||
+      get_in(context, [:params, String.to_atom(param_name)])
   end
 
   defp resolve_telemetry_value(item, context) do
@@ -600,7 +602,8 @@ defmodule Cadence.Procedures.Primitives do
   end
 
   defp maybe_emit_wait_for_progress(state, actual, now) do
-    if is_function(state.progress_callback, 2) and now - state.last_progress_at >= state.progress_interval do
+    if is_function(state.progress_callback, 2) and
+         now - state.last_progress_at >= state.progress_interval do
       remaining_ms = max(0, state.deadline - now)
 
       state.progress_callback.(state.name, %{

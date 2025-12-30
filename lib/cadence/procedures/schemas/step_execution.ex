@@ -36,6 +36,7 @@ defmodule Cadence.Procedures.StepExecution do
   import Ecto.Changeset
 
   alias Cadence.Accounts.User
+
   alias Cadence.Procedures.{
     BlockExecution,
     ExecutionComment,

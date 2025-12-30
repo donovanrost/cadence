@@ -541,7 +541,8 @@ defmodule Cadence.Procedures.V2.ExecutionProcess do
     ready_steps =
       execution.step_executions
       |> Enum.filter(fn step_exec ->
-        step_exec.status == :pending and ExecutionQueries.dependencies_satisfied?(step_exec, execution)
+        step_exec.status == :pending and
+          ExecutionQueries.dependencies_satisfied?(step_exec, execution)
       end)
 
     # Activate each ready step

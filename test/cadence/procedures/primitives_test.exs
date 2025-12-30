@@ -1,5 +1,5 @@
 defmodule Cadence.Procedures.PrimitivesTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Procedures.Primitives
 

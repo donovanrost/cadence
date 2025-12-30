@@ -223,33 +223,16 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
     version_override = Map.get(params, "version", "")
     publish = Map.get(params, "publish", "false") == "on"
 
-    opts = [database_id: database.id]
-
-    opts =
-      if version_override != "", do: Keyword.put(opts, :version, version_override), else: opts
+    opts = build_import_opts(database.id, version_override)
 
     case YamlImporter.import_string(database, yaml_content, opts) do
       {:ok, definition_set} ->
-        definition_set =
-          if publish do
-            case DefinitionSet.publish(definition_set) do
-              {:ok, published} -> published
-              {:error, _} -> definition_set
-            end
-          else
-            definition_set
-          end
-
+        definition_set = maybe_publish(definition_set, publish)
         notify_parent({:saved, definition_set})
-
-        message =
-          if publish,
-            do: "Version #{definition_set.version} imported and published",
-            else: "Version #{definition_set.version} imported (draft)"
 
         {:noreply,
          socket
-         |> put_flash(:info, message)
+         |> put_flash(:info, import_message(definition_set, publish))
          |> push_patch(to: socket.assigns.patch)}
 
       {:error, {:yaml_parse_error, reason}} ->
@@ -261,6 +244,28 @@ defmodule CadenceWeb.DatabaseLive.FormComponent do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Import failed: #{inspect(reason)}")}
     end
+  end
+
+  defp build_import_opts(database_id, version_override) do
+    opts = [database_id: database_id]
+    if version_override != "", do: Keyword.put(opts, :version, version_override), else: opts
+  end
+
+  defp maybe_publish(definition_set, true) do
+    case DefinitionSet.publish(definition_set) do
+      {:ok, published} -> published
+      {:error, _} -> definition_set
+    end
+  end
+
+  defp maybe_publish(definition_set, false), do: definition_set
+
+  defp import_message(definition_set, true) do
+    "Version #{definition_set.version} imported and published"
+  end
+
+  defp import_message(definition_set, false) do
+    "Version #{definition_set.version} imported (draft)"
   end
 
   defp notify_parent(msg), do: send(self(), {__MODULE__, msg})

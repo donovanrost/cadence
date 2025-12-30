@@ -1,70 +1,81 @@
 defmodule Cadence.SchedulesTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: false
 
   alias Cadence.Schedules
 
-  import Cadence.OrganizationsFixtures
-  import Cadence.MissionsFixtures
-  import Cadence.ProceduresFixtures
+  alias Cadence.Test.Adapters.FakeEventPublisher
+  alias Cadence.Test.Adapters.InMemoryScheduleRepository
 
   describe "schedules" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      procedure = procedure_fixture(organization: org, mission: mission)
+      {:ok, _} = InMemoryScheduleRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :schedule_repository, InMemoryScheduleRepository)
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
 
-      %{org: org, mission: mission, procedure: procedure}
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+      procedure_id = Ecto.UUID.generate()
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :schedule_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryScheduleRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end
 
     test "list_schedules/2 returns schedules for organization", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id)
 
-      schedules = Schedules.list_schedules(org.id)
+      schedules = Schedules.list_schedules(org_id)
       assert length(schedules) == 1
       assert hd(schedules).id == schedule.id
     end
 
-    test "list_schedules/2 filters by mission", %{org: org, procedure: _procedure} do
-      mission1 = mission_fixture(organization: org)
-      mission2 = mission_fixture(organization: org)
-      proc1 = procedure_fixture(organization: org, mission: mission1)
-      proc2 = procedure_fixture(organization: org, mission: mission2)
+    test "list_schedules/2 filters by mission", %{org_id: org_id} do
+      mission1_id = Ecto.UUID.generate()
+      mission2_id = Ecto.UUID.generate()
+      proc1_id = Ecto.UUID.generate()
+      proc2_id = Ecto.UUID.generate()
 
-      sched1 = schedule_fixture(org, mission1, proc1)
-      _sched2 = schedule_fixture(org, mission2, proc2)
+      sched1 = schedule_fixture(org_id, mission1_id, proc1_id)
+      _sched2 = schedule_fixture(org_id, mission2_id, proc2_id)
 
-      schedules = Schedules.list_schedules(org.id, mission_id: mission1.id)
+      schedules = Schedules.list_schedules(org_id, mission_id: mission1_id)
       assert length(schedules) == 1
       assert hd(schedules).id == sched1.id
     end
 
     test "list_schedules/2 filters enabled only", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      _enabled = schedule_fixture(org, mission, procedure, enabled: true)
-      _disabled = schedule_fixture(org, mission, procedure, enabled: false)
+      _enabled = schedule_fixture(org_id, mission_id, procedure_id, enabled: true)
+      _disabled = schedule_fixture(org_id, mission_id, procedure_id, enabled: false)
 
-      enabled_only = Schedules.list_schedules(org.id, enabled_only: true)
+      enabled_only = Schedules.list_schedules(org_id, enabled_only: true)
       assert length(enabled_only) == 1
     end
 
     test "create_schedule/1 creates cron schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
       {:ok, schedule} =
         Schedules.create_schedule(%{
           name: "Daily Check",
-          organization_id: org.id,
-          mission_id: mission.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          mission_id: mission_id,
+          procedure_id: procedure_id,
           schedule_type: :cron,
           cron_expression: "0 8 * * *"
         })
@@ -76,35 +87,38 @@ defmodule Cadence.SchedulesTest do
     end
 
     test "create_schedule/1 creates one-time schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      scheduled_time = DateTime.add(DateTime.utc_now(), 3600, :second)
+      scheduled_time =
+        DateTime.utc_now()
+        |> DateTime.add(3600, :second)
+        |> DateTime.truncate(:second)
 
       {:ok, schedule} =
         Schedules.create_schedule(%{
           name: "One-time Task",
-          organization_id: org.id,
-          mission_id: mission.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          mission_id: mission_id,
+          procedure_id: procedure_id,
           schedule_type: :once,
           scheduled_at: scheduled_time
         })
 
       assert schedule.schedule_type == :once
-      assert schedule.scheduled_at == DateTime.truncate(scheduled_time, :second)
+      assert schedule.scheduled_at == scheduled_time
     end
 
     test "create_schedule/1 validates cron expression required for cron type", %{
-      org: org,
-      procedure: procedure
+      org_id: org_id,
+      procedure_id: procedure_id
     } do
       {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Schedule",
-          organization_id: org.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          procedure_id: procedure_id,
           schedule_type: :cron
         })
 
@@ -113,14 +127,14 @@ defmodule Cadence.SchedulesTest do
     end
 
     test "create_schedule/1 validates scheduled_at required for once type", %{
-      org: org,
-      procedure: procedure
+      org_id: org_id,
+      procedure_id: procedure_id
     } do
       {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Schedule",
-          organization_id: org.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          procedure_id: procedure_id,
           schedule_type: :once
         })
 
@@ -128,12 +142,15 @@ defmodule Cadence.SchedulesTest do
       assert error == {:required_for_once, :scheduled_at}
     end
 
-    test "create_schedule/1 validates cron expression syntax", %{org: org, procedure: procedure} do
+    test "create_schedule/1 validates cron expression syntax", %{
+      org_id: org_id,
+      procedure_id: procedure_id
+    } do
       {:error, error} =
         Schedules.create_schedule(%{
           name: "Bad Cron",
-          organization_id: org.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          procedure_id: procedure_id,
           schedule_type: :cron,
           cron_expression: "not a cron"
         })
@@ -143,55 +160,55 @@ defmodule Cadence.SchedulesTest do
     end
 
     test "update_schedule/2 updates schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id)
 
       {:ok, updated} = Schedules.update_schedule(schedule, %{name: "Updated Name"})
       assert updated.name == "Updated Name"
     end
 
     test "delete_schedule/1 deletes schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id)
 
       {:ok, _} = Schedules.delete_schedule(schedule)
-      assert Schedules.get_schedule(schedule.id, org.id) == nil
+      assert Schedules.get_schedule(schedule.id, org_id) == nil
     end
 
     test "enable_schedule/1 enables schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure, enabled: false)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id, enabled: false)
 
       {:ok, updated} = Schedules.enable_schedule(schedule)
       assert updated.enabled == true
     end
 
     test "disable_schedule/1 disables schedule", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure, enabled: true)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id, enabled: true)
 
       {:ok, updated} = Schedules.disable_schedule(schedule)
       assert updated.enabled == false
     end
 
     test "record_run/2 updates run tracking", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
-      schedule = schedule_fixture(org, mission, procedure)
+      schedule = schedule_fixture(org_id, mission_id, procedure_id)
       assert schedule.run_count == 0
       assert schedule.last_run_at == nil
 
@@ -204,26 +221,38 @@ defmodule Cadence.SchedulesTest do
 
   describe "due schedules" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      procedure = procedure_fixture(organization: org, mission: mission)
+      {:ok, _} = InMemoryScheduleRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :schedule_repository, InMemoryScheduleRepository)
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
 
-      %{org: org, mission: mission, procedure: procedure}
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+      procedure_id = Ecto.UUID.generate()
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :schedule_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryScheduleRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end
 
     test "get_due_once_schedules/0 returns due one-time schedules", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
       past = DateTime.add(DateTime.utc_now(), -3600, :second)
 
       {:ok, schedule} =
         Schedules.create_schedule(%{
           name: "Past Schedule",
-          organization_id: org.id,
-          mission_id: mission.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          mission_id: mission_id,
+          procedure_id: procedure_id,
           schedule_type: :once,
           scheduled_at: past
         })
@@ -234,18 +263,18 @@ defmodule Cadence.SchedulesTest do
     end
 
     test "get_due_once_schedules/0 excludes future schedules", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
 
       {:ok, _schedule} =
         Schedules.create_schedule(%{
           name: "Future Schedule",
-          organization_id: org.id,
-          mission_id: mission.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          mission_id: mission_id,
+          procedure_id: procedure_id,
           schedule_type: :once,
           scheduled_at: future
         })
@@ -255,18 +284,18 @@ defmodule Cadence.SchedulesTest do
     end
 
     test "get_due_once_schedules/0 excludes already run schedules", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
       past = DateTime.add(DateTime.utc_now(), -3600, :second)
 
       {:ok, schedule} =
         Schedules.create_schedule(%{
           name: "Already Run",
-          organization_id: org.id,
-          mission_id: mission.id,
-          procedure_id: procedure.id,
+          organization_id: org_id,
+          mission_id: mission_id,
+          procedure_id: procedure_id,
           schedule_type: :once,
           scheduled_at: past
         })
@@ -280,12 +309,12 @@ defmodule Cadence.SchedulesTest do
   end
 
   # Fixture helper
-  defp schedule_fixture(org, mission, procedure, opts \\ []) do
+  defp schedule_fixture(org_id, mission_id, procedure_id, opts \\ []) do
     attrs = %{
       name: "Test Schedule #{System.unique_integer([:positive])}",
-      organization_id: org.id,
-      mission_id: mission.id,
-      procedure_id: procedure.id,
+      organization_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id,
       schedule_type: Keyword.get(opts, :schedule_type, :cron),
       cron_expression: Keyword.get(opts, :cron_expression, "0 * * * *"),
       enabled: Keyword.get(opts, :enabled, true)

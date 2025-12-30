@@ -42,6 +42,7 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
 
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.PacketIdentifier
+
   alias Cadence.Telemetry.{
     Conversions,
     Decommutation,
@@ -120,87 +121,20 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
     process_start = System.monotonic_time(:microsecond)
     mission_id = context.mission_id
 
-    # Step 1: Identify packet type based on format
-    packet_format = Packet.get_format(packet)
-
-    identify_result =
-      Stats.time(mission_id, :identify, fn ->
-        identify_packet(packet, packet_format, mission_id)
-      end)
-
-    case identify_result do
-      {:ok, packet_def} ->
-        # Step 2: Extract payload and decommutate
-        case Packet.get_payload(packet) do
-          {:ok, payload} ->
-            decom_result =
-              Stats.time(mission_id, :decommutate, fn ->
-                Decommutation.decommutate(payload, packet_def, packet_format)
-              end)
-
-            case decom_result do
-              {:ok, raw_items} ->
-                # Step 3: Apply conversions
-                converted_items =
-                  Stats.time(mission_id, :convert, fn ->
-                    apply_conversions(raw_items, packet_def.items)
-                  end)
-
-                # Step 4: Build qualified item names and compute derived items
-                all_items =
-                  Stats.time(mission_id, :derive, fn ->
-                    # Qualify item names with packet name (PACKET.item format)
-                    packet_name = packet_def.name
-
-                    qualified_items =
-                      converted_items
-                      |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
-                      |> Enum.into(%{})
-
-                    # Compute derived items using mission's runtime overlay
-                    case DerivedItems.compute(qualified_items, mission_id) do
-                      {:ok, items} ->
-                        items
-
-                      {:error, reason} ->
-                        Logger.warning("Derived items computation failed: #{inspect(reason)}")
-                        qualified_items
-                    end
-                  end)
-
-                # Step 5: Check limits (TODO)
-                items_with_limits =
-                  Enum.map(all_items, fn {name, value} ->
-                    {name, value, :green}
-                  end)
-
-                # Record total processing time
-                process_duration = System.monotonic_time(:microsecond) - process_start
-                Stats.record_timing(mission_id, :total_process, process_duration)
-
-                # Build final message data for batcher
-                message
-                |> Message.update_data(fn data ->
-                  Map.merge(data, %{
-                    packet_def: packet_def,
-                    items_with_limits: items_with_limits
-                  })
-                end)
-                |> Message.put_batcher(:cvt_updates)
-
-              {:error, reason} ->
-                Logger.error("Decommutation error for #{packet_def.name}: #{inspect(reason)}")
-                Message.failed(message, reason)
-            end
-
-          {:error, reason} ->
-            Logger.error("Payload extraction error: #{inspect(reason)}")
-            Message.failed(message, reason)
-        end
+    case process_packet(packet, mission_id, process_start) do
+      {:ok, packet_def, items_with_limits} ->
+        message
+        |> Message.update_data(fn data ->
+          Map.merge(data, %{
+            packet_def: packet_def,
+            items_with_limits: items_with_limits
+          })
+        end)
+        |> Message.put_batcher(:cvt_updates)
 
       {:error, :unknown_packet} ->
         Logger.warning(
-          "Unknown packet type for mission_id=#{mission_id}, format=#{packet_format}"
+          "Unknown packet type for mission_id=#{mission_id}, format=#{Packet.get_format(packet)}"
         )
 
         Message.failed(message, :unknown_packet)
@@ -267,6 +201,86 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
     :erlang.phash2(target)
   end
 
+  defp process_packet(%Packet{} = packet, mission_id, process_start) do
+    packet_format = Packet.get_format(packet)
+
+    with {:ok, packet_def} <- identify_with_timing(packet, packet_format, mission_id),
+         {:ok, raw_items} <- decommutate_packet(packet, packet_def, packet_format, mission_id),
+         {:ok, items_with_limits} <-
+           convert_and_derive(raw_items, packet_def, mission_id) do
+      record_total_timing(mission_id, process_start)
+      {:ok, packet_def, items_with_limits}
+    end
+  end
+
+  defp identify_with_timing(packet, packet_format, mission_id) do
+    Stats.time(mission_id, :identify, fn ->
+      identify_packet(packet, packet_format, mission_id)
+    end)
+  end
+
+  defp decommutate_packet(packet, packet_def, packet_format, mission_id) do
+    case Packet.get_payload(packet) do
+      {:ok, payload} ->
+        Stats.time(mission_id, :decommutate, fn ->
+          Decommutation.decommutate(payload, packet_def, packet_format)
+        end)
+        |> handle_decommutation_result(packet_def)
+
+      {:error, reason} ->
+        Logger.error("Payload extraction error: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp handle_decommutation_result({:ok, raw_items}, _packet_def), do: {:ok, raw_items}
+
+  defp handle_decommutation_result({:error, reason}, packet_def) do
+    Logger.error("Decommutation error for #{packet_def.name}: #{inspect(reason)}")
+    {:error, reason}
+  end
+
+  defp convert_and_derive(raw_items, packet_def, mission_id) do
+    converted_items =
+      Stats.time(mission_id, :convert, fn ->
+        apply_conversions(raw_items, packet_def.items)
+      end)
+
+    all_items =
+      Stats.time(mission_id, :derive, fn ->
+        build_all_items(converted_items, packet_def.name, mission_id)
+      end)
+
+    {:ok, add_limits(all_items)}
+  end
+
+  defp build_all_items(converted_items, packet_name, mission_id) do
+    qualified_items =
+      converted_items
+      |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
+      |> Enum.into(%{})
+
+    case DerivedItems.compute(qualified_items, mission_id) do
+      {:ok, items} ->
+        items
+
+      _ ->
+        Logger.warning("Derived items computation failed, using qualified items")
+        qualified_items
+    end
+  end
+
+  defp add_limits(all_items) do
+    Enum.map(all_items, fn {name, value} ->
+      {name, value, :green}
+    end)
+  end
+
+  defp record_total_timing(mission_id, process_start) do
+    process_duration = System.monotonic_time(:microsecond) - process_start
+    Stats.record_timing(mission_id, :total_process, process_duration)
+  end
+
   # Identify packet based on format
   defp identify_packet(%Packet{} = packet, :ccsds, mission_id) do
     # CCSDS format: Use APID from header
@@ -292,30 +306,22 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
 
   defp identify_packet(%Packet{} = packet, :simulator, mission_id) do
     # Simulator format: Use type byte
-    case Packet.get_type_byte(packet) do
-      {:ok, _type_byte} ->
-        # Extract target_id from packet
-        case packet.raw do
-          <<_type::8, target_id_len::8, rest::binary>> when byte_size(rest) >= target_id_len ->
-            <<target_id::binary-size(target_id_len), _payload::binary>> = rest
-
-            # Call identify with type_byte, then merge target_id
-            case PacketIdentifier.identify(mission_id, packet.raw) do
-              {:ok, packet_def} ->
-                {:ok, Map.put(packet_def, :target_id, target_id)}
-
-              error ->
-                error
-            end
-
-          _ ->
-            {:error, :malformed_packet}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, _type_byte} <- Packet.get_type_byte(packet),
+         {:ok, target_id} <- extract_sim_target_id(packet.raw),
+         {:ok, packet_def} <- PacketIdentifier.identify(mission_id, packet.raw) do
+      {:ok, Map.put(packet_def, :target_id, target_id)}
+    else
+      {:error, reason} -> {:error, reason}
     end
   end
+
+  defp extract_sim_target_id(<<_type::8, target_id_len::8, rest::binary>>)
+       when byte_size(rest) >= target_id_len do
+    <<target_id::binary-size(target_id_len), _payload::binary>> = rest
+    {:ok, target_id}
+  end
+
+  defp extract_sim_target_id(_raw), do: {:error, :malformed_packet}
 
   defp apply_conversions(raw_items, packet_items) do
     # Apply conversions to each item based on its definition
@@ -344,9 +350,7 @@ defmodule Cadence.Runtime.Telemetry.BroadwayPipeline do
         value
 
       {:error, reason} ->
-        Logger.warning(
-          "Conversion failed for #{item_name}: #{inspect(reason)}, using raw value"
-        )
+        Logger.warning("Conversion failed for #{item_name}: #{inspect(reason)}, using raw value")
 
         raw_value
     end

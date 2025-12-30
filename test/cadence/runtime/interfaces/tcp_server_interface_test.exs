@@ -1,6 +1,7 @@
 defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.TcpServerInterface
   alias Cadence.Runtime.Missions.MissionSupervisor
@@ -19,7 +20,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
     target = hd(setup_result.targets)
 
     # Start the mission supervision tree (required for protocol chain supervisor)
-    {:ok, _pid} = MissionSupervisor.start_mission(mission)
+    {:ok, config} = MissionConfig.load(mission.id)
+    {:ok, _pid} = MissionSupervisor.start_mission(config)
 
     # Pick a random port to avoid conflicts
     port = Enum.random(10_000..60_000)

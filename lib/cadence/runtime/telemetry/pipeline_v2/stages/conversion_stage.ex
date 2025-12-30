@@ -46,8 +46,12 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.ConversionStage do
   def stage_name, do: :convert
 
   @impl true
-  def process(event, _state) do
-    %{raw_items: raw_items, packet_def: packet_def, packet: packet} = event
+  def process(%{raw_items: raw_items} = _event, _state) when map_size(raw_items) == 0 do
+    {:skip, :no_items}
+  end
+
+  @impl true
+  def process(%{raw_items: raw_items, packet_def: packet_def, packet: packet} = event, _state) do
     # Use pre-built O(1) lookup map from PacketIdentifier
     items_by_name = packet_def.items_by_name
     packet_name = packet_def.name
@@ -76,6 +80,8 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.ConversionStage do
          qualified_items: qualified_items
      }}
   end
+
+  def process(_event, _state), do: {:error, :invalid_event}
 
   # Sequential conversion for small packets
   defp apply_conversions(raw_items, items_by_name) do

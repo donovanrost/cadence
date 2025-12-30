@@ -141,7 +141,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Application.put_env(:cadence, :start_reconcilers, false)
     Mix.Task.run("app.start")
 
-    # Start the mission if requested (starts interfaces, pipeline, etc.)
+    # Start the mission runtime directly if requested (interfaces, pipeline, etc.)
     maybe_start_mission(config)
 
     # Display configuration
@@ -211,8 +211,10 @@ defmodule Mix.Tasks.Cadence.Simulate do
         Mix.raise("Mission not found: #{mission_id}")
 
       {:ok, mission} ->
-        case Cadence.Missions.start_mission(mission.id, mission.organization_id) do
-          {:ok, _mission} ->
+        {:ok, config} = Cadence.Application.Missions.MissionConfig.load(mission.id)
+
+        case Cadence.Runtime.Missions.MissionSupervisor.start_mission(config) do
+          {:ok, _pid} ->
             Mix.shell().info("Mission started")
             # Give interfaces time to start
             :timer.sleep(500)
@@ -505,7 +507,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --scenario, -s <path>      Path to YAML scenario file for deterministic testing
       --definitions <path>       Path to YAML packet definitions for encoding
       --provider <type>          Provider: basic (default) or scenario
-      --start-mission            Start the mission runtime (interfaces, pipeline)
+      --start-mission            Start the mission runtime directly (interfaces, pipeline)
       --help, -h                 Show this help
 
     Parallel Mode (for high-throughput testing):
@@ -522,7 +524,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       # Basic simulation with hardcoded encoding
       mix cadence.simulate -m <uuid> --output tcp:localhost:9999
 
-      # With mission runtime started (for end-to-end testing)
+      # With mission runtime started directly (for end-to-end testing)
       mix cadence.simulate -m <uuid> \\
         --start-mission \\
         --definitions ~/mission/telemetry.yaml \\

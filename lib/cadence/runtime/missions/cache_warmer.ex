@@ -21,46 +21,61 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
   use GenServer
   require Logger
 
+  alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Runtime.Telemetry.DerivedItems.Cache, as: DerivedItemsCache
   alias Cadence.Runtime.Telemetry.Limits.Cache, as: LimitsCache
-  alias Cadence.Targets
 
   def start_link(opts) do
-    mission_id = Keyword.fetch!(opts, :mission_id)
-    GenServer.start_link(__MODULE__, mission_id, name: via_tuple(mission_id))
+    if enabled?() do
+      do_start_link(opts)
+    else
+      :ignore
+    end
+  end
+
+  def enabled? do
+    :cadence
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:enabled, true)
+  end
+
+  defp do_start_link(opts) do
+    config = Keyword.fetch!(opts, :config)
+    mission_id = config.mission_id
+
+    GenServer.start_link(
+      __MODULE__,
+      %{mission_id: mission_id, config: config},
+      name: via_tuple(mission_id)
+    )
   end
 
   @impl true
-  def init(mission_id) do
+  def init(state) do
     # Warm caches asynchronously via handle_continue to not block supervisor startup
-    {:ok, %{mission_id: mission_id}, {:continue, :warm_caches}}
+    {:ok, state, {:continue, :warm_caches}}
   end
 
   @impl true
   def handle_continue(:warm_caches, state) do
-    warm_all_caches(state.mission_id)
+    warm_all_caches(state)
     {:noreply, state}
   end
 
-  defp warm_all_caches(mission_id) do
+  defp warm_all_caches(%{mission_id: mission_id, config: %MissionConfig{} = config}) do
     start_time = System.monotonic_time(:millisecond)
 
     # Warm derived items cache (mission-wide)
-    DerivedItemsCache.warm(mission_id)
+    DerivedItemsCache.warm_from_defs(mission_id, config.derived_item_defs)
 
-    # Get all targets for this mission and warm limits cache for each
-    targets = Targets.list_targets(mission_id)
-
-    Enum.each(targets, fn target ->
-      # Use target identifier for limits cache (as expected by limits processing)
-      LimitsCache.warm(mission_id, target.identifier)
-    end)
+    # Warm limits cache for each target using config snapshot
+    LimitsCache.warm_from_packet_defs(mission_id, config.targets, config.packet_defs)
 
     elapsed = System.monotonic_time(:millisecond) - start_time
 
     Logger.info(
       "Cache warming complete for mission_id=#{mission_id}: " <>
-        "#{length(targets)} targets, #{elapsed}ms"
+        "#{length(config.targets)} targets, #{elapsed}ms"
     )
   end
 

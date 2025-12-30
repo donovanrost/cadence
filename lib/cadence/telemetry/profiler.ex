@@ -136,8 +136,19 @@ defmodule Cadence.Telemetry.Profiler do
   """
   def debug(mission_id) do
     IO.puts("\n=== DEBUG: Profiler Diagnostics ===\n")
+    print_registry_entries(mission_id)
+    print_pipeline_lookup(mission_id)
+    print_cvt_lookup(mission_id)
+    print_broadway_lookup(mission_id)
+    print_cvt_table(mission_id)
+    print_stats_counters(mission_id)
+    print_pipeline_v2_lookup(mission_id)
 
-    # 1. Check Registry entries
+    IO.puts("\n=== END DEBUG ===\n")
+    :ok
+  end
+
+  defp print_registry_entries(mission_id) do
     IO.puts("1. All Registry entries for this mission:")
 
     all_keys =
@@ -157,8 +168,9 @@ defmodule Cadence.Telemetry.Profiler do
     Enum.each(matching, fn {key, pid, value} ->
       IO.puts("   - #{inspect(key)} => #{inspect(pid)} (value: #{inspect(value)})")
     end)
+  end
 
-    # 2. Direct Pipeline lookup
+  defp print_pipeline_lookup(mission_id) do
     IO.puts("\n2. Direct Pipeline lookup:")
     pipeline_key = {mission_id, :telemetry_pipeline}
 
@@ -166,24 +178,22 @@ defmodule Cadence.Telemetry.Profiler do
       [{pid, value}] ->
         IO.puts("   Found: #{inspect(pid)}, value: #{inspect(value)}")
         IO.puts("   Process alive? #{Process.alive?(pid)}")
-
-        # Try to get stats directly
         IO.puts("   Attempting GenServer.call(:stats)...")
-
-        try do
-          result = GenServer.call(pid, :stats, 5000)
-          IO.puts("   Result: #{inspect(result)}")
-        rescue
-          e -> IO.puts("   Error: #{Exception.message(e)}")
-        catch
-          kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
-        end
+        print_pipeline_stats(pid)
 
       [] ->
         IO.puts("   NOT FOUND with key #{inspect(pipeline_key)}")
     end
+  end
 
-    # 3. CVT lookup
+  defp print_pipeline_stats(pid) do
+    case safe_call(fn -> GenServer.call(pid, :stats, 5000) end) do
+      %{error: error} -> IO.puts("   Error: #{error}")
+      result -> IO.puts("   Result: #{inspect(result)}")
+    end
+  end
+
+  defp print_cvt_lookup(mission_id) do
     IO.puts("\n3. Direct CVT lookup:")
     cvt_key = {mission_id, :cvt}
 
@@ -191,24 +201,22 @@ defmodule Cadence.Telemetry.Profiler do
       [{pid, value}] ->
         IO.puts("   Found: #{inspect(pid)}, value: #{inspect(value)}")
         IO.puts("   Process alive? #{Process.alive?(pid)}")
-
-        # Try stats function
         IO.puts("   Attempting CurrentValueTable.stats()...")
-
-        try do
-          result = CurrentValueTable.stats(mission_id)
-          IO.puts("   Result: #{inspect(result)}")
-        rescue
-          e -> IO.puts("   Error: #{Exception.message(e)}")
-        catch
-          kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
-        end
+        print_cvt_stats(mission_id)
 
       [] ->
         IO.puts("   NOT FOUND")
     end
+  end
 
-    # 4. Broadway lookup
+  defp print_cvt_stats(mission_id) do
+    case safe_call(fn -> CurrentValueTable.stats(mission_id) end) do
+      %{error: error} -> IO.puts("   Error: #{error}")
+      result -> IO.puts("   Result: #{inspect(result)}")
+    end
+  end
+
+  defp print_broadway_lookup(mission_id) do
     IO.puts("\n4. Broadway lookup:")
     broadway_key = {:broadway_pipeline, mission_id, :main}
 
@@ -220,8 +228,9 @@ defmodule Cadence.Telemetry.Profiler do
       [] ->
         IO.puts("   NOT FOUND with key #{inspect(broadway_key)}")
     end
+  end
 
-    # 5. ETS tables
+  defp print_cvt_table(mission_id) do
     IO.puts("\n5. ETS tables:")
     cvt_table = String.to_atom("cvt_mission_#{mission_id}")
 
@@ -234,8 +243,9 @@ defmodule Cadence.Telemetry.Profiler do
         IO.puts("   - size: #{info[:size]}")
         IO.puts("   - memory: #{info[:memory]} words")
     end
+  end
 
-    # 6. Stats (new ETS-based counters)
+  defp print_stats_counters(mission_id) do
     IO.puts("\n6. Stats (ETS counters):")
 
     try do
@@ -253,8 +263,9 @@ defmodule Cadence.Telemetry.Profiler do
     catch
       kind, reason -> IO.puts("   Caught #{kind}: #{inspect(reason)}")
     end
+  end
 
-    # 7. Pipeline V2 lookup
+  defp print_pipeline_v2_lookup(mission_id) do
     IO.puts("\n7. Pipeline V2 lookup:")
     router_key = {:pipeline_v2, mission_id, :router}
 
@@ -262,39 +273,40 @@ defmodule Cadence.Telemetry.Profiler do
       [{pid, _}] ->
         IO.puts("   Router found: #{inspect(pid)}")
         IO.puts("   Process alive? #{Process.alive?(pid)}")
-
-        # Get queue depth
-        try do
-          depth = PartitionRouter.queue_depth(pid)
-          IO.puts("   Router queue depth: #{depth}")
-        rescue
-          e -> IO.puts("   Queue depth error: #{Exception.message(e)}")
-        end
-
-        # Count partitions
-        partition_count = count_partitions(mission_id)
-        IO.puts("   Partition count: #{partition_count}")
-
-        # Show stage PIDs for partition 0
-        if partition_count > 0 do
-          IO.puts("   Partition 0 stages:")
-
-          for stage <- [:identify, :decom, :convert, :derive] do
-            stage_name = PartitionSupervisor.stage_name(mission_id, 0, stage)
-
-            case GenServer.whereis(stage_name) do
-              nil -> IO.puts("     #{stage}: NOT FOUND")
-              pid -> IO.puts("     #{stage}: #{inspect(pid)}")
-            end
-          end
-        end
+        print_router_depth(pid)
+        print_partition_stats(mission_id)
 
       [] ->
         IO.puts("   NOT FOUND with key #{inspect(router_key)}")
     end
+  end
 
-    IO.puts("\n=== END DEBUG ===\n")
-    :ok
+  defp print_router_depth(pid) do
+    case safe_call(fn -> PartitionRouter.queue_depth(pid) end) do
+      %{error: error} -> IO.puts("   Queue depth error: #{error}")
+      depth -> IO.puts("   Router queue depth: #{depth}")
+    end
+  end
+
+  defp print_partition_stats(mission_id) do
+    partition_count = count_partitions(mission_id)
+    IO.puts("   Partition count: #{partition_count}")
+    print_partition_stages(mission_id, partition_count)
+  end
+
+  defp print_partition_stages(_mission_id, partition_count) when partition_count <= 0, do: :ok
+
+  defp print_partition_stages(mission_id, _partition_count) do
+    IO.puts("   Partition 0 stages:")
+
+    for stage <- [:identify, :decom, :convert, :derive] do
+      stage_name = PartitionSupervisor.stage_name(mission_id, 0, stage)
+
+      case GenServer.whereis(stage_name) do
+        nil -> IO.puts("     #{stage}: NOT FOUND")
+        pid -> IO.puts("     #{stage}: #{inspect(pid)}")
+      end
+    end
   end
 
   @doc """
@@ -572,7 +584,16 @@ defmodule Cadence.Telemetry.Profiler do
   def limits_stats(mission_id) do
     IO.puts("\n=== Limits Evaluation Statistics ===\n")
 
-    # 1. Timing stats
+    print_limits_timing(mission_id)
+    print_state_tracker_stats(mission_id)
+    print_limits_cache_stats()
+    print_limits_timing_analysis(mission_id)
+
+    IO.puts("\n=== End Limits Stats ===\n")
+    :ok
+  end
+
+  defp print_limits_timing(mission_id) do
     IO.puts("1. Timing (limits evaluation per packet):")
     timing = Stats.get_timing(mission_id)
 
@@ -582,18 +603,21 @@ defmodule Cadence.Telemetry.Profiler do
         IO.puts("   Average:     #{format_us(avg)}")
         IO.puts("   Min:         #{format_us(min)}")
         IO.puts("   Max:         #{format_us(max)}")
-
-        # Get percentiles
-        percentiles = Stats.get_percentiles(mission_id, :limits)
-        IO.puts("   P50:         #{format_us(percentiles.p50)}")
-        IO.puts("   P95:         #{format_us(percentiles.p95)}")
-        IO.puts("   P99:         #{format_us(percentiles.p99)}")
+        print_limits_percentiles(mission_id)
 
       _ ->
         IO.puts("   No limits timing data recorded yet")
     end
+  end
 
-    # 2. StateTracker stats
+  defp print_limits_percentiles(mission_id) do
+    percentiles = Stats.get_percentiles(mission_id, :limits)
+    IO.puts("   P50:         #{format_us(percentiles.p50)}")
+    IO.puts("   P95:         #{format_us(percentiles.p95)}")
+    IO.puts("   P99:         #{format_us(percentiles.p99)}")
+  end
+
+  defp print_state_tracker_stats(mission_id) do
     IO.puts("\n2. StateTracker:")
     tracker_stats = safe_call(fn -> StateTracker.stats(mission_id) end)
 
@@ -601,15 +625,7 @@ defmodule Cadence.Telemetry.Profiler do
       %{tracked_items: items, table_memory_bytes: mem, state_counts: state_counts} ->
         IO.puts("   Tracked items:  #{items}")
         IO.puts("   Table memory:   #{div(mem, 1024)} KB")
-
-        # Show state breakdown
-        if map_size(state_counts) > 0 do
-          IO.puts("   State breakdown:")
-
-          Enum.each(state_counts, fn {state, count} ->
-            IO.puts("     #{state}: #{count}")
-          end)
-        end
+        print_state_breakdown(state_counts)
 
       %{error: :not_found} ->
         IO.puts("   StateTracker not running")
@@ -617,8 +633,19 @@ defmodule Cadence.Telemetry.Profiler do
       other ->
         IO.puts("   #{inspect(other)}")
     end
+  end
 
-    # 3. Cache stats
+  defp print_state_breakdown(state_counts) do
+    if map_size(state_counts) > 0 do
+      IO.puts("   State breakdown:")
+
+      Enum.each(state_counts, fn {state, count} ->
+        IO.puts("     #{state}: #{count}")
+      end)
+    end
+  end
+
+  defp print_limits_cache_stats do
     IO.puts("\n3. Limits Cache:")
     cache_stats = safe_call(fn -> Cache.stats() end)
 
@@ -633,8 +660,9 @@ defmodule Cadence.Telemetry.Profiler do
       other ->
         IO.puts("   #{inspect(other)}")
     end
+  end
 
-    # 4. Timing analysis (warmup/spikes)
+  defp print_limits_timing_analysis(mission_id) do
     IO.puts("\n4. Timing Analysis:")
     analysis = Stats.get_timing_analysis(mission_id, :limits)
 
@@ -643,27 +671,31 @@ defmodule Cadence.Telemetry.Profiler do
       IO.puts("   Avg:           #{format_us(analysis.avg_us)}")
       IO.puts("   Trimmed avg:   #{format_us(analysis.trimmed_avg_us)}")
       IO.puts("   Median:        #{format_us(analysis.median_us)}")
-
-      if analysis.spike_count > 0 do
-        spike_pct = Float.round(analysis.spike_count / analysis.sample_count * 100, 2)
-        IO.puts("   Spikes:        #{analysis.spike_count} (#{spike_pct}%)")
-      end
-
-      if length(analysis.warmup_samples) > 0 do
-        warmup_str =
-          analysis.warmup_samples
-          |> Enum.take(5)
-          |> Enum.map_join(", ", &format_us_compact/1)
-
-        IO.puts("   Warmup:        [#{warmup_str}...]")
-      end
+      print_spikes(analysis)
+      print_warmup(analysis)
     else
       IO.puts("   No timing samples recorded")
     end
-
-    IO.puts("\n=== End Limits Stats ===\n")
-    :ok
   end
+
+  defp print_spikes(%{spike_count: spike_count, sample_count: sample_count})
+       when spike_count > 0 do
+    spike_pct = Float.round(spike_count / sample_count * 100, 2)
+    IO.puts("   Spikes:        #{spike_count} (#{spike_pct}%)")
+  end
+
+  defp print_spikes(_analysis), do: :ok
+
+  defp print_warmup(%{warmup_samples: warmup_samples}) when length(warmup_samples) > 0 do
+    warmup_str =
+      warmup_samples
+      |> Enum.take(5)
+      |> Enum.map_join(", ", &format_us_compact/1)
+
+    IO.puts("   Warmup:        [#{warmup_str}...]")
+  end
+
+  defp print_warmup(_analysis), do: :ok
 
   # Private helpers
 
@@ -727,25 +759,27 @@ defmodule Cadence.Telemetry.Profiler do
       {:links, links} ->
         links
         |> Enum.filter(&is_pid/1)
-        |> Enum.map(fn pid ->
-          case Process.info(pid, [:registered_name, :message_queue_len]) do
-            nil ->
-              nil
-
-            info ->
-              name = info[:registered_name] || inspect(pid)
-
-              if String.contains?(to_string(name), name_pattern) do
-                %{pid: pid, name: name, queue_len: info[:message_queue_len]}
-              else
-                nil
-              end
-          end
-        end)
+        |> Enum.map(&build_broadway_child(&1, name_pattern))
         |> Enum.reject(&is_nil/1)
 
       _ ->
         []
+    end
+  end
+
+  defp build_broadway_child(pid, name_pattern) do
+    case Process.info(pid, [:registered_name, :message_queue_len]) do
+      nil ->
+        nil
+
+      info ->
+        name = info[:registered_name] || inspect(pid)
+
+        if String.contains?(to_string(name), name_pattern) do
+          %{pid: pid, name: name, queue_len: info[:message_queue_len]}
+        else
+          nil
+        end
     end
   end
 
@@ -759,104 +793,101 @@ defmodule Cadence.Telemetry.Profiler do
   defp print_snapshot(snapshot, prev) do
     IO.puts("--- #{format_time(snapshot.timestamp)} ---")
 
-    # CVT stats
-    case snapshot.cvt do
-      %{total_entries: entries, memory_bytes: bytes} ->
-        IO.puts("CVT: #{entries} entries, #{div(bytes, 1024)} KB")
+    print_cvt_snapshot(snapshot.cvt)
+    print_stats_snapshot(snapshot, prev)
+    print_queue_warnings(snapshot.process_queues)
 
-      other ->
-        IO.puts("CVT: #{inspect(other)}")
+    IO.puts("")
+  end
+
+  defp print_cvt_snapshot(%{total_entries: entries, memory_bytes: bytes}) do
+    IO.puts("CVT: #{entries} entries, #{div(bytes, 1024)} KB")
+  end
+
+  defp print_cvt_snapshot(other) do
+    IO.puts("CVT: #{inspect(other)}")
+  end
+
+  defp print_stats_snapshot(
+         %{
+           stats:
+             %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats
+         } = snapshot,
+         prev
+       ) do
+    failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+    delta = packet_delta(prev, proc)
+
+    IO.puts("Packets: #{proc} processed#{delta}, #{failed} dropped, 0 failed")
+    IO.puts("Items: #{items} processed")
+
+    print_throughput(stats)
+    print_router_queue(snapshot.pipeline_v2)
+    print_producer_queue(snapshot.broadway)
+    print_timing_breakdown(stats, snapshot)
+    print_stage_errors_snapshot(snapshot)
+  end
+
+  defp print_stats_snapshot(%{stats: other}, _prev) do
+    IO.puts("Stats: #{inspect(other)}")
+  end
+
+  defp packet_delta(%{stats: %{packets_processed: prev_proc}}, proc),
+    do: " (+#{proc - prev_proc}/s)"
+
+  defp packet_delta(_prev, _proc), do: ""
+
+  defp print_throughput(%{packets_per_sec: pps, bytes_per_sec: bps}) when bps > 0 do
+    mbps = Float.round(bps * 8 / 1_000_000, 1)
+    mb_per_sec = Float.round(bps / 1_000_000, 2)
+
+    IO.puts(
+      "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
+    )
+  end
+
+  defp print_throughput(%{packets_per_sec: pps}) when pps > 0 do
+    IO.puts("Throughput: #{format_number(round(pps))} packets/sec")
+  end
+
+  defp print_throughput(_stats), do: :ok
+
+  defp print_router_queue(%{router_queue: depth}) when is_integer(depth) and depth > 0 do
+    IO.puts("Router queue: #{depth} pending")
+  end
+
+  defp print_router_queue(_pipeline_v2), do: :ok
+
+  defp print_producer_queue(%{producer_queue_depth: depth})
+       when is_integer(depth) and depth > 0 do
+    IO.puts("Producer queue: #{depth} waiting")
+  end
+
+  defp print_producer_queue(_broadway), do: :ok
+
+  defp print_timing_breakdown(%{timing: timing}, snapshot)
+       when is_map(timing) and map_size(timing) > 0 do
+    percentiles = Map.get(snapshot, :percentiles)
+    first_stage_data = timing |> Map.values() |> List.first()
+
+    if first_stage_data && Map.has_key?(first_stage_data, :min_us) do
+      print_timing(timing, percentiles)
+    else
+      print_timing_v2(timing, percentiles)
     end
+  end
 
-    # Stats - handle both V1 (Stats) and V2 (PipelineMetrics) formats
-    case snapshot.stats do
-      %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats ->
-        # V1 uses packets_failed, V2 uses packets_dropped
-        failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+  defp print_timing_breakdown(_stats, _snapshot), do: :ok
 
-        delta =
-          case prev do
-            %{stats: %{packets_processed: prev_proc}} ->
-              " (+#{proc - prev_proc}/s)"
+  defp print_stage_errors_snapshot(%{stage_errors: errors})
+       when is_map(errors) and map_size(errors) > 0 do
+    print_stage_errors(errors)
+  end
 
-            _ ->
-              ""
-          end
+  defp print_stage_errors_snapshot(_snapshot), do: :ok
 
-        IO.puts("Packets: #{proc} processed#{delta}, #{failed} dropped, 0 failed")
-
-        IO.puts("Items: #{items} processed")
-
-        # Show throughput if available (V2 pipeline with bitrate)
-        case stats do
-          %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
-            mbps = Float.round(bps * 8 / 1_000_000, 1)
-            mb_per_sec = Float.round(bps / 1_000_000, 2)
-
-            IO.puts(
-              "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
-            )
-
-          %{packets_per_sec: pps} when pps > 0 ->
-            IO.puts("Throughput: #{format_number(round(pps))} packets/sec")
-
-          _ ->
-            :ok
-        end
-
-        # Show router queue depth for V2
-        case snapshot.pipeline_v2 do
-          %{router_queue: depth} when is_integer(depth) and depth > 0 ->
-            IO.puts("Router queue: #{depth} pending")
-
-          _ ->
-            :ok
-        end
-
-        # Show producer queue depth for V1 (Broadway)
-        case snapshot.broadway do
-          %{producer_queue_depth: depth} when is_integer(depth) and depth > 0 ->
-            IO.puts("Producer queue: #{depth} waiting")
-
-          _ ->
-            :ok
-        end
-
-        # Show timing breakdown if available
-        case stats do
-          %{timing: timing} when is_map(timing) and map_size(timing) > 0 ->
-            percentiles = Map.get(snapshot, :percentiles)
-
-            # Detect V1 vs V2 format based on presence of min_us
-            first_stage_data = timing |> Map.values() |> List.first()
-
-            if first_stage_data && Map.has_key?(first_stage_data, :min_us) do
-              print_timing(timing, percentiles)
-            else
-              print_timing_v2(timing, percentiles)
-            end
-
-          _ ->
-            :ok
-        end
-
-        # Show stage errors if any
-        case Map.get(snapshot, :stage_errors) do
-          errors when is_map(errors) and map_size(errors) > 0 ->
-            print_stage_errors(errors)
-
-          _ ->
-            :ok
-        end
-
-      other ->
-        IO.puts("Stats: #{inspect(other)}")
-    end
-
-    # Queue warnings
-    backed_up =
-      snapshot.process_queues
-      |> Enum.filter(fn q -> q.queue_len > 10 end)
+  defp print_queue_warnings(process_queues) do
+    backed_up = Enum.filter(process_queues, fn q -> q.queue_len > 10 end)
 
     if length(backed_up) > 0 do
       IO.puts("⚠️  Backed up processes:")
@@ -865,8 +896,6 @@ defmodule Cadence.Telemetry.Profiler do
         IO.puts("   #{q.name}: #{q.queue_len} messages")
       end)
     end
-
-    IO.puts("")
   end
 
   defp format_time(%DateTime{} = dt) do
@@ -889,16 +918,18 @@ defmodule Cadence.Telemetry.Profiler do
 
       stages = [:identify, :decom, :convert, :derive, :limits, :cvt_batch, :ets_write]
 
-      Enum.each(stages, fn stage ->
-        case Map.get(timing, stage) do
-          %{avg_us: avg, count: count} when count > 0 ->
-            stage_name = stage |> to_string() |> String.pad_trailing(16)
-            IO.puts("  #{stage_name} #{format_us(avg)}  /  #{count}")
+      Enum.each(stages, &print_v2_stage(timing, &1))
+    end
+  end
 
-          _ ->
-            :ok
-        end
-      end)
+  defp print_v2_stage(timing, stage) do
+    case Map.get(timing, stage) do
+      %{avg_us: avg, count: count} when count > 0 ->
+        stage_name = stage |> to_string() |> String.pad_trailing(16)
+        IO.puts("  #{stage_name} #{format_us(avg)}  /  #{count}")
+
+      _ ->
+        :ok
     end
   end
 
@@ -908,58 +939,58 @@ defmodule Cadence.Telemetry.Profiler do
     stages_with_data = Enum.filter(timing, fn {_stage, data} -> data.count > 0 end)
 
     if length(stages_with_data) > 0 do
-      if percentiles && is_map(percentiles) do
-        IO.puts("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
-      else
-        IO.puts("Timing (μs):  avg / min / max")
+      print_timing_header(percentiles)
+      Enum.each(all_timing_stages(), &print_v1_stage(timing, percentiles, &1))
+    end
+  end
+
+  defp print_timing_header(percentiles) do
+    if percentiles && is_map(percentiles) do
+      IO.puts("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
+    else
+      IO.puts("Timing (μs):  avg / min / max")
+    end
+  end
+
+  defp all_timing_stages do
+    [
+      :identify,
+      :decommutate,
+      :convert,
+      :derive,
+      :decom,
+      :limits,
+      :cvt_batch,
+      :ets_write,
+      :pubsub_broadcast,
+      :total_process,
+      :end_to_end
+    ]
+  end
+
+  defp print_v1_stage(timing, percentiles, stage) do
+    case Map.get(timing, stage) do
+      %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+        stage_name = stage |> to_string() |> String.pad_trailing(14)
+        basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
+        IO.puts(timing_line(stage_name, basic, percentiles, stage))
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp timing_line(stage_name, basic, percentiles, stage) do
+    if percentiles && is_map(percentiles) do
+      case Map.get(percentiles, stage) do
+        %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
+          "  #{stage_name} #{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
+
+        _ ->
+          "  #{stage_name} #{basic}"
       end
-
-      # V1 Broadway stages + V2 GenStage stages
-      all_stages = [
-        # V1 Broadway stages
-        :identify,
-        :decommutate,
-        :convert,
-        :derive,
-        # V2 GenStage stages (decom is shorter name for decommutation)
-        :decom,
-        # Limits evaluation
-        :limits,
-        # Shared stages
-        :cvt_batch,
-        :ets_write,
-        :pubsub_broadcast,
-        :total_process,
-        # End-to-end latency
-        :end_to_end
-      ]
-
-      Enum.each(all_stages, fn stage ->
-        case Map.get(timing, stage) do
-          %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
-            stage_name = stage |> to_string() |> String.pad_trailing(14)
-            basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
-
-            # Add percentiles if available
-            line =
-              if percentiles && is_map(percentiles) do
-                case Map.get(percentiles, stage) do
-                  %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
-                    "  #{stage_name} #{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
-
-                  _ ->
-                    "  #{stage_name} #{basic}"
-                end
-              else
-                "  #{stage_name} #{basic}"
-              end
-
-            IO.puts(line)
-
-          _ ->
-            :ok
-        end
-      end)
+    else
+      "  #{stage_name} #{basic}"
     end
   end
 

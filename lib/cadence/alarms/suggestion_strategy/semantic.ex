@@ -56,39 +56,28 @@ defmodule Cadence.Alarms.SuggestionStrategy.Semantic do
     name = String.upcase(parameter.qualified_name)
     data_type = parameter.data_type
 
-    cond do
-      # Safety-critical parameters (highest priority)
-      safety_pattern?(name) ->
-        :safety
+    categorization_checks(name, data_type)
+    |> Enum.find_value(&match_category/1)
+    |> fallback_category()
+  end
 
-      # Temperature sensors
-      temperature_pattern?(name) ->
-        :temperature
+  defp match_category({match?, category}) do
+    if match?.(), do: category
+  end
 
-      # Power subsystem
-      power_pattern?(name) ->
-        :power
+  defp fallback_category(nil), do: :numeric
+  defp fallback_category(category), do: category
 
-      # State/status enumerations
-      state_pattern?(name) || enumerated_type?(data_type) ->
-        :state
-
-      # Counters
-      counter_pattern?(name) ->
-        :counter
-
-      # Housekeeping telemetry
-      housekeeping_pattern?(name) ->
-        :housekeeping
-
-      # Command-related
-      command_pattern?(name) ->
-        :command
-
-      # Default numeric
-      true ->
-        :numeric
-    end
+  defp categorization_checks(name, data_type) do
+    [
+      {fn -> safety_pattern?(name) end, :safety},
+      {fn -> temperature_pattern?(name) end, :temperature},
+      {fn -> power_pattern?(name) end, :power},
+      {fn -> state_pattern?(name) || enumerated_type?(data_type) end, :state},
+      {fn -> counter_pattern?(name) end, :counter},
+      {fn -> housekeeping_pattern?(name) end, :housekeeping},
+      {fn -> command_pattern?(name) end, :command}
+    ]
   end
 
   # Pattern matching helpers
@@ -100,14 +89,20 @@ defmodule Cadence.Alarms.SuggestionStrategy.Semantic do
   end
 
   defp power_pattern?(name) do
-    String.contains?(name, "VOLTAGE") ||
-      String.contains?(name, "CURRENT") ||
-      String.contains?(name, "POWER") ||
-      String.contains?(name, "BATTERY") ||
-      (String.contains?(name, "_V") && !String.contains?(name, "VALVE")) ||
-      (String.contains?(name, "_I") && !String.contains?(name, "INFO")) ||
-      String.contains?(name, "EPS") ||
-      String.contains?(name, "PDU")
+    power_term?(name) || power_suffix?(name) || power_subsystem?(name)
+  end
+
+  defp power_term?(name) do
+    Enum.any?(["VOLTAGE", "CURRENT", "POWER", "BATTERY"], &String.contains?(name, &1))
+  end
+
+  defp power_suffix?(name) do
+    (String.contains?(name, "_V") && !String.contains?(name, "VALVE")) ||
+      (String.contains?(name, "_I") && !String.contains?(name, "INFO"))
+  end
+
+  defp power_subsystem?(name) do
+    String.contains?(name, "EPS") || String.contains?(name, "PDU")
   end
 
   defp state_pattern?(name) do

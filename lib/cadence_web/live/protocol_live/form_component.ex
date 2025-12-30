@@ -405,69 +405,22 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
     protocol_config =
       case protocol_type do
         "template" ->
-          %{
-            "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"]),
-            "header_length" => parse_int(params["header_length"]),
-            "length_offset" => parse_int(params["length_offset"]),
-            "length_bit_size" => parse_int(params["length_bit_size"]),
-            "length_value_offset" => parse_int(params["length_value_offset"]),
-            "length_endian" => params["length_endian"] || "big"
-          }
-          |> Enum.reject(fn {_k, v} -> is_nil(v) or v == "" end)
-          |> Map.new()
+          build_config_template(params)
 
         "length" ->
-          %{
-            "length_bit_offset" => parse_int(params["length_bit_offset"]),
-            "length_bit_size" => parse_int(params["length_bit_size"]),
-            "length_endian" => params["length_endian"] || "big",
-            "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"])
-          }
-          |> Enum.reject(fn {_k, v} -> is_nil(v) or v == "" end)
-          |> Map.new()
+          build_config_length(params)
 
         "terminated" ->
-          %{
-            "terminator_hex" => normalize_hex(params["terminator_hex"]),
-            "strip_terminator" => params["strip_terminator"] == "true"
-          }
-          |> Enum.reject(fn {_k, v} -> is_nil(v) or v == "" end)
-          |> Map.new()
+          build_config_terminated(params)
 
         "fixed" ->
-          %{
-            "packet_size" => parse_int(params["packet_size"])
-          }
-          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-          |> Map.new()
+          build_config_fixed(params)
 
         "crc" ->
-          %{
-            "algorithm" => params["crc_algorithm"] || "crc16_ccitt",
-            "endian" => params["crc_endian"] || "big",
-            "on_failure" => params["crc_on_failure"] || "skip"
-          }
+          build_config_crc(params)
 
         "ccsds" ->
-          crc_enabled = params["ccsds_crc_enabled"] == "true"
-          include_sync = Map.get(params, "include_sync", "true") == "true"
-
-          base_config = %{
-            "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"]) || "1ACFFC1D",
-            "include_sync" => include_sync,
-            # Always discard sync - required for proper CCSDS header parsing
-            "discard_sync" => true,
-            "crc_enabled" => crc_enabled
-          }
-
-          if crc_enabled do
-            base_config
-            |> Map.put("crc_algorithm", params["ccsds_crc_algorithm"] || "crc16_ccitt")
-            |> Map.put("crc_endian", params["ccsds_crc_endian"] || "big")
-            |> Map.put("crc_on_failure", params["ccsds_crc_on_failure"] || "skip")
-          else
-            base_config
-          end
+          build_config_ccsds(params)
 
         _ ->
           %{}
@@ -497,6 +450,79 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       "ccsds_crc_on_failure"
     ])
     |> Map.put("protocol_config", protocol_config)
+  end
+
+  defp build_config_template(params) do
+    %{
+      "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"]),
+      "header_length" => parse_int(params["header_length"]),
+      "length_offset" => parse_int(params["length_offset"]),
+      "length_bit_size" => parse_int(params["length_bit_size"]),
+      "length_value_offset" => parse_int(params["length_value_offset"]),
+      "length_endian" => params["length_endian"] || "big"
+    }
+    |> compact_config()
+  end
+
+  defp build_config_length(params) do
+    %{
+      "length_bit_offset" => parse_int(params["length_bit_offset"]),
+      "length_bit_size" => parse_int(params["length_bit_size"]),
+      "length_endian" => params["length_endian"] || "big",
+      "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"])
+    }
+    |> compact_config()
+  end
+
+  defp build_config_terminated(params) do
+    %{
+      "terminator_hex" => normalize_hex(params["terminator_hex"]),
+      "strip_terminator" => params["strip_terminator"] == "true"
+    }
+    |> compact_config()
+  end
+
+  defp build_config_fixed(params) do
+    %{
+      "packet_size" => parse_int(params["packet_size"])
+    }
+    |> compact_config()
+  end
+
+  defp build_config_crc(params) do
+    %{
+      "algorithm" => params["crc_algorithm"] || "crc16_ccitt",
+      "endian" => params["crc_endian"] || "big",
+      "on_failure" => params["crc_on_failure"] || "skip"
+    }
+  end
+
+  defp build_config_ccsds(params) do
+    crc_enabled = params["ccsds_crc_enabled"] == "true"
+    include_sync = Map.get(params, "include_sync", "true") == "true"
+
+    base_config = %{
+      "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"]) || "1ACFFC1D",
+      "include_sync" => include_sync,
+      # Always discard sync - required for proper CCSDS header parsing
+      "discard_sync" => true,
+      "crc_enabled" => crc_enabled
+    }
+
+    if crc_enabled do
+      base_config
+      |> Map.put("crc_algorithm", params["ccsds_crc_algorithm"] || "crc16_ccitt")
+      |> Map.put("crc_endian", params["ccsds_crc_endian"] || "big")
+      |> Map.put("crc_on_failure", params["ccsds_crc_on_failure"] || "skip")
+    else
+      base_config
+    end
+  end
+
+  defp compact_config(config) do
+    config
+    |> Enum.reject(fn {_k, v} -> is_nil(v) or v == "" end)
+    |> Map.new()
   end
 
   # Normalize hex string (uppercase, remove spaces)

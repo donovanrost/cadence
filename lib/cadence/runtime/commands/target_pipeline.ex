@@ -47,9 +47,11 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
   - ID-based: `mission_id: id, target_id: id` (legacy, makes DB calls)
   """
   def start_link(opts) do
-    {mission, target} = extract_mission_and_target(opts)
+    {mission, target, snapshot} = extract_mission_target_snapshot(opts)
 
-    Supervisor.start_link(__MODULE__, {mission, target}, name: via_tuple(mission.id, target.id))
+    Supervisor.start_link(__MODULE__, {mission, target, snapshot},
+      name: via_tuple(mission.id, target.id)
+    )
   end
 
   @doc """
@@ -72,7 +74,7 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
   ## Supervisor Callbacks
 
   @impl true
-  def init({%Mission{} = mission, %Target{} = target}) do
+  def init({%Mission{} = mission, %Target{} = target, snapshot}) do
     Logger.info(
       "Starting TargetPipeline for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
@@ -80,7 +82,7 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
     children = [
       # Queue must start before Dispatcher since Dispatcher queries Queue
       # Pass entities directly - no DB lookups needed
-      {TargetQueue, mission: mission, target: target},
+      {TargetQueue, mission: mission, target: target, queue_snapshot: snapshot},
       {TargetDispatcher, mission: mission, target: target}
     ]
 
@@ -92,31 +94,16 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
 
   ## Private Functions
 
-  # Extract mission and target from opts, supporting both entity and ID-based startup
-  defp extract_mission_and_target(opts) do
+  # Extract mission and target from opts (entity-based only)
+  defp extract_mission_target_snapshot(opts) do
     case {Keyword.get(opts, :mission), Keyword.get(opts, :target)} do
       {%Mission{} = mission, %Target{} = target} ->
-        # Entity-based startup (preferred) - no DB calls
-        {mission, target}
-
-      {nil, nil} ->
-        # Legacy ID-based startup - makes DB calls
-        mission_id = Keyword.fetch!(opts, :mission_id)
-        target_id = Keyword.fetch!(opts, :target_id)
-
-        Logger.warning(
-          "TargetPipeline started with IDs instead of entities. " <>
-            "Consider passing entities to avoid DB calls."
-        )
-
-        mission = Cadence.Missions.get_mission!(mission_id)
-        target = Cadence.Targets.get_target_with_definition_set!(target_id)
-
-        {mission, target}
+        snapshot = Keyword.get(opts, :queue_snapshot)
+        {mission, target, snapshot}
 
       _ ->
         raise ArgumentError,
-              "TargetPipeline requires either (mission: entity, target: entity) or (mission_id: id, target_id: id)"
+              "TargetPipeline requires (mission: entity, target: entity)"
     end
   end
 end

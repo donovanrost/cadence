@@ -235,42 +235,10 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   """
   def add_approval(version_id, user_id, comment) do
     Repo.transaction(fn ->
-      # Get the version with lock
-      query =
-        from v in ProcedureVersionSchema,
-          where: v.id == ^version_id,
-          lock: "FOR UPDATE"
-
-      case Repo.one(query) do
-        nil ->
-          Repo.rollback(:not_found)
-
-        version ->
-          # Insert approval record
-          approval_attrs = %{
-            procedure_version_id: version_id,
-            user_id: user_id,
-            decision: :approved,
-            comment: comment
-          }
-
-          case %ProcedureApprovalSchema{}
-               |> ProcedureApprovalSchema.changeset(approval_attrs)
-               |> Repo.insert() do
-            {:ok, _approval} ->
-              # Reload with approvals
-              version = Repo.preload(version, :approvals, force: true)
-              {:ok, to_entity(version)}
-
-            {:error, changeset} ->
-              Repo.rollback(extract_errors(changeset))
-          end
-      end
+      version = fetch_version_for_update(version_id)
+      insert_approval(version, user_id, comment)
     end)
-    |> case do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
-    end
+    |> handle_transaction_result()
   end
 
   @doc """
@@ -298,6 +266,42 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   # ===========================================================================
   # ApprovalOperations Implementation
   # ===========================================================================
+
+  defp fetch_version_for_update(version_id) do
+    query =
+      from v in ProcedureVersionSchema,
+        where: v.id == ^version_id,
+        lock: "FOR UPDATE"
+
+    case Repo.one(query) do
+      nil -> Repo.rollback(:not_found)
+      version -> version
+    end
+  end
+
+  defp insert_approval(version, user_id, comment) do
+    approval_attrs = %{
+      procedure_version_id: version.id,
+      user_id: user_id,
+      decision: :approved,
+      comment: comment
+    }
+
+    %ProcedureApprovalSchema{}
+    |> ProcedureApprovalSchema.changeset(approval_attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, _approval} ->
+        version = Repo.preload(version, :approvals, force: true)
+        {:ok, to_entity(version)}
+
+      {:error, changeset} ->
+        Repo.rollback(extract_errors(changeset))
+    end
+  end
+
+  defp handle_transaction_result({:ok, result}), do: result
+  defp handle_transaction_result({:error, reason}), do: {:error, reason}
 
   @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
   def find_approval(id) do

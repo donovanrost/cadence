@@ -1,61 +1,89 @@
 defmodule Cadence.AutomationsTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: false
 
   alias Cadence.Automations
 
-  import Cadence.OrganizationsFixtures
-  import Cadence.MissionsFixtures
-  import Cadence.ProceduresFixtures
+  alias Cadence.Test.Adapters.FakeEventPublisher
+  alias Cadence.Test.Adapters.InMemoryAutomationExecutionRepository
+  alias Cadence.Test.Adapters.InMemoryAutomationRepository
 
   describe "automations" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      procedure = procedure_fixture(organization: org, mission: mission)
+      {:ok, _} = InMemoryAutomationRepository.start_link()
+      {:ok, _} = InMemoryAutomationExecutionRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
 
-      %{org: org, mission: mission, procedure: procedure}
+      Application.put_env(
+        :cadence,
+        :automation_execution_repository,
+        InMemoryAutomationExecutionRepository
+      )
+
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
+
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+      procedure_id = Ecto.UUID.generate()
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :automation_repository)
+        Application.delete_env(:cadence, :automation_execution_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryAutomationExecutionRepository.stop()
+        InMemoryAutomationRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end
 
-    test "list_automations/2 returns automations for organization", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission)
+    test "list_automations/2 returns automations for organization", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
 
-      automations = Automations.list_automations(org.id)
+      automations = Automations.list_automations(org_id)
       assert length(automations) == 1
       assert hd(automations).id == automation.id
     end
 
-    test "list_automations/2 filters by mission", %{org: org, mission: mission} do
-      mission2 = mission_fixture(organization: org)
-      auto1 = automation_fixture(organization: org, mission: mission)
-      _auto2 = automation_fixture(organization: org, mission: mission2)
+    test "list_automations/2 filters by mission", %{org_id: org_id, mission_id: mission_id} do
+      mission2_id = Ecto.UUID.generate()
+      auto1 = automation_fixture(organization_id: org_id, mission_id: mission_id)
+      _auto2 = automation_fixture(organization_id: org_id, mission_id: mission2_id)
 
-      automations = Automations.list_automations(org.id, mission_id: mission.id)
+      automations = Automations.list_automations(org_id, mission_id: mission_id)
       assert length(automations) == 1
       assert hd(automations).id == auto1.id
     end
 
-    test "list_automations/2 filters enabled only", %{org: org, mission: mission} do
-      _enabled = automation_fixture(organization: org, mission: mission, enabled: true)
-      _disabled = automation_fixture(organization: org, mission: mission, enabled: false)
+    test "list_automations/2 filters enabled only", %{org_id: org_id, mission_id: mission_id} do
+      _enabled =
+        automation_fixture(organization_id: org_id, mission_id: mission_id, enabled: true)
 
-      enabled_only = Automations.list_automations(org.id, enabled_only: true)
+      _disabled =
+        automation_fixture(organization_id: org_id, mission_id: mission_id, enabled: false)
+
+      enabled_only = Automations.list_automations(org_id, enabled_only: true)
       assert length(enabled_only) == 1
     end
 
     test "create_automation/1 creates automation with valid attrs", %{
-      org: org,
-      mission: mission,
-      procedure: procedure
+      org_id: org_id,
+      mission_id: mission_id,
+      procedure_id: procedure_id
     } do
       {:ok, automation} =
         Automations.create_automation(%{
           name: "Test Automation",
-          organization_id: org.id,
-          mission_id: mission.id,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_type: :alarm_fired,
           trigger_conditions: %{"severity_in" => ["critical"]},
           action_type: :execute_procedure,
-          action_config: %{"procedure_id" => procedure.id}
+          action_config: %{"procedure_id" => procedure_id}
         })
 
       assert automation.name == "Test Automation"
@@ -63,21 +91,21 @@ defmodule Cadence.AutomationsTest do
       assert automation.enabled == true
     end
 
-    test "create_automation/1 validates required fields", %{org: org} do
+    test "create_automation/1 validates required fields", %{org_id: org_id} do
       {:error, error} =
         Automations.create_automation(%{
-          organization_id: org.id
+          organization_id: org_id
         })
 
       # Domain entity returns error tuples like {:required, :field}
       assert error == {:required, :name}
     end
 
-    test "create_automation/1 validates trigger_type", %{org: org} do
+    test "create_automation/1 validates trigger_type", %{org_id: org_id} do
       {:error, error} =
         Automations.create_automation(%{
           name: "Test",
-          organization_id: org.id,
+          organization_id: org_id,
           trigger_type: "invalid_type",
           action_type: :execute_procedure,
           action_config: %{"procedure_id" => Ecto.UUID.generate()}
@@ -86,11 +114,11 @@ defmodule Cadence.AutomationsTest do
       assert error == {:invalid, :trigger_type}
     end
 
-    test "create_automation/1 validates action_type", %{org: org} do
+    test "create_automation/1 validates action_type", %{org_id: org_id} do
       {:error, error} =
         Automations.create_automation(%{
           name: "Test",
-          organization_id: org.id,
+          organization_id: org_id,
           trigger_type: :alarm_fired,
           action_type: "invalid_action"
         })
@@ -98,11 +126,13 @@ defmodule Cadence.AutomationsTest do
       assert error == {:invalid, :action_type}
     end
 
-    test "create_automation/1 validates execute_procedure requires procedure_id", %{org: org} do
+    test "create_automation/1 validates execute_procedure requires procedure_id", %{
+      org_id: org_id
+    } do
       {:error, error} =
         Automations.create_automation(%{
           name: "Test",
-          organization_id: org.id,
+          organization_id: org_id,
           trigger_type: :alarm_fired,
           action_type: :execute_procedure,
           action_config: %{}
@@ -111,29 +141,31 @@ defmodule Cadence.AutomationsTest do
       assert error == {:missing_config, :procedure_id}
     end
 
-    test "update_automation/2 updates automation", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission)
+    test "update_automation/2 updates automation", %{org_id: org_id, mission_id: mission_id} do
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
 
       {:ok, updated} = Automations.update_automation(automation, %{name: "Updated Name"})
       assert updated.name == "Updated Name"
     end
 
-    test "delete_automation/1 deletes automation", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission)
+    test "delete_automation/1 deletes automation", %{org_id: org_id, mission_id: mission_id} do
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
 
       {:ok, _} = Automations.delete_automation(automation)
-      assert Automations.get_automation(automation.id, org.id) == nil
+      assert Automations.get_automation(automation.id, org_id) == nil
     end
 
-    test "enable_automation/1 enables automation", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission, enabled: false)
+    test "enable_automation/1 enables automation", %{org_id: org_id, mission_id: mission_id} do
+      automation =
+        automation_fixture(organization_id: org_id, mission_id: mission_id, enabled: false)
 
       {:ok, updated} = Automations.enable_automation(automation)
       assert updated.enabled == true
     end
 
-    test "disable_automation/1 disables automation", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission, enabled: true)
+    test "disable_automation/1 disables automation", %{org_id: org_id, mission_id: mission_id} do
+      automation =
+        automation_fixture(organization_id: org_id, mission_id: mission_id, enabled: true)
 
       {:ok, updated} = Automations.disable_automation(automation)
       assert updated.enabled == false
@@ -142,25 +174,45 @@ defmodule Cadence.AutomationsTest do
 
   describe "condition matching" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      %{org: org, mission: mission}
+      {:ok, _} = InMemoryAutomationRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
+
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :automation_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryAutomationRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id}
     end
 
-    test "matches_conditions?/2 returns true when no conditions", %{org: org, mission: mission} do
+    test "matches_conditions?/2 returns true when no conditions", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
       automation =
-        automation_fixture(organization: org, mission: mission, trigger_conditions: %{})
+        automation_fixture(
+          organization_id: org_id,
+          mission_id: mission_id,
+          trigger_conditions: %{}
+        )
 
       event = %{severity: "critical", item_name: "TEMP_SENSOR"}
 
       assert Automations.matches_conditions?(automation, event)
     end
 
-    test "matches_conditions?/2 matches severity_in", %{org: org, mission: mission} do
+    test "matches_conditions?/2 matches severity_in", %{org_id: org_id, mission_id: mission_id} do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_conditions: %{"severity_in" => ["critical", "warning"]}
         )
 
@@ -169,11 +221,11 @@ defmodule Cadence.AutomationsTest do
       refute Automations.matches_conditions?(automation, %{severity: "info"})
     end
 
-    test "matches_conditions?/2 matches item_pattern", %{org: org, mission: mission} do
+    test "matches_conditions?/2 matches item_pattern", %{org_id: org_id, mission_id: mission_id} do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_conditions: %{"item_pattern" => "TEMP_.*"}
         )
 
@@ -182,11 +234,14 @@ defmodule Cadence.AutomationsTest do
       refute Automations.matches_conditions?(automation, %{item_name: "PRESSURE_SENSOR"})
     end
 
-    test "matches_conditions?/2 matches state_in for limit events", %{org: org, mission: mission} do
+    test "matches_conditions?/2 matches state_in for limit events", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_type: "telemetry_limit",
           trigger_conditions: %{"state_in" => ["red", "yellow"]}
         )
@@ -196,11 +251,14 @@ defmodule Cadence.AutomationsTest do
       refute Automations.matches_conditions?(automation, %{new_state: :green})
     end
 
-    test "matches_conditions?/2 requires all conditions to match", %{org: org, mission: mission} do
+    test "matches_conditions?/2 requires all conditions to match", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_conditions: %{
             "severity_in" => ["critical"],
             "item_pattern" => "TEMP_.*"
@@ -229,24 +287,40 @@ defmodule Cadence.AutomationsTest do
 
   describe "rate limiting" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      %{org: org, mission: mission}
+      {:ok, _} = InMemoryAutomationRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
+
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :automation_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryAutomationRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id}
     end
 
-    test "check_rate_limits/1 allows when no limits set", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission)
+    test "check_rate_limits/1 allows when no limits set", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
       assert {:ok, :allowed} = Automations.check_rate_limits(automation)
     end
 
     test "check_rate_limits/1 returns cooldown error when in cooldown", %{
-      org: org,
-      mission: mission
+      org_id: org_id,
+      mission_id: mission_id
     } do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           cooldown_seconds: 60
         )
 
@@ -256,11 +330,14 @@ defmodule Cadence.AutomationsTest do
       assert {:error, :cooldown} = Automations.check_rate_limits(triggered)
     end
 
-    test "check_rate_limits/1 allows when cooldown expired", %{org: org, mission: mission} do
+    test "check_rate_limits/1 allows when cooldown expired", %{
+      org_id: org_id,
+      mission_id: mission_id
+    } do
       automation =
         automation_fixture(
-          organization: org,
-          mission: mission,
+          organization_id: org_id,
+          mission_id: mission_id,
           cooldown_seconds: 60
         )
 
@@ -273,8 +350,8 @@ defmodule Cadence.AutomationsTest do
       assert {:ok, :allowed} = Automations.check_rate_limits(expired_automation)
     end
 
-    test "record_trigger/1 updates trigger tracking", %{org: org, mission: mission} do
-      automation = automation_fixture(organization: org, mission: mission)
+    test "record_trigger/1 updates trigger tracking", %{org_id: org_id, mission_id: mission_id} do
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
       assert automation.trigger_count == 0
       assert automation.last_triggered_at == nil
 
@@ -287,22 +364,45 @@ defmodule Cadence.AutomationsTest do
 
   describe "executions" do
     setup do
-      org = organization_fixture()
-      mission = mission_fixture(organization: org)
-      automation = automation_fixture(organization: org, mission: mission)
-      %{org: org, mission: mission, automation: automation}
+      {:ok, _} = InMemoryAutomationRepository.start_link()
+      {:ok, _} = InMemoryAutomationExecutionRepository.start_link()
+      {:ok, _} = FakeEventPublisher.start_link()
+      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
+
+      Application.put_env(
+        :cadence,
+        :automation_execution_repository,
+        InMemoryAutomationExecutionRepository
+      )
+
+      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
+
+      org_id = Ecto.UUID.generate()
+      mission_id = Ecto.UUID.generate()
+      automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
+
+      on_exit(fn ->
+        Application.delete_env(:cadence, :automation_repository)
+        Application.delete_env(:cadence, :automation_execution_repository)
+        Application.delete_env(:cadence, :event_publisher)
+        InMemoryAutomationExecutionRepository.stop()
+        InMemoryAutomationRepository.stop()
+        FakeEventPublisher.stop()
+      end)
+
+      %{org_id: org_id, mission_id: mission_id, automation: automation}
     end
 
     test "create_execution/1 creates execution record", %{
-      org: org,
-      mission: mission,
+      org_id: org_id,
+      mission_id: mission_id,
       automation: automation
     } do
       {:ok, execution} =
         Automations.create_execution(%{
           automation_id: automation.id,
-          organization_id: org.id,
-          mission_id: mission.id,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_event: %{"type" => "alarm_fired", "severity" => "critical"}
         })
 
@@ -311,15 +411,15 @@ defmodule Cadence.AutomationsTest do
     end
 
     test "update_execution_status/2 updates status", %{
-      org: org,
-      mission: mission,
+      org_id: org_id,
+      mission_id: mission_id,
       automation: automation
     } do
       {:ok, execution} =
         Automations.create_execution(%{
           automation_id: automation.id,
-          organization_id: org.id,
-          mission_id: mission.id,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_event: %{}
         })
 
@@ -335,15 +435,15 @@ defmodule Cadence.AutomationsTest do
     end
 
     test "list_executions/1 filters by automation", %{
-      org: org,
-      mission: mission,
+      org_id: org_id,
+      mission_id: mission_id,
       automation: automation
     } do
       {:ok, _} =
         Automations.create_execution(%{
           automation_id: automation.id,
-          organization_id: org.id,
-          mission_id: mission.id,
+          organization_id: org_id,
+          mission_id: mission_id,
           trigger_event: %{}
         })
 
@@ -354,8 +454,8 @@ defmodule Cadence.AutomationsTest do
 
   # Fixture helper
   defp automation_fixture(opts) do
-    org = Keyword.fetch!(opts, :organization)
-    mission = Keyword.get(opts, :mission)
+    org_id = Keyword.fetch!(opts, :organization_id)
+    mission_id = Keyword.get(opts, :mission_id)
     procedure_id = Keyword.get(opts, :procedure_id, Ecto.UUID.generate())
 
     # Convert string trigger_type to atom if provided as string
@@ -372,8 +472,8 @@ defmodule Cadence.AutomationsTest do
     attrs =
       %{
         name: "Test Automation #{System.unique_integer([:positive])}",
-        organization_id: org.id,
-        mission_id: mission && mission.id,
+        organization_id: org_id,
+        mission_id: mission_id,
         trigger_type: trigger_type,
         trigger_conditions: Keyword.get(opts, :trigger_conditions, %{}),
         action_type: action_type,

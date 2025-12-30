@@ -549,28 +549,7 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
 
     steps =
       Enum.map(socket.assigns.steps, fn step ->
-        if step["id"] == step_id do
-          args = step["args"] || %{}
-          args_list = Enum.to_list(args)
-
-          {old_key, old_value} = Enum.at(args_list, arg_index, {"", ""})
-
-          {new_key, new_value} =
-            case field do
-              "key" -> {value, old_value}
-              "value" -> {old_key, value}
-            end
-
-          new_args =
-            args_list
-            |> List.delete_at(arg_index)
-            |> List.insert_at(arg_index, {new_key, new_value})
-            |> Map.new()
-
-          Map.put(step, "args", new_args)
-        else
-          step
-        end
+        update_step_args(step, step_id, arg_index, field, value)
       end)
 
     {:noreply, assign(socket, :steps, steps)}
@@ -611,6 +590,29 @@ defmodule CadenceWeb.ProcedureLive.StepBuilderComponent do
   end
 
   # Helper Functions
+
+  defp update_step_args(step, step_id, arg_index, field, value) do
+    if step["id"] == step_id do
+      args = step["args"] || %{}
+      args_list = Enum.to_list(args)
+
+      {old_key, old_value} = Enum.at(args_list, arg_index, {"", ""})
+      {new_key, new_value} = apply_arg_update(field, value, old_key, old_value)
+
+      new_args =
+        args_list
+        |> List.delete_at(arg_index)
+        |> List.insert_at(arg_index, {new_key, new_value})
+        |> Map.new()
+
+      Map.put(step, "args", new_args)
+    else
+      step
+    end
+  end
+
+  defp apply_arg_update("key", value, _old_key, old_value), do: {value, old_value}
+  defp apply_arg_update("value", value, old_key, _old_value), do: {old_key, value}
 
   defp step_types, do: @step_types
 

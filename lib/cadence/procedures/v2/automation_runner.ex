@@ -136,7 +136,13 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
   # ============================================================================
 
   defp execute_command_block(block, context, opts) do
-    %{context: context, command_name: command_name, arguments: arguments, priority: priority, content: content} =
+    %{
+      context: context,
+      command_name: command_name,
+      arguments: arguments,
+      priority: priority,
+      content: content
+    } =
       command_context(block, context)
 
     notify_command_progress(opts[:on_progress], block, command_name, arguments)

@@ -10,8 +10,11 @@ defmodule Cadence.Application.Missions.MissionOperations do
       # Create a mission (also creates its bucket)
       {:ok, mission} = MissionOperations.create(org_id, %{name: "ISS Ops", slug: "iss-ops"})
 
-      # Start the mission runtime
-      {:ok, mission} = MissionOperations.start(mission_id, org_id)
+      # Request mission runtime start (desired state)
+      {:ok, mission} = MissionOperations.request_start(mission_id, org_id)
+
+      # Request mission runtime stop (desired state)
+      {:ok, mission} = MissionOperations.request_stop(mission_id, org_id)
 
       # Advance mission phase
       {:ok, mission} = MissionOperations.advance_phase(mission_id, org_id, :operational)
@@ -137,7 +140,7 @@ defmodule Cadence.Application.Missions.MissionOperations do
   end
 
   @doc """
-  Starts the mission runtime.
+  Requests mission runtime start (sets status to :active).
 
   This updates the mission status to :active in the database.
   The OrgReconciler will detect this change and start the MissionSupervisor tree.
@@ -147,8 +150,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
   This function only updates the desired state (database). The reconciler
   handles the actual runtime start, providing self-healing if events are missed.
   """
-  @spec start(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
-  def start(mission_id, org_id) do
+  @spec request_start(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
+  def request_start(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
          {:ok, started} <- Mission.start(mission) do
       # Reconciler will detect the status change and start the runtime
@@ -157,7 +160,7 @@ defmodule Cadence.Application.Missions.MissionOperations do
   end
 
   @doc """
-  Stops the mission runtime.
+  Requests mission runtime stop (sets status to :inactive).
 
   This updates the mission status to :inactive in the database.
   The OrgReconciler will detect this change and stop the MissionSupervisor tree.
@@ -167,8 +170,8 @@ defmodule Cadence.Application.Missions.MissionOperations do
   This function only updates the desired state (database). The reconciler
   handles the actual runtime stop, providing self-healing if events are missed.
   """
-  @spec stop(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
-  def stop(mission_id, org_id) do
+  @spec request_stop(mission_id(), org_id()) :: {:ok, Mission.t()} | {:error, term()}
+  def request_stop(mission_id, org_id) do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
          {:ok, stopped} <- Mission.stop(mission) do
       # Reconciler will detect the status change and stop the runtime
@@ -177,7 +180,7 @@ defmodule Cadence.Application.Missions.MissionOperations do
   end
 
   @doc """
-  Suspends the mission runtime.
+  Requests mission runtime suspension (sets status to :suspended).
 
   The mission can be resumed later with `resume/2`.
   """

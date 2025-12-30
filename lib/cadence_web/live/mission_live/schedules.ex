@@ -91,99 +91,66 @@ defmodule CadenceWeb.MissionLive.Schedules do
 
   @impl true
   def handle_event("toggle", %{"id" => schedule_id}, socket) do
-    mission = socket.assigns.mission
-    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
-    scope = socket.assigns.current_scope
+    with {:ok, schedule} <- fetch_schedule(socket, schedule_id),
+         :ok <- authorize_manage_schedules(socket),
+         {:ok, _} <- toggle_schedule(schedule) do
+      schedules = list_schedules(socket)
+      action = if schedule.enabled, do: "disabled", else: "enabled"
 
-    if schedule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          result =
-            if schedule.enabled do
-              Schedules.disable_schedule(schedule)
-            else
-              Schedules.enable_schedule(schedule)
-            end
-
-          case result do
-            {:ok, _} ->
-              schedules =
-                Schedules.list_schedules(mission.organization_id, mission_id: mission.id)
-
-              action = if schedule.enabled, do: "disabled", else: "enabled"
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Schedule #{action}")
-               |> assign(:schedules, schedules)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to update schedule")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to manage schedules")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Schedule #{action}")
+       |> assign(:schedules, schedules)}
     else
-      {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to manage schedules")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update schedule")}
     end
   end
 
   @impl true
   def handle_event("run_now", %{"id" => schedule_id}, socket) do
-    mission = socket.assigns.mission
-    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
-    scope = socket.assigns.current_scope
-
-    if schedule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Schedules.enqueue_schedule(schedule) do
-            {:ok, _job} ->
-              {:noreply,
-               socket
-               |> put_flash(:info, "Schedule queued for immediate execution")}
-
-            {:error, reason} ->
-              {:noreply, put_flash(socket, :error, "Failed to enqueue: #{inspect(reason)}")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to run schedules")}
-      end
+    with {:ok, schedule} <- fetch_schedule(socket, schedule_id),
+         :ok <- authorize_manage_schedules(socket),
+         {:ok, _job} <- Schedules.enqueue_schedule(schedule) do
+      {:noreply, put_flash(socket, :info, "Schedule queued for immediate execution")}
     else
-      {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to run schedules")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to enqueue: #{inspect(reason)}")}
     end
   end
 
   @impl true
   def handle_event("delete", %{"id" => schedule_id}, socket) do
-    mission = socket.assigns.mission
-    schedule = Schedules.get_schedule!(schedule_id, mission.organization_id)
-    scope = socket.assigns.current_scope
+    with {:ok, schedule} <- fetch_schedule(socket, schedule_id),
+         :ok <- authorize_manage_schedules(socket),
+         {:ok, _} <- Schedules.delete_schedule(schedule) do
+      schedules = list_schedules(socket)
 
-    if schedule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Schedules.delete_schedule(schedule) do
-            {:ok, _} ->
-              schedules =
-                Schedules.list_schedules(mission.organization_id, mission_id: mission.id)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Schedule deleted")
-               |> assign(:schedules, schedules)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete schedule")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete schedules")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Schedule deleted")
+       |> assign(:schedules, schedules)}
     else
-      {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Schedule not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete schedules")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete schedule")}
     end
   end
 
@@ -294,6 +261,45 @@ defmodule CadenceWeb.MissionLive.Schedules do
       />
     </.modal>
     """
+  end
+
+  defp fetch_schedule(socket, schedule_id) do
+    mission = socket.assigns.mission
+
+    case Schedules.get_schedule(schedule_id, mission.organization_id) do
+      nil ->
+        {:error, :not_found}
+
+      schedule ->
+        if schedule.mission_id == mission.id do
+          {:ok, schedule}
+        else
+          {:error, :not_found}
+        end
+    end
+  end
+
+  defp authorize_manage_schedules(socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp toggle_schedule(schedule) do
+    if schedule.enabled do
+      Schedules.disable_schedule(schedule)
+    else
+      Schedules.enable_schedule(schedule)
+    end
+  end
+
+  defp list_schedules(socket) do
+    mission = socket.assigns.mission
+    Schedules.list_schedules(mission.organization_id, mission_id: mission.id)
   end
 
   # Converts a domain entity to an Ecto schema for form changeset handling

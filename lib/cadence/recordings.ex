@@ -279,6 +279,7 @@ defmodule Cadence.Recordings do
   defp apply_cursor_filter(query, _cursor), do: query
 
   defp apply_org_filter(query, nil), do: query
+
   defp apply_org_filter(query, organization_id),
     do: where(query, [r], r.organization_id == ^organization_id)
 
@@ -294,6 +295,7 @@ defmodule Cadence.Recordings do
   defp apply_bucket_filter(query, bucket_id), do: where(query, [r], r.bucket_id == ^bucket_id)
 
   defp apply_aggregate_filter(query, nil), do: query
+
   defp apply_aggregate_filter(query, aggregate_types),
     do: where(query, [r], r.aggregate_type in ^aggregate_types)
 

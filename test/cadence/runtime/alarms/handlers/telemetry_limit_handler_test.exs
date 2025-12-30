@@ -7,7 +7,6 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandlerTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
   alias Cadence.Recordings
   alias Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandler

@@ -543,65 +543,49 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("rename_dashboard", %{"dashboard_id" => id, "name" => name}, socket) do
-    user = socket.assigns.current_scope.user
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, updated_layout} <- DashboardLayouts.save_layout(layout, %{name: name}) do
+      dashboards = update_layout_in_list(socket.assigns.dashboards, updated_layout)
+      current_layout = current_layout_after_update(socket, updated_layout)
 
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.save_layout(layout, %{name: name}) do
-          {:ok, updated_layout} ->
-            dashboards = update_layout_in_list(socket.assigns.dashboards, updated_layout)
-
-            current_layout =
-              if socket.assigns.current_layout.id == updated_layout.id do
-                updated_layout
-              else
-                socket.assigns.current_layout
-              end
-
-            {:noreply,
-             socket
-             |> assign(:dashboards, dashboards)
-             |> assign(:current_layout, current_layout)
-             |> assign(:show_rename_dashboard, nil)
-             |> push_event("update_dashboards", %{
-               dashboards: Enum.map(dashboards, &dashboard_json/1),
-               currentId: current_layout.id
-             })
-             |> put_flash(:info, "Dashboard renamed")}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to rename dashboard")}
-        end
-
+      {:noreply,
+       socket
+       |> assign(:dashboards, dashboards)
+       |> assign(:current_layout, current_layout)
+       |> assign(:show_rename_dashboard, nil)
+       |> push_event("update_dashboards", %{
+         dashboards: Enum.map(dashboards, &dashboard_json/1),
+         currentId: current_layout.id
+       })
+       |> put_flash(:info, "Dashboard renamed")}
+    else
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Dashboard not found")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to rename dashboard")}
     end
   end
 
   def handle_event("duplicate_dashboard", %{"id" => id}, socket) do
-    user = socket.assigns.current_scope.user
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, new_layout} <- DashboardLayouts.duplicate_layout(layout, "#{layout.name} (copy)") do
+      dashboards = [new_layout | socket.assigns.dashboards]
 
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.duplicate_layout(layout, "#{layout.name} (copy)") do
-          {:ok, new_layout} ->
-            dashboards = [new_layout | socket.assigns.dashboards]
-
-            {:noreply,
-             socket
-             |> assign(:dashboards, dashboards)
-             |> push_event("update_dashboards", %{
-               dashboards: Enum.map(dashboards, &dashboard_json/1),
-               currentId: socket.assigns.current_layout.id
-             })
-             |> put_flash(:info, "Dashboard duplicated")}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to duplicate dashboard")}
-        end
-
+      {:noreply,
+       socket
+       |> assign(:dashboards, dashboards)
+       |> push_event("update_dashboards", %{
+         dashboards: Enum.map(dashboards, &dashboard_json/1),
+         currentId: socket.assigns.current_layout.id
+       })
+       |> put_flash(:info, "Dashboard duplicated")}
+    else
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Dashboard not found")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to duplicate dashboard")}
     end
   end
 
@@ -614,55 +598,18 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   end
 
   def handle_event("confirm_delete_dashboard", %{"id" => id}, socket) do
-    user = socket.assigns.current_scope.user
-
-    case DashboardLayouts.get_layout(id, user.id) do
-      {:ok, layout} ->
-        case DashboardLayouts.delete_layout(layout) do
-          {:ok, _} ->
-            dashboards = Enum.reject(socket.assigns.dashboards, &(&1.id == layout.id))
-
-            {current_layout, should_load} =
-              if socket.assigns.current_layout.id == layout.id do
-                new_current = List.first(dashboards) || create_default_layout(socket)
-                {new_current, true}
-              else
-                {socket.assigns.current_layout, false}
-              end
-
-            socket =
-              socket
-              |> assign(:dashboards, dashboards)
-              |> assign(:current_layout, current_layout)
-              |> assign(:show_delete_confirm, nil)
-              |> push_event("update_dashboards", %{
-                dashboards: Enum.map(dashboards, &dashboard_json/1),
-                currentId: current_layout.id
-              })
-              |> put_flash(:info, "Dashboard deleted")
-
-            socket =
-              if should_load do
-                push_event(socket, "load_layout", %{
-                  frame_layout:
-                    current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
-                  widgets: current_layout.widgets || []
-                })
-              else
-                socket
-              end
-
-            {:noreply, socket}
-
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to delete dashboard")}
-        end
-
+    with {:ok, layout} <- fetch_layout(socket, id),
+         {:ok, _} <- DashboardLayouts.delete_layout(layout) do
+      handle_dashboard_delete(socket, layout)
+    else
       {:error, :not_found} ->
         {:noreply,
          socket
          |> assign(:show_delete_confirm, nil)
          |> put_flash(:error, "Dashboard not found")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete dashboard")}
     end
   end
 
@@ -791,30 +738,10 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     command = Enum.find(socket.assigns.command_definitions, &(&1.id == command_id))
 
     if command do
-      results =
-        Enum.map(target_ids, fn target_id ->
-          opts = [target_id: target_id, priority: priority]
+      {successes, failures} =
+        dispatch_command_targets(mission_id, command, target_ids, params, mode, priority)
 
-          if mode == "immediate" do
-            Commands.dispatch(mission_id, command.name, params, opts)
-          else
-            Commands.enqueue(mission_id, command.name, params, opts)
-          end
-        end)
-
-      # Check results
-      successes = Enum.count(results, &match?({:ok, _}, &1))
-      failures = Enum.count(results, &match?({:error, _}, &1))
-
-      # Refresh queue
-      queue_entries =
-        Commands.list_queue_entries(mission_id,
-          status: [:pending, :executing],
-          preload: [:target],
-          limit: 50
-        )
-
-      targets = targets_map(socket.assigns.targets)
+      {queue_entries, targets} = refresh_queue(socket)
 
       socket =
         socket
@@ -823,21 +750,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
           commands: Enum.map(queue_entries, &queue_entry_json(&1, targets))
         })
 
-      cond do
-        failures == 0 ->
-          {:noreply,
-           put_flash(
-             socket,
-             :info,
-             "#{successes} command(s) #{if mode == "immediate", do: "sent", else: "queued"}"
-           )}
-
-        successes == 0 ->
-          {:noreply, put_flash(socket, :error, "Failed to dispatch commands")}
-
-        true ->
-          {:noreply, put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")}
-      end
+      {:noreply, dispatch_feedback(socket, successes, failures, mode)}
     else
       {:noreply, put_flash(socket, :error, "Command not found")}
     end
@@ -1261,6 +1174,104 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
+  defp fetch_layout(socket, id) do
+    user = socket.assigns.current_scope.user
+    DashboardLayouts.get_layout(id, user.id)
+  end
+
+  defp current_layout_after_update(socket, updated_layout) do
+    if socket.assigns.current_layout.id == updated_layout.id do
+      updated_layout
+    else
+      socket.assigns.current_layout
+    end
+  end
+
+  defp handle_dashboard_delete(socket, layout) do
+    dashboards = Enum.reject(socket.assigns.dashboards, &(&1.id == layout.id))
+    {current_layout, should_load} = next_current_layout(socket, dashboards, layout.id)
+
+    socket =
+      socket
+      |> assign(:dashboards, dashboards)
+      |> assign(:current_layout, current_layout)
+      |> assign(:show_delete_confirm, nil)
+      |> push_event("update_dashboards", %{
+        dashboards: Enum.map(dashboards, &dashboard_json/1),
+        currentId: current_layout.id
+      })
+      |> put_flash(:info, "Dashboard deleted")
+
+    socket =
+      if should_load do
+        push_event(socket, "load_layout", %{
+          frame_layout: current_layout.frame_layout || DashboardLayouts.default_frame_layout(),
+          widgets: current_layout.widgets || []
+        })
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  defp next_current_layout(socket, dashboards, deleted_id) do
+    if socket.assigns.current_layout.id == deleted_id do
+      new_current = List.first(dashboards) || create_default_layout(socket)
+      {new_current, true}
+    else
+      {socket.assigns.current_layout, false}
+    end
+  end
+
+  defp dispatch_command_targets(mission_id, command, target_ids, params, mode, priority) do
+    results =
+      Enum.map(target_ids, fn target_id ->
+        opts = [target_id: target_id, priority: priority]
+
+        if mode == "immediate" do
+          Commands.dispatch(mission_id, command.name, params, opts)
+        else
+          Commands.enqueue(mission_id, command.name, params, opts)
+        end
+      end)
+
+    successes = Enum.count(results, &match?({:ok, _}, &1))
+    failures = Enum.count(results, &match?({:error, _}, &1))
+    {successes, failures}
+  end
+
+  defp refresh_queue(socket) do
+    mission_id = socket.assigns.mission.id
+
+    queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        preload: [:target],
+        limit: 50
+      )
+
+    targets = targets_map(socket.assigns.targets)
+    {queue_entries, targets}
+  end
+
+  defp dispatch_feedback(socket, successes, failures, mode) do
+    cond do
+      failures == 0 ->
+        put_flash(
+          socket,
+          :info,
+          "#{successes} command(s) #{if mode == "immediate", do: "sent", else: "queued"}"
+        )
+
+      successes == 0 ->
+        put_flash(socket, :error, "Failed to dispatch commands")
+
+      true ->
+        put_flash(socket, :warning, "#{successes} succeeded, #{failures} failed")
+    end
+  end
+
   # Clock tick handler
   @impl true
   def handle_info(:tick, socket) do
@@ -1377,16 +1388,6 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
-  # Map AlarmOperations event types to tuple-handler event names
-  defp map_event_type(:triggered), do: :alarm_triggered
-  defp map_event_type(:created), do: :alarm_created
-  defp map_event_type(:updated), do: :alarm_updated
-  defp map_event_type(:cleared), do: :alarm_cleared
-  defp map_event_type(:acknowledged), do: :alarm_acknowledged
-  defp map_event_type(:shelved), do: :alarm_shelved
-  defp map_event_type(:unshelved), do: :alarm_unshelved
-  defp map_event_type(other), do: other
-
   # Outbox event handlers for command queue updates
   def handle_info({:outbox_event, %{event_type: event_type} = event}, socket)
       when event_type in ["command_enqueued", "command_status_changed", "command_cancelled"] do
@@ -1473,6 +1474,16 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
      |> assign(:configuring_widget, nil)
      |> push_event("add_widget", widget)}
   end
+
+  # Map AlarmOperations event types to tuple-handler event names
+  defp map_event_type(:triggered), do: :alarm_triggered
+  defp map_event_type(:created), do: :alarm_created
+  defp map_event_type(:updated), do: :alarm_updated
+  defp map_event_type(:cleared), do: :alarm_cleared
+  defp map_event_type(:acknowledged), do: :alarm_acknowledged
+  defp map_event_type(:shelved), do: :alarm_shelved
+  defp map_event_type(:unshelved), do: :alarm_unshelved
+  defp map_event_type(other), do: other
 
   # Private functions
 

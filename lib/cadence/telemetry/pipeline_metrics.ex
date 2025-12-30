@@ -293,82 +293,109 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     partition_count = get_partition_count(mission_id)
 
     if partition_count == 0 do
-      %{
-        packets_received: 0,
-        packets_processed: 0,
-        items_processed: 0,
-        packets_dropped: 0,
-        bytes_received: 0,
-        errors: %{},
-        timing: %{},
-        duration_ms: 0,
-        packets_per_sec: 0.0,
-        items_per_sec: 0.0,
-        bytes_per_sec: 0.0
-      }
+      empty_stats()
     else
-      # Merge counters from all partitions
       merged = merge_all_partitions(mission_id, partition_count)
-
-      # Calculate duration
-      started_at = get_started_at(mission_id)
-      duration_ms = System.monotonic_time(:millisecond) - started_at
-      duration_sec = max(duration_ms / 1000, 0.001)
-
-      # Merge min/max from all partitions
       minmax = merge_all_minmax(mission_id, partition_count)
-
-      # Build timing stats with min/max
-      timing =
-        Enum.reduce(@timing_stages, %{}, fn stage, acc ->
-          sum_key = :"latency_sum_#{stage}"
-          count_key = :"latency_count_#{stage}"
-          min_key = :"min_#{stage}"
-          max_key = :"max_#{stage}"
-
-          sum = Map.get(merged, sum_key, 0)
-          count = Map.get(merged, count_key, 0)
-          min_val = Map.get(minmax, min_key, @min_sentinel)
-          max_val = Map.get(minmax, max_key, 0)
-
-          avg = if count > 0, do: Float.round(sum / count, 1), else: 0.0
-          # Convert sentinel to 0 for display
-          min_display = if min_val == @min_sentinel, do: 0, else: min_val
-
-          Map.put(acc, stage, %{
-            avg_us: avg,
-            min_us: min_display,
-            max_us: max_val,
-            count: count
-          })
-        end)
-
-      # Build error stats
-      errors =
-        Enum.reduce(@error_stages, %{}, fn stage, acc ->
-          error_key = :"errors_#{stage}"
-          count = Map.get(merged, error_key, 0)
-          Map.put(acc, stage, count)
-        end)
-
+      {duration_ms, duration_sec} = get_duration(mission_id)
+      timing = build_timing_stats(merged, minmax)
+      errors = build_error_stats(merged)
       bytes_received = Map.get(merged, :bytes_received, 0)
 
-      %{
-        packets_received: Map.get(merged, :packets_received, 0),
-        packets_processed: Map.get(merged, :packets_processed, 0),
-        items_processed: Map.get(merged, :items_processed, 0),
-        packets_dropped: Map.get(merged, :packets_dropped, 0),
-        bytes_received: bytes_received,
-        errors: errors,
-        timing: timing,
-        duration_ms: duration_ms,
-        duration_sec: duration_sec,
-        packets_per_sec: Float.round(Map.get(merged, :packets_processed, 0) / duration_sec, 1),
-        items_per_sec: Float.round(Map.get(merged, :items_processed, 0) / duration_sec, 1),
-        bytes_per_sec: Float.round(bytes_received / duration_sec, 1),
-        partition_count: partition_count
-      }
+      build_stats_summary(
+        merged,
+        bytes_received,
+        errors,
+        timing,
+        duration_ms,
+        duration_sec,
+        partition_count
+      )
     end
+  end
+
+  defp empty_stats do
+    %{
+      packets_received: 0,
+      packets_processed: 0,
+      items_processed: 0,
+      packets_dropped: 0,
+      bytes_received: 0,
+      errors: %{},
+      timing: %{},
+      duration_ms: 0,
+      packets_per_sec: 0.0,
+      items_per_sec: 0.0,
+      bytes_per_sec: 0.0
+    }
+  end
+
+  defp get_duration(mission_id) do
+    started_at = get_started_at(mission_id)
+    duration_ms = System.monotonic_time(:millisecond) - started_at
+    duration_sec = max(duration_ms / 1000, 0.001)
+    {duration_ms, duration_sec}
+  end
+
+  defp build_timing_stats(merged, minmax) do
+    Enum.reduce(@timing_stages, %{}, fn stage, acc ->
+      sum_key = :"latency_sum_#{stage}"
+      count_key = :"latency_count_#{stage}"
+      min_key = :"min_#{stage}"
+      max_key = :"max_#{stage}"
+
+      sum = Map.get(merged, sum_key, 0)
+      count = Map.get(merged, count_key, 0)
+      min_val = Map.get(minmax, min_key, @min_sentinel)
+      max_val = Map.get(minmax, max_key, 0)
+
+      avg = if count > 0, do: Float.round(sum / count, 1), else: 0.0
+      min_display = if min_val == @min_sentinel, do: 0, else: min_val
+
+      Map.put(acc, stage, %{
+        avg_us: avg,
+        min_us: min_display,
+        max_us: max_val,
+        count: count
+      })
+    end)
+  end
+
+  defp build_error_stats(merged) do
+    Enum.reduce(@error_stages, %{}, fn stage, acc ->
+      error_key = :"errors_#{stage}"
+      count = Map.get(merged, error_key, 0)
+      Map.put(acc, stage, count)
+    end)
+  end
+
+  defp build_stats_summary(
+         merged,
+         bytes_received,
+         errors,
+         timing,
+         duration_ms,
+         duration_sec,
+         partition_count
+       ) do
+    packets_processed = Map.get(merged, :packets_processed, 0)
+    items_processed = Map.get(merged, :items_processed, 0)
+
+    %{
+      packets_received: Map.get(merged, :packets_received, 0),
+      packets_processed: packets_processed,
+      items_processed: items_processed,
+      packets_dropped: Map.get(merged, :packets_dropped, 0),
+      bytes_received: bytes_received,
+      errors: errors,
+      timing: timing,
+      duration_ms: duration_ms,
+      duration_sec: duration_sec,
+      packets_per_sec: Float.round(packets_processed / duration_sec, 1),
+      items_per_sec: Float.round(items_processed / duration_sec, 1),
+      bytes_per_sec: Float.round(bytes_received / duration_sec, 1),
+      partition_count: partition_count
+    }
   end
 
   @doc """
@@ -493,11 +520,15 @@ defmodule Cadence.Telemetry.PipelineMetrics do
           acc
 
         ref ->
-          Enum.reduce(@slots, acc, fn {name, slot}, inner_acc ->
-            value = :counters.get(ref, slot)
-            Map.update(inner_acc, name, value, &(&1 + value))
-          end)
+          merge_partition_counters(ref, acc)
       end
+    end)
+  end
+
+  defp merge_partition_counters(ref, acc) do
+    Enum.reduce(@slots, acc, fn {name, slot}, inner_acc ->
+      value = :counters.get(ref, slot)
+      Map.update(inner_acc, name, value, &(&1 + value))
     end)
   end
 

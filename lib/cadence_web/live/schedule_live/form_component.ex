@@ -287,36 +287,27 @@ defmodule CadenceWeb.ScheduleLive.FormComponent do
   defp describe_cron(""), do: nil
 
   defp describe_cron(cron) do
-    case String.split(cron, " ") do
-      ["*", "*", "*", "*", "*"] ->
-        "Runs every minute"
-
-      ["*/5", "*", "*", "*", "*"] ->
-        "Runs every 5 minutes"
-
-      ["*/15", "*", "*", "*", "*"] ->
-        "Runs every 15 minutes"
-
-      ["0", "*", "*", "*", "*"] ->
-        "Runs at the start of every hour"
-
-      ["0", "0", "*", "*", "*"] ->
-        "Runs daily at midnight"
-
-      ["0", hour, "*", "*", "*"] ->
-        "Runs daily at #{hour}:00"
-
-      ["0", hour, "*", "*", day] when day != "*" ->
-        day_name = weekday_name(day)
-        "Runs every #{day_name} at #{hour}:00"
-
-      ["0", "0", "1", "*", "*"] ->
-        "Runs on the 1st of every month"
-
-      _ ->
-        "Custom schedule: #{cron}"
-    end
+    cron
+    |> String.split(" ")
+    |> cron_description(cron)
   end
+
+  defp cron_description(["*", "*", "*", "*", "*"], _cron), do: "Runs every minute"
+  defp cron_description(["*/5", "*", "*", "*", "*"], _cron), do: "Runs every 5 minutes"
+  defp cron_description(["*/15", "*", "*", "*", "*"], _cron), do: "Runs every 15 minutes"
+  defp cron_description(["0", "*", "*", "*", "*"], _cron), do: "Runs at the start of every hour"
+  defp cron_description(["0", "0", "*", "*", "*"], _cron), do: "Runs daily at midnight"
+  defp cron_description(["0", hour, "*", "*", "*"], _cron), do: "Runs daily at #{hour}:00"
+
+  defp cron_description(["0", hour, "*", "*", day], _cron) when day != "*" do
+    day_name = weekday_name(day)
+    "Runs every #{day_name} at #{hour}:00"
+  end
+
+  defp cron_description(["0", "0", "1", "*", "*"], _cron),
+    do: "Runs on the 1st of every month"
+
+  defp cron_description(_parts, cron), do: "Custom schedule: #{cron}"
 
   defp weekday_name("0"), do: "Sunday"
   defp weekday_name("1"), do: "Monday"

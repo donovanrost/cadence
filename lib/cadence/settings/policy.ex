@@ -144,6 +144,14 @@ defmodule Cadence.Settings.Policy do
 
   defp has_org_role?(_user, _org_id, _roles), do: false
 
+  defp get_mission_role(%User{mission_memberships: memberships}, %Mission{id: mission_id})
+       when is_list(memberships) do
+    case Enum.find(memberships, &(&1.mission_id == mission_id)) do
+      %{role: role} -> role
+      nil -> nil
+    end
+  end
+
   defp get_mission_role(user, %Mission{id: mission_id}) do
     import Ecto.Query
 

@@ -319,6 +319,8 @@ defmodule Cadence.Accounts do
   """
   def deliver_login_instructions(user, magic_link_url_fun)
       when is_function(magic_link_url_fun, 1) do
+    user = ensure_domain_user(user)
+
     case MagicLinkOperations.generate_for_user(user) do
       {:ok, encoded_token} ->
         user_schema = domain_to_schema(user)
@@ -409,4 +411,10 @@ defmodule Cadence.Accounts do
   defp ensure_schema(%UserEntity{} = user), do: domain_to_schema(user)
   defp ensure_schema(%UserSchema{} = schema), do: schema
   defp ensure_schema(%{} = attrs), do: struct(UserSchema, attrs)
+
+  defp ensure_domain_user(%UserEntity{} = user), do: user
+
+  defp ensure_domain_user(%UserSchema{id: user_id}) do
+    UserQueries.find!(user_id)
+  end
 end

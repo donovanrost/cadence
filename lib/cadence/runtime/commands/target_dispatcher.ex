@@ -45,12 +45,14 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Recordings
+
   alias Cadence.Recordings.Recordables.{
     CommandDispatched,
     CommandSent,
     CommandVerificationFailed,
     CommandVerified
   }
+
   alias Cadence.Repo
   alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue}
   alias Cadence.Telemetry.ProtocolChain
@@ -99,9 +101,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   @doc """
   Starts dispatcher for a target.
 
-  Accepts either:
-  - Entity-based: `mission: mission_entity, target: target_entity` (preferred, no DB calls)
-  - ID-based: `mission_id: id, target_id: id` (legacy, makes DB calls)
+  Requires:
+  - `mission: mission_entity`
+  - `target: target_entity`
   """
   def start_link(opts) do
     {mission, target} = extract_mission_and_target(opts)
@@ -267,7 +269,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   def handle_call({:dispatch, command_name, params, opts}, _from, state) do
-    case do_dispatch(command_name, params, opts, state) do
+    entry = %{id: nil, command_name: command_name, parameters: params}
+
+    case do_dispatch(entry, opts, state) do
       {:ok, command_log_id, new_state} ->
         {:reply, {:ok, command_log_id}, new_state}
 
@@ -287,36 +291,46 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       nil ->
         {:reply, {:error, :invalid_token}, state}
 
-      %ConfirmationRequest{expires_at: expires_at} = request ->
-        if DateTime.compare(DateTime.utc_now(), expires_at) == :gt do
-          # Token expired
-          new_state = %{
-            state
-            | pending_confirmations: Map.delete(state.pending_confirmations, token)
-          }
+      %ConfirmationRequest{} = request ->
+        handle_confirmation_request(request, token, state)
+    end
+  end
 
-          {:reply, {:error, :token_expired}, new_state}
-        else
-          # Execute the command with hazardous check skipped
-          opts = Keyword.put(request.opts, :skip_hazardous_check, true)
+  defp handle_confirmation_request(request, token, state) do
+    if confirmation_expired?(request) do
+      {:reply, {:error, :token_expired}, drop_confirmation(state, token)}
+    else
+      dispatch_confirmed_request(request, token, state)
+    end
+  end
 
-          # Remove the confirmation from pending before dispatch
-          state_without_confirmation = %{
-            state
-            | pending_confirmations: Map.delete(state.pending_confirmations, token)
-          }
+  defp confirmation_expired?(%ConfirmationRequest{expires_at: expires_at}) do
+    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+  end
 
-          case do_dispatch(request.command_name, request.params, opts, state_without_confirmation) do
-            {:ok, command_log_id, new_state} ->
-              {:reply, {:ok, command_log_id}, new_state}
+  defp drop_confirmation(state, token) do
+    %{state | pending_confirmations: Map.delete(state.pending_confirmations, token)}
+  end
 
-            {:error, _} = error ->
-              {:reply, error, state_without_confirmation}
+  defp dispatch_confirmed_request(request, token, state) do
+    opts = Keyword.put(request.opts, :skip_hazardous_check, true)
+    state_without_confirmation = drop_confirmation(state, token)
 
-            {:error, _, _} = error ->
-              {:reply, error, state_without_confirmation}
-          end
-        end
+    entry = %{
+      id: nil,
+      command_name: request.command_name,
+      parameters: request.params
+    }
+
+    case do_dispatch(entry, opts, state_without_confirmation) do
+      {:ok, command_log_id, new_state} ->
+        {:reply, {:ok, command_log_id}, new_state}
+
+      {:error, _} = error ->
+        {:reply, error, state_without_confirmation}
+
+      {:error, _, _} = error ->
+        {:reply, error, state_without_confirmation}
     end
   end
 
@@ -399,134 +413,37 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         {:noreply, state}
 
       %{type: :multi_stage, runner: runner} = verification ->
-        # Verify this is the stage that timed out (not stale)
-        if VerificationRunner.current_stage(runner) == stage do
-          case VerificationRunner.handle_timeout(runner) do
-            {:continue, updated_runner} ->
-              # Move to next stage
-              case VerificationRunner.start_current_stage(updated_runner) do
-                {:ok, runner_with_stage} ->
-                  runner_with_timeout =
-                    VerificationRunner.start_timeout(runner_with_stage, self())
-
-                  Logger.info(
-                    "Advancing to verification stage #{VerificationRunner.current_stage(runner_with_timeout)} " <>
-                      "for aggregate_id=#{aggregate_id}"
-                  )
-
-                  updated_verification = %{verification | runner: runner_with_timeout}
-
-                  new_state = %{
-                    state
-                    | pending_verifications:
-                        Map.put(state.pending_verifications, aggregate_id, updated_verification)
-                  }
-
-                  {:noreply, new_state}
-
-                {:complete, final_runner} ->
-                  new_state =
-                    complete_multi_stage_verification(
-                      state,
-                      aggregate_id,
-                      verification,
-                      final_runner
-                    )
-
-                  {:noreply, new_state}
-              end
-
-            {:retry, updated_runner} ->
-              # Retry same stage
-              runner_with_timeout = VerificationRunner.start_timeout(updated_runner, self())
-              updated_verification = %{verification | runner: runner_with_timeout}
-
-              new_state = %{
-                state
-                | pending_verifications:
-                    Map.put(state.pending_verifications, aggregate_id, updated_verification)
-              }
-
-              {:noreply, new_state}
-
-            {:abort, _runner} ->
-              Logger.warning(
-                "Multi-stage verification aborted for aggregate_id=#{aggregate_id}, stage=#{stage}"
-              )
-
-              record_command_verification_failed(
-                state,
-                aggregate_id,
-                verification.recording_id,
-                %{
-                  error_reason: "Verification stage #{stage} timeout"
-                }
-              )
-
-              new_state = %{
-                state
-                | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)
-              }
-
-              {:noreply, new_state}
-          end
-        else
-          # Stale timeout message for a previous stage
-          {:noreply, state}
-        end
+        handle_stage_timeout(aggregate_id, stage, verification, runner, state)
 
       _other ->
         {:noreply, state}
     end
   end
 
-  def handle_info({:telemetry_update, target_id, packet_name, item_name, telemetry_value}, state) do
-    # Only process updates for this target
-    if target_id == state.target_id do
-      state =
-        Enum.reduce(state.pending_verifications, state, fn {aggregate_id, verification}, acc ->
-          case verification do
-            %{type: :simple, item: item} ->
-              full_item = "#{packet_name}.#{item_name}"
+  def handle_info(
+        {:telemetry_update, target_id, packet_name, item_name, telemetry_value},
+        %{target_id: target_id} = state
+      ) do
+    new_state =
+      Enum.reduce(state.pending_verifications, state, fn {aggregate_id, verification}, acc ->
+        apply_verification_update(
+          acc,
+          aggregate_id,
+          verification,
+          packet_name,
+          item_name,
+          telemetry_value.value
+        )
+      end)
 
-              if item == full_item do
-                check_simple_verification(acc, aggregate_id, verification, telemetry_value.value)
-              else
-                acc
-              end
+    {:noreply, new_state}
+  end
 
-            %{type: :multi_stage, runner: runner} ->
-              handle_multi_stage_update(
-                acc,
-                aggregate_id,
-                verification,
-                runner,
-                packet_name,
-                item_name,
-                telemetry_value.value
-              )
-
-            # Legacy format (no type field) - shouldn't occur with new system
-            %{item: item} = legacy_verification ->
-              full_item = "#{packet_name}.#{item_name}"
-
-              if item == full_item do
-                check_simple_verification(
-                  acc,
-                  aggregate_id,
-                  legacy_verification,
-                  telemetry_value.value
-                )
-              else
-                acc
-              end
-          end
-        end)
-
-      {:noreply, state}
-    else
-      {:noreply, state}
-    end
+  def handle_info(
+        {:telemetry_update, _target_id, _packet_name, _item_name, _telemetry_value},
+        state
+      ) do
+    {:noreply, state}
   end
 
   # Queue processing - triggered by TargetQueue when commands are available
@@ -697,6 +614,162 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   ## Private Functions
 
+  defp handle_stage_timeout(aggregate_id, stage, verification, runner, state) do
+    if VerificationRunner.current_stage(runner) == stage do
+      handle_timeout_action(
+        VerificationRunner.handle_timeout(runner),
+        aggregate_id,
+        stage,
+        verification,
+        state
+      )
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp handle_timeout_action(
+         {:continue, updated_runner},
+         aggregate_id,
+         _stage,
+         verification,
+         state
+       ) do
+    advance_multi_stage(
+      VerificationRunner.start_current_stage(updated_runner),
+      aggregate_id,
+      verification,
+      state
+    )
+  end
+
+  defp handle_timeout_action(
+         {:retry, updated_runner},
+         aggregate_id,
+         _stage,
+         verification,
+         state
+       ) do
+    runner_with_timeout = VerificationRunner.start_timeout(updated_runner, self())
+    updated_verification = %{verification | runner: runner_with_timeout}
+
+    new_state = %{
+      state
+      | pending_verifications:
+          Map.put(state.pending_verifications, aggregate_id, updated_verification)
+    }
+
+    {:noreply, new_state}
+  end
+
+  defp handle_timeout_action(
+         {:abort, _runner},
+         aggregate_id,
+         stage,
+         verification,
+         state
+       ) do
+    Logger.warning(
+      "Multi-stage verification aborted for aggregate_id=#{aggregate_id}, stage=#{stage}"
+    )
+
+    record_command_verification_failed(
+      state,
+      aggregate_id,
+      verification.recording_id,
+      %{
+        error_reason: "Verification stage #{stage} timeout"
+      }
+    )
+
+    new_state = %{
+      state
+      | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)
+    }
+
+    {:noreply, new_state}
+  end
+
+  defp advance_multi_stage({:ok, runner_with_stage}, aggregate_id, verification, state) do
+    runner_with_timeout = VerificationRunner.start_timeout(runner_with_stage, self())
+
+    Logger.info(
+      "Advancing to verification stage #{VerificationRunner.current_stage(runner_with_timeout)} " <>
+        "for aggregate_id=#{aggregate_id}"
+    )
+
+    updated_verification = %{verification | runner: runner_with_timeout}
+
+    new_state = %{
+      state
+      | pending_verifications:
+          Map.put(state.pending_verifications, aggregate_id, updated_verification)
+    }
+
+    {:noreply, new_state}
+  end
+
+  defp advance_multi_stage({:complete, final_runner}, aggregate_id, verification, state) do
+    new_state =
+      complete_multi_stage_verification(
+        state,
+        aggregate_id,
+        verification,
+        final_runner
+      )
+
+    {:noreply, new_state}
+  end
+
+  defp apply_verification_update(
+         acc,
+         aggregate_id,
+         %{type: :simple, item: item} = verification,
+         packet_name,
+         item_name,
+         value
+       ) do
+    if item == "#{packet_name}.#{item_name}" do
+      check_simple_verification(acc, aggregate_id, verification, value)
+    else
+      acc
+    end
+  end
+
+  defp apply_verification_update(
+         acc,
+         aggregate_id,
+         %{type: :multi_stage, runner: runner} = verification,
+         packet_name,
+         item_name,
+         value
+       ) do
+    handle_multi_stage_update(
+      acc,
+      aggregate_id,
+      verification,
+      runner,
+      packet_name,
+      item_name,
+      value
+    )
+  end
+
+  defp apply_verification_update(
+         acc,
+         aggregate_id,
+         %{item: item} = legacy_verification,
+         packet_name,
+         item_name,
+         value
+       ) do
+    if item == "#{packet_name}.#{item_name}" do
+      check_simple_verification(acc, aggregate_id, legacy_verification, value)
+    else
+      acc
+    end
+  end
+
   defp process_queue_entry(entry, state) do
     # Mark as executing in queue
     {:ok, _} = TargetQueue.mark_executing(state.mission_id, state.target_id, entry.id)
@@ -710,7 +783,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
           |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
           |> Keyword.put(:user_id, entry.user_id)
 
-        result = do_dispatch(entry.command_name, entry.parameters, opts, state)
+        result = do_dispatch(entry, opts, state)
 
         # Normalize result for queue
         case result do
@@ -742,27 +815,36 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp do_dispatch(command_name, params, opts, state) do
+  defp do_dispatch(entry, opts, state) do
     # Use target from state - already loaded with definition_set
     target = state.target
     interface_id = Keyword.get(opts, :interface_id)
 
     Logger.info(
-      "[DISPATCH] command_name=#{inspect(command_name)}, " <>
+      "[DISPATCH] command_name=#{inspect(entry.command_name)}, " <>
         "mission_id=#{inspect(state.mission_id)}, target_id=#{target.id}, " <>
         "definition_set_id=#{inspect(target.definition_set_id)}"
     )
 
-    with {:ok, command} <- get_command(state, target, command_name),
+    with {:ok, command} <- get_command(state, target, entry.command_name),
          :ok <- check_phase_restriction(command, state.mission),
-         :ok <- check_hazardous(command, params, opts, state),
-         :ok <- validate_args(command, params),
-         {:ok, encoded} <- encode_command(command, params),
+         :ok <- check_hazardous(command, entry.parameters, opts, state),
+         :ok <- validate_args(command, entry.parameters),
+         {:ok, encoded} <- encode_command(command, entry.parameters),
          {:ok, interface} <- get_interface(target, opts),
          {:ok, framed} <- process_protocol_chain(interface, encoded),
          {:ok, cmd_info} <-
-           create_command_recording(state, command, target, params, encoded, opts),
+           create_command_recording(state, command, target, entry.parameters, encoded, opts),
          :ok <- send_to_interface(interface, framed) do
+      if entry.id do
+        TargetQueue.attach_command_log(
+          state.mission_id,
+          state.target_id,
+          entry.id,
+          cmd_info.aggregate_id
+        )
+      end
+
       # Record command sent event
       record_command_sent(
         state,
@@ -784,7 +866,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     else
       {:error, :requires_confirmation, _} ->
         # Handle hazardous command - store confirmation request and return info
-        create_hazardous_confirmation(command_name, params, opts, state)
+        create_hazardous_confirmation(entry.command_name, entry.parameters, opts, state)
 
       {:error, _} = error ->
         error
@@ -1223,31 +1305,15 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
   end
 
-  # Extract mission and target from opts, supporting both entity and ID-based startup
+  # Extract mission and target from opts (entity-based only)
   defp extract_mission_and_target(opts) do
     case {Keyword.get(opts, :mission), Keyword.get(opts, :target)} do
       {%Mission{} = mission, %Target{} = target} ->
-        # Entity-based startup (preferred) - no DB calls
-        {mission, target}
-
-      {nil, nil} ->
-        # Legacy ID-based startup - makes DB calls
-        mission_id = Keyword.fetch!(opts, :mission_id)
-        target_id = Keyword.fetch!(opts, :target_id)
-
-        Logger.warning(
-          "TargetDispatcher started with IDs instead of entities. " <>
-            "Consider passing entities to avoid DB calls."
-        )
-
-        mission = Cadence.Missions.get_mission!(mission_id)
-        target = Cadence.Targets.get_target_with_definition_set!(target_id)
-
         {mission, target}
 
       _ ->
         raise ArgumentError,
-              "TargetDispatcher requires either (mission: entity, target: entity) or (mission_id: id, target_id: id)"
+              "TargetDispatcher requires (mission: entity, target: entity)"
     end
   end
 end

@@ -29,7 +29,8 @@ defmodule Cadence.Test.Adapters.InMemoryMissionsRepository do
 
   @behaviour Cadence.Ports.Repository.Missions.MissionsRepository
 
-  alias Cadence.Missions.{Mission, MissionMembership}
+  alias Cadence.Domain.Missions.Entities.Mission
+  alias Cadence.Domain.Missions.Entities.MissionMembership
 
   # ============================================================================
   # Agent Lifecycle
@@ -87,7 +88,7 @@ defmodule Cadence.Test.Adapters.InMemoryMissionsRepository do
       |> Map.values()
       |> Enum.filter(&(&1.organization_id == organization_id))
       |> filter_by_status(status_filter)
-      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+      |> Enum.sort_by(& &1.created_at, {:desc, DateTime})
       |> maybe_limit(limit)
     end)
   end
@@ -106,7 +107,7 @@ defmodule Cadence.Test.Adapters.InMemoryMissionsRepository do
 
     mission =
       mission
-      |> maybe_set_timestamp(:inserted_at, now)
+      |> maybe_set_timestamp(:created_at, now)
       |> maybe_set_timestamp(:updated_at, now)
 
     Agent.update(__MODULE__, fn state ->
@@ -161,7 +162,7 @@ defmodule Cadence.Test.Adapters.InMemoryMissionsRepository do
 
     membership =
       membership
-      |> maybe_set_timestamp(:inserted_at, now)
+      |> maybe_set_timestamp(:created_at, now)
       |> maybe_set_timestamp(:updated_at, now)
 
     Agent.update(__MODULE__, fn state ->

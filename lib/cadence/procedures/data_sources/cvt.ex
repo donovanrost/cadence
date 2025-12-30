@@ -35,7 +35,6 @@ defmodule Cadence.Procedures.DataSources.CVT do
 
   alias Cadence.Procedures.DataSources.DataSource
   alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVTStore
-  alias Cadence.Telemetry.Dictionary
 
   # Default stale threshold: 30 seconds
   @default_stale_threshold_ms 30_000
@@ -448,9 +447,11 @@ defmodule Cadence.Procedures.DataSources.CVT do
 
   # Try to get items from Dictionary module, with fallback for when module doesn't exist
   defp list_dictionary_items(mission_id, filter) do
-    # Check if the Dictionary module exists and has the function
-    if Code.ensure_loaded?(Dictionary) and function_exported?(Dictionary, :list_items, 2) do
-      Dictionary.list_items(mission_id, filter)
+    dictionary_module = Module.concat([Cadence, Telemetry, Dictionary])
+
+    if Code.ensure_loaded?(dictionary_module) and
+         function_exported?(dictionary_module, :list_items, 2) do
+      dictionary_module.list_items(mission_id, filter)
     else
       # Dictionary module not available, return empty list
       {:ok, []}

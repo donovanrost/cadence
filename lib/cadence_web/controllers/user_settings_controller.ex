@@ -33,7 +33,8 @@ defmodule CadenceWeb.UserSettingsController do
         |> redirect(to: ~p"/users/settings")
 
       changeset ->
-        render(conn, :edit, email_changeset: %{changeset | action: :insert})
+        changeset = %{changeset | action: :insert}
+        render(conn, :edit, email_form: Phoenix.Component.to_form(changeset))
     end
   end
 
@@ -48,8 +49,17 @@ defmodule CadenceWeb.UserSettingsController do
         |> put_session(:user_return_to, ~p"/users/settings")
         |> UserAuth.log_in_user(user)
 
-      {:error, changeset} ->
-        render(conn, :edit, password_changeset: changeset)
+      {:error, %Ecto.Changeset{} = changeset} ->
+        changeset = %{changeset | action: :insert}
+        render(conn, :edit, password_form: Phoenix.Component.to_form(changeset))
+
+      {:error, _reason} ->
+        changeset =
+          user
+          |> Accounts.change_user_password(user_params)
+          |> then(&%{&1 | action: :insert})
+
+        render(conn, :edit, password_form: Phoenix.Component.to_form(changeset))
     end
   end
 
@@ -71,7 +81,7 @@ defmodule CadenceWeb.UserSettingsController do
     user = conn.assigns.current_scope.user
 
     conn
-    |> assign(:email_changeset, Accounts.change_user_email(user))
-    |> assign(:password_changeset, Accounts.change_user_password(user))
+    |> assign(:email_form, Phoenix.Component.to_form(Accounts.change_user_email(user)))
+    |> assign(:password_form, Phoenix.Component.to_form(Accounts.change_user_password(user)))
   end
 end

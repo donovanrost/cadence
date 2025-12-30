@@ -415,7 +415,10 @@ defmodule Cadence.Procedures.Parameters do
   defp validate_param_def(param, index) do
     []
     |> maybe_add_error(not is_map(param), "Parameter #{index}: must be a map")
-    |> maybe_add_error(not valid_param_name?(param), "Parameter #{index}: must have a 'name' string")
+    |> maybe_add_error(
+      not valid_param_name?(param),
+      "Parameter #{index}: must have a 'name' string"
+    )
     |> maybe_add_error(
       not valid_param_type?(param),
       "Parameter #{index}: must have a valid 'type' (#{Enum.join(@supported_types, ", ")})"

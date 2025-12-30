@@ -33,7 +33,8 @@ defmodule Cadence.Commands do
       :ok = Commands.validate_arguments(cmd, %{"target_temp" => 25.0})
   """
 
-  alias Cadence.Commands.{QueueEntry, Staging}
+  alias Cadence.Application.Commanding.{CommandQueries, EnqueueCommand, ManageQueue}
+  alias Cadence.Commands.Staging
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.MissionDatabase.{Argument, MetaCommand}
   alias Cadence.Missions
@@ -361,69 +362,64 @@ defmodule Cadence.Commands do
 
     deadline = System.monotonic_time(:millisecond) + timeout
 
-    poll_cvt(
-      mission_id,
-      target_id,
-      packet_name,
-      item_name,
-      expected,
-      comparison,
-      poll_interval,
-      deadline
-    )
+    poll_cvt(%{
+      mission_id: mission_id,
+      target_id: target_id,
+      packet_name: packet_name,
+      item_name: item_name,
+      expected: expected,
+      comparison: comparison,
+      interval: poll_interval,
+      deadline: deadline
+    })
   end
 
   defp poll_cvt(
-         mission_id,
-         target_id,
-         packet_name,
-         item_name,
-         expected,
-         comparison,
-         interval,
-         deadline
+         %{
+           mission_id: mission_id,
+           target_id: target_id,
+           packet_name: packet_name,
+           item_name: item_name,
+           expected: expected,
+           comparison: comparison
+         } = ctx
        ) do
     case CurrentValueTable.get(mission_id, target_id, packet_name, item_name) do
       {:ok, %{value: value}} ->
         if compare_value(value, expected, comparison) do
           :ok
         else
-          if System.monotonic_time(:millisecond) >= deadline do
-            {:error, :mismatch, value}
-          else
-            Process.sleep(interval)
-
-            poll_cvt(
-              mission_id,
-              target_id,
-              packet_name,
-              item_name,
-              expected,
-              comparison,
-              interval,
-              deadline
-            )
-          end
+          poll_on_mismatch(value, ctx)
         end
 
       {:error, :not_found} ->
-        if System.monotonic_time(:millisecond) >= deadline do
-          {:error, :timeout}
-        else
-          Process.sleep(interval)
-
-          poll_cvt(
-            mission_id,
-            target_id,
-            packet_name,
-            item_name,
-            expected,
-            comparison,
-            interval,
-            deadline
-          )
-        end
+        poll_on_not_found(ctx)
     end
+  end
+
+  defp poll_on_mismatch(value, ctx) do
+    if timed_out?(ctx.deadline) do
+      {:error, :mismatch, value}
+    else
+      sleep_and_recur(ctx)
+    end
+  end
+
+  defp poll_on_not_found(ctx) do
+    if timed_out?(ctx.deadline) do
+      {:error, :timeout}
+    else
+      sleep_and_recur(ctx)
+    end
+  end
+
+  defp sleep_and_recur(ctx) do
+    Process.sleep(ctx.interval)
+    poll_cvt(ctx)
+  end
+
+  defp timed_out?(deadline) do
+    System.monotonic_time(:millisecond) >= deadline
   end
 
   defp compare_value(actual, expected, :eq), do: actual == expected
@@ -499,10 +495,23 @@ defmodule Cadence.Commands do
       )
   """
   @spec enqueue(String.t(), String.t(), map(), keyword()) ::
-          {:ok, QueueEntry.t()} | {:error, term()}
+          {:ok, QueuedCommand.t()} | {:error, term()}
   def enqueue(mission_id, command_name, params, opts \\ []) do
     target_id = get_target_id!(opts)
-    TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+    mission = Missions.get_mission!(mission_id)
+    user_id = Keyword.get(opts, :user_id)
+
+    attrs = %{
+      organization_id: mission.organization_id,
+      mission_id: mission_id,
+      target_id: target_id,
+      user_id: user_id,
+      command_name: command_name,
+      parameters: params,
+      dispatch_opts: dispatch_opts_from_opts(opts)
+    }
+
+    EnqueueCommand.enqueue(attrs, opts)
   end
 
   @doc """
@@ -564,9 +573,12 @@ defmodule Cadence.Commands do
   Returns error if command is already executing or finished.
   """
   @spec cancel_queued(String.t(), String.t(), String.t()) ::
-          {:ok, QueueEntry.t()} | {:error, :not_found | :already_finished | :currently_executing}
+          {:ok, QueuedCommand.t()}
+          | {:error, :not_found | :already_finished | :currently_executing}
   def cancel_queued(mission_id, target_id, entry_id) do
-    TargetQueue.cancel(mission_id, target_id, entry_id)
+    _ = mission_id
+    _ = target_id
+    ManageQueue.cancel(entry_id)
   end
 
   @doc """
@@ -576,7 +588,8 @@ defmodule Cadence.Commands do
   """
   @spec cancel_all_queued_for_target(String.t(), String.t()) :: {:ok, non_neg_integer()}
   def cancel_all_queued_for_target(mission_id, target_id) do
-    TargetQueue.clear(mission_id, target_id)
+    _ = mission_id
+    ManageQueue.cancel_all_pending(target_id)
   end
 
   @doc """
@@ -592,7 +605,7 @@ defmodule Cadence.Commands do
 
     total =
       Enum.reduce(targets, 0, fn target, acc ->
-        {:ok, count} = TargetQueue.clear(mission_id, target.id)
+        {:ok, count} = ManageQueue.cancel_all_pending(target.id)
         acc + count
       end)
 
@@ -623,9 +636,10 @@ defmodule Cadence.Commands do
 
   - `:limit` - Max entries to return (default: 100)
   """
-  @spec list_target_queued(String.t(), String.t(), keyword()) :: [QueueEntry.t()]
+  @spec list_target_queued(String.t(), String.t(), keyword()) :: [QueuedCommand.t()]
   def list_target_queued(mission_id, target_id, opts \\ []) do
-    TargetQueue.list_pending(mission_id, target_id, opts)
+    _ = mission_id
+    CommandQueries.list_pending(target_id, Keyword.put_new(opts, :include_scheduled, true))
   end
 
   @doc """
@@ -634,9 +648,11 @@ defmodule Cadence.Commands do
   Higher priority commands (lower number) execute first.
   """
   @spec reorder_queued(String.t(), String.t(), String.t(), integer()) ::
-          {:ok, QueueEntry.t()} | {:error, :not_found}
+          {:ok, QueuedCommand.t()} | {:error, :not_found}
   def reorder_queued(mission_id, target_id, entry_id, new_priority) do
-    TargetQueue.reorder(mission_id, target_id, entry_id, new_priority)
+    _ = mission_id
+    _ = target_id
+    ManageQueue.set_priority(entry_id, new_priority)
   end
 
   # ============================================================================
@@ -673,10 +689,23 @@ defmodule Cadence.Commands do
   Returns a list of {target_id, result} tuples.
   """
   @spec fleet_enqueue(String.t(), [String.t()], String.t(), map(), keyword()) ::
-          [{String.t(), {:ok, QueueEntry.t()} | {:error, term()}}]
+          [{String.t(), {:ok, QueuedCommand.t()} | {:error, term()}}]
   def fleet_enqueue(mission_id, target_ids, command_name, params, opts \\ []) do
+    mission = Missions.get_mission!(mission_id)
+    user_id = Keyword.get(opts, :user_id)
+
     Enum.map(target_ids, fn target_id ->
-      result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+      attrs = %{
+        organization_id: mission.organization_id,
+        mission_id: mission_id,
+        target_id: target_id,
+        user_id: user_id,
+        command_name: command_name,
+        parameters: params,
+        dispatch_opts: dispatch_opts_from_opts(opts)
+      }
+
+      result = EnqueueCommand.enqueue(attrs, opts)
       {target_id, result}
     end)
   end
@@ -852,7 +881,7 @@ defmodule Cadence.Commands do
           String.t(),
           [{String.t(), map()}],
           keyword()
-        ) :: [{String.t(), {:ok, QueueEntry.t()} | {:error, term()}}]
+        ) :: [{String.t(), {:ok, QueuedCommand.t()} | {:error, term()}}]
   def fleet_enqueue_parameterized(mission_id, command_name, target_params, opts \\ [])
 
   def fleet_enqueue_parameterized(_mission_id, _command_name, [], _opts), do: []
@@ -877,8 +906,21 @@ defmodule Cadence.Commands do
   end
 
   defp enqueue_parameterized_sequential(mission_id, command_name, target_params, opts) do
+    mission = Missions.get_mission!(mission_id)
+    user_id = Keyword.get(opts, :user_id)
+
     Enum.map(target_params, fn {target_id, params} ->
-      result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+      attrs = %{
+        organization_id: mission.organization_id,
+        mission_id: mission_id,
+        target_id: target_id,
+        user_id: user_id,
+        command_name: command_name,
+        parameters: params,
+        dispatch_opts: dispatch_opts_from_opts(opts)
+      }
+
+      result = EnqueueCommand.enqueue(attrs, opts)
       {target_id, result}
     end)
   end
@@ -891,10 +933,23 @@ defmodule Cadence.Commands do
          max_concurrency,
          timeout
        ) do
+    mission = Missions.get_mission!(mission_id)
+    user_id = Keyword.get(opts, :user_id)
+
     target_params
     |> Task.async_stream(
       fn {target_id, params} ->
-        result = TargetQueue.enqueue(mission_id, target_id, command_name, params, opts)
+        attrs = %{
+          organization_id: mission.organization_id,
+          mission_id: mission_id,
+          target_id: target_id,
+          user_id: user_id,
+          command_name: command_name,
+          parameters: params,
+          dispatch_opts: dispatch_opts_from_opts(opts)
+        }
+
+        result = EnqueueCommand.enqueue(attrs, opts)
         {target_id, result}
       end,
       max_concurrency: max_concurrency,
@@ -915,7 +970,10 @@ defmodule Cadence.Commands do
   """
   @spec start_target_pipeline(String.t(), String.t()) :: {:ok, pid()} | {:error, term()}
   def start_target_pipeline(mission_id, target_id) do
-    TargetPipelineSupervisor.start_pipeline(mission_id, target_id)
+    case Targets.get_target_with_definition_set(target_id) do
+      {:ok, target} -> TargetPipelineSupervisor.start_pipeline(mission_id, target)
+      {:error, :not_found} -> {:error, :target_not_found}
+    end
   end
 
   @doc """
@@ -1106,5 +1164,11 @@ defmodule Cadence.Commands do
       target_id ->
         target_id
     end
+  end
+
+  defp dispatch_opts_from_opts(opts) do
+    opts
+    |> Keyword.drop([:priority, :scheduled_at, :expires_at, :max_attempts, :user_id])
+    |> Map.new(fn {k, v} -> {to_string(k), v} end)
   end
 end

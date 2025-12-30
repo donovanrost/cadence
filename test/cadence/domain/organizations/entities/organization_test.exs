@@ -2,8 +2,6 @@ defmodule Cadence.Domain.Organizations.Entities.OrganizationTest do
   use Cadence.PureCase
 
   alias Cadence.Domain.Organizations.Entities.Organization
-  alias Cadence.Domain.Organizations.ValueObjects.OrganizationStatus
-  alias Cadence.Domain.Organizations.ValueObjects.SubscriptionTier
 
   defp valid_attrs(overrides \\ %{}) do
     Map.merge(

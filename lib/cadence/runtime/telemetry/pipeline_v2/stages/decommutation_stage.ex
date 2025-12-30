@@ -26,9 +26,14 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DecommutationStage do
   def stage_name, do: :decom
 
   @impl true
-  def process(event, _state) do
-    %{packet: packet, packet_def: packet_def, packet_format: packet_format} = event
+  def process(%{packet_def: nil}, _state), do: {:skip, :missing_packet_def}
+  def process(%{packet_format: nil}, _state), do: {:skip, :missing_packet_format}
 
+  @impl true
+  def process(
+        %{packet: packet, packet_def: packet_def, packet_format: packet_format} = event,
+        _state
+      ) do
     case Packet.get_payload(packet) do
       {:ok, payload} ->
         case Decommutation.decommutate(payload, packet_def, packet_format) do
@@ -43,4 +48,6 @@ defmodule Cadence.Runtime.Telemetry.PipelineV2.Stages.DecommutationStage do
         {:error, {:payload_extraction_failed, reason}}
     end
   end
+
+  def process(_event, _state), do: {:error, :invalid_event}
 end

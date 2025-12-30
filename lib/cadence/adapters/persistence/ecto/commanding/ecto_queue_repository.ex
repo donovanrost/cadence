@@ -100,42 +100,12 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
 
   @impl true
   def claim_next(target_id) do
-    now = DateTime.utc_now()
-
-    # Find the highest priority, earliest sequence pending entry
-    query =
-      from q in QueueEntrySchema,
-        where: q.target_id == ^target_id,
-        where: q.status == :pending,
-        where: is_nil(q.scheduled_at) or q.scheduled_at <= ^now,
-        where: is_nil(q.expires_at) or q.expires_at > ^now,
-        order_by: [asc: q.priority, asc: q.sequence_number],
-        limit: 1,
-        lock: "FOR UPDATE SKIP LOCKED"
-
     Repo.transaction(fn ->
-      case Repo.one(query) do
-        nil ->
-          {:error, :queue_empty}
-
-        schema ->
-          # Transition to executing
-          attrs = %{
-            status: :executing,
-            attempts: schema.attempts + 1,
-            last_attempt_at: now
-          }
-
-          case schema |> QueueEntrySchema.execution_changeset(attrs) |> Repo.update() do
-            {:ok, updated} -> {:ok, to_entity(updated)}
-            {:error, changeset} -> {:error, extract_errors(changeset)}
-          end
-      end
+      target_id
+      |> fetch_claimable_entry(DateTime.utc_now())
+      |> update_to_executing()
     end)
-    |> case do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
-    end
+    |> handle_transaction_result()
   end
 
   @impl true
@@ -163,6 +133,44 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
     |> Repo.all()
     |> Enum.into(%{})
   end
+
+  defp fetch_claimable_entry(target_id, now) do
+    query =
+      from q in QueueEntrySchema,
+        where: q.target_id == ^target_id,
+        where: q.status == :pending,
+        where: is_nil(q.scheduled_at) or q.scheduled_at <= ^now,
+        where: is_nil(q.expires_at) or q.expires_at > ^now,
+        order_by: [asc: q.priority, asc: q.sequence_number],
+        limit: 1,
+        lock: "FOR UPDATE SKIP LOCKED"
+
+    case Repo.one(query) do
+      nil -> {:error, :queue_empty}
+      schema -> {:ok, schema, now}
+    end
+  end
+
+  defp update_to_executing({:error, reason}), do: {:error, reason}
+
+  defp update_to_executing({:ok, schema, now}) do
+    attrs = %{
+      status: :executing,
+      attempts: schema.attempts + 1,
+      last_attempt_at: now
+    }
+
+    schema
+    |> QueueEntrySchema.execution_changeset(attrs)
+    |> Repo.update()
+    |> case do
+      {:ok, updated} -> {:ok, to_entity(updated)}
+      {:error, changeset} -> {:error, extract_errors(changeset)}
+    end
+  end
+
+  defp handle_transaction_result({:ok, result}), do: result
+  defp handle_transaction_result({:error, reason}), do: {:error, reason}
 
   @impl true
   def cancel_all_pending(target_id) do

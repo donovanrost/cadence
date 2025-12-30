@@ -158,38 +158,40 @@ defmodule Cadence.Runtime.Telemetry.Pipeline do
   end
 
   defp process_identified_packet(binary_packet, packet_def, metadata, state) do
-    # Extract payload (skip packet type byte and target_id)
-    case binary_packet do
-      <<_packet_type::8, target_id_len::8, rest::binary>> ->
-        if byte_size(rest) >= target_id_len do
-          <<_target_id::binary-size(target_id_len), payload::binary>> = rest
+    with {:ok, payload} <- extract_payload(binary_packet),
+         {:ok, raw_items} <- Decommutation.decommutate(payload, packet_def, :json) do
+      update_cvt(
+        packet_def.target_id,
+        packet_def.name,
+        raw_items,
+        metadata,
+        state
+      )
+    else
+      {:error, :insufficient_target_id} ->
+        Logger.error("Malformed packet: insufficient data for target_id")
+        %{state | errors: state.errors + 1}
 
-          # Decommutate
-          case Decommutation.decommutate(payload, packet_def, :json) do
-            {:ok, raw_items} ->
-              # Update CVT with each item (respecting stored flag)
-              update_cvt(
-                packet_def.target_id,
-                packet_def.name,
-                raw_items,
-                metadata,
-                state
-              )
-
-            {:error, reason} ->
-              Logger.error("Decommutation error: #{inspect(reason)}")
-              %{state | errors: state.errors + 1}
-          end
-        else
-          Logger.error("Malformed packet: insufficient data for target_id")
-          %{state | errors: state.errors + 1}
-        end
-
-      _ ->
+      {:error, :malformed_packet} ->
         Logger.error("Malformed packet structure")
+        %{state | errors: state.errors + 1}
+
+      {:error, reason} ->
+        Logger.error("Decommutation error: #{inspect(reason)}")
         %{state | errors: state.errors + 1}
     end
   end
+
+  defp extract_payload(<<_packet_type::8, target_id_len::8, rest::binary>>) do
+    if byte_size(rest) >= target_id_len do
+      <<_target_id::binary-size(target_id_len), payload::binary>> = rest
+      {:ok, payload}
+    else
+      {:error, :insufficient_target_id}
+    end
+  end
+
+  defp extract_payload(_binary_packet), do: {:error, :malformed_packet}
 
   defp process_simulator_packet(target_id, packet_type, data, state) do
     packet_name = packet_type |> to_string() |> String.upcase()
@@ -231,12 +233,28 @@ defmodule Cadence.Runtime.Telemetry.Pipeline do
     }
   end
 
-  defp maybe_update_cvt_item(_mission_id, _target_id, _packet_name, item_name, _raw_value, _time, _stored)
+  defp maybe_update_cvt_item(
+         _mission_id,
+         _target_id,
+         _packet_name,
+         item_name,
+         _raw_value,
+         _time,
+         _stored
+       )
        when item_name in [:received_time] do
     0
   end
 
-  defp maybe_update_cvt_item(mission_id, target_id, packet_name, item_name, raw_value, time, stored) do
+  defp maybe_update_cvt_item(
+         mission_id,
+         target_id,
+         packet_name,
+         item_name,
+         raw_value,
+         time,
+         stored
+       ) do
     # TODO: Apply conversions here when we have conversion configs
     converted_value = raw_value
 

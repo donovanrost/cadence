@@ -174,81 +174,26 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
     if byte_size(buffer) < min_packet_size do
       return_packets(acc, %{state | buffer: buffer})
     else
-      case find_sync(buffer, state.sync_pattern) do
-        :not_found ->
-          # Keep last (sync_size - 1) bytes in case sync spans chunks
-          keep_size = min(byte_size(buffer), sync_size - 1)
-          <<_discard::binary-size(byte_size(buffer) - keep_size), keep::binary>> = buffer
-          return_packets(acc, %{state | buffer: keep})
-
-        {:found, offset} ->
-          # Discard bytes before sync
-          <<_garbage::binary-size(offset), sync_and_rest::binary>> = buffer
-
-          if byte_size(sync_and_rest) < sync_size + @header_size do
-            # Need more data for header
-            return_packets(acc, %{state | buffer: sync_and_rest})
-          else
-            # Parse header
-            <<_sync::binary-size(sync_size), header::binary-size(@header_size), rest::binary>> =
-              sync_and_rest
-
-            case parse_header(header) do
-              {:ok, _apid, _seq, data_length} ->
-                # CCSDS data_length = (data_field_bytes - 1)
-                # When CRC is enabled, data_length already includes CRC bytes
-                # So total_data_size is just data_length + 1
-                total_data_size = data_length + 1
-
-                if byte_size(rest) >= total_data_size do
-                  # Extract complete packet
-                  <<payload_and_crc::binary-size(total_data_size), remaining::binary>> = rest
-
-                  packet_without_sync = header <> payload_and_crc
-                  full_packet = state.sync_pattern <> packet_without_sync
-
-                  # Validate CRC if enabled
-                  case validate_crc(packet_without_sync, state) do
-                    {:ok, validated_data} ->
-                      # Decide what to return based on discard_sync
-                      output =
-                        if state.discard_sync do
-                          validated_data
-                        else
-                          state.sync_pattern <> validated_data
-                        end
-
-                      new_state = %{state | packets_extracted: state.packets_extracted + 1}
-                      extract_packets(remaining, new_state, [output | acc])
-
-                    {:error, :crc_mismatch, expected, actual} ->
-                      handle_crc_failure(state, expected, actual, full_packet, remaining, acc)
-
-                    {:skip} ->
-                      # CRC disabled, return the full packet (header + data)
-                      output =
-                        if state.discard_sync do
-                          packet_without_sync
-                        else
-                          state.sync_pattern <> packet_without_sync
-                        end
-
-                      new_state = %{state | packets_extracted: state.packets_extracted + 1}
-                      extract_packets(remaining, new_state, [output | acc])
-                  end
-                else
-                  # Need more data for payload
-                  return_packets(acc, %{state | buffer: sync_and_rest})
-                end
-
-              :error ->
-                # Invalid header - skip sync and try again
-                <<_sync::binary-size(sync_size), rest_after_sync::binary>> = sync_and_rest
-                extract_packets(rest_after_sync, state, acc)
-            end
-          end
-      end
+      buffer
+      |> next_packet(state, sync_size)
+      |> handle_next_packet(acc)
     end
+  end
+
+  defp handle_next_packet({:emit, output, remaining, new_state}, acc) do
+    extract_packets(remaining, new_state, [output | acc])
+  end
+
+  defp handle_next_packet({:skip, remaining, new_state}, acc) do
+    extract_packets(remaining, new_state, acc)
+  end
+
+  defp handle_next_packet({:need_more, new_buffer, new_state}, acc) do
+    return_packets(acc, %{new_state | buffer: new_buffer})
+  end
+
+  defp handle_next_packet({:disconnect, reason}, _acc) do
+    {:disconnect, reason}
   end
 
   defp find_sync(buffer, sync_pattern) do
@@ -300,7 +245,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
     end
   end
 
-  defp handle_crc_failure(state, expected, actual, _full_packet, remaining, acc) do
+  defp handle_crc_failure(state, expected, actual, _full_packet, remaining) do
     new_state = %{state | crc_failures: state.crc_failures + 1}
 
     case state.crc_on_failure do
@@ -315,7 +260,7 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
             "got 0x#{Integer.to_string(actual, 16)}"
         )
 
-        extract_packets(remaining, new_state, acc)
+        {:skip, remaining, new_state}
 
       :pass ->
         Logger.warning(
@@ -324,9 +269,91 @@ defmodule Cadence.Telemetry.Protocols.CCSDSProtocol do
         )
 
         # Pass packet anyway per CRC failure policy :pass
-        extract_packets(remaining, new_state, acc)
+        {:skip, remaining, new_state}
     end
   end
+
+  defp next_packet(buffer, state, sync_size) do
+    case find_sync(buffer, state.sync_pattern) do
+      :not_found ->
+        keep_tail(buffer, sync_size, state)
+
+      {:found, offset} ->
+        parse_from_offset(buffer, state, sync_size, offset)
+    end
+  end
+
+  defp keep_tail(buffer, sync_size, state) do
+    keep_size = min(byte_size(buffer), max(sync_size - 1, 0))
+    <<_discard::binary-size(byte_size(buffer) - keep_size), keep::binary>> = buffer
+    {:need_more, keep, state}
+  end
+
+  defp parse_from_offset(buffer, state, sync_size, offset) do
+    <<_garbage::binary-size(offset), sync_and_rest::binary>> = buffer
+
+    case read_header(sync_and_rest, sync_size) do
+      {:need_more, new_buffer} ->
+        {:need_more, new_buffer, state}
+
+      {:error, :invalid_header, rest_after_sync} ->
+        {:skip, rest_after_sync, state}
+
+      {:ok, header, rest, data_length} ->
+        parse_payload(sync_and_rest, header, rest, data_length, state)
+    end
+  end
+
+  defp read_header(sync_and_rest, sync_size) do
+    if byte_size(sync_and_rest) < sync_size + @header_size do
+      {:need_more, sync_and_rest}
+    else
+      <<_sync::binary-size(sync_size), header::binary-size(@header_size), rest::binary>> =
+        sync_and_rest
+
+      case parse_header(header) do
+        {:ok, _apid, _seq, data_length} ->
+          {:ok, header, rest, data_length}
+
+        :error ->
+          <<_sync::binary-size(sync_size), rest_after_sync::binary>> = sync_and_rest
+          {:error, :invalid_header, rest_after_sync}
+      end
+    end
+  end
+
+  defp parse_payload(sync_and_rest, header, rest, data_length, state) do
+    total_data_size = data_length + 1
+
+    if byte_size(rest) < total_data_size do
+      {:need_more, sync_and_rest, state}
+    else
+      <<payload_and_crc::binary-size(total_data_size), remaining::binary>> = rest
+      packet_without_sync = header <> payload_and_crc
+      full_packet = state.sync_pattern <> packet_without_sync
+      handle_validated_packet(packet_without_sync, full_packet, remaining, state)
+    end
+  end
+
+  defp handle_validated_packet(packet_without_sync, full_packet, remaining, state) do
+    case validate_crc(packet_without_sync, state) do
+      {:ok, validated_data} ->
+        output = maybe_prepend_sync(validated_data, state)
+        new_state = %{state | packets_extracted: state.packets_extracted + 1}
+        {:emit, output, remaining, new_state}
+
+      {:skip} ->
+        output = maybe_prepend_sync(packet_without_sync, state)
+        new_state = %{state | packets_extracted: state.packets_extracted + 1}
+        {:emit, output, remaining, new_state}
+
+      {:error, :crc_mismatch, expected, actual} ->
+        handle_crc_failure(state, expected, actual, full_packet, remaining)
+    end
+  end
+
+  defp maybe_prepend_sync(packet, %{discard_sync: true}), do: packet
+  defp maybe_prepend_sync(packet, state), do: state.sync_pattern <> packet
 
   defp return_packets([], state), do: {:ok, [], state}
   defp return_packets(acc, state), do: {:ok, Enum.reverse(acc), state}

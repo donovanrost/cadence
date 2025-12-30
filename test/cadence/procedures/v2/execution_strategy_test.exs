@@ -1,5 +1,5 @@
 defmodule Cadence.Procedures.V2.ExecutionStrategyTest do
-  use Cadence.DataCase, async: true
+  use Cadence.PureCase, async: true
 
   alias Cadence.Procedures.V2.ExecutionStrategy
   alias Cadence.Procedures.V2.Strategies.{Assisted, Automatic, Manual}

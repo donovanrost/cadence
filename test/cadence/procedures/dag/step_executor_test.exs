@@ -182,7 +182,7 @@ defmodule Cadence.Procedures.Dag.StepExecutorTest do
 
   describe "value resolution" do
     test "resolves params.* references" do
-      step = %{"type" => "log", "message" => "params.name"}
+      _step = %{"type" => "log", "message" => "params.name"}
       context = %{params: %{"name" => "test-value"}}
 
       # The log message itself isn't resolved directly by log,

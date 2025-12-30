@@ -11,8 +11,6 @@ defmodule Cadence.Telemetry.ProtocolsTest do
 
   use ExUnit.Case, async: true
 
-  import Bitwise
-
   alias Cadence.Telemetry.Protocols.{
     FixedProtocol,
     LengthProtocol,

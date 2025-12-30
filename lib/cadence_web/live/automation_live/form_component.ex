@@ -298,31 +298,30 @@ defmodule CadenceWeb.AutomationLive.FormComponent do
           "procedure_id" => params["automation"]["procedure_id"],
           "inject_trigger_data" => params["automation"]["inject_trigger_data"] == "true"
         }
-        |> Map.reject(fn {_k, v} -> v == "" or is_nil(v) end)
 
       "acknowledge_alarm" ->
         %{"note" => params["automation"]["acknowledge_note"]}
-        |> Map.reject(fn {_k, v} -> v == "" or is_nil(v) end)
 
       "shelve_alarm" ->
-        duration = parse_integer(params["automation"]["shelve_duration"], 60)
-
         %{
-          "duration_minutes" => duration,
+          "duration_minutes" => parse_integer(params["automation"]["shelve_duration"], 60),
           "reason" => params["automation"]["shelve_reason"]
         }
-        |> Map.reject(fn {_k, v} -> v == "" or is_nil(v) end)
 
       "send_notification" ->
         %{
           "channel" => params["automation"]["notification_channel"],
           "message_template" => params["automation"]["notification_template"]
         }
-        |> Map.reject(fn {_k, v} -> v == "" or is_nil(v) end)
 
       _ ->
         %{}
     end
+    |> reject_empty_values()
+  end
+
+  defp reject_empty_values(values) do
+    Map.reject(values, fn {_k, v} -> v == "" or is_nil(v) end)
   end
 
   defp maybe_add_list(map, _key, nil), do: map

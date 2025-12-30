@@ -15,18 +15,16 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
   ## Data Plane
 
   This module is part of the Data Plane - it manages runtime processes and
-  does not make database calls. Configuration is received via domain entities
-  or PubSub events.
+  does not make database calls. Configuration is received via MissionConfig
+  snapshots from the control plane.
   """
 
   use DynamicSupervisor
 
   require Logger
 
-  # Accept Ecto schema, domain entity, or MissionConfig
+  # Accept MissionConfig only
   alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Missions.Mission
 
   def start_link(init_arg) do
     DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
@@ -40,27 +38,19 @@ defmodule Cadence.Runtime.Missions.MissionSupervisor do
   @doc """
   Starts a mission's supervision tree.
 
-  Accepts a MissionConfig (preferred), Ecto schema, or domain entity.
+  Accepts a MissionConfig only.
   Returns `{:ok, pid}` on success or `{:error, reason}` on failure.
   """
   def start_mission(%MissionConfig{} = config) do
     do_start_mission(config.mission_id, config)
   end
 
-  def start_mission(%Mission{} = mission) do
-    do_start_mission(mission.id, mission)
-  end
-
-  def start_mission(%MissionEntity{} = entity) do
-    do_start_mission(entity.id, entity)
-  end
-
-  defp do_start_mission(mission_id, config_or_mission) do
+  defp do_start_mission(mission_id, config) do
     Logger.info("Starting mission supervision tree for mission_id=#{mission_id}")
 
     child_spec = {
       Cadence.Runtime.Missions.MissionInstance,
-      config: config_or_mission
+      config: config
     }
 
     case DynamicSupervisor.start_child(__MODULE__, child_spec) do

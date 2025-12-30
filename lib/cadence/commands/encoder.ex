@@ -140,18 +140,23 @@ defmodule Cadence.Commands.Encoder do
     if total_bytes == 0 do
       {:ok, <<>>}
     else
-      # Start with zero-filled buffer
       initial_buffer = <<0::size(total_bytes * 8)>>
+      insert_arguments(sorted, params, initial_buffer)
+    end
+  end
 
-      # Insert each argument value
-      Enum.reduce_while(sorted, {:ok, initial_buffer}, fn arg, {:ok, buffer} ->
-        value = get_arg_value(params, arg)
+  defp insert_arguments(arguments, params, buffer) do
+    Enum.reduce_while(arguments, {:ok, buffer}, fn arg, {:ok, acc} ->
+      insert_argument(arg, params, acc)
+    end)
+  end
 
-        case encode_and_insert(buffer, arg, value) do
-          {:ok, new_buffer} -> {:cont, {:ok, new_buffer}}
-          {:error, reason} -> {:halt, {:error, {:encoding, arg.name, reason}}}
-        end
-      end)
+  defp insert_argument(arg, params, buffer) do
+    value = get_arg_value(params, arg)
+
+    case encode_and_insert(buffer, arg, value) do
+      {:ok, new_buffer} -> {:cont, {:ok, new_buffer}}
+      {:error, reason} -> {:halt, {:error, {:encoding, arg.name, reason}}}
     end
   end
 

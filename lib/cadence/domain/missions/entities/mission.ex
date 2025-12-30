@@ -18,7 +18,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
         slug: "iss-ops"
       })
 
-      # Start the mission runtime
+      # Request mission runtime start (desired state)
       {:ok, mission} = Mission.start(mission)
 
       # Advance through phases
@@ -141,7 +141,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   end
 
   @doc """
-  Starts the mission runtime.
+  Sets mission status to :active (desired state).
   """
   @spec start(t()) :: {:ok, t()} | {:error, term()}
   def start(%__MODULE__{status: status} = mission) do
@@ -151,7 +151,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   end
 
   @doc """
-  Stops the mission runtime.
+  Sets mission status to :inactive (desired state).
   """
   @spec stop(t()) :: {:ok, t()} | {:error, term()}
   def stop(%__MODULE__{status: status} = mission) do
@@ -161,7 +161,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   end
 
   @doc """
-  Suspends the mission runtime.
+  Sets mission status to :suspended (desired state).
   """
   @spec suspend(t()) :: {:ok, t()} | {:error, term()}
   def suspend(%__MODULE__{status: status} = mission) do
@@ -191,7 +191,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   end
 
   @doc """
-  Returns true if the mission runtime is running.
+  Returns true if the mission runtime is marked as running.
   """
   @spec running?(t()) :: boolean()
   def running?(%__MODULE__{status: status}), do: MissionStatus.running?(status)

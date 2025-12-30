@@ -75,12 +75,12 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   require Logger
 
   alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Procedures
+  alias Cadence.Ports.Persistence.Procedures.ExecutionPersistence, as: ExecutionPersistencePort
+  alias Cadence.Ports.Repository.Procedures.ExecutionOperations
   alias Cadence.Procedures.Dag.{Executor, StepExecutor}
-  alias Cadence.Procedures.Engine.ExecutionPersistence
+  alias Cadence.Procedures.Engine.ExecutionCore
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
   alias Cadence.Procedures.Events.StepEvent
-  alias Cadence.Procedures.ProcedureLog
   alias Cadence.Procedures.Runtime.CadenceApi
   alias Cadence.Repo
 
@@ -93,6 +93,8 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
       :execution,
       :procedure,
       :version,
+      :execution_ops,
+      :persistence,
       :lua_state,
       :context,
       :current_step_index,
@@ -110,6 +112,20 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   def start_link(opts) do
     execution_id = Keyword.fetch!(opts, :execution_id)
     GenServer.start_link(__MODULE__, opts, name: via_tuple(execution_id))
+  end
+
+  @doc """
+  Starts execution for a pending execution process.
+  """
+  def start_execution(execution_id) do
+    case whereis(execution_id) do
+      nil ->
+        {:error, :not_found}
+
+      pid ->
+        send(pid, :start_execution)
+        :ok
+    end
   end
 
   @doc """
@@ -165,24 +181,22 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   @impl true
   def init(opts) do
     execution_id = Keyword.fetch!(opts, :execution_id)
+    execution_ops = ExecutionOperations.impl()
+    persistence = Keyword.get(opts, :persistence, ExecutionPersistencePort.impl())
 
-    Logger.info("Starting ExecutionProcess for execution_id=#{execution_id}")
+    Logger.info(ExecutionCore.execution_starting_message(execution_id))
 
     # Load execution with associations
-    execution = Procedures.get_execution!(execution_id)
-    procedure = Repo.preload(execution.procedure, [])
-    version = Repo.preload(execution.procedure_version, [])
+    execution =
+      case execution_ops.find_execution(execution_id) do
+        {:ok, execution} -> normalize_execution(execution)
+        {:error, :not_found} -> raise "Execution not found: #{execution_id}"
+      end
+
+    {procedure, version} = load_procedure_and_version(execution)
 
     # Build context for Cadence API
-    context = %{
-      mission_id: execution.mission_id,
-      organization_id: execution.organization_id,
-      target_id: execution.target_id,
-      execution_id: execution_id,
-      execution_pid: self(),
-      params: execution.parameters || %{},
-      allow_hazardous_commands: version.allow_hazardous_commands || false
-    }
+    context = ExecutionCore.build_api_context(execution, version, execution_id, self())
 
     # Initialize Luerl state
     lua_state = :luerl.init()
@@ -193,6 +207,8 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
       execution: execution,
       procedure: procedure,
       version: version,
+      execution_ops: execution_ops,
+      persistence: persistence,
       lua_state: lua_state,
       context: context,
       current_step_index: execution.current_step_index || 0,
@@ -203,7 +219,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
     # Note: Late-joining clients derive state from outbox events (source of truth),
     # so there's no need for artificial delays. The ExecutionChannel handles this
     # via derive_step_state_from_events on join.
-    if execution.status == :pending do
+    if execution.status == :pending and autostart_pending?() do
       send(self(), :start_execution)
     end
 
@@ -224,7 +240,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   @impl true
   def handle_cast({:control_signal, signal}, state) do
-    Logger.info("Received control signal #{inspect(signal)} for execution #{state.execution_id}")
+    Logger.info(ExecutionCore.control_signal_received(signal, state.execution_id))
 
     case signal do
       :pause when state.status in [:running, :pausing] ->
@@ -234,16 +250,12 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
           if state.status == :running do
             new_state = update_status(state, :pausing)
 
-            persist_log(
-              new_state,
-              :info,
-              "Pause requested, waiting for current step to complete..."
-            )
+            persist_log(new_state, :info, ExecutionCore.pause_requested_message())
 
             new_state
           else
             # Already in :pausing, just log
-            persist_log(state, :info, "Pause requested, waiting for current step to complete...")
+            persist_log(state, :info, ExecutionCore.pause_requested_message())
             state
           end
 
@@ -259,8 +271,9 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
       :resume when state.status == :paused ->
         # Update status in DB and broadcast before continuing
-        state = update_status(state, :running)
-        persist_log(state, :info, "Execution resumed")
+        transition = ExecutionCore.resume_transition()
+        state = update_status(state, transition.status, transition.attrs)
+        persist_log(state, transition.log_level, transition.log_message)
         send(self(), :continue_execution)
         {:noreply, %{state | control_signal: nil}}
 
@@ -271,16 +284,18 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   @impl true
   def handle_info(:start_execution, state) do
-    state = update_status(state, :running, %{started_at: DateTime.utc_now()})
+    start_attrs = ExecutionCore.start_attrs(DateTime.utc_now())
+    state = update_status(state, start_attrs.status, start_attrs.attrs)
     send(self(), :continue_execution)
     {:noreply, state}
   end
 
   def handle_info(:continue_execution, state) do
-    case check_control_signal(state) do
+    case ExecutionCore.control_action(state) do
       {:pause, state} ->
-        state = update_status(state, :paused)
-        persist_log(state, :info, "Execution paused")
+        transition = ExecutionCore.pause_transition()
+        state = update_status(state, transition.status, transition.attrs)
+        persist_log(state, transition.log_level, transition.log_message)
         {:noreply, %{state | control_signal: nil}}
 
       {:abort, state} ->
@@ -316,8 +331,8 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   # Handle DAG Task crash via :DOWN message
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{dag_task: %Task{ref: ref}} = state) do
-    Logger.error("DAG executor crashed: #{inspect(reason)}")
-    handle_failure(state, 0, "DAG executor crashed: #{inspect(reason)}")
+    Logger.error(ExecutionCore.dag_executor_crashed_message(reason))
+    handle_failure(state, 0, ExecutionCore.dag_executor_failure_reason(reason))
   end
 
   # Messages from Cadence API callbacks
@@ -328,34 +343,34 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   end
 
   def handle_info({:checkpoint, name}, state) do
-    Logger.debug("Checkpoint reached: #{name} at step #{state.current_step_index}")
+    Logger.debug(ExecutionCore.checkpoint_message(name, state.current_step_index))
     persist_checkpoint(state)
     broadcast(state, {:checkpoint, name})
     {:noreply, state}
   end
 
   def handle_info({:command_sent, name, log_id}, state) do
-    persist_log(state, :info, "Command sent: #{name} (log_id: #{log_id})")
+    persist_log(state, :info, ExecutionCore.command_sent_message(name, log_id))
     {:noreply, state}
   end
 
   def handle_info({:command_failed, name, reason}, state) do
-    persist_log(state, :error, "Command failed: #{name} - #{inspect(reason)}")
+    persist_log(state, :error, ExecutionCore.command_failed_message(name, reason))
     {:noreply, state}
   end
 
   def handle_info({:waiting, milliseconds}, state) do
-    persist_log(state, :debug, "Waiting #{milliseconds}ms")
+    persist_log(state, :debug, ExecutionCore.wait_message(milliseconds))
     {:noreply, state}
   end
 
   def handle_info({:waiting_for_telemetry, item, op, value}, state) do
-    persist_log(state, :debug, "Waiting for #{item} #{op} #{inspect(value)}")
+    persist_log(state, :debug, ExecutionCore.wait_for_message(item, op, value))
     {:noreply, state}
   end
 
   def handle_info({:abort_requested, message}, state) do
-    persist_log(state, :warn, "Abort requested: #{message}")
+    persist_log(state, :warn, ExecutionCore.abort_requested_message(message))
     {:noreply, %{state | control_signal: :abort}}
   end
 
@@ -365,9 +380,7 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info(
-      "ExecutionProcess terminating: execution_id=#{state.execution_id}, reason=#{inspect(reason)}"
-    )
+    Logger.info(ExecutionCore.execution_terminating_message(state.execution_id, reason))
 
     :ok
   end
@@ -383,14 +396,17 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
     # the current step completes.
     source = state.version.source
 
-    Logger.info("execute_next: procedure.type=#{inspect(state.procedure.type)}")
+    Logger.info(ExecutionCore.execute_next_message(state.procedure.type))
 
-    case state.procedure.type do
-      :script ->
+    case ExecutionCore.execution_mode(state.procedure.type) do
+      {:ok, :script} ->
         execute_script(state, source)
 
-      :dag ->
+      {:ok, :dag} ->
         execute_dag_sequence(state, source)
+
+      {:error, reason} ->
+        handle_failure(state, 0, reason)
     end
   end
 
@@ -398,168 +414,171 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
     {:noreply, state}
   end
 
-  defp execute_script(state, %{"code" => code}) do
-    step_info = %{type: "script"}
-    broadcast_step_event(state, 0, step_info, :step_started)
+  defp execute_script(state, source) do
+    case ExecutionCore.script_source(source) do
+      {:ok, code} ->
+        step_info = %{type: "script"}
+        broadcast_step_event(state, 0, step_info, :step_started)
 
-    case :luerl.do(code, state.lua_state) do
-      {:ok, _result, new_lua_state} ->
-        state = %{state | lua_state: new_lua_state, current_step_index: 1}
-        broadcast_step_event(state, 0, step_info, :step_completed)
-        handle_completion(state)
+        try do
+          case :luerl.do(code, state.lua_state) do
+            {:ok, _result, new_lua_state} ->
+              state = %{state | lua_state: new_lua_state, current_step_index: 1}
+              broadcast_step_event(state, 0, step_info, :step_completed)
+              handle_completion(state)
 
-      {:error, reason, _lua_state} ->
+            {:error, reason, _lua_state} ->
+              handle_failure(state, 0, reason)
+          end
+        catch
+          {:procedure_abort, message} ->
+            handle_abort_with_message(state, message)
+        end
+
+      {:error, reason} ->
         handle_failure(state, 0, reason)
     end
-  catch
-    {:procedure_abort, message} ->
-      handle_abort_with_message(state, message)
-  end
-
-  defp execute_script(state, _invalid_source) do
-    handle_failure(state, 0, "Invalid script source: missing 'code' key")
   end
 
   # DAG mode: execute steps in parallel based on dependencies
   # We spawn the DAG executor in a separate Task to avoid blocking the GenServer.
   # This allows the GenServer to respond to get_state calls while execution runs.
-  defp execute_dag_sequence(state, %{"steps" => steps}) when is_map(steps) do
-    Logger.info("Executing DAG sequence with #{map_size(steps)} steps")
+  defp execute_dag_sequence(state, source) do
+    case ExecutionCore.dag_source(source) do
+      {:ok, %{"steps" => steps}} ->
+        Logger.info(ExecutionCore.dag_start_message(map_size(steps)))
 
-    # Build execution context
-    dag_context = %{
-      mission_id: state.context.mission_id,
-      organization_id: state.context.organization_id,
-      target_id: state.context.target_id,
-      execution_id: state.execution_id,
-      params: state.context.params,
-      trigger: state.execution.trigger_context,
-      vars: %{},
-      user_id: state.execution.triggered_by_user_id,
-      allow_hazardous_commands: state.context.allow_hazardous_commands
-    }
+        # Build execution context
+        dag_context = ExecutionCore.build_dag_context(state)
 
-    # Get DAG options from source
-    default_on_fail =
-      case Map.get(state.version.source, "on_step_failure", "abort") do
-        "continue" -> :continue
-        "pause" -> :pause
-        _ -> :abort
-      end
+        # Get DAG options from source
+        default_on_fail = ExecutionCore.on_step_failure(state.version.source)
 
-    # Progress callback - broadcasts progress events for wait/wait_for steps
-    # This is lightweight (no DB writes) to avoid performance issues with frequent updates
-    on_progress = fn step_name, progress_data ->
-      topic = "procedure:#{state.execution_id}"
-      EventPublisher.impl().publish(topic, {:dag_step_progress, step_name, progress_data})
+        # Progress callback - broadcasts progress events for wait/wait_for steps
+        # This is lightweight (no DB writes) to avoid performance issues with frequent updates
+        on_progress = fn step_name, progress_data ->
+          topic = "procedure:#{state.execution_id}"
+          EventPublisher.impl().publish(topic, {:dag_step_progress, step_name, progress_data})
+        end
+
+        # Create step executor with progress callback
+        step_executor = StepExecutor.create_executor(%{on_progress: on_progress})
+
+        # Status change callback - uses ExecutionPersistence for atomic writes
+        # The outbox event is the authoritative record; PubSub is for real-time updates
+        execution = state.execution
+
+        on_status_change = fn step_name, status, data ->
+          # Delegate to ExecutionPersistence for atomic transaction handling
+          # This ensures step event + log entries are persisted atomically
+          # and broadcasts happen only after commit
+          state.persistence.persist_step_event(execution, step_name, status, data)
+        end
+
+        # Get pre-completed steps and their results for resume support
+        # Derive from outbox events (source of truth) rather than execution record
+        step_state =
+          state.persistence.list_step_events(state.execution_id)
+          |> StepEvent.derive_state()
+
+        # For resume, we need to mark ALL finished steps (not just completed) so they don't re-run
+        # This includes: completed, failed, timed_out, skipped, blocked
+        pre_completed = step_state.completed
+        pre_failed = step_state.failed
+        pre_timed_out = step_state.timed_out
+        pre_skipped = step_state.skipped
+        pre_blocked = step_state.blocked
+
+        # Get pre-existing step results from execution record (persisted on pause/completion)
+        # This is used to rebuild context.vars for resumed executions
+        pre_step_results = state.execution.step_results || %{}
+
+        # Execute the DAG in a separate Task to avoid blocking the GenServer
+        # This allows the GenServer to respond to get_state calls during execution
+        # Using Task.async provides automatic monitoring - if the task crashes,
+        # we receive a :DOWN message and can handle it gracefully
+        opts = [
+          on_step_failure: default_on_fail,
+          completed_steps: pre_completed,
+          failed_steps: pre_failed,
+          timed_out_steps: pre_timed_out,
+          skipped_steps: pre_skipped,
+          blocked_steps: pre_blocked,
+          step_results: pre_step_results,
+          on_status_change: on_status_change
+        ]
+
+        task =
+          Task.async(fn ->
+            Executor.execute(steps, step_executor, dag_context, opts)
+          end)
+
+        # Return immediately - result will be handled in handle_info via Task ref pattern
+        # Store the Task struct so we can match on ref and forward control signals
+        {:noreply, %{state | status: :running, dag_task: task}}
+
+      {:error, reason} ->
+        handle_failure(state, 0, reason)
     end
-
-    # Create step executor with progress callback
-    step_executor = StepExecutor.create_executor(%{on_progress: on_progress})
-
-    # Status change callback - uses ExecutionPersistence for atomic writes
-    # The outbox event is the authoritative record; PubSub is for real-time updates
-    execution = state.execution
-
-    on_status_change = fn step_name, status, data ->
-      # Delegate to ExecutionPersistence for atomic transaction handling
-      # This ensures step event + log entries are persisted atomically
-      # and broadcasts happen only after commit
-      ExecutionPersistence.persist_step_event(execution, step_name, status, data)
-    end
-
-    # Get pre-completed steps and their results for resume support
-    # Derive from outbox events (source of truth) rather than execution record
-    step_state = StepEvent.list_for_execution(state.execution_id) |> StepEvent.derive_state()
-
-    # For resume, we need to mark ALL finished steps (not just completed) so they don't re-run
-    # This includes: completed, failed, timed_out, skipped, blocked
-    pre_completed = step_state.completed
-    pre_failed = step_state.failed
-    pre_timed_out = step_state.timed_out
-    pre_skipped = step_state.skipped
-    pre_blocked = step_state.blocked
-
-    # Get pre-existing step results from execution record (persisted on pause/completion)
-    # This is used to rebuild context.vars for resumed executions
-    pre_step_results = state.execution.step_results || %{}
-
-    # Execute the DAG in a separate Task to avoid blocking the GenServer
-    # This allows the GenServer to respond to get_state calls during execution
-    # Using Task.async provides automatic monitoring - if the task crashes,
-    # we receive a :DOWN message and can handle it gracefully
-    opts = [
-      on_step_failure: default_on_fail,
-      completed_steps: pre_completed,
-      failed_steps: pre_failed,
-      timed_out_steps: pre_timed_out,
-      skipped_steps: pre_skipped,
-      blocked_steps: pre_blocked,
-      step_results: pre_step_results,
-      on_status_change: on_status_change
-    ]
-
-    task =
-      Task.async(fn ->
-        Executor.execute(steps, step_executor, dag_context, opts)
-      end)
-
-    # Return immediately - result will be handled in handle_info via Task ref pattern
-    # Store the Task struct so we can match on ref and forward control signals
-    {:noreply, %{state | status: :running, dag_task: task}}
   end
 
-  defp execute_dag_sequence(state, _invalid_source) do
-    handle_failure(state, 0, "Invalid DAG source: 'steps' must be a map")
+  defp autostart_pending? do
+    Application.get_env(:cadence, __MODULE__, [])
+    |> Keyword.get(:autostart_pending?, true)
   end
 
   defp handle_dag_completion(state, result) do
     Logger.info(
-      "DAG execution completed: #{length(result.completed_steps)} completed, #{length(result.skipped_steps)} skipped"
+      ExecutionCore.dag_completion_summary(
+        length(result.completed_steps),
+        length(result.skipped_steps)
+      )
     )
 
     # Use ExecutionPersistence for atomic update + outbox event
-    case ExecutionPersistence.persist_dag_result(state.execution, :completed, result) do
+    case state.persistence.persist_dag_result(state.execution, :completed, result) do
       {:ok, execution} ->
+        execution = normalize_execution(execution)
         state = %{state | execution: execution, status: :completed}
-        persist_log(state, :info, "DAG execution completed successfully")
+        persist_log(state, :info, ExecutionCore.dag_completed_message())
         {:stop, :normal, state}
 
       {:error, reason} ->
-        Logger.error("Failed to update DAG execution: #{inspect(reason)}")
+        Logger.error(ExecutionCore.dag_update_failure_message(reason))
         {:stop, :normal, state}
     end
   end
 
   defp handle_dag_failure(state, result) do
-    failed_names = Enum.join(result.failed_steps || [], ", ")
-    Logger.error("DAG execution failed: steps failed: #{failed_names}")
+    Logger.error(ExecutionCore.dag_failed_message(result.failed_steps))
 
     # Use ExecutionPersistence for atomic update + outbox event
-    case ExecutionPersistence.persist_dag_result(state.execution, :failed, result) do
+    case state.persistence.persist_dag_result(state.execution, :failed, result) do
       {:ok, execution} ->
+        execution = normalize_execution(execution)
         state = %{state | execution: execution, status: :failed}
-        persist_log(state, :error, "DAG execution failed: #{failed_names}")
+        persist_log(state, :error, ExecutionCore.dag_failed_message(result.failed_steps))
         {:stop, :normal, state}
 
       {:error, _reason} ->
-        Logger.error("Failed to update DAG execution status")
+        Logger.error(ExecutionCore.dag_persist_failure_message())
         {:stop, :normal, state}
     end
   end
 
   defp handle_dag_pause(state, result) do
-    Logger.info("DAG execution paused: #{length(result.completed_steps)} completed so far")
+    Logger.info(ExecutionCore.dag_paused_summary(length(result.completed_steps)))
 
     # Use ExecutionPersistence for atomic update + outbox event
-    case ExecutionPersistence.persist_dag_result(state.execution, :paused, result) do
+    case state.persistence.persist_dag_result(state.execution, :paused, result) do
       {:ok, execution} ->
+        execution = normalize_execution(execution)
         state = %{state | execution: execution, status: :paused, control_signal: nil}
-        persist_log(state, :info, "DAG execution paused")
+        persist_log(state, :info, ExecutionCore.dag_paused_message())
         {:noreply, state}
 
       {:error, _reason} ->
-        Logger.error("Failed to update DAG execution status")
+        Logger.error(ExecutionCore.dag_persist_failure_message())
         {:noreply, %{state | control_signal: nil}}
     end
   end
@@ -568,64 +587,44 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   # Control Signal Handling
   # ============================================================================
 
-  defp check_control_signal(%{control_signal: :pause} = state) do
-    {:pause, state}
-  end
-
-  defp check_control_signal(%{control_signal: :abort} = state) do
-    {:abort, state}
-  end
-
-  defp check_control_signal(state) do
-    {:continue, state}
-  end
-
   # Forward control signals to the DAG executor Task if it's running
   defp forward_signal_to_dag_executor(%{dag_task: %Task{pid: pid}}, signal) when is_pid(pid) do
     if Process.alive?(pid) do
       send(pid, {:control_signal, signal})
-      Logger.debug("Forwarded #{signal} signal to DAG executor #{inspect(pid)}")
+      Logger.debug(ExecutionCore.forward_signal_message(signal, pid))
     end
   end
 
   defp forward_signal_to_dag_executor(_state, _signal), do: :ok
 
   defp handle_abort(state) do
-    state = update_status(state, :cancelled)
-    persist_log(state, :warn, "Execution cancelled")
+    transition = ExecutionCore.abort_transition(state.current_step_index)
+    state = update_status(state, transition.status, transition.attrs)
+    persist_log(state, transition.log_level, transition.log_message)
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
   end
 
   defp handle_abort_with_message(state, message) do
-    state =
-      update_status(state, :failed, %{
-        error_message: message,
-        error_step_index: state.current_step_index
-      })
-
-    persist_log(state, :error, "Execution aborted: #{message}")
+    transition = ExecutionCore.abort_transition(state.current_step_index, message)
+    state = update_status(state, transition.status, transition.attrs)
+    persist_log(state, transition.log_level, transition.log_message)
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
   end
 
   defp handle_completion(state) do
-    state = update_status(state, :completed, %{completed_at: DateTime.utc_now()})
-    persist_log(state, :info, "Execution completed successfully")
+    transition = ExecutionCore.completion_transition(DateTime.utc_now())
+    state = update_status(state, transition.status, transition.attrs)
+    persist_log(state, transition.log_level, transition.log_message)
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
   end
 
   defp handle_failure(state, step_index, reason) do
-    error_message = format_error_reason(reason)
-
-    state =
-      update_status(state, :failed, %{
-        error_message: error_message,
-        error_step_index: step_index
-      })
-
-    persist_log(state, :error, "Step #{step_index} failed: #{error_message}")
+    transition = ExecutionCore.failure_transition(step_index, reason)
+    state = update_status(state, transition.status, transition.attrs)
+    persist_log(state, transition.log_level, transition.log_message)
     # Note: update_status already broadcasts {:status_changed, ...}
     {:stop, :normal, state}
   end
@@ -637,13 +636,14 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   defp update_status(state, new_status, extra_attrs \\ %{}) do
     attrs = Map.merge(%{status: new_status}, extra_attrs)
 
-    case Procedures.update_execution_status(state.execution, attrs) do
+    case state.execution_ops.update_execution(state.execution.id, attrs) do
       {:ok, execution} ->
+        execution = normalize_execution(execution)
         broadcast(state, {:status_changed, new_status, execution})
         %{state | execution: execution, status: new_status}
 
-      {:error, _changeset} ->
-        Logger.error("Failed to update execution status to #{new_status}")
+      {:error, _reason} ->
+        Logger.error(ExecutionCore.status_update_failure_message(new_status))
         %{state | status: new_status}
     end
   end
@@ -656,8 +656,9 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
       # checkpoint_state: :erlang.term_to_binary(state.lua_state)
     }
 
-    case Procedures.update_execution_status(state.execution, attrs) do
+    case state.execution_ops.update_execution(state.execution.id, attrs) do
       {:ok, execution} ->
+        execution = normalize_execution(execution)
         %{state | execution: execution}
 
       {:error, _} ->
@@ -674,13 +675,37 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
       step_index: state.current_step_index
     }
 
-    %ProcedureLog{}
-    |> ProcedureLog.changeset(attrs)
-    |> Repo.insert()
+    _ = state.execution_ops.create_log(attrs)
 
     # Also broadcast for real-time UI updates
     broadcast(state, {:log, level, message})
   end
+
+  defp load_procedure_and_version(execution) do
+    procedure = Map.get(execution, :procedure)
+    version = Map.get(execution, :procedure_version)
+
+    cond do
+      assoc_loaded?(procedure) and assoc_loaded?(version) ->
+        {procedure, version}
+
+      is_struct(execution, Cadence.Procedures.ProcedureExecution) ->
+        execution = Repo.preload(execution, [:procedure, :procedure_version])
+        {execution.procedure, execution.procedure_version}
+
+      true ->
+        raise "Execution is missing procedure associations"
+    end
+  end
+
+  defp assoc_loaded?(%Ecto.Association.NotLoaded{}), do: false
+  defp assoc_loaded?(nil), do: false
+  defp assoc_loaded?(_), do: true
+
+  defp normalize_execution(%Cadence.Procedures.ProcedureExecution{} = execution), do: execution
+
+  defp normalize_execution(execution),
+    do: struct(Cadence.Procedures.ProcedureExecution, execution)
 
   # ============================================================================
   # Broadcasting
@@ -718,11 +743,4 @@ defmodule Cadence.Procedures.Engine.ExecutionProcess do
   defp via_tuple(execution_id) do
     {:via, Registry, {Cadence.ProcedureRegistry, execution_id}}
   end
-
-  # Format error reasons for storage - handles various error types including Luerl parse errors
-  defp format_error_reason(reason) when is_binary(reason), do: reason
-  defp format_error_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-  defp format_error_reason(reason) when is_list(reason), do: inspect(reason)
-  defp format_error_reason({:lua_error, error, _stacktrace}), do: "Lua error: #{inspect(error)}"
-  defp format_error_reason(reason), do: inspect(reason)
 end

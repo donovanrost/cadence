@@ -68,14 +68,17 @@ defmodule CadenceWeb.UserAuth do
   """
   def fetch_current_scope_for_user(conn, _opts) do
     with {token, conn} <- ensure_user_token(conn),
-         {user, token_inserted_at} <- Accounts.get_user_by_session_token(token) do
+         {user, token_authenticated_at} <- Accounts.get_user_by_session_token(token) do
       # Get current organization from session or use default
       current_org_id = get_session(conn, :current_organization_id)
       scope_opts = if current_org_id, do: [current_organization_id: current_org_id], else: []
 
-      conn
-      |> assign(:current_scope, Scope.for_user(user, scope_opts))
-      |> maybe_reissue_user_session_token(user, token_inserted_at)
+      conn =
+        conn
+        |> assign(:current_scope, Scope.for_user(user, scope_opts))
+        |> assign_authenticated_at(token_authenticated_at)
+
+      maybe_reissue_user_session_token(conn, user, token_authenticated_at)
     else
       nil -> assign(conn, :current_scope, Scope.for_user(nil))
     end
@@ -103,6 +106,17 @@ defmodule CadenceWeb.UserAuth do
       create_or_extend_session(conn, user, %{})
     else
       conn
+    end
+  end
+
+  defp assign_authenticated_at(conn, authenticated_at) do
+    case conn.assigns.current_scope do
+      %{user: user} ->
+        scope = %{conn.assigns.current_scope | user: %{user | authenticated_at: authenticated_at}}
+        assign(conn, :current_scope, scope)
+
+      _ ->
+        conn
     end
   end
 

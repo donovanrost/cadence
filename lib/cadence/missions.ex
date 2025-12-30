@@ -24,8 +24,11 @@ defmodule Cadence.Missions do
       # Create a mission
       {:ok, mission} = Missions.create_mission(org_id, attrs)
 
-      # Start mission runtime
-      {:ok, mission} = Missions.start_mission(mission_id, org_id)
+      # Request mission runtime start (control plane desired state)
+      {:ok, mission} = Missions.request_start(mission_id, org_id)
+
+      # Request mission runtime stop (control plane desired state)
+      {:ok, mission} = Missions.request_stop(mission_id, org_id)
 
   ## Form Helpers
 
@@ -77,7 +80,7 @@ defmodule Cadence.Missions do
   def get_mission(id, organization_id), do: MissionQueries.find_by_org(id, organization_id)
 
   @doc """
-  Checks if a mission runtime is running.
+  Checks if a mission runtime is marked as running.
   """
   @spec running?(String.t()) :: boolean()
   def running?(mission_id), do: MissionQueries.running?(mission_id)
@@ -138,19 +141,21 @@ defmodule Cadence.Missions do
   # ============================================================================
 
   @doc """
-  Starts a mission's runtime (sets status to active and starts supervision tree).
+  Requests a mission runtime start by setting status to active.
+
+  The control plane updates desired state; the OrgReconciler starts the runtime.
   """
-  @spec start_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
-  def start_mission(mission_id, organization_id) do
-    MissionOperations.start(mission_id, organization_id)
+  @spec request_start(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def request_start(mission_id, organization_id) do
+    MissionOperations.request_start(mission_id, organization_id)
   end
 
   @doc """
-  Stops a mission's runtime (stops supervision tree and sets status to inactive).
+  Requests a mission runtime stop by setting status to inactive.
   """
-  @spec stop_mission(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
-  def stop_mission(mission_id, organization_id) do
-    MissionOperations.stop(mission_id, organization_id)
+  @spec request_stop(String.t(), String.t()) :: {:ok, MissionEntity.t()} | {:error, term()}
+  def request_stop(mission_id, organization_id) do
+    MissionOperations.request_stop(mission_id, organization_id)
   end
 
   @doc """

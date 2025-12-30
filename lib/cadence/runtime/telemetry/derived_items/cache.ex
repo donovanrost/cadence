@@ -128,6 +128,29 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   end
 
   @doc """
+  Warms the cache from preloaded derived item definitions.
+
+  This avoids database access when config is provided by the control plane.
+  """
+  @spec warm_from_defs(String.t(), [map()]) :: :ok
+  def warm_from_defs(mission_id, derived_defs) when is_list(derived_defs) do
+    if :ets.whereis(@table) != :undefined do
+      case build_enriched_defs(derived_defs) do
+        {:ok, {enriched_defs, packet_index}} ->
+          cached_at = System.monotonic_time(:millisecond)
+          :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
+
+        {:error, reason} ->
+          Logger.error(
+            "Failed to warm derived items cache for mission #{mission_id}: #{inspect(reason)}"
+          )
+      end
+    end
+
+    :ok
+  end
+
+  @doc """
   Returns cache statistics for monitoring.
   """
   @spec stats() :: map()
@@ -239,24 +262,37 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   defp compute_root_packets_for_item(def, derived_names, computed_so_far) do
     def.required_vars
     |> Enum.reduce(MapSet.new(), fn var, acc ->
-      case String.split(var, ".", parts: 2) do
-        [packet_name, _item_name] ->
-          if MapSet.member?(derived_names, packet_name) do
-            # This depends on another derived item - get its root packets
-            case Map.get(computed_so_far, packet_name) do
-              # Not yet computed (shouldn't happen due to topo sort)
-              nil -> acc
-              root_packets -> MapSet.union(acc, root_packets)
-            end
-          else
-            # This is a raw telemetry packet
-            MapSet.put(acc, packet_name)
-          end
-
-        _ ->
-          acc
-      end
+      add_root_packet(var, acc, derived_names, computed_so_far)
     end)
+  end
+
+  defp add_root_packet(var, acc, derived_names, computed_so_far) do
+    case root_packets_for_var(var, derived_names, computed_so_far) do
+      {:ok, root_packets} -> MapSet.union(acc, root_packets)
+      {:raw, packet_name} -> MapSet.put(acc, packet_name)
+      :skip -> acc
+    end
+  end
+
+  defp root_packets_for_var(var, derived_names, computed_so_far) do
+    case String.split(var, ".", parts: 2) do
+      [packet_name, _item_name] ->
+        if MapSet.member?(derived_names, packet_name) do
+          fetch_root_packets(packet_name, computed_so_far)
+        else
+          {:raw, packet_name}
+        end
+
+      _ ->
+        :skip
+    end
+  end
+
+  defp fetch_root_packets(packet_name, computed_so_far) do
+    case Map.get(computed_so_far, packet_name) do
+      nil -> :skip
+      root_packets -> {:ok, root_packets}
+    end
   end
 
   # Build an index: packet_name -> list of derived items that can be computed

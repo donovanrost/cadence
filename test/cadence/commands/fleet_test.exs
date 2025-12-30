@@ -2,10 +2,10 @@ defmodule Cadence.Commands.FleetTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Commands
-  alias Cadence.Commands.{TargetDispatcher, TargetQueue}
   alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
   alias Cadence.Targets.Target
 
   # Setup creates an org, mission, multiple targets, and commands for testing
@@ -54,6 +54,8 @@ defmodule Cadence.Commands.FleetTest do
       })
       |> Repo.insert!()
 
+    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+
     # Create multiple targets for fleet operations
     targets =
       for i <- 1..5 do
@@ -70,15 +72,18 @@ defmodule Cadence.Commands.FleetTest do
           |> Repo.insert!()
 
         # Start queue and dispatcher for each target
+        target_entity =
+          Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+
         {:ok, _queue_pid} =
           start_supervised(
-            {TargetQueue, mission_id: mission.id, target_id: target.id},
+            {TargetQueue, mission: mission_entity, target: target_entity},
             id: {:target_queue, i}
           )
 
         {:ok, _dispatcher_pid} =
           start_supervised(
-            {TargetDispatcher, mission_id: mission.id, target_id: target.id},
+            {TargetDispatcher, mission: mission_entity, target: target_entity},
             id: {:target_dispatcher, i}
           )
 

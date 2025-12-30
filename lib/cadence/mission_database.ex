@@ -28,6 +28,7 @@ defmodule Cadence.MissionDatabase do
   import Ecto.Query
 
   alias Cadence.Config.VersionRegistry
+
   alias Cadence.MissionDatabase.{
     Container,
     ContainerEntry,
@@ -36,6 +37,7 @@ defmodule Cadence.MissionDatabase do
     MetaCommand,
     Parameter
   }
+
   alias Cadence.Repo
   alias Cadence.Telemetry.Database.DerivedItem
 

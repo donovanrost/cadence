@@ -249,25 +249,29 @@ defmodule Cadence.Interfaces do
     deleted_order = protocol.order
 
     Repo.transaction(fn ->
-      # Delete the protocol
-      case Repo.delete(protocol) do
-        {:ok, deleted} ->
-          # Reorder remaining protocols to fill the gap
-          InterfaceProtocol
-          |> where([p], p.interface_id == ^interface_id and p.order > ^deleted_order)
-          |> Repo.all()
-          |> Enum.each(fn p ->
-            p
-            |> InterfaceProtocol.changeset(%{"order" => p.order - 1})
-            |> Repo.update!()
-          end)
-
-          deleted
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
+      with {:ok, deleted} <- Repo.delete(protocol),
+           :ok <- reorder_after_delete(interface_id, deleted_order) do
+        deleted
+      else
+        {:error, %Ecto.Changeset{} = changeset} -> Repo.rollback(changeset)
+        {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp reorder_after_delete(interface_id, deleted_order) do
+    InterfaceProtocol
+    |> where([p], p.interface_id == ^interface_id and p.order > ^deleted_order)
+    |> Repo.all()
+    |> Enum.each(&decrement_protocol_order/1)
+
+    :ok
+  end
+
+  defp decrement_protocol_order(protocol) do
+    protocol
+    |> InterfaceProtocol.changeset(%{"order" => protocol.order - 1})
+    |> Repo.update!()
   end
 
   @doc """
@@ -279,33 +283,38 @@ defmodule Cadence.Interfaces do
   def reorder_protocols(%InterfaceSchema{id: interface_id}, protocol_ids)
       when is_list(protocol_ids) do
     Repo.transaction(fn ->
-      # Get all protocols for this interface
       protocols =
         InterfaceProtocol
         |> where([p], p.interface_id == ^interface_id)
         |> Repo.all()
 
-      # Verify all protocols are included
-      protocol_id_set = MapSet.new(Enum.map(protocols, & &1.id))
-      provided_id_set = MapSet.new(protocol_ids)
+      protocol_map = Map.new(protocols, &{&1.id, &1})
+      :ok = validate_protocol_order(protocol_map, protocol_ids)
+      update_protocol_order(protocol_map, protocol_ids)
+      list_protocols(interface_id)
+    end)
+  end
 
-      if protocol_id_set != provided_id_set do
-        Repo.rollback(:invalid_protocol_list)
-      else
-        # Update each protocol's order
-        protocol_ids
-        |> Enum.with_index()
-        |> Enum.each(fn {protocol_id, new_order} ->
-          protocol = Enum.find(protocols, &(&1.id == protocol_id))
+  defp validate_protocol_order(protocol_map, protocol_ids) do
+    protocol_id_set = MapSet.new(Map.keys(protocol_map))
+    provided_id_set = MapSet.new(protocol_ids)
 
-          protocol
-          |> InterfaceProtocol.changeset(%{"order" => new_order})
-          |> Repo.update!()
-        end)
+    if protocol_id_set != provided_id_set do
+      Repo.rollback(:invalid_protocol_list)
+    else
+      :ok
+    end
+  end
 
-        # Return updated protocols
-        list_protocols(interface_id)
-      end
+  defp update_protocol_order(protocol_map, protocol_ids) do
+    protocol_ids
+    |> Enum.with_index()
+    |> Enum.each(fn {protocol_id, new_order} ->
+      protocol = Map.fetch!(protocol_map, protocol_id)
+
+      protocol
+      |> InterfaceProtocol.changeset(%{"order" => new_order})
+      |> Repo.update!()
     end)
   end
 

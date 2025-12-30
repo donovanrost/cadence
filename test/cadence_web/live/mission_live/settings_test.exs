@@ -1,8 +1,5 @@
 defmodule CadenceWeb.MissionLive.SettingsTest do
-  use CadenceWeb.ConnCase, async: true
-
-  # TODO: These tests hang - need investigation. Skipping until resolved.
-  @moduletag :skip
+  use CadenceWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import Cadence.AccountsFixtures
@@ -23,18 +20,18 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
 
   describe "GET /missions/:id/settings" do
     test "renders general settings tab", %{conn: conn, mission: mission} do
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings")
 
-      assert html =~ "Mission Settings"
-      assert html =~ "General"
-      assert html =~ "Procedures"
+      assert has_element?(view, "h1", "General Settings")
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings"]))
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings/procedures"]))
     end
 
     test "shows mission info on general tab", %{conn: conn, mission: mission} do
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings")
 
-      assert html =~ mission.name
-      assert html =~ mission.status
+      assert has_element?(view, "dd", mission.name)
+      assert has_element?(view, "dd", mission.status)
     end
   end
 
@@ -42,28 +39,28 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     test "shows org defaults", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
-      assert html =~ "Organization default"
-      assert html =~ "2"
+      assert has_element?(view, "span", "Organization default:")
+      assert has_element?(view, "span", "2")
     end
 
     test "shows existing override", %{conn: conn, mission: mission} do
       mission = Cadence.Repo.preload(mission, :organization)
       {:ok, _} = Settings.set_mission(mission, :procedures, :required_approvals, 5)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       # Override value should be shown
-      assert html =~ ~s(value="5")
+      assert has_element?(view, ~s(input[name="required_approvals"][value="5"]))
     end
 
     test "shows all procedure settings", %{conn: conn, mission: mission} do
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
-      assert html =~ "Required Approvals"
-      assert html =~ "Allow Self-Approval"
-      assert html =~ "Allow Withdrawal"
+      assert has_element?(view, "div", "Required Approvals")
+      assert has_element?(view, "div", "Allow Self-Approval")
+      assert has_element?(view, "div", "Allow Withdrawal")
     end
   end
 
@@ -71,11 +68,10 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     test "controls are always visible", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :required_approvals, 2)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       # Number input should be visible without needing to enable override
-      assert html =~ "input"
-      assert html =~ "name=\"required_approvals\""
+      assert has_element?(view, ~s(input[type="number"][name="required_approvals"]))
     end
 
     test "changing value creates override automatically", %{
@@ -124,8 +120,7 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
       |> element("input[name=\"required_approvals\"]")
       |> render_change(%{required_approvals: "2"})
 
-      html = render(view)
-      assert html =~ "Must be at least 3"
+      assert has_element?(view, "span", "Must be at least 3")
 
       # Value should not have changed
       assert Settings.get_mission_override(mission, :procedures, :required_approvals) == 3
@@ -180,11 +175,14 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     test "cannot override when org has false", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :allow_self_approval, false)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       # The toggle should be disabled or indicate cannot be overridden
       # In the HEAD implementation, override is disabled for false_is_stricter when org is false
-      assert html =~ "disabled" or html =~ "Cannot"
+      assert has_element?(
+               view,
+               ~s(input[type="checkbox"][name="allow_self_approval"][disabled])
+             )
     end
   end
 
@@ -207,10 +205,13 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
     test "cannot override when org has false", %{conn: conn, mission: mission, org: org} do
       {:ok, _} = Settings.set_org(org, :procedures, :allow_withdrawal, false)
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       # The toggle should be disabled or indicate cannot be overridden
-      assert html =~ "disabled" or html =~ "Cannot"
+      assert has_element?(
+               view,
+               ~s(input[type="checkbox"][name="allow_withdrawal"][disabled])
+             )
     end
   end
 
@@ -219,26 +220,24 @@ defmodule CadenceWeb.MissionLive.SettingsTest do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings")
 
       # Settings dropdown in sidebar should show both General and Procedures links
-      html = render(view)
-      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings"[^>]*>.*General/s
-      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings\/procedures"[^>]*>.*Procedures/s
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings"]))
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings/procedures"]))
 
       # Navigate to procedures via direct URL (sidebar uses navigate, not patch)
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
-      assert html =~ "Procedures Settings"
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
+      assert has_element?(view, "h1", "Procedures Settings")
     end
 
     test "can navigate from procedures to general via sidebar", %{conn: conn, mission: mission} do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings/procedures")
 
       # Settings dropdown in sidebar should show both General and Procedures links
-      html = render(view)
-      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings"[^>]*>.*General/s
-      assert html =~ ~r/href="\/missions\/#{mission.id}\/settings\/procedures"[^>]*>.*Procedures/s
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings"]))
+      assert has_element?(view, ~s(a[href="/missions/#{mission.id}/settings/procedures"]))
 
       # Navigate to general via direct URL (sidebar uses navigate, not patch)
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission}/settings")
-      assert html =~ "General Settings"
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission}/settings")
+      assert has_element?(view, "h1", "General Settings")
     end
   end
 

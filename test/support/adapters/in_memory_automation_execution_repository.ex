@@ -92,6 +92,20 @@ defmodule Cadence.Test.Adapters.InMemoryAutomationExecutionRepository do
     end
   end
 
+  def save(%AutomationExecution{id: id} = execution) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      case Map.get(state.executions, id) do
+        nil ->
+          {{:error, :not_found}, state}
+
+        _existing ->
+          updated = %{execution | updated_at: DateTime.utc_now()}
+          new_state = %{state | executions: Map.put(state.executions, id, updated)}
+          {{:ok, updated}, new_state}
+      end
+    end)
+  end
+
   defp save_with_idempotency(state, execution) do
     if MapSet.member?(state.idempotency_keys, execution.idempotency_key) do
       {{:error, :duplicate}, state}
@@ -130,20 +144,6 @@ defmodule Cadence.Test.Adapters.InMemoryAutomationExecutionRepository do
     end)
 
     execution
-  end
-
-  def save(%AutomationExecution{id: id} = execution) do
-    Agent.get_and_update(__MODULE__, fn state ->
-      case Map.get(state.executions, id) do
-        nil ->
-          {{:error, :not_found}, state}
-
-        _existing ->
-          updated = %{execution | updated_at: DateTime.utc_now()}
-          new_state = %{state | executions: Map.put(state.executions, id, updated)}
-          {{:ok, updated}, new_state}
-      end
-    end)
   end
 
   # ============================================================================

@@ -82,37 +82,43 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   @spec get_limits(String.t(), String.t(), String.t()) ::
           {:ok, map(), pos_integer(), pos_integer()} | :not_configured | {:error, term()}
   def get_limits(mission_id, target_id, qualified_item_name) do
-    case get_cached_data(mission_id, target_id) do
-      {:ok, item_limits_map, active_limit_set} ->
-        case Map.get(item_limits_map, qualified_item_name) do
-          nil ->
-            :not_configured
+    with {:ok, config, active_limit_set} <-
+           fetch_limits_config(mission_id, target_id, qualified_item_name),
+         {:ok, limits} <- select_limits(config, active_limit_set) do
+      {:ok, limits, persistence_for(config), stale_timeout_for(config)}
+    else
+      :not_configured -> :not_configured
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-          %{has_limits: false} ->
-            :not_configured
+  defp fetch_limits_config(mission_id, target_id, qualified_item_name) do
+    with {:ok, item_limits_map, active_limit_set} <- get_cached_data(mission_id, target_id),
+         {:ok, config} <- fetch_item_config(item_limits_map, qualified_item_name) do
+      {:ok, config, active_limit_set}
+    end
+  end
 
-          %{has_limits: true, limits_config: limits_config} = config ->
-            # Get the limits for the active limit set
-            case Map.get(limits_config, active_limit_set) do
-              nil ->
-                # Active set not defined for this item, try "DEFAULT" or return not_configured
-                case Map.get(limits_config, "DEFAULT") do
-                  nil ->
-                    :not_configured
+  defp persistence_for(config) do
+    Map.get(config, :persistence, @default_persistence)
+  end
 
-                  limits ->
-                    {:ok, limits, config[:persistence] || @default_persistence,
-                     config[:stale_timeout_ms] || @default_stale_timeout_ms}
-                end
+  defp stale_timeout_for(config) do
+    Map.get(config, :stale_timeout_ms, @default_stale_timeout_ms)
+  end
 
-              limits ->
-                {:ok, limits, config[:persistence] || @default_persistence,
-                 config[:stale_timeout_ms] || @default_stale_timeout_ms}
-            end
-        end
+  defp fetch_item_config(item_limits_map, qualified_item_name) do
+    case Map.get(item_limits_map, qualified_item_name) do
+      nil -> :not_configured
+      %{has_limits: false} -> :not_configured
+      %{has_limits: true} = config -> {:ok, config}
+    end
+  end
 
-      {:error, reason} ->
-        {:error, reason}
+  defp select_limits(%{limits_config: limits_config}, active_limit_set) do
+    case Map.get(limits_config, active_limit_set) || Map.get(limits_config, "DEFAULT") do
+      nil -> :not_configured
+      limits -> {:ok, limits}
     end
   end
 
@@ -235,6 +241,32 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   @spec warm(String.t(), String.t()) :: :ok
   def warm(mission_id, target_id) do
     _ = get_cached_data(mission_id, target_id)
+    :ok
+  end
+
+  @doc """
+  Pre-warms the cache from preloaded packet definitions and targets.
+
+  This avoids database access when config is provided by the control plane.
+  """
+  @spec warm_from_packet_defs(String.t(), list(), list()) :: :ok
+  def warm_from_packet_defs(mission_id, targets, packet_defs)
+      when is_list(targets) and is_list(packet_defs) do
+    if :ets.whereis(@table) != :undefined do
+      item_limits_map = build_item_limits_map(packet_defs)
+      cached_at = System.monotonic_time(:millisecond)
+
+      Enum.each(targets, fn target ->
+        target_id = target.identifier
+        active_limit_set = target.active_limit_set || "NOMINAL"
+
+        :ets.insert(
+          @table,
+          {{mission_id, target_id}, item_limits_map, active_limit_set, cached_at}
+        )
+      end)
+    end
+
     :ok
   end
 
@@ -368,20 +400,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
       )
       |> Repo.all()
 
-    # Build item limits map
-    item_limits_map =
-      packet_defs
-      |> Enum.flat_map(fn packet_def ->
-        packet_name = packet_def.name
-
-        packet_def.packet_items
-        |> Enum.map(fn item ->
-          qualified_name = "#{packet_name}.#{item.name}"
-          config = build_item_config(item)
-          {qualified_name, config}
-        end)
-      end)
-      |> Map.new()
+    item_limits_map = build_item_limits_map(packet_defs)
 
     {:ok, item_limits_map, active_limit_set}
   rescue
@@ -410,6 +429,21 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
       persistence: get_persistence(item.limits_config),
       stale_timeout_ms: get_stale_timeout(item.limits_config)
     }
+  end
+
+  defp build_item_limits_map(packet_defs) do
+    packet_defs
+    |> Enum.flat_map(fn packet_def ->
+      packet_name = packet_def.name
+
+      packet_def.packet_items
+      |> Enum.map(fn item ->
+        qualified_name = "#{packet_name}.#{item.name}"
+        config = build_item_config(item)
+        {qualified_name, config}
+      end)
+    end)
+    |> Map.new()
   end
 
   # Parse limits_config - handle both legacy (flat) and new (named sets) formats

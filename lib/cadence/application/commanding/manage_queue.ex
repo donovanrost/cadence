@@ -212,7 +212,14 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   """
   @spec cancel_all_pending(target_id()) :: {:ok, non_neg_integer()}
   def cancel_all_pending(target_id) do
-    repo().cancel_all_pending(target_id)
+    case repo().cancel_all_pending(target_id) do
+      {:ok, count} ->
+        event_publisher().publish("target:#{target_id}:queue", {:commands_cleared, target_id})
+        {:ok, count}
+
+      error ->
+        error
+    end
   end
 
   # ===========================================================================
@@ -237,8 +244,10 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   @spec set_priority(entry_id(), 0..5) :: {:ok, QueuedCommand.t()} | {:error, term()}
   def set_priority(entry_id, priority) do
     with {:ok, entry} <- CommandQueries.find(entry_id),
-         {:ok, updated} <- QueuedCommand.set_priority(entry, priority) do
-      repo().save(updated)
+         {:ok, updated} <- QueuedCommand.set_priority(entry, priority),
+         {:ok, saved} <- repo().save(updated) do
+      broadcast_reordered(saved)
+      {:ok, saved}
     end
   end
 
@@ -340,6 +349,13 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   defp broadcast_retried(%QueuedCommand{target_id: target_id} = entry) do
     topic = "target:#{target_id}:queue"
     event_publisher().publish(topic, {:command_retried, entry})
+  rescue
+    _ -> :ok
+  end
+
+  defp broadcast_reordered(%QueuedCommand{target_id: target_id} = entry) do
+    topic = "target:#{target_id}:queue"
+    event_publisher().publish(topic, {:command_reordered, entry})
   rescue
     _ -> :ok
   end

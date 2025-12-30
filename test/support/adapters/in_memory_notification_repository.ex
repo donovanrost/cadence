@@ -29,6 +29,9 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
 
   @behaviour Cadence.Ports.Repository.Notifications.NotificationRepository
 
+  alias Cadence.Notifications.Notification
+  alias Cadence.Notifications.NotificationPreference
+
   # ============================================================================
   # Agent Lifecycle
   # ============================================================================
@@ -121,36 +124,38 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
 
   @impl true
   def save(notification) do
-    notification =
-      if Map.get(notification, :id) do
-        notification
-      else
-        Map.put(notification, :id, Ecto.UUID.generate())
-      end
+    with {:ok, valid_notification} <- validate_notification(notification) do
+      persisted =
+        if Map.get(valid_notification, :id) do
+          valid_notification
+        else
+          Map.put(valid_notification, :id, Ecto.UUID.generate())
+        end
 
-    now = DateTime.utc_now()
+      now = DateTime.utc_now()
 
-    notification =
-      notification
-      |> maybe_set_field(:inserted_at, now)
-      |> Map.put(:updated_at, now)
+      persisted =
+        persisted
+        |> maybe_set_field(:inserted_at, now)
+        |> Map.put(:updated_at, now)
 
-    Agent.update(__MODULE__, fn state ->
-      %{state | notifications: Map.put(state.notifications, notification.id, notification)}
-    end)
+      Agent.update(__MODULE__, fn state ->
+        %{state | notifications: Map.put(state.notifications, persisted.id, persisted)}
+      end)
 
-    {:ok, notification}
+      {:ok, persisted}
+    end
   end
 
   @impl true
   def save_batch(notifications) do
-    results =
-      Enum.map(notifications, fn notification ->
-        {:ok, saved} = save(notification)
-        saved
-      end)
-
-    {:ok, results}
+    Enum.reduce_while(notifications, {:ok, []}, fn notification, {:ok, acc} ->
+      case save(notification) do
+        {:ok, saved} -> {:cont, {:ok, [saved | acc]}}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
+    |> normalize_batch_result()
   end
 
   @impl true
@@ -196,6 +201,24 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
       (is_nil(mission_id) || notification.mission_id == mission_id)
   end
 
+  defp validate_notification(notification) do
+    attrs =
+      notification
+      |> Map.from_struct()
+      |> Map.drop([:__struct__, :__meta__])
+
+    changeset = Notification.changeset(%Notification{}, attrs)
+
+    if changeset.valid? do
+      {:ok, struct(Notification, attrs)}
+    else
+      {:error, changeset}
+    end
+  end
+
+  defp normalize_batch_result({:ok, notifications}), do: {:ok, Enum.reverse(notifications)}
+  defp normalize_batch_result({:error, changeset}), do: {:error, changeset}
+
   @impl true
   def archive(notification) do
     updated = Map.put(notification, :archived_at, DateTime.utc_now())
@@ -232,39 +255,28 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
 
   @impl true
   def save_preference(attrs) do
-    user_id = Map.get(attrs, :user_id) || Map.get(attrs, "user_id")
-    notification_type = Map.get(attrs, :notification_type) || Map.get(attrs, "notification_type")
-    mission_id = Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id")
-
     Agent.get_and_update(__MODULE__, fn state ->
-      existing =
-        state.preferences
-        |> Map.values()
-        |> Enum.find(fn p ->
-          p.user_id == user_id &&
-            p.notification_type == notification_type &&
-            p.mission_id == mission_id
-        end)
+      identifiers = preference_identifiers(attrs)
+      existing = find_preference_in_state(state, identifiers)
 
       now = DateTime.utc_now()
+      base = if existing, do: existing, else: %NotificationPreference{}
 
-      preference =
-        if existing do
-          existing
-          |> Map.merge(attrs)
-          |> Map.put(:updated_at, now)
-        else
-          attrs
-          |> Map.put(:id, Ecto.UUID.generate())
-          |> Map.put(:user_id, user_id)
-          |> Map.put(:notification_type, notification_type)
-          |> Map.put(:mission_id, mission_id)
-          |> Map.put(:inserted_at, now)
-          |> Map.put(:updated_at, now)
-        end
+      changeset = NotificationPreference.changeset(base, preference_attrs(attrs, identifiers))
 
-      new_state = %{state | preferences: Map.put(state.preferences, preference.id, preference)}
-      {{:ok, preference}, new_state}
+      if changeset.valid? do
+        preference =
+          changeset
+          |> Ecto.Changeset.apply_changes()
+          |> Map.put(:id, (existing && existing.id) || Ecto.UUID.generate())
+          |> Map.put(:inserted_at, (existing && existing.inserted_at) || now)
+          |> Map.put(:updated_at, now)
+
+        new_state = %{state | preferences: Map.put(state.preferences, preference.id, preference)}
+        {{:ok, preference}, new_state}
+      else
+        {{:error, changeset}, state}
+      end
     end)
   end
 
@@ -338,6 +350,32 @@ defmodule Cadence.Test.Adapters.InMemoryNotificationRepository do
   # ============================================================================
   # Private Helpers
   # ============================================================================
+
+  defp preference_identifiers(attrs) do
+    %{
+      user_id: Map.get(attrs, :user_id) || Map.get(attrs, "user_id"),
+      notification_type:
+        Map.get(attrs, :notification_type) || Map.get(attrs, "notification_type"),
+      mission_id: Map.get(attrs, :mission_id) || Map.get(attrs, "mission_id")
+    }
+  end
+
+  defp preference_attrs(attrs, identifiers) do
+    attrs
+    |> Map.put(:user_id, identifiers.user_id)
+    |> Map.put(:notification_type, identifiers.notification_type)
+    |> Map.put(:mission_id, identifiers.mission_id)
+  end
+
+  defp find_preference_in_state(state, identifiers) do
+    state.preferences
+    |> Map.values()
+    |> Enum.find(fn preference ->
+      preference.user_id == identifiers.user_id &&
+        preference.notification_type == identifiers.notification_type &&
+        preference.mission_id == identifiers.mission_id
+    end)
+  end
 
   defp maybe_set_field(map, field, value) do
     if Map.get(map, field) do

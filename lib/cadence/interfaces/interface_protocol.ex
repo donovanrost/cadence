@@ -107,34 +107,25 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
 
   # Validate protocol configuration matches protocol type
   defp validate_protocol_config(changeset) do
-    protocol_type = get_field(changeset, :protocol_type)
-    protocol_config = get_field(changeset, :protocol_config)
+    case {get_field(changeset, :protocol_type), get_field(changeset, :protocol_config)} do
+      {protocol_type, protocol_config}
+      when not is_nil(protocol_type) and not is_nil(protocol_config) ->
+        apply_protocol_config_validation(changeset, protocol_type, protocol_config)
 
-    if protocol_type && protocol_config do
-      case protocol_type do
-        "length" ->
-          validate_length_protocol_config(changeset, protocol_config)
+      _ ->
+        changeset
+    end
+  end
 
-        "template" ->
-          validate_template_protocol_config(changeset, protocol_config)
-
-        "terminated" ->
-          validate_terminated_protocol_config(changeset, protocol_config)
-
-        "fixed" ->
-          validate_fixed_protocol_config(changeset, protocol_config)
-
-        "crc" ->
-          validate_crc_protocol_config(changeset, protocol_config)
-
-        "ccsds" ->
-          validate_ccsds_protocol_config(changeset, protocol_config)
-
-        _ ->
-          changeset
-      end
-    else
-      changeset
+  defp apply_protocol_config_validation(changeset, protocol_type, protocol_config) do
+    case protocol_type do
+      "length" -> validate_length_protocol_config(changeset, protocol_config)
+      "template" -> validate_template_protocol_config(changeset, protocol_config)
+      "terminated" -> validate_terminated_protocol_config(changeset, protocol_config)
+      "fixed" -> validate_fixed_protocol_config(changeset, protocol_config)
+      "crc" -> validate_crc_protocol_config(changeset, protocol_config)
+      "ccsds" -> validate_ccsds_protocol_config(changeset, protocol_config)
+      _ -> changeset
     end
   end
 

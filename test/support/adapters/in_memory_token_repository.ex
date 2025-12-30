@@ -296,6 +296,39 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
   end
 
   # ============================================================================
+  # Bulk Token Operations
+  # ============================================================================
+
+  @impl true
+  def list_all_for_user(user_id) do
+    Agent.get(__MODULE__, fn state ->
+      state.tokens
+      |> Map.values()
+      |> Enum.filter(&(&1.user_id == user_id))
+      |> Enum.sort_by(& &1.created_at, {:desc, DateTime})
+    end)
+  end
+
+  @impl true
+  def delete_all_for_user(user_id) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      {to_delete, remaining} =
+        state.tokens
+        |> Map.values()
+        |> Enum.split_with(fn token -> token.user_id == user_id end)
+
+      new_tokens = Map.new(remaining, fn token -> {token.id, token} end)
+
+      new_index =
+        Enum.reduce(to_delete, state.token_index, fn token, idx ->
+          Map.delete(idx, {token.token, token.context})
+        end)
+
+      {{:ok, to_delete}, %{state | tokens: new_tokens, token_index: new_index}}
+    end)
+  end
+
+  # ============================================================================
   # Cleanup Operations
   # ============================================================================
 
@@ -337,6 +370,27 @@ defmodule Cadence.Test.Adapters.InMemoryTokenRepository do
     end)
 
     :ok
+  end
+
+  @doc """
+  Updates a token for tests by token value and context.
+  """
+  def update_token(token, context, attrs) when is_map(attrs) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      key = {token, context}
+
+      case Map.get(state.token_index, key) do
+        nil ->
+          {{:error, :not_found}, state}
+
+        token_entity ->
+          updated = struct(token_entity, attrs)
+          new_tokens = Map.put(state.tokens, updated.id, updated)
+          new_index = Map.put(state.token_index, key, updated)
+
+          {{:ok, updated}, %{state | tokens: new_tokens, token_index: new_index}}
+      end
+    end)
   end
 
   @doc """

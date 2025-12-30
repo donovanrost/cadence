@@ -175,69 +175,48 @@ defmodule CadenceWeb.MissionLive.Alarms do
 
   @impl true
   def handle_event("toggle", %{"id" => rule_id}, socket) do
-    rule = Alarms.get_rule!(rule_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
+    with {:ok, rule} <- fetch_rule(socket, rule_id),
+         :ok <- authorize_manage_alarms(socket),
+         {:ok, _} <- toggle_rule(socket, rule) do
+      alarm_rules = list_alarm_rules(socket)
+      action = if rule.enabled, do: "disabled", else: "enabled"
 
-    if rule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          result =
-            if rule.enabled do
-              Alarms.disable_rule(rule, scope.user.id, "Disabled via UI")
-            else
-              Alarms.enable_rule(rule)
-            end
-
-          case result do
-            {:ok, _} ->
-              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-              action = if rule.enabled, do: "disabled", else: "enabled"
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Alarm rule #{action}")
-               |> assign(:alarm_rules, alarm_rules)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to update alarm rule")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to manage alarm rules")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Alarm rule #{action}")
+       |> assign(:alarm_rules, alarm_rules)}
     else
-      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to manage alarm rules")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to update alarm rule")}
     end
   end
 
   @impl true
   def handle_event("delete", %{"id" => rule_id}, socket) do
-    rule = Alarms.get_rule!(rule_id)
-    mission = socket.assigns.mission
-    scope = socket.assigns.current_scope
+    with {:ok, rule} <- fetch_rule(socket, rule_id),
+         :ok <- authorize_manage_alarms(socket),
+         {:ok, _} <- Alarms.delete_rule(rule) do
+      alarm_rules = list_alarm_rules(socket)
 
-    if rule.mission_id == mission.id do
-      case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
-        :ok ->
-          case Alarms.delete_rule(rule) do
-            {:ok, _} ->
-              alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
-
-              {:noreply,
-               socket
-               |> put_flash(:info, "Alarm rule deleted")
-               |> assign(:alarm_rules, alarm_rules)}
-
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Failed to delete alarm rule")}
-          end
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "You don't have permission to delete alarm rules")}
-      end
+      {:noreply,
+       socket
+       |> put_flash(:info, "Alarm rule deleted")
+       |> assign(:alarm_rules, alarm_rules)}
     else
-      {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "Alarm rule not found in this mission")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You don't have permission to delete alarm rules")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete alarm rule")}
     end
   end
 
@@ -259,6 +238,45 @@ defmodule CadenceWeb.MissionLive.Alarms do
      |> assign(:bulk_create_definition_set_id, nil)
      |> assign(:bulk_create_target_id, nil)
      |> assign(:bulk_create_parameters, nil)}
+  end
+
+  defp fetch_rule(socket, rule_id) do
+    mission = socket.assigns.mission
+
+    case Alarms.get_rule(rule_id) do
+      nil ->
+        {:error, :not_found}
+
+      rule ->
+        if rule.mission_id == mission.id do
+          {:ok, rule}
+        else
+          {:error, :not_found}
+        end
+    end
+  end
+
+  defp authorize_manage_alarms(socket) do
+    mission = socket.assigns.mission
+    scope = socket.assigns.current_scope
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :manage_targets, scope, mission) do
+      :ok -> :ok
+      {:error, _} -> {:error, :unauthorized}
+    end
+  end
+
+  defp toggle_rule(socket, rule) do
+    if rule.enabled do
+      Alarms.disable_rule(rule, socket.assigns.current_scope.user.id, "Disabled via UI")
+    else
+      Alarms.enable_rule(rule)
+    end
+  end
+
+  defp list_alarm_rules(socket) do
+    mission = socket.assigns.mission
+    Alarms.list_rules(mission.organization_id, mission_id: mission.id)
   end
 
   defp assign_coverage_modal_defaults(socket) do

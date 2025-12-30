@@ -28,11 +28,11 @@ defmodule Cadence.Commands.Staging do
 
   import Ecto.Query, warn: false
 
+  alias Cadence.Application.Commanding.EnqueueCommand
   alias Cadence.Commands.{StagedCommand, StagedCommandTarget}
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Outbox
   alias Cadence.Repo
-  alias Cadence.Runtime.Commands.TargetQueue
   alias Ecto.Multi
 
   @pubsub Cadence.PubSub
@@ -347,12 +347,18 @@ defmodule Cadence.Commands.Staging do
       entry ->
         staged = entry.staged_command |> Repo.preload(:meta_command)
 
+        attrs = %{
+          organization_id: staged.organization_id,
+          mission_id: staged.mission_id,
+          target_id: entry.target_id,
+          user_id: staged.created_by_user_id,
+          command_name: staged.command_name,
+          parameters: entry.params
+        }
+
         result =
-          TargetQueue.enqueue(
-            staged.mission_id,
-            entry.target_id,
-            staged.command_name,
-            entry.params,
+          EnqueueCommand.enqueue(
+            attrs,
             Keyword.merge(opts, priority: staged.priority, user_id: staged.created_by_user_id)
           )
 
@@ -380,11 +386,17 @@ defmodule Cadence.Commands.Staging do
       staged ->
         results =
           Enum.map(staged.targets, fn target_entry ->
-            TargetQueue.enqueue(
-              staged.mission_id,
-              target_entry.target_id,
-              staged.command_name,
-              target_entry.params,
+            attrs = %{
+              organization_id: staged.organization_id,
+              mission_id: staged.mission_id,
+              target_id: target_entry.target_id,
+              user_id: staged.created_by_user_id,
+              command_name: staged.command_name,
+              parameters: target_entry.params
+            }
+
+            EnqueueCommand.enqueue(
+              attrs,
               Keyword.merge(opts, priority: staged.priority, user_id: staged.created_by_user_id)
             )
           end)

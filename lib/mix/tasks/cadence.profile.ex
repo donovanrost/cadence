@@ -217,14 +217,7 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp run_analyze(config) do
-    Mix.shell().info("""
-
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║           Timing Analysis: Warmup & Spike Detection           ║
-    ╚═══════════════════════════════════════════════════════════════╝
-
-    Mission: #{config.mission_id}
-    """)
+    print_analysis_header(config.mission_id)
 
     case rpc_call(config.node, Cadence.Telemetry.Stats, :get_all_timing_analysis, [
            config.mission_id
@@ -233,33 +226,51 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.raise("RPC failed: #{inspect(reason)}")
 
       analysis when is_map(analysis) ->
-        # Show analysis for key stages
-        stages_to_show = [:identify, :decom, :convert, :derive, :end_to_end]
-
-        Enum.each(stages_to_show, fn stage ->
-          case Map.get(analysis, stage) do
-            %{sample_count: count} = data when count > 0 ->
-              print_stage_analysis(stage, data)
-
-            _ ->
-              :ok
-          end
-        end)
-
-        Mix.shell().info("""
-        ═══════════════════════════════════════════════════════════════
-                                  Legend
-        ═══════════════════════════════════════════════════════════════
-          avg       - Standard average (affected by outliers)
-          trimmed   - Average excluding top/bottom 5%
-          median    - Middle value (P50)
-          warmup    - First 10 samples (may be slow due to JIT/cache)
-          spikes    - Samples > 3σ from mean (likely GC pauses)
-        """)
+        print_analysis(analysis)
+        print_analysis_legend()
 
       other ->
         Mix.shell().error("Unexpected result: #{inspect(other)}")
     end
+  end
+
+  defp print_analysis_header(mission_id) do
+    Mix.shell().info("""
+
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║           Timing Analysis: Warmup & Spike Detection           ║
+    ╚═══════════════════════════════════════════════════════════════╝
+
+    Mission: #{mission_id}
+    """)
+  end
+
+  defp print_analysis(analysis) do
+    stages_to_show = [:identify, :decom, :convert, :derive, :end_to_end]
+    Enum.each(stages_to_show, &maybe_print_stage_analysis(&1, analysis))
+  end
+
+  defp maybe_print_stage_analysis(stage, analysis) do
+    case Map.get(analysis, stage) do
+      %{sample_count: count} = data when count > 0 ->
+        print_stage_analysis(stage, data)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp print_analysis_legend do
+    Mix.shell().info("""
+    ═══════════════════════════════════════════════════════════════
+                              Legend
+    ═══════════════════════════════════════════════════════════════
+      avg       - Standard average (affected by outliers)
+      trimmed   - Average excluding top/bottom 5%
+      median    - Middle value (P50)
+      warmup    - First 10 samples (may be slow due to JIT/cache)
+      spikes    - Samples > 3σ from mean (likely GC pauses)
+    """)
   end
 
   defp print_stage_analysis(stage, data) do
@@ -271,29 +282,42 @@ defmodule Mix.Tasks.Cadence.Profile do
       "  Averages:  avg=#{format_us(data.avg_us)}  trimmed=#{format_us(data.trimmed_avg_us)}  median=#{format_us(data.median_us)}"
     )
 
-    # Warmup analysis
-    if length(data.warmup_samples) > 0 do
-      warmup_str = Enum.map_join(data.warmup_samples, ", ", &format_us_compact/1)
-      Mix.shell().info("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
+    print_warmup_analysis(data)
+    print_spike_analysis(data)
+    print_outlier_analysis(data)
 
-      # Check if first packet is an outlier
-      first = List.first(data.warmup_samples)
+    Mix.shell().info("")
+  end
 
-      if first && data.avg_us > 0 && first > data.avg_us * 2 do
-        Mix.shell().info(
-          "  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg"
-        )
-      end
+  defp print_warmup_analysis(%{warmup_samples: warmup_samples} = data)
+       when length(warmup_samples) > 0 do
+    warmup_str = Enum.map_join(warmup_samples, ", ", &format_us_compact/1)
+    Mix.shell().info("  Warmup:    [#{warmup_str}]  avg=#{format_us(data.warmup_avg_us)}")
+    print_first_warmup_warning(warmup_samples, data)
+    print_warmup_avg_warning(data)
+  end
 
-      # Check if warmup avg is significantly higher
-      if data.trimmed_avg_us > 0 && data.warmup_avg_us > data.trimmed_avg_us * 1.5 do
-        Mix.shell().info(
-          "  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state"
-        )
-      end
+  defp print_warmup_analysis(_data), do: :ok
+
+  defp print_first_warmup_warning(warmup_samples, data) do
+    first = List.first(warmup_samples)
+
+    if first && data.avg_us > 0 && first > data.avg_us * 2 do
+      Mix.shell().info(
+        "  ⚠️  First packet (#{format_us(first)}) is #{Float.round(first / data.avg_us, 1)}x slower than avg"
+      )
     end
+  end
 
-    # Spike analysis
+  defp print_warmup_avg_warning(data) do
+    if data.trimmed_avg_us > 0 && data.warmup_avg_us > data.trimmed_avg_us * 1.5 do
+      Mix.shell().info(
+        "  ⚠️  Warmup period #{Float.round(data.warmup_avg_us / data.trimmed_avg_us, 1)}x slower than steady state"
+      )
+    end
+  end
+
+  defp print_spike_analysis(data) do
     if data.spike_count > 0 do
       spike_pct = Float.round(data.spike_count / data.sample_count * 100, 2)
 
@@ -301,8 +325,9 @@ defmodule Mix.Tasks.Cadence.Profile do
         "  Spikes:    #{data.spike_count} samples (#{spike_pct}%) > #{format_us(data.spike_threshold_us)}"
       )
     end
+  end
 
-    # Show how much outliers affect the average
+  defp print_outlier_analysis(data) do
     if data.trimmed_avg_us > 0 &&
          abs(data.avg_us - data.trimmed_avg_us) > data.trimmed_avg_us * 0.1 do
       diff_pct = Float.round((data.avg_us - data.trimmed_avg_us) / data.trimmed_avg_us * 100, 1)
@@ -311,8 +336,6 @@ defmodule Mix.Tasks.Cadence.Profile do
         "  📊 Outliers inflate avg by #{diff_pct}% (use trimmed for accurate measurement)"
       )
     end
-
-    Mix.shell().info("")
   end
 
   defp format_us_compact(us) when is_number(us) do
@@ -401,116 +424,123 @@ defmodule Mix.Tasks.Cadence.Profile do
     timestamp = Map.get(snapshot, :timestamp, DateTime.utc_now())
     Mix.shell().info("--- #{Calendar.strftime(timestamp, "%H:%M:%S")} ---")
 
-    # CVT stats
-    case snapshot[:cvt] do
-      %{total_entries: entries, memory_bytes: bytes} ->
-        Mix.shell().info("CVT: #{entries} entries, #{div(bytes, 1024)} KB")
+    print_cvt_stats(snapshot[:cvt])
+    print_stats_snapshot(snapshot, prev)
+    print_pipeline_v2_snapshot(snapshot[:pipeline_v2])
+    print_queue_warnings(snapshot[:process_queues] || [])
 
-      %{error: e} ->
-        Mix.shell().info("CVT: error - #{inspect(e)}")
+    Mix.shell().info("")
+  end
 
-      other ->
-        Mix.shell().info("CVT: #{inspect(other)}")
+  defp print_cvt_stats(%{total_entries: entries, memory_bytes: bytes}) do
+    Mix.shell().info("CVT: #{entries} entries, #{div(bytes, 1024)} KB")
+  end
+
+  defp print_cvt_stats(%{error: e}) do
+    Mix.shell().info("CVT: error - #{inspect(e)}")
+  end
+
+  defp print_cvt_stats(other) do
+    Mix.shell().info("CVT: #{inspect(other)}")
+  end
+
+  defp print_stats_snapshot(
+         %{
+           stats:
+             %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats
+         } =
+           snapshot,
+         prev
+       ) do
+    # V1 uses packets_failed, V2 uses packets_dropped
+    failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+    delta = stats_delta(prev, proc)
+
+    Mix.shell().info("Packets: #{proc} processed#{delta}, #{failed} dropped")
+    Mix.shell().info("Items: #{items} processed")
+
+    print_stats_throughput(stats)
+    print_stats_timing(stats, snapshot[:percentiles])
+    print_stage_errors_snapshot(snapshot[:stage_errors])
+  end
+
+  defp print_stats_snapshot(%{stats: %{error: e}}, _prev) do
+    Mix.shell().info("Stats: error - #{inspect(e)}")
+  end
+
+  defp print_stats_snapshot(%{stats: other}, _prev) do
+    Mix.shell().info("Stats: #{inspect(other)}")
+  end
+
+  defp print_stats_snapshot(_snapshot, _prev), do: :ok
+
+  defp stats_delta(%{stats: %{packets_processed: prev_proc}}, proc) do
+    " (+#{proc - prev_proc}/s)"
+  end
+
+  defp stats_delta(_prev, _proc), do: ""
+
+  defp print_stats_throughput(%{packets_per_sec: pps, bytes_per_sec: bps}) when bps > 0 do
+    mbps = Float.round(bps * 8 / 1_000_000, 1)
+    mb_per_sec = Float.round(bps / 1_000_000, 2)
+
+    Mix.shell().info(
+      "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
+    )
+  end
+
+  defp print_stats_throughput(%{packets_per_sec: pps}) when pps > 0 do
+    Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec")
+  end
+
+  defp print_stats_throughput(_stats), do: :ok
+
+  defp print_stats_timing(%{timing: timing}, percentiles)
+       when is_map(timing) and map_size(timing) > 0 do
+    print_timing(timing, percentiles)
+  end
+
+  defp print_stats_timing(_stats, _percentiles), do: :ok
+
+  defp print_stage_errors_snapshot(errors) when is_map(errors) and map_size(errors) > 0 do
+    print_stage_errors(errors)
+  end
+
+  defp print_stage_errors_snapshot(_errors), do: :ok
+
+  defp print_pipeline_v2_snapshot(%{error: :not_found}), do: :ok
+
+  defp print_pipeline_v2_snapshot(
+         %{
+           router_queue: router_queue,
+           partition_count: partition_count
+         } = v2
+       ) do
+    router_q = if is_integer(router_queue), do: router_queue, else: 0
+    Mix.shell().info("V2 Pipeline: #{partition_count} partitions, router queue: #{router_q}")
+
+    stage_errors = Map.get(v2, :stage_errors, 0)
+    dropped = Map.get(v2, :packets_dropped, 0)
+
+    if stage_errors > 0 or dropped > 0 do
+      Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
     end
 
-    # Stats - handle both V1 (Stats) and V2 (PipelineMetrics) formats
-    case snapshot[:stats] do
-      %{packets_received: _recv, packets_processed: proc, items_processed: items} = stats ->
-        # V1 uses packets_failed, V2 uses packets_dropped
-        failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
+    partitions = Map.get(v2, :partitions, %{})
+    backed_up_stages = find_backed_up_v2_stages(partitions)
 
-        delta =
-          case prev do
-            %{stats: %{packets_processed: prev_proc}} ->
-              " (+#{proc - prev_proc}/s)"
+    if length(backed_up_stages) > 0 do
+      Mix.shell().info("⚠️  V2 backed up stages:")
 
-            _ ->
-              ""
-          end
-
-        Mix.shell().info("Packets: #{proc} processed#{delta}, #{failed} dropped")
-
-        Mix.shell().info("Items: #{items} processed")
-
-        # Show throughput if available (V2 pipeline with bitrate)
-        case stats do
-          %{packets_per_sec: pps, bytes_per_sec: bps} when bps > 0 ->
-            mbps = Float.round(bps * 8 / 1_000_000, 1)
-            mb_per_sec = Float.round(bps / 1_000_000, 2)
-
-            Mix.shell().info(
-              "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps)"
-            )
-
-          %{packets_per_sec: pps} when pps > 0 ->
-            Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec")
-
-          _ ->
-            :ok
-        end
-
-        # Show timing if available (with percentiles)
-        case stats do
-          %{timing: timing} when is_map(timing) and map_size(timing) > 0 ->
-            percentiles = snapshot[:percentiles]
-            print_timing(timing, percentiles)
-
-          _ ->
-            :ok
-        end
-
-        # Show stage errors if any
-        case snapshot[:stage_errors] do
-          errors when is_map(errors) and map_size(errors) > 0 ->
-            print_stage_errors(errors)
-
-          _ ->
-            :ok
-        end
-
-      %{error: e} ->
-        Mix.shell().info("Stats: error - #{inspect(e)}")
-
-      other ->
-        Mix.shell().info("Stats: #{inspect(other)}")
+      Enum.each(backed_up_stages, fn {partition, stage, queue_len} ->
+        Mix.shell().info("   p#{partition}:#{stage}: #{queue_len} messages")
+      end)
     end
+  end
 
-    # V2 Pipeline stats (if running)
-    case snapshot[:pipeline_v2] do
-      %{error: :not_found} ->
-        :ok
+  defp print_pipeline_v2_snapshot(_snapshot), do: :ok
 
-      %{router_queue: router_queue, partition_count: partition_count} = v2 ->
-        router_q = if is_integer(router_queue), do: router_queue, else: 0
-        Mix.shell().info("V2 Pipeline: #{partition_count} partitions, router queue: #{router_q}")
-
-        # Show V2-specific counters
-        stage_errors = Map.get(v2, :stage_errors, 0)
-        dropped = Map.get(v2, :packets_dropped, 0)
-
-        if stage_errors > 0 or dropped > 0 do
-          Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
-        end
-
-        # Show partition queue depths if any are backed up
-        partitions = Map.get(v2, :partitions, %{})
-        backed_up_stages = find_backed_up_v2_stages(partitions)
-
-        if length(backed_up_stages) > 0 do
-          Mix.shell().info("⚠️  V2 backed up stages:")
-
-          Enum.each(backed_up_stages, fn {partition, stage, queue_len} ->
-            Mix.shell().info("   p#{partition}:#{stage}: #{queue_len} messages")
-          end)
-        end
-
-      _ ->
-        :ok
-    end
-
-    # Queue warnings
-    queues = snapshot[:process_queues] || []
-
+  defp print_queue_warnings(queues) do
     backed_up =
       queues
       |> Enum.filter(fn q -> is_map(q) && Map.get(q, :queue_len, 0) > 10 end)
@@ -522,8 +552,6 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.shell().info("   #{q.name}: #{q.queue_len} messages")
       end)
     end
-
-    Mix.shell().info("")
   end
 
   defp find_backed_up_v2_stages(partitions) do
@@ -546,19 +574,24 @@ defmodule Mix.Tasks.Cadence.Profile do
     else
       Mix.shell().info("Process Queue Depths:\n")
 
-      Enum.each(queues, fn q ->
-        status =
-          cond do
-            q.queue_len > 100 -> "🔴"
-            q.queue_len > 10 -> "🟡"
-            q.queue_len > 0 -> "🟢"
-            true -> "⚪"
-          end
+      Enum.each(queues, &print_queue_entry/1)
+    end
+  end
 
-        Mix.shell().info(
-          "  #{status} #{q.name}: #{q.queue_len} msgs, #{q.memory_kb} KB, #{format_reductions(q.reductions)} reductions"
-        )
-      end)
+  defp print_queue_entry(q) do
+    status = queue_status(q.queue_len)
+
+    Mix.shell().info(
+      "  #{status} #{q.name}: #{q.queue_len} msgs, #{q.memory_kb} KB, #{format_reductions(q.reductions)} reductions"
+    )
+  end
+
+  defp queue_status(queue_len) do
+    cond do
+      queue_len > 100 -> "🔴"
+      queue_len > 10 -> "🟡"
+      queue_len > 0 -> "🟢"
+      true -> "⚪"
     end
   end
 
@@ -567,78 +600,97 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp format_reductions(r), do: "#{r}"
 
   defp print_timing(timing, percentiles) do
-    stages_with_data =
-      Enum.filter(timing, fn {_stage, data} ->
-        is_map(data) && Map.get(data, :count, 0) > 0
+    if timing_has_data?(timing) do
+      format = timing_format(timing)
+      print_timing_header(format, percentiles)
+
+      Enum.each(all_timing_stages(), fn stage ->
+        print_stage_timing(stage, timing, percentiles, format)
       end)
+    end
+  end
 
-    if length(stages_with_data) > 0 do
-      # Detect V1 vs V2 format based on presence of min_us
-      first_stage_data = timing |> Map.values() |> List.first()
-      is_v1_format = first_stage_data && Map.has_key?(first_stage_data, :min_us)
+  defp timing_has_data?(timing) do
+    Enum.any?(timing, fn {_stage, data} ->
+      is_map(data) && Map.get(data, :count, 0) > 0
+    end)
+  end
 
-      if is_v1_format do
-        if percentiles && is_map(percentiles) do
-          Mix.shell().info("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
-        else
-          Mix.shell().info("Timing (μs):  avg / min / max")
-        end
-      else
-        Mix.shell().info("")
-        Mix.shell().info("Timing (μs):          avg   /  samples")
+  defp timing_format(timing) do
+    first_stage_data = timing |> Map.values() |> List.first()
+    if first_stage_data && Map.has_key?(first_stage_data, :min_us), do: :v1, else: :v2
+  end
+
+  defp print_timing_header(:v1, percentiles) do
+    if percentiles && is_map(percentiles) do
+      Mix.shell().info("Timing (μs):      avg   /  min  /  max  |  P50  /  P95  /  P99")
+    else
+      Mix.shell().info("Timing (μs):  avg / min / max")
+    end
+  end
+
+  defp print_timing_header(:v2, _percentiles) do
+    Mix.shell().info("")
+    Mix.shell().info("Timing (μs):          avg   /  samples")
+  end
+
+  defp all_timing_stages do
+    [
+      # V1 Broadway stages
+      :identify,
+      :decommutate,
+      :convert,
+      :derive,
+      # V2 GenStage stages (decom is shorter name for decommutation)
+      :decom,
+      # Limits evaluation
+      :limits,
+      # Shared stages
+      :cvt_batch,
+      :ets_write,
+      :pubsub_broadcast,
+      :total_process,
+      # End-to-end latency
+      :end_to_end
+    ]
+  end
+
+  defp print_stage_timing(stage, timing, percentiles, :v1) do
+    case Map.get(timing, stage) do
+      %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+        line = format_v1_timing_line(stage, avg, min, max, percentiles)
+        Mix.shell().info(line)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp print_stage_timing(stage, timing, _percentiles, :v2) do
+    case Map.get(timing, stage) do
+      %{avg_us: avg, count: count} when count > 0 ->
+        stage_name = stage |> to_string() |> String.pad_trailing(16)
+        Mix.shell().info("  #{stage_name} #{format_us(avg)}  /  #{count}")
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp format_v1_timing_line(stage, avg, min, max, percentiles) do
+    stage_name = stage |> to_string() |> String.pad_trailing(14)
+    basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
+
+    if percentiles && is_map(percentiles) do
+      case Map.get(percentiles, stage) do
+        %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
+          "  #{stage_name} #{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
+
+        _ ->
+          "  #{stage_name} #{basic}"
       end
-
-      # V1 Broadway stages + V2 GenStage stages
-      all_stages = [
-        # V1 Broadway stages
-        :identify,
-        :decommutate,
-        :convert,
-        :derive,
-        # V2 GenStage stages (decom is shorter name for decommutation)
-        :decom,
-        # Limits evaluation
-        :limits,
-        # Shared stages
-        :cvt_batch,
-        :ets_write,
-        :pubsub_broadcast,
-        :total_process,
-        # End-to-end latency
-        :end_to_end
-      ]
-
-      Enum.each(all_stages, fn stage ->
-        case Map.get(timing, stage) do
-          # V1 format with min/max
-          %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
-            stage_name = stage |> to_string() |> String.pad_trailing(14)
-            basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
-
-            line =
-              if percentiles && is_map(percentiles) do
-                case Map.get(percentiles, stage) do
-                  %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
-                    "  #{stage_name} #{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
-
-                  _ ->
-                    "  #{stage_name} #{basic}"
-                end
-              else
-                "  #{stage_name} #{basic}"
-              end
-
-            Mix.shell().info(line)
-
-          # V2 format (avg + count only)
-          %{avg_us: avg, count: count} when count > 0 ->
-            stage_name = stage |> to_string() |> String.pad_trailing(16)
-            Mix.shell().info("  #{stage_name} #{format_us(avg)}  /  #{count}")
-
-          _ ->
-            :ok
-        end
-      end)
+    else
+      "  #{stage_name} #{basic}"
     end
   end
 
@@ -681,97 +733,126 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp format_number(n), do: to_string(n)
 
   defp print_summary(initial, final, duration_ms) do
+    print_summary_header()
+    print_summary_stats(initial[:stats], final[:stats], duration_ms)
+    print_pipeline_summary(final[:pipeline_v2])
+    print_max_queue(final[:process_queues] || [])
+    Mix.shell().info("")
+  end
+
+  defp print_summary_header do
     Mix.shell().info("""
 
     ═══════════════════════════════════════════════════════════════
                               Summary
     ═══════════════════════════════════════════════════════════════
     """)
+  end
 
-    case {initial[:stats], final[:stats]} do
-      {%{packets_processed: p1, items_processed: i1, packets_received: r1} = stats1,
-       %{packets_processed: p2, items_processed: i2, packets_received: r2} = stats2} ->
-        # V1 uses packets_failed, V2 uses packets_dropped
-        f1 = Map.get(stats1, :packets_failed) || Map.get(stats1, :packets_dropped, 0)
-        f2 = Map.get(stats2, :packets_failed) || Map.get(stats2, :packets_dropped, 0)
+  defp print_summary_stats(
+         %{packets_processed: p1, items_processed: i1, packets_received: r1} = stats1,
+         %{packets_processed: p2, items_processed: i2, packets_received: r2} = stats2,
+         duration_ms
+       ) do
+    # V1 uses packets_failed, V2 uses packets_dropped
+    f1 = Map.get(stats1, :packets_failed) || Map.get(stats1, :packets_dropped, 0)
+    f2 = Map.get(stats2, :packets_failed) || Map.get(stats2, :packets_dropped, 0)
+    duration_sec = duration_ms / 1000
 
-        packets = p2 - p1
-        items = i2 - i1
-        received = r2 - r1
-        failed = f2 - f1
-        duration_sec = duration_ms / 1000
-        pps = Float.round(packets / duration_sec, 1)
-        ips = Float.round(items / duration_sec, 1)
-        recv_ps = Float.round(received / duration_sec, 1)
+    values = %{
+      packets: p2 - p1,
+      items: i2 - i1,
+      received: r2 - r1,
+      failed: f2 - f1,
+      duration_sec: duration_sec
+    }
 
-        Mix.shell().info("Received:  #{received} packets (#{recv_ps}/sec)")
-        Mix.shell().info("Processed: #{packets} packets (#{pps}/sec)")
-        Mix.shell().info("Items:     #{items} (#{ips}/sec)")
+    print_throughput(values)
+    print_bitrate(stats1, stats2, duration_sec)
+    print_failed(values.failed)
+    print_stage_errors(stats1, stats2)
+    print_backpressure(values.received, values.packets)
+  end
 
-        # Show bitrate if available (V2)
-        case {Map.get(stats1, :bytes_received, 0), Map.get(stats2, :bytes_received, 0)} do
-          {b1, b2} when b2 > b1 ->
-            bytes = b2 - b1
-            bytes_per_sec = bytes / duration_sec
-            mbps = Float.round(bytes_per_sec * 8 / 1_000_000, 1)
-            mb_per_sec = Float.round(bytes_per_sec / 1_000_000, 2)
-            Mix.shell().info("Bitrate:   #{mb_per_sec} MB/sec (#{mbps} Mbps)")
+  defp print_summary_stats(_initial, _final, _duration_ms) do
+    Mix.shell().info("Could not calculate throughput (stats unavailable)")
+  end
 
-          _ ->
-            :ok
-        end
+  defp print_throughput(%{
+         packets: packets,
+         items: items,
+         received: received,
+         duration_sec: duration_sec
+       }) do
+    pps = Float.round(packets / duration_sec, 1)
+    ips = Float.round(items / duration_sec, 1)
+    recv_ps = Float.round(received / duration_sec, 1)
 
-        if failed > 0 do
-          Mix.shell().info("Dropped:   #{failed} packets")
-        end
+    Mix.shell().info("Received:  #{received} packets (#{recv_ps}/sec)")
+    Mix.shell().info("Processed: #{packets} packets (#{pps}/sec)")
+    Mix.shell().info("Items:     #{items} (#{ips}/sec)")
+  end
 
-        # V2-specific errors from errors map
-        case {Map.get(stats1, :errors), Map.get(stats2, :errors)} do
-          {e1, e2} when is_map(e1) and is_map(e2) ->
-            total_errors1 = Enum.reduce(e1, 0, fn {_, v}, acc -> acc + v end)
-            total_errors2 = Enum.reduce(e2, 0, fn {_, v}, acc -> acc + v end)
-            stage_errors = total_errors2 - total_errors1
-
-            if stage_errors > 0 do
-              Mix.shell().info("V2 Errors: #{stage_errors} stage errors")
-            end
-
-          _ ->
-            :ok
-        end
-
-        # Check for backpressure
-        if received > packets + 10 do
-          Mix.shell().info("\n⚠️  Backpressure detected: #{received - packets} packets pending")
-        end
+  defp print_bitrate(stats1, stats2, duration_sec) do
+    case {Map.get(stats1, :bytes_received, 0), Map.get(stats2, :bytes_received, 0)} do
+      {b1, b2} when b2 > b1 ->
+        bytes = b2 - b1
+        bytes_per_sec = bytes / duration_sec
+        mbps = Float.round(bytes_per_sec * 8 / 1_000_000, 1)
+        mb_per_sec = Float.round(bytes_per_sec / 1_000_000, 2)
+        Mix.shell().info("Bitrate:   #{mb_per_sec} MB/sec (#{mbps} Mbps)")
 
       _ ->
-        Mix.shell().info("Could not calculate throughput (stats unavailable)")
+        :ok
     end
+  end
 
-    # V2 Pipeline summary
-    case final[:pipeline_v2] do
-      %{partition_count: partition_count, router_queue: router_queue} when partition_count > 0 ->
-        router_q = if is_integer(router_queue), do: router_queue, else: 0
-        Mix.shell().info("\nV2 Pipeline: #{partition_count} partitions")
+  defp print_failed(failed) when failed > 0 do
+    Mix.shell().info("Dropped:   #{failed} packets")
+  end
 
-        if router_q > 0 do
-          Mix.shell().info("Router queue: #{router_q} pending")
+  defp print_failed(_failed), do: :ok
+
+  defp print_stage_errors(stats1, stats2) do
+    case {Map.get(stats1, :errors), Map.get(stats2, :errors)} do
+      {e1, e2} when is_map(e1) and is_map(e2) ->
+        total_errors1 = Enum.reduce(e1, 0, fn {_, v}, acc -> acc + v end)
+        total_errors2 = Enum.reduce(e2, 0, fn {_, v}, acc -> acc + v end)
+        stage_errors = total_errors2 - total_errors1
+
+        if stage_errors > 0 do
+          Mix.shell().info("V2 Errors: #{stage_errors} stage errors")
         end
 
       _ ->
         :ok
     end
+  end
 
-    # Final queue check
-    queues = final[:process_queues] || []
+  defp print_backpressure(received, packets) do
+    if received > packets + 10 do
+      Mix.shell().info("\n⚠️  Backpressure detected: #{received - packets} packets pending")
+    end
+  end
+
+  defp print_pipeline_summary(%{partition_count: partition_count, router_queue: router_queue})
+       when partition_count > 0 do
+    router_q = if is_integer(router_queue), do: router_queue, else: 0
+    Mix.shell().info("\nV2 Pipeline: #{partition_count} partitions")
+
+    if router_q > 0 do
+      Mix.shell().info("Router queue: #{router_q} pending")
+    end
+  end
+
+  defp print_pipeline_summary(_pipeline_v2), do: :ok
+
+  defp print_max_queue(queues) do
     max_queue = Enum.max_by(queues, & &1[:queue_len], fn -> %{queue_len: 0} end)
 
     if max_queue[:queue_len] > 0 do
       Mix.shell().info("\nMax queue depth:   #{max_queue[:name]} (#{max_queue[:queue_len]} msgs)")
     end
-
-    Mix.shell().info("")
   end
 
   defp print_help do

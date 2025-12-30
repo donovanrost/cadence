@@ -77,6 +77,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   require Logger
 
   alias Cadence.Config.VersionRegistry
+
   alias Cadence.MissionDatabase.{
     Algorithm,
     Argument,
@@ -88,6 +89,7 @@ defmodule Cadence.MissionDatabase.YamlImporter do
     Parameter,
     Unit
   }
+
   alias Cadence.Repo
 
   @doc """
@@ -163,38 +165,37 @@ defmodule Cadence.MissionDatabase.YamlImporter do
   end
 
   defp validate_structure(parsed) when is_map(parsed) do
-    has_packets = is_list(parsed["packets"]) && not Enum.empty?(parsed["packets"])
-    has_commands = is_list(parsed["commands"]) && not Enum.empty?(parsed["commands"])
+    has_packets = has_section?(parsed, "packets")
+    has_commands = has_section?(parsed, "commands")
 
-    cond do
-      not has_packets and not has_commands ->
+    case {has_packets, has_commands} do
+      {false, false} ->
         {:error, {:validation_error, "Must define at least 'packets' or 'commands'"}}
 
-      has_packets ->
-        case validate_packets(parsed["packets"]) do
-          :ok ->
-            if has_commands do
-              case validate_commands(parsed["commands"]) do
-                :ok -> {:ok, parsed}
-                {:error, _} = error -> error
-              end
-            else
-              {:ok, parsed}
-            end
-
-          {:error, _} = error ->
-            error
+      {true, _} ->
+        with :ok <- validate_packets(parsed["packets"]),
+             :ok <- maybe_validate_commands(parsed["commands"], has_commands) do
+          {:ok, parsed}
         end
 
-      has_commands ->
-        case validate_commands(parsed["commands"]) do
-          :ok -> {:ok, parsed}
-          {:error, _} = error -> error
+      {false, true} ->
+        with :ok <- validate_commands(parsed["commands"]) do
+          {:ok, parsed}
         end
     end
   end
 
   defp validate_structure(_), do: {:error, {:validation_error, "YAML root must be a map"}}
+
+  defp has_section?(parsed, key) do
+    is_list(parsed[key]) && parsed[key] != []
+  end
+
+  defp maybe_validate_commands(_commands, false), do: :ok
+
+  defp maybe_validate_commands(commands, true) do
+    validate_commands(commands)
+  end
 
   defp validate_packets(packets) do
     Enum.reduce_while(packets, :ok, fn packet, :ok ->
@@ -356,28 +357,8 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       }
 
       # Import packets (creates containers, parameters, data_types, algorithms)
-      ctx =
-        case parsed["packets"] do
-          packets when is_list(packets) ->
-            Enum.reduce(packets, ctx, fn packet_data, acc ->
-              import_packet(acc, packet_data)
-            end)
-
-          _ ->
-            ctx
-        end
-
-      # Import commands (creates meta_commands, arguments)
-      _ctx =
-        case parsed["commands"] do
-          commands when is_list(commands) ->
-            Enum.reduce(commands, ctx, fn command_data, acc ->
-              import_command(acc, command_data)
-            end)
-
-          _ ->
-            ctx
-        end
+      ctx = import_packets(ctx, parsed["packets"])
+      _ctx = import_commands(ctx, parsed["commands"])
 
       # Return the definition_set with associations preloaded
       Repo.preload(definition_set, [
@@ -390,6 +371,18 @@ defmodule Cadence.MissionDatabase.YamlImporter do
       ])
     end)
   end
+
+  defp import_packets(ctx, packets) when is_list(packets) do
+    Enum.reduce(packets, ctx, fn packet_data, acc -> import_packet(acc, packet_data) end)
+  end
+
+  defp import_packets(ctx, _packets), do: ctx
+
+  defp import_commands(ctx, commands) when is_list(commands) do
+    Enum.reduce(commands, ctx, fn command_data, acc -> import_command(acc, command_data) end)
+  end
+
+  defp import_commands(ctx, _commands), do: ctx
 
   # ============================================================================
   # Packet Import

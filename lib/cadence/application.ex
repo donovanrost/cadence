@@ -52,6 +52,10 @@ defmodule Cadence.Application do
       # Outbox Processor - processes transactional outbox events
       Cadence.Outbox.Processor,
 
+      # Queue Persistence - applies data plane queue events in the control plane
+      # (disabled in test to avoid sandbox ownership issues)
+      Cadence.Application.Commanding.QueuePersistence,
+
       # Notification Dispatcher - subscribes to outbox events and creates notifications
       Cadence.Notifications.Dispatcher,
 
@@ -83,7 +87,11 @@ defmodule Cadence.Application do
       CadenceWeb.Endpoint
     ]
 
-    children = base_children ++ reconciler_children ++ final_children
+    children =
+      base_children
+      |> maybe_disable_queue_persistence()
+      |> Kernel.++(reconciler_children)
+      |> Kernel.++(final_children)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -102,6 +110,16 @@ defmodule Cadence.Application do
 
     if email && password do
       Cadence.Accounts.ensure_system_admin(email, password)
+    end
+  end
+
+  defp maybe_disable_queue_persistence(children) do
+    opts = Application.get_env(:cadence, Cadence.Application.Commanding.QueuePersistence, [])
+
+    if is_list(opts) and Keyword.get(opts, :enabled, true) == false do
+      Enum.reject(children, &(&1 == Cadence.Application.Commanding.QueuePersistence))
+    else
+      children
     end
   end
 

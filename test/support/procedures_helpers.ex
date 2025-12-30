@@ -379,4 +379,46 @@ defmodule Cadence.ProceduresHelpers do
         {:error, reason}
     end
   end
+
+  def stop_execution_process(pid) when is_pid(pid) do
+    if Process.alive?(pid) do
+      Process.unlink(pid)
+      ref = Process.monitor(pid)
+
+      attempt_abort(pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _reason} ->
+          :ok
+      after
+        5_000 ->
+          GenServer.stop(pid)
+
+          receive do
+            {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+          after
+            5_000 -> Process.demonitor(ref, [:flush])
+          end
+      end
+    end
+  end
+
+  def stop_execution_processes do
+    pids =
+      Registry.select(Cadence.ProcedureRegistry, [
+        {{:"$1", :"$2", :_}, [], [:"$2"]}
+      ])
+
+    Enum.each(pids, &stop_execution_process/1)
+  end
+
+  defp attempt_abort(pid) do
+    case Registry.keys(Cadence.ProcedureRegistry, pid) do
+      [execution_id | _] ->
+        Cadence.Procedures.Engine.ExecutionProcess.abort(execution_id)
+
+      _ ->
+        :ok
+    end
+  end
 end

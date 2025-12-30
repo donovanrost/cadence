@@ -289,7 +289,9 @@ defmodule Cadence.Procedures do
 
     Multi.new()
     |> Multi.insert(:version, ProcedureVersion.changeset(%ProcedureVersion{}, version_attrs))
-    |> Recordings.append(:created, ProcedureVersionCreated, version_created_attrs, fn %{version: v} ->
+    |> Recordings.append(:created, ProcedureVersionCreated, version_created_attrs, fn %{
+                                                                                        version: v
+                                                                                      } ->
       version_recording_attrs(procedure, user_id, v.id)
     end)
     |> Repo.transaction()

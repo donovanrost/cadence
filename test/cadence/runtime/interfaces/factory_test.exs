@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.Interfaces.FactoryTest do
-  use Cadence.DataCase, async: false
+  use Cadence.PureCase, async: true
 
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.Factory

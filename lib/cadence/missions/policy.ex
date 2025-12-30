@@ -68,7 +68,7 @@ defmodule Cadence.Missions.Policy do
   end
 
   # Organization owners/admins can do anything to missions in their org
-  defp authorize_user(_action, user, mission_id, mission_org_id, current_org) do
+  defp authorize_user(action, user, mission_id, mission_org_id, current_org) do
     cond do
       # Check if user is org owner/admin via organization_memberships
       has_org_admin_access?(user, mission_org_id) ->
@@ -81,14 +81,14 @@ defmodule Cadence.Missions.Policy do
 
       # Otherwise check mission membership
       true ->
-        check_mission_membership(user.id, mission_id)
+        check_mission_membership(action, user.id, mission_id)
     end
   end
 
-  defp check_mission_membership(user_id, mission_id) do
+  defp check_mission_membership(action, user_id, mission_id) do
     case get_mission_role(user_id, mission_id) do
       "admin" -> :ok
-      role when not is_nil(role) -> check_mission_role_permission(:view, role)
+      role when not is_nil(role) -> check_mission_role_permission(action, role)
       nil -> :error
     end
   end
