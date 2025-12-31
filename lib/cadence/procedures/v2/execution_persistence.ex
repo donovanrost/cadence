@@ -23,6 +23,7 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
 
   alias Cadence.Procedures.{
     BlockExecution,
+    Procedure,
     ProcedureExecution,
     ProcedureSection,
     ProcedureStep,
@@ -30,6 +31,8 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
     StepExecution,
     StepSignoff
   }
+
+  alias Cadence.Procedures.Events.ProcedureExecutionEvent
 
   alias Cadence.Repo
   alias Ecto.Multi
@@ -512,6 +515,7 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
     ProcedureExecution
     |> Repo.get!(id)
     |> Repo.preload([
+      :procedure,
       :procedure_version,
       step_executions: [:step, :block_executions, :signoffs]
     ])
@@ -541,10 +545,12 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
   # Broadcasts event via PubSub
   defp broadcast_event(%ProcedureExecution{id: id} = execution, event_type) do
     do_broadcast("execution:#{id}", {event_type, execution})
+    maybe_broadcast_mission_event(execution, event_type)
   end
 
   defp broadcast_event(%StepExecution{procedure_execution_id: exec_id} = step, event_type) do
     do_broadcast("execution:#{exec_id}", {event_type, step})
+    maybe_broadcast_step_event(step, event_type)
   end
 
   defp broadcast_event(%BlockExecution{} = block, event_type) do
@@ -564,6 +570,89 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
   defp do_broadcast(topic, message) do
     Phoenix.PubSub.broadcast(Cadence.PubSub, topic, message)
   end
+
+  defp maybe_broadcast_mission_event(execution, :execution_started) do
+    event = ProcedureExecutionEvent.started(execution)
+    broadcast_procedure_event(execution.mission_id, event)
+  end
+
+  defp maybe_broadcast_mission_event(execution, {:execution_status_changed, status}) do
+    event_type =
+      case status do
+        :completed -> :completed
+        :failed -> :failed
+        :paused -> :paused
+        :pausing -> :pausing
+        :cancelled -> :cancelled
+        :running -> :resumed
+        _ -> nil
+      end
+
+    if event_type do
+      event =
+        ProcedureExecutionEvent.new(%{
+          event_type: event_type,
+          execution_id: execution.id,
+          procedure_id: execution.procedure_id,
+          procedure_name: safe_procedure_name(execution),
+          mission_id: execution.mission_id,
+          organization_id: execution.organization_id,
+          target_id: execution.target_id,
+          status: execution.status,
+          triggered_by: execution.triggered_by,
+          triggered_by_user_id: execution.triggered_by_user_id,
+          parameters: execution.parameters,
+          error_message: execution.error_message,
+          step_index: execution.error_step_index,
+          started_at: execution.started_at,
+          completed_at: execution.completed_at
+        })
+
+      broadcast_procedure_event(execution.mission_id, event)
+    end
+  end
+
+  defp maybe_broadcast_mission_event(_execution, _event_type), do: :ok
+
+  defp maybe_broadcast_step_event(step_exec, :step_activated) do
+    execution = load_execution_for_step(step_exec)
+    step_info = step_info(step_exec)
+    event = ProcedureExecutionEvent.step_started(execution, step_info.position, step_info)
+    broadcast_procedure_event(execution.mission_id, event)
+  end
+
+  defp maybe_broadcast_step_event(step_exec, :step_completed) do
+    execution = load_execution_for_step(step_exec)
+    step_info = step_info(step_exec)
+    event = ProcedureExecutionEvent.step_completed(execution, step_info.position, step_info)
+    broadcast_procedure_event(execution.mission_id, event)
+  end
+
+  defp maybe_broadcast_step_event(_step_exec, _event_type), do: :ok
+
+  defp broadcast_procedure_event(mission_id, event) do
+    do_broadcast("mission:#{mission_id}:procedures", {:procedure_event, event})
+  end
+
+  defp load_execution_for_step(step_exec) do
+    ProcedureExecution
+    |> Repo.get!(step_exec.procedure_execution_id)
+    |> Repo.preload(:procedure)
+  end
+
+  defp step_info(step_exec) do
+    step = step_exec.step || Repo.preload(step_exec, :step).step
+
+    %{
+      id: step.id,
+      name: step.name,
+      title: step.title,
+      position: step.position || 0
+    }
+  end
+
+  defp safe_procedure_name(%ProcedureExecution{procedure: %Procedure{name: name}}), do: name
+  defp safe_procedure_name(_), do: nil
 
   # Helper to get current UTC time without microseconds (for Ecto :utc_datetime fields)
   defp utc_now do

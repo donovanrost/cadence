@@ -94,7 +94,7 @@ defmodule Cadence.Procedures.ProcedureExecution do
 
   @statuses [:pending, :running, :pausing, :paused, :completed, :failed, :cancelled]
   @triggers [:manual, :schedule, :event]
-  @execution_versions [:v1, :v2]
+  @execution_versions [:v2]
 
   schema "procedure_executions" do
     field :status, Ecto.Enum, values: @statuses, default: :pending
@@ -113,8 +113,8 @@ defmodule Cadence.Procedures.ProcedureExecution do
     field :trigger_event_id, :binary_id
     field :trigger_context, :map
 
-    # Execution engine version - v1 (DAG) or v2 (user-driven)
-    field :execution_version, Ecto.Enum, values: @execution_versions, default: :v1
+    # Execution engine version (v2 only)
+    field :execution_version, Ecto.Enum, values: @execution_versions, default: :v2
 
     # DAG execution tracking (for non-linear procedures)
     field :completed_steps, {:array, :string}, default: []

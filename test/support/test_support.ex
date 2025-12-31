@@ -20,7 +20,6 @@ defmodule Cadence.TestSupport do
       commands_repository: Application.get_env(:cadence, :commands_repository),
       dashboard_layout_repository: Application.get_env(:cadence, :dashboard_layout_repository),
       event_recorder: Application.get_env(:cadence, :event_recorder),
-      execution_persistence: Application.get_env(:cadence, :execution_persistence),
       execution_operations: Application.get_env(:cadence, :execution_operations),
       interface_repository: Application.get_env(:cadence, :interface_repository),
       membership_repository: Application.get_env(:cadence, :membership_repository),
@@ -46,7 +45,6 @@ defmodule Cadence.TestSupport do
     start_if_needed(Cadence.Test.Adapters.InMemoryCommandsRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryDashboardLayoutRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryEventRecorder)
-    start_if_needed(Cadence.Test.Adapters.InMemoryExecutionPersistence)
     start_if_needed(Cadence.Test.Adapters.InMemoryInterfaceRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryMembershipRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryMissionsRepository)
@@ -95,12 +93,6 @@ defmodule Cadence.TestSupport do
     )
 
     Application.put_env(:cadence, :event_recorder, Cadence.Test.Adapters.InMemoryEventRecorder)
-
-    Application.put_env(
-      :cadence,
-      :execution_persistence,
-      Cadence.Test.Adapters.InMemoryExecutionPersistence
-    )
 
     Application.put_env(
       :cadence,
@@ -198,7 +190,6 @@ defmodule Cadence.TestSupport do
     stop_if_needed(Cadence.Test.Adapters.InMemoryCommandsRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryDashboardLayoutRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryEventRecorder)
-    stop_if_needed(Cadence.Test.Adapters.InMemoryExecutionPersistence)
     stop_if_needed(Cadence.Test.Adapters.InMemoryInterfaceRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryMembershipRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryMissionsRepository)

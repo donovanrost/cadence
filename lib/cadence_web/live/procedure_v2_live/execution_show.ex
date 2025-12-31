@@ -25,6 +25,11 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
      socket
      |> assign(:show_comment_form, false)
      |> assign(:step_comments, [])
+     |> assign(:suggested_edits, [])
+     |> assign(:suggesting_step_id, nil)
+     |> assign(:allow_suggested_edits, true)
+     |> assign(:comment_form, to_form(%{}, as: :comment))
+     |> assign(:suggested_edit_form, to_form(%{}, as: :suggested_edit))
      # State for full document view
      |> assign(:expanded_step_ids, MapSet.new())
      |> assign(:collapsed_section_ids, MapSet.new())
@@ -60,7 +65,9 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
          "procedure_id" => procedure_id,
          "execution_id" => execution_id
        }) do
-    case load_execution_state(procedure_id, execution_id) do
+    mission = socket.assigns.mission
+
+    case load_execution_state(mission, procedure_id, execution_id) do
       {:ok, procedure, execution} ->
         socket
         |> maybe_subscribe_execution(execution, execution_id)
@@ -73,13 +80,15 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     end
   end
 
-  defp load_execution_state(procedure_id, execution_id) do
-    execution = V2.get_execution_with_steps(execution_id)
-
-    if is_nil(execution) do
-      {:error, :not_found}
+  defp load_execution_state(mission, procedure_id, execution_id) do
+    with %{} = execution <- V2.get_execution_with_steps(execution_id),
+         true <- execution.procedure_id == procedure_id,
+         %Cadence.Procedures.Procedure{} = procedure <- Procedures.get_procedure(procedure_id),
+         true <- procedure.mission_id == mission.id,
+         true <- execution.mission_id == mission.id do
+      {:ok, procedure, execution}
     else
-      {:ok, Procedures.get_procedure!(procedure_id), execution}
+      _ -> {:error, :not_found}
     end
   end
 
@@ -98,6 +107,9 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     active_step = find_active_step(execution.step_executions)
     active_step_id = active_step && active_step.id
     command_lifecycles = build_initial_command_lifecycles(execution)
+    step_comments = V2.list_comments(execution.id)
+    suggested_edits = V2.list_suggested_edits(execution.id)
+    allow_suggested_edits = execution.procedure_version.allow_suggested_edits
 
     socket
     |> assign(:page_title, "Executing: #{procedure.name}")
@@ -107,6 +119,9 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     |> assign(:step_executions, execution.step_executions)
     |> assign(:active_step_id, active_step_id)
     |> assign(:visible_step_id, active_step_id)
+    |> assign(:step_comments, step_comments)
+    |> assign(:suggested_edits, suggested_edits)
+    |> assign(:allow_suggested_edits, allow_suggested_edits)
     |> assign(:execution_process, maybe_start_execution_process(socket, execution, execution_id))
     |> assign(:command_lifecycles, command_lifecycles)
   end
@@ -230,6 +245,28 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     {:noreply, socket}
   end
 
+  def handle_event(
+        "submit_checkbox",
+        %{"block_id" => block_id, "step_id" => step_id, "value" => value},
+        socket
+      ) do
+    execution_id = socket.assigns.execution.id
+    user_id = socket.assigns.current_scope.user.id
+    checked = value in ["true", "on", true]
+
+    case V2.submit_block_input(execution_id, step_id, block_id, checked, user_id: user_id) do
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit checkbox: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("submit_checkbox", _params, socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("toggle_comment_form", %{"step_id" => step_id}, socket) do
     current = socket.assigns.commenting_step_id
 
@@ -240,30 +277,135 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         step_id
       end
 
-    {:noreply, assign(socket, :commenting_step_id, new_commenting_id)}
-  end
-
-  def handle_event("add_comment", %{"step_id" => step_id, "comment" => comment}, socket)
-      when comment != "" do
-    user = socket.assigns.current_scope.user
-
-    # Add comment to local state (in a real app, this would persist to DB)
-    new_comment = %{
-      id: System.unique_integer([:positive]),
-      text: comment,
-      user: user,
-      step_execution_id: step_id,
-      inserted_at: DateTime.utc_now()
-    }
-
     {:noreply,
      socket
-     |> update(:step_comments, &[new_comment | &1])
-     |> assign(:commenting_step_id, nil)}
+     |> assign(:commenting_step_id, new_commenting_id)
+     |> assign(:show_comment_form, not is_nil(new_commenting_id))}
+  end
+
+  def handle_event(
+        "add_comment",
+        %{"comment" => %{"content" => content, "step_id" => step_id}},
+        socket
+      )
+      when content != "" do
+    execution_id = socket.assigns.execution.id
+    user_id = socket.assigns.current_scope.user.id
+
+    case V2.create_comment(%{
+           procedure_execution_id: execution_id,
+           step_execution_id: step_id,
+           user_id: user_id,
+           content: content
+         }) do
+      {:ok, _comment} ->
+        {:noreply,
+         socket
+         |> assign(:step_comments, V2.list_comments(execution_id))
+         |> assign(:commenting_step_id, nil)
+         |> assign(:show_comment_form, false)}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to add comment: #{inspect(reason)}")}
+    end
   end
 
   def handle_event("add_comment", _params, socket) do
-    {:noreply, assign(socket, :commenting_step_id, nil)}
+    {:noreply, assign(socket, :commenting_step_id, nil) |> assign(:show_comment_form, false)}
+  end
+
+  def handle_event("toggle_suggested_edit_form", %{"step_id" => step_id}, socket) do
+    current = socket.assigns.suggesting_step_id
+    new_value = if current == step_id, do: nil, else: step_id
+    {:noreply, assign(socket, :suggesting_step_id, new_value)}
+  end
+
+  def handle_event(
+        "add_suggested_edit",
+        %{"suggested_edit" => %{"reason" => reason, "step_id" => step_id}},
+        socket
+      )
+      when reason != "" do
+    execution = socket.assigns.execution
+    user_id = socket.assigns.current_scope.user.id
+    step_exec = Enum.find(socket.assigns.step_executions, &(&1.id == step_id))
+
+    if socket.assigns.allow_suggested_edits and step_exec do
+      attrs = %{
+        procedure_execution_id: execution.id,
+        step_execution_id: step_id,
+        target_step_id: step_exec.step_id,
+        suggested_by_id: user_id,
+        edit_type: :modify_step,
+        reason: reason,
+        before_snapshot: step_snapshot(step_exec),
+        after_snapshot: %{"note" => reason}
+      }
+
+      case V2.create_suggested_edit(attrs) do
+        {:ok, _edit} ->
+          {:noreply,
+           socket
+           |> assign(:suggested_edits, V2.list_suggested_edits(execution.id))
+           |> assign(:suggesting_step_id, nil)}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to add suggestion: #{inspect(reason)}")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Suggested edits are disabled")}
+    end
+  end
+
+  def handle_event("add_suggested_edit", _params, socket) do
+    {:noreply, assign(socket, :suggesting_step_id, nil)}
+  end
+
+  def handle_event("accept_suggested_edit", %{"edit_id" => edit_id}, socket) do
+    user_id = socket.assigns.current_scope.user.id
+
+    case V2.get_suggested_edit(edit_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Suggested edit not found")}
+
+      edit ->
+        case V2.accept_suggested_edit(edit, user_id) do
+          {:ok, _} ->
+            {:noreply,
+             assign(
+               socket,
+               :suggested_edits,
+               V2.list_suggested_edits(edit.procedure_execution_id)
+             )}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to accept: #{inspect(reason)}")}
+        end
+    end
+  end
+
+  def handle_event("reject_suggested_edit", %{"edit_id" => edit_id, "note" => note}, socket) do
+    user_id = socket.assigns.current_scope.user.id
+    note = if note in [nil, ""], do: "Rejected", else: note
+
+    case V2.get_suggested_edit(edit_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Suggested edit not found")}
+
+      edit ->
+        case V2.reject_suggested_edit(edit, user_id, note) do
+          {:ok, _} ->
+            {:noreply,
+             assign(
+               socket,
+               :suggested_edits,
+               V2.list_suggested_edits(edit.procedure_execution_id)
+             )}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to reject: #{inspect(reason)}")}
+        end
+    end
   end
 
   def handle_event("sign_off", %{"step_id" => step_id, "role" => role} = params, socket) do
@@ -296,7 +438,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     end
   end
 
-  def handle_event("skip_step", %{"step_id" => step_id, "reason" => reason}, socket) do
+  def handle_event("skip_step", %{"skip" => %{"step_id" => step_id, "reason" => reason}}, socket) do
     execution_id = socket.assigns.execution.id
     user_id = socket.assigns.current_scope.user.id
 
@@ -340,7 +482,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     end
   end
 
-  def handle_event("abort_execution", %{"reason" => reason}, socket) do
+  def handle_event("abort_execution", %{"abort" => %{"reason" => reason}}, socket) do
     execution_id = socket.assigns.execution.id
     user_id = socket.assigns.current_scope.user.id
 
@@ -520,6 +662,9 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     active_step = find_active_step(execution.step_executions)
     prev_active_id = socket.assigns.active_step_id
     new_active_id = active_step && active_step.id
+    step_comments = V2.list_comments(execution.id)
+    suggested_edits = V2.list_suggested_edits(execution.id)
+    allow_suggested_edits = execution.procedure_version.allow_suggested_edits
 
     socket =
       socket
@@ -527,6 +672,9 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       |> assign(:step_executions, execution.step_executions)
       |> assign(:steps_by_section, steps_by_section)
       |> assign(:active_step_id, new_active_id)
+      |> assign(:step_comments, step_comments)
+      |> assign(:suggested_edits, suggested_edits)
+      |> assign(:allow_suggested_edits, allow_suggested_edits)
 
     # Auto-scroll to new active step if it changed
     if new_active_id && new_active_id != prev_active_id do
@@ -652,109 +800,120 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       |> assign(:progress_percent, progress_percent)
 
     ~H"""
-    <div class="h-[calc(100vh-4rem)] flex flex-col" id="procedure-execution">
-      <!-- Header with Progress -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-base-300 bg-base-200">
-        <div class="flex items-center gap-3">
-          <.link
-            navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
-            class="btn btn-ghost btn-sm"
-          >
-            <.icon name="hero-arrow-left" class="h-4 w-4" />
-          </.link>
-          <div>
-            <h1 class="text-lg font-bold">{@procedure.name}</h1>
-            <span class="text-sm text-base-content/60">Execution</span>
-          </div>
-        </div>
-        
-    <!-- Progress Section -->
-        <div class="flex items-center gap-4">
-          <.execution_mode_badge mode={@execution.procedure_version.execution_mode || :manual} />
-          <.execution_status_badge status={@execution.status} />
-          
-    <!-- Automation Running Indicator -->
-          <%= if @automation_running do %>
-            <div class="flex items-center gap-2 text-primary">
-              <span class="loading loading-spinner loading-xs"></span>
-              <span class="text-sm">Automation Running</span>
-            </div>
-          <% end %>
-          
-    <!-- Progress Bar -->
+    <Layouts.app flash={@flash} current_scope={@current_scope} variant={:bare}>
+      <div class="h-[calc(100vh-4rem)] flex flex-col" id="procedure-execution">
+        <!-- Header with Progress -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-base-300 bg-base-200">
           <div class="flex items-center gap-3">
-            <div class="w-32 h-2 bg-base-300 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-success transition-all duration-500 ease-out"
-                style={"width: #{@progress_percent}%"}
-              >
-              </div>
+            <.link
+              navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
+              class="btn btn-ghost btn-sm"
+            >
+              <.icon name="hero-arrow-left" class="h-4 w-4" />
+            </.link>
+            <div>
+              <h1 class="text-lg font-bold">{@procedure.name}</h1>
+              <span class="text-sm text-base-content/60">Execution</span>
             </div>
-            <span class="text-sm font-mono text-base-content/70">
-              {@completed_steps}/{@total_steps}
-            </span>
           </div>
           
-    <!-- Execution Controls -->
-          <.execution_controls
-            status={@execution.status}
-            execution_process={@execution_process}
-          />
-        </div>
-      </div>
-      
-    <!-- Three Column Layout -->
-      <div class="flex-1 flex overflow-hidden">
-        <!-- Left Panel: Navigation Index -->
-        <div class="w-64 border-r border-base-300 bg-base-100 flex flex-col">
-          <div class="p-3 border-b border-base-300">
-            <span class="font-semibold text-sm uppercase tracking-wide text-base-content/70">
-              Navigation
-            </span>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2">
-            <%= for {{section, step_execs}, section_idx} <- Enum.with_index(@steps_by_section) do %>
-              <.nav_section
-                section={section}
-                section_letter={section_letter(section_idx)}
-                step_executions={step_execs}
-                visible_step_id={@visible_step_id}
-                active_step_id={@active_step_id}
-                collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
-              />
+    <!-- Progress Section -->
+          <div class="flex items-center gap-4">
+            <.execution_mode_badge mode={@execution.procedure_version.execution_mode || :manual} />
+            <.execution_status_badge status={@execution.status} />
+            
+    <!-- Automation Running Indicator -->
+            <%= if @automation_running do %>
+              <div class="flex items-center gap-2 text-primary">
+                <span class="loading loading-spinner loading-xs"></span>
+                <span class="text-sm">Automation Running</span>
+              </div>
             <% end %>
-          </div>
-          <div class="p-3 border-t border-base-300 text-xs text-base-content/60">
-            <div class="flex items-center gap-2">
-              <span class="text-success">●</span> Completed
+            
+    <!-- Progress Bar -->
+            <div class="flex items-center gap-3">
+              <div class="w-32 h-2 bg-base-300 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-success transition-all duration-500 ease-out"
+                  style={"width: #{@progress_percent}%"}
+                >
+                </div>
+              </div>
+              <span class="text-sm font-mono text-base-content/70">
+                {@completed_steps}/{@total_steps}
+              </span>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-primary">●</span> Active
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-base-content/30">○</span> Pending
-            </div>
-          </div>
-        </div>
-        
-    <!-- Center Panel: Full Procedure Document -->
-        <div class="flex-1 bg-base-200/50 flex flex-col overflow-hidden">
-          <div class="flex-1 overflow-y-auto" id="procedure-scroll-container" phx-hook="ProcedureNav">
-            <.procedure_document
-              steps_by_section={@steps_by_section}
-              step_comments={@step_comments}
-              user={@current_scope.user}
-              expanded_step_ids={@expanded_step_ids}
-              collapsed_section_ids={@collapsed_section_ids}
-              hidden_activity_step_ids={@hidden_activity_step_ids}
-              commenting_step_id={@commenting_step_id}
-              active_step_id={@active_step_id}
-              command_lifecycles={@command_lifecycles}
+            
+    <!-- Execution Controls -->
+            <.execution_controls
+              status={@execution.status}
+              execution_process={@execution_process}
             />
           </div>
         </div>
+        
+    <!-- Three Column Layout -->
+        <div class="flex-1 flex overflow-hidden">
+          <!-- Left Panel: Navigation Index -->
+          <div class="w-64 border-r border-base-300 bg-base-100 flex flex-col">
+            <div class="p-3 border-b border-base-300">
+              <span class="font-semibold text-sm uppercase tracking-wide text-base-content/70">
+                Navigation
+              </span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2">
+              <%= for {{section, step_execs}, section_idx} <- Enum.with_index(@steps_by_section) do %>
+                <.nav_section
+                  section={section}
+                  section_letter={section_letter(section_idx)}
+                  step_executions={step_execs}
+                  visible_step_id={@visible_step_id}
+                  active_step_id={@active_step_id}
+                  collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
+                />
+              <% end %>
+            </div>
+            <div class="p-3 border-t border-base-300 text-xs text-base-content/60">
+              <div class="flex items-center gap-2">
+                <span class="text-success">●</span> Completed
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-primary">●</span> Active
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-base-content/30">○</span> Pending
+              </div>
+            </div>
+          </div>
+          
+    <!-- Center Panel: Full Procedure Document -->
+          <div class="flex-1 bg-base-200/50 flex flex-col overflow-hidden">
+            <div
+              class="flex-1 overflow-y-auto"
+              id="procedure-scroll-container"
+              phx-hook="ProcedureNav"
+            >
+              <.procedure_document
+                steps_by_section={@steps_by_section}
+                step_comments={@step_comments}
+                suggested_edits={@suggested_edits}
+                allow_suggested_edits={@allow_suggested_edits}
+                user={@current_scope.user}
+                expanded_step_ids={@expanded_step_ids}
+                collapsed_section_ids={@collapsed_section_ids}
+                hidden_activity_step_ids={@hidden_activity_step_ids}
+                commenting_step_id={@commenting_step_id}
+                suggesting_step_id={@suggesting_step_id}
+                active_step_id={@active_step_id}
+                command_lifecycles={@command_lifecycles}
+                comment_form={@comment_form}
+                suggested_edit_form={@suggested_edit_form}
+              />
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -811,6 +970,8 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   attr :execution_process, :any, default: nil
 
   defp execution_controls(assigns) do
+    assigns = assign(assigns, :abort_form, to_form(%{}, as: :abort))
+
     ~H"""
     <div class="flex items-center gap-2">
       <%= case @status do %>
@@ -830,11 +991,12 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
               <span class="hidden sm:inline">Abort</span>
             </label>
             <div tabindex="0" class="dropdown-content z-[1] p-4 shadow-lg bg-base-100 rounded-lg w-72">
-              <form phx-submit="abort_execution">
+              <.form for={@abort_form} id="abort-execution-form-running" phx-submit="abort_execution">
                 <p class="text-sm mb-2">Are you sure you want to abort this execution?</p>
-                <input
+                <.input
                   type="text"
-                  name="reason"
+                  field={@abort_form[:reason]}
+                  id="abort-execution-reason-running"
                   placeholder="Reason for aborting..."
                   class="input input-bordered input-sm w-full mb-2"
                   required
@@ -842,7 +1004,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
                 <div class="flex justify-end gap-2">
                   <button type="submit" class="btn btn-error btn-sm">Abort</button>
                 </div>
-              </form>
+              </.form>
             </div>
           </div>
         <% :paused -> %>
@@ -861,11 +1023,12 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
               <span class="hidden sm:inline">Abort</span>
             </label>
             <div tabindex="0" class="dropdown-content z-[1] p-4 shadow-lg bg-base-100 rounded-lg w-72">
-              <form phx-submit="abort_execution">
+              <.form for={@abort_form} id="abort-execution-form-paused" phx-submit="abort_execution">
                 <p class="text-sm mb-2">Are you sure you want to abort this execution?</p>
-                <input
+                <.input
                   type="text"
-                  name="reason"
+                  field={@abort_form[:reason]}
+                  id="abort-execution-reason-paused"
                   placeholder="Reason for aborting..."
                   class="input input-bordered input-sm w-full mb-2"
                   required
@@ -873,7 +1036,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
                 <div class="flex justify-end gap-2">
                   <button type="submit" class="btn btn-error btn-sm">Abort</button>
                 </div>
-              </form>
+              </.form>
             </div>
           </div>
         <% _other -> %>
@@ -1031,13 +1194,18 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
 
   attr :steps_by_section, :list, required: true
   attr :step_comments, :list, required: true
+  attr :suggested_edits, :list, required: true
+  attr :allow_suggested_edits, :boolean, required: true
   attr :user, :map, required: true
   attr :expanded_step_ids, :any, required: true
   attr :collapsed_section_ids, :any, required: true
   attr :hidden_activity_step_ids, :any, required: true
   attr :commenting_step_id, :string, default: nil
+  attr :suggesting_step_id, :string, default: nil
   attr :active_step_id, :string, default: nil
   attr :command_lifecycles, :map, default: %{}
+  attr :comment_form, :map, required: true
+  attr :suggested_edit_form, :map, required: true
 
   defp procedure_document(assigns) do
     ~H"""
@@ -1048,13 +1216,18 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
           section_letter={section_letter(section_idx)}
           step_executions={step_execs}
           step_comments={@step_comments}
+          suggested_edits={@suggested_edits}
+          allow_suggested_edits={@allow_suggested_edits}
           user={@user}
           expanded_step_ids={@expanded_step_ids}
           hidden_activity_step_ids={@hidden_activity_step_ids}
           collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
           commenting_step_id={@commenting_step_id}
+          suggesting_step_id={@suggesting_step_id}
           active_step_id={@active_step_id}
           command_lifecycles={@command_lifecycles}
+          comment_form={@comment_form}
+          suggested_edit_form={@suggested_edit_form}
         />
       <% end %>
     </div>
@@ -1065,13 +1238,18 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   attr :section_letter, :string, required: true
   attr :step_executions, :list, required: true
   attr :step_comments, :list, required: true
+  attr :suggested_edits, :list, required: true
+  attr :allow_suggested_edits, :boolean, required: true
   attr :user, :map, required: true
   attr :expanded_step_ids, :any, required: true
   attr :hidden_activity_step_ids, :any, required: true
   attr :collapsed, :boolean, default: false
   attr :commenting_step_id, :string, default: nil
+  attr :suggesting_step_id, :string, default: nil
   attr :active_step_id, :string, default: nil
   attr :command_lifecycles, :map, default: %{}
+  attr :comment_form, :map, required: true
+  attr :suggested_edit_form, :map, required: true
 
   defp document_section(assigns) do
     completed = Enum.count(assigns.step_executions, &(&1.status == :completed))
@@ -1139,11 +1317,19 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
               section_letter={@section_letter}
               step_index={step_idx + 1}
               step_comments={Enum.filter(@step_comments, &(&1.step_execution_id == step_exec.id))}
+              step_suggested_edits={
+                Enum.filter(@suggested_edits, &(&1.step_execution_id == step_exec.id))
+              }
+              allow_suggested_edits={@allow_suggested_edits}
               user={@user}
               is_expanded={MapSet.member?(@expanded_step_ids, step_exec.id)}
               is_activity_hidden={MapSet.member?(@hidden_activity_step_ids, step_exec.id)}
               is_active={step_exec.id == @active_step_id}
               command_lifecycles={@command_lifecycles}
+              commenting_step_id={@commenting_step_id}
+              suggesting_step_id={@suggesting_step_id}
+              comment_form={@comment_form}
+              suggested_edit_form={@suggested_edit_form}
             />
           <% end %>
         </div>
@@ -1156,11 +1342,17 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   attr :section_letter, :string, required: true
   attr :step_index, :integer, required: true
   attr :step_comments, :list, required: true
+  attr :step_suggested_edits, :list, required: true
+  attr :allow_suggested_edits, :boolean, required: true
   attr :user, :map, required: true
   attr :is_expanded, :boolean, default: false
   attr :is_activity_hidden, :boolean, default: false
   attr :is_active, :boolean, default: false
   attr :command_lifecycles, :map, default: %{}
+  attr :commenting_step_id, :string, default: nil
+  attr :suggesting_step_id, :string, default: nil
+  attr :comment_form, :map, required: true
+  attr :suggested_edit_form, :map, required: true
 
   defp step_card(assigns) do
     step = assigns.step_execution.step
@@ -1198,9 +1390,15 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
             section_letter={@section_letter}
             step_index={@step_index}
             step_comments={@step_comments}
+            step_suggested_edits={@step_suggested_edits}
+            allow_suggested_edits={@allow_suggested_edits}
             user={@user}
             is_activity_hidden={@is_activity_hidden}
             command_lifecycles={@command_lifecycles}
+            commenting_step_id={@commenting_step_id}
+            suggesting_step_id={@suggesting_step_id}
+            comment_form={@comment_form}
+            suggested_edit_form={@suggested_edit_form}
           />
         <% :completed -> %>
           <.step_card_completed
@@ -1247,9 +1445,15 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   attr :section_letter, :string, required: true
   attr :step_index, :integer, required: true
   attr :step_comments, :list, required: true
+  attr :step_suggested_edits, :list, required: true
+  attr :allow_suggested_edits, :boolean, required: true
   attr :user, :map, required: true
   attr :is_activity_hidden, :boolean, default: false
   attr :command_lifecycles, :map, default: %{}
+  attr :commenting_step_id, :string, default: nil
+  attr :suggesting_step_id, :string, default: nil
+  attr :comment_form, :map, required: true
+  attr :suggested_edit_form, :map, required: true
 
   defp step_card_active(assigns) do
     blocks = assigns.step.blocks || []
@@ -1344,25 +1548,96 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
             <%= for comment <- @step_comments do %>
               <div class="flex items-center gap-2 text-sm">
                 <.icon name="hero-chat-bubble-left" class="h-4 w-4 text-base-content/50" />
-                <span>{comment.text}</span>
+                <span>{comment.content}</span>
                 <span class="text-base-content/50">- {short_email(comment.user.email)}</span>
+              </div>
+            <% end %>
+
+            <%= for edit <- @step_suggested_edits do %>
+              <div class="flex flex-wrap items-center gap-2 text-sm">
+                <.icon name="hero-pencil-square" class="h-4 w-4 text-warning" />
+                <span class="font-medium">Suggested edit</span>
+                <span class="text-base-content/60">{edit.reason}</span>
+                <span class={[
+                  "badge badge-xs",
+                  edit.status == :pending && "badge-warning",
+                  edit.status == :accepted && "badge-success",
+                  edit.status == :rejected && "badge-ghost"
+                ]}>
+                  {edit.status}
+                </span>
+                <%= if edit.status == :pending do %>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-success"
+                    phx-click="accept_suggested_edit"
+                    phx-value-edit_id={edit.id}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost"
+                    phx-click="reject_suggested_edit"
+                    phx-value-edit_id={edit.id}
+                    phx-value-note="Rejected"
+                  >
+                    Reject
+                  </button>
+                <% end %>
               </div>
             <% end %>
             
     <!-- Comment Input -->
-            <form phx-submit="add_comment" class="flex items-center gap-2 mt-2">
-              <input type="hidden" name="step_id" value={@step_execution.id} />
-              <input
+            <.form
+              for={@comment_form}
+              id={"step-comment-form-#{@step_execution.id}"}
+              phx-submit="add_comment"
+              class="flex items-center gap-2 mt-2"
+            >
+              <input type="hidden" name="comment[step_id]" value={@step_execution.id} />
+              <.input
                 type="text"
-                name="comment"
+                field={@comment_form[:content]}
+                id={"comment-content-#{@step_execution.id}"}
                 placeholder="Add comment"
                 class="input input-bordered input-sm flex-1 bg-base-200/50"
               />
               <button type="submit" class="btn btn-ghost btn-sm">Post ›</button>
-              <button type="button" class="btn btn-ghost btn-sm btn-square">
-                <.icon name="hero-paper-clip" class="h-4 w-4" />
-              </button>
-            </form>
+            </.form>
+
+            <div class="mt-2">
+              <%= if @allow_suggested_edits do %>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  phx-click="toggle_suggested_edit_form"
+                  phx-value-step_id={@step_execution.id}
+                >
+                  <.icon name="hero-pencil-square" class="h-3 w-3" /> Suggest edit
+                </button>
+                <%= if @suggesting_step_id == @step_execution.id do %>
+                  <.form
+                    for={@suggested_edit_form}
+                    id={"suggested-edit-form-#{@step_execution.id}"}
+                    phx-submit="add_suggested_edit"
+                    class="flex items-center gap-2 mt-2"
+                  >
+                    <input type="hidden" name="suggested_edit[step_id]" value={@step_execution.id} />
+                    <.input
+                      type="text"
+                      field={@suggested_edit_form[:reason]}
+                      id={"suggested-edit-reason-#{@step_execution.id}"}
+                      placeholder="Describe the change"
+                      class="input input-bordered input-sm flex-1 bg-base-200/50"
+                    />
+                    <button type="submit" class="btn btn-warning btn-sm">Send</button>
+                  </.form>
+                <% end %>
+              <% else %>
+                <span class="text-xs text-base-content/50">Suggested edits disabled</span>
+              <% end %>
+            </div>
           </div>
         <% end %>
       </div>
@@ -1464,6 +1739,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       assigns
       |> assign(:blocks, blocks)
       |> assign(:block_executions, block_executions)
+      |> assign(:skip_form, to_form(%{}, as: :skip))
 
     ~H"""
     <div class="bg-base-100 rounded-lg border-2 border-error shadow-lg shadow-error/10">
@@ -1496,12 +1772,17 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
                 tabindex="0"
                 class="dropdown-content z-[1] p-4 shadow-lg bg-base-100 rounded-lg w-72"
               >
-                <form phx-submit="skip_step">
-                  <input type="hidden" name="step_id" value={@step_execution.id} />
+                <.form
+                  for={@skip_form}
+                  id={"skip-step-form-#{@step_execution.id}"}
+                  phx-submit="skip_step"
+                >
+                  <input type="hidden" name="skip[step_id]" value={@step_execution.id} />
                   <p class="text-sm mb-2">Reason for skipping:</p>
-                  <input
+                  <.input
                     type="text"
-                    name="reason"
+                    field={@skip_form[:reason]}
+                    id={"skip-step-reason-#{@step_execution.id}"}
                     placeholder="Enter skip reason..."
                     class="input input-bordered input-sm w-full mb-2"
                     required
@@ -1509,7 +1790,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
                   <div class="flex justify-end gap-2">
                     <button type="submit" class="btn btn-ghost btn-sm">Skip Step</button>
                   </div>
-                </form>
+                </.form>
               </div>
             </div>
           </div>
@@ -1629,15 +1910,24 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       </div>
       <div class="text-sm">
         <%= cond do %>
-          <% @block.block_type in [:text_input, :number_input, :select_input] && @block_execution -> %>
+          <% @block.block_type in [
+               :text_input,
+               :number_input,
+               :select_input,
+               :checkbox_input,
+               :timestamp_input,
+               :duration_input,
+               :attachment_input,
+               :signature_input
+             ] && @block_execution -> %>
             <span class="font-mono bg-base-200 px-2 py-1 rounded">
               {BlockExecution.display_value(@block_execution)}
             </span>
           <% @block.block_type == :telemetry_check && @block_execution -> %>
             <div class="flex items-center gap-2">
-              <span class="font-mono">{@block.content["item_path"]}</span>
+              <span class="font-mono">{@block.content["item"]}</span>
               <span>=</span>
-              <span class="font-mono">{@block_execution.telemetry_reading["value"]}</span>
+              <span class="font-mono">{@block_execution.telemetry_reading["actual"]}</span>
               <%= if @block_execution.passed do %>
                 <span class="badge badge-success badge-sm">PASS</span>
               <% else %>
@@ -1785,6 +2075,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       |> assign(:blocks, blocks)
       |> assign(:block_executions, block_executions)
       |> assign(:signoffs, signoffs)
+      |> assign(:comment_form, to_form(%{}, as: :comment))
 
     ~H"""
     <div class="flex-1 overflow-y-auto">
@@ -1810,6 +2101,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
             <button
               type="button"
               phx-click="toggle_comment_form"
+              phx-value-step_id={@step_execution.id}
               class={[
                 "btn btn-sm btn-ghost gap-1",
                 @show_comment_form && "btn-active"
@@ -1836,10 +2128,17 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     <!-- Comment Form (Inline) -->
       <%= if @show_comment_form do %>
         <div class="p-4 bg-info/5 border-b border-info/20">
-          <form phx-submit="add_comment" class="flex gap-2">
-            <input
+          <.form
+            for={@comment_form}
+            id={"active-step-comment-form-#{@step_execution.id}"}
+            phx-submit="add_comment"
+            class="flex gap-2"
+          >
+            <input type="hidden" name="comment[step_id]" value={@step_execution.id} />
+            <.input
               type="text"
-              name="comment"
+              field={@comment_form[:content]}
+              id={"active-step-comment-content-#{@step_execution.id}"}
               placeholder="Add a note about this step..."
               class="input input-bordered flex-1 input-sm"
               autofocus
@@ -1850,7 +2149,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
             <button type="button" phx-click="toggle_comment_form" class="btn btn-ghost btn-sm">
               Cancel
             </button>
-          </form>
+          </.form>
         </div>
       <% end %>
       
@@ -1864,7 +2163,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
                 class="h-4 w-4 text-info flex-shrink-0 mt-0.5"
               />
               <div class="flex-1 min-w-0">
-                <p class="text-sm">{comment.text}</p>
+                <p class="text-sm">{comment.content}</p>
                 <div class="text-xs text-base-content/50 mt-1">
                   {comment.user.email} · {format_time_with_seconds(comment.inserted_at)}
                 </div>
@@ -1940,6 +2239,22 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     Enum.find(block_executions, &(&1.block_id == block_id))
   end
 
+  defp step_snapshot(step_exec) do
+    step = step_exec.step
+
+    %{
+      "name" => step.name,
+      "title" => step.title,
+      "blocks" =>
+        Enum.map(step.blocks || [], fn block ->
+          %{
+            "block_type" => to_string(block.block_type),
+            "content" => block.content
+          }
+        end)
+    }
+  end
+
   attr :block, :map, required: true
   attr :block_execution, :map, default: nil
   attr :step_execution, :map, required: true
@@ -1984,19 +2299,14 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
   end
 
   # Colored callout classes for blocks (Epsilon3-style)
+  @callout_classes %{
+    note: "rounded px-3 py-2 bg-info/10",
+    caution: "rounded px-3 py-2 bg-warning/10",
+    warning: "rounded px-3 py-2 bg-error/10"
+  }
+
   defp block_callout_classes(type) do
-    case type do
-      :note -> "rounded px-3 py-2 bg-info/10"
-      :caution -> "rounded px-3 py-2 bg-warning/10"
-      :warning -> "rounded px-3 py-2 bg-error/10"
-      # Input blocks are inline, no container
-      :text_input -> ""
-      :number_input -> ""
-      :select_input -> ""
-      # Text blocks are plain
-      :text -> ""
-      _ -> ""
-    end
+    Map.get(@callout_classes, type, "")
   end
 
   defp block_header_color(type) do
@@ -2006,6 +2316,12 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       :warning -> "text-error"
       _ -> "text-base-content/60"
     end
+  end
+
+  defp input_classes(classes) do
+    classes
+    |> Enum.filter(& &1)
+    |> Enum.join(" ")
   end
 
   attr :type, :atom, required: true
@@ -2018,13 +2334,17 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
     text_input: "hero-pencil-square",
     number_input: "hero-calculator",
     select_input: "hero-list-bullet",
+    checkbox_input: "hero-check",
+    timestamp_input: "hero-clock",
+    duration_input: "hero-clock",
+    attachment_input: "hero-paper-clip",
+    signature_input: "hero-pencil",
     telemetry_value: "hero-signal",
     telemetry_check: "hero-check-circle",
     telemetry_wait: "hero-clock",
     command: "hero-command-line",
-    script: "hero-code-bracket",
-    wait: "hero-clock",
-    wait_for: "hero-clock"
+    command_sequence: "hero-queue-list",
+    script: "hero-code-bracket"
   }
 
   defp block_type_icon(assigns) do
@@ -2059,6 +2379,8 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         <.telemetry_value_display block={@block} block_execution={@block_execution} />
       <% :telemetry_check -> %>
         <.telemetry_check_display block={@block} block_execution={@block_execution} />
+      <% :telemetry_wait -> %>
+        <.telemetry_check_display block={@block} block_execution={@block_execution} />
       <% :text_input -> %>
         <.text_input_block
           block={@block}
@@ -2080,12 +2402,53 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
           step_execution={@step_execution}
           step_status={@step_status}
         />
+      <% :checkbox_input -> %>
+        <.checkbox_input_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
+          step_status={@step_status}
+        />
+      <% :timestamp_input -> %>
+        <.timestamp_input_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
+          step_status={@step_status}
+        />
+      <% :duration_input -> %>
+        <.duration_input_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
+          step_status={@step_status}
+        />
+      <% :attachment_input -> %>
+        <.attachment_input_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
+          step_status={@step_status}
+        />
+      <% :signature_input -> %>
+        <.signature_input_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
+          step_status={@step_status}
+        />
       <% :command -> %>
         <.command_block
           block={@block}
           block_execution={@block_execution}
           step_execution={@step_execution}
           lifecycle={get_command_lifecycle(@block_execution, @command_lifecycles)}
+        />
+      <% :command_sequence -> %>
+        <.command_sequence_block
+          block={@block}
+          block_execution={@block_execution}
+          step_execution={@step_execution}
         />
       <% :script -> %>
         <.script_block
@@ -2127,7 +2490,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
             </div>
           <% end %>
           <div class="font-mono text-xs text-primary bg-primary/10 px-2 py-1 rounded inline-block">
-            {@block.content["item_path"]}
+            {@block.content["item"]}
           </div>
         </div>
         <%= if @has_value do %>
@@ -2181,11 +2544,11 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
       <div class="flex items-center justify-between mb-4">
         <div class="font-mono text-sm">
           <span class="text-primary bg-primary/10 px-2 py-1 rounded">
-            {@block.content["item_path"]}
+            {@block.content["item"]}
           </span>
           <span class="mx-2 text-base-content/60">{@block.content["operator"]}</span>
           <span class="text-success bg-success/10 px-2 py-1 rounded font-bold">
-            {@block.content["expected_value"]}
+            {@block.content["expected"]}
           </span>
         </div>
       </div>
@@ -2221,7 +2584,7 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
               @status == :passed && "text-success",
               @status == :failed && "text-error"
             ]}>
-              {@block_execution.telemetry_reading["value"]}
+              {@block_execution.telemetry_reading["actual"]}
             </div>
           </div>
         <% else %>
@@ -2261,18 +2624,21 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         <.icon name="hero-check-circle-solid" class="h-4 w-4 text-success" />
       <% else %>
         <%!-- Input field --%>
-        <input
+        <.input
           type="text"
           id={"input-#{@block.id}"}
+          name="value"
           phx-blur="submit_input"
           phx-keydown="submit_input"
           phx-key="Enter"
           phx-value-block_id={@block.id}
           phx-value-step_id={@step_execution.id}
-          class={[
-            "input input-bordered input-sm flex-1 min-w-[200px] max-w-md",
-            @step_status in [:active, :awaiting_signoff] && "input-primary"
-          ]}
+          class={
+            input_classes([
+              "input input-bordered input-sm flex-1 min-w-[200px] max-w-md",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
           placeholder={@block.content["placeholder"] || "Enter value..."}
           disabled={@step_status not in [:active, :awaiting_signoff]}
         />
@@ -2320,18 +2686,21 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         </span>
       <% else %>
         <%!-- Input field --%>
-        <input
+        <.input
           type="number"
           id={"input-#{@block.id}"}
+          name="value"
           phx-blur="submit_input"
           phx-keydown="submit_input"
           phx-key="Enter"
           phx-value-block_id={@block.id}
           phx-value-step_id={@step_execution.id}
-          class={[
-            "input input-bordered input-sm w-24 font-mono text-center",
-            @step_status in [:active, :awaiting_signoff] && "input-primary"
-          ]}
+          class={
+            input_classes([
+              "input input-bordered input-sm w-24 font-mono text-center",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
           min={@min_val}
           max={@max_val}
           placeholder="--"
@@ -2440,23 +2809,298 @@ defmodule CadenceWeb.ProcedureV2Live.ExecutionShow do
         </span>
       <% else %>
         <%!-- Select dropdown --%>
-        <select
+        <.input
+          type="select"
           id={"input-#{@block.id}"}
           name="value"
+          options={@options}
+          prompt="Select..."
           phx-change="submit_select"
           phx-value-block_id={@block.id}
           phx-value-step_id={@step_execution.id}
-          class={[
-            "select select-bordered select-sm min-w-[150px]",
-            @step_status in [:active, :awaiting_signoff] && "select-primary"
-          ]}
+          class={
+            input_classes([
+              "select select-bordered select-sm min-w-[150px]",
+              @step_status in [:active, :awaiting_signoff] && "select-primary"
+            ])
+          }
           disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+  attr :step_status, :atom, required: true
+
+  defp checkbox_input_block(assigns) do
+    current_value =
+      if assigns.block_execution,
+        do: BlockExecution.display_value(assigns.block_execution),
+        else: nil
+
+    assigns = assign(assigns, :current_value, current_value)
+
+    ~H"""
+    <div class="flex items-center gap-3 flex-wrap">
+      <%= if is_boolean(@current_value) do %>
+        <span class="font-medium text-base-content">
+          {@block.content["label"] || @block.name}
+        </span>
+        <span class={[
+          "px-2 py-0.5 rounded text-sm",
+          @current_value && "bg-success/20 text-success",
+          !@current_value && "bg-base-200 text-base-content/60"
+        ]}>
+          {if @current_value, do: "Checked", else: "Unchecked"}
+        </span>
+      <% else %>
+        <.input
+          type="checkbox"
+          id={"input-#{@block.id}"}
+          name="value"
+          label={@block.content["label"] || @block.name}
+          value={false}
+          phx-change="submit_checkbox"
+          phx-value-block_id={@block.id}
+          phx-value-step_id={@step_execution.id}
+          disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+  attr :step_status, :atom, required: true
+
+  defp timestamp_input_block(assigns) do
+    current_value =
+      if assigns.block_execution,
+        do: BlockExecution.display_value(assigns.block_execution),
+        else: nil
+
+    assigns = assign(assigns, :current_value, current_value)
+
+    ~H"""
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="font-medium text-base-content">{@block.content["label"] || @block.name} =</span>
+
+      <%= if @current_value do %>
+        <span class="font-mono px-2 py-0.5 bg-base-200 rounded">
+          {@current_value}
+        </span>
+        <.icon name="hero-check-circle-solid" class="h-4 w-4 text-success" />
+      <% else %>
+        <.input
+          type="datetime-local"
+          id={"input-#{@block.id}"}
+          name="value"
+          phx-blur="submit_input"
+          phx-keydown="submit_input"
+          phx-key="Enter"
+          phx-value-block_id={@block.id}
+          phx-value-step_id={@step_execution.id}
+          class={
+            input_classes([
+              "input input-bordered input-sm",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
+          placeholder={@block.content["placeholder"] || "Select timestamp"}
+          disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+  attr :step_status, :atom, required: true
+
+  defp duration_input_block(assigns) do
+    current_value =
+      if assigns.block_execution,
+        do: BlockExecution.display_value(assigns.block_execution),
+        else: nil
+
+    unit = assigns.block.content["unit"] || "seconds"
+
+    assigns =
+      assigns
+      |> assign(:current_value, current_value)
+      |> assign(:unit, unit)
+
+    ~H"""
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="font-medium text-base-content">{@block.content["label"] || @block.name} =</span>
+
+      <%= if @current_value do %>
+        <span class="font-mono text-lg font-bold px-2 py-0.5 bg-base-200 rounded">
+          {@current_value}
+        </span>
+      <% else %>
+        <.input
+          type="number"
+          id={"input-#{@block.id}"}
+          name="value"
+          phx-blur="submit_input"
+          phx-keydown="submit_input"
+          phx-key="Enter"
+          phx-value-block_id={@block.id}
+          phx-value-step_id={@step_execution.id}
+          class={
+            input_classes([
+              "input input-bordered input-sm w-28 font-mono text-center",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
+          placeholder="--"
+          disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+
+      <span class="text-base-content/60">{@unit}</span>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+  attr :step_status, :atom, required: true
+
+  defp attachment_input_block(assigns) do
+    current_value =
+      if assigns.block_execution,
+        do: BlockExecution.display_value(assigns.block_execution),
+        else: nil
+
+    assigns = assign(assigns, :current_value, current_value)
+
+    ~H"""
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="font-medium text-base-content">{@block.content["label"] || @block.name} =</span>
+
+      <%= if @current_value do %>
+        <span class="font-mono px-2 py-0.5 bg-base-200 rounded">
+          {@current_value}
+        </span>
+        <.icon name="hero-check-circle-solid" class="h-4 w-4 text-success" />
+      <% else %>
+        <.input
+          type="text"
+          id={"input-#{@block.id}"}
+          name="value"
+          phx-blur="submit_input"
+          phx-keydown="submit_input"
+          phx-key="Enter"
+          phx-value-block_id={@block.id}
+          phx-value-step_id={@step_execution.id}
+          class={
+            input_classes([
+              "input input-bordered input-sm flex-1 min-w-[220px]",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
+          placeholder={@block.content["placeholder"] || "Add attachment reference"}
+          disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+  attr :step_status, :atom, required: true
+
+  defp signature_input_block(assigns) do
+    current_value =
+      if assigns.block_execution,
+        do: BlockExecution.display_value(assigns.block_execution),
+        else: nil
+
+    assigns = assign(assigns, :current_value, current_value)
+
+    ~H"""
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="font-medium text-base-content">{@block.content["label"] || @block.name} =</span>
+
+      <%= if @current_value do %>
+        <span class="font-mono px-2 py-0.5 bg-base-200 rounded">
+          {@current_value}
+        </span>
+        <.icon name="hero-check-circle-solid" class="h-4 w-4 text-success" />
+      <% else %>
+        <.input
+          type="text"
+          id={"input-#{@block.id}"}
+          name="value"
+          phx-blur="submit_input"
+          phx-keydown="submit_input"
+          phx-key="Enter"
+          phx-value-block_id={@block.id}
+          phx-value-step_id={@step_execution.id}
+          class={
+            input_classes([
+              "input input-bordered input-sm flex-1 min-w-[200px]",
+              @step_status in [:active, :awaiting_signoff] && "input-primary"
+            ])
+          }
+          placeholder={@block.content["placeholder"] || "Signed by..."}
+          disabled={@step_status not in [:active, :awaiting_signoff]}
+        />
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+  attr :block_execution, :map, default: nil
+  attr :step_execution, :map, required: true
+
+  defp command_sequence_block(assigns) do
+    commands = assigns.block.content["commands"] || []
+    status = assigns.block_execution && assigns.block_execution.status
+    assigns = assign(assigns, :commands, commands)
+    assigns = assign(assigns, :status, status)
+
+    ~H"""
+    <div class="rounded-lg border-2 p-4 transition-all duration-300 bg-base-100 border-base-300">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <.icon name="hero-queue-list" class="h-5 w-5 text-warning" />
+          <span class="text-xs font-medium uppercase tracking-wide text-base-content/60">
+            Command Sequence
+          </span>
+        </div>
+        <span class="text-xs text-base-content/60">{length(@commands)} commands</span>
+      </div>
+
+      <%= if @status == :completed do %>
+        <div class="flex items-center gap-2 text-success">
+          <.icon name="hero-check-circle-solid" class="h-5 w-5" />
+          <span class="font-medium">Sequence Queued</span>
+        </div>
+      <% else %>
+        <button
+          type="button"
+          phx-click="send_command"
+          phx-value-step_id={@step_execution.id}
+          phx-value-block_id={@block.id}
+          class="btn btn-warning gap-2"
         >
-          <option value="" disabled selected>Select...</option>
-          <%= for option <- @options do %>
-            <option value={option}>{option}</option>
-          <% end %>
-        </select>
+          <.icon name="hero-paper-airplane" class="h-4 w-4" /> Send Sequence
+        </button>
       <% end %>
     </div>
     """

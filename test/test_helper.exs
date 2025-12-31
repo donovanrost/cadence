@@ -104,8 +104,6 @@ case System.get_env("CADENCE_TEST_VERBOSE") do
 
   _ ->
     quiet_modules = [
-      Cadence.Procedures.Dag.Executor,
-      Cadence.Procedures.Dag.StepExecutor,
       Cadence.Runtime.Commands.TargetDispatcher,
       Cadence.Runtime.Interfaces.TcpServerInterface,
       Cadence.Runtime.Missions.CacheWarmer,

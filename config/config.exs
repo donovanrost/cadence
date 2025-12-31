@@ -90,12 +90,7 @@ config :cadence, Oban,
     procedures: 10
   ],
   plugins: [
-    Oban.Plugins.Pruner,
-    {Oban.Plugins.Cron,
-     crontab: [
-       # Clean up orphaned executions every minute
-       {"* * * * *", Cadence.Procedures.Workers.OrphanedExecutionCleanupWorker}
-     ]}
+    Oban.Plugins.Pruner
   ]
 
 # =============================================================================

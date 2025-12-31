@@ -62,9 +62,6 @@ config :cadence, Oban, testing: :inline
 # Run TargetQueue persistence inline in tests to avoid leaking DB tasks.
 config :cadence, Cadence.Runtime.Commands.TargetQueue, persist_async?: false
 
-# Disable auto-start in ExecutionProcess; tests can start it explicitly.
-config :cadence, Cadence.Procedures.Engine.ExecutionProcess, autostart_pending?: false
-
 # =============================================================================
 # Ports & Adapters Test Configuration (Hexagonal Architecture)
 #

@@ -65,6 +65,7 @@ defmodule Cadence.Procedures.BlockExecution do
   @foreign_key_type :binary_id
 
   @statuses [:pending, :in_progress, :completed, :failed, :skipped]
+  @validation_message_max 255
 
   schema "block_executions" do
     field :status, Ecto.Enum, values: @statuses, default: :pending
@@ -113,7 +114,7 @@ defmodule Cadence.Procedures.BlockExecution do
     block_execution
     |> cast(attrs, @required_fields ++ @optional_fields)
     |> validate_required(@required_fields)
-    |> validate_length(:validation_message, max: 1000)
+    |> validate_length(:validation_message, max: @validation_message_max)
     |> foreign_key_constraint(:step_execution_id)
     |> foreign_key_constraint(:block_id)
     |> foreign_key_constraint(:entered_by_id)
@@ -167,6 +168,7 @@ defmodule Cadence.Procedures.BlockExecution do
   """
   def telemetry_check_changeset(block_execution, reading, passed, validation_message \\ nil) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
+    validation_message = truncate_message(validation_message)
 
     block_execution
     |> change()
@@ -195,6 +197,7 @@ defmodule Cadence.Procedures.BlockExecution do
   """
   def fail_changeset(block_execution, message) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
+    message = truncate_message(message)
 
     block_execution
     |> change()
@@ -246,4 +249,16 @@ defmodule Cadence.Procedures.BlockExecution do
   def display_value(%__MODULE__{value: value}), do: inspect(value)
 
   def statuses, do: @statuses
+
+  defp truncate_message(nil), do: nil
+
+  defp truncate_message(message) when is_binary(message) do
+    if String.length(message) > @validation_message_max do
+      String.slice(message, 0, @validation_message_max - 3) <> "..."
+    else
+      message
+    end
+  end
+
+  defp truncate_message(message), do: truncate_message(inspect(message))
 end

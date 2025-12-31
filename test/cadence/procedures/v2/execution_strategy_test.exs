@@ -60,7 +60,7 @@ defmodule Cadence.Procedures.V2.ExecutionStrategyTest do
 
     test "should_auto_run_block? returns false for all block types" do
       assert Manual.should_auto_run_block?(mock_block(:command)) == false
-      assert Manual.should_auto_run_block?(mock_block(:wait_for)) == false
+      assert Manual.should_auto_run_block?(mock_block(:telemetry_wait)) == false
       assert Manual.should_auto_run_block?(mock_block(:script)) == false
       assert Manual.should_auto_run_block?(mock_block(:text_input)) == false
     end
@@ -92,7 +92,7 @@ defmodule Cadence.Procedures.V2.ExecutionStrategyTest do
   describe "Assisted strategy" do
     test "on_step_activated runs automation for automated blocks" do
       command_block = mock_block(:command)
-      wait_block = mock_block(:wait_for)
+      wait_block = mock_block(:telemetry_wait)
       input_block = mock_block(:text_input)
 
       step_exec = mock_step_exec(blocks: [command_block, wait_block, input_block])
@@ -102,7 +102,7 @@ defmodule Cadence.Procedures.V2.ExecutionStrategyTest do
       # Should only include automated blocks, not input blocks
       block_types = Enum.map(blocks, & &1.block_type)
       assert :command in block_types
-      assert :wait_for in block_types
+      assert :telemetry_wait in block_types
       refute :text_input in block_types
     end
 
@@ -115,7 +115,7 @@ defmodule Cadence.Procedures.V2.ExecutionStrategyTest do
 
     test "should_auto_run_block? returns true for automated block types" do
       assert Assisted.should_auto_run_block?(mock_block(:command)) == true
-      assert Assisted.should_auto_run_block?(mock_block(:wait_for)) == true
+      assert Assisted.should_auto_run_block?(mock_block(:telemetry_wait)) == true
       assert Assisted.should_auto_run_block?(mock_block(:script)) == true
       assert Assisted.should_auto_run_block?(mock_block(:telemetry_check)) == true
     end

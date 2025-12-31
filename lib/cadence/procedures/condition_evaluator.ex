@@ -345,13 +345,22 @@ defmodule Cadence.Procedures.ConditionEvaluator do
     value =
       case Map.fetch(map, key) do
         {:ok, v} -> v
-        :error -> Map.get(map, String.to_atom(key))
+        :error -> get_atom_value(map, key)
       end
 
     get_nested_value(value, rest)
   end
 
   defp get_nested_value(_, _), do: nil
+
+  defp get_atom_value(map, key) do
+    atom_key =
+      Enum.find(Map.keys(map), fn map_key ->
+        is_atom(map_key) and Atom.to_string(map_key) == key
+      end)
+
+    if atom_key, do: Map.get(map, atom_key), else: nil
+  end
 
   # ============================================================================
   # Comparison

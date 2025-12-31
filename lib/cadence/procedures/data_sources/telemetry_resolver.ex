@@ -173,14 +173,25 @@ defmodule Cadence.Procedures.DataSources.TelemetryResolver do
   end
 
   defp get_param_value(params, name) do
-    # Try both string and atom keys
-    value = params[name] || params[String.to_atom(name)]
+    case Map.fetch(params, name) do
+      {:ok, value} ->
+        {:ok, value}
 
-    if is_nil(value) do
-      {:error, {:missing_param, name}}
-    else
-      {:ok, value}
+      :error ->
+        case get_atom_value(params, name) do
+          {:ok, value} -> {:ok, value}
+          :error -> {:error, {:missing_param, name}}
+        end
     end
+  end
+
+  defp get_atom_value(params, name) do
+    atom_key =
+      Enum.find(Map.keys(params), fn key ->
+        is_atom(key) and Atom.to_string(key) == name
+      end)
+
+    if atom_key, do: {:ok, Map.get(params, atom_key)}, else: :error
   end
 
   defp resolve_target_prefix("target." <> rest, context) do

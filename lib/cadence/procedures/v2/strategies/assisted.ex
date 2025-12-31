@@ -22,10 +22,9 @@ defmodule Cadence.Procedures.V2.Strategies.Assisted do
   @automated_block_types [
     :command,
     :command_sequence,
-    :wait,
-    :wait_for,
     :telemetry_check,
     :telemetry_value,
+    :telemetry_wait,
     :script
   ]
 

@@ -85,7 +85,7 @@ defmodule Cadence.Procedures.Runtime.CadenceApiTest do
 
       {:ok, _, _} = :luerl.do("cadence.log('warn', 'Warning message')", installed_state)
 
-      assert_receive {:log, :warn, "Warning message"}
+      assert_receive {:log, :warning, "Warning message"}
     end
   end
 

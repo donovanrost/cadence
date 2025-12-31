@@ -30,15 +30,18 @@ defmodule Cadence.Procedures.V2.Strategies.Automatic do
   @automated_block_types [
     :command,
     :command_sequence,
-    :wait,
-    :wait_for,
     :telemetry_check,
     :telemetry_value,
+    :telemetry_wait,
     :script,
     :text_input,
     :number_input,
-    :select,
-    :checkbox
+    :select_input,
+    :checkbox_input,
+    :timestamp_input,
+    :duration_input,
+    :attachment_input,
+    :signature_input
   ]
 
   # ============================================================================

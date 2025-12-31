@@ -306,8 +306,23 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
   end
 
   defp flow_log(context, level, message) do
-    send(context.execution_pid, {:log, String.to_atom(level), message})
+    send(context.execution_pid, {:log, normalize_log_level(level), message})
   end
+
+  defp normalize_log_level(level) when is_atom(level), do: level
+
+  defp normalize_log_level(level) when is_binary(level) do
+    case String.downcase(level) do
+      "debug" -> :debug
+      "info" -> :info
+      "warn" -> :warning
+      "warning" -> :warning
+      "error" -> :error
+      _ -> :info
+    end
+  end
+
+  defp normalize_log_level(_), do: :info
 
   defp flow_checkpoint(context, name) do
     send(context.execution_pid, {:checkpoint, name})

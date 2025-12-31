@@ -39,6 +39,7 @@ defmodule Cadence.Procedures.Primitives do
 
   alias Cadence.Commands
   alias Cadence.Procedures.ConditionEvaluator
+  alias Cadence.Procedures.DataSources.TelemetryResolver
   alias Cadence.Procedures.InputReferences
   alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVT
 
@@ -169,31 +170,17 @@ defmodule Cadence.Procedures.Primitives do
   def get_telemetry(item_path, context, _opts \\ []) do
     mission_id = context[:mission_id]
     target_id = context[:target_id]
+    params = context[:params] || context[:parameters] || %{}
 
-    parts = String.split(item_path, ".")
-
-    {effective_target, packet_name, item_name} =
-      case parts do
-        [target, packet, item_name] ->
-          {target, packet, item_name}
-
-        [packet, item_name] ->
-          {target_id, packet, item_name}
-
-        _ ->
-          {target_id, nil, nil}
-      end
-
-    if packet_name && item_name do
-      case CVT.get(mission_id, effective_target, packet_name, item_name) do
-        {:ok, value} -> {:ok, value}
-        {:error, _} -> {:error, :not_found}
-      end
+    with {:ok, resolved_path} <-
+           resolve_telemetry_path(item_path, target_id, context[:target_name], params),
+         {:ok, {effective_target, packet_name, item_name}} <-
+           telemetry_parts(resolved_path, target_id),
+         {:ok, value} <- lookup_telemetry(mission_id, effective_target, packet_name, item_name) do
+      {:ok, value}
     else
-      {:error, :invalid_item_format}
+      {:error, reason} -> {:error, reason}
     end
-  rescue
-    _ -> {:error, :cvt_error}
   end
 
   # ============================================================================
@@ -419,8 +406,8 @@ defmodule Cadence.Procedures.Primitives do
   defp resolve_by_prefix(:telemetry, rest, context), do: resolve_telemetry_value(rest, context)
 
   defp resolve_params_value(param_name, context) do
-    get_in(context, [:params, param_name]) ||
-      get_in(context, [:params, String.to_atom(param_name)])
+    params = context[:params] || %{}
+    get_map_value(params, param_name)
   end
 
   defp resolve_trigger_value(path, context) do
@@ -432,8 +419,8 @@ defmodule Cadence.Procedures.Primitives do
   end
 
   defp resolve_target_value(param_name, context) do
-    get_in(context, [:params, param_name]) ||
-      get_in(context, [:params, String.to_atom(param_name)])
+    params = context[:params] || %{}
+    get_map_value(params, param_name)
   end
 
   defp resolve_telemetry_value(item, context) do
@@ -628,13 +615,66 @@ defmodule Cadence.Procedures.Primitives do
     end)
   end
 
+  defp resolve_telemetry_path(item_path, target_id, target_name, params) do
+    resolved_path =
+      TelemetryResolver.resolve!(item_path, %{
+        target_id: target_id,
+        target_name: target_name,
+        parameters: params
+      })
+
+    {:ok, resolved_path}
+  rescue
+    _ -> {:error, :cvt_error}
+  end
+
+  defp telemetry_parts(resolved_path, target_id) do
+    parts = String.split(resolved_path, ".")
+
+    case parts do
+      [target, packet, item_name | _rest] ->
+        {:ok, {target, packet, item_name}}
+
+      [packet, item_name] when not is_nil(target_id) ->
+        {:ok, {target_id, packet, item_name}}
+
+      _ ->
+        {:error, :invalid_item_format}
+    end
+  end
+
+  defp lookup_telemetry(mission_id, target_id, packet_name, item_name) do
+    case CVT.get(mission_id, target_id, packet_name, item_name) do
+      {:ok, value} -> {:ok, value}
+      {:error, _} -> {:error, :not_found}
+    end
+  rescue
+    _ -> {:error, :cvt_error}
+  end
+
   defp get_nested(map, []), do: map
   defp get_nested(nil, _), do: nil
 
   defp get_nested(map, [key | rest]) when is_map(map) do
-    value = Map.get(map, key) || Map.get(map, String.to_atom(key))
+    value = get_map_value(map, key)
     get_nested(value, rest)
   end
 
   defp get_nested(_, _), do: nil
+
+  defp get_map_value(map, key) when is_map(map) do
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> get_map_atom_value(map, key)
+    end
+  end
+
+  defp get_map_atom_value(map, key) do
+    atom_key =
+      Enum.find(Map.keys(map), fn map_key ->
+        is_atom(map_key) and Atom.to_string(map_key) == key
+      end)
+
+    if atom_key, do: Map.get(map, atom_key), else: nil
+  end
 end

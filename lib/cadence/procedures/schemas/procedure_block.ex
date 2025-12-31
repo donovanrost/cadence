@@ -228,27 +228,35 @@ defmodule Cadence.Procedures.ProcedureBlock do
   end
 
   defp validate_content_for_type(:telemetry_value, content) do
-    # Accept either 'item' (schema format) or 'item_path' (UI format)
     require_any_key(
       content,
-      [:item, "item", :item_path, "item_path"],
-      "telemetry_value block requires 'item' or 'item_path' field"
+      [:item, "item"],
+      "telemetry_value block requires 'item' field"
     )
   end
 
   defp validate_content_for_type(:telemetry_check, content) do
-    # Accept either 'item' (schema format) or 'item_path' (UI format)
     case require_any_key(
            content,
-           [:item, "item", :item_path, "item_path"],
-           "telemetry_check block requires 'item' or 'item_path' field"
+           [:item, "item"],
+           "telemetry_check block requires 'item' field"
          ) do
       :ok ->
-        require_any_key(
-          content,
-          [:pass_criteria, "pass_criteria", :operator, "operator"],
-          "telemetry_check block requires 'pass_criteria' or 'operator' field"
-        )
+        case require_any_key(
+               content,
+               [:operator, "operator"],
+               "telemetry_check block requires 'operator' field"
+             ) do
+          :ok ->
+            require_any_key(
+              content,
+              [:expected, "expected"],
+              "telemetry_check block requires 'expected' field"
+            )
+
+          {:error, _} = error ->
+            error
+        end
 
       {:error, _} = error ->
         error
@@ -256,18 +264,37 @@ defmodule Cadence.Procedures.ProcedureBlock do
   end
 
   defp validate_content_for_type(:telemetry_wait, content) do
-    # Accept either 'condition' (schema format) or 'item_path'+'operator' (UI format)
     case require_any_key(
            content,
-           [:condition, "condition", :item_path, "item_path"],
-           "telemetry_wait block requires 'condition' or 'item_path' field"
+           [:item, "item"],
+           "telemetry_wait block requires 'item' field"
          ) do
       :ok ->
-        require_any_key(
-          content,
-          [:timeout_seconds, "timeout_seconds", :timeout_ms, "timeout_ms"],
-          "telemetry_wait block requires 'timeout_seconds' or 'timeout_ms' field"
-        )
+        case require_any_key(
+               content,
+               [:operator, "operator"],
+               "telemetry_wait block requires 'operator' field"
+             ) do
+          :ok ->
+            case require_any_key(
+                   content,
+                   [:expected, "expected"],
+                   "telemetry_wait block requires 'expected' field"
+                 ) do
+              :ok ->
+                require_any_key(
+                  content,
+                  [:timeout_ms, "timeout_ms"],
+                  "telemetry_wait block requires 'timeout_ms' field"
+                )
+
+              {:error, _} = error ->
+                error
+            end
+
+          {:error, _} = error ->
+            error
+        end
 
       {:error, _} = error ->
         error

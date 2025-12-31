@@ -12,7 +12,6 @@ defmodule Cadence.Ports.Repository.Procedures.ExecutionOperations do
   """
 
   alias Cadence.Procedures.ProcedureExecution
-  alias Cadence.Procedures.ProcedureLog
 
   @type id :: String.t()
   @type execution_id :: String.t()
@@ -64,28 +63,6 @@ defmodule Cadence.Ports.Repository.Procedures.ExecutionOperations do
   Useful for recovery after restarts.
   """
   @callback list_running_executions() :: [ProcedureExecution.t()]
-
-  # ============================================================================
-  # Log Operations
-  # ============================================================================
-
-  @doc """
-  Lists log entries for an execution.
-
-  ## Options
-
-  - `:level` - Filter by log level (:debug, :info, :warn, :error)
-  - `:limit` - Maximum number of results (default: 100)
-  - `:offset` - Pagination offset
-  """
-  @callback list_logs(execution_id(), opts :: keyword()) :: [ProcedureLog.t()]
-
-  @doc """
-  Creates a log entry for an execution.
-
-  Returns `{:ok, log}` on success, `{:error, reason}` on failure.
-  """
-  @callback create_log(attrs :: map()) :: {:ok, ProcedureLog.t()} | {:error, error()}
 
   @doc """
   Returns the configured execution operations implementation.

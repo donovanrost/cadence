@@ -63,7 +63,7 @@ defmodule CadenceWeb.CoreComponents do
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
+        "alert w-80 sm:w-96 max-w-[90vw] sm:max-w-96 text-wrap break-words whitespace-pre-wrap max-h-64 overflow-auto",
         @kind == :info && "alert-info",
         @kind == :error && "alert-error"
       ]}>
@@ -71,7 +71,7 @@ defmodule CadenceWeb.CoreComponents do
         <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{msg}</p>
+          <p class="break-words">{msg}</p>
         </div>
         <div class="flex-1" />
         <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>

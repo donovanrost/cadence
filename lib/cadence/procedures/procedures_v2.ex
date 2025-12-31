@@ -2,11 +2,10 @@ defmodule Cadence.Procedures.V2 do
   @moduledoc """
   Context functions for Procedures V2 (block-based steps).
 
-  This module provides the public API for the new normalized procedure
-  model with sections, steps, and blocks. It complements the existing
-  `Cadence.Procedures` context which handles the legacy DAG model.
+  This module provides the public API for the normalized procedure
+  model with sections, steps, and blocks.
 
-  ## Key Differences from V1
+  ## Key Capabilities
 
   - **Normalized structure** - Sections, steps, and blocks are separate records
   - **Block-based content** - Steps contain typed blocks (text, inputs, telemetry, commands)
@@ -24,8 +23,8 @@ defmodule Cadence.Procedures.V2 do
       {:ok, execution} = V2.start_execution(version, params, opts)
 
       # Operator interactions
-      {:ok, block_exec} = V2.enter_block_value(execution, step_exec, block, value, user)
-      {:ok, signoff} = V2.sign_off_step(execution, step_exec, user, "operator")
+      :ok = V2.submit_block_input(execution.id, step_id, block_id, value, user_id: user.id)
+      :ok = V2.sign_off_step_v2(execution.id, step_id, "operator", nil, user_id: user.id)
   """
 
   import Ecto.Query
@@ -33,7 +32,7 @@ defmodule Cadence.Procedures.V2 do
   alias Cadence.Procedures.{
     DataSourceConfig,
     ExecutionComment,
-    Executor,
+    Parameters,
     ProcedureBlock,
     ProcedureExecution,
     ProcedureSection,
@@ -46,6 +45,7 @@ defmodule Cadence.Procedures.V2 do
   }
 
   alias Cadence.Repo
+  alias Cadence.Targets
 
   # ============================================================================
   # Sections
@@ -290,7 +290,57 @@ defmodule Cadence.Procedures.V2 do
   - `:trigger_context` - Additional trigger context
   """
   def start_execution(%ProcedureVersion{} = version, params \\ %{}, opts \\ []) do
-    Executor.start(version, params, opts)
+    version = Repo.preload(version, :procedure)
+    skip_validation = Keyword.get(opts, :skip_validation, false)
+    mission_id = version.procedure.mission_id
+
+    validation_context = %{
+      mission_id: mission_id,
+      organization_id: version.procedure.organization_id
+    }
+
+    with {:ok, validated_params} <-
+           maybe_validate_params(params, version, validation_context, skip_validation),
+         {:ok, target_id} <- resolve_target_id(opts[:target_id], mission_id),
+         {:ok, pid} <-
+           DynamicSupervisor.start_child(
+             Cadence.Procedures.ExecutionSupervisor,
+             {Cadence.Procedures.V2.ExecutionProcess,
+              [
+                procedure_version: version,
+                params: validated_params,
+                target_id: target_id,
+                user_id: opts[:user_id],
+                triggered_by: opts[:triggered_by],
+                trigger_context: opts[:trigger_context]
+              ]}
+           ) do
+      {:ok, Cadence.Procedures.V2.ExecutionProcess.get_execution(pid)}
+    end
+  end
+
+  defp maybe_validate_params(params, _version, _context, true), do: {:ok, params}
+
+  defp maybe_validate_params(params, version, context, false) do
+    case Parameters.validate(params, version.parameters_schema, context) do
+      {:ok, validated} -> {:ok, validated}
+      {:error, errors} -> {:error, {:validation, errors}}
+    end
+  end
+
+  defp resolve_target_id(nil, _mission_id), do: {:ok, nil}
+
+  defp resolve_target_id(target_id, mission_id) when is_binary(target_id) do
+    case Ecto.UUID.cast(target_id) do
+      {:ok, uuid} ->
+        {:ok, uuid}
+
+      :error ->
+        case Targets.get_target_by_identifier(mission_id, target_id) do
+          {:ok, target} -> {:ok, target.id}
+          {:error, :not_found} -> {:error, {:target_not_found, target_id}}
+        end
+    end
   end
 
   @doc """
@@ -320,65 +370,6 @@ defmodule Cadence.Procedures.V2 do
   """
   def get_step_execution(id), do: Repo.get(StepExecution, id)
   def get_step_execution!(id), do: Repo.get!(StepExecution, id)
-
-  @doc """
-  Enters a value into an input block.
-  """
-  def enter_block_value(execution, step_execution, block, value, user) do
-    Executor.enter_block_value(execution, step_execution, block, value, user)
-  end
-
-  @doc """
-  Evaluates telemetry blocks in a step.
-  """
-  def evaluate_telemetry_blocks(execution, step_execution) do
-    Executor.evaluate_telemetry_blocks(execution, step_execution)
-  end
-
-  @doc """
-  Signs off a step.
-  """
-  def sign_off_step(execution, step_execution, user, role, note \\ nil) do
-    Executor.sign_off_step(execution, step_execution, user, role, note)
-  end
-
-  @doc """
-  Skips a step.
-  """
-  def skip_step(execution, step_execution, user, reason) do
-    Executor.skip_step(execution, step_execution, user, reason)
-  end
-
-  @doc """
-  Pauses execution.
-  """
-  def pause_execution(execution) do
-    Executor.pause_execution(execution)
-  end
-
-  @doc """
-  Resumes execution.
-  """
-  def resume_execution(execution) do
-    Executor.resume_execution(execution)
-  end
-
-  @doc """
-  Fails execution with error.
-  """
-  def fail_execution(execution, error_message, failed_step \\ nil) do
-    Executor.fail_execution(execution, error_message, failed_step)
-  end
-
-  @doc """
-  Completes a step (for manual mode where user explicitly marks complete).
-
-  Validates that all required inputs are filled, checks passed, and
-  signoff requirements are met before completing.
-  """
-  def complete_step(execution, step_execution) do
-    Executor.complete_step(execution, step_execution)
-  end
 
   # ============================================================================
   # V2 Runtime Execution Operations (via ExecutionProcess)
@@ -582,6 +573,12 @@ defmodule Cadence.Procedures.V2 do
   # ============================================================================
   # Suggested Edits (Redlines)
   # ============================================================================
+
+  @doc """
+  Gets a suggested edit by ID.
+  """
+  def get_suggested_edit(id), do: Repo.get(SuggestedEdit, id)
+  def get_suggested_edit!(id), do: Repo.get!(SuggestedEdit, id)
 
   @doc """
   Lists suggested edits for an execution.
@@ -871,125 +868,6 @@ defmodule Cadence.Procedures.V2 do
       signoffs: signoffs,
       is_complete: StepSignoff.requirements_met?(signoffs, required_roles, step.signoff_logic),
       missing_roles: StepSignoff.missing_roles(signoffs, required_roles, step.signoff_logic)
-    }
-  end
-
-  # ============================================================================
-  # Version Conversion
-  # ============================================================================
-
-  @doc """
-  Converts a v1 procedure version (JSON DAG) to v2 structure.
-
-  This is a one-time migration helper that creates sections, steps, and blocks
-  from the existing `source` JSON blob.
-  """
-  def convert_v1_to_v2(%ProcedureVersion{} = version) do
-    source = version.source || %{}
-    steps = source["steps"] || %{}
-
-    Repo.transaction(fn ->
-      # Create a single section for all steps
-      {:ok, section} =
-        create_section(version.id, %{
-          name: "Main",
-          description: "Converted from v1 procedure",
-          position: 0
-        })
-
-      # Convert each step
-      steps
-      |> Enum.with_index()
-      |> Enum.each(fn {{step_name, step_def}, index} ->
-        convert_v1_step(section.id, step_name, step_def, index)
-      end)
-
-      section
-    end)
-  end
-
-  defp convert_v1_step(section_id, step_name, step_def, position) do
-    step_type = step_def["type"]
-
-    step_attrs = %{
-      name: step_name,
-      title: step_def["description"] || step_name,
-      position: position,
-      depends_on: step_def["depends_on"] || [],
-      condition: step_def["condition"],
-      requires_signoff: true
-    }
-
-    {:ok, step} = create_step(section_id, step_attrs)
-
-    # Create block based on v1 step type
-    block_attrs = convert_v1_step_type_to_block(step_type, step_def)
-    create_block(step.id, Map.put(block_attrs, :position, 0))
-
-    step
-  end
-
-  defp convert_v1_step_type_to_block("check", step_def) do
-    %{
-      block_type: :telemetry_check,
-      name: "check",
-      content: %{
-        "condition" => step_def["condition"],
-        "pass_criteria" => step_def["condition"]
-      }
-    }
-  end
-
-  defp convert_v1_step_type_to_block("command", step_def) do
-    %{
-      block_type: :command,
-      name: "command",
-      content: %{
-        "command_name" => step_def["name"],
-        "arguments" => step_def["arguments"] || %{},
-        "target" => step_def["target"]
-      }
-    }
-  end
-
-  defp convert_v1_step_type_to_block("wait", step_def) do
-    %{
-      block_type: :text,
-      name: "wait",
-      content: %{
-        "markdown" => "Wait for #{step_def["duration_seconds"] || 0} seconds"
-      }
-    }
-  end
-
-  defp convert_v1_step_type_to_block("wait_for", step_def) do
-    %{
-      block_type: :telemetry_wait,
-      name: "wait_for",
-      content: %{
-        "condition" => step_def["condition"],
-        "timeout_seconds" => step_def["timeout_seconds"] || 60
-      }
-    }
-  end
-
-  defp convert_v1_step_type_to_block("log", step_def) do
-    %{
-      block_type: :text,
-      name: "log",
-      content: %{
-        "markdown" => step_def["message"] || ""
-      }
-    }
-  end
-
-  defp convert_v1_step_type_to_block(_type, step_def) do
-    %{
-      block_type: :text,
-      name: "content",
-      content: %{
-        "markdown" => step_def["description"] || "Step content"
-      }
     }
   end
 end

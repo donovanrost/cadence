@@ -36,7 +36,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   # Accept MissionConfig only
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Automations.Engine.AutomationManager
-  alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
@@ -123,9 +122,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
           # Target Pipeline Supervisor - manages per-target command queues and dispatchers
           {TargetPipelineSupervisor, config: config},
-
-          # Procedure Execution Coordinator - manages procedure executions
-          {ExecutionCoordinator, mission_id: mission_id, organization_id: organization_id},
 
           # Automation Manager - processes events and triggers automations
           {AutomationManager, mission_id: mission_id, organization_id: organization_id}

@@ -25,7 +25,10 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
   """
 
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
+  alias Cadence.Outbox
   alias Cadence.Ports.Recordings.EventRecorder
+  alias Cadence.Targets
+  require Logger
 
   @type enqueue_attrs :: %{
           required(:organization_id) => String.t(),
@@ -92,10 +95,11 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
   @spec enqueue(enqueue_attrs(), enqueue_opts()) ::
           {:ok, QueuedCommand.t()} | {:error, term()}
   def enqueue(attrs, opts \\ []) do
-    entity_attrs = build_entity_attrs(attrs, opts)
-
-    with {:ok, command} <- QueuedCommand.new(entity_attrs),
+    with {:ok, target_id} <- resolve_target_id(attrs[:target_id], attrs[:mission_id]),
+         entity_attrs <- build_entity_attrs(attrs, opts, target_id),
+         {:ok, command} <- QueuedCommand.new(entity_attrs),
          {:ok, saved} <- repo().enqueue(command) do
+      _ = publish_outbox_event(saved, attrs[:user_id])
       broadcast_enqueued(saved)
       {:ok, saved}
     end
@@ -174,11 +178,11 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
   # Private Helpers
   # ===========================================================================
 
-  defp build_entity_attrs(attrs, opts) do
+  defp build_entity_attrs(attrs, opts, target_id) do
     %{
       organization_id: attrs[:organization_id],
       mission_id: attrs[:mission_id],
-      target_id: attrs[:target_id],
+      target_id: target_id,
       user_id: attrs[:user_id],
       command_name: attrs[:command_name],
       parameters: attrs[:parameters] || %{},
@@ -191,6 +195,27 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
     }
   end
 
+  defp resolve_target_id(nil, _mission_id), do: {:ok, nil}
+
+  defp resolve_target_id(target_id, mission_id) when is_binary(target_id) do
+    case Ecto.UUID.cast(target_id) do
+      {:ok, uuid} ->
+        {:ok, uuid}
+
+      :error ->
+        case mission_id do
+          nil ->
+            {:error, :missing_mission_id}
+
+          _ ->
+            case Targets.get_target_by_identifier(mission_id, target_id) do
+              {:ok, target} -> {:ok, target.id}
+              {:error, :not_found} -> {:error, {:target_not_found, target_id}}
+            end
+        end
+    end
+  end
+
   defp broadcast_enqueued(%QueuedCommand{target_id: target_id, user_id: user_id} = entry) do
     topic = "target:#{target_id}:queue"
     event_publisher().publish(topic, {:command_enqueued, entry})
@@ -199,5 +224,30 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
     recorder().record(:command_queued, entry, user_id, %{})
   rescue
     _ -> :ok
+  end
+
+  defp publish_outbox_event(%QueuedCommand{} = entry, user_id) do
+    actor_type = if user_id, do: "user", else: nil
+
+    Outbox.insert(%{
+      organization_id: entry.organization_id,
+      mission_id: entry.mission_id,
+      event_type: "command_enqueued",
+      aggregate_type: "command_queue_entry",
+      aggregate_id: entry.id,
+      actor_id: user_id,
+      actor_type: actor_type,
+      payload: %{
+        command_name: entry.command_name,
+        target_id: entry.target_id,
+        status: "pending",
+        priority: entry.priority,
+        scheduled_at: entry.scheduled_at
+      }
+    })
+    |> case do
+      {:ok, _event} -> :ok
+      {:error, changeset} -> Logger.warning("Failed to insert outbox event: #{inspect(changeset)}")
+    end
   end
 end

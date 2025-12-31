@@ -38,27 +38,44 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
          "procedure_id" => procedure_id,
          "version_id" => version_id
        }) do
-    procedure = Procedures.get_procedure!(procedure_id)
-    version = Procedures.get_version!(version_id)
-    sections = V2.list_sections_with_steps(version_id)
+    mission = socket.assigns.mission
 
-    parameter_types =
-      ~w(string number integer boolean enum target telemetry_item command duration datetime array)
+    case load_version_for_mission(mission, procedure_id, version_id) do
+      {:ok, procedure, version} ->
+        sections = V2.list_sections_with_steps(version_id)
 
-    socket
-    |> assign(:page_title, "Edit: #{procedure.name} (v#{version.version_number})")
-    |> assign(:procedure, procedure)
-    |> assign(:version, version)
-    |> assign(:sections, sections)
-    |> assign(:collapsed_section_ids, MapSet.new())
-    |> assign(:settings_expanded, true)
-    |> assign(:editing_section_id, nil)
-    |> assign(:editing_step_id, nil)
-    |> assign(:editing_block_id, nil)
-    |> assign(:show_block_palette_for_step, nil)
-    |> assign(:editing_parameter_index, nil)
-    |> assign(:adding_parameter, false)
-    |> assign(:parameter_types, parameter_types)
+        parameter_types =
+          ~w(string number integer boolean enum target telemetry_item command duration datetime array)
+
+        execution_mode_options = [
+          {"Manual", "manual"},
+          {"Assisted", "assisted"},
+          {"Automatic", "automatic"}
+        ]
+
+        socket
+        |> assign(:page_title, "Edit: #{procedure.name} (v#{version.version_number})")
+        |> assign(:procedure, procedure)
+        |> assign(:version, version)
+        |> assign(:sections, sections)
+        |> assign(:collapsed_section_ids, MapSet.new())
+        |> assign(:settings_expanded, true)
+        |> assign(:editing_section_id, nil)
+        |> assign(:editing_step_id, nil)
+        |> assign(:editing_block_id, nil)
+        |> assign(:show_block_palette_for_step, nil)
+        |> assign(:editing_parameter_index, nil)
+        |> assign(:adding_parameter, false)
+        |> assign(:parameter_types, parameter_types)
+        |> assign(:execution_mode_options, execution_mode_options)
+        |> assign(:show_reject_form, false)
+        |> refresh_version_assigns(version)
+
+      {:error, message} ->
+        socket
+        |> put_flash(:error, message)
+        |> push_navigate(to: ~p"/missions/#{mission}/procedures")
+    end
   end
 
   # ────────────────────────────────────────────────────────────────────
@@ -78,7 +95,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     {:noreply, assign(socket, :adding_parameter, false)}
   end
 
-  def handle_event("save_new_parameter", params, socket) do
+  def handle_event("save_new_parameter", %{"parameter" => params}, socket) do
     version = socket.assigns.version
     current_params = get_parameters(version)
 
@@ -114,7 +131,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     {:noreply, assign(socket, :editing_parameter_index, nil)}
   end
 
-  def handle_event("save_parameter", %{"index" => index} = params, socket) do
+  def handle_event("save_parameter", %{"index" => index, "parameter" => params}, socket) do
     version = socket.assigns.version
     current_params = get_parameters(version)
     idx = String.to_integer(index)
@@ -162,6 +179,93 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     end
   end
 
+  def handle_event("save_settings", %{"settings" => params}, socket) do
+    version = socket.assigns.version
+
+    attrs = %{
+      execution_mode: parse_execution_mode(params["execution_mode"]),
+      allow_hazardous_commands: parse_boolean(params["allow_hazardous_commands"]),
+      allow_suggested_edits: parse_boolean(params["allow_suggested_edits"])
+    }
+
+    case update_version_settings(version, attrs) do
+      {:ok, updated_version} ->
+        {:noreply, refresh_version_assigns(socket, updated_version)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save settings")}
+    end
+  end
+
+  def handle_event("submit_for_review", _params, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.submit_for_review(version, user_id) do
+      {:ok, updated_version} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> put_flash(:info, "Version submitted for review")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("withdraw_submission", _params, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.withdraw_submission(version, user_id) do
+      {:ok, updated_version} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> put_flash(:info, "Submission withdrawn")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to withdraw: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("approve_version", _params, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.add_approval(version, user_id, :approved) do
+      {:ok, %{version: updated_version}} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> put_flash(:info, "Approval recorded")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to approve: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("toggle_reject_form", _params, socket) do
+    {:noreply, assign(socket, :show_reject_form, !socket.assigns.show_reject_form)}
+  end
+
+  def handle_event("reject_version", %{"rejection" => %{"reason" => reason}}, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.add_approval(version, user_id, :rejected, comment: reason) do
+      {:ok, %{version: updated_version}} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> assign(:show_reject_form, false)
+         |> put_flash(:info, "Rejection recorded")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to reject: #{inspect(reason)}")}
+    end
+  end
+
   # ────────────────────────────────────────────────────────────────────
   # Event Handlers - Sections
   # ────────────────────────────────────────────────────────────────────
@@ -205,7 +309,11 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     {:noreply, assign(socket, :editing_section_id, section_id)}
   end
 
-  def handle_event("save_section_name", %{"id" => section_id, "name" => name}, socket) do
+  def handle_event(
+        "save_section_name",
+        %{"id" => section_id, "section" => %{"name" => name}},
+        socket
+      ) do
     section = V2.get_section!(section_id)
 
     case V2.update_section(section, %{name: name}) do
@@ -273,14 +381,14 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     {:noreply, assign(socket, :editing_step_id, nil)}
   end
 
-  def handle_event("save_step", %{"step_id" => step_id} = params, socket) do
+  def handle_event("save_step", %{"step_id" => step_id, "step" => params}, socket) do
     step = V2.get_step!(step_id)
 
     attrs = %{
       name: params["name"] || step.name,
       title: params["title"],
       requires_signoff: params["requires_signoff"] == "true",
-      on_fail: String.to_existing_atom(params["on_fail"] || "pause"),
+      on_fail: parse_on_fail(params["on_fail"]),
       required_roles: parse_roles(params["required_roles"])
     }
 
@@ -380,7 +488,8 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   def handle_event("save_block", %{"block_id" => block_id} = params, socket) do
     block = V2.get_block!(block_id)
-    content = build_content_from_params(block.block_type, params)
+    block_params = Map.get(params, "block", params)
+    content = build_content_from_params(block.block_type, block_params)
 
     case V2.update_block(block, %{content: content}) do
       {:ok, _} ->
@@ -507,16 +616,19 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   defp default_content_for_type("warning"), do: %{"text" => ""}
 
   defp default_content_for_type("telemetry_value"),
-    do: %{"item_path" => "", "label" => "", "unit" => ""}
+    do: %{"item" => "", "label" => "", "unit" => ""}
 
   defp default_content_for_type("telemetry_check"),
-    do: %{"item_path" => "", "operator" => "==", "expected_value" => ""}
+    do: %{"item" => "", "operator" => "==", "expected" => ""}
 
   defp default_content_for_type("telemetry_wait"),
-    do: %{"item_path" => "", "operator" => "==", "expected_value" => "", "timeout_ms" => 30_000}
+    do: %{"item" => "", "operator" => "==", "expected" => "", "timeout_ms" => 30_000}
 
   defp default_content_for_type("command"),
     do: %{"command_name" => "", "target" => "", "arguments" => %{}, "priority" => 3}
+
+  defp default_content_for_type("command_sequence"),
+    do: %{"commands" => []}
 
   defp default_content_for_type("text_input"),
     do: %{"label" => "", "variable_name" => "", "placeholder" => ""}
@@ -526,6 +638,21 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   defp default_content_for_type("select_input"),
     do: %{"label" => "", "variable_name" => "", "options" => []}
+
+  defp default_content_for_type("checkbox_input"),
+    do: %{"label" => "", "variable_name" => "", "options" => []}
+
+  defp default_content_for_type("timestamp_input"),
+    do: %{"label" => "", "variable_name" => "", "placeholder" => ""}
+
+  defp default_content_for_type("duration_input"),
+    do: %{"label" => "", "variable_name" => "", "unit" => "seconds"}
+
+  defp default_content_for_type("attachment_input"),
+    do: %{"label" => "", "variable_name" => "", "placeholder" => ""}
+
+  defp default_content_for_type("signature_input"),
+    do: %{"label" => "", "variable_name" => "", "placeholder" => ""}
 
   defp default_content_for_type(_), do: %{}
 
@@ -537,7 +664,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   defp build_content_from_params(:telemetry_value, params) do
     %{
-      "item_path" => params["item_path"] || "",
+      "item" => params["item"] || "",
       "label" => params["label"] || "",
       "unit" => params["unit"] || ""
     }
@@ -545,17 +672,17 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   defp build_content_from_params(:telemetry_check, params) do
     %{
-      "item_path" => params["item_path"] || "",
+      "item" => params["item"] || "",
       "operator" => params["operator"] || "==",
-      "expected_value" => params["expected_value"] || ""
+      "expected" => params["expected"] || ""
     }
   end
 
   defp build_content_from_params(:telemetry_wait, params) do
     %{
-      "item_path" => params["item_path"] || "",
+      "item" => params["item"] || "",
       "operator" => params["operator"] || "==",
-      "expected_value" => params["expected_value"] || "",
+      "expected" => params["expected"] || "",
       "timeout_ms" => parse_int(params["timeout_ms"], 30_000)
     }
   end
@@ -575,6 +702,18 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
       "arguments" => args,
       "priority" => parse_int(params["priority"], 3)
     }
+  end
+
+  defp build_content_from_params(:command_sequence, params) do
+    commands =
+      case params["commands"] do
+        nil -> []
+        "" -> []
+        json when is_binary(json) -> parse_json_args(json)
+        list when is_list(list) -> list
+      end
+
+    %{"commands" => commands}
   end
 
   defp build_content_from_params(:text_input, params) do
@@ -607,6 +746,54 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
       "label" => params["label"] || "",
       "variable_name" => params["variable_name"] || "",
       "options" => options
+    }
+  end
+
+  defp build_content_from_params(:checkbox_input, params) do
+    options =
+      case params["options"] do
+        nil -> []
+        "" -> []
+        str when is_binary(str) -> String.split(str, "\n", trim: true)
+        list when is_list(list) -> list
+      end
+
+    %{
+      "label" => params["label"] || "",
+      "variable_name" => params["variable_name"] || "",
+      "options" => options
+    }
+  end
+
+  defp build_content_from_params(:timestamp_input, params) do
+    %{
+      "label" => params["label"] || "",
+      "variable_name" => params["variable_name"] || "",
+      "placeholder" => params["placeholder"] || ""
+    }
+  end
+
+  defp build_content_from_params(:duration_input, params) do
+    %{
+      "label" => params["label"] || "",
+      "variable_name" => params["variable_name"] || "",
+      "unit" => params["unit"] || "seconds"
+    }
+  end
+
+  defp build_content_from_params(:attachment_input, params) do
+    %{
+      "label" => params["label"] || "",
+      "variable_name" => params["variable_name"] || "",
+      "placeholder" => params["placeholder"] || ""
+    }
+  end
+
+  defp build_content_from_params(:signature_input, params) do
+    %{
+      "label" => params["label"] || "",
+      "variable_name" => params["variable_name"] || "",
+      "placeholder" => params["placeholder"] || ""
     }
   end
 
@@ -652,6 +839,67 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     <<?A + index::utf8>>
   end
 
+  defp parse_execution_mode(nil), do: :manual
+  defp parse_execution_mode(""), do: :manual
+  defp parse_execution_mode("manual"), do: :manual
+  defp parse_execution_mode("assisted"), do: :assisted
+  defp parse_execution_mode("automatic"), do: :automatic
+  defp parse_execution_mode(mode) when is_atom(mode), do: mode
+  defp parse_execution_mode(_), do: :manual
+
+  defp parse_on_fail(nil), do: :pause
+  defp parse_on_fail("pause"), do: :pause
+  defp parse_on_fail("abort"), do: :abort
+  defp parse_on_fail("continue"), do: :continue
+  defp parse_on_fail(_), do: :pause
+
+  defp parse_boolean(value) when value in [true, "true", "on", 1, "1"], do: true
+  defp parse_boolean(_), do: false
+
+  defp update_version_settings(version, attrs) do
+    version
+    |> Ecto.Changeset.change(attrs)
+    |> Cadence.Repo.update()
+  end
+
+  defp refresh_version_assigns(socket, version) do
+    approval_status =
+      if version.status == :in_review, do: Procedures.get_approval_status(version), else: nil
+
+    settings_form =
+      to_form(
+        %{
+          "execution_mode" => to_string(version.execution_mode || :manual),
+          "allow_hazardous_commands" => version.allow_hazardous_commands,
+          "allow_suggested_edits" => version.allow_suggested_edits
+        },
+        as: :settings
+      )
+
+    socket
+    |> assign(:version, version)
+    |> assign(:settings_form, settings_form)
+    |> assign(:approval_status, approval_status)
+    |> assign(:rejection_form, to_form(%{}, as: :rejection))
+  end
+
+  defp load_version_for_mission(mission, procedure_id, version_id) do
+    case Procedures.get_procedure(procedure_id) do
+      %Cadence.Procedures.Procedure{mission_id: mission_id} = procedure
+      when mission_id == mission.id ->
+        case Procedures.get_version(version_id) do
+          %Cadence.Procedures.ProcedureVersion{procedure_id: ^procedure_id} = version ->
+            {:ok, procedure, version}
+
+          _ ->
+            {:error, "Procedure version not found"}
+        end
+
+      _ ->
+        {:error, "Procedure not found in this mission"}
+    end
+  end
+
   # ────────────────────────────────────────────────────────────────────
   # Render
   # ────────────────────────────────────────────────────────────────────
@@ -662,125 +910,198 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     assigns = assign(assigns, :parameters, parameters)
 
     ~H"""
-    <div class="h-[calc(100vh-4rem)] flex flex-col overflow-hidden" id="procedure-editor">
-      <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-primary/20 bg-surface-raised">
-        <div class="flex items-center gap-4">
-          <.link
-            navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
-            class="btn btn-ghost btn-sm hover-glow-cyan transition-smooth"
-          >
-            <.icon name="hero-arrow-left" class="h-4 w-4" />
-          </.link>
-          <div>
-            <h1 class="text-lg font-bold tracking-wide">{@procedure.name}</h1>
-            <span class="hud-label">
-              Version {@version.version_number} • Editing
-            </span>
+    <Layouts.app flash={@flash} current_scope={@current_scope} variant={:bare}>
+      <div class="h-[calc(100vh-4rem)] flex flex-col overflow-hidden" id="procedure-editor">
+        <!-- Header -->
+        <div class="flex flex-col gap-3 px-6 py-4 border-b border-primary/20 bg-surface-raised">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <.link
+                navigate={~p"/missions/#{@mission}/procedures/#{@procedure}"}
+                class="btn btn-ghost btn-sm hover-glow-cyan transition-smooth"
+              >
+                <.icon name="hero-arrow-left" class="h-4 w-4" />
+              </.link>
+              <div>
+                <h1 class="text-lg font-bold tracking-wide">{@procedure.name}</h1>
+                <span class="hud-label">
+                  Version {@version.version_number} • Editing
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class={[
+                "badge",
+                @version.status == :draft && "badge-warning",
+                @version.status == :approved && "badge-success",
+                @version.status == :deprecated && "badge-ghost",
+                @version.status == :in_review && "badge-info"
+              ]}>
+                {@version.status}
+              </span>
+            </div>
           </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class={[
-            "badge",
-            @version.status == :draft && "badge-warning",
-            @version.status == :approved && "badge-success",
-            @version.status == :deprecated && "badge-ghost"
-          ]}>
-            {@version.status}
-          </span>
-        </div>
-      </div>
-      
-    <!-- Two Column Layout -->
-      <div class="flex-1 flex overflow-hidden">
-        <!-- Left Panel: Navigation Sidebar -->
-        <div class="w-64 border-r border-cyan-subtle bg-surface-raised hud-grid flex flex-col">
-          <div class="flex-1 overflow-y-auto p-3">
-            <!-- Settings Nav Item -->
-            <div
-              class={[
-                "flex items-center gap-2 px-3 py-2 rounded-sm cursor-pointer mb-3",
-                "hover:bg-cyan-ghost transition-smooth"
-              ]}
-              phx-click="toggle_settings"
-            >
-              <.icon name="hero-cog-6-tooth" class="h-4 w-4 opacity-70" />
-              <span class="text-sm font-medium text-base-content">Procedure Settings</span>
-              <%= if length(@parameters) > 0 do %>
-                <span class="badge badge-sm badge-ghost">{length(@parameters)}</span>
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-xs text-base-content/60">
+              <%= if @approval_status do %>
+                {@approval_status.approved}/{@approval_status.required} approvals · {if @approval_status.is_blocked,
+                  do: "Blocked",
+                  else: "#{@approval_status.pending} pending"}
+              <% else %>
+                Ready when you are
               <% end %>
             </div>
-
-            <div class="hud-divider my-2"></div>
-            
-    <!-- Sections Navigation -->
-            <div class="space-y-2">
-              <%= for {section, idx} <- Enum.with_index(@sections) do %>
-                <.nav_section
-                  section={section}
-                  section_letter={section_letter(idx)}
-                  collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
-                />
+            <div class="flex flex-wrap items-center gap-2">
+              <%= if @version.status == :draft do %>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary"
+                  phx-click="submit_for_review"
+                >
+                  Submit for review
+                </button>
               <% end %>
+              <%= if @version.status == :in_review do %>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost"
+                  phx-click="withdraw_submission"
+                >
+                  Withdraw
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-success"
+                  phx-click="approve_version"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline btn-error"
+                  phx-click="toggle_reject_form"
+                >
+                  Reject
+                </button>
+              <% end %>
+            </div>
+          </div>
 
-              <%= if Enum.empty?(@sections) do %>
-                <div class="text-center py-4 opacity-60 text-sm">
-                  No sections yet
+          <%= if @show_reject_form do %>
+            <div class="bg-error/5 border border-error/20 rounded-md p-3">
+              <.form for={@rejection_form} id="reject-version-form" phx-submit="reject_version">
+                <div class="flex flex-wrap items-center gap-2">
+                  <.input
+                    type="text"
+                    field={@rejection_form[:reason]}
+                    label="Rejection reason"
+                    placeholder="Why should this change be revised?"
+                    class="input input-bordered input-sm flex-1 min-w-[240px]"
+                  />
+                  <button type="submit" class="btn btn-sm btn-error">Confirm Reject</button>
+                  <button type="button" class="btn btn-sm btn-ghost" phx-click="toggle_reject_form">
+                    Cancel
+                  </button>
                 </div>
-              <% end %>
+              </.form>
+            </div>
+          <% end %>
+        </div>
+        
+    <!-- Two Column Layout -->
+        <div class="flex-1 flex overflow-hidden">
+          <!-- Left Panel: Navigation Sidebar -->
+          <div class="w-64 border-r border-cyan-subtle bg-surface-raised hud-grid flex flex-col">
+            <div class="flex-1 overflow-y-auto p-3">
+              <!-- Settings Nav Item -->
+              <div
+                class={[
+                  "flex items-center gap-2 px-3 py-2 rounded-sm cursor-pointer mb-3",
+                  "hover:bg-cyan-ghost transition-smooth"
+                ]}
+                phx-click="toggle_settings"
+              >
+                <.icon name="hero-cog-6-tooth" class="h-4 w-4 opacity-70" />
+                <span class="text-sm font-medium text-base-content">Procedure Settings</span>
+                <%= if length(@parameters) > 0 do %>
+                  <span class="badge badge-sm badge-ghost">{length(@parameters)}</span>
+                <% end %>
+              </div>
+
+              <div class="hud-divider my-2"></div>
+              
+    <!-- Sections Navigation -->
+              <div class="space-y-2">
+                <%= for {section, idx} <- Enum.with_index(@sections) do %>
+                  <.nav_section
+                    section={section}
+                    section_letter={section_letter(idx)}
+                    collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
+                  />
+                <% end %>
+
+                <%= if Enum.empty?(@sections) do %>
+                  <div class="text-center py-4 opacity-60 text-sm">
+                    No sections yet
+                  </div>
+                <% end %>
+              </div>
+            </div>
+            
+    <!-- Add Section Button -->
+            <div class="p-3 border-t border-cyan-subtle">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm w-full justify-start gap-2 hover-glow-cyan transition-smooth"
+                phx-click="add_section"
+              >
+                <.icon name="hero-plus" class="h-4 w-4" /> Add Section
+              </button>
             </div>
           </div>
           
-    <!-- Add Section Button -->
-          <div class="p-3 border-t border-cyan-subtle">
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm w-full justify-start gap-2 hover-glow-cyan transition-smooth"
-              phx-click="add_section"
-            >
-              <.icon name="hero-plus" class="h-4 w-4" /> Add Section
-            </button>
-          </div>
-        </div>
-        
     <!-- Center Panel: Full Procedure Document -->
-        <div class="flex-1 bg-surface-base flex flex-col overflow-hidden">
-          <div class="flex-1 overflow-y-auto" id="procedure-scroll-container" phx-hook="ScrollTo">
-            <div class="p-4 space-y-6 max-w-4xl mx-auto">
-              <!-- Settings Section -->
-              <.settings_section
-                expanded={@settings_expanded}
-                parameters={@parameters}
-                editing_index={@editing_parameter_index}
-                adding={@adding_parameter}
-                parameter_types={@parameter_types}
-              />
-              
-    <!-- Procedure Sections -->
-              <%= for {section, idx} <- Enum.with_index(@sections) do %>
-                <.document_section
-                  section={section}
-                  section_letter={section_letter(idx)}
-                  collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
-                  editing_section={section.id == @editing_section_id}
-                  editing_step_id={@editing_step_id}
-                  editing_block_id={@editing_block_id}
-                  show_palette_for_step={@show_block_palette_for_step}
+          <div class="flex-1 bg-surface-base flex flex-col overflow-hidden">
+            <div class="flex-1 overflow-y-auto" id="procedure-scroll-container" phx-hook="ScrollTo">
+              <div class="p-4 space-y-6 max-w-4xl mx-auto">
+                <!-- Settings Section -->
+                <.settings_section
+                  expanded={@settings_expanded}
+                  parameters={@parameters}
+                  editing_index={@editing_parameter_index}
+                  adding={@adding_parameter}
+                  parameter_types={@parameter_types}
+                  settings_form={@settings_form}
+                  execution_mode_options={@execution_mode_options}
                 />
-              <% end %>
+                
+    <!-- Procedure Sections -->
+                <%= for {section, idx} <- Enum.with_index(@sections) do %>
+                  <.document_section
+                    section={section}
+                    section_letter={section_letter(idx)}
+                    collapsed={MapSet.member?(@collapsed_section_ids, section.id)}
+                    editing_section={section.id == @editing_section_id}
+                    editing_step_id={@editing_step_id}
+                    editing_block_id={@editing_block_id}
+                    show_palette_for_step={@show_block_palette_for_step}
+                  />
+                <% end %>
 
-              <%= if Enum.empty?(@sections) do %>
-                <div class="text-center py-16 opacity-60">
-                  <.icon name="hero-document-plus" class="h-12 w-12 mx-auto mb-4" />
-                  <p class="text-lg">No sections yet</p>
-                  <p class="text-sm opacity-80 mt-2">Click "Add Section" to get started</p>
-                </div>
-              <% end %>
+                <%= if Enum.empty?(@sections) do %>
+                  <div class="text-center py-16 opacity-60">
+                    <.icon name="hero-document-plus" class="h-12 w-12 mx-auto mb-4" />
+                    <p class="text-lg">No sections yet</p>
+                    <p class="text-sm opacity-80 mt-2">Click "Add Section" to get started</p>
+                  </div>
+                <% end %>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Layouts.app>
     """
   end
 
@@ -834,6 +1155,8 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   attr :editing_index, :integer, default: nil
   attr :adding, :boolean, default: false
   attr :parameter_types, :list, required: true
+  attr :settings_form, :map, required: true
+  attr :execution_mode_options, :list, required: true
 
   defp settings_section(assigns) do
     ~H"""
@@ -864,6 +1187,37 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
         <%= if @expanded do %>
           <div class="border-t border-cyan-subtle p-4">
             <div class="space-y-4">
+              <div class="space-y-3">
+                <h3 class="hud-label">Execution Settings</h3>
+                <.form for={@settings_form} id="procedure-settings-form" phx-submit="save_settings">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <.input
+                      field={@settings_form[:execution_mode]}
+                      type="select"
+                      label="Execution mode"
+                      options={@execution_mode_options}
+                    />
+                    <div class="space-y-1">
+                      <.input
+                        field={@settings_form[:allow_hazardous_commands]}
+                        type="checkbox"
+                        label="Allow hazardous commands"
+                      />
+                      <.input
+                        field={@settings_form[:allow_suggested_edits]}
+                        type="checkbox"
+                        label="Allow suggested edits"
+                      />
+                    </div>
+                  </div>
+                  <div class="flex justify-end">
+                    <button type="submit" class="btn btn-sm btn-primary">Save Settings</button>
+                  </div>
+                </.form>
+              </div>
+
+              <div class="hud-divider"></div>
+
               <div class="flex items-center justify-between">
                 <h3 class="hud-label">
                   Input Parameters
@@ -978,58 +1332,57 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   defp parameter_form(assigns) do
     event = if assigns.is_new, do: "save_new_parameter", else: "save_parameter"
     cancel_event = if assigns.is_new, do: "cancel_add_parameter", else: "cancel_edit_parameter"
-    assigns = assign(assigns, event: event, cancel_event: cancel_event)
+    form = to_form(assigns.param, as: :parameter)
+
+    assigns =
+      assigns
+      |> assign(:event, event)
+      |> assign(:cancel_event, cancel_event)
+      |> assign(:form, form)
 
     ~H"""
-    <form phx-submit={@event} class="p-4 bg-surface-elevated hud-border rounded-sm space-y-3">
+    <.form
+      for={@form}
+      id={"parameter-form-#{@index || "new"}"}
+      phx-submit={@event}
+      class="p-4 bg-surface-elevated hud-border rounded-sm space-y-3"
+    >
       <%= if @index do %>
         <input type="hidden" name="index" value={@index} />
       <% end %>
 
       <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="hud-label">Name</label>
-          <input
-            type="text"
-            name="name"
-            value={@param["name"]}
-            class="mt-1 input input-bordered input-sm w-full font-mono rounded-sm"
-            placeholder="parameter_name"
-            required
-          />
-        </div>
-        <div>
-          <label class="hud-label">Type</label>
-          <select name="type" class="mt-1 select select-bordered select-sm w-full rounded-sm">
-            <%= for type <- @parameter_types do %>
-              <option value={type} selected={@param["type"] == type}>{type}</option>
-            <% end %>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label class="hud-label">Description</label>
-        <input
+        <.input
           type="text"
-          name="description"
-          value={@param["description"]}
-          class="mt-1 input input-bordered input-sm w-full rounded-sm"
-          placeholder="Optional description"
+          field={@form[:name]}
+          label="Name"
+          class="input input-bordered input-sm w-full font-mono rounded-sm"
+          placeholder="parameter_name"
+          required
+        />
+        <.input
+          type="select"
+          field={@form[:type]}
+          label="Type"
+          options={@parameter_types}
+          class="select select-bordered select-sm w-full rounded-sm"
         />
       </div>
 
+      <.input
+        type="text"
+        field={@form[:description]}
+        label="Description"
+        class="input input-bordered input-sm w-full rounded-sm"
+        placeholder="Optional description"
+      />
+
       <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            name="required"
-            value="true"
-            checked={@param["required"]}
-            class="checkbox checkbox-sm"
-          />
-          <span class="text-sm">Required</span>
-        </label>
+        <.input
+          type="checkbox"
+          field={@form[:required]}
+          label="Required"
+        />
       </div>
       
     <!-- Type-specific fields could go here -->
@@ -1042,7 +1395,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           {if @is_new, do: "Add", else: "Save"}
         </button>
       </div>
-    </form>
+    </.form>
     """
   end
 
@@ -1059,6 +1412,9 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   attr :show_palette_for_step, :string, default: nil
 
   defp document_section(assigns) do
+    assigns =
+      assign(assigns, :section_form, to_form(%{"name" => assigns.section.name}, as: :section))
+
     ~H"""
     <div id={"section-#{@section.id}"} class="scroll-mt-6">
       <!-- Sticky Section Header -->
@@ -1079,16 +1435,22 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
             </button>
 
             <%= if @editing_section do %>
-              <form phx-submit="save_section_name" phx-value-id={@section.id} class="flex-1">
-                <input
+              <.form
+                for={@section_form}
+                id={"section-name-form-#{@section.id}"}
+                phx-submit="save_section_name"
+                phx-value-id={@section.id}
+                class="flex-1"
+              >
+                <.input
                   type="text"
-                  name="name"
-                  value={@section.name}
+                  field={@section_form[:name]}
+                  id={"section-name-#{@section.id}"}
                   class="input input-sm input-bordered rounded-sm"
                   autofocus
                   phx-blur="cancel_edit_section"
                 />
-              </form>
+              </.form>
             <% else %>
               <span class="font-semibold tracking-wide">
                 Section {@section_letter}: {@section.name}
@@ -1168,6 +1530,20 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   attr :show_palette, :boolean, default: false
 
   defp step_card(assigns) do
+    step_form =
+      to_form(
+        %{
+          "name" => assigns.step.name,
+          "title" => assigns.step.title || "",
+          "requires_signoff" => assigns.step.requires_signoff,
+          "on_fail" => to_string(assigns.step.on_fail || :pause),
+          "required_roles" => Enum.join(assigns.step.required_roles || [], ", ")
+        },
+        as: :step
+      )
+
+    assigns = assign(assigns, :step_form, step_form)
+
     ~H"""
     <div
       id={"step-#{@step.id}"}
@@ -1218,63 +1594,51 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     <!-- Step Properties Edit Form (inline) -->
       <%= if @editing do %>
         <div class="p-4 bg-surface-elevated border-b border-cyan-subtle">
-          <form phx-submit="save_step" class="space-y-3">
+          <.form
+            for={@step_form}
+            id={"step-form-#{@step.id}"}
+            phx-submit="save_step"
+            class="space-y-3"
+          >
             <input type="hidden" name="step_id" value={@step.id} />
 
             <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="hud-label">Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={@step.name}
-                  class="mt-1 input input-bordered input-sm w-full font-mono rounded-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label class="hud-label">Title</label>
-                <input
-                  type="text"
-                  name="title"
-                  value={@step.title || ""}
-                  class="mt-1 input input-bordered input-sm w-full rounded-sm"
-                  placeholder="Human-readable title"
-                />
-              </div>
+              <.input
+                type="text"
+                field={@step_form[:name]}
+                label="Name"
+                class="input input-bordered input-sm w-full font-mono rounded-sm"
+                required
+              />
+              <.input
+                type="text"
+                field={@step_form[:title]}
+                label="Title"
+                class="input input-bordered input-sm w-full rounded-sm"
+                placeholder="Human-readable title"
+              />
             </div>
 
             <div class="grid grid-cols-3 gap-3">
-              <div>
-                <label class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="requires_signoff"
-                    value="true"
-                    checked={@step.requires_signoff}
-                    class="checkbox checkbox-sm"
-                  />
-                  <span class="text-sm">Requires Signoff</span>
-                </label>
-              </div>
-              <div>
-                <label class="hud-label">On Failure</label>
-                <select name="on_fail" class="mt-1 select select-bordered select-sm w-full rounded-sm">
-                  <option value="pause" selected={@step.on_fail == :pause}>Pause</option>
-                  <option value="abort" selected={@step.on_fail == :abort}>Abort</option>
-                  <option value="continue" selected={@step.on_fail == :continue}>Continue</option>
-                </select>
-              </div>
-              <div>
-                <label class="hud-label">Required Roles</label>
-                <input
-                  type="text"
-                  name="required_roles"
-                  value={Enum.join(@step.required_roles || [], ", ")}
-                  class="mt-1 input input-bordered input-sm w-full rounded-sm"
-                  placeholder="operator, supervisor"
-                />
-              </div>
+              <.input
+                type="checkbox"
+                field={@step_form[:requires_signoff]}
+                label="Requires Signoff"
+              />
+              <.input
+                type="select"
+                field={@step_form[:on_fail]}
+                label="On Failure"
+                options={[{"Pause", "pause"}, {"Abort", "abort"}, {"Continue", "continue"}]}
+                class="select select-bordered select-sm w-full rounded-sm"
+              />
+              <.input
+                type="text"
+                field={@step_form[:required_roles]}
+                label="Required Roles"
+                class="input input-bordered input-sm w-full rounded-sm"
+                placeholder="operator, supervisor"
+              />
             </div>
 
             <div class="flex justify-end gap-3">
@@ -1283,7 +1647,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
               </button>
               <button type="submit" class="btn btn-sm btn-primary">Save</button>
             </div>
-          </form>
+          </.form>
         </div>
       <% end %>
       
@@ -1371,6 +1735,36 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
             icon="hero-list-bullet"
             label="Select"
           />
+          <.block_type_btn
+            step_id={@step_id}
+            type="checkbox_input"
+            icon="hero-check"
+            label="Checkbox"
+          />
+          <.block_type_btn
+            step_id={@step_id}
+            type="timestamp_input"
+            icon="hero-clock"
+            label="Timestamp"
+          />
+          <.block_type_btn
+            step_id={@step_id}
+            type="duration_input"
+            icon="hero-clock"
+            label="Duration"
+          />
+          <.block_type_btn
+            step_id={@step_id}
+            type="attachment_input"
+            icon="hero-paper-clip"
+            label="Attachment"
+          />
+          <.block_type_btn
+            step_id={@step_id}
+            type="signature_input"
+            icon="hero-pencil"
+            label="Signature"
+          />
         </div>
         <div class="space-y-2">
           <span class="hud-label">Telemetry</span>
@@ -1386,6 +1780,12 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
         <div class="space-y-2">
           <span class="hud-label">Commands</span>
           <.block_type_btn step_id={@step_id} type="command" icon="hero-command-line" label="Command" />
+          <.block_type_btn
+            step_id={@step_id}
+            type="command_sequence"
+            icon="hero-queue-list"
+            label="Command Sequence"
+          />
         </div>
       </div>
     </div>
@@ -1467,7 +1867,12 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   defp block_edit_form(assigns) do
     ~H"""
-    <form phx-submit="save_block" class="space-y-4">
+    <.form
+      for={to_form(%{}, as: :block)}
+      id={"block-edit-form-#{@block.id}"}
+      phx-submit="save_block"
+      class="space-y-4"
+    >
       <input type="hidden" name="block_id" value={@block.id} />
       <.block_edit_fields block={@block} />
       <div class="flex items-center justify-end gap-3 pt-3">
@@ -1478,230 +1883,406 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           Save
         </button>
       </div>
-    </form>
+    </.form>
     """
   end
 
   attr :block, :map, required: true
 
   defp block_edit_fields(assigns) do
+    operator_options = ["==", "!=", ">", ">=", "<", "<="]
+
+    priority_options = [
+      {"Emergency", 0},
+      {"Critical", 1},
+      {"High", 2},
+      {"Normal", 3},
+      {"Low", 4},
+      {"Background", 5}
+    ]
+
+    command_args_text =
+      if assigns.block.content["arguments"] && assigns.block.content["arguments"] != %{} do
+        Jason.encode!(assigns.block.content["arguments"], pretty: true)
+      else
+        ""
+      end
+
+    command_sequence_text =
+      if is_list(assigns.block.content["commands"]) and assigns.block.content["commands"] != [] do
+        Jason.encode!(assigns.block.content["commands"], pretty: true)
+      else
+        ""
+      end
+
+    assigns =
+      assign(assigns,
+        operator_options: operator_options,
+        priority_options: priority_options,
+        command_args_text: command_args_text,
+        command_sequence_text: command_sequence_text
+      )
+
     ~H"""
     <%= case @block.block_type do %>
       <% :text -> %>
-        <textarea
+        <.input
+          type="textarea"
           name="markdown"
-          class="textarea textarea-bordered w-full"
+          label="Markdown"
+          value={@block.content["markdown"] || ""}
           rows="3"
           placeholder="Enter markdown text..."
-        >{@block.content["markdown"] || ""}</textarea>
+        />
       <% type when type in [:note, :caution, :warning] -> %>
-        <textarea
+        <.input
+          type="textarea"
           name="text"
-          class="textarea textarea-bordered w-full"
+          label="Text"
+          value={@block.content["text"] || ""}
           rows="3"
           placeholder="Enter text..."
-        >{@block.content["text"] || ""}</textarea>
+        />
       <% :telemetry_value -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
-            name="item_path"
-            value={@block.content["item_path"] || ""}
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="TARGET.PACKET.item"
+            name="item"
+            label="Telemetry Item"
+            value={@block.content["item"] || ""}
+            placeholder="target.PACKET.item"
           />
           <div class="grid grid-cols-2 gap-2">
-            <input
+            <.input
               type="text"
               name="label"
+              label="Label"
               value={@block.content["label"] || ""}
-              class="input input-bordered input-sm"
               placeholder="Label"
             />
-            <input
+            <.input
               type="text"
               name="unit"
+              label="Unit"
               value={@block.content["unit"] || ""}
-              class="input input-bordered input-sm"
               placeholder="Unit (e.g., V, A, Hz)"
             />
           </div>
         </div>
       <% :telemetry_check -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
-            name="item_path"
-            value={@block.content["item_path"] || ""}
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="TARGET.PACKET.item"
+            name="item"
+            label="Telemetry Item"
+            value={@block.content["item"] || ""}
+            placeholder="target.PACKET.item"
           />
           <div class="grid grid-cols-2 gap-2">
-            <select name="operator" class="select select-bordered select-sm">
-              <%= for op <- ["==", "!=", ">", ">=", "<", "<="] do %>
-                <option value={op} selected={@block.content["operator"] == op}>{op}</option>
-              <% end %>
-            </select>
-            <input
+            <.input
+              type="select"
+              name="operator"
+              label="Operator"
+              options={@operator_options}
+              value={@block.content["operator"] || "=="}
+            />
+            <.input
               type="text"
-              name="expected_value"
-              value={@block.content["expected_value"] || ""}
-              class="input input-bordered input-sm"
+              name="expected"
+              label="Expected"
+              value={@block.content["expected"] || ""}
               placeholder="Expected value"
             />
           </div>
         </div>
       <% :telemetry_wait -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
-            name="item_path"
-            value={@block.content["item_path"] || ""}
-            class="input input-bordered input-sm w-full font-mono"
-            placeholder="TARGET.PACKET.item"
+            name="item"
+            label="Telemetry Item"
+            value={@block.content["item"] || ""}
+            placeholder="target.PACKET.item"
           />
           <div class="grid grid-cols-3 gap-2">
-            <select name="operator" class="select select-bordered select-sm">
-              <%= for op <- ["==", "!=", ">", ">=", "<", "<="] do %>
-                <option value={op} selected={@block.content["operator"] == op}>{op}</option>
-              <% end %>
-            </select>
-            <input
-              type="text"
-              name="expected_value"
-              value={@block.content["expected_value"] || ""}
-              class="input input-bordered input-sm"
-              placeholder="Expected"
+            <.input
+              type="select"
+              name="operator"
+              label="Operator"
+              options={@operator_options}
+              value={@block.content["operator"] || "=="}
             />
-            <input
+            <.input
+              type="text"
+              name="expected"
+              label="Expected"
+              value={@block.content["expected"] || ""}
+              placeholder="Expected value"
+            />
+            <.input
               type="number"
               name="timeout_ms"
-              value={@block.content["timeout_ms"] || 30000}
-              class="input input-bordered input-sm"
-              placeholder="Timeout (ms)"
+              label="Timeout (ms)"
+              value={@block.content["timeout_ms"] || 30_000}
+              placeholder="30000"
             />
           </div>
         </div>
       <% :command -> %>
         <div class="space-y-2">
           <div class="grid grid-cols-2 gap-2">
-            <input
+            <.input
               type="text"
               name="command_name"
+              label="Command Name"
               value={@block.content["command_name"] || ""}
-              class="input input-bordered input-sm font-mono"
               placeholder="COMMAND_NAME"
             />
-            <input
+            <.input
               type="text"
               name="target"
+              label="Target"
               value={@block.content["target"] || ""}
-              class="input input-bordered input-sm font-mono"
               placeholder="{{params.target}} or target_id"
             />
           </div>
           <div class="grid grid-cols-4 gap-2">
             <div class="col-span-3">
-              <textarea
+              <.input
+                type="textarea"
                 name="arguments"
-                class="textarea textarea-bordered textarea-sm w-full font-mono"
+                label="Arguments (JSON)"
+                value={@command_args_text}
                 rows="2"
                 placeholder='{"arg": "value"}'
-              ><%= if @block.content["arguments"] && @block.content["arguments"] != %{}, do: Jason.encode!(@block.content["arguments"], pretty: true), else: "" %></textarea>
+              />
             </div>
             <div>
-              <label class="text-xs opacity-70">Priority</label>
-              <select name="priority" class="select select-bordered select-sm w-full">
-                <%= for {label, val} <- [{"Emergency", 0}, {"Critical", 1}, {"High", 2}, {"Normal", 3}, {"Low", 4}, {"Background", 5}] do %>
-                  <option value={val} selected={(@block.content["priority"] || 3) == val}>
-                    {label}
-                  </option>
-                <% end %>
-              </select>
+              <.input
+                type="select"
+                name="priority"
+                label="Priority"
+                options={@priority_options}
+                value={@block.content["priority"] || 3}
+              />
             </div>
           </div>
         </div>
+      <% :command_sequence -> %>
+        <.input
+          type="textarea"
+          name="commands"
+          label="Commands (JSON array)"
+          value={@command_sequence_text}
+          rows="4"
+          placeholder='[{"command_name":"CMD","arguments":{}}]'
+        />
       <% :text_input -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
             name="label"
+            label="Label"
             value={@block.content["label"] || ""}
-            class="input input-bordered input-sm w-full"
             placeholder="Label"
           />
           <div class="grid grid-cols-2 gap-2">
-            <input
+            <.input
               type="text"
               name="variable_name"
+              label="Variable Name"
               value={@block.content["variable_name"] || ""}
-              class="input input-bordered input-sm font-mono"
               placeholder="variable_name"
             />
-            <input
+            <.input
               type="text"
               name="placeholder"
+              label="Placeholder"
               value={@block.content["placeholder"] || ""}
-              class="input input-bordered input-sm"
               placeholder="Placeholder text"
             />
           </div>
         </div>
       <% :number_input -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
             name="label"
+            label="Label"
             value={@block.content["label"] || ""}
-            class="input input-bordered input-sm w-full"
             placeholder="Label"
           />
           <div class="grid grid-cols-3 gap-2">
-            <input
+            <.input
               type="text"
               name="variable_name"
+              label="Variable Name"
               value={@block.content["variable_name"] || ""}
-              class="input input-bordered input-sm font-mono"
               placeholder="variable"
             />
-            <input
+            <.input
               type="number"
               name="min"
+              label="Min"
               value={@block.content["min"]}
-              class="input input-bordered input-sm"
               placeholder="Min"
             />
-            <input
+            <.input
               type="number"
               name="max"
+              label="Max"
               value={@block.content["max"]}
-              class="input input-bordered input-sm"
               placeholder="Max"
             />
           </div>
         </div>
       <% :select_input -> %>
         <div class="space-y-2">
-          <input
+          <.input
             type="text"
             name="label"
+            label="Label"
             value={@block.content["label"] || ""}
-            class="input input-bordered input-sm w-full"
             placeholder="Label"
           />
-          <input
+          <.input
             type="text"
             name="variable_name"
+            label="Variable Name"
             value={@block.content["variable_name"] || ""}
-            class="input input-bordered input-sm w-full font-mono"
             placeholder="variable_name"
           />
-          <textarea
+          <.input
+            type="textarea"
             name="options"
-            class="textarea textarea-bordered textarea-sm w-full"
+            label="Options"
+            value={Enum.join(@block.content["options"] || [], "\n")}
             rows="3"
             placeholder="One option per line"
-          ><%= Enum.join(@block.content["options"] || [], "\n") %></textarea>
+          />
+        </div>
+      <% :checkbox_input -> %>
+        <div class="space-y-2">
+          <.input
+            type="text"
+            name="label"
+            label="Label"
+            value={@block.content["label"] || ""}
+            placeholder="Label"
+          />
+          <.input
+            type="text"
+            name="variable_name"
+            label="Variable Name"
+            value={@block.content["variable_name"] || ""}
+            placeholder="variable_name"
+          />
+          <.input
+            type="textarea"
+            name="options"
+            label="Options (optional)"
+            value={Enum.join(@block.content["options"] || [], "\n")}
+            rows="3"
+            placeholder="One option per line"
+          />
+        </div>
+      <% :timestamp_input -> %>
+        <div class="space-y-2">
+          <.input
+            type="text"
+            name="label"
+            label="Label"
+            value={@block.content["label"] || ""}
+            placeholder="Label"
+          />
+          <.input
+            type="text"
+            name="variable_name"
+            label="Variable Name"
+            value={@block.content["variable_name"] || ""}
+            placeholder="variable_name"
+          />
+          <.input
+            type="text"
+            name="placeholder"
+            label="Placeholder"
+            value={@block.content["placeholder"] || ""}
+            placeholder="YYYY-MM-DD HH:MM"
+          />
+        </div>
+      <% :duration_input -> %>
+        <div class="space-y-2">
+          <.input
+            type="text"
+            name="label"
+            label="Label"
+            value={@block.content["label"] || ""}
+            placeholder="Label"
+          />
+          <div class="grid grid-cols-2 gap-2">
+            <.input
+              type="text"
+              name="variable_name"
+              label="Variable Name"
+              value={@block.content["variable_name"] || ""}
+              placeholder="duration_value"
+            />
+            <.input
+              type="text"
+              name="unit"
+              label="Unit"
+              value={@block.content["unit"] || "seconds"}
+              placeholder="seconds"
+            />
+          </div>
+        </div>
+      <% :attachment_input -> %>
+        <div class="space-y-2">
+          <.input
+            type="text"
+            name="label"
+            label="Label"
+            value={@block.content["label"] || ""}
+            placeholder="Label"
+          />
+          <.input
+            type="text"
+            name="variable_name"
+            label="Variable Name"
+            value={@block.content["variable_name"] || ""}
+            placeholder="attachment_ref"
+          />
+          <.input
+            type="text"
+            name="placeholder"
+            label="Placeholder"
+            value={@block.content["placeholder"] || ""}
+            placeholder="Paste a URL or file reference"
+          />
+        </div>
+      <% :signature_input -> %>
+        <div class="space-y-2">
+          <.input
+            type="text"
+            name="label"
+            label="Label"
+            value={@block.content["label"] || ""}
+            placeholder="Label"
+          />
+          <.input
+            type="text"
+            name="variable_name"
+            label="Variable Name"
+            value={@block.content["variable_name"] || ""}
+            placeholder="operator_signature"
+          />
+          <.input
+            type="text"
+            name="placeholder"
+            label="Placeholder"
+            value={@block.content["placeholder"] || ""}
+            placeholder="Signed by..."
+          />
         </div>
       <% _ -> %>
         <div class="text-sm opacity-60">
@@ -1721,10 +2302,16 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     text_input: "hero-pencil-square",
     number_input: "hero-calculator",
     select_input: "hero-list-bullet",
+    checkbox_input: "hero-check",
+    timestamp_input: "hero-clock",
+    duration_input: "hero-clock",
+    attachment_input: "hero-paper-clip",
+    signature_input: "hero-pencil",
     telemetry_value: "hero-signal",
     telemetry_check: "hero-check-circle",
     telemetry_wait: "hero-clock",
-    command: "hero-command-line"
+    command: "hero-command-line",
+    command_sequence: "hero-queue-list"
   }
 
   defp block_icon(assigns) do
@@ -1758,25 +2345,25 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           </div>
         <% :telemetry_value -> %>
           <div class="font-mono text-xs bg-base-200 p-2 rounded">
-            <span class="text-primary">{@block.content["item_path"] || "item.path"}</span>
+            <span class="text-primary">{@block.content["item"] || "item.path"}</span>
             <%= if @block.content["unit"] && @block.content["unit"] != "" do %>
               <span class="opacity-60 ml-1">({@block.content["unit"]})</span>
             <% end %>
           </div>
         <% :telemetry_check -> %>
           <div class="font-mono text-xs bg-base-200 p-2 rounded flex items-center gap-2">
-            <span class="text-primary">{@block.content["item_path"] || "item.path"}</span>
+            <span class="text-primary">{@block.content["item"] || "item.path"}</span>
             <span class="opacity-60">{@block.content["operator"] || "=="}</span>
-            <span class="text-success">{@block.content["expected_value"] || "?"}</span>
+            <span class="text-success">{@block.content["expected"] || "?"}</span>
           </div>
         <% :telemetry_wait -> %>
           <div class="font-mono text-xs bg-base-200 p-2 rounded">
             <div class="flex items-center gap-2">
               <.icon name="hero-clock" class="h-3 w-3" />
               <span>Wait for</span>
-              <span class="text-primary">{@block.content["item_path"] || "item.path"}</span>
+              <span class="text-primary">{@block.content["item"] || "item.path"}</span>
               <span class="opacity-60">{@block.content["operator"] || "=="}</span>
-              <span class="text-success">{@block.content["expected_value"] || "?"}</span>
+              <span class="text-success">{@block.content["expected"] || "?"}</span>
             </div>
             <div class="opacity-60 mt-1">
               Timeout: {@block.content["timeout_ms"] || 30000}ms
@@ -1796,6 +2383,10 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                 {Jason.encode!(@block.content["arguments"])}
               </div>
             <% end %>
+          </div>
+        <% :command_sequence -> %>
+          <div class="font-mono text-xs bg-base-200 p-2 rounded">
+            {length(@block.content["commands"] || [])} commands
           </div>
         <% :text_input -> %>
           <div class="space-y-1">
@@ -1819,6 +2410,42 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
             <div class="font-medium">{@block.content["label"] || "Select"}</div>
             <div class="text-xs opacity-60">
               {length(@block.content["options"] || [])} options
+            </div>
+          </div>
+        <% :checkbox_input -> %>
+          <div class="space-y-1">
+            <div class="font-medium">{@block.content["label"] || "Checkbox"}</div>
+            <div class="text-xs opacity-60">
+              Variable: {@block.content["variable_name"] || "unnamed"}
+            </div>
+          </div>
+        <% :timestamp_input -> %>
+          <div class="space-y-1">
+            <div class="font-medium">{@block.content["label"] || "Timestamp"}</div>
+            <div class="text-xs opacity-60">
+              Variable: {@block.content["variable_name"] || "unnamed"}
+            </div>
+          </div>
+        <% :duration_input -> %>
+          <div class="space-y-1">
+            <div class="font-medium">{@block.content["label"] || "Duration"}</div>
+            <div class="text-xs opacity-60">
+              Variable: {@block.content["variable_name"] || "unnamed"} · {@block.content["unit"] ||
+                "seconds"}
+            </div>
+          </div>
+        <% :attachment_input -> %>
+          <div class="space-y-1">
+            <div class="font-medium">{@block.content["label"] || "Attachment"}</div>
+            <div class="text-xs opacity-60">
+              Variable: {@block.content["variable_name"] || "unnamed"}
+            </div>
+          </div>
+        <% :signature_input -> %>
+          <div class="space-y-1">
+            <div class="font-medium">{@block.content["label"] || "Signature"}</div>
+            <div class="text-xs opacity-60">
+              Variable: {@block.content["variable_name"] || "unnamed"}
             </div>
           </div>
         <% _ -> %>

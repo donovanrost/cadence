@@ -25,9 +25,6 @@ defmodule Cadence.Application do
       # Protocol Chain Registry - registers protocol chains by interface_id
       {Registry, keys: :unique, name: Cadence.ProtocolChainRegistry},
 
-      # Procedure Registry - registers procedure execution processes
-      {Registry, keys: :unique, name: Cadence.ProcedureRegistry},
-
       # V2 Execution Registry - registers V2 procedure execution processes by execution_id
       {Registry, keys: :unique, name: Cadence.Procedures.V2.ExecutionRegistry},
 

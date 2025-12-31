@@ -143,35 +143,48 @@ defmodule Cadence.Procedures.V2.AutomationRunnerTest do
   end
 
   describe "execute_block/3 for :telemetry_check blocks" do
-    test "returns passed: true for true conditions" do
-      block = mock_block(:telemetry_check, content: %{"condition" => "true"})
-
-      {:ok, result} = AutomationRunner.execute_block(block, test_context())
-
-      assert result.passed == true
-      assert result.condition == "true"
-    end
-
-    test "returns passed: false for false conditions" do
-      block = mock_block(:telemetry_check, content: %{"condition" => "false"})
-
-      {:ok, result} = AutomationRunner.execute_block(block, test_context())
-
-      assert result.passed == false
-    end
-
-    test "returns error when fail_on_false is true" do
+    test "returns error when telemetry lookup fails" do
       block =
         mock_block(:telemetry_check,
           content: %{
-            "condition" => "false",
+            "item" => "HK.battery_voltage",
+            "operator" => ">=",
+            "expected" => 24
+          }
+        )
+
+      {:error, reason} = AutomationRunner.execute_block(block, test_context())
+      assert reason in [:not_found, :cvt_error]
+    end
+
+    test "returns error when telemetry lookup fails for false condition" do
+      block =
+        mock_block(:telemetry_check,
+          content: %{
+            "item" => "HK.battery_voltage",
+            "operator" => "<",
+            "expected" => 5
+          }
+        )
+
+      {:error, reason} = AutomationRunner.execute_block(block, test_context())
+      assert reason in [:not_found, :cvt_error]
+    end
+
+    test "returns error when fail_on_false is true and telemetry lookup fails" do
+      block =
+        mock_block(:telemetry_check,
+          content: %{
+            "item" => "HK.battery_voltage",
+            "operator" => "<",
+            "expected" => 5,
             "fail_on_false" => true
           }
         )
 
       {:error, reason} = AutomationRunner.execute_block(block, test_context())
 
-      assert reason =~ "Telemetry check failed"
+      assert reason in [:not_found, :cvt_error]
     end
   end
 
@@ -212,7 +225,7 @@ defmodule Cadence.Procedures.V2.AutomationRunnerTest do
           content: %{
             "item" => "HK.missing_item",
             "operator" => "==",
-            "value" => 42,
+            "expected" => 42,
             # Very short timeout
             "timeout" => 100
           }

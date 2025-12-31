@@ -13,7 +13,6 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
   require Logger
 
   alias Cadence.Procedures
-  alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Schedules
 
   @impl Oban.Worker
@@ -69,22 +68,13 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
   end
 
   defp start_procedure_execution(schedule, procedure) do
-    # Get the mission_id from either the schedule or procedure
-    mission_id = schedule.mission_id || procedure.mission_id
-
-    if mission_id do
-      ExecutionCoordinator.start_execution(
-        mission_id,
-        schedule.procedure_id,
-        parameters: schedule.parameters || %{},
-        target_id: schedule.target_id,
-        triggered_by: :schedule,
-        trigger_event_id: schedule.id
-      )
-    else
-      Logger.error("No mission_id available for schedule #{schedule.id}")
-      {:error, :no_mission_id}
-    end
+    Procedures.start_execution(
+      schedule.procedure_id,
+      parameters: schedule.parameters || %{},
+      target_id: schedule.target_id,
+      triggered_by: :schedule,
+      trigger_context: %{"schedule_id" => schedule.id}
+    )
   end
 
   defp calculate_next_run(%{schedule_type: :once}), do: nil

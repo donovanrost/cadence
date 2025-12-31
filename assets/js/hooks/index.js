@@ -6,9 +6,6 @@
 
 import { OpsConsoleHook } from "./ops_console_hook"
 import { OpsConsoleV2Hook } from "./ops_console_v2/index"
-import { DagEditorHook } from "./dag_editor"
-import { DagViewerHook } from "./dag_viewer"
-import { ExecutionChannelHook } from "./execution_channel_hook"
 
 /**
  * AutoScroll hook for log containers
@@ -365,9 +362,6 @@ export const Hooks = {
   AutoScroll: AutoScrollHook,
   LogFilter: LogFilterHook,
   Sortable: SortableHook,
-  DagEditor: DagEditorHook,
-  DagViewer: DagViewerHook,
-  ExecutionChannel: ExecutionChannelHook,
   Download: DownloadHook,
   ProcedureNav: ProcedureNavHook
 }

@@ -12,7 +12,7 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
   require Logger
 
   alias Cadence.Alarms
-  alias Cadence.Procedures.Engine.ExecutionCoordinator
+  alias Cadence.Procedures
 
   @doc """
   Executes an action based on the action type and configuration.
@@ -42,12 +42,14 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
     procedure_id = config["procedure_id"]
     parameters = build_parameters(config, trigger_event)
 
-    case ExecutionCoordinator.start_execution(
-           context.mission_id,
+    case Procedures.start_execution(
            procedure_id,
            parameters: parameters,
            triggered_by: :event,
-           trigger_event_id: trigger_event[:event_id] || trigger_event[:alarm_id]
+           trigger_context: %{
+             "event_id" => trigger_event[:event_id],
+             "alarm_id" => trigger_event[:alarm_id]
+           }
          ) do
       {:ok, execution} ->
         Logger.info("Started procedure execution #{execution.id} from automation")

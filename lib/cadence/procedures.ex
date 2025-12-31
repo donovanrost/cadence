@@ -12,7 +12,6 @@ defmodule Cadence.Procedures do
     Procedure,
     ProcedureApproval,
     ProcedureExecution,
-    ProcedureLog,
     ProcedureVersion,
     V2
   }
@@ -20,11 +19,11 @@ defmodule Cadence.Procedures do
   alias Cadence.Outbox
   alias Cadence.Recordings
   alias Cadence.Repo
+  alias Cadence.Targets
   alias Cadence.Settings
 
   alias Cadence.Recordings.Recordables.{
     ProcedureApprovalAdded,
-    ProcedureStarted,
     ProcedureVersionApproved,
     ProcedureVersionCreated,
     ProcedureVersionRejected,
@@ -789,29 +788,9 @@ defmodule Cadence.Procedures do
   end
 
   @doc """
-  Creates a new execution record.
-
-  Does not start the execution - use `start_execution/2` for that.
-  """
-  def create_execution(attrs) do
-    %ProcedureExecution{}
-    |> ProcedureExecution.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Updates execution status.
-  """
-  def update_execution_status(%ProcedureExecution{} = execution, attrs) do
-    execution
-    |> ProcedureExecution.status_changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
   Starts a new procedure execution.
 
-  Creates the execution record and starts the ExecutionProcess.
+  Starts a V2 ExecutionProcess, which creates the execution record.
 
   Parameters are validated against the procedure version's `parameters_schema`
   before execution begins. If validation fails, returns `{:error, {:validation, errors}}`.
@@ -856,59 +835,18 @@ defmodule Cadence.Procedures do
     }
 
     with {:ok, validated_params} <-
-           maybe_validate_params(parameters, version, validation_context, skip_validation) do
-      # Create execution record
-      execution_attrs = %{
-        procedure_id: procedure_id,
-        procedure_version_id: version.id,
-        organization_id: procedure.organization_id,
-        mission_id: procedure.mission_id,
-        target_id: target_id,
-        parameters: validated_params,
-        triggered_by: triggered_by,
-        triggered_by_user_id: user_id,
-        trigger_context: trigger_context,
-        status: :pending
-      }
-
-      # Recordable attrs for ProcedureStarted
-      started_attrs = %{
-        procedure_id: procedure_id,
-        procedure_version_id: version.id,
-        target_id: target_id,
-        parameters: validated_params,
-        triggered_by: to_string(triggered_by),
-        trigger_context: trigger_context
-      }
-
-      result =
-        Multi.new()
-        |> Multi.insert(
-          :execution,
-          ProcedureExecution.changeset(%ProcedureExecution{}, execution_attrs)
-        )
-        |> Recordings.append(:started, ProcedureStarted, started_attrs, fn %{execution: exec} ->
-          %{
-            organization_id: procedure.organization_id,
-            mission_id: procedure.mission_id,
-            bucket_id: get_mission_bucket_id(procedure.mission_id),
-            aggregate_type: "ProcedureExecution",
-            aggregate_id: exec.id,
-            actor_id: user_id,
-            actor_type: if(user_id, do: "user", else: "system"),
-            timestamp: DateTime.utc_now()
-          }
-        end)
-        |> Repo.transaction()
-
-      with {:ok, %{execution: execution}} <- result,
-           {:ok, _pid} <- start_execution_process(execution.id) do
-        {:ok, execution}
-      else
-        {:error, :execution, changeset, _} -> {:error, changeset}
-        {:error, _, changeset, _} -> {:error, changeset}
-        other -> other
-      end
+           maybe_validate_params(parameters, version, validation_context, skip_validation),
+         {:ok, resolved_target_id} <- resolve_target_id(target_id, procedure.mission_id),
+         {:ok, pid} <-
+           start_execution_process(
+             version,
+             validated_params,
+             target_id: resolved_target_id,
+             user_id: user_id,
+             triggered_by: triggered_by,
+             trigger_context: trigger_context
+           ) do
+      {:ok, Cadence.Procedures.V2.ExecutionProcess.get_execution(pid)}
     end
   end
 
@@ -921,39 +859,34 @@ defmodule Cadence.Procedures do
     end
   end
 
-  defp start_execution_process(execution_id) do
+  defp resolve_target_id(nil, _mission_id), do: {:ok, nil}
+
+  defp resolve_target_id(target_id, mission_id) when is_binary(target_id) do
+    case Ecto.UUID.cast(target_id) do
+      {:ok, uuid} ->
+        {:ok, uuid}
+
+      :error ->
+        case Targets.get_target_by_identifier(mission_id, target_id) do
+          {:ok, target} -> {:ok, target.id}
+          {:error, :not_found} -> {:error, {:target_not_found, target_id}}
+        end
+    end
+  end
+
+  defp start_execution_process(version, params, opts) do
     DynamicSupervisor.start_child(
       Cadence.Procedures.ExecutionSupervisor,
-      {Cadence.Procedures.Engine.ExecutionProcess, execution_id: execution_id}
+      {Cadence.Procedures.V2.ExecutionProcess,
+       [
+         procedure_version: version,
+         params: params,
+         target_id: opts[:target_id],
+         user_id: opts[:user_id],
+         triggered_by: opts[:triggered_by],
+         trigger_context: opts[:trigger_context]
+       ]}
     )
-  end
-
-  # ============================================================================
-  # Logs
-  # ============================================================================
-
-  @doc """
-  Lists logs for an execution.
-  """
-  def list_logs(execution_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 100)
-    level = Keyword.get(opts, :level)
-
-    ProcedureLog
-    |> where([l], l.execution_id == ^execution_id)
-    |> maybe_filter(:level, level)
-    |> order_by([l], asc: l.timestamp)
-    |> limit(^limit)
-    |> Repo.all()
-  end
-
-  @doc """
-  Creates a log entry.
-  """
-  def create_log(attrs) do
-    %ProcedureLog{}
-    |> ProcedureLog.changeset(attrs)
-    |> Repo.insert()
   end
 
   # ============================================================================

@@ -320,6 +320,8 @@ defmodule Cadence.Procedures.V2.ExecutionProcess do
           execution_id: execution.id,
           user_id: opts[:user_id],
           params: execution.parameters || %{},
+          parameters: execution.parameters || %{},
+          allow_hazardous_commands: procedure_version.allow_hazardous_commands,
           vars: %{},
           trigger: execution.trigger_context || %{}
         }
@@ -690,8 +692,12 @@ defmodule Cadence.Procedures.V2.ExecutionProcess do
   end
 
   defp wrap_input_value(:number_input, value) when is_number(value), do: %{number: value}
-  defp wrap_input_value(:checkbox, value), do: %{checked: value}
-  defp wrap_input_value(:select, value), do: %{selected: value}
+  defp wrap_input_value(:checkbox_input, value), do: %{checked: value}
+  defp wrap_input_value(:select_input, value), do: %{selected: value}
+  defp wrap_input_value(:timestamp_input, value), do: %{timestamp: value}
+  defp wrap_input_value(:duration_input, value), do: %{duration: value}
+  defp wrap_input_value(:attachment_input, value), do: %{attachment: value}
+  defp wrap_input_value(:signature_input, value), do: %{signature: value}
   defp wrap_input_value(_block_type, value) when is_map(value), do: value
   defp wrap_input_value(_block_type, value), do: %{value: value}
 
@@ -886,8 +892,7 @@ defmodule Cadence.Procedures.V2.ExecutionProcess do
     ExecutionPersistence.update_block_telemetry_reading(block_exec, data)
   end
 
-  defp handle_block_result_map(block_exec, %{condition: _} = data) do
-    passed = Map.get(data, :passed, true)
+  defp handle_block_result_map(block_exec, %{item: _, passed: passed} = data) do
     ExecutionPersistence.update_block_telemetry_check(block_exec, data, passed)
   end
 
@@ -915,6 +920,8 @@ defmodule Cadence.Procedures.V2.ExecutionProcess do
       execution_id: execution.id,
       user_id: opts[:user_id],
       params: params,
+      parameters: params,
+      allow_hazardous_commands: procedure_version.allow_hazardous_commands,
       vars: %{},
       trigger: opts[:trigger_context] || %{}
     }

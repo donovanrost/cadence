@@ -36,7 +36,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   alias Cadence.Procedures.Procedure, as: ProcedureSchema
   alias Cadence.Procedures.ProcedureApproval, as: ProcedureApprovalSchema
   alias Cadence.Procedures.ProcedureExecution, as: ProcedureExecutionSchema
-  alias Cadence.Procedures.ProcedureLog, as: ProcedureLogSchema
   alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
   alias Cadence.Repo
 
@@ -430,39 +429,11 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
     Repo.all(query)
   end
 
-  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
-  def list_logs(execution_id, opts \\ []) do
-    level = Keyword.get(opts, :level)
-    limit = Keyword.get(opts, :limit, 100)
-    offset = Keyword.get(opts, :offset, 0)
-
-    query =
-      from l in ProcedureLogSchema,
-        where: l.execution_id == ^execution_id,
-        order_by: [asc: l.timestamp],
-        limit: ^limit,
-        offset: ^offset
-
-    query = apply_log_filter(query, :level, level)
-
-    Repo.all(query)
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
-  def create_log(attrs) do
-    %ProcedureLogSchema{}
-    |> ProcedureLogSchema.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  # Private helpers for execution/log filtering
+  # Private helpers for execution filtering
   defp apply_execution_filter(query, _field, nil), do: query
 
   defp apply_execution_filter(query, field, value),
     do: where(query, [e], field(e, ^field) == ^value)
-
-  defp apply_log_filter(query, _field, nil), do: query
-  defp apply_log_filter(query, field, value), do: where(query, [l], field(l, ^field) == ^value)
 
   # ===========================================================================
   # Entity <-> Schema Conversion

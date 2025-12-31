@@ -31,8 +31,8 @@ defmodule Cadence.Procedures.V2.ExecutionStrategy do
       end
   """
 
-  alias Cadence.Procedures.Schemas.ProcedureBlock
-  alias Cadence.Procedures.Schemas.StepExecution
+  alias Cadence.Procedures.ProcedureBlock
+  alias Cadence.Procedures.StepExecution
 
   @type state :: map()
   @type step_exec :: StepExecution.t()

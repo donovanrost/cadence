@@ -35,8 +35,8 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
   require Logger
 
   alias Cadence.Procedures.Primitives
+  alias Cadence.Procedures.ProcedureBlock
   alias Cadence.Procedures.Runtime.CadenceApi
-  alias Cadence.Procedures.Schemas.ProcedureBlock
   alias Cadence.Targets
 
   @type block :: ProcedureBlock.t() | map()
@@ -96,6 +96,10 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
     execute_command_sequence_block(block, context, opts)
   end
 
+  def execute_block(%{block_type: :telemetry_wait} = block, context, opts) do
+    execute_wait_for_block(block, context, opts)
+  end
+
   def execute_block(%{block_type: :wait} = block, context, opts) do
     execute_wait_block(block, context, opts)
   end
@@ -117,7 +121,16 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
   end
 
   def execute_block(%{block_type: type} = block, context, opts)
-      when type in [:text_input, :number_input, :select, :checkbox] do
+      when type in [
+             :text_input,
+             :number_input,
+             :select_input,
+             :checkbox_input,
+             :timestamp_input,
+             :duration_input,
+             :attachment_input,
+             :signature_input
+           ] do
     execute_input_block(block, context, opts)
   end
 
@@ -296,7 +309,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
     content = block.content || %{}
     item = content["item"]
     operator = content["operator"] || "=="
-    expected = Primitives.resolve_value(content["value"] || content["expected"], context)
+    expected = Primitives.resolve_value(content["expected"], context)
     timeout = content["timeout"] || content["timeout_ms"] || 30_000
 
     on_progress = opts[:on_progress]
@@ -313,8 +326,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
            name: block.id
          ) do
       {:ok, actual} ->
-        {:ok,
-         %{item: item, operator: operator, expected: expected, actual: actual, satisfied: true}}
+        {:ok, %{item: item, operator: operator, expected: expected, actual: actual, passed: true}}
 
       {:error, :timeout} ->
         {:error, :timeout}
@@ -323,20 +335,26 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
 
   defp execute_telemetry_check_block(block, context) do
     content = block.content || %{}
-    condition = content["condition"]
+    item = content["item"]
+    operator = content["operator"] || "=="
+    expected = Primitives.resolve_value(content["expected"], context)
+    condition = "telemetry.#{item} #{operator} #{expected}"
 
-    case Primitives.check_condition(condition, context) do
-      {:ok, true} ->
-        {:ok, %{condition: condition, passed: true}}
-
-      {:ok, false} ->
-        # Telemetry check failed - this may or may not be an error depending on block config
-        if content["fail_on_false"] == true do
-          {:error, "Telemetry check failed: #{condition}"}
-        else
-          {:ok, %{condition: condition, passed: false}}
-        end
-
+    with {:ok, actual} <- Primitives.get_telemetry(item, context),
+         {:ok, passed} <- Primitives.check_condition(condition, context) do
+      if passed == false and content["fail_on_false"] == true do
+        {:error, "Telemetry check failed: #{item} #{operator} #{expected}"}
+      else
+        {:ok,
+         %{
+           item: item,
+           operator: operator,
+           expected: expected,
+           actual: actual,
+           passed: passed
+         }}
+      end
+    else
       {:error, reason} ->
         {:error, reason}
     end
