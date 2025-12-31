@@ -1,5 +1,5 @@
 defmodule Cadence.Commands.FleetTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Commands
   alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
@@ -8,8 +8,7 @@ defmodule Cadence.Commands.FleetTest do
   alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
   alias Cadence.Targets.Target
 
-  # Setup creates an org, mission, multiple targets, and commands for testing
-  setup do
+  defp base_fleet_setup do
     # Create organization
     org =
       %Organization{}
@@ -71,22 +70,6 @@ defmodule Cadence.Commands.FleetTest do
           })
           |> Repo.insert!()
 
-        # Start queue and dispatcher for each target
-        target_entity =
-          Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
-
-        {:ok, _queue_pid} =
-          start_supervised(
-            {TargetQueue, mission: mission_entity, target: target_entity},
-            id: {:target_queue, i}
-          )
-
-        {:ok, _dispatcher_pid} =
-          start_supervised(
-            {TargetDispatcher, mission: mission_entity, target: target_entity},
-            id: {:target_dispatcher, i}
-          )
-
         target
       end
 
@@ -130,12 +113,40 @@ defmodule Cadence.Commands.FleetTest do
     %{
       org: org,
       mission: mission,
+      mission_entity: mission_entity,
       targets: targets,
       command: command
     }
   end
 
+  defp start_target_pipelines(mission_entity, targets) do
+    targets
+    |> Enum.with_index(1)
+    |> Enum.each(fn {target, i} ->
+      target_entity =
+        Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+
+      {:ok, _queue_pid} =
+        start_supervised(
+          {TargetQueue, mission: mission_entity, target: target_entity},
+          id: {:target_queue, i}
+        )
+
+      {:ok, _dispatcher_pid} =
+        start_supervised(
+          {TargetDispatcher, mission: mission_entity, target: target_entity},
+          id: {:target_dispatcher, i}
+        )
+    end)
+  end
+
   describe "fleet_dispatch_parameterized/4" do
+    setup do
+      setup = base_fleet_setup()
+      start_target_pipelines(setup.mission_entity, setup.targets)
+      setup
+    end
+
     test "returns empty list for empty target_params", %{mission: mission} do
       result = Commands.fleet_dispatch_parameterized(mission.id, "SET_ORBIT", [])
       assert result == []
@@ -235,6 +246,10 @@ defmodule Cadence.Commands.FleetTest do
   end
 
   describe "fleet_enqueue_parameterized/4" do
+    setup do
+      base_fleet_setup()
+    end
+
     test "returns empty list for empty target_params", %{mission: mission} do
       result = Commands.fleet_enqueue_parameterized(mission.id, "SET_ORBIT", [])
       assert result == []
@@ -335,6 +350,10 @@ defmodule Cadence.Commands.FleetTest do
   end
 
   describe "fleet operations with large fleet simulation" do
+    setup do
+      base_fleet_setup()
+    end
+
     test "handles many targets efficiently with parallel option", %{
       mission: mission,
       targets: targets

@@ -1,39 +1,13 @@
 defmodule Cadence.AutomationsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Automations
 
-  alias Cadence.Test.Adapters.FakeEventPublisher
-  alias Cadence.Test.Adapters.InMemoryAutomationExecutionRepository
-  alias Cadence.Test.Adapters.InMemoryAutomationRepository
-
   describe "automations" do
     setup do
-      {:ok, _} = InMemoryAutomationRepository.start_link()
-      {:ok, _} = InMemoryAutomationExecutionRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
-
-      Application.put_env(
-        :cadence,
-        :automation_execution_repository,
-        InMemoryAutomationExecutionRepository
-      )
-
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
       procedure_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :automation_repository)
-        Application.delete_env(:cadence, :automation_execution_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryAutomationExecutionRepository.stop()
-        InMemoryAutomationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end
@@ -174,20 +148,8 @@ defmodule Cadence.AutomationsTest do
 
   describe "condition matching" do
     setup do
-      {:ok, _} = InMemoryAutomationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :automation_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryAutomationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id}
     end
@@ -287,20 +249,8 @@ defmodule Cadence.AutomationsTest do
 
   describe "rate limiting" do
     setup do
-      {:ok, _} = InMemoryAutomationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :automation_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryAutomationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id}
     end
@@ -364,31 +314,9 @@ defmodule Cadence.AutomationsTest do
 
   describe "executions" do
     setup do
-      {:ok, _} = InMemoryAutomationRepository.start_link()
-      {:ok, _} = InMemoryAutomationExecutionRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :automation_repository, InMemoryAutomationRepository)
-
-      Application.put_env(
-        :cadence,
-        :automation_execution_repository,
-        InMemoryAutomationExecutionRepository
-      )
-
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
       automation = automation_fixture(organization_id: org_id, mission_id: mission_id)
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :automation_repository)
-        Application.delete_env(:cadence, :automation_execution_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryAutomationExecutionRepository.stop()
-        InMemoryAutomationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id, automation: automation}
     end

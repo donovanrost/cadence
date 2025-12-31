@@ -12,7 +12,7 @@ defmodule Cadence.Procedures.DagExecutionTest do
   4. Variable passing - vars between steps
   5. Telemetry integration - conditions with telemetry data
   """
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures

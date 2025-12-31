@@ -1,5 +1,5 @@
 defmodule Cadence.Missions.MissionLifecycleTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   import Cadence.OrganizationsFixtures
 

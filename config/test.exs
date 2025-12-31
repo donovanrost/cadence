@@ -47,6 +47,15 @@ config :cadence, Cadence.Outbox.Processor, enabled: false
 # Disable queue persistence in tests to avoid sandbox ownership issues.
 config :cadence, Cadence.Application.Commanding.QueuePersistence, enabled: false
 
+# Disable cache warming in tests to avoid background DB work.
+config :cadence, Cadence.Runtime.Missions.CacheWarmer, enabled: false
+
+# Disable reconcilers in tests to avoid background DB work.
+config :cadence, :start_reconcilers, false
+
+# Use in-memory adapters in unit tests only when explicitly enabled per test.
+config :cadence, :use_in_memory_adapters, false
+
 # Configure Oban for testing - inline execution
 config :cadence, Oban, testing: :inline
 

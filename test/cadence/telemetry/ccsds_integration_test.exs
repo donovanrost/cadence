@@ -13,7 +13,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
   This validates that we can process real spacecraft telemetry.
   """
 
-  use Cadence.DataCase
+  use Cadence.IntegrationCase
 
   import Bitwise
 

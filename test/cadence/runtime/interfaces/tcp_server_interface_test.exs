@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Domain.Interfaces.Entities.Interface

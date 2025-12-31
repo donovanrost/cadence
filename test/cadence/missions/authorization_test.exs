@@ -1,28 +1,15 @@
 defmodule Cadence.Missions.AuthorizationTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.{Accounts, Missions}
   alias Cadence.Accounts.Scope
   alias Cadence.Accounts.User
   alias Cadence.Application.Organizations.{MembershipOperations, OrganizationOperations}
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Test.Adapters.InMemoryMembershipRepository
   alias Cadence.Test.Adapters.InMemoryMissionsRepository
-  alias Cadence.Test.Adapters.InMemoryOrganizationRepository
-  alias Cadence.Test.Adapters.InMemoryUserRepository
 
   describe "mission authorization flow" do
     setup do
-      {:ok, _} = InMemoryOrganizationRepository.start_link()
-      {:ok, _} = InMemoryMembershipRepository.start_link()
-      {:ok, _} = InMemoryMissionsRepository.start_link()
-      {:ok, _} = InMemoryUserRepository.start_link()
-
-      Application.put_env(:cadence, :organization_repository, InMemoryOrganizationRepository)
-      Application.put_env(:cadence, :membership_repository, InMemoryMembershipRepository)
-      Application.put_env(:cadence, :missions_repository, InMemoryMissionsRepository)
-      Application.put_env(:cadence, :user_repository, InMemoryUserRepository)
-
       {:ok, org} =
         OrganizationOperations.create(%{
           name: "Test Org",
@@ -50,17 +37,6 @@ defmodule Cadence.Missions.AuthorizationTest do
           organization_id: other_org.id,
           role: "admin"
         })
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :organization_repository)
-        Application.delete_env(:cadence, :membership_repository)
-        Application.delete_env(:cadence, :missions_repository)
-        Application.delete_env(:cadence, :user_repository)
-        InMemoryUserRepository.stop()
-        InMemoryMissionsRepository.stop()
-        InMemoryMembershipRepository.stop()
-        InMemoryOrganizationRepository.stop()
-      end)
 
       %{org: org, user: user, other_user: other_user, other_org: other_org}
     end

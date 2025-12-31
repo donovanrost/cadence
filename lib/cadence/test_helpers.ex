@@ -4,6 +4,7 @@ defmodule Cadence.TestHelpers do
 
   These functions make it easy to set up test data without building full UI.
   """
+  require Logger
 
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
   alias Cadence.{Missions, Repo, Targets}
@@ -56,11 +57,11 @@ defmodule Cadence.TestHelpers do
     # Check if all succeeded
     if Enum.all?(results, &match?({:ok, _}, &1)) do
       targets = Enum.map(results, fn {:ok, target} -> target end)
-      IO.puts("✅ Created 3 test targets: SAT-1, SAT-2, SAT-3")
+      log_test_output(:info, "✅ Created 3 test targets: SAT-1, SAT-2, SAT-3")
       {:ok, targets}
     else
       errors = Enum.filter(results, &match?({:error, _}, &1))
-      IO.puts("❌ Failed to create some targets")
+      log_test_output(:error, "❌ Failed to create some targets")
       {:error, errors}
     end
   end
@@ -87,7 +88,7 @@ defmodule Cadence.TestHelpers do
     |> Database.changeset(%{
       mission_id: mission.id,
       name: "Test Database",
-      slug: "test-database-#{System.unique_integer([:positive])}"
+      slug: "test-database-#{Ecto.UUID.generate()}"
     })
     |> Repo.insert!()
   end
@@ -133,7 +134,7 @@ defmodule Cadence.TestHelpers do
            status: status
          }) do
       {:ok, target} ->
-        IO.puts("✅ Created target: #{identifier}")
+        log_test_output(:info, "✅ Created target: #{identifier}")
         {:ok, target}
 
       {:error, changeset} ->
@@ -167,7 +168,7 @@ defmodule Cadence.TestHelpers do
     {:ok, org} =
       Organizations.create_organization(%{
         name: org_name,
-        slug: "test-org-#{System.unique_integer([:positive])}",
+        slug: "test-org-#{Ecto.UUID.generate()}",
         status: "active",
         subscription_tier: "pro"
       })
@@ -175,7 +176,7 @@ defmodule Cadence.TestHelpers do
     # Create user
     {:ok, user} =
       Accounts.register_user(%{
-        email: "test-#{System.unique_integer([:positive])}@example.com",
+        email: "test-#{Ecto.UUID.generate()}@example.com",
         organization_id: org.id,
         role: "admin"
       })
@@ -184,7 +185,7 @@ defmodule Cadence.TestHelpers do
     {:ok, mission} =
       Missions.create_mission(org.id, %{
         name: mission_name,
-        slug: "test-mission-#{System.unique_integer([:positive])}",
+        slug: "test-mission-#{Ecto.UUID.generate()}",
         description: "Test mission for development",
         status: "active",
         creator_user_id: user.id
@@ -193,12 +194,12 @@ defmodule Cadence.TestHelpers do
     # Create targets
     {:ok, targets} = create_test_targets(mission)
 
-    IO.puts("\n✅ Full test setup complete!")
-    IO.puts("   Organization: #{org.name} (#{org.id})")
-    IO.puts("   User: #{user.email}")
-    IO.puts("   Mission: #{mission.name} (#{mission.id})")
-    IO.puts("   Targets: #{length(targets)} created")
-    IO.puts("\n📊 View at: http://localhost:4000/missions/#{mission.id}")
+    log_test_output(:info, "\n✅ Full test setup complete!")
+    log_test_output(:info, "   Organization: #{org.name} (#{org.id})")
+    log_test_output(:info, "   User: #{user.email}")
+    log_test_output(:info, "   Mission: #{mission.name} (#{mission.id})")
+    log_test_output(:info, "   Targets: #{length(targets)} created")
+    log_test_output(:info, "\n📊 View at: http://localhost:4000/missions/#{mission.id}")
 
     %{
       org: org,
@@ -206,5 +207,20 @@ defmodule Cadence.TestHelpers do
       mission: mission,
       targets: targets
     }
+  end
+
+  defp log_test_output(level, message) do
+    if verbose_test_output?() do
+      Logger.log(level, message)
+    end
+  end
+
+  defp verbose_test_output? do
+    case System.get_env("CADENCE_TEST_VERBOSE") do
+      "1" -> true
+      "true" -> true
+      "TRUE" -> true
+      _ -> false
+    end
   end
 end

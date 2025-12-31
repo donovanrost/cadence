@@ -5,7 +5,7 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandlerTest do
   These tests verify the handler's behavior in isolation, mocking the RuleCache
   where needed but using real database operations for alarm creation/updates.
   """
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Alarms.Alarm
   alias Cadence.Recordings

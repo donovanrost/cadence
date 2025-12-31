@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.Commands.TargetQueueTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Commands
   alias Cadence.Domain.Commanding.Entities.QueuedCommand

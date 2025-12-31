@@ -1,5 +1,5 @@
 defmodule Cadence.Procedures.Engine.ExecutionCoordinatorTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Procedures.Engine.ExecutionCoordinator
   alias Cadence.Repo

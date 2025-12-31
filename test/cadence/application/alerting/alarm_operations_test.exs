@@ -6,36 +6,13 @@ defmodule Cadence.Application.Alerting.AlarmOperationsTest do
   to test the application layer without a database. This provides fast,
   isolated tests that verify the orchestration logic.
   """
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Application.Alerting.AlarmOperations
   alias Cadence.Domain.Alerting.Entities.Alarm
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryAlarmRepository
   alias Cadence.Test.Adapters.InMemoryEventRecorder
-
-  setup do
-    # Start fake adapters
-    {:ok, _} = InMemoryAlarmRepository.start_link()
-    {:ok, _} = FakeEventPublisher.start_link()
-    {:ok, _} = InMemoryEventRecorder.start_link()
-
-    # Configure DI to use fakes
-    Application.put_env(:cadence, :alarm_repository, InMemoryAlarmRepository)
-    Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-    Application.put_env(:cadence, :event_recorder, InMemoryEventRecorder)
-
-    on_exit(fn ->
-      Application.delete_env(:cadence, :alarm_repository)
-      Application.delete_env(:cadence, :event_publisher)
-      Application.delete_env(:cadence, :event_recorder)
-      InMemoryAlarmRepository.stop()
-      FakeEventPublisher.stop()
-      InMemoryEventRecorder.stop()
-    end)
-
-    :ok
-  end
 
   describe "acknowledge/3" do
     test "acknowledges an active alarm" do

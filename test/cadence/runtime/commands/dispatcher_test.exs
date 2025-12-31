@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Commands
   alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}

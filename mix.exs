@@ -27,7 +27,12 @@ defmodule Cadence.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [
+        precommit: :test,
+        "test.all": :test,
+        "test.unit": :test,
+        "test.integration": :test
+      ]
     ]
   end
 
@@ -91,6 +96,13 @@ defmodule Cadence.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      "test.unit": ["ecto.create --quiet", "ecto.migrate --quiet", "test --exclude integration"],
+      "test.integration": [
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
+        "cmd CADENCE_INTEGRATION=1 mix test --only integration"
+      ],
+      "test.all": ["test.unit", "test.integration"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["tailwind cadence", "esbuild cadence"],
       "assets.deploy": [
@@ -102,7 +114,7 @@ defmodule Cadence.MixProject do
         "compile --warning-as-errors",
         "deps.unlock --unused",
         "format",
-        "test",
+        "test.all",
         "credo --strict"
       ]
     ]

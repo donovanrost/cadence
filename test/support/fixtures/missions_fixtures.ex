@@ -8,7 +8,7 @@ defmodule Cadence.MissionsFixtures do
 
   import Cadence.OrganizationsFixtures
 
-  def unique_mission_slug, do: "mission-#{System.unique_integer([:positive])}"
+  def unique_mission_slug, do: "mission-#{Ecto.UUID.generate()}"
 
   def mission_fixture(attrs \\ %{}) do
     # Ensure attrs is a map

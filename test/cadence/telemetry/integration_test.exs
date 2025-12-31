@@ -11,7 +11,7 @@ defmodule Cadence.Telemetry.IntegrationTest do
   6. PubSub broadcasts updates
   """
 
-  use Cadence.DataCase
+  use Cadence.IntegrationCase
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.{Missions, Organizations}

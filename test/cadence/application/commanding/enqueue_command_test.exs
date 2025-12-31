@@ -4,35 +4,12 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
 
   Tests the command queuing logic with in-memory adapters.
   """
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Application.Commanding.EnqueueCommand
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryEventRecorder
   alias Cadence.Test.Adapters.InMemoryQueueRepository
-
-  setup do
-    # Start fake adapters
-    {:ok, _} = InMemoryQueueRepository.start_link()
-    {:ok, _} = FakeEventPublisher.start_link()
-    {:ok, _} = InMemoryEventRecorder.start_link()
-
-    # Configure DI
-    Application.put_env(:cadence, :queue_repository, InMemoryQueueRepository)
-    Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-    Application.put_env(:cadence, :event_recorder, InMemoryEventRecorder)
-
-    on_exit(fn ->
-      Application.delete_env(:cadence, :queue_repository)
-      Application.delete_env(:cadence, :event_publisher)
-      Application.delete_env(:cadence, :event_recorder)
-      InMemoryQueueRepository.stop()
-      FakeEventPublisher.stop()
-      InMemoryEventRecorder.stop()
-    end)
-
-    :ok
-  end
 
   describe "enqueue/2" do
     test "enqueues a command with default priority" do

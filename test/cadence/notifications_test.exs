@@ -1,27 +1,13 @@
 defmodule Cadence.NotificationsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
-  alias Cadence.Test.Adapters.FakeEventPublisher
-  alias Cadence.Test.Adapters.InMemoryNotificationRepository
 
   describe "create_notification/1" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end
@@ -59,20 +45,8 @@ defmodule Cadence.NotificationsTest do
 
   describe "list_unread/2" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end
@@ -106,20 +80,8 @@ defmodule Cadence.NotificationsTest do
 
   describe "list_inbox/2" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end
@@ -146,20 +108,8 @@ defmodule Cadence.NotificationsTest do
 
   describe "unread_count/2" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end
@@ -185,19 +135,7 @@ defmodule Cadence.NotificationsTest do
 
   describe "mark_read/1" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       notification = notification_fixture()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{notification: notification}
     end
@@ -217,20 +155,8 @@ defmodule Cadence.NotificationsTest do
 
   describe "mark_all_read/2" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end
@@ -250,19 +176,7 @@ defmodule Cadence.NotificationsTest do
 
   describe "archive/1" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       notification = notification_fixture()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{notification: notification}
     end
@@ -277,15 +191,7 @@ defmodule Cadence.NotificationsTest do
 
   describe "preferences" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-
       user_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        InMemoryNotificationRepository.stop()
-      end)
 
       %{user_id: user_id}
     end
@@ -354,20 +260,8 @@ defmodule Cadence.NotificationsTest do
 
   describe "pubsub" do
     setup do
-      {:ok, _} = InMemoryNotificationRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :notification_repository, InMemoryNotificationRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       user_id = Ecto.UUID.generate()
       org_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :notification_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryNotificationRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{user_id: user_id, org_id: org_id}
     end

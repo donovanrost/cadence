@@ -1,5 +1,5 @@
 defmodule Cadence.AccountsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Accounts
   alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
@@ -11,18 +11,10 @@ defmodule Cadence.AccountsTest do
   alias Cadence.Accounts.User
 
   setup do
-    {:ok, _} = InMemoryUserRepository.start_link()
-    {:ok, _} = InMemoryTokenRepository.start_link()
-    Application.put_env(:cadence, :user_repository, InMemoryUserRepository)
-    Application.put_env(:cadence, :token_repository, InMemoryTokenRepository)
     Application.put_env(:cadence, :password_hasher, FakePasswordHasher)
 
     on_exit(fn ->
-      Application.delete_env(:cadence, :user_repository)
-      Application.delete_env(:cadence, :token_repository)
       Application.delete_env(:cadence, :password_hasher)
-      InMemoryTokenRepository.stop()
-      InMemoryUserRepository.stop()
     end)
 
     :ok

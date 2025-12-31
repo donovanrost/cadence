@@ -1,24 +1,11 @@
 defmodule Cadence.SettingsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Domain.Settings.Entities.Setting, as: SettingEntity
   alias Cadence.Organizations.Organization
   alias Cadence.Settings
   alias Cadence.Settings.Setting
-  alias Cadence.Test.Adapters.InMemorySettingsRepository
-
-  setup do
-    {:ok, _} = InMemorySettingsRepository.start_link()
-    Application.put_env(:cadence, :settings_repository, InMemorySettingsRepository)
-
-    on_exit(fn ->
-      Application.delete_env(:cadence, :settings_repository)
-      InMemorySettingsRepository.stop()
-    end)
-
-    :ok
-  end
 
   describe "definitions" do
     test "get_definition/2 returns definition for known settings" do

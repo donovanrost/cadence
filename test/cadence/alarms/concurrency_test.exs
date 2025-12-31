@@ -13,7 +13,7 @@ defmodule Cadence.Alarms.ConcurrencyTest do
   Tests tagged with :race_condition are expected to fail until fixed.
   Tests tagged with :cache_consistency are expected to fail until fixed.
   """
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Alarms
   alias Cadence.Runtime.Alarms.AlarmManager

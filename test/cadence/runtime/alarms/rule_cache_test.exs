@@ -2,7 +2,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
   @moduledoc """
   Tests for RuleCache ETS-based caching of alarm rules.
   """
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Runtime.Alarms.RuleCache
   alias Cadence.Runtime.Telemetry.PacketIdentifier

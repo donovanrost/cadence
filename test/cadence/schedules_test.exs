@@ -1,28 +1,13 @@
 defmodule Cadence.SchedulesTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Schedules
 
-  alias Cadence.Test.Adapters.FakeEventPublisher
-  alias Cadence.Test.Adapters.InMemoryScheduleRepository
-
   describe "schedules" do
     setup do
-      {:ok, _} = InMemoryScheduleRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :schedule_repository, InMemoryScheduleRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
       procedure_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :schedule_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryScheduleRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end
@@ -221,21 +206,9 @@ defmodule Cadence.SchedulesTest do
 
   describe "due schedules" do
     setup do
-      {:ok, _} = InMemoryScheduleRepository.start_link()
-      {:ok, _} = FakeEventPublisher.start_link()
-      Application.put_env(:cadence, :schedule_repository, InMemoryScheduleRepository)
-      Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
-
       org_id = Ecto.UUID.generate()
       mission_id = Ecto.UUID.generate()
       procedure_id = Ecto.UUID.generate()
-
-      on_exit(fn ->
-        Application.delete_env(:cadence, :schedule_repository)
-        Application.delete_env(:cadence, :event_publisher)
-        InMemoryScheduleRepository.stop()
-        FakeEventPublisher.stop()
-      end)
 
       %{org_id: org_id, mission_id: mission_id, procedure_id: procedure_id}
     end

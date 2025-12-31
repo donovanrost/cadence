@@ -1,5 +1,5 @@
 defmodule Cadence.Runtime.Alarms.AlarmManagerTest do
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Alarms.Alarm
   alias Cadence.Runtime.Alarms.AlarmManager
@@ -174,7 +174,13 @@ defmodule Cadence.Runtime.Alarms.AlarmManagerTest do
         )
 
       on_exit(fn ->
-        if Process.alive?(pid), do: GenServer.stop(pid)
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       %{org: org, mission: mission, target: target, rule: rule, pid: pid}

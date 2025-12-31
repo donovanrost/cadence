@@ -7,7 +7,7 @@ defmodule Cadence.OrganizationsFixtures do
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
 
-  def unique_org_slug, do: "org-#{System.unique_integer([:positive])}"
+  def unique_org_slug, do: "org-#{Ecto.UUID.generate()}"
 
   def organization_fixture(attrs \\ %{}) do
     attrs =

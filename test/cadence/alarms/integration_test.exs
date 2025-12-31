@@ -8,7 +8,7 @@ defmodule Cadence.Alarms.IntegrationTest do
   - Cache consistency throughout the lifecycle
   - PubSub event broadcasting
   """
-  use Cadence.DataCase, async: false
+  use Cadence.IntegrationCase
 
   alias Cadence.Alarms
   alias Cadence.Recordings

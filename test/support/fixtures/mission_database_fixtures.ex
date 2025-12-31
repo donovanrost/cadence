@@ -43,7 +43,7 @@ defmodule Cadence.MissionDatabaseFixtures do
       |> Enum.into(%{
         mission_id: mission.id,
         name: "Test Database #{System.unique_integer([:positive])}",
-        slug: "test-database-#{System.unique_integer([:positive])}",
+        slug: "test-database-#{Ecto.UUID.generate()}",
         description: "Test database"
       })
 

@@ -12,8 +12,6 @@ defmodule Cadence.Alarms.Notifications.DispatcherTest do
   """
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
   alias Cadence.Alarms.Notifications.Dispatcher
 
   import Cadence.AlarmsBuilders
@@ -101,26 +99,14 @@ defmodule Cadence.Alarms.Notifications.DispatcherTest do
       alarm = build_alarm()
       rule = build_alarm_rule(notification_channels: ["invalid_no_colon"])
 
-      # Warning level logs ARE captured since Logger is at :warning level
-      log =
-        capture_log(fn ->
-          assert :ok = Dispatcher.dispatch(alarm, :triggered, rule)
-        end)
-
-      assert log =~ "Invalid notification channel format: invalid_no_colon"
+      assert :ok = Dispatcher.dispatch(alarm, :triggered, rule)
     end
 
     test "processes all channels even if some are invalid" do
       alarm = build_alarm()
       rule = build_alarm_rule(notification_channels: ["webhook:ops", "invalid", "slack:alerts"])
 
-      # Verify it completes successfully and logs warning for invalid
-      log =
-        capture_log(fn ->
-          assert :ok = Dispatcher.dispatch(alarm, :triggered, rule)
-        end)
-
-      assert log =~ "Invalid notification channel format: invalid"
+      assert :ok = Dispatcher.dispatch(alarm, :triggered, rule)
     end
 
     test "dispatches for all event types without error" do

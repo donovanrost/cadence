@@ -1,35 +1,12 @@
 defmodule Cadence.TargetsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase, async: false
 
   alias Cadence.Domain.Targeting.Entities.Target
   alias Cadence.Targets
-  alias Cadence.Test.Adapters.InMemoryQueueRepository
-  alias Cadence.Test.Adapters.InMemoryTargetRepository
-
-  setup_all do
-    case Process.whereis(Cadence.PubSub) do
-      nil -> Phoenix.PubSub.Supervisor.start_link(name: Cadence.PubSub)
-      _pid -> :ok
-    end
-
-    :ok
-  end
 
   setup do
-    {:ok, _} = InMemoryTargetRepository.start_link()
-    {:ok, _} = InMemoryQueueRepository.start_link()
-    Application.put_env(:cadence, :target_repository, InMemoryTargetRepository)
-    Application.put_env(:cadence, :queue_repository, InMemoryQueueRepository)
-
     mission_id = Ecto.UUID.generate()
     definition_set_id = Ecto.UUID.generate()
-
-    on_exit(fn ->
-      Application.delete_env(:cadence, :target_repository)
-      Application.delete_env(:cadence, :queue_repository)
-      InMemoryTargetRepository.stop()
-      InMemoryQueueRepository.stop()
-    end)
 
     %{mission_id: mission_id, definition_set_id: definition_set_id}
   end

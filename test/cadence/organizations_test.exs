@@ -1,23 +1,11 @@
 defmodule Cadence.OrganizationsTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase
 
   alias Cadence.Application.Organizations.OrganizationOperations
   alias Cadence.Application.Organizations.OrganizationQueries
   alias Cadence.Application.Organizations.QuotaService
   alias Cadence.Domain.Organizations.Entities.Organization
   alias Cadence.Test.Adapters.InMemoryOrganizationRepository
-
-  setup do
-    {:ok, _} = InMemoryOrganizationRepository.start_link()
-    Application.put_env(:cadence, :organization_repository, InMemoryOrganizationRepository)
-
-    on_exit(fn ->
-      Application.delete_env(:cadence, :organization_repository)
-      InMemoryOrganizationRepository.stop()
-    end)
-
-    :ok
-  end
 
   describe "organizations" do
     test "list_organizations/0 returns all organizations" do

@@ -97,9 +97,21 @@ defmodule Cadence.PureCase do
     end
   end
 
-  setup _tags do
-    # No database setup needed for pure tests
+  setup tags do
+    if use_in_memory_adapters?(tags) do
+      cleanup = Cadence.TestSupport.enable_in_memory_adapters()
+      on_exit(cleanup)
+    end
+
     :ok
+  end
+
+  defp use_in_memory_adapters?(tags) do
+    if tags[:no_in_memory_adapters] do
+      false
+    else
+      Application.get_env(:cadence, :use_in_memory_adapters, false)
+    end
   end
 
   @doc """
@@ -133,7 +145,7 @@ defmodule Cadence.PureCase do
   Generates a unique email address for tests.
   """
   def unique_email do
-    "user#{unique_integer()}@example.com"
+    "user-#{Ecto.UUID.generate()}@example.com"
   end
 
   @doc """

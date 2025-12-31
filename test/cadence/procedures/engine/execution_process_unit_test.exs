@@ -1,31 +1,17 @@
 defmodule Cadence.Procedures.Engine.ExecutionProcessUnitTest do
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase, async: false
 
   alias Cadence.Domain.Procedures.Entities.Procedure
   alias Cadence.Procedures.Engine.ExecutionProcess
   alias Cadence.Procedures.ProcedureVersion
   alias Cadence.Test.Adapters.FakeEventPublisher
-  alias Cadence.Test.Adapters.InMemoryExecutionPersistence
   alias Cadence.Test.Adapters.InMemoryProcedureRepository
 
   setup do
-    {:ok, _} = InMemoryProcedureRepository.start_link()
-    {:ok, _} = InMemoryExecutionPersistence.start_link()
-    {:ok, _} = FakeEventPublisher.start_link()
-
-    Application.put_env(:cadence, :execution_operations, InMemoryProcedureRepository)
-    Application.put_env(:cadence, :execution_persistence, InMemoryExecutionPersistence)
-    Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
     Application.put_env(:cadence, ExecutionProcess, autostart_pending?: false)
 
     on_exit(fn ->
-      Application.delete_env(:cadence, :execution_operations)
-      Application.delete_env(:cadence, :execution_persistence)
-      Application.delete_env(:cadence, :event_publisher)
       Application.delete_env(:cadence, ExecutionProcess)
-      InMemoryExecutionPersistence.stop()
-      InMemoryProcedureRepository.stop()
-      FakeEventPublisher.stop()
     end)
 
     :ok
@@ -39,7 +25,16 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessUnitTest do
       :ok = ExecutionProcess.start_execution(execution.id)
     end
 
-    on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        try do
+          GenServer.stop(pid)
+        catch
+          :exit, _ -> :ok
+        end
+      end
+    end)
+
     %{execution: execution, pid: pid}
   end
 

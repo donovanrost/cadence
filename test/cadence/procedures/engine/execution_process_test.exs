@@ -8,36 +8,20 @@ defmodule Cadence.Procedures.Engine.ExecutionProcessTest do
   1. Process lifecycle (start_link, init)
   2. Client API (whereis, get_state)
   """
-  use Cadence.PureCase, async: false
+  use Cadence.UseCaseCase, async: false
 
   import Cadence.ProceduresBuilders
   import Cadence.ProceduresHelpers
 
   alias Cadence.Procedures.Engine.ExecutionProcess
-  alias Cadence.Test.Adapters.FakeEventPublisher
-  alias Cadence.Test.Adapters.InMemoryExecutionPersistence
   alias Cadence.Test.Adapters.InMemoryProcedureRepository
 
   setup do
-    {:ok, _} = InMemoryProcedureRepository.start_link()
-    {:ok, _} = InMemoryExecutionPersistence.start_link()
-    {:ok, _} = FakeEventPublisher.start_link()
-
-    Application.put_env(:cadence, :execution_operations, InMemoryProcedureRepository)
-    Application.put_env(:cadence, :execution_persistence, InMemoryExecutionPersistence)
-    Application.put_env(:cadence, :event_publisher, FakeEventPublisher)
     Application.put_env(:cadence, ExecutionProcess, autostart_pending?: false)
 
-    on_exit(fn -> stop_execution_processes() end)
-
     on_exit(fn ->
-      Application.delete_env(:cadence, :execution_operations)
-      Application.delete_env(:cadence, :execution_persistence)
-      Application.delete_env(:cadence, :event_publisher)
+      stop_execution_processes()
       Application.delete_env(:cadence, ExecutionProcess)
-      InMemoryExecutionPersistence.stop()
-      InMemoryProcedureRepository.stop()
-      FakeEventPublisher.stop()
     end)
 
     :ok
