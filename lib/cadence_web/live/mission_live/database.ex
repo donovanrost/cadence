@@ -187,7 +187,7 @@ defmodule CadenceWeb.MissionLive.Database do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <div class="px-4 py-4 space-y-6">
       <%= if @selected_database do %>
         <.breadcrumb items={[
           {"Database Catalog", ~p"/missions/#{@mission}/database"},

@@ -62,7 +62,6 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     procedure_version_rejected: Recordables.ProcedureVersionRejected,
     procedure_version_withdrawn: Recordables.ProcedureVersionWithdrawn,
     procedure_version_deprecated: Recordables.ProcedureVersionDeprecated,
-    procedure_approval_added: Recordables.ProcedureApprovalAdded,
     # Automation events
     automation_triggered: Recordables.AutomationTriggered,
     automation_completed: Recordables.AutomationCompleted,
@@ -179,10 +178,6 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
 
   defp build_recordable_attrs(:procedure_version_deprecated, _version, _attrs) do
     %{}
-  end
-
-  defp build_recordable_attrs(:procedure_approval_added, _version, attrs) do
-    %{comment: Map.get(attrs, :comment)}
   end
 
   # Automation events

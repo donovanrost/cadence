@@ -86,6 +86,9 @@ defmodule CadenceWeb.Router do
 
       # Notifications
       live "/notifications", NotificationLive.Index, :index
+
+      # Global Reviews Inbox
+      live "/reviews", ReviewLive.Index, :index
     end
 
     # Mission-specific routes (mission sidebar with mission context)
@@ -144,15 +147,32 @@ defmodule CadenceWeb.Router do
       # Command sender
       live "/missions/:id/commands", CommandLive.Sender, :index
 
-      # Procedures (V2)
-      live "/missions/:id/procedures", MissionLive.Procedures, :index
-      live "/missions/:id/procedures/:procedure_id", MissionLive.Procedures, :show
-      live "/missions/:id/procedures/:procedure_id/execute", MissionLive.Procedures, :execute
+      # Procedures - List View
+      live "/missions/:id/procedures", MissionLive.Procedures.Index, :index
+
+      # Procedures - Reviews (mission-scoped review inbox)
+      live "/missions/:id/procedures/reviews", MissionLive.Procedures.Reviews, :index
+
+      # Procedures - Detail View with Tabs
+      live "/missions/:id/procedures/:procedure_id", MissionLive.Procedures.Show, :overview
+      live "/missions/:id/procedures/:procedure_id/versions", MissionLive.Procedures.Show, :versions
+      live "/missions/:id/procedures/:procedure_id/executions", MissionLive.Procedures.Show, :executions
+      live "/missions/:id/procedures/:procedure_id/reviews", MissionLive.Procedures.Show, :reviews
+      live "/missions/:id/procedures/:procedure_id/execute", MissionLive.Procedures.Show, :execute
 
       # Procedures V2 - Block-based editor & execution
       live "/missions/:id/procedures-v2/:procedure_id/versions/:version_id/edit",
            ProcedureV2Live.VersionEdit,
            :edit_version
+
+      # Review workflow - Overview and Changes tabs
+      live "/missions/:id/procedures-v2/:procedure_id/versions/:version_id/review",
+           ReviewLive.Overview,
+           :overview
+
+      live "/missions/:id/procedures-v2/:procedure_id/versions/:version_id/review/changes",
+           ReviewLive.Changes,
+           :changes
 
       live "/missions/:id/procedures-v2/:procedure_id/executions/:execution_id",
            ProcedureV2Live.ExecutionShow,

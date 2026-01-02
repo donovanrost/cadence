@@ -67,7 +67,7 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
     end
   end
 
-  defp start_procedure_execution(schedule, procedure) do
+  defp start_procedure_execution(schedule, _procedure) do
     Procedures.start_execution(
       schedule.procedure_id,
       parameters: schedule.parameters || %{},

@@ -234,7 +234,7 @@ defmodule CadenceWeb.MissionLive.Catalog do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <div class="px-4 py-4 space-y-6">
       <!-- Header -->
       <.header>
         Catalog

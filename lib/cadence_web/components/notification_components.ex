@@ -38,7 +38,7 @@ defmodule CadenceWeb.NotificationComponents do
 
       <div
         tabindex="0"
-        class="dropdown-content z-[100] card card-compact w-80 bg-base-200 shadow-lg border border-base-300"
+        class="dropdown-content z-[100] card card-compact w-80 bg-base-200 shadow-lg border border-primary/20 hud-grid"
       >
         <div class="card-body">
           <div class="flex items-center justify-between mb-2">

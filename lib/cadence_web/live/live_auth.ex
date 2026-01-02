@@ -162,11 +162,13 @@ defmodule CadenceWeb.LiveAuth do
   # loads initial unread notifications, and assigns data to socket.
   def on_mount(:subscribe_notifications, _params, _session, socket) do
     alias Cadence.Notifications
+    alias Cadence.Reviews
 
     current_scope = socket.assigns[:current_scope]
 
     if current_scope && current_scope.user do
       user_id = current_scope.user.id
+      organization_id = current_scope.current_organization && current_scope.current_organization.id
 
       if connected?(socket) do
         Notifications.subscribe(user_id)
@@ -176,10 +178,15 @@ defmodule CadenceWeb.LiveAuth do
       notifications = Notifications.list_unread(user_id, limit: 7)
       unread_count = Notifications.unread_count(user_id)
 
+      # Load review inbox counts for sidebar badge
+      review_counts = Reviews.get_inbox_counts(user_id, organization_id: organization_id)
+      review_pending_count = review_counts.total
+
       socket =
         socket
         |> assign(:notifications, notifications)
         |> assign(:notification_unread_count, unread_count)
+        |> assign(:review_pending_count, review_pending_count)
 
       {:cont, socket}
     else
@@ -187,6 +194,7 @@ defmodule CadenceWeb.LiveAuth do
         socket
         |> assign(:notifications, [])
         |> assign(:notification_unread_count, 0)
+        |> assign(:review_pending_count, 0)
 
       {:cont, socket}
     end

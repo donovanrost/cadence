@@ -93,6 +93,7 @@ defmodule CadenceWeb.Layouts do
   attr :current_path, :string, default: ""
   attr :notifications, :list, default: []
   attr :notification_unread_count, :integer, default: 0
+  attr :review_pending_count, :integer, default: 0
   attr :inner_content, :any, required: true
 
   def sidebar(assigns) do
@@ -119,26 +120,25 @@ defmodule CadenceWeb.Layouts do
             </div>
           </div>
           
-    <!-- Main content area -->
+    <!-- Desktop: Fixed top bar (outside main, doesn't scroll) -->
+          <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
+            <CadenceWeb.NotificationComponents.notification_bell
+              id="notification-bell-desktop"
+              unread_count={@notification_unread_count}
+              notifications={@notifications}
+            />
+            <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} size="sm" />
+          </div>
+
+          <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
-            <!-- Desktop: User menu in top-right -->
-            <div class="hidden lg:flex items-center justify-end gap-4 p-4 border-b border-base-300">
-              <CadenceWeb.NotificationComponents.notification_bell
-                id="notification-bell-desktop"
-                unread_count={@notification_unread_count}
-                notifications={@notifications}
-              />
-              <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
-            </div>
-            
-    <!-- Page content -->
             <div class="p-6">
               {@inner_content}
             </div>
           </main>
         </div>
       </div>
-      
+
     <!-- Sidebar - HUD Mission Control Style -->
       <div class="drawer-side">
         <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
@@ -146,31 +146,30 @@ defmodule CadenceWeb.Layouts do
           data-sidebar-collapsible
           class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid relative"
         >
-          <!-- Logo/Brand -->
-          <div class="p-3 border-b border-primary/20">
+          <!-- Logo/Brand (h-10 matches top bar height) -->
+          <div class="px-3 h-10 flex items-center border-b border-primary/20">
             <.link navigate={~p"/"} class="flex items-center gap-2">
               <div class="relative flex-shrink-0">
-                <img src={~p"/images/logo.svg"} width="24" class="relative z-10" />
+                <img src={~p"/images/logo.svg"} width="20" class="relative z-10" />
                 <div class="absolute inset-0 blur-md bg-primary/30"></div>
               </div>
-              <div class="flex flex-col sidebar-label">
-                <span class="text-xs font-bold tracking-[0.15em] text-primary">
-                  CADENCE
-                </span>
-                <span class="text-[0.5rem] tracking-[0.1em] text-base-content/40 uppercase">
-                  Mission Control
-                </span>
-              </div>
+              <span class="text-xs font-bold tracking-[0.15em] text-primary sidebar-label">
+                CADENCE
+              </span>
             </.link>
           </div>
-          
+
     <!-- Navigation -->
           <nav class="flex-1 overflow-y-auto py-2">
             <div class="px-3 mb-2 sidebar-expanded-only">
               <span class="hud-label text-base-content/30">Navigation</span>
             </div>
             <ul class="menu menu-sm space-y-0.5">
-              <.sidebar_navigation current_scope={@current_scope} current_path={@current_path} />
+              <.sidebar_navigation
+                current_scope={@current_scope}
+                current_path={@current_path}
+                review_pending_count={@review_pending_count}
+              />
             </ul>
           </nav>
           
@@ -196,6 +195,7 @@ defmodule CadenceWeb.Layouts do
   """
   attr :current_scope, :map, required: true
   attr :current_path, :string, default: ""
+  attr :review_pending_count, :integer, default: 0
 
   def sidebar_navigation(assigns) do
     is_admin_context = String.starts_with?(assigns.current_path, "/admin")
@@ -276,6 +276,22 @@ defmodule CadenceWeb.Layouts do
         Targets
       </.sidebar_nav_item>
 
+      <.sidebar_nav_item
+        navigate={~p"/reviews"}
+        active={String.contains?(@current_path, "/reviews")}
+      >
+        <:icon><.icon name="hero-chat-bubble-left-right" class="h-5 w-5" /></:icon>
+        <span class="flex items-center gap-2">
+          Reviews
+          <span
+            :if={@review_pending_count > 0}
+            class="badge badge-xs badge-primary"
+          >
+            {format_review_count(@review_pending_count)}
+          </span>
+        </span>
+      </.sidebar_nav_item>
+
       <.sidebar_nav_group
         label="Settings"
         icon="hero-cog-6-tooth"
@@ -297,6 +313,7 @@ defmodule CadenceWeb.Layouts do
   """
   attr :id, :string, required: true
   attr :current_scope, :map, required: true
+  attr :size, :string, default: "md", values: ~w(sm md)
 
   def user_org_menu(assigns) do
     user = assigns.current_scope.user
@@ -322,13 +339,19 @@ defmodule CadenceWeb.Layouts do
     ~H"""
     <.dropdown id={@id}>
       <:trigger>
-        <div class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 cursor-pointer transition-glow hover-glow-cyan">
-          <.avatar email={@user.email} size="sm" />
+        <div class={[
+          "flex items-center rounded-lg hover:bg-base-200 cursor-pointer transition-glow hover-glow-cyan",
+          @size == "sm" && "gap-2 px-2 py-1",
+          @size == "md" && "gap-3 px-3 py-2"
+        ]}>
+          <.avatar email={@user.email} size={if @size == "sm", do: "xs", else: "sm"} />
           <div class="hidden sm:flex flex-col items-start">
-            <span class="text-sm font-semibold">{@org_name}</span>
-            <span class="text-xs text-base-content/60">{@user.email}</span>
+            <span class={["font-semibold", @size == "sm" && "text-xs", @size == "md" && "text-sm"]}>
+              {@org_name}
+            </span>
+            <span :if={@size == "md"} class="text-xs text-base-content/60">{@user.email}</span>
           </div>
-          <.icon name="hero-chevron-down" class="h-4 w-4 hidden sm:block" />
+          <.icon name="hero-chevron-down" class={chevron_class(@size)} />
         </div>
       </:trigger>
       
@@ -439,6 +462,7 @@ defmodule CadenceWeb.Layouts do
   attr :mission, :map, default: nil
   attr :notifications, :list, default: []
   attr :notification_unread_count, :integer, default: 0
+  attr :review_pending_count, :integer, default: 0
   attr :inner_content, :any, required: true
 
   def mission_sidebar(assigns) do
@@ -467,22 +491,19 @@ defmodule CadenceWeb.Layouts do
             </div>
           </div>
           
-    <!-- Main content area -->
+    <!-- Desktop: Fixed top bar (outside main, doesn't scroll) -->
+          <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
+            <CadenceWeb.NotificationComponents.notification_bell
+              id="mission-notification-bell-desktop"
+              unread_count={@notification_unread_count}
+              notifications={@notifications}
+            />
+            <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} size="sm" />
+          </div>
+
+          <!-- Main content area -->
           <main class="flex-1 overflow-y-auto bg-base-100">
-            <!-- Desktop: User menu in top-right -->
-            <div class="hidden lg:flex items-center justify-end gap-4 p-4 border-b border-base-300">
-              <CadenceWeb.NotificationComponents.notification_bell
-                id="mission-notification-bell-desktop"
-                unread_count={@notification_unread_count}
-                notifications={@notifications}
-              />
-              <.user_org_menu id="user-org-menu-desktop" current_scope={@current_scope} />
-            </div>
-            
-    <!-- Page content -->
-            <div class="p-6">
-              {@inner_content}
-            </div>
+            {@inner_content}
           </main>
         </div>
       </div>
@@ -494,11 +515,11 @@ defmodule CadenceWeb.Layouts do
           data-sidebar-collapsible
           class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 dark:sidebar-dark-bg flex flex-col border-r border-primary/20 hud-grid relative"
         >
-          <!-- Logo/Brand -->
-          <div class="p-3 border-b border-primary/20">
+          <!-- Logo/Brand (h-10 matches top bar height) -->
+          <div class="px-3 h-10 flex items-center border-b border-primary/20">
             <.link navigate={~p"/"} class="flex items-center gap-2">
               <div class="relative flex-shrink-0">
-                <img src={~p"/images/logo.svg"} width="24" class="relative z-10" />
+                <img src={~p"/images/logo.svg"} width="20" class="relative z-10" />
                 <div class="absolute inset-0 blur-md bg-primary/30"></div>
               </div>
               <span class="text-xs font-bold tracking-[0.15em] text-primary sidebar-label">
@@ -506,7 +527,7 @@ defmodule CadenceWeb.Layouts do
               </span>
             </.link>
           </div>
-          
+
     <!-- Back to missions link -->
           <div class="py-2 border-b border-primary/20 sidebar-back-link">
             <.link
@@ -581,6 +602,11 @@ defmodule CadenceWeb.Layouts do
       |> assign(:is_commands, String.contains?(assigns.current_path, "#{base_path}/commands"))
       |> assign(:is_procedures, String.contains?(assigns.current_path, "#{base_path}/procedures"))
       |> assign(
+        :is_procedure_reviews,
+        assigns.current_path == "#{base_path}/procedures/reviews" or
+          String.starts_with?(assigns.current_path, "#{base_path}/procedures/reviews?")
+      )
+      |> assign(
         :is_automations,
         String.contains?(assigns.current_path, "#{base_path}/automations")
       )
@@ -635,10 +661,19 @@ defmodule CadenceWeb.Layouts do
       <.sidebar_nav_group
         label="Procedures"
         icon="hero-document-text"
-        expanded={@is_procedures or @is_automations or @is_schedules}
+        expanded={@is_procedures or @is_procedure_reviews or @is_automations or @is_schedules}
       >
-        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/procedures"} active={@is_procedures}>
+        <.sidebar_nav_child
+          navigate={~p"/missions/#{@mission}/procedures"}
+          active={@is_procedures and not @is_procedure_reviews}
+        >
           Procedures
+        </.sidebar_nav_child>
+        <.sidebar_nav_child
+          navigate={~p"/missions/#{@mission}/procedures/reviews"}
+          active={@is_procedure_reviews}
+        >
+          Reviews
         </.sidebar_nav_child>
         <.sidebar_nav_child navigate={~p"/missions/#{@mission}/automations"} active={@is_automations}>
           Automations
@@ -861,4 +896,13 @@ defmodule CadenceWeb.Layouts do
     </.sidebar_nav_item>
     """
   end
+
+  # Format review count for display (shows "99+" for counts > 99)
+  defp format_review_count(count) when count > 99, do: "99+"
+  defp format_review_count(count), do: to_string(count)
+
+  # Helper for chevron icon size in user menu
+  defp chevron_class("sm"), do: "hidden sm:block h-3 w-3"
+  defp chevron_class("md"), do: "hidden sm:block h-4 w-4"
+  defp chevron_class(_), do: "hidden sm:block h-4 w-4"
 end

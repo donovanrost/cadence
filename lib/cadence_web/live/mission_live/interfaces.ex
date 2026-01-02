@@ -213,15 +213,16 @@ defmodule CadenceWeb.MissionLive.Interfaces do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Interfaces
-      <:subtitle>Manage communication interfaces for this mission</:subtitle>
-      <:actions>
-        <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
-          <.button>New Interface</.button>
-        </.link>
-      </:actions>
-    </.header>
+    <div class="px-4 py-4">
+      <.header>
+        Interfaces
+        <:subtitle>Manage communication interfaces for this mission</:subtitle>
+        <:actions>
+          <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
+            <.button>New Interface</.button>
+          </.link>
+        </:actions>
+      </.header>
 
     <.table id="interfaces" rows={@interfaces}>
       <:col :let={interface} label="Name">{interface.name}</:col>
@@ -315,6 +316,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         </div>
       </div>
     <% end %>
+    </div>
 
     <.modal
       :if={@live_action in [:new, :edit]}

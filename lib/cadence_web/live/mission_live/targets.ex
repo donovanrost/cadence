@@ -135,15 +135,16 @@ defmodule CadenceWeb.MissionLive.Targets do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Targets
-      <:subtitle>Manage spacecraft and ground station targets for this mission</:subtitle>
-      <:actions>
-        <.link patch={~p"/missions/#{@mission}/targets/new"}>
-          <.button>New Target</.button>
-        </.link>
-      </:actions>
-    </.header>
+    <div class="px-4 py-4">
+      <.header>
+        Targets
+        <:subtitle>Manage spacecraft and ground station targets for this mission</:subtitle>
+        <:actions>
+          <.link patch={~p"/missions/#{@mission}/targets/new"}>
+            <.button>New Target</.button>
+          </.link>
+        </:actions>
+      </.header>
 
     <.table id="targets" rows={@targets}>
       <:col :let={target} label="Name">{target.name}</:col>
@@ -190,6 +191,7 @@ defmodule CadenceWeb.MissionLive.Targets do
         </div>
       </div>
     <% end %>
+    </div>
 
     <.modal
       :if={@live_action in [:new, :edit]}

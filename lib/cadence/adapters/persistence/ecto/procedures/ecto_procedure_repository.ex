@@ -26,7 +26,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   """
 
   @behaviour Cadence.Ports.Repository.Procedures.ProcedureRepository
-  @behaviour Cadence.Ports.Repository.Procedures.ApprovalOperations
   @behaviour Cadence.Ports.Repository.Procedures.ExecutionOperations
 
   import Ecto.Query
@@ -34,7 +33,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   alias Cadence.Domain.Procedures.Entities.Procedure, as: ProcedureEntity
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion, as: ProcedureVersionEntity
   alias Cadence.Procedures.Procedure, as: ProcedureSchema
-  alias Cadence.Procedures.ProcedureApproval, as: ProcedureApprovalSchema
   alias Cadence.Procedures.ProcedureExecution, as: ProcedureExecutionSchema
   alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
   alias Cadence.Repo
@@ -133,12 +131,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
 
   @impl true
   def find_version(id) do
-    query =
-      from v in ProcedureVersionSchema,
-        where: v.id == ^id,
-        preload: [:approvals]
-
-    case Repo.one(query) do
+    case Repo.get(ProcedureVersionSchema, id) do
       nil -> {:error, :not_found}
       schema -> {:ok, to_entity(schema)}
     end
@@ -178,8 +171,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
       from v in ProcedureVersionSchema,
         where: v.procedure_id == ^procedure_id,
         order_by: [desc: v.version_number],
-        limit: ^limit,
-        preload: [:approvals]
+        limit: ^limit
 
     query =
       if status do
@@ -201,8 +193,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
         where: v.procedure_id == ^procedure_id,
         where: v.status == :approved,
         order_by: [desc: v.version_number],
-        limit: 1,
-        preload: [:approvals]
+        limit: 1
 
     case Repo.one(query) do
       nil -> {:error, :not_found}
@@ -228,19 +219,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   end
 
   @doc """
-  Adds an approval record to a version.
-
-  This is a convenience function, not part of the behaviour contract.
-  """
-  def add_approval(version_id, user_id, comment) do
-    Repo.transaction(fn ->
-      version = fetch_version_for_update(version_id)
-      insert_approval(version, user_id, comment)
-    end)
-    |> handle_transaction_result()
-  end
-
-  @doc """
   Deprecates all approved versions except the specified one.
 
   This is a convenience function, not part of the behaviour contract.
@@ -259,107 +237,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
         set: [status: :deprecated, updated_at: now]
       )
 
-    {:ok, count}
-  end
-
-  # ===========================================================================
-  # ApprovalOperations Implementation
-  # ===========================================================================
-
-  defp fetch_version_for_update(version_id) do
-    query =
-      from v in ProcedureVersionSchema,
-        where: v.id == ^version_id,
-        lock: "FOR UPDATE"
-
-    case Repo.one(query) do
-      nil -> Repo.rollback(:not_found)
-      version -> version
-    end
-  end
-
-  defp insert_approval(version, user_id, comment) do
-    approval_attrs = %{
-      procedure_version_id: version.id,
-      user_id: user_id,
-      decision: :approved,
-      comment: comment
-    }
-
-    %ProcedureApprovalSchema{}
-    |> ProcedureApprovalSchema.changeset(approval_attrs)
-    |> Repo.insert()
-    |> case do
-      {:ok, _approval} ->
-        version = Repo.preload(version, :approvals, force: true)
-        {:ok, to_entity(version)}
-
-      {:error, changeset} ->
-        Repo.rollback(extract_errors(changeset))
-    end
-  end
-
-  defp handle_transaction_result({:ok, result}), do: result
-  defp handle_transaction_result({:error, reason}), do: {:error, reason}
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def find_approval(id) do
-    case Repo.get(ProcedureApprovalSchema, id) do
-      nil -> {:error, :not_found}
-      approval -> {:ok, approval}
-    end
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def find_user_approval(version_id, user_id) do
-    query =
-      from a in ProcedureApprovalSchema,
-        where: a.procedure_version_id == ^version_id and a.user_id == ^user_id
-
-    case Repo.one(query) do
-      nil -> {:error, :not_found}
-      approval -> {:ok, approval}
-    end
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def list_approvals(version_id, opts \\ []) do
-    preloads = Keyword.get(opts, :preload, [:user])
-
-    query =
-      from a in ProcedureApprovalSchema,
-        where: a.procedure_version_id == ^version_id,
-        order_by: [asc: a.inserted_at]
-
-    query
-    |> preload(^preloads)
-    |> Repo.all()
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def save_approval(attrs) do
-    %ProcedureApprovalSchema{}
-    |> ProcedureApprovalSchema.changeset(attrs)
-    |> Repo.insert()
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def count_approvals(version_id, decision) do
-    query =
-      from a in ProcedureApprovalSchema,
-        where: a.procedure_version_id == ^version_id and a.decision == ^decision,
-        select: count(a.id)
-
-    Repo.one(query) || 0
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def delete_approvals(version_id) do
-    query =
-      from a in ProcedureApprovalSchema,
-        where: a.procedure_version_id == ^version_id
-
-    {count, _} = Repo.delete_all(query)
     {:ok, count}
   end
 
@@ -447,19 +324,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
     # Map schema status to domain status
     status = schema_status_to_domain(schema)
 
-    # Convert approvals from schema records to domain format
-    # Only include approvals with :approved decision
-    approvals =
-      (schema.approvals || [])
-      |> Enum.filter(fn approval -> approval.decision == :approved end)
-      |> Enum.map(fn approval ->
-        %{
-          user_id: approval.user_id,
-          approved_at: approval.inserted_at,
-          comment: approval.comment
-        }
-      end)
-
     %ProcedureVersionEntity{
       id: schema.id,
       procedure_id: schema.procedure_id,
@@ -470,7 +334,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
       parameters: schema.parameters_schema || %{},
       description: nil,
       change_summary: schema.change_summary,
-      approvals: approvals,
+      approvals: [],
       required_approvals: 1,
       submitted_at: schema.submitted_at,
       approved_at: schema.approved_at,
@@ -528,8 +392,6 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   end
 
   defp handle_result({:ok, schema}) do
-    # Reload with approvals for consistent entity representation
-    schema = Repo.preload(schema, :approvals)
     {:ok, to_entity(schema)}
   end
 

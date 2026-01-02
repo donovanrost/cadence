@@ -135,17 +135,18 @@ defmodule CadenceWeb.MissionLive.Automations do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Automations
-      <:subtitle>
-        Event-triggered actions that respond to alarms, telemetry, or procedure events
-      </:subtitle>
-      <:actions>
-        <.link patch={~p"/missions/#{@mission}/automations/new"}>
-          <.button>New Automation</.button>
-        </.link>
-      </:actions>
-    </.header>
+    <div class="px-4 py-4">
+      <.header>
+        Automations
+        <:subtitle>
+          Event-triggered actions that respond to alarms, telemetry, or procedure events
+        </:subtitle>
+        <:actions>
+          <.link patch={~p"/missions/#{@mission}/automations/new"}>
+            <.button>New Automation</.button>
+          </.link>
+        </:actions>
+      </.header>
 
     <.table id="automations" rows={@automations}>
       <:col :let={automation} label="Name">{automation.name}</:col>
@@ -195,6 +196,7 @@ defmodule CadenceWeb.MissionLive.Automations do
         </div>
       </div>
     <% end %>
+    </div>
 
     <!-- Automation Modal -->
     <.modal

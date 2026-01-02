@@ -67,7 +67,6 @@ defmodule Cadence.Recordings do
     "ProcedureVersionCreated" => Cadence.Recordings.Recordables.ProcedureVersionCreated,
     "ProcedureVersionSubmitted" => Cadence.Recordings.Recordables.ProcedureVersionSubmitted,
     "ProcedureVersionWithdrawn" => Cadence.Recordings.Recordables.ProcedureVersionWithdrawn,
-    "ProcedureApprovalAdded" => Cadence.Recordings.Recordables.ProcedureApprovalAdded,
     "ProcedureVersionApproved" => Cadence.Recordings.Recordables.ProcedureVersionApproved,
     "ProcedureVersionRejected" => Cadence.Recordings.Recordables.ProcedureVersionRejected,
     "ProcedureVersionDeprecated" => Cadence.Recordings.Recordables.ProcedureVersionDeprecated,
@@ -78,7 +77,16 @@ defmodule Cadence.Recordings do
     "AutomationSkipped" => Cadence.Recordings.Recordables.AutomationSkipped,
     # Queue recordables
     "CommandQueued" => Cadence.Recordings.Recordables.CommandQueued,
-    "CommandDequeued" => Cadence.Recordings.Recordables.CommandDequeued
+    "CommandDequeued" => Cadence.Recordings.Recordables.CommandDequeued,
+    # Procedure review workflow recordables
+    "ProcedureReviewSubmitted" => Cadence.Recordings.Recordables.ProcedureReviewSubmitted,
+    "ProcedureReviewRequested" => Cadence.Recordings.Recordables.ProcedureReviewRequested,
+    "ProcedureReviewApproved" => Cadence.Recordings.Recordables.ProcedureReviewApproved,
+    "ProcedureChangesRequested" => Cadence.Recordings.Recordables.ProcedureChangesRequested,
+    "ProcedureReviewCommentAdded" => Cadence.Recordings.Recordables.ProcedureReviewCommentAdded,
+    "ProcedureThreadResolved" => Cadence.Recordings.Recordables.ProcedureThreadResolved,
+    "ProcedureVersionResubmitted" => Cadence.Recordings.Recordables.ProcedureVersionResubmitted,
+    "ProcedureVersionClosed" => Cadence.Recordings.Recordables.ProcedureVersionClosed
   }
 
   @doc """

@@ -38,7 +38,7 @@ defmodule Cadence.Automations.Engine.ActionExecutor do
     execute("send_notification", config, trigger_event, context)
   end
 
-  def execute("execute_procedure", config, trigger_event, context) do
+  def execute("execute_procedure", config, trigger_event, _context) do
     procedure_id = config["procedure_id"]
     parameters = build_parameters(config, trigger_event)
 

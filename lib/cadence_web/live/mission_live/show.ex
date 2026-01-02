@@ -193,7 +193,8 @@ defmodule CadenceWeb.MissionLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <!-- Mission Header -->
+    <div class="px-4 py-4">
+      <!-- Mission Header -->
     <div class="mb-8">
       <div class="flex items-center justify-between">
         <div>
@@ -401,6 +402,7 @@ defmodule CadenceWeb.MissionLive.Show do
           <% end %>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- Edit Mission Modal -->

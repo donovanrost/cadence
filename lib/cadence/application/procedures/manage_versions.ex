@@ -3,8 +3,8 @@ defmodule Cadence.Application.Procedures.ManageVersions do
   Use case module for managing procedure versions.
 
   Handles creation and editing of procedure versions in draft status.
-  Once a version is submitted for review, use ApprovalWorkflow for
-  status changes.
+  Once a version is submitted for review, use the Procedures context
+  functions for review workflow operations.
 
   ## Usage
 

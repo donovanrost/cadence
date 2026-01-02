@@ -10,8 +10,11 @@ defmodule Cadence.Procedures do
   alias Cadence.Procedures.{
     Parameters,
     Procedure,
-    ProcedureApproval,
     ProcedureExecution,
+    ProcedureReview,
+    ProcedureReviewComment,
+    ProcedureReviewRequest,
+    ProcedureReviewThread,
     ProcedureVersion,
     V2
   }
@@ -19,15 +22,19 @@ defmodule Cadence.Procedures do
   alias Cadence.Outbox
   alias Cadence.Recordings
   alias Cadence.Repo
-  alias Cadence.Targets
   alias Cadence.Settings
+  alias Cadence.Targets
 
   alias Cadence.Recordings.Recordables.{
-    ProcedureApprovalAdded,
-    ProcedureVersionApproved,
+    ProcedureChangesRequested,
+    ProcedureReviewApproved,
+    ProcedureReviewCommentAdded,
+    ProcedureReviewRequested,
+    ProcedureReviewSubmitted,
+    ProcedureThreadResolved,
+    ProcedureVersionClosed,
     ProcedureVersionCreated,
-    ProcedureVersionRejected,
-    ProcedureVersionSubmitted,
+    ProcedureVersionResubmitted,
     ProcedureVersionWithdrawn
   }
 
@@ -258,6 +265,20 @@ defmodule Cadence.Procedures do
   def get_version!(id), do: Repo.get!(ProcedureVersion, id)
 
   @doc """
+  Gets the previous version (by version number) for diffing.
+
+  Returns nil if this is the first version.
+  """
+  def get_previous_version(procedure_id, current_version_number) do
+    from(v in ProcedureVersion,
+      where: v.procedure_id == ^procedure_id and v.version_number < ^current_version_number,
+      order_by: [desc: v.version_number],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  @doc """
   Gets the current approved version for a procedure.
   """
   def get_approved_version(procedure_id) do
@@ -267,6 +288,36 @@ defmodule Cadence.Procedures do
     |> order_by([v], desc: v.version_number)
     |> limit(1)
     |> Repo.one()
+  end
+
+  @doc """
+  Publishes an approved version, making it the current version of the procedure.
+
+  This sets the procedure's `current_version_id` to point to this version.
+
+  Returns `{:ok, %{procedure: procedure, version: version}}` on success.
+  Returns `{:error, reason}` if the version is not approved or doesn't belong to the procedure.
+  """
+  def publish_version(%Procedure{} = procedure, %ProcedureVersion{} = version, _user_id) do
+    cond do
+      version.procedure_id != procedure.id ->
+        {:error, :version_does_not_belong_to_procedure}
+
+      version.status != :approved ->
+        {:error, :version_not_approved}
+
+      true ->
+        procedure
+        |> Ecto.Changeset.change(%{current_version_id: version.id})
+        |> Repo.update()
+        |> case do
+          {:ok, updated_procedure} ->
+            {:ok, %{procedure: updated_procedure, version: version}}
+
+          {:error, changeset} ->
+            {:error, changeset}
+        end
+    end
   end
 
   @doc """
@@ -387,56 +438,195 @@ defmodule Cadence.Procedures do
     |> Repo.update()
   end
 
+  @doc """
+  Creates a new draft version by cloning an existing version.
+
+  This is used when editing an approved version - instead of modifying the
+  approved version directly, we create a new draft that inherits all content
+  from the source version.
+
+  The new version will have:
+  - A new version number (next in sequence)
+  - Status of :draft
+  - All sections, steps, and blocks copied from the source version
+
+  ## Options
+
+  - `:user_id` - The user creating the new version (sets created_by_id)
+  """
+  def create_draft_from_version(%ProcedureVersion{} = source_version, opts \\ []) do
+    user_id = Keyword.get(opts, :user_id)
+    procedure_id = source_version.procedure_id
+
+    # Calculate next version number
+    version_number = next_version_number(procedure_id)
+
+    # Build version attributes from source
+    version_attrs = %{
+      procedure_id: procedure_id,
+      version_number: version_number,
+      status: :draft,
+      source: source_version.source,
+      parameters_schema: source_version.parameters_schema,
+      execution_mode: source_version.execution_mode,
+      allow_suggested_edits: source_version.allow_suggested_edits,
+      allow_hazardous_commands: source_version.allow_hazardous_commands,
+      created_by_id: user_id
+    }
+
+    Repo.transaction(fn ->
+      # 1. Create the new version
+      {:ok, new_version} =
+        %ProcedureVersion{}
+        |> ProcedureVersion.changeset(version_attrs)
+        |> Repo.insert()
+
+      # 2. Clone sections, steps, and blocks
+      clone_version_content(source_version.id, new_version.id)
+
+      new_version
+    end)
+  end
+
+  # Clones all sections, steps, and blocks from source version to target version
+  defp clone_version_content(source_version_id, target_version_id) do
+    # Load source sections with steps and blocks
+    source_sections = V2.list_sections_with_steps(source_version_id)
+
+    # Clone each section
+    Enum.each(source_sections, fn source_section ->
+      # Create new section
+      {:ok, new_section} =
+        V2.create_section(target_version_id, %{
+          name: source_section.name,
+          description: source_section.description,
+          position: source_section.position,
+          collapsed_by_default: source_section.collapsed_by_default
+        })
+
+      # Clone each step in the section
+      Enum.each(source_section.steps, fn source_step ->
+        {:ok, new_step} =
+          V2.create_step(new_section.id, %{
+            name: source_step.name,
+            title: source_step.title,
+            position: source_step.position,
+            requires_signoff: source_step.requires_signoff,
+            required_roles: source_step.required_roles,
+            signoff_logic: source_step.signoff_logic,
+            depends_on: source_step.depends_on,
+            dependency_logic: source_step.dependency_logic,
+            condition: source_step.condition,
+            on_fail: source_step.on_fail,
+            estimated_duration_seconds: source_step.estimated_duration_seconds
+          })
+
+        # Clone each block in the step
+        Enum.each(source_step.blocks, fn source_block ->
+          {:ok, _new_block} =
+            V2.create_block(new_step.id, %{
+              block_type: source_block.block_type,
+              position: source_block.position,
+              name: source_block.name,
+              label: source_block.label,
+              required: source_block.required,
+              content: source_block.content
+            })
+        end)
+      end)
+    end)
+  end
+
   # ============================================================================
-  # Approval Workflow
+  # Approval Workflow (PR-style Review System)
   # ============================================================================
 
   @doc """
   Submits a procedure version for review. (draft → in_review)
 
-  Creates an audit event recording the submission.
+  Creates an audit event recording the submission and optionally creates
+  review requests for specific reviewers.
+
+  ## Options
+
+  - `:reviewer_ids` - List of user IDs to request reviews from
+  - `:note` - Optional note explaining the submission
   """
-  def submit_for_review(%ProcedureVersion{} = version, user_id) do
+  def submit_for_review(%ProcedureVersion{} = version, user_id, opts \\ []) do
+    reviewer_ids = Keyword.get(opts, :reviewer_ids, [])
+    note = Keyword.get(opts, :note)
+
     with :ok <- validate_status(version, :draft) do
       version = Repo.preload(version, :procedure)
 
-      Multi.new()
-      |> Multi.update(
-        :version,
-        ProcedureVersion.submit_changeset(version, %{
-          status: :in_review,
-          submitted_at: DateTime.utc_now(),
-          submitted_by_id: user_id
-        })
-      )
-      |> Outbox.append(:outbox, fn %{version: v} ->
-        %{
-          organization_id: version.procedure.organization_id,
-          mission_id: version.procedure.mission_id,
-          event_type: "procedure_submitted",
-          aggregate_type: "procedure_version",
-          aggregate_id: v.id,
-          actor_id: user_id,
-          actor_type: "user",
-          payload: %{
-            procedure_id: version.procedure_id,
-            procedure_name: version.procedure.name,
-            version_number: version.version_number
+      multi =
+        Multi.new()
+        |> Multi.update(
+          :version,
+          ProcedureVersion.submit_changeset(version, %{
+            status: :in_review,
+            submitted_at: DateTime.utc_now(),
+            submitted_by_id: user_id
+          })
+        )
+        |> Outbox.append(:outbox, fn %{version: v} ->
+          %{
+            organization_id: version.procedure.organization_id,
+            mission_id: version.procedure.mission_id,
+            event_type: "procedure_submitted",
+            aggregate_type: "procedure_version",
+            aggregate_id: v.id,
+            actor_id: user_id,
+            actor_type: "user",
+            payload: %{
+              procedure_id: version.procedure_id,
+              procedure_name: version.procedure.name,
+              version_number: version.version_number,
+              reviewer_ids: reviewer_ids
+            }
           }
-        }
-      end)
-      |> Recordings.append(:submitted, ProcedureVersionSubmitted, %{note: nil}, fn %{version: v} ->
-        %{
-          organization_id: version.procedure.organization_id,
-          mission_id: version.procedure.mission_id,
-          bucket_id: get_mission_bucket_id(version.procedure.mission_id),
-          aggregate_type: "ProcedureVersion",
-          aggregate_id: v.id,
-          actor_id: user_id,
-          actor_type: "user",
-          timestamp: DateTime.utc_now()
-        }
-      end)
+        end)
+        |> Recordings.append(
+          :submitted,
+          ProcedureReviewSubmitted,
+          %{note: note, reviewer_ids: reviewer_ids},
+          fn %{version: v} ->
+            version_recording_attrs(version.procedure, user_id, v.id)
+          end
+        )
+
+      # Create review requests for each requested reviewer
+      multi =
+        reviewer_ids
+        |> Enum.with_index()
+        |> Enum.reduce(multi, fn {reviewer_id, idx}, acc ->
+          Multi.insert(acc, {:review_request, idx}, fn %{version: v} ->
+            ProcedureReviewRequest.changeset(%ProcedureReviewRequest{}, %{
+              procedure_version_id: v.id,
+              requester_id: user_id,
+              reviewer_id: reviewer_id,
+              status: :pending
+            })
+          end)
+        end)
+
+      # Record individual review requests
+      multi =
+        reviewer_ids
+        |> Enum.with_index()
+        |> Enum.reduce(multi, fn {reviewer_id, idx}, acc ->
+          Recordings.append(
+            acc,
+            {:requested, idx},
+            ProcedureReviewRequested,
+            %{reviewer_id: reviewer_id, message: nil},
+            fn %{version: v} ->
+              version_recording_attrs(version.procedure, user_id, v.id)
+            end
+          )
+        end)
+
+      multi
       |> Repo.transaction()
       |> case do
         {:ok, %{version: updated}} -> {:ok, updated}
@@ -446,22 +636,30 @@ defmodule Cadence.Procedures do
   end
 
   @doc """
-  Withdraws a submission. (in_review → draft)
+  Withdraws a submission. (in_review or changes_requested → draft)
 
   Only the author (submitted_by or created_by) can withdraw, and only if
   the `allow_withdrawal` setting is enabled for the mission.
 
-  Deletes any existing approvals and creates an audit event.
+  Cancels any pending review requests and marks existing reviews as superseded.
   """
   def withdraw_submission(%ProcedureVersion{} = version, user_id) do
-    with :ok <- validate_status(version, :in_review),
+    with :ok <- validate_status_in(version, [:in_review, :changes_requested]),
          :ok <- validate_can_withdraw(version, user_id) do
       version = Repo.preload(version, :procedure)
 
       Repo.transaction(fn ->
-        # Delete any existing approvals
-        from(a in ProcedureApproval, where: a.procedure_version_id == ^version.id)
-        |> Repo.delete_all()
+        # Cancel pending review requests
+        from(rr in ProcedureReviewRequest,
+          where: rr.procedure_version_id == ^version.id and rr.status == :pending
+        )
+        |> Repo.update_all(set: [status: :cancelled])
+
+        # Supersede all active reviews
+        from(r in ProcedureReview,
+          where: r.procedure_version_id == ^version.id and r.superseded == false
+        )
+        |> Repo.update_all(set: [superseded: true])
 
         updated =
           version
@@ -477,112 +675,155 @@ defmodule Cadence.Procedures do
   end
 
   @doc """
-  Adds an approval or rejection decision to a version in review.
+  Adds a review decision (approve or request_changes) to a version.
 
-  If this is a rejection, the version immediately returns to draft status.
+  ## Decision Types
 
-  If this is an approval and the required approval count is met (with no
-  rejections), the version automatically transitions to :approved status.
+  - `:approve` - Approves the version. If approval threshold is met, version
+    transitions to :approved status.
+  - `:request_changes` - Requests changes. Creates a review thread and
+    transitions version to :changes_requested status.
 
   ## Options
 
-  - `:comment` - Optional comment explaining the decision
+  - `:body` - Review comment (required for request_changes, optional for approve)
+
+  ## Returns
+
+  - `{:ok, %{review: review, version: version}}` on success
+  - `{:error, reason}` on failure
   """
-  def add_approval(%ProcedureVersion{} = version, user_id, decision, opts \\ []) do
-    comment = Keyword.get(opts, :comment)
+  def add_review(%ProcedureVersion{} = version, user_id, decision, opts \\ [])
+      when decision in [:approve, :request_changes] do
+    body = Keyword.get(opts, :body)
     version = Repo.preload(version, :procedure)
 
-    with :ok <- validate_status(version, :in_review),
-         :ok <- validate_can_approve(version, user_id),
-         :ok <- validate_not_already_decided(version, user_id) do
+    with :ok <- validate_status_in(version, [:in_review, :changes_requested]),
+         :ok <- validate_can_review(version, user_id) do
       Repo.transaction(fn ->
-        # Create approval record
-        {:ok, approval} =
-          %ProcedureApproval{}
-          |> ProcedureApproval.changeset(%{
+        # Supersede any previous reviews from this user
+        from(r in ProcedureReview,
+          where:
+            r.procedure_version_id == ^version.id and
+              r.user_id == ^user_id and
+              r.superseded == false
+        )
+        |> Repo.update_all(set: [superseded: true])
+
+        # Create the new review
+        {:ok, review} =
+          %ProcedureReview{}
+          |> ProcedureReview.changeset(%{
             procedure_version_id: version.id,
             user_id: user_id,
             decision: decision,
-            comment: comment
+            body: body
           })
           |> Repo.insert()
 
-        # Record audit event
-        record_version_event(version, user_id, ProcedureApprovalAdded, %{
-          decision: to_string(decision),
-          comment: comment
-        })
+        # Complete any pending review request from this user
+        from(rr in ProcedureReviewRequest,
+          where:
+            rr.procedure_version_id == ^version.id and
+              rr.reviewer_id == ^user_id and
+              rr.status == :pending
+        )
+        |> Repo.update_all(set: [status: :completed, completed_at: DateTime.utc_now()])
 
-        # Handle decision consequences and emit outbox event
-        updated_version = handle_approval_decision(version, user_id, decision, comment)
+        # Handle the decision
+        {updated_version, thread} = handle_review_decision(version, review, user_id, body)
 
-        # Emit outbox event for the approval/rejection
-        event_type =
-          if decision == :approved, do: "procedure_approved", else: "procedure_rejected"
+        # Record the event
+        record_review_event(version, updated_version, user_id, decision, body, thread)
 
-        {:ok, _} =
-          Outbox.insert(%{
-            organization_id: version.procedure.organization_id,
-            mission_id: version.procedure.mission_id,
-            event_type: event_type,
-            aggregate_type: "procedure_version",
-            aggregate_id: version.id,
-            actor_id: user_id,
-            actor_type: "user",
-            payload: %{
-              procedure_id: version.procedure_id,
-              procedure_name: version.procedure.name,
-              version_number: version.version_number,
-              reason: comment
-            }
-          })
-
-        %{approval: approval, version: updated_version}
+        %{review: review, version: updated_version, thread: thread}
       end)
     end
   end
 
-  @doc """
-  Gets approval status summary for a version.
+  # Legacy alias for backwards compatibility
+  @doc false
+  def add_approval(version, user_id, decision, opts \\ []) do
+    new_decision =
+      case decision do
+        :approved -> :approve
+        :rejected -> :request_changes
+        other -> other
+      end
 
-  Returns a map with:
-  - `:required` - Number of approvals required
-  - `:approved` - Number of approvals received
-  - `:rejected` - Number of rejections received
-  - `:pending` - Number of approvals still needed
-  - `:can_be_approved` - Whether the version has enough approvals
-  - `:is_blocked` - Whether there are any rejections
-  - `:approvals` - List of approval records with users preloaded
-  """
-  def get_approval_status(%ProcedureVersion{} = version) do
-    version = Repo.preload(version, procedure: :mission, approvals: :user)
-    required = Settings.get(version.procedure.mission, :procedures, :required_approvals)
-
-    approvals = version.approvals
-    approved_count = Enum.count(approvals, &(&1.decision == :approved))
-    rejected_count = Enum.count(approvals, &(&1.decision == :rejected))
-
-    %{
-      required: required,
-      approved: approved_count,
-      rejected: rejected_count,
-      pending: max(0, required - approved_count),
-      can_be_approved: approved_count >= required and rejected_count == 0,
-      is_blocked: rejected_count > 0,
-      approvals: approvals
-    }
+    add_review(version, user_id, new_decision, opts)
   end
 
   @doc """
-  Lists all approvals for a version.
+  Gets review status summary for a version.
+
+  Returns a map with:
+  - `:required` - Number of approvals required
+  - `:approved_count` - Number of active approvals
+  - `:changes_requested_count` - Number of active change requests
+  - `:pending` - Number of approvals still needed
+  - `:can_be_approved` - Whether version has enough approvals with no blockers
+  - `:is_blocked` - Whether there are unresolved change requests
+  - `:reviews` - List of active (non-superseded) reviews with users preloaded
+  - `:open_threads` - List of open review threads
   """
-  def list_approvals(version_id) do
-    from(a in ProcedureApproval,
-      where: a.procedure_version_id == ^version_id,
-      preload: :user,
-      order_by: [asc: a.inserted_at]
-    )
-    |> Repo.all()
+  def get_review_status(%ProcedureVersion{} = version) do
+    version = Repo.preload(version, [:procedure, reviews: :user, review_threads: :author])
+    required = get_required_approvals(version)
+
+    # Get active (non-superseded) reviews
+    active_reviews =
+      version.reviews
+      |> Enum.filter(&(not &1.superseded))
+
+    approved_count = Enum.count(active_reviews, &(&1.decision == :approve))
+    changes_requested_count = Enum.count(active_reviews, &(&1.decision == :request_changes))
+
+    # Get open threads (blocking for resubmit)
+    open_threads =
+      version.review_threads
+      |> Enum.filter(&(&1.status == :open))
+
+    %{
+      required: required,
+      approved_count: approved_count,
+      changes_requested_count: changes_requested_count,
+      pending: max(0, required - approved_count),
+      can_be_approved: approved_count >= required and changes_requested_count == 0,
+      is_blocked: changes_requested_count > 0 or length(open_threads) > 0,
+      reviews: active_reviews,
+      open_threads: open_threads
+    }
+  end
+
+  # Legacy alias
+  @doc false
+  def get_approval_status(version), do: get_review_status(version)
+
+  @doc """
+  Lists all reviews for a version.
+
+  ## Options
+
+  - `:include_superseded` - Include superseded reviews (default: false)
+  """
+  def list_reviews(version_id, opts \\ []) do
+    include_superseded = Keyword.get(opts, :include_superseded, false)
+
+    query =
+      from r in ProcedureReview,
+        where: r.procedure_version_id == ^version_id,
+        order_by: [desc: r.inserted_at],
+        preload: [:user]
+
+    query =
+      if include_superseded do
+        query
+      else
+        where(query, [r], r.superseded == false)
+      end
+
+    Repo.all(query)
   end
 
   @doc """
@@ -605,10 +846,488 @@ defmodule Cadence.Procedures do
     |> Recordings.load_recordables_for_recordings()
   end
 
-  # Private approval workflow helpers
+  # ============================================================================
+  # Threading Functions
+  # ============================================================================
+
+  @doc """
+  Adds a comment to a review thread.
+
+  Anyone with access to the procedure can add comments to existing threads.
+  """
+  def add_comment(%ProcedureReviewThread{} = thread, user_id, body) do
+    thread = Repo.preload(thread, procedure_version: :procedure)
+
+    Repo.transaction(fn ->
+      {:ok, comment} =
+        %ProcedureReviewComment{}
+        |> ProcedureReviewComment.changeset(%{
+          thread_id: thread.id,
+          user_id: user_id,
+          body: body
+        })
+        |> Repo.insert()
+
+      # Record the event
+      record_version_event(
+        thread.procedure_version,
+        user_id,
+        ProcedureReviewCommentAdded,
+        %{thread_id: thread.id, body: body}
+      )
+
+      comment
+    end)
+  end
+
+  @doc """
+  Resolves a review thread.
+
+  Threads can be resolved by the author or any reviewer.
+  """
+  def resolve_thread(%ProcedureReviewThread{} = thread, user_id) do
+    if thread.status == :resolved do
+      {:error, :already_resolved}
+    else
+      thread = Repo.preload(thread, procedure_version: :procedure)
+
+      Repo.transaction(fn ->
+        {:ok, updated_thread} =
+          thread
+          |> ProcedureReviewThread.resolve_changeset(user_id)
+          |> Repo.update()
+
+        # Record the event
+        record_version_event(
+          thread.procedure_version,
+          user_id,
+          ProcedureThreadResolved,
+          %{thread_id: thread.id}
+        )
+
+        updated_thread
+      end)
+    end
+  end
+
+  @doc """
+  Reopens a resolved thread.
+  """
+  def reopen_thread(%ProcedureReviewThread{} = thread) do
+    if thread.status == :open do
+      {:error, :already_open}
+    else
+      thread
+      |> ProcedureReviewThread.reopen_changeset()
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Creates a new discussion thread on a version.
+
+  Unlike threads created from request_changes reviews, these are general
+  discussion threads that are not blocking for resubmission.
+
+  ## Options
+
+  - `:anchor_type` - Where to anchor the thread: :version, :section, :step, or :block (default: :version)
+  - `:anchor_id` - The UUID of the anchored element (required if anchor_type is not :version)
+  - `:body` - Initial comment body (required)
+  """
+  def create_thread(%ProcedureVersion{} = version, user_id, opts \\ []) do
+    body = Keyword.get(opts, :body)
+    anchor_type = Keyword.get(opts, :anchor_type, :version)
+    anchor_id = Keyword.get(opts, :anchor_id)
+
+    if is_nil(body) or body == "" do
+      {:error, :body_required}
+    else
+      version = Repo.preload(version, :procedure)
+
+      Repo.transaction(fn ->
+        {:ok, thread} =
+          %ProcedureReviewThread{}
+          |> ProcedureReviewThread.changeset(%{
+            procedure_version_id: version.id,
+            author_id: user_id,
+            status: :open,
+            anchor_type: anchor_type,
+            anchor_id: anchor_id
+          })
+          |> Repo.insert()
+
+        # Add the initial comment
+        {:ok, _comment} =
+          %ProcedureReviewComment{}
+          |> ProcedureReviewComment.changeset(%{
+            thread_id: thread.id,
+            user_id: user_id,
+            body: body
+          })
+          |> Repo.insert()
+
+        # Record the event
+        record_version_event(
+          version,
+          user_id,
+          ProcedureReviewCommentAdded,
+          %{thread_id: thread.id, body: body, anchor_type: anchor_type, anchor_id: anchor_id}
+        )
+
+        Repo.preload(thread, [:author, comments: :user])
+      end)
+    end
+  end
+
+  @doc """
+  Lists threads for a specific anchor point.
+
+  Returns all threads (open and resolved) anchored to the given element.
+  """
+  def list_threads_by_anchor(version_id, anchor_type, anchor_id \\ nil) do
+    query =
+      from t in ProcedureReviewThread,
+        where:
+          t.procedure_version_id == ^version_id and
+            t.anchor_type == ^anchor_type,
+        order_by: [asc: t.inserted_at],
+        preload: [:author, :review, comments: :user]
+
+    query =
+      if anchor_id do
+        where(query, [t], t.anchor_id == ^anchor_id)
+      else
+        where(query, [t], is_nil(t.anchor_id))
+      end
+
+    Repo.all(query)
+  end
+
+  @doc """
+  Gets thread counts grouped by anchor for displaying badges in the review UI.
+
+  Returns a map of anchor keys to thread counts:
+
+      %{
+        {:version, nil} => 2,
+        {:section, "uuid1"} => 1,
+        {:step, "uuid2"} => 3,
+        {:block, "uuid3"} => 1
+      }
+  """
+  def get_thread_counts_by_anchor(version_id) do
+    query =
+      from t in ProcedureReviewThread,
+        where: t.procedure_version_id == ^version_id and t.status == :open,
+        group_by: [t.anchor_type, t.anchor_id],
+        select: {t.anchor_type, t.anchor_id, count(t.id)}
+
+    Repo.all(query)
+    |> Enum.into(%{}, fn {anchor_type, anchor_id, count} ->
+      {{anchor_type, anchor_id}, count}
+    end)
+  end
+
+  @doc """
+  Gets the count of open threads anchored to a specific element.
+  """
+  def get_anchor_thread_count(version_id, anchor_type, anchor_id \\ nil) do
+    query =
+      from t in ProcedureReviewThread,
+        where:
+          t.procedure_version_id == ^version_id and
+            t.anchor_type == ^anchor_type and
+            t.status == :open,
+        select: count(t.id)
+
+    query =
+      if anchor_id do
+        where(query, [t], t.anchor_id == ^anchor_id)
+      else
+        where(query, [t], is_nil(t.anchor_id))
+      end
+
+    Repo.one(query)
+  end
+
+  # ============================================================================
+  # Resubmit and Close Functions
+  # ============================================================================
+
+  @doc """
+  Resubmits a version after addressing requested changes. (changes_requested → in_review)
+
+  Validates that all blocking threads (from request_changes reviews) are resolved.
+  Marks all existing reviews as superseded for a fresh review cycle.
+
+  ## Options
+
+  - `:note` - Optional note explaining what was changed
+  """
+  def resubmit(%ProcedureVersion{} = version, user_id, opts \\ []) do
+    note = Keyword.get(opts, :note)
+
+    with :ok <- validate_status(version, :changes_requested),
+         :ok <- validate_can_resubmit(version, user_id),
+         :ok <- validate_threads_resolved(version) do
+      version = Repo.preload(version, :procedure)
+
+      Repo.transaction(fn ->
+        # Supersede all existing reviews
+        from(r in ProcedureReview,
+          where: r.procedure_version_id == ^version.id and r.superseded == false
+        )
+        |> Repo.update_all(set: [superseded: true])
+
+        # Update version status
+        updated =
+          version
+          |> ProcedureVersion.resubmit_changeset(%{
+            submitted_at: DateTime.utc_now(),
+            submitted_by_id: user_id
+          })
+          |> Repo.update!()
+
+        # Record the resubmission
+        record_version_event(updated, user_id, ProcedureVersionResubmitted, %{note: note})
+
+        # Emit outbox event
+        {:ok, _} =
+          Outbox.insert(%{
+            organization_id: version.procedure.organization_id,
+            mission_id: version.procedure.mission_id,
+            event_type: "procedure_resubmitted",
+            aggregate_type: "procedure_version",
+            aggregate_id: version.id,
+            actor_id: user_id,
+            actor_type: "user",
+            payload: %{
+              procedure_id: version.procedure_id,
+              procedure_name: version.procedure.name,
+              version_number: version.version_number,
+              note: note
+            }
+          })
+
+        updated
+      end)
+    end
+  end
+
+  @doc """
+  Closes a version without approval. (any status → closed)
+
+  Similar to closing a PR without merging. Can be done by the author or admins.
+
+  ## Options
+
+  - `:reason` - Optional reason for closing
+  """
+  def close_version(%ProcedureVersion{} = version, user_id, opts \\ []) do
+    reason = Keyword.get(opts, :reason)
+
+    if version.status in [:approved, :closed, :deprecated] do
+      {:error, :cannot_close}
+    else
+      version = Repo.preload(version, :procedure)
+
+      Repo.transaction(fn ->
+        # Cancel any pending review requests
+        from(rr in ProcedureReviewRequest,
+          where: rr.procedure_version_id == ^version.id and rr.status == :pending
+        )
+        |> Repo.update_all(set: [status: :cancelled])
+
+        # Update version status
+        updated =
+          version
+          |> ProcedureVersion.close_changeset(%{})
+          |> Repo.update!()
+
+        # Record the closure
+        record_version_event(updated, user_id, ProcedureVersionClosed, %{reason: reason})
+
+        # Emit outbox event
+        {:ok, _} =
+          Outbox.insert(%{
+            organization_id: version.procedure.organization_id,
+            mission_id: version.procedure.mission_id,
+            event_type: "procedure_version_closed",
+            aggregate_type: "procedure_version",
+            aggregate_id: version.id,
+            actor_id: user_id,
+            actor_type: "user",
+            payload: %{
+              procedure_id: version.procedure_id,
+              procedure_name: version.procedure.name,
+              version_number: version.version_number,
+              reason: reason
+            }
+          })
+
+        updated
+      end)
+    end
+  end
+
+  # ============================================================================
+  # List Functions
+  # ============================================================================
+
+  @doc """
+  Lists review threads for a version.
+
+  ## Options
+
+  - `:status` - Filter by status (:open or :resolved)
+  - `:anchor_type` - Filter by anchor type (:version, :section, :step, :block)
+  - `:anchor_id` - Filter by anchor ID (use nil for version-level threads)
+  """
+  def list_threads(version_id, opts \\ []) do
+    status = Keyword.get(opts, :status)
+    anchor_type = Keyword.get(opts, :anchor_type)
+    anchor_id = Keyword.get(opts, :anchor_id)
+
+    query =
+      from t in ProcedureReviewThread,
+        where: t.procedure_version_id == ^version_id,
+        order_by: [asc: t.inserted_at],
+        preload: [:author, :review, comments: :user]
+
+    query =
+      if status do
+        where(query, [t], t.status == ^status)
+      else
+        query
+      end
+
+    query =
+      if anchor_type do
+        query = where(query, [t], t.anchor_type == ^anchor_type)
+
+        if anchor_id do
+          where(query, [t], t.anchor_id == ^anchor_id)
+        else
+          where(query, [t], is_nil(t.anchor_id))
+        end
+      else
+        query
+      end
+
+    Repo.all(query)
+  end
+
+  @doc """
+  Lists comments in a thread.
+  """
+  def list_comments(thread_id) do
+    from(c in ProcedureReviewComment,
+      where: c.thread_id == ^thread_id,
+      order_by: [asc: c.inserted_at],
+      preload: [:user]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Lists review requests for a version.
+
+  ## Options
+
+  - `:status` - Filter by status (:pending, :completed, :cancelled)
+  """
+  def list_review_requests(version_id, opts \\ []) do
+    status = Keyword.get(opts, :status)
+
+    query =
+      from rr in ProcedureReviewRequest,
+        where: rr.procedure_version_id == ^version_id,
+        order_by: [asc: rr.inserted_at],
+        preload: [:requester, :reviewer]
+
+    query =
+      if status do
+        where(query, [rr], rr.status == ^status)
+      else
+        query
+      end
+
+    Repo.all(query)
+  end
+
+  @doc """
+  Requests a review from a specific user.
+
+  Creates a pending review request. The requester is typically the author
+  or someone on the team wanting additional reviews.
+
+  Returns `{:ok, request}` or `{:error, changeset}`.
+
+  ## Options
+
+  - `:message` - Optional message to include with the request
+  """
+  def request_review(%ProcedureVersion{} = version, requester_id, reviewer_id, opts \\ []) do
+    message = Keyword.get(opts, :message)
+
+    attrs = %{
+      procedure_version_id: version.id,
+      requester_id: requester_id,
+      reviewer_id: reviewer_id,
+      message: message,
+      status: :pending
+    }
+
+    # Check if there's already a pending request for this reviewer
+    existing =
+      from(rr in ProcedureReviewRequest,
+        where:
+          rr.procedure_version_id == ^version.id and
+            rr.reviewer_id == ^reviewer_id and
+            rr.status == :pending
+      )
+      |> Repo.one()
+
+    if existing do
+      {:error, :already_requested}
+    else
+      version = Repo.preload(version, :procedure)
+
+      Multi.new()
+      |> Multi.insert(:request, ProcedureReviewRequest.changeset(%ProcedureReviewRequest{}, attrs))
+      |> Recordings.append(
+        :recorded,
+        ProcedureReviewRequested,
+        %{reviewer_id: reviewer_id, message: message},
+        fn %{request: _request} ->
+          version_recording_attrs(version.procedure, requester_id, version.id)
+        end
+      )
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{request: request}} -> {:ok, Repo.preload(request, [:requester, :reviewer])}
+        {:error, _step, changeset, _} -> {:error, changeset}
+      end
+    end
+  end
+
+  @doc """
+  Gets a review thread by ID.
+  """
+  def get_thread(id), do: Repo.get(ProcedureReviewThread, id)
+  def get_thread!(id), do: Repo.get!(ProcedureReviewThread, id)
+
+  # ============================================================================
+  # Private Review Workflow Helpers
+  # ============================================================================
 
   defp validate_status(version, expected) do
     if version.status == expected, do: :ok, else: {:error, :invalid_status}
+  end
+
+  defp validate_status_in(version, statuses) do
+    if version.status in statuses, do: :ok, else: {:error, :invalid_status}
   end
 
   defp validate_can_withdraw(version, user_id) do
@@ -625,45 +1344,81 @@ defmodule Cadence.Procedures do
     end
   end
 
-  defp validate_can_approve(version, user_id) do
+  defp validate_can_review(version, user_id) do
     version = Repo.preload(version, procedure: :mission)
     allow_self = Settings.get(version.procedure.mission, :procedures, :allow_self_approval)
 
     if not allow_self and version.created_by_id == user_id do
-      {:error, :cannot_approve_own_work}
+      {:error, :cannot_review_own_work}
     else
       :ok
     end
   end
 
-  defp validate_not_already_decided(version, user_id) do
-    case Repo.get_by(ProcedureApproval, procedure_version_id: version.id, user_id: user_id) do
-      nil -> :ok
-      _ -> {:error, :already_submitted_decision}
+  defp validate_can_resubmit(version, user_id) do
+    if version.submitted_by_id == user_id or version.created_by_id == user_id do
+      :ok
+    else
+      {:error, :not_author}
     end
   end
 
-  defp handle_approval_decision(version, user_id, :rejected, reason) do
-    updated =
-      version
-      |> ProcedureVersion.rejection_changeset(%{
-        rejected_at: DateTime.utc_now(),
-        rejected_by_id: user_id,
-        rejection_reason: reason
-      })
-      |> Repo.update!()
+  defp validate_threads_resolved(version) do
+    open_blocking_threads =
+      from(t in ProcedureReviewThread,
+        where:
+          t.procedure_version_id == ^version.id and
+            t.status == :open and
+            not is_nil(t.review_id)
+      )
+      |> Repo.aggregate(:count)
 
-    record_version_event(updated, user_id, ProcedureVersionRejected, %{reason: reason})
-
-    updated
+    if open_blocking_threads > 0 do
+      {:error, :unresolved_threads}
+    else
+      :ok
+    end
   end
 
-  defp handle_approval_decision(version, user_id, :approved, _comment) do
+  defp get_required_approvals(version) do
     version = Repo.preload(version, procedure: :mission)
-    required = Settings.get(version.procedure.mission, :procedures, :required_approvals)
-    current_approvals = count_approvals(version.id)
+    Settings.get(version.procedure.mission, :procedures, :required_approvals)
+  end
 
-    if current_approvals >= required do
+  defp handle_review_decision(version, review, user_id, body) do
+    case review.decision do
+      :approve ->
+        handle_approve_decision(version, user_id)
+
+      :request_changes ->
+        handle_request_changes_decision(version, review, user_id, body)
+    end
+  end
+
+  defp handle_approve_decision(version, user_id) do
+    # Check if approval threshold is met
+    required = get_required_approvals(version)
+
+    approved_count =
+      from(r in ProcedureReview,
+        where:
+          r.procedure_version_id == ^version.id and
+            r.decision == :approve and
+            r.superseded == false
+      )
+      |> Repo.aggregate(:count)
+
+    # Check for blocking reviews
+    blocking_count =
+      from(r in ProcedureReview,
+        where:
+          r.procedure_version_id == ^version.id and
+            r.decision == :request_changes and
+            r.superseded == false
+      )
+      |> Repo.aggregate(:count)
+
+    if approved_count >= required and blocking_count == 0 do
       updated =
         version
         |> ProcedureVersion.approval_changeset(%{
@@ -676,8 +1431,6 @@ defmodule Cadence.Procedures do
       # Update procedure's current version pointer
       from(p in Procedure, where: p.id == ^version.procedure_id)
       |> Repo.update_all(set: [current_version_id: version.id])
-
-      record_version_event(updated, user_id, ProcedureVersionApproved, %{})
 
       # Emit outbox event for finalization
       {:ok, _} =
@@ -696,17 +1449,56 @@ defmodule Cadence.Procedures do
           }
         })
 
-      updated
+      {updated, nil}
     else
-      version
+      {version, nil}
     end
   end
 
-  defp count_approvals(version_id) do
-    from(a in ProcedureApproval,
-      where: a.procedure_version_id == ^version_id and a.decision == :approved
-    )
-    |> Repo.aggregate(:count)
+  defp handle_request_changes_decision(version, review, user_id, body) do
+    # Create a review thread for the change request
+    {:ok, thread} =
+      %ProcedureReviewThread{}
+      |> ProcedureReviewThread.changeset(%{
+        procedure_version_id: version.id,
+        author_id: user_id,
+        review_id: review.id,
+        status: :open
+      })
+      |> Repo.insert()
+
+    # Add the review body as the first comment in the thread
+    {:ok, _comment} =
+      %ProcedureReviewComment{}
+      |> ProcedureReviewComment.changeset(%{
+        thread_id: thread.id,
+        user_id: user_id,
+        body: body
+      })
+      |> Repo.insert()
+
+    # Transition version to changes_requested if not already
+    updated =
+      if version.status != :changes_requested do
+        version
+        |> ProcedureVersion.changes_requested_changeset(%{})
+        |> Repo.update!()
+      else
+        version
+      end
+
+    {updated, thread}
+  end
+
+  defp record_review_event(version, _updated_version, user_id, :approve, body, _thread) do
+    record_version_event(version, user_id, ProcedureReviewApproved, %{body: body})
+  end
+
+  defp record_review_event(version, _updated_version, user_id, :request_changes, body, thread) do
+    record_version_event(version, user_id, ProcedureChangesRequested, %{
+      body: body,
+      thread_id: thread && thread.id
+    })
   end
 
   defp record_version_event(

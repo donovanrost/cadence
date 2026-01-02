@@ -296,44 +296,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp handle_confirmation_request(request, token, state) do
-    if confirmation_expired?(request) do
-      {:reply, {:error, :token_expired}, drop_confirmation(state, token)}
-    else
-      dispatch_confirmed_request(request, token, state)
-    end
-  end
-
-  defp confirmation_expired?(%ConfirmationRequest{expires_at: expires_at}) do
-    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
-  end
-
-  defp drop_confirmation(state, token) do
-    %{state | pending_confirmations: Map.delete(state.pending_confirmations, token)}
-  end
-
-  defp dispatch_confirmed_request(request, token, state) do
-    opts = Keyword.put(request.opts, :skip_hazardous_check, true)
-    state_without_confirmation = drop_confirmation(state, token)
-
-    entry = %{
-      id: nil,
-      command_name: request.command_name,
-      parameters: request.params
-    }
-
-    case do_dispatch(entry, opts, state_without_confirmation) do
-      {:ok, command_log_id, new_state} ->
-        {:reply, {:ok, command_log_id}, new_state}
-
-      {:error, _} = error ->
-        {:reply, error, state_without_confirmation}
-
-      {:error, _, _} = error ->
-        {:reply, error, state_without_confirmation}
-    end
-  end
-
   def handle_call({:verification_status, command_log_id}, _from, state) do
     status =
       case Map.get(state.pending_verifications, command_log_id) do
@@ -613,6 +575,45 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   ## Private Functions
+
+  # Confirmation request helpers (grouped separately from GenServer callbacks)
+  defp handle_confirmation_request(request, token, state) do
+    if confirmation_expired?(request) do
+      {:reply, {:error, :token_expired}, drop_confirmation(state, token)}
+    else
+      dispatch_confirmed_request(request, token, state)
+    end
+  end
+
+  defp confirmation_expired?(%ConfirmationRequest{expires_at: expires_at}) do
+    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+  end
+
+  defp drop_confirmation(state, token) do
+    %{state | pending_confirmations: Map.delete(state.pending_confirmations, token)}
+  end
+
+  defp dispatch_confirmed_request(request, token, state) do
+    opts = Keyword.put(request.opts, :skip_hazardous_check, true)
+    state_without_confirmation = drop_confirmation(state, token)
+
+    entry = %{
+      id: nil,
+      command_name: request.command_name,
+      parameters: request.params
+    }
+
+    case do_dispatch(entry, opts, state_without_confirmation) do
+      {:ok, command_log_id, new_state} ->
+        {:reply, {:ok, command_log_id}, new_state}
+
+      {:error, _} = error ->
+        {:reply, error, state_without_confirmation}
+
+      {:error, _, _} = error ->
+        {:reply, error, state_without_confirmation}
+    end
+  end
 
   defp handle_stage_timeout(aggregate_id, stage, verification, runner, state) do
     if VerificationRunner.current_stage(runner) == stage do

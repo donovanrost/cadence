@@ -137,7 +137,8 @@ defmodule CadenceWeb.MissionLive.Settings do
   @impl true
   def render(assigns) do
     ~H"""
-    <%= if @active_tab == :general do %>
+    <div class="px-4 py-4">
+      <%= if @active_tab == :general do %>
       <.header>
         General Settings
         <:subtitle>Mission information</:subtitle>
@@ -186,6 +187,7 @@ defmodule CadenceWeb.MissionLive.Settings do
         </.settings_section>
       </div>
     <% end %>
+    </div>
     """
   end
 end

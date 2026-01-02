@@ -39,43 +39,68 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
          "version_id" => version_id
        }) do
     mission = socket.assigns.mission
+    user_id = socket.assigns.current_scope.user.id
 
     case load_version_for_mission(mission, procedure_id, version_id) do
       {:ok, procedure, version} ->
-        sections = V2.list_sections_with_steps(version_id)
+        # If the version is approved, create a new draft and redirect to it
+        if version.status == :approved do
+          case Procedures.create_draft_from_version(version, user_id: user_id) do
+            {:ok, new_version} ->
+              socket
+              |> put_flash(:info, "Created new draft v#{new_version.version_number} from approved v#{version.version_number}")
+              |> push_navigate(
+                to: ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/versions/#{new_version.id}/edit"
+              )
 
-        parameter_types =
-          ~w(string number integer boolean enum target telemetry_item command duration datetime array)
-
-        execution_mode_options = [
-          {"Manual", "manual"},
-          {"Assisted", "assisted"},
-          {"Automatic", "automatic"}
-        ]
-
-        socket
-        |> assign(:page_title, "Edit: #{procedure.name} (v#{version.version_number})")
-        |> assign(:procedure, procedure)
-        |> assign(:version, version)
-        |> assign(:sections, sections)
-        |> assign(:collapsed_section_ids, MapSet.new())
-        |> assign(:settings_expanded, true)
-        |> assign(:editing_section_id, nil)
-        |> assign(:editing_step_id, nil)
-        |> assign(:editing_block_id, nil)
-        |> assign(:show_block_palette_for_step, nil)
-        |> assign(:editing_parameter_index, nil)
-        |> assign(:adding_parameter, false)
-        |> assign(:parameter_types, parameter_types)
-        |> assign(:execution_mode_options, execution_mode_options)
-        |> assign(:show_reject_form, false)
-        |> refresh_version_assigns(version)
+            {:error, _reason} ->
+              socket
+              |> put_flash(:error, "Failed to create new draft version")
+              |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure.id}")
+          end
+        else
+          # Normal edit flow for draft/in_review/changes_requested versions
+          setup_edit_socket(socket, procedure, version)
+        end
 
       {:error, message} ->
         socket
         |> put_flash(:error, message)
         |> push_navigate(to: ~p"/missions/#{mission}/procedures")
     end
+  end
+
+  # Sets up the socket for editing a version
+  defp setup_edit_socket(socket, procedure, version) do
+    sections = V2.list_sections_with_steps(version.id)
+
+    parameter_types =
+      ~w(string number integer boolean enum target telemetry_item command duration datetime array)
+
+    execution_mode_options = [
+      {"Manual", "manual"},
+      {"Assisted", "assisted"},
+      {"Automatic", "automatic"}
+    ]
+
+    socket
+    |> assign(:page_title, "Edit: #{procedure.name} (v#{version.version_number})")
+    |> assign(:procedure, procedure)
+    |> assign(:version, version)
+    |> assign(:sections, sections)
+    |> assign(:collapsed_section_ids, MapSet.new())
+    |> assign(:settings_expanded, true)
+    |> assign(:editing_section_id, nil)
+    |> assign(:editing_step_id, nil)
+    |> assign(:editing_block_id, nil)
+    |> assign(:show_block_palette_for_step, nil)
+    |> assign(:editing_parameter_index, nil)
+    |> assign(:adding_parameter, false)
+    |> assign(:parameter_types, parameter_types)
+    |> assign(:execution_mode_options, execution_mode_options)
+    |> assign(:show_request_changes_form, false)
+    |> assign(:show_submit_form, false)
+    |> refresh_version_assigns(version)
   end
 
   # ────────────────────────────────────────────────────────────────────
@@ -197,7 +222,29 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     end
   end
 
+  def handle_event("toggle_submit_form", _params, socket) do
+    {:noreply, assign(socket, :show_submit_form, !socket.assigns.show_submit_form)}
+  end
+
+  def handle_event("submit_for_review", %{"submit" => %{"note" => note}}, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.submit_for_review(version, user_id, note: note) do
+      {:ok, updated_version} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> assign(:show_submit_form, false)
+         |> put_flash(:info, "Version submitted for review")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to submit: #{inspect(reason)}")}
+    end
+  end
+
   def handle_event("submit_for_review", _params, socket) do
+    # Quick submit without note
     version = socket.assigns.version
     user_id = socket.assigns.current_scope.user.id
 
@@ -245,24 +292,69 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     end
   end
 
-  def handle_event("toggle_reject_form", _params, socket) do
-    {:noreply, assign(socket, :show_reject_form, !socket.assigns.show_reject_form)}
+  def handle_event("toggle_request_changes_form", _params, socket) do
+    {:noreply, assign(socket, :show_request_changes_form, !socket.assigns.show_request_changes_form)}
   end
 
-  def handle_event("reject_version", %{"rejection" => %{"reason" => reason}}, socket) do
+  def handle_event("request_changes", %{"request_changes" => %{"body" => body}}, socket) do
     version = socket.assigns.version
     user_id = socket.assigns.current_scope.user.id
 
-    case Procedures.add_approval(version, user_id, :rejected, comment: reason) do
+    case Procedures.add_review(version, user_id, :request_changes, body: body) do
       {:ok, %{version: updated_version}} ->
         {:noreply,
          socket
          |> refresh_version_assigns(updated_version)
-         |> assign(:show_reject_form, false)
-         |> put_flash(:info, "Rejection recorded")}
+         |> assign(:show_request_changes_form, false)
+         |> put_flash(:info, "Changes requested")}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to reject: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, "Failed to request changes: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("resolve_thread", %{"thread_id" => thread_id}, socket) do
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.get_thread(thread_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Thread not found")}
+
+      thread ->
+        case Procedures.resolve_thread(thread, user_id) do
+          {:ok, _result} ->
+            version = Procedures.get_version(socket.assigns.version.id)
+
+            {:noreply,
+             socket
+             |> refresh_version_assigns(version)
+             |> put_flash(:info, "Thread resolved")}
+
+          {:error, :already_resolved} ->
+            {:noreply, put_flash(socket, :info, "Thread already resolved")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to resolve: #{inspect(reason)}")}
+        end
+    end
+  end
+
+  def handle_event("resubmit_for_review", %{"resubmit" => %{"note" => note}}, socket) do
+    version = socket.assigns.version
+    user_id = socket.assigns.current_scope.user.id
+
+    case Procedures.resubmit(version, user_id, note: note) do
+      {:ok, %{version: updated_version}} ->
+        {:noreply,
+         socket
+         |> refresh_version_assigns(updated_version)
+         |> put_flash(:info, "Version resubmitted for review")}
+
+      {:error, :unresolved_threads} ->
+        {:noreply, put_flash(socket, :error, "Please resolve all review threads before resubmitting")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to resubmit: #{inspect(reason)}")}
     end
   end
 
@@ -856,6 +948,14 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   defp parse_boolean(value) when value in [true, "true", "on", 1, "1"], do: true
   defp parse_boolean(_), do: false
 
+  defp status_label(:draft), do: "Draft"
+  defp status_label(:in_review), do: "In Review"
+  defp status_label(:changes_requested), do: "Changes Requested"
+  defp status_label(:approved), do: "Approved"
+  defp status_label(:closed), do: "Closed"
+  defp status_label(:deprecated), do: "Deprecated"
+  defp status_label(status), do: to_string(status)
+
   defp update_version_settings(version, attrs) do
     version
     |> Ecto.Changeset.change(attrs)
@@ -864,7 +964,22 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
   defp refresh_version_assigns(socket, version) do
     approval_status =
-      if version.status == :in_review, do: Procedures.get_approval_status(version), else: nil
+      if version.status in [:in_review, :changes_requested] do
+        Procedures.get_approval_status(version)
+      else
+        nil
+      end
+
+    # Load review threads when in review or changes_requested status
+    review_threads =
+      if version.status in [:in_review, :changes_requested] do
+        Procedures.list_threads(version.id)
+      else
+        []
+      end
+
+    # Count unresolved threads
+    unresolved_count = Enum.count(review_threads, &(&1.status != :resolved))
 
     settings_form =
       to_form(
@@ -880,7 +995,11 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
     |> assign(:version, version)
     |> assign(:settings_form, settings_form)
     |> assign(:approval_status, approval_status)
-    |> assign(:rejection_form, to_form(%{}, as: :rejection))
+    |> assign(:review_threads, review_threads)
+    |> assign(:unresolved_count, unresolved_count)
+    |> assign(:request_changes_form, to_form(%{}, as: :request_changes))
+    |> assign(:resubmit_form, to_form(%{}, as: :resubmit))
+    |> assign(:submit_form, to_form(%{}, as: :submit))
   end
 
   defp load_version_for_mission(mission, procedure_id, version_id) do
@@ -897,6 +1016,121 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
       _ ->
         {:error, "Procedure not found in this mission"}
+    end
+  end
+
+  # ────────────────────────────────────────────────────────────────────
+  # Review Threads Panel Component
+  # ────────────────────────────────────────────────────────────────────
+
+  attr :threads, :list, required: true
+  attr :unresolved_count, :integer, required: true
+  attr :resubmit_form, :map, required: true
+
+  defp review_threads_panel(assigns) do
+    ~H"""
+    <div class="bg-warning/5 border border-warning/20 rounded-md overflow-hidden">
+      <%!-- Header --%>
+      <div class="flex items-center justify-between px-4 py-3 bg-warning/10 border-b border-warning/20">
+        <div class="flex items-center gap-2">
+          <.icon name="hero-chat-bubble-left-right" class="h-5 w-5 text-warning" />
+          <span class="font-semibold text-sm">Review Feedback</span>
+          <span class="badge badge-sm badge-warning">{length(@threads)} threads</span>
+        </div>
+        <%= if @unresolved_count == 0 do %>
+          <span class="text-success text-sm flex items-center gap-1">
+            <.icon name="hero-check-circle" class="h-4 w-4" />
+            All resolved
+          </span>
+        <% end %>
+      </div>
+
+      <%!-- Thread List --%>
+      <div class="divide-y divide-warning/10 max-h-64 overflow-y-auto">
+        <%= for thread <- @threads do %>
+          <.thread_item thread={thread} />
+        <% end %>
+      </div>
+
+      <%!-- Resubmit Section --%>
+      <div class="p-4 bg-base-200/50 border-t border-warning/20">
+        <%= if @unresolved_count == 0 do %>
+          <.form for={@resubmit_form} id="resubmit-form" phx-submit="resubmit_for_review">
+            <div class="space-y-2">
+              <.input
+                type="text"
+                field={@resubmit_form[:note]}
+                placeholder="Optional: Add a note about your changes..."
+              />
+              <button type="submit" class="btn btn-sm btn-primary w-full">
+                <.icon name="hero-arrow-path" class="h-4 w-4" />
+                Resubmit for Review
+              </button>
+            </div>
+          </.form>
+        <% else %>
+          <div class="text-center text-sm text-base-content/60">
+            <.icon name="hero-information-circle" class="h-4 w-4 inline" />
+            Resolve all threads to resubmit for review
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  attr :thread, :map, required: true
+
+  defp thread_item(assigns) do
+    # Get the thread body from the review or first comment
+    thread_body = get_thread_body(assigns.thread)
+    assigns = assign(assigns, :thread_body, thread_body)
+
+    ~H"""
+    <div class={[
+      "p-3 flex items-start justify-between gap-3",
+      @thread.status == :resolved && "bg-success/5",
+      @thread.status != :resolved && "hover:bg-warning/5"
+    ]}>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-medium">{@thread.author.email}</span>
+          <span class="text-xs text-base-content/50">
+            {Calendar.strftime(@thread.inserted_at, "%b %d, %H:%M")}
+          </span>
+          <%= if @thread.status == :resolved do %>
+            <span class="badge badge-xs badge-success">Resolved</span>
+          <% end %>
+        </div>
+        <p class="text-sm text-base-content/80 line-clamp-2">{@thread_body}</p>
+      </div>
+      <%= if @thread.status != :resolved do %>
+        <button
+          type="button"
+          class="btn btn-xs btn-success btn-outline shrink-0"
+          phx-click="resolve_thread"
+          phx-value-thread_id={@thread.id}
+        >
+          <.icon name="hero-check" class="h-3 w-3" />
+          Resolve
+        </button>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp get_thread_body(thread) do
+    cond do
+      # First try the review body
+      thread.review && thread.review.body ->
+        thread.review.body
+
+      # Then try the first comment
+      is_list(thread.comments) && length(thread.comments) > 0 ->
+        List.first(thread.comments).body
+
+      true ->
+        "(No comment)"
     end
   end
 
@@ -932,12 +1166,13 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
             <div class="flex items-center gap-2">
               <span class={[
                 "badge",
-                @version.status == :draft && "badge-warning",
+                @version.status == :draft && "badge-ghost",
                 @version.status == :approved && "badge-success",
-                @version.status == :deprecated && "badge-ghost",
-                @version.status == :in_review && "badge-info"
+                @version.status == :deprecated && "badge-ghost text-base-content/50",
+                @version.status == :in_review && "badge-info",
+                @version.status == :changes_requested && "badge-warning"
               ]}>
-                {@version.status}
+                {status_label(@version.status)}
               </span>
             </div>
           </div>
@@ -945,7 +1180,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="text-xs text-base-content/60">
               <%= if @approval_status do %>
-                {@approval_status.approved}/{@approval_status.required} approvals · {if @approval_status.is_blocked,
+                {@approval_status.approved_count}/{@approval_status.required} approvals · {if @approval_status.is_blocked,
                   do: "Blocked",
                   else: "#{@approval_status.pending} pending"}
               <% else %>
@@ -956,6 +1191,14 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
               <%= if @version.status == :draft do %>
                 <button
                   type="button"
+                  class="btn btn-sm btn-ghost"
+                  phx-click="toggle_submit_form"
+                  title="Submit with note"
+                >
+                  <.icon name="hero-chat-bubble-bottom-center-text" class="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
                   class="btn btn-sm btn-primary"
                   phx-click="submit_for_review"
                 >
@@ -963,49 +1206,80 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                 </button>
               <% end %>
               <%= if @version.status == :in_review do %>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-ghost"
-                  phx-click="withdraw_submission"
+                <.link
+                  navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                  class="btn btn-sm btn-info gap-1"
                 >
-                  Withdraw
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-success"
-                  phx-click="approve_version"
+                  <.icon name="hero-chat-bubble-left-right" class="h-4 w-4" />
+                  View Review
+                </.link>
+              <% end %>
+              <%= if @version.status == :changes_requested do %>
+                <span class="badge badge-warning gap-1">
+                  <.icon name="hero-chat-bubble-left-right" class="h-3 w-3" />
+                  {@unresolved_count} unresolved
+                </span>
+                <.link
+                  navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                  class="btn btn-sm btn-warning btn-outline gap-1"
                 >
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline btn-error"
-                  phx-click="toggle_reject_form"
-                >
-                  Reject
-                </button>
+                  View Feedback
+                </.link>
               <% end %>
             </div>
           </div>
 
-          <%= if @show_reject_form do %>
-            <div class="bg-error/5 border border-error/20 rounded-md p-3">
-              <.form for={@rejection_form} id="reject-version-form" phx-submit="reject_version">
-                <div class="flex flex-wrap items-center gap-2">
+          <%!-- Submit with Note Form --%>
+          <%= if @show_submit_form do %>
+            <div class="bg-primary/5 border border-primary/20 rounded-md p-3">
+              <.form for={@submit_form} id="submit-for-review-form" phx-submit="submit_for_review">
+                <div class="space-y-2">
                   <.input
                     type="text"
-                    field={@rejection_form[:reason]}
-                    label="Rejection reason"
-                    placeholder="Why should this change be revised?"
-                    class="input input-bordered input-sm flex-1 min-w-[240px]"
+                    field={@submit_form[:note]}
+                    label="Add a note for reviewers (optional)"
+                    placeholder="What should reviewers focus on?"
                   />
-                  <button type="submit" class="btn btn-sm btn-error">Confirm Reject</button>
-                  <button type="button" class="btn btn-sm btn-ghost" phx-click="toggle_reject_form">
-                    Cancel
-                  </button>
+                  <div class="flex justify-end gap-2">
+                    <button type="button" class="btn btn-sm btn-ghost" phx-click="toggle_submit_form">
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                      <.icon name="hero-paper-airplane" class="h-4 w-4" />
+                      Submit for Review
+                    </button>
+                  </div>
                 </div>
               </.form>
             </div>
+          <% end %>
+
+          <%!-- In Review Banner --%>
+          <%= if @version.status == :in_review do %>
+            <div class="bg-info/10 border border-info/20 rounded-md p-3 flex items-center gap-3">
+              <.icon name="hero-clock" class="h-5 w-5 text-info" />
+              <div class="flex-1">
+                <span class="font-medium text-sm">This version is under review</span>
+                <span class="text-xs text-base-content/60 block">
+                  {@approval_status.approved_count}/{@approval_status.required} approvals
+                </span>
+              </div>
+              <.link
+                navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                class="btn btn-sm btn-info btn-outline"
+              >
+                View Review
+              </.link>
+            </div>
+          <% end %>
+
+          <%!-- Review Threads Panel (when changes requested) --%>
+          <%= if @version.status == :changes_requested and length(@review_threads) > 0 do %>
+            <.review_threads_panel
+              threads={@review_threads}
+              unresolved_count={@unresolved_count}
+              resubmit_form={@resubmit_form}
+            />
           <% end %>
         </div>
         

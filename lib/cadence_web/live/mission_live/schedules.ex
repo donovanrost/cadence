@@ -157,17 +157,18 @@ defmodule CadenceWeb.MissionLive.Schedules do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Schedules
-      <:subtitle>
-        Scheduled procedure executions using cron expressions or one-time triggers
-      </:subtitle>
-      <:actions>
-        <.link patch={~p"/missions/#{@mission}/schedules/new"}>
-          <.button>New Schedule</.button>
-        </.link>
-      </:actions>
-    </.header>
+    <div class="px-4 py-4">
+      <.header>
+        Schedules
+        <:subtitle>
+          Scheduled procedure executions using cron expressions or one-time triggers
+        </:subtitle>
+        <:actions>
+          <.link patch={~p"/missions/#{@mission}/schedules/new"}>
+            <.button>New Schedule</.button>
+          </.link>
+        </:actions>
+      </.header>
 
     <.table id="schedules" rows={@schedules}>
       <:col :let={schedule} label="Name">
@@ -240,6 +241,7 @@ defmodule CadenceWeb.MissionLive.Schedules do
         </div>
       </div>
     <% end %>
+    </div>
 
     <!-- Schedule Modal -->
     <.modal

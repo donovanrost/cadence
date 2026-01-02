@@ -30,7 +30,6 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
   use Agent
 
   @behaviour Cadence.Ports.Repository.Procedures.ProcedureRepository
-  @behaviour Cadence.Ports.Repository.Procedures.ApprovalOperations
   @behaviour Cadence.Ports.Repository.Procedures.ExecutionOperations
 
   alias Cadence.Domain.Procedures.Entities.ProcedureVersion
@@ -251,91 +250,6 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     end)
 
     :ok
-  end
-
-  # ============================================================================
-  # ApprovalOperations Implementation
-  # ============================================================================
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def find_approval(id) do
-    case Agent.get(__MODULE__, fn state -> Map.get(state.approvals, id) end) do
-      nil -> {:error, :not_found}
-      approval -> {:ok, approval}
-    end
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def find_user_approval(version_id, user_id) do
-    Agent.get(__MODULE__, fn state ->
-      result =
-        state.approvals
-        |> Map.values()
-        |> Enum.find(fn a ->
-          a.procedure_version_id == version_id && a.user_id == user_id
-        end)
-
-      case result do
-        nil -> {:error, :not_found}
-        approval -> {:ok, approval}
-      end
-    end)
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def list_approvals(version_id, _opts \\ []) do
-    Agent.get(__MODULE__, fn state ->
-      state.approvals
-      |> Map.values()
-      |> Enum.filter(&(&1.procedure_version_id == version_id))
-      |> Enum.sort_by(& &1.inserted_at)
-    end)
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def save_approval(attrs) do
-    id = Ecto.UUID.generate()
-    now = DateTime.utc_now()
-
-    approval = %{
-      id: id,
-      procedure_version_id:
-        Map.get(attrs, :procedure_version_id) || Map.get(attrs, "procedure_version_id"),
-      user_id: Map.get(attrs, :user_id) || Map.get(attrs, "user_id"),
-      decision: Map.get(attrs, :decision) || Map.get(attrs, "decision"),
-      comment: Map.get(attrs, :comment) || Map.get(attrs, "comment"),
-      inserted_at: now,
-      updated_at: now
-    }
-
-    Agent.update(__MODULE__, fn state ->
-      %{state | approvals: Map.put(state.approvals, id, approval)}
-    end)
-
-    {:ok, approval}
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def count_approvals(version_id, decision) do
-    Agent.get(__MODULE__, fn state ->
-      state.approvals
-      |> Map.values()
-      |> Enum.count(fn a ->
-        a.procedure_version_id == version_id && a.decision == decision
-      end)
-    end)
-  end
-
-  @impl Cadence.Ports.Repository.Procedures.ApprovalOperations
-  def delete_approvals(version_id) do
-    Agent.get_and_update(__MODULE__, fn state ->
-      {to_delete, to_keep} =
-        state.approvals
-        |> Map.split_with(fn {_id, a} -> a.procedure_version_id == version_id end)
-
-      count = map_size(to_delete)
-      {{:ok, count}, %{state | approvals: to_keep}}
-    end)
   end
 
   # ============================================================================

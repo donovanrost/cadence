@@ -7,7 +7,9 @@ defmodule Cadence.Procedures.ProcedureVersion do
 
   - `draft` - Being edited, not ready for use
   - `in_review` - Submitted for approval
+  - `changes_requested` - Reviewer requested changes, awaiting author revision
   - `approved` - Approved for execution
+  - `closed` - Abandoned/cancelled (like closing a PR without merging)
   - `deprecated` - No longer recommended for use
 
   ## Source Format
@@ -40,14 +42,14 @@ defmodule Cadence.Procedures.ProcedureVersion do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias Cadence.Procedures.{Procedure, ProcedureApproval}
+  alias Cadence.Procedures.Procedure
 
   @type t :: %__MODULE__{}
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses [:draft, :in_review, :approved, :deprecated]
+  @statuses [:draft, :in_review, :changes_requested, :approved, :closed, :deprecated]
   @execution_modes [:manual, :assisted, :automatic]
 
   schema "procedure_versions" do
@@ -84,7 +86,10 @@ defmodule Cadence.Procedures.ProcedureVersion do
     belongs_to :submitted_by, Cadence.Accounts.User
     belongs_to :rejected_by, Cadence.Accounts.User
 
-    has_many :approvals, ProcedureApproval
+    # New review workflow (replaces approvals)
+    has_many :reviews, Cadence.Procedures.ProcedureReview
+    has_many :review_threads, Cadence.Procedures.ProcedureReviewThread
+    has_many :review_requests, Cadence.Procedures.ProcedureReviewRequest
 
     timestamps(type: :utc_datetime)
   end
@@ -155,7 +160,40 @@ defmodule Cadence.Procedures.ProcedureVersion do
   end
 
   @doc """
+  Changeset for requesting changes on a version.
+  Transitions to changes_requested status.
+  """
+  def changes_requested_changeset(version, _attrs) do
+    version
+    |> change()
+    |> put_change(:status, :changes_requested)
+  end
+
+  @doc """
+  Changeset for resubmitting a version after changes.
+  Clears rejection data and transitions back to in_review.
+  """
+  def resubmit_changeset(version, attrs) do
+    version
+    |> cast(attrs, [:submitted_at, :submitted_by_id])
+    |> put_change(:status, :in_review)
+    |> put_change(:rejected_at, nil)
+    |> put_change(:rejected_by_id, nil)
+    |> put_change(:rejection_reason, nil)
+  end
+
+  @doc """
+  Changeset for closing a version (abandoning without approval).
+  """
+  def close_changeset(version, _attrs) do
+    version
+    |> change()
+    |> put_change(:status, :closed)
+  end
+
+  @doc """
   Changeset for rejecting a version.
+  DEPRECATED: Use changes_requested_changeset instead for the new workflow.
   """
   def rejection_changeset(version, attrs) do
     version

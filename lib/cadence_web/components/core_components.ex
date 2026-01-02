@@ -310,14 +310,14 @@ defmodule CadenceWeb.CoreComponents do
   def header(assigns) do
     ~H"""
     <header class={[
-      @actions != [] && "flex items-center justify-between gap-6",
-      "pb-4 mb-6 border-b border-primary/20"
+      @actions != [] && "flex items-center justify-between gap-4",
+      "pb-3 mb-4 border-b border-primary/20"
     ]}>
       <div>
-        <h1 class="text-base font-semibold leading-8 tracking-wide uppercase text-base-content">
+        <h1 class="text-xl font-bold text-base-content">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-xs text-base-content/50 tracking-wide mt-0.5">
+        <p :if={@subtitle != []} class="text-xs text-base-content/50 mt-0.5">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -805,7 +805,7 @@ defmodule CadenceWeb.CoreComponents do
   """
   attr :email, :string, required: true
   attr :name, :string, default: nil
-  attr :size, :string, default: "md", values: ~w(sm md lg)
+  attr :size, :string, default: "md", values: ~w(xs sm md lg)
   attr :class, :string, default: nil
 
   def avatar(assigns) do
@@ -862,6 +862,7 @@ defmodule CadenceWeb.CoreComponents do
   defp color_class(3), do: "bg-info text-info-content"
   defp color_class(_), do: "bg-success text-success-content"
 
+  defp avatar_size_class("xs"), do: "h-6 w-6 text-[10px]"
   defp avatar_size_class("sm"), do: "h-8 w-8 text-xs"
   defp avatar_size_class("md"), do: "h-10 w-10 text-sm"
   defp avatar_size_class("lg"), do: "h-12 w-12 text-base"
@@ -894,7 +895,7 @@ defmodule CadenceWeb.CoreComponents do
       </div>
       <ul
         tabindex="0"
-        class="dropdown-content menu bg-base-200 rounded-box z-[100] w-56 p-2 shadow-lg border border-base-300"
+        class="dropdown-content menu bg-base-200 rounded-box z-[100] w-56 p-2 shadow-lg border border-primary/20 hud-grid"
       >
         {render_slot(@inner_block)}
       </ul>

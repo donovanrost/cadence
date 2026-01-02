@@ -31,6 +31,7 @@ defmodule Cadence.Procedures.V2 do
 
   alias Cadence.Procedures.{
     DataSourceConfig,
+    Diff,
     ExecutionComment,
     Parameters,
     ProcedureBlock,
@@ -128,6 +129,35 @@ defmodule Cadence.Procedures.V2 do
       end)
     end)
   end
+
+  # ============================================================================
+  # Version Diff
+  # ============================================================================
+
+  @doc """
+  Computes the structural diff between two procedure versions.
+
+  Returns a diff result with added/removed/modified/moved elements at
+  section, step, and block levels.
+
+  ## Example
+
+      diff = V2.compute_version_diff(old_version_id, new_version_id)
+      # => %{sections: %{added: [...], ...}, steps: %{...}, blocks: %{...}, stats: %{...}}
+  """
+  defdelegate compute_version_diff(old_version_id, new_version_id), to: Diff, as: :compute
+
+  @doc """
+  Builds a map from element IDs to their diff status.
+
+  Useful for efficiently rendering diff badges in the review UI.
+
+  ## Example
+
+      status_map = V2.build_diff_status_map(diff)
+      # => %{"uuid1" => :added, "uuid2" => :modified, ...}
+  """
+  defdelegate build_diff_status_map(diff), to: Diff, as: :build_status_map
 
   # ============================================================================
   # Steps

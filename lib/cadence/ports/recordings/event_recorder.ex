@@ -48,7 +48,6 @@ defmodule Cadence.Ports.Recordings.EventRecorder do
           | :procedure_version_rejected
           | :procedure_version_withdrawn
           | :procedure_version_deprecated
-          | :procedure_approval_added
 
   @type aggregate :: struct()
   @type actor_id :: String.t() | nil

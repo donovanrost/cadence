@@ -291,21 +291,22 @@ defmodule CadenceWeb.MissionLive.Alarms do
   @impl true
   def render(assigns) do
     ~H"""
-    <.header>
-      Alarm Rules
-      <:subtitle>Define when alarms are generated from telemetry limit violations</:subtitle>
-      <:actions>
-        <.button
-          phx-click="show_coverage_analysis"
-          variant="secondary"
-        >
-          Coverage Analysis
-        </.button>
-        <.link patch={~p"/missions/#{@mission}/alarms/new"}>
-          <.button>New Rule</.button>
-        </.link>
-      </:actions>
-    </.header>
+    <div class="px-4 py-4">
+      <.header>
+        Alarm Rules
+        <:subtitle>Define when alarms are generated from telemetry limit violations</:subtitle>
+        <:actions>
+          <.button
+            phx-click="show_coverage_analysis"
+            variant="secondary"
+          >
+            Coverage Analysis
+          </.button>
+          <.link patch={~p"/missions/#{@mission}/alarms/new"}>
+            <.button>New Rule</.button>
+          </.link>
+        </:actions>
+      </.header>
 
     <.table id="alarm-rules" rows={@alarm_rules}>
       <:col :let={rule} label="Name">{rule.name}</:col>
@@ -377,6 +378,7 @@ defmodule CadenceWeb.MissionLive.Alarms do
         </div>
       </div>
     <% end %>
+    </div>
 
     <!-- Alarm Rule Modal -->
     <.modal
