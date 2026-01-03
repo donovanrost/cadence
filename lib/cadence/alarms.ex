@@ -133,6 +133,21 @@ defmodule Cadence.Alarms do
   end
 
   @doc """
+  Lists historical (cleared) alarms for a mission.
+
+  ## Options
+
+  - `:time_range` - Filter by time range: `:"1h"`, `:"6h"`, `:"24h"`, `:"7d"`, `:all`
+  - `:target_id` - Filter by target UUID
+  - `:severity` - Filter by severity (atom or list of atoms)
+  - `:limit` - Maximum number of results (default: 100)
+  """
+  @spec list_historical_alarms(String.t(), keyword()) :: [Alarm.t()]
+  def list_historical_alarms(mission_id, opts \\ []) do
+    AlarmQueries.list_historical(mission_id, opts) |> Enum.map(&entity_to_schema/1)
+  end
+
+  @doc """
   Counts alarms by status for a mission.
   """
   @spec count_alarms_by_status(String.t()) :: map()

@@ -321,6 +321,9 @@
 /* Queue Mode */
 @import "./modes/queue-mode.css";
 
+/* Alarms Mode */
+@import "./modes/alarms-mode.css";
+
 /* ============================================
    External Libraries
    ============================================ */

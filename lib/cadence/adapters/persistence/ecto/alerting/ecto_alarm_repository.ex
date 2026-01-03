@@ -265,7 +265,14 @@ defmodule Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository do
       {:target_id, nil}, q -> q
       {:target_id, target_id}, q -> from(a in q, where: a.target_id == ^target_id)
       {:severity, nil}, q -> q
+      {:severity, severities}, q when is_list(severities) -> from(a in q, where: a.severity in ^severities)
       {:severity, severity}, q -> from(a in q, where: a.severity == ^severity)
+      {:since, nil}, q -> q
+      {:since, since}, q -> from(a in q, where: a.triggered_at >= ^since)
+      {:until, nil}, q -> q
+      {:until, until_time}, q -> from(a in q, where: a.triggered_at <= ^until_time)
+      {:cleared_since, nil}, q -> q
+      {:cleared_since, since}, q -> from(a in q, where: a.cleared_at >= ^since)
     end)
   end
 end

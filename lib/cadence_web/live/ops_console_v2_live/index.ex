@@ -24,6 +24,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   }
 
   alias Cadence.Alarms.Alarm
+  alias Cadence.Application.Alerting.ManageAlarmRules
   alias Cadence.DashboardLayouts.DashboardLayout
   alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand}
 
@@ -628,6 +629,30 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
     end
   end
 
+  def handle_event("acknowledge_alarms", %{"alarm_ids" => alarm_ids}, socket) do
+    user = socket.assigns.current_scope.user
+    mission_id = socket.assigns.mission.id
+
+    results =
+      Enum.map(alarm_ids, fn alarm_id ->
+        alarm = Alarms.get_alarm!(alarm_id)
+        Alarms.acknowledge_alarm(alarm, user.id)
+      end)
+
+    success_count = Enum.count(results, fn result -> match?({:ok, _}, result) end)
+
+    # Broadcast updates for successful acknowledgments
+    results
+    |> Enum.filter(fn result -> match?({:ok, _}, result) end)
+    |> Enum.each(fn {:ok, alarm} -> broadcast_alarm_update(mission_id, alarm) end)
+
+    if success_count > 0 do
+      {:noreply, put_flash(socket, :info, "#{success_count} alarm(s) acknowledged")}
+    else
+      {:noreply, put_flash(socket, :error, "Failed to acknowledge alarms")}
+    end
+  end
+
   def handle_event("open_shelve_modal", %{"id" => alarm_id}, socket) do
     alarm = Alarms.get_alarm!(alarm_id)
     {:noreply, assign(socket, :show_shelve_modal, alarm)}
@@ -686,6 +711,41 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to clear alarm")}
     end
+  end
+
+  def handle_event("load_historical_alarms", %{"time_range" => time_range}, socket) do
+    mission_id = socket.assigns.mission.id
+
+    time_range_atom =
+      case time_range do
+        "1h" -> :"1h"
+        "6h" -> :"6h"
+        "24h" -> :"24h"
+        "7d" -> :"7d"
+        _ -> :all
+      end
+
+    historical_alarms =
+      Alarms.list_historical_alarms(mission_id, time_range: time_range_atom, limit: 100)
+
+    {:noreply,
+     push_event(socket, "historical_alarms_loaded", %{
+       alarms: Enum.map(historical_alarms, &alarm_json/1)
+     })}
+  end
+
+  def handle_event("load_alarm_rules", _params, socket) do
+    mission = socket.assigns.mission
+    org_id = mission.organization_id
+    mission_id = mission.id
+
+    rules =
+      ManageAlarmRules.list(org_id, mission_id: mission_id, enabled: true)
+
+    {:noreply,
+     push_event(socket, "alarm_rules_loaded", %{
+       rules: Enum.map(rules, &alarm_rule_json/1)
+     })}
   end
 
   # Command queue action handlers
@@ -1607,6 +1667,7 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
   defp alarm_json(alarm) do
     %{
       id: alarm.id,
+      alarm_rule_id: alarm.alarm_rule_id,
       severity: alarm.severity,
       status: alarm.status,
       source_type: alarm.source_type,
@@ -1616,9 +1677,23 @@ defmodule CadenceWeb.OpsConsoleV2Live.Index do
       acknowledged_at: alarm.acknowledged_at && DateTime.to_iso8601(alarm.acknowledged_at),
       shelved_at: alarm.shelved_at && DateTime.to_iso8601(alarm.shelved_at),
       shelved_until: alarm.shelved_until && DateTime.to_iso8601(alarm.shelved_until),
+      cleared_at: alarm.cleared_at && DateTime.to_iso8601(alarm.cleared_at),
       target_id: alarm.target_id,
       current_value: alarm.current_value,
       limit_state: alarm.limit_state
+    }
+  end
+
+  defp alarm_rule_json(rule) do
+    %{
+      id: rule.id,
+      name: rule.name,
+      severity: rule.severity,
+      enabled: rule.enabled,
+      event_type: rule.event_type,
+      target_id: rule.target_id,
+      conditions: rule.conditions,
+      message_template: rule.message_template
     }
   end
 

@@ -261,6 +261,12 @@ export const OpsConsoleV2Hook = {
                 </svg>
                 <span class="nav-label">Queue</span>
               </button>
+              <button class="mode-btn" data-mode="alarms">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+                <span class="nav-label">Alarms</span>
+              </button>
             </div>
           </div>
 
@@ -322,6 +328,11 @@ export const OpsConsoleV2Hook = {
             <button class="rail-btn" data-mode="queue" title="Queue Mode">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+            </button>
+            <button class="rail-btn" data-mode="alarms" title="Alarms Mode">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
               </svg>
             </button>
           </div>
@@ -970,8 +981,25 @@ export const OpsConsoleV2Hook = {
       } else if (payload.type === "cleared") {
         this.alarms = this.alarms.filter(a => a.id !== payload.alarm.id)
       }
-      // Re-render alarms in context panel
+      // Re-render alarms in context panel and alarms mode
       this._populateContextPanel()
+      if (this.currentMode === 'alarms') {
+        this._renderAlarmsMode()
+      }
+    })
+
+    this.handleEvent("historical_alarms_loaded", (payload) => {
+      this.historicalAlarms = payload.alarms || []
+      if (this.currentMode === 'alarms' && this.alarmsViewMode === 'historical') {
+        this._renderAlarmsMode()
+      }
+    })
+
+    this.handleEvent("alarm_rules_loaded", (payload) => {
+      this.alarmRules = payload.rules || []
+      if (this.currentMode === 'alarms' && this.alarmsViewMode === 'panel') {
+        this._renderAlarmsMode()
+      }
     })
 
     this.handleEvent("update_commands", (payload) => {
@@ -1070,31 +1098,42 @@ export const OpsConsoleV2Hook = {
     if (!dashboard) return
 
     // Clear all mode classes first
-    dashboard.classList.remove("commands-mode-active", "timeline-mode-active", "queue-mode-active")
+    dashboard.classList.remove("commands-mode-active", "timeline-mode-active", "queue-mode-active", "alarms-mode-active")
 
     if (this.currentMode === "commands") {
       // Hide GridStack dashboard, show Commands mode
       dashboard.classList.add("commands-mode-active")
       this._hideTimelineMode()
       this._hideQueueMode()
+      this._hideAlarmsMode()
       this._renderCommandsMode()
     } else if (this.currentMode === "timeline") {
       // Hide GridStack dashboard, show Timeline mode
       dashboard.classList.add("timeline-mode-active")
       this._hideCommandsMode()
       this._hideQueueMode()
+      this._hideAlarmsMode()
       this._renderTimelineMode()
     } else if (this.currentMode === "queue") {
       // Hide GridStack dashboard, show Queue mode
       dashboard.classList.add("queue-mode-active")
       this._hideCommandsMode()
       this._hideTimelineMode()
+      this._hideAlarmsMode()
       this._renderQueueMode()
+    } else if (this.currentMode === "alarms") {
+      // Hide GridStack dashboard, show Alarms mode
+      dashboard.classList.add("alarms-mode-active")
+      this._hideCommandsMode()
+      this._hideTimelineMode()
+      this._hideQueueMode()
+      this._renderAlarmsMode()
     } else {
       // Show GridStack dashboard, hide mode-specific content
       this._hideCommandsMode()
       this._hideTimelineMode()
       this._hideQueueMode()
+      this._hideAlarmsMode()
     }
 
     // Update context panel based on mode
@@ -5849,6 +5888,16 @@ export const OpsConsoleV2Hook = {
     }
   },
 
+  _hideAlarmsMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    const alarmsContainer = dashboard.querySelector(".alarms-mode-container")
+    if (alarmsContainer) {
+      alarmsContainer.innerHTML = ""
+    }
+  },
+
   _calculateQueueMetrics() {
     // Use server-side metrics if available (accurate counts from database)
     if (this.queueServerMetrics) {
@@ -7924,6 +7973,1162 @@ export const OpsConsoleV2Hook = {
     }
 
     this._debounceTimers[key] = setTimeout(fn, delay)
+  },
+
+  // ============================================================================
+  // Alarms Mode
+  // ============================================================================
+
+  _renderAlarmsMode() {
+    const dashboard = this.panelLayout?.elements?.dashboard
+    if (!dashboard) return
+
+    // Check if alarms container already exists
+    let alarmsContainer = dashboard.querySelector(".alarms-mode-container")
+    if (!alarmsContainer) {
+      alarmsContainer = document.createElement("div")
+      alarmsContainer.className = "alarms-mode-container"
+      dashboard.appendChild(alarmsContainer)
+    }
+
+    // Get filtered alarms
+    const filteredAlarms = this._getFilteredAlarms()
+    const groupedAlarms = this._groupAlarmsBySeverity(filteredAlarms)
+    const selectedAlarm = this.alarmsSelectedAlarm
+      ? this.alarms.find(a => a.id === this.alarmsSelectedAlarm)
+      : null
+
+    // Render view-specific content
+    let viewContent
+    if (this.alarmsViewMode === 'panel') {
+      viewContent = this._renderAlarmsPanelView()
+    } else if (this.alarmsViewMode === 'historical') {
+      viewContent = this._renderAlarmsHistoricalView()
+    } else if (this.alarmsViewMode === 'rules') {
+      viewContent = this._renderAlarmsRulesView()
+    } else if (this.alarmsViewMode === 'analytics') {
+      viewContent = this._renderAlarmsAnalyticsView()
+    } else {
+      viewContent = this._renderAlarmsActiveView(filteredAlarms, groupedAlarms, selectedAlarm)
+    }
+
+    alarmsContainer.innerHTML = `
+      <div class="alarms-mode-layout">
+        <!-- View Tabs -->
+        <div class="alarms-view-tabs">
+          <button class="alarms-view-tab ${this.alarmsViewMode === 'active' ? 'active' : ''}"
+                  data-view="active">ACTIVE</button>
+          <button class="alarms-view-tab ${this.alarmsViewMode === 'panel' ? 'active' : ''}"
+                  data-view="panel">PANEL</button>
+          <button class="alarms-view-tab ${this.alarmsViewMode === 'historical' ? 'active' : ''}"
+                  data-view="historical">HISTORICAL</button>
+          <button class="alarms-view-tab ${this.alarmsViewMode === 'rules' ? 'active' : ''}"
+                  data-view="rules">RULES</button>
+          <button class="alarms-view-tab ${this.alarmsViewMode === 'analytics' ? 'active' : ''}"
+                  data-view="analytics">ANALYTICS</button>
+        </div>
+
+        ${viewContent}
+      </div>
+    `
+
+    this._bindAlarmsModeEvents(alarmsContainer)
+  },
+
+  _renderAlarmsActiveView(filteredAlarms, groupedAlarms, selectedAlarm) {
+    const selectedCount = this.alarmsSelectedTargets.size
+    const totalTargets = this.targets.length
+
+    return `
+      <!-- Main Content Area -->
+      <div class="alarms-panels-row" id="alarms-panels-row">
+        <!-- Left Panel: Target Selection -->
+        <div class="alarms-target-panel" id="alarms-target-panel" style="flex: 0 0 ${this.alarmsTargetPanelWidth}%">
+          <div class="alarms-panel-header">
+            <div class="alarms-panel-title">
+              <span class="mc-label-subsystem">TARGETS</span>
+              <span class="alarms-selection-count">${selectedCount === 0 ? 'All' : selectedCount} of ${totalTargets}</span>
+            </div>
+            <div class="alarms-view-toggle">
+              <button class="alarms-view-btn ${this.alarmsTargetViewMode === 'compact' ? 'active' : ''}"
+                      data-target-view="compact" title="Compact view">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+              </button>
+              <button class="alarms-view-btn ${this.alarmsTargetViewMode === 'detailed' ? 'active' : ''}"
+                      data-target-view="detailed" title="Detailed view">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="alarms-target-filters">
+            <input type="text"
+                   class="alarms-target-search"
+                   id="alarms-target-search"
+                   placeholder="Filter targets..."
+                   value="${this.alarmsTargetSearch}">
+          </div>
+          <div class="alarms-target-grid ${this.alarmsTargetViewMode === 'detailed' ? 'detailed-view' : ''}">
+            ${this._renderAlarmsTargetGrid()}
+          </div>
+          <div class="alarms-selection-actions">
+            <button class="btn btn-ghost btn-xs" id="alarms-select-all-targets">Select All</button>
+            <button class="btn btn-ghost btn-xs" id="alarms-clear-targets">Clear</button>
+          </div>
+        </div>
+
+        <!-- Resize Handle (Target/List) -->
+        <div class="alarms-resize-handle" id="alarms-target-resize-handle">
+          <div class="alarms-resize-grip"></div>
+        </div>
+
+        <!-- Middle Panel: Alarm List -->
+        <div class="alarms-list-panel" id="alarms-list-panel" style="flex: 0 0 ${this.alarmsListPanelWidth}%">
+          <div class="alarms-panel-header">
+            <div class="alarms-panel-title">
+              <span class="mc-label-subsystem">ALARMS</span>
+              <span class="alarms-count">${filteredAlarms.length} total</span>
+            </div>
+          </div>
+
+          <!-- Filter Controls -->
+          <div class="alarms-filters">
+            <div class="alarms-filter-row">
+              <div class="alarms-status-filters">
+                <button class="alarms-filter-btn ${this.alarmsFilterStatus.has('active') ? 'active' : ''}"
+                        data-status="active">ACTIVE</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterStatus.has('acknowledged') ? 'active' : ''}"
+                        data-status="acknowledged">ACK</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterStatus.has('shelved') ? 'active' : ''}"
+                        data-status="shelved">SHELVED</button>
+              </div>
+              <div class="alarms-severity-filters">
+                <button class="alarms-severity-btn severity-critical ${this.alarmsFilterSeverity.has('critical') ? 'active' : ''}"
+                        data-severity="critical" title="Critical">C</button>
+                <button class="alarms-severity-btn severity-warning ${this.alarmsFilterSeverity.has('warning') ? 'active' : ''}"
+                        data-severity="warning" title="Warning">W</button>
+                <button class="alarms-severity-btn severity-info ${this.alarmsFilterSeverity.has('info') ? 'active' : ''}"
+                        data-severity="info" title="Info">I</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alarm Groups -->
+          <div class="alarms-list">
+            ${this._renderAlarmGroups(groupedAlarms)}
+          </div>
+
+          <!-- Bulk Actions -->
+          <div class="alarms-bulk-actions">
+            <button class="btn btn-primary btn-sm" id="alarms-ack-all"
+                    ${filteredAlarms.filter(a => a.status === 'active').length === 0 ? 'disabled' : ''}>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              ACK ALL VISIBLE (${filteredAlarms.filter(a => a.status === 'active').length})
+            </button>
+          </div>
+        </div>
+
+        <!-- Resize Handle (List/Detail) -->
+        <div class="alarms-resize-handle" id="alarms-resize-handle">
+          <div class="alarms-resize-grip"></div>
+        </div>
+
+        <!-- Right Panel: Alarm Detail -->
+        <div class="alarms-detail-panel" id="alarms-detail-panel">
+          ${selectedAlarm
+            ? this._renderAlarmDetailPanel(selectedAlarm)
+            : `<div class="alarms-detail-empty">
+                 <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                 </svg>
+                 <span>Select an alarm to view details</span>
+               </div>`
+          }
+        </div>
+      </div>
+    `
+  },
+
+  _renderAlarmsTargetGrid() {
+    const searchLower = this.alarmsTargetSearch.toLowerCase()
+    const filteredTargets = this.targets.filter(t =>
+      t.name.toLowerCase().includes(searchLower)
+    )
+
+    // Count alarms per target
+    const alarmCounts = new Map()
+    const activeAlarms = this.alarms || []
+    activeAlarms.forEach(alarm => {
+      if (alarm.target_id) {
+        const count = alarmCounts.get(alarm.target_id) || { active: 0, ack: 0, total: 0 }
+        count.total++
+        if (alarm.status === 'active') count.active++
+        if (alarm.status === 'acknowledged') count.ack++
+        alarmCounts.set(alarm.target_id, count)
+      }
+    })
+
+    if (filteredTargets.length === 0) {
+      return `<div class="alarms-target-empty">No targets match filter</div>`
+    }
+
+    const isDetailed = this.alarmsTargetViewMode === 'detailed'
+
+    return filteredTargets.map(target => {
+      const isSelected = this.alarmsSelectedTargets.has(target.id)
+      const counts = alarmCounts.get(target.id) || { active: 0, ack: 0, total: 0 }
+      const hasActiveAlarms = counts.active > 0
+      const hasAckAlarms = counts.ack > 0
+      const statusClass = target.status || 'online'
+      const mode = target.mode || 'NOMINAL'
+
+      if (isDetailed) {
+        return `
+          <div class="alarms-target-cell ${isSelected ? 'selected' : ''} status-${statusClass} ${hasActiveAlarms ? 'has-alarms' : ''}"
+               data-target-id="${target.id}">
+            <div class="alarms-target-main">
+              <span class="alarms-target-name">${target.name}</span>
+              <span class="alarms-target-mode">${mode}</span>
+            </div>
+            <div class="alarms-target-meta">
+              <span class="alarms-target-type">${target.target_type || 'Unknown'}</span>
+              ${counts.total > 0 ? `
+                <span class="alarms-target-alarm-count">
+                  ${hasActiveAlarms ? `<span class="active">${counts.active}</span>` : ''}
+                  ${hasAckAlarms ? `<span class="ack">${counts.ack}</span>` : ''}
+                </span>
+              ` : ''}
+            </div>
+          </div>
+        `
+      } else {
+        // Compact view
+        return `
+          <div class="alarms-target-cell ${isSelected ? 'selected' : ''} status-${statusClass} ${hasActiveAlarms ? 'has-alarms' : ''}"
+               data-target-id="${target.id}">
+            <span class="alarms-target-name">${target.name}</span>
+            ${counts.total > 0 ? `<span class="alarms-target-count">${counts.total}</span>` : ''}
+          </div>
+        `
+      }
+    }).join('')
+  },
+
+  _renderAlarmsHistoricalView() {
+    const alarms = this.historicalAlarms || []
+    const selectedAlarm = this.alarmsSelectedAlarm
+      ? alarms.find(a => a.id === this.alarmsSelectedAlarm)
+      : null
+
+    return `
+      <div class="alarms-panels-row" id="alarms-panels-row">
+        <!-- Left Panel: Historical Alarm List -->
+        <div class="alarms-list-panel" id="alarms-list-panel" style="flex: 0 0 ${this.alarmsListPanelWidth}%">
+          <div class="alarms-panel-header">
+            <div class="alarms-panel-title">
+              <span class="mc-label-subsystem">HISTORICAL ALARMS</span>
+              <span class="alarms-count">${alarms.length} total</span>
+            </div>
+          </div>
+
+          <!-- Time Range Filter -->
+          <div class="alarms-filters">
+            <div class="alarms-filter-row">
+              <div class="alarms-time-filters">
+                <button class="alarms-filter-btn ${this.alarmsFilterTimeRange === '1h' ? 'active' : ''}"
+                        data-time-range="1h">1H</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterTimeRange === '6h' ? 'active' : ''}"
+                        data-time-range="6h">6H</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterTimeRange === '24h' ? 'active' : ''}"
+                        data-time-range="24h">24H</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterTimeRange === '7d' ? 'active' : ''}"
+                        data-time-range="7d">7D</button>
+                <button class="alarms-filter-btn ${this.alarmsFilterTimeRange === 'all' ? 'active' : ''}"
+                        data-time-range="all">ALL</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Historical Alarm Table -->
+          <div class="alarms-historical-table-container">
+            ${alarms.length > 0 ? `
+              <table class="alarms-historical-table">
+                <thead>
+                  <tr>
+                    <th class="alarms-th-severity">SEV</th>
+                    <th class="alarms-th-source">SOURCE</th>
+                    <th class="alarms-th-message">MESSAGE</th>
+                    <th class="alarms-th-target">TARGET</th>
+                    <th class="alarms-th-triggered">TRIGGERED</th>
+                    <th class="alarms-th-cleared">CLEARED</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${alarms.map(alarm => this._renderHistoricalAlarmRow(alarm)).join('')}
+                </tbody>
+              </table>
+            ` : `
+              <div class="alarms-table-empty">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+                <span>No historical alarms found</span>
+              </div>
+            `}
+          </div>
+        </div>
+
+        <!-- Resize Handle -->
+        <div class="alarms-resize-handle" id="alarms-resize-handle">
+          <div class="alarms-resize-grip"></div>
+        </div>
+
+        <!-- Right Panel: Alarm Detail -->
+        <div class="alarms-detail-panel" id="alarms-detail-panel">
+          ${selectedAlarm
+            ? this._renderAlarmDetailPanel(selectedAlarm)
+            : `<div class="alarms-detail-empty">
+                 <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                 </svg>
+                 <span>Select an alarm to view details</span>
+               </div>`
+          }
+        </div>
+      </div>
+    `
+  },
+
+  _renderHistoricalAlarmRow(alarm) {
+    const isSelected = this.alarmsSelectedAlarm === alarm.id
+    const targetName = alarm.target_id
+      ? (this.targets.find(t => t.id === alarm.target_id)?.name || 'Unknown')
+      : 'System'
+
+    return `
+      <tr class="alarms-historical-row ${isSelected ? 'selected' : ''}"
+          data-alarm-id="${alarm.id}">
+        <td class="alarms-td-severity">
+          <span class="alarms-severity-dot severity-${alarm.severity}"></span>
+        </td>
+        <td class="alarms-td-source">${alarm.source_id || 'Unknown'}</td>
+        <td class="alarms-td-message">${alarm.message || '-'}</td>
+        <td class="alarms-td-target">${targetName}</td>
+        <td class="alarms-td-time">${this._formatAlarmDateTime(alarm.triggered_at)}</td>
+        <td class="alarms-td-time">${this._formatAlarmDateTime(alarm.cleared_at)}</td>
+      </tr>
+    `
+  },
+
+  _renderAlarmsRulesView() {
+    return `
+      <div class="alarms-placeholder-view">
+        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span class="alarms-placeholder-title">ALARM RULES</span>
+        <span class="alarms-placeholder-text">Alarm rules management coming soon</span>
+      </div>
+    `
+  },
+
+  _renderAlarmsAnalyticsView() {
+    return `
+      <div class="alarms-placeholder-view">
+        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        <span class="alarms-placeholder-title">ANALYTICS</span>
+        <span class="alarms-placeholder-text">Alarm analytics coming soon</span>
+      </div>
+    `
+  },
+
+  // =====================================================
+  // Alarm Panel View (Annunciator Panel)
+  // =====================================================
+
+  _renderAlarmsPanelView() {
+    const panelCells = this._computePanelCells()
+    const selectedCell = this.alarmPanelSelectedCell
+      ? panelCells.find(c => c.rule.id === this.alarmPanelSelectedCell)
+      : null
+
+    // Count active alarms by state
+    const activeCells = panelCells.filter(c => c.state !== 'ok')
+    const criticalCount = activeCells.filter(c => c.rule.severity === 'critical' && c.state === 'active').length
+    const warningCount = activeCells.filter(c => c.rule.severity === 'warning' && c.state === 'active').length
+    const ackCount = activeCells.filter(c => c.state === 'acknowledged').length
+
+    return `
+      <div class="alarms-panel-fullwidth">
+        <!-- Header Bar -->
+        <div class="alarms-panel-header-bar">
+          <div class="alarms-panel-title">
+            <span class="mc-label-subsystem">ANNUNCIATOR PANEL</span>
+            <span class="alarms-count">${panelCells.length} rules</span>
+            ${criticalCount > 0 ? `<span class="alarms-panel-badge critical">${criticalCount} CRIT</span>` : ''}
+            ${warningCount > 0 ? `<span class="alarms-panel-badge warning">${warningCount} WARN</span>` : ''}
+            ${ackCount > 0 ? `<span class="alarms-panel-badge ack">${ackCount} ACK</span>` : ''}
+          </div>
+          <div class="alarms-panel-controls">
+            <select class="alarms-panel-size-select" id="panel-size-select">
+              <option value="auto" ${this.alarmPanelGridSize === 'auto' ? 'selected' : ''}>Auto</option>
+              <option value="small" ${this.alarmPanelGridSize === 'small' ? 'selected' : ''}>Small</option>
+              <option value="medium" ${this.alarmPanelGridSize === 'medium' ? 'selected' : ''}>Medium</option>
+              <option value="large" ${this.alarmPanelGridSize === 'large' ? 'selected' : ''}>Large</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Full-width Grid -->
+        <div class="alarms-panel-grid alarms-panel-grid-${this.alarmPanelGridSize}">
+          ${panelCells.length > 0 ? panelCells.map(cell => this._renderPanelCell(cell)).join('') : `
+            <div class="alarms-panel-empty">
+              <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+              </svg>
+              <span>No alarm rules configured</span>
+            </div>
+          `}
+        </div>
+
+        <!-- Slide-up Detail Overlay -->
+        ${selectedCell ? `
+          <div class="alarms-panel-overlay">
+            <div class="alarms-panel-overlay-content">
+              <button class="alarms-panel-overlay-close" data-action="close-panel-overlay">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+              ${this._renderPanelOverlayContent(selectedCell)}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `
+  },
+
+  _renderPanelOverlayContent(selectedCell) {
+    const rule = selectedCell.rule
+    const alarm = selectedCell.alarm
+    const targetName = rule.target_id
+      ? (this.targets.find(t => t.id === rule.target_id)?.name || 'Unknown')
+      : 'All Targets'
+
+    if (alarm) {
+      // Active alarm - show alarm details with actions
+      const timeSince = this._formatTimeSince(alarm.triggered_at)
+      return `
+        <div class="alarms-panel-overlay-grid">
+          <div class="alarms-panel-overlay-main">
+            <div class="alarms-panel-overlay-header">
+              <span class="alarms-detail-severity severity-${alarm.severity}">${alarm.severity.toUpperCase()}</span>
+              <span class="alarms-detail-source">${rule.name}</span>
+              <span class="alarms-panel-overlay-status state-${alarm.status}">${alarm.status.toUpperCase()}</span>
+            </div>
+            <p class="alarms-panel-overlay-message">${alarm.message || 'No message'}</p>
+          </div>
+          <div class="alarms-panel-overlay-meta">
+            <div class="alarms-panel-overlay-item">
+              <span class="label">TARGET</span>
+              <span class="value">${targetName}</span>
+            </div>
+            <div class="alarms-panel-overlay-item">
+              <span class="label">TRIGGERED</span>
+              <span class="value">${timeSince} ago</span>
+            </div>
+            <div class="alarms-panel-overlay-item">
+              <span class="label">SOURCE</span>
+              <span class="value">${alarm.source_id || 'N/A'}</span>
+            </div>
+            ${alarm.current_value !== null ? `
+              <div class="alarms-panel-overlay-item">
+                <span class="label">VALUE</span>
+                <span class="value">${typeof alarm.current_value === 'number' ? alarm.current_value.toFixed(2) : alarm.current_value}</span>
+              </div>
+            ` : ''}
+          </div>
+          <div class="alarms-panel-overlay-actions">
+            ${alarm.status === 'active' ? `
+              <button class="alarm-action-btn acknowledge" data-alarm-id="${alarm.id}">ACKNOWLEDGE</button>
+              <button class="alarm-action-btn shelve" data-alarm-id="${alarm.id}">SHELVE</button>
+            ` : ''}
+            ${alarm.status === 'acknowledged' ? `
+              <button class="alarm-action-btn shelve" data-alarm-id="${alarm.id}">SHELVE</button>
+            ` : ''}
+            ${alarm.status === 'shelved' ? `
+              <button class="alarm-action-btn unshelve" data-alarm-id="${alarm.id}">UNSHELVE</button>
+            ` : ''}
+            <button class="alarm-action-btn clear" data-alarm-id="${alarm.id}">CLEAR</button>
+          </div>
+        </div>
+      `
+    } else {
+      // Rule is OK - show rule info
+      return `
+        <div class="alarms-panel-overlay-grid">
+          <div class="alarms-panel-overlay-main">
+            <div class="alarms-panel-overlay-header">
+              <span class="alarms-detail-severity severity-${rule.severity}">${rule.severity.toUpperCase()}</span>
+              <span class="alarms-detail-source">${rule.name}</span>
+              <span class="alarms-panel-overlay-status state-ok">OK</span>
+            </div>
+            <p class="alarms-panel-overlay-message">This alarm rule is not currently triggered.</p>
+          </div>
+          <div class="alarms-panel-overlay-meta">
+            <div class="alarms-panel-overlay-item">
+              <span class="label">TARGET</span>
+              <span class="value">${targetName}</span>
+            </div>
+            <div class="alarms-panel-overlay-item">
+              <span class="label">EVENT TYPE</span>
+              <span class="value">${rule.event_type || 'telemetry_limit'}</span>
+            </div>
+            ${rule.message_template ? `
+              <div class="alarms-panel-overlay-item wide">
+                <span class="label">MESSAGE TEMPLATE</span>
+                <span class="value">${rule.message_template}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `
+    }
+  },
+
+  _computePanelCells() {
+    const cells = (this.alarmRules || []).map(rule => {
+      // Find matching active alarm via alarm_rule_id
+      const activeAlarm = (this.alarms || []).find(a => a.alarm_rule_id === rule.id)
+
+      return {
+        rule,
+        alarm: activeAlarm || null,
+        state: this._getPanelCellState(activeAlarm),
+        value: activeAlarm?.current_value,
+        triggeredAt: activeAlarm?.triggered_at
+      }
+    })
+
+    // Sort by severity (critical first), then by state (active first)
+    const severityOrder = { critical: 0, warning: 1, info: 2 }
+    const stateOrder = { active: 0, acknowledged: 1, shelved: 2, ok: 3 }
+
+    return cells.sort((a, b) => {
+      const sevDiff = (severityOrder[a.rule.severity] || 2) - (severityOrder[b.rule.severity] || 2)
+      if (sevDiff !== 0) return sevDiff
+      return (stateOrder[a.state] || 3) - (stateOrder[b.state] || 3)
+    })
+  },
+
+  _getPanelCellState(alarm) {
+    if (!alarm) return 'ok'
+    return alarm.status  // 'active', 'acknowledged', 'shelved'
+  },
+
+  _renderPanelCell(cell) {
+    const isSelected = this.alarmPanelSelectedCell === cell.rule.id
+    const targetName = cell.rule.target_id
+      ? (this.targets.find(t => t.id === cell.rule.target_id)?.name || 'Unknown')
+      : 'All'
+
+    // Format time since triggered
+    const timeSince = cell.triggeredAt ? this._formatTimeSince(cell.triggeredAt) : null
+
+    // Format value (show only for active alarms with numeric value)
+    const valueStr = (cell.value !== null && cell.value !== undefined)
+      ? (typeof cell.value === 'number' ? cell.value.toFixed(2) : String(cell.value))
+      : null
+
+    return `
+      <div class="alarm-panel-cell state-${cell.state} severity-${cell.rule.severity} ${isSelected ? 'selected' : ''}"
+           data-rule-id="${cell.rule.id}"
+           data-alarm-id="${cell.alarm?.id || ''}">
+        <div class="alarm-panel-cell-header">
+          <span class="alarm-panel-cell-name" title="${cell.rule.name}">${cell.rule.name}</span>
+          <span class="alarm-panel-cell-indicator"></span>
+        </div>
+        <div class="alarm-panel-cell-body">
+          ${valueStr ? `<span class="alarm-panel-cell-value">${valueStr}</span>` : ''}
+          ${timeSince ? `<span class="alarm-panel-cell-time">${timeSince}</span>` : ''}
+          ${!valueStr && !timeSince ? `<span class="alarm-panel-cell-status">OK</span>` : ''}
+        </div>
+        <div class="alarm-panel-cell-footer">
+          <span class="alarm-panel-cell-target">${targetName}</span>
+        </div>
+      </div>
+    `
+  },
+
+  _formatTimeSince(isoString) {
+    if (!isoString) return null
+    const triggered = new Date(isoString)
+    const now = new Date()
+    const diffMs = now - triggered
+    const diffSecs = Math.floor(diffMs / 1000)
+
+    if (diffSecs < 60) return `${diffSecs}s`
+    if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m`
+    if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)}h`
+    return `${Math.floor(diffSecs / 86400)}d`
+  },
+
+  _getFilteredAlarms() {
+    let alarms = this.alarms || []
+
+    // Filter by status
+    alarms = alarms.filter(a => this.alarmsFilterStatus.has(a.status))
+
+    // Filter by severity
+    alarms = alarms.filter(a => this.alarmsFilterSeverity.has(a.severity))
+
+    // Filter by selected targets (empty set = all targets)
+    if (this.alarmsSelectedTargets.size > 0) {
+      alarms = alarms.filter(a => this.alarmsSelectedTargets.has(a.target_id))
+    }
+
+    // Filter by search query
+    if (this.alarmsSearchQuery) {
+      const query = this.alarmsSearchQuery.toLowerCase()
+      alarms = alarms.filter(a =>
+        a.source_id?.toLowerCase().includes(query) ||
+        a.message?.toLowerCase().includes(query)
+      )
+    }
+
+    return alarms
+  },
+
+  _groupAlarmsBySeverity(alarms) {
+    const groups = {
+      critical: [],
+      warning: [],
+      info: []
+    }
+
+    for (const alarm of alarms) {
+      if (groups[alarm.severity]) {
+        groups[alarm.severity].push(alarm)
+      }
+    }
+
+    // Sort each group by triggered_at (newest first)
+    for (const severity of Object.keys(groups)) {
+      groups[severity].sort((a, b) => new Date(b.triggered_at) - new Date(a.triggered_at))
+    }
+
+    return groups
+  },
+
+  _renderAlarmGroups(groupedAlarms) {
+    const severities = ['critical', 'warning', 'info']
+    const severityLabels = {
+      critical: 'CRITICAL',
+      warning: 'WARNING',
+      info: 'INFO'
+    }
+
+    return severities.map(severity => {
+      const alarms = groupedAlarms[severity]
+      const isCollapsed = this.alarmsCollapsedGroups.has(severity)
+      const count = alarms.length
+
+      if (count === 0) return ''
+
+      return `
+        <div class="alarms-group severity-${severity}">
+          <div class="alarms-group-header" data-severity="${severity}">
+            <svg class="alarms-group-chevron ${isCollapsed ? 'collapsed' : ''}"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+            <span class="alarms-group-dot severity-${severity}"></span>
+            <span class="alarms-group-label">${severityLabels[severity]}</span>
+            <span class="alarms-group-count">${count}</span>
+          </div>
+          <div class="alarms-group-items ${isCollapsed ? 'collapsed' : ''}">
+            ${alarms.map(alarm => this._renderAlarmRow(alarm)).join('')}
+          </div>
+        </div>
+      `
+    }).join('')
+  },
+
+  _renderAlarmRow(alarm) {
+    const isSelected = this.alarmsSelectedAlarm === alarm.id
+    const triggeredTime = this._formatAlarmTime(alarm.triggered_at)
+    const targetName = alarm.target_id
+      ? (this.targets.find(t => t.id === alarm.target_id)?.name || 'Unknown')
+      : 'System'
+
+    return `
+      <div class="alarms-row ${isSelected ? 'selected' : ''} status-${alarm.status}"
+           data-alarm-id="${alarm.id}">
+        <div class="alarms-row-main">
+          <span class="alarms-row-status status-${alarm.status}"></span>
+          <div class="alarms-row-content">
+            <div class="alarms-row-source">${alarm.source_id || 'Unknown'}</div>
+            <div class="alarms-row-message">${alarm.message || 'No message'}</div>
+          </div>
+          <div class="alarms-row-meta">
+            <span class="alarms-row-target">${targetName}</span>
+            <span class="alarms-row-time">${triggeredTime}</span>
+          </div>
+        </div>
+        <div class="alarms-row-actions">
+          ${alarm.status === 'active' ? `
+            <button class="alarms-action-btn" data-action="acknowledge" data-alarm-id="${alarm.id}" title="Acknowledge">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            </button>
+          ` : ''}
+          ${alarm.status !== 'shelved' ? `
+            <button class="alarms-action-btn" data-action="shelve" data-alarm-id="${alarm.id}" title="Shelve">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </button>
+          ` : `
+            <button class="alarms-action-btn" data-action="unshelve" data-alarm-id="${alarm.id}" title="Unshelve">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </button>
+          `}
+        </div>
+      </div>
+    `
+  },
+
+  _renderAlarmDetailPanel(alarm) {
+    const targetName = alarm.target_id
+      ? (this.targets.find(t => t.id === alarm.target_id)?.name || 'Unknown')
+      : 'System'
+    const triggeredTime = this._formatAlarmDateTime(alarm.triggered_at)
+
+    return `
+      <div class="alarms-detail-content">
+        <!-- Header -->
+        <div class="alarms-detail-header">
+          <div class="alarms-detail-title">
+            <span class="alarms-detail-severity severity-${alarm.severity}">${alarm.severity.toUpperCase()}</span>
+            <span class="alarms-detail-source">${alarm.source_id || 'Unknown'}</span>
+          </div>
+          <span class="alarms-detail-status status-${alarm.status}">${alarm.status.toUpperCase()}</span>
+        </div>
+
+        <!-- Message -->
+        <div class="alarms-detail-section">
+          <span class="alarms-detail-label">MESSAGE</span>
+          <p class="alarms-detail-message">${alarm.message || 'No message provided'}</p>
+        </div>
+
+        <!-- Details Grid -->
+        <div class="alarms-detail-grid">
+          <div class="alarms-detail-item">
+            <span class="alarms-detail-label">TARGET</span>
+            <span class="alarms-detail-value">${targetName}</span>
+          </div>
+          <div class="alarms-detail-item">
+            <span class="alarms-detail-label">TRIGGERED</span>
+            <span class="alarms-detail-value">${triggeredTime}</span>
+          </div>
+          ${alarm.current_value !== null && alarm.current_value !== undefined ? `
+            <div class="alarms-detail-item">
+              <span class="alarms-detail-label">VALUE</span>
+              <span class="alarms-detail-value">${alarm.current_value}</span>
+            </div>
+          ` : ''}
+          ${alarm.limit_state ? `
+            <div class="alarms-detail-item">
+              <span class="alarms-detail-label">LIMIT STATE</span>
+              <span class="alarms-detail-value limit-${alarm.limit_state}">${alarm.limit_state.toUpperCase()}</span>
+            </div>
+          ` : ''}
+          ${alarm.acknowledged_at ? `
+            <div class="alarms-detail-item">
+              <span class="alarms-detail-label">ACKNOWLEDGED</span>
+              <span class="alarms-detail-value">${this._formatAlarmDateTime(alarm.acknowledged_at)}</span>
+            </div>
+          ` : ''}
+          ${alarm.shelved_until ? `
+            <div class="alarms-detail-item">
+              <span class="alarms-detail-label">SHELVED UNTIL</span>
+              <span class="alarms-detail-value">${this._formatAlarmDateTime(alarm.shelved_until)}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Actions -->
+        <div class="alarms-detail-actions">
+          ${alarm.status === 'active' ? `
+            <button class="btn btn-primary btn-sm" data-action="acknowledge" data-alarm-id="${alarm.id}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              ACKNOWLEDGE
+            </button>
+          ` : ''}
+          ${alarm.status !== 'shelved' ? `
+            <button class="btn btn-warning btn-sm" data-action="shelve" data-alarm-id="${alarm.id}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              SHELVE
+            </button>
+          ` : `
+            <button class="btn btn-success btn-sm" data-action="unshelve" data-alarm-id="${alarm.id}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              UNSHELVE
+            </button>
+          `}
+          <button class="btn btn-error btn-sm" data-action="clear" data-alarm-id="${alarm.id}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            CLEAR
+          </button>
+        </div>
+      </div>
+    `
+  },
+
+  _formatAlarmTime(isoString) {
+    if (!isoString) return '--:--'
+    const date = new Date(isoString)
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    })
+  },
+
+  _formatAlarmDateTime(isoString) {
+    if (!isoString) return '--'
+    const date = new Date(isoString)
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+  },
+
+  _bindAlarmsModeEvents(container) {
+    // View tab switching
+    container.querySelectorAll('.alarms-view-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const view = tab.dataset.view
+        this.alarmsViewMode = view
+
+        // Load data on-demand when switching views
+        if (view === 'panel') {
+          this.pushEvent('load_alarm_rules', {})
+        } else if (view === 'historical') {
+          this.pushEvent('load_historical_alarms', { time_range: this.alarmsFilterTimeRange })
+        }
+
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Status filter buttons (only for active view)
+    container.querySelectorAll('.alarms-filter-btn[data-status]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const status = btn.dataset.status
+        if (this.alarmsFilterStatus.has(status)) {
+          this.alarmsFilterStatus.delete(status)
+        } else {
+          this.alarmsFilterStatus.add(status)
+        }
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Time range filter buttons (for historical view)
+    container.querySelectorAll('.alarms-filter-btn[data-time-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const timeRange = btn.dataset.timeRange
+        this.alarmsFilterTimeRange = timeRange
+        this.pushEvent('load_historical_alarms', { time_range: timeRange })
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Severity filter buttons
+    container.querySelectorAll('.alarms-severity-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const severity = btn.dataset.severity
+        if (this.alarmsFilterSeverity.has(severity)) {
+          this.alarmsFilterSeverity.delete(severity)
+        } else {
+          this.alarmsFilterSeverity.add(severity)
+        }
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Target panel events
+    this._bindAlarmsTargetPanelEvents(container)
+
+    // Group header collapse/expand
+    container.querySelectorAll('.alarms-group-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const severity = header.dataset.severity
+        if (this.alarmsCollapsedGroups.has(severity)) {
+          this.alarmsCollapsedGroups.delete(severity)
+        } else {
+          this.alarmsCollapsedGroups.add(severity)
+        }
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Alarm row selection (active view)
+    container.querySelectorAll('.alarms-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        // Don't select if clicking on action buttons
+        if (e.target.closest('.alarms-action-btn')) return
+
+        const alarmId = row.dataset.alarmId
+        this.alarmsSelectedAlarm = alarmId
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Historical alarm row selection
+    container.querySelectorAll('.alarms-historical-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const alarmId = row.dataset.alarmId
+        this.alarmsSelectedAlarm = alarmId
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Panel cell selection
+    container.querySelectorAll('.alarm-panel-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const ruleId = cell.dataset.ruleId
+        const alarmId = cell.dataset.alarmId
+
+        this.alarmPanelSelectedCell = ruleId
+        // If cell has an active alarm, also set alarmsSelectedAlarm for reuse
+        if (alarmId) {
+          this.alarmsSelectedAlarm = alarmId
+        }
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Panel grid size selector
+    const sizeSelect = container.querySelector('#panel-size-select')
+    if (sizeSelect) {
+      sizeSelect.addEventListener('change', (e) => {
+        this.alarmPanelGridSize = e.target.value
+        this._renderAlarmsMode()
+      })
+    }
+
+    // Panel overlay close button
+    const closeOverlayBtn = container.querySelector('[data-action="close-panel-overlay"]')
+    if (closeOverlayBtn) {
+      closeOverlayBtn.addEventListener('click', () => {
+        this.alarmPanelSelectedCell = null
+        this.alarmsSelectedAlarm = null
+        this._renderAlarmsMode()
+      })
+    }
+
+    // Panel overlay action buttons
+    container.querySelectorAll('.alarms-panel-overlay-actions .alarm-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const alarmId = btn.dataset.alarmId
+        if (btn.classList.contains('acknowledge')) {
+          this.pushEvent('acknowledge_alarm', { id: alarmId })
+        } else if (btn.classList.contains('shelve')) {
+          this.pushEvent('open_shelve_modal', { id: alarmId })
+        } else if (btn.classList.contains('unshelve')) {
+          this.pushEvent('unshelve_alarm', { id: alarmId })
+        } else if (btn.classList.contains('clear')) {
+          this.pushEvent('clear_alarm', { id: alarmId })
+        }
+      })
+    })
+
+    // Inline action buttons
+    container.querySelectorAll('.alarms-action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const action = btn.dataset.action
+        const alarmId = btn.dataset.alarmId
+        this._handleAlarmAction(action, alarmId)
+      })
+    })
+
+    // Detail panel action buttons
+    container.querySelectorAll('.alarms-detail-actions button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action
+        const alarmId = btn.dataset.alarmId
+        this._handleAlarmAction(action, alarmId)
+      })
+    })
+
+    // Acknowledge All Visible button
+    const ackAllBtn = container.querySelector('#alarms-ack-all')
+    if (ackAllBtn) {
+      ackAllBtn.addEventListener('click', () => {
+        const activeAlarms = this._getFilteredAlarms().filter(a => a.status === 'active')
+        const alarmIds = activeAlarms.map(a => a.id)
+        if (alarmIds.length > 0) {
+          this.pushEvent('acknowledge_alarms', { alarm_ids: alarmIds })
+        }
+      })
+    }
+
+    // Resize handle for split view
+    this._bindAlarmsResizeHandle(container)
+  },
+
+  _bindAlarmsTargetPanelEvents(container) {
+    // Target cell selection
+    container.querySelectorAll('.alarms-target-cell').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const targetId = cell.dataset.targetId
+        if (this.alarmsSelectedTargets.has(targetId)) {
+          this.alarmsSelectedTargets.delete(targetId)
+        } else {
+          this.alarmsSelectedTargets.add(targetId)
+        }
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Target search input
+    const targetSearch = container.querySelector('#alarms-target-search')
+    if (targetSearch) {
+      targetSearch.addEventListener('input', (e) => {
+        this.alarmsTargetSearch = e.target.value
+        this._renderAlarmsMode()
+      })
+    }
+
+    // Target view mode toggle
+    container.querySelectorAll('.alarms-view-btn[data-target-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.alarmsTargetViewMode = btn.dataset.targetView
+        this._renderAlarmsMode()
+      })
+    })
+
+    // Select All button
+    const selectAllBtn = container.querySelector('#alarms-select-all-targets')
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        this.targets.forEach(t => this.alarmsSelectedTargets.add(t.id))
+        this._renderAlarmsMode()
+      })
+    }
+
+    // Clear button
+    const clearBtn = container.querySelector('#alarms-clear-targets')
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.alarmsSelectedTargets.clear()
+        this._renderAlarmsMode()
+      })
+    }
+  },
+
+  _bindAlarmsResizeHandle(container) {
+    const panelsRow = container.querySelector('#alarms-panels-row')
+    if (!panelsRow) return
+
+    // Target panel resize handle
+    const targetResizeHandle = container.querySelector('#alarms-target-resize-handle')
+    if (targetResizeHandle) {
+      this._setupResizeHandle(targetResizeHandle, panelsRow, '#alarms-target-panel', 'alarmsTargetPanelWidth', 15, 40)
+    }
+
+    // List panel resize handle
+    const listResizeHandle = container.querySelector('#alarms-resize-handle')
+    if (listResizeHandle) {
+      this._setupResizeHandle(listResizeHandle, panelsRow, '#alarms-list-panel', 'alarmsListPanelWidth', 25, 60)
+    }
+  },
+
+  _setupResizeHandle(handle, panelsRow, panelSelector, stateKey, minPercent, maxPercent) {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+
+      const panel = panelsRow.querySelector(panelSelector)
+      if (!panel) return
+
+      handle.classList.add('dragging')
+
+      const startX = e.clientX
+      const layoutRect = panelsRow.getBoundingClientRect()
+      const startWidth = panel.getBoundingClientRect().width
+      const layoutWidth = layoutRect.width
+
+      const onMouseMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX
+        const newWidth = startWidth + deltaX
+        const newPercent = (newWidth / layoutWidth) * 100
+
+        const clampedPercent = Math.max(minPercent, Math.min(maxPercent, newPercent))
+
+        panel.style.flex = `0 0 ${clampedPercent}%`
+        this[stateKey] = clampedPercent
+      }
+
+      const onMouseUp = () => {
+        handle.classList.remove('dragging')
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    })
+  },
+
+  _handleAlarmAction(action, alarmId) {
+    switch (action) {
+      case 'acknowledge':
+        this.pushEvent('acknowledge_alarm', { id: alarmId })
+        break
+      case 'shelve':
+        // Open the shelve modal (existing handler)
+        this.pushEvent('open_shelve_modal', { id: alarmId })
+        break
+      case 'unshelve':
+        this.pushEvent('unshelve_alarm', { id: alarmId })
+        break
+      case 'clear':
+        this.pushEvent('clear_alarm', { id: alarmId })
+        break
+    }
   },
 
   updated() {

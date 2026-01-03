@@ -108,6 +108,46 @@ defmodule Cadence.Application.Alerting.AlarmQueries do
   end
 
   @doc """
+  Lists historical (cleared) alarms for a mission.
+
+  ## Options
+
+  - `:time_range` - Filter by time range: `:1h`, `:6h`, `:24h`, `:7d`, `:all` (default: `:all`)
+  - `:target_id` - Filter by target UUID
+  - `:severity` - Filter by severity (atom or list of atoms)
+  - `:limit` - Maximum number of results (default: 100)
+  - `:offset` - Offset for pagination (default: 0)
+
+  ## Examples
+
+      # All historical alarms
+      AlarmQueries.list_historical(mission_id)
+
+      # Historical alarms from last 24 hours
+      AlarmQueries.list_historical(mission_id, time_range: :"24h")
+  """
+  @spec list_historical(mission_id(), opts()) :: [Alarm.t()]
+  def list_historical(mission_id, opts \\ []) do
+    time_range = Keyword.get(opts, :time_range, :all)
+    since = time_range_to_datetime(time_range)
+
+    opts =
+      opts
+      |> Keyword.put(:status, :cleared)
+      |> Keyword.put(:cleared_since, since)
+      |> Keyword.delete(:time_range)
+
+    repo().list(mission_id, opts)
+  end
+
+  defp time_range_to_datetime(:all), do: nil
+  defp time_range_to_datetime(:"1h"), do: DateTime.add(DateTime.utc_now(), -1, :hour)
+  defp time_range_to_datetime(:"6h"), do: DateTime.add(DateTime.utc_now(), -6, :hour)
+  defp time_range_to_datetime(:"24h"), do: DateTime.add(DateTime.utc_now(), -24, :hour)
+  defp time_range_to_datetime(:"7d"), do: DateTime.add(DateTime.utc_now(), -7, :day)
+  defp time_range_to_datetime(_), do: nil
+
+  @doc """
   Counts alarms by status for a mission.
 
   Returns a map of status to count.

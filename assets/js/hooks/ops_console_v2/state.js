@@ -47,6 +47,9 @@ export function initializeState(hook) {
   // Initialize queue mode state
   initializeQueueState(hook)
 
+  // Initialize alarms mode state
+  initializeAlarmsState(hook)
+
   // Live time update interval for timeline mode
   hook._timelineUpdateInterval = null
 }
@@ -208,4 +211,56 @@ export function resetQueueState(hook) {
   hook.queueSelectedEntries = new Set()
   hook.queueManageSelectedTarget = null
   hook.queueTargetStatuses = new Map()
+}
+
+/**
+ * Initialize alarms mode state
+ * @param {Object} hook - The LiveView hook instance
+ */
+export function initializeAlarmsState(hook) {
+  // Alarms view mode: 'active', 'panel', 'historical', 'rules', 'analytics'
+  hook.alarmsViewMode = 'active'
+
+  // Filter state
+  hook.alarmsFilterStatus = new Set(['active', 'acknowledged', 'shelved'])
+  hook.alarmsFilterSeverity = new Set(['critical', 'warning', 'info'])
+  hook.alarmsFilterTimeRange = 'all'  // '1h', '6h', '24h', '7d', 'all'
+  hook.alarmsSearchQuery = ''
+
+  // Target selection state
+  hook.alarmsSelectedTargets = new Set()  // Selected target IDs (empty = all targets)
+  hook.alarmsTargetSearch = ''            // Target search filter
+  hook.alarmsTargetViewMode = 'compact'   // 'compact' or 'detailed'
+  hook.alarmsTargetPanelWidth = 25        // Target panel width percentage
+
+  // Selection state
+  hook.alarmsSelectedAlarm = null     // Currently selected alarm for detail panel
+  hook.alarmsCollapsedGroups = new Set()  // Collapsed severity groups
+
+  // Split view layout
+  hook.alarmsListPanelWidth = 45      // List panel width percentage (default 45%)
+
+  // Historical alarms (loaded on demand)
+  hook.historicalAlarms = []
+
+  // Panel view state (annunciator panel)
+  hook.alarmRules = []                // Loaded alarm rules for Panel view
+  hook.alarmPanelGridSize = 'auto'    // 'auto', 'small', 'medium', 'large'
+  hook.alarmPanelSelectedCell = null  // Selected rule ID for Panel detail
+
+  // Debounce timer
+  hook._alarmsSearchDebounce = null
+}
+
+/**
+ * Reset alarms mode state (useful when switching modes)
+ * @param {Object} hook - The LiveView hook instance
+ */
+export function resetAlarmsState(hook) {
+  hook.alarmsSelectedAlarm = null
+  hook.alarmsCollapsedGroups = new Set()
+  hook.alarmsSearchQuery = ''
+  hook.alarmPanelSelectedCell = null
+  hook.alarmsSelectedTargets = new Set()
+  hook.alarmsTargetSearch = ''
 }
