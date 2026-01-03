@@ -2,33 +2,9 @@
  * Ops Console Styles
  *
  * Styles for the mission control operator console including:
- * - Golden Layout theming
  * - GridStack theming
  * - Widget styles
  */
-
-/* Golden Layout Base Overrides */
-.lm_goldenlayout {
-  background-color: var(--color-base-100);
-}
-
-.lm_content {
-  background-color: var(--color-base-100);
-  border: none;
-}
-
-/* Hide Golden Layout headers/tabs - we don't use tabbed panels */
-.lm_header {
-  display: none !important;
-}
-
-.lm_splitter {
-  background-color: var(--color-base-300) !important;
-}
-
-.lm_splitter:hover {
-  background-color: var(--color-primary) !important;
-}
 
 /* GridStack Theme */
 .grid-stack {

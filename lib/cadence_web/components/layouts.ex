@@ -710,13 +710,6 @@ defmodule CadenceWeb.Layouts do
           Ops Console <span class="badge badge-xs badge-primary">Live</span>
         </span>
       </.sidebar_nav_item>
-
-      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/ops-v2"} active={false}>
-        <:icon><.icon name="hero-sparkles" class="h-5 w-5" /></:icon>
-        <span class="flex items-center gap-2">
-          Ops Console V2 <span class="badge badge-xs badge-accent">New</span>
-        </span>
-      </.sidebar_nav_item>
     <% end %>
     """
   end

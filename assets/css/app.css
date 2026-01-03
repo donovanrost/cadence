@@ -302,8 +302,8 @@
 /* Custom Panel Layout System */
 @import "./components/panel-layout.css";
 
-/* Widget Styles */
-@import "./components/widgets.css";
+/* Widget Components - unified styling for Phoenix and JS widgets */
+@import "./components/widget-components.css";
 
 /* Target Selection Panel - shared component */
 @import "./components/target-selection-panel.css";
@@ -329,8 +329,7 @@
    ============================================ */
 
 /* Library CSS for Ops Console */
-@import "../node_modules/golden-layout/dist/css/goldenlayout-base.css";
 @import "../node_modules/gridstack/dist/gridstack.min.css";
 
-/* Ops Console V1 styles */
+/* Ops Console styles */
 @import "./ops-console.css";

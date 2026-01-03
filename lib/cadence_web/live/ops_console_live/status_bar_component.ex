@@ -1,6 +1,6 @@
-defmodule CadenceWeb.OpsConsoleV2Live.StatusBarComponent do
+defmodule CadenceWeb.OpsConsoleLive.StatusBarComponent do
   @moduledoc """
-  Global Status Bar for OPS Console V2.
+  Global Status Bar for OPS Console.
 
   Always-visible strip at top showing:
   - Mission name and operational mode

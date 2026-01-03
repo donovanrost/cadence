@@ -25,11 +25,11 @@ import "../../widgets/index"
 import { initializeState } from "./state"
 
 /**
- * OpsConsoleV2 LiveView Hook
+ * OpsConsole LiveView Hook
  */
-export const OpsConsoleV2Hook = {
+export const OpsConsoleHook = {
   mounted() {
-    console.log("[OpsConsoleV2] Mounting...", this.el.id)
+    console.log("[OpsConsole] Mounting...", this.el.id)
 
     // Initialize all state from data attributes
     initializeState(this)
@@ -51,25 +51,25 @@ export const OpsConsoleV2Hook = {
   async _init() {
     // Prevent re-initialization
     if (this._initialized) {
-      console.log("[OpsConsoleV2] Already initialized, skipping")
+      console.log("[OpsConsole] Already initialized, skipping")
       return
     }
 
     try {
       // 1. Initialize custom panel layout on the inner container
-      const layoutContainer = this.el.querySelector("#ops-console-v2")
+      const layoutContainer = this.el.querySelector("#ops-console")
       this.panelLayout = createPanelLayout(layoutContainer, {})
       this.panelLayout.init()
 
       // 2. Load saved panel state from localStorage (client-side preference)
-      const storageKey = `ops-console-v2-panels-${this.missionId}`
+      const storageKey = `ops-console-panels-${this.missionId}`
       try {
         const savedPanelState = localStorage.getItem(storageKey)
         if (savedPanelState) {
           this.panelLayout.loadState(JSON.parse(savedPanelState))
         }
       } catch (e) {
-        console.warn("[OpsConsoleV2] Failed to load panel state:", e)
+        console.warn("[OpsConsole] Failed to load panel state:", e)
       }
 
       // 3. Set up panel layout event handlers
@@ -112,10 +112,10 @@ export const OpsConsoleV2Hook = {
       this._setupKeyboardShortcuts()
 
       this._initialized = true
-      console.log("[OpsConsoleV2] Initialization complete")
+      console.log("[OpsConsole] Initialization complete")
 
     } catch (err) {
-      console.error("[OpsConsoleV2] Initialization failed:", err)
+      console.error("[OpsConsole] Initialization failed:", err)
     }
   },
 
@@ -135,22 +135,22 @@ export const OpsConsoleV2Hook = {
     // Handle layout state changes - persist to localStorage (client-side only)
     this.panelLayout.on("layout:changed", (state) => {
       this._debounce("saveLayout", () => {
-        const storageKey = `ops-console-v2-panels-${this.missionId}`
+        const storageKey = `ops-console-panels-${this.missionId}`
         try {
           localStorage.setItem(storageKey, JSON.stringify(state))
         } catch (e) {
-          console.warn("[OpsConsoleV2] Failed to save panel state:", e)
+          console.warn("[OpsConsole] Failed to save panel state:", e)
         }
       }, 500)
     })
 
     // Handle panel open/close for analytics or logging
     this.panelLayout.on("panel:opened", ({ panel }) => {
-      console.log("[OpsConsoleV2] Panel opened:", panel)
+      console.log("[OpsConsole] Panel opened:", panel)
     })
 
     this.panelLayout.on("panel:closed", ({ panel }) => {
-      console.log("[OpsConsoleV2] Panel closed:", panel)
+      console.log("[OpsConsole] Panel closed:", panel)
     })
   },
 
@@ -700,7 +700,7 @@ export const OpsConsoleV2Hook = {
     // Bind quick command handlers
     quickAccessContent.querySelector("#quick-target-select")?.addEventListener("change", (e) => {
       this.selectedTargetId = e.target.value || null
-      console.log("[OpsConsoleV2] Target selected:", this.selectedTargetId)
+      console.log("[OpsConsole] Target selected:", this.selectedTargetId)
     })
 
     quickAccessContent.querySelector("#quick-cmd-safe")?.addEventListener("click", () => {
@@ -843,7 +843,7 @@ export const OpsConsoleV2Hook = {
 
   async _connectTelemetry() {
     if (!this.token || !this.missionId) {
-      console.warn("[OpsConsoleV2] Missing token or missionId, skipping telemetry connection")
+      console.warn("[OpsConsole] Missing token or missionId, skipping telemetry connection")
       return
     }
 
@@ -872,7 +872,7 @@ export const OpsConsoleV2Hook = {
     try {
       await this.telemetryStore.connect(this.token, this.missionId, subscriptions)
     } catch (err) {
-      console.error("[OpsConsoleV2] Failed to connect telemetry:", err)
+      console.error("[OpsConsole] Failed to connect telemetry:", err)
     }
   },
 
@@ -914,12 +914,12 @@ export const OpsConsoleV2Hook = {
     })
 
     this.gridManager.on("widgetRemoved", ({ id }) => {
-      console.log("[OpsConsoleV2] Widget removed:", id)
+      console.log("[OpsConsole] Widget removed:", id)
       this._updateToolbar()
     })
 
     this.gridManager.on("widgetAdded", ({ id, type }) => {
-      console.log("[OpsConsoleV2] Widget added:", id, type)
+      console.log("[OpsConsole] Widget added:", id, type)
       this._updateToolbar()
     })
   },
@@ -931,10 +931,10 @@ export const OpsConsoleV2Hook = {
           try {
             this.gridManager.addWidget(payload)
           } catch (err) {
-            console.error("[OpsConsoleV2] Failed to add widget:", err)
+            console.error("[OpsConsole] Failed to add widget:", err)
           }
         } else {
-          console.error("[OpsConsoleV2] GridManager not initialized!")
+          console.error("[OpsConsole] GridManager not initialized!")
         }
       })
     })
@@ -1062,7 +1062,7 @@ export const OpsConsoleV2Hook = {
 
     // Handle staging updates (for multi-tab/multi-operator sync)
     this.handleEvent("staging_updated", (payload) => {
-      console.log("[OpsConsoleV2] Staging updated:", payload.action)
+      console.log("[OpsConsole] Staging updated:", payload.action)
       // The server will send load_staged_commands right after this
       // This event is just a notification that staging changed
     })
@@ -1092,7 +1092,7 @@ export const OpsConsoleV2Hook = {
   // ============================================================================
 
   _onModeChange() {
-    console.log("[OpsConsoleV2] Mode changed to:", this.currentMode)
+    console.log("[OpsConsole] Mode changed to:", this.currentMode)
 
     const dashboard = this.panelLayout?.elements?.dashboard
     if (!dashboard) return
@@ -5047,7 +5047,7 @@ export const OpsConsoleV2Hook = {
     })
 
     if (targets.length === 0) {
-      console.warn("[OpsConsoleV2] No staged params to add to staging area")
+      console.warn("[OpsConsole] No staged params to add to staging area")
       return
     }
 
@@ -7702,7 +7702,7 @@ export const OpsConsoleV2Hook = {
     })
 
     if (targetParams.length === 0) {
-      console.warn("[OpsConsoleV2] No staged params to dispatch")
+      console.warn("[OpsConsole] No staged params to dispatch")
       return
     }
 
@@ -9136,7 +9136,7 @@ export const OpsConsoleV2Hook = {
   },
 
   destroyed() {
-    console.log("[OpsConsoleV2] Destroying...")
+    console.log("[OpsConsole] Destroying...")
 
     // Clean up timeline update interval
     if (this._timelineUpdateInterval) {
@@ -9187,4 +9187,4 @@ export const OpsConsoleV2Hook = {
   }
 }
 
-export default OpsConsoleV2Hook
+export default OpsConsoleHook

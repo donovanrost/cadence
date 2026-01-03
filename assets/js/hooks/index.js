@@ -4,8 +4,11 @@
  * Exports all custom LiveView hooks for the Cadence application.
  */
 
-import { OpsConsoleHook } from "./ops_console_hook"
-import { OpsConsoleV2Hook } from "./ops_console_v2/index"
+import { OpsConsoleHook } from "./ops_console/index"
+
+// Widget hooks for Phoenix LiveComponents
+import { ValueDisplayWidgetHook } from "./widgets/value_display_hook"
+import { ProcedureElapsedHook } from "./widgets/procedure_elapsed_hook"
 
 /**
  * AutoScroll hook for log containers
@@ -358,12 +361,14 @@ const LogFilterHook = {
 
 export const Hooks = {
   OpsConsole: OpsConsoleHook,
-  OpsConsoleV2: OpsConsoleV2Hook,
   AutoScroll: AutoScrollHook,
   LogFilter: LogFilterHook,
   Sortable: SortableHook,
   Download: DownloadHook,
-  ProcedureNav: ProcedureNavHook
+  ProcedureNav: ProcedureNavHook,
+  // Widget hooks for Phoenix LiveComponents
+  ValueDisplayWidget: ValueDisplayWidgetHook,
+  ProcedureElapsed: ProcedureElapsedHook
 }
 
 export default Hooks
