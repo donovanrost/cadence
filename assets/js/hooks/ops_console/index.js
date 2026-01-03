@@ -373,10 +373,26 @@ export const OpsConsoleHook = {
     // Mode selector (expanded view)
     navContent.querySelectorAll(".nav-expanded .mode-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        // Update both expanded and rail buttons
+        const mode = btn.dataset.mode
+        const missionId = this.el.dataset.missionId
+
+        // Phoenix LiveView modes - navigate to new routes
+        const phoenixModes = {
+          'commands': `/missions/${missionId}/ops/commands`,
+          'queue': `/missions/${missionId}/ops/queue`,
+          'alarms': `/missions/${missionId}/ops/alarms`,
+          'timeline': `/missions/${missionId}/ops/timeline`
+        }
+
+        if (phoenixModes[mode]) {
+          window.location.href = phoenixModes[mode]
+          return
+        }
+
+        // JS modes - handle in-place
         navContent.querySelectorAll(".mode-btn, .rail-btn[data-mode]").forEach(b => b.classList.remove("active"))
-        navContent.querySelectorAll(`[data-mode="${btn.dataset.mode}"]`).forEach(b => b.classList.add("active"))
-        this.currentMode = btn.dataset.mode
+        navContent.querySelectorAll(`[data-mode="${mode}"]`).forEach(b => b.classList.add("active"))
+        this.currentMode = mode
         this._onModeChange()
       })
     })
@@ -384,9 +400,26 @@ export const OpsConsoleHook = {
     // Rail mode buttons
     navContent.querySelectorAll(".nav-rail .rail-btn[data-mode]").forEach(btn => {
       btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode
+        const missionId = this.el.dataset.missionId
+
+        // Phoenix LiveView modes - navigate to new routes
+        const phoenixModes = {
+          'commands': `/missions/${missionId}/ops/commands`,
+          'queue': `/missions/${missionId}/ops/queue`,
+          'alarms': `/missions/${missionId}/ops/alarms`,
+          'timeline': `/missions/${missionId}/ops/timeline`
+        }
+
+        if (phoenixModes[mode]) {
+          window.location.href = phoenixModes[mode]
+          return
+        }
+
+        // JS modes - handle in-place
         navContent.querySelectorAll(".mode-btn, .rail-btn[data-mode]").forEach(b => b.classList.remove("active"))
-        navContent.querySelectorAll(`[data-mode="${btn.dataset.mode}"]`).forEach(b => b.classList.add("active"))
-        this.currentMode = btn.dataset.mode
+        navContent.querySelectorAll(`[data-mode="${mode}"]`).forEach(b => b.classList.add("active"))
+        this.currentMode = mode
         this._onModeChange()
       })
     })

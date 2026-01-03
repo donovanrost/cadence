@@ -1761,6 +1761,18 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     }
   end
 
+  defp broadcast_timeline_event(socket, %Cadence.Timeline.Event{} = event) do
+    mission_id = socket.assigns.mission.id
+
+    Phoenix.PubSub.broadcast(
+      Cadence.PubSub,
+      "mission:#{mission_id}:timeline",
+      {:timeline_event, event}
+    )
+
+    push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+  end
+
   defp update_staged_commands(socket) do
     mission_id = socket.assigns.mission.id
     staged = Commands.list_staged(mission_id)
@@ -1813,7 +1825,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       source_table: :command_queue_entries
     }
 
-    push_event(socket, "timeline_event", %{event: timeline_event_json(timeline_event)})
+    broadcast_timeline_event(socket, timeline_event)
   end
 
   defp maybe_push_timeline_command_event(socket, _event), do: socket
@@ -1874,7 +1886,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       source_table: :alarms
     }
 
-    push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+    broadcast_timeline_event(socket, event)
   end
 
   defp format_alarm_event_description(:triggered), do: "Alarm triggered"
@@ -1922,7 +1934,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       source_table: :procedure_executions
     }
 
-    push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+    broadcast_timeline_event(socket, event)
   end
 
   defp format_procedure_event_description(%{event_type: :started}), do: "Execution started"

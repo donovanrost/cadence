@@ -2,25 +2,13 @@
    Queue Mode Styles - HUD Mission Control Theme
    ============================================================================= */
 
-/* Hide GridStack when Queue mode is active */
-.panel-dashboard.queue-mode-active .dashboard-toolbar,
-.panel-dashboard.queue-mode-active .dashboard-grid-wrapper {
-  display: none;
-}
-
-.panel-dashboard.queue-mode-active .queue-mode-container {
+/* Queue Mode Container - Standalone page layout */
+.queue-mode-container {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-/* Queue Mode Container */
-.queue-mode-container {
-  display: none;
-  flex-direction: column;
-  min-height: 0;
-  height: 0;
   overflow: hidden;
 }
 
@@ -1193,10 +1181,6 @@
   min-width: 80px;
 }
 
-.queue-global-actions .btn {
-  gap: var(--space-xs);
-}
-
 /* ----------------------------------------
    Empty State - HUD Style
    ---------------------------------------- */
@@ -1366,10 +1350,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-}
-
-.queue-global-actions .btn {
-  gap: var(--space-xs);
 }
 
 /* ----------------------------------------
@@ -1652,8 +1632,49 @@
   flex-wrap: wrap;
 }
 
-.queue-quick-actions .btn {
+/* HUD-styled action buttons */
+.queue-quick-actions .btn,
+.queue-global-actions .btn,
+.queue-bulk-bar .btn {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--surface-inset);
+  border: 1px solid var(--neutral-mid);
+  border-radius: var(--radius-sm);
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.queue-quick-actions .btn:hover,
+.queue-global-actions .btn:hover,
+.queue-bulk-bar .btn:hover {
+  background: oklch(from var(--glow-cyan) 22% 0.04 h);
+  border-color: oklch(from var(--glow-cyan) l c h / 0.5);
+  color: var(--glow-cyan);
+  box-shadow: 0 0 8px oklch(from var(--glow-cyan) l c h / 0.2);
+}
+
+.queue-quick-actions .btn:active,
+.queue-global-actions .btn:active,
+.queue-bulk-bar .btn:active {
+  background: oklch(from var(--glow-cyan) 25% 0.06 h);
+  transform: translateY(1px);
+}
+
+.queue-quick-actions .btn svg,
+.queue-global-actions .btn svg,
+.queue-bulk-bar .btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* ----------------------------------------

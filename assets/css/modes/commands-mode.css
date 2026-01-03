@@ -2,25 +2,13 @@
    Commands Mode Styles - HUD Mission Control Theme
    ============================================================================= */
 
-/* Hide GridStack when Commands mode is active */
-.panel-dashboard.commands-mode-active .dashboard-toolbar,
-.panel-dashboard.commands-mode-active .dashboard-grid-wrapper {
-  display: none;
-}
-
-.panel-dashboard.commands-mode-active .commands-mode-container {
+/* Commands Mode Container - Standalone page layout */
+.commands-mode-container {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-/* Commands Mode Container - uses flex, not absolute positioning */
-.commands-mode-container {
-  display: none;
-  flex-direction: column;
-  min-height: 0;
-  height: 0;
   overflow: hidden;
 }
 

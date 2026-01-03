@@ -359,6 +359,9 @@ const LogFilterHook = {
   }
 }
 
+// Lanes hooks have been migrated to colocated hooks in timeline.ex
+// See lib/cadence_web/live/ops_console_live/timeline.ex
+
 export const Hooks = {
   OpsConsole: OpsConsoleHook,
   AutoScroll: AutoScrollHook,

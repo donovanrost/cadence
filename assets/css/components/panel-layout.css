@@ -869,6 +869,22 @@
   letter-spacing: 0.05em;
 }
 
+/* Rail badge for queue entries */
+.rail-queue-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.rail-queue-badge:hover {
+  background: oklch(from var(--glow-cyan) l c h / 0.1);
+}
+
 /* Collapsible Context Panel Sections */
 .context-section {
   /* Section container */

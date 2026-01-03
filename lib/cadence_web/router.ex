@@ -202,7 +202,28 @@ defmodule CadenceWeb.Router do
         {CadenceWeb.LiveAuth, :load_mission}
       ],
       session: {CadenceWeb.LiveAuth, :on_session_init, []} do
-      live "/missions/:id/ops", OpsConsoleLive.Index, :index
+      # Dashboard mode (GridStack widgets)
+      live "/missions/:id/ops", OpsConsoleLive.Index, :dashboard
+
+      # Commands mode
+      live "/missions/:id/ops/commands", OpsConsoleLive.Commands, :index
+
+      # Queue mode
+      live "/missions/:id/ops/queue", OpsConsoleLive.Queue, :overview
+      live "/missions/:id/ops/queue/manage", OpsConsoleLive.Queue, :manage
+      live "/missions/:id/ops/queue/table", OpsConsoleLive.Queue, :table
+
+      # Alarms mode
+      live "/missions/:id/ops/alarms", OpsConsoleLive.Alarms, :active
+      live "/missions/:id/ops/alarms/panel", OpsConsoleLive.Alarms, :panel
+      live "/missions/:id/ops/alarms/history", OpsConsoleLive.Alarms, :historical
+      live "/missions/:id/ops/alarms/rules", OpsConsoleLive.Alarms, :rules
+      live "/missions/:id/ops/alarms/analytics", OpsConsoleLive.Alarms, :analytics
+
+      # Timeline mode
+      live "/missions/:id/ops/timeline", OpsConsoleLive.Timeline, :stream
+      live "/missions/:id/ops/timeline/matrix", OpsConsoleLive.Timeline, :matrix
+      live "/missions/:id/ops/timeline/lanes", OpsConsoleLive.Timeline, :lanes
     end
   end
 
