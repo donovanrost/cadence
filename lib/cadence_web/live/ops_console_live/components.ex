@@ -33,7 +33,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
         {render_slot(@expanded)}
       </div>
 
-      <div class="context-rail hidden flex-col items-center py-2 gap-1">
+      <div class="context-rail flex-col items-center py-2 gap-1">
         {render_slot(@rail)}
       </div>
     </div>

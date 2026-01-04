@@ -175,8 +175,8 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
         phx-hook=".PanelResize"
         data-mission-id={@mission.id}
       >
-        <!-- Nav Panel -->
-        <aside class="panel-nav" id="panel-nav">
+        <!-- Nav Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
+        <aside class="panel-nav" id="panel-nav" phx-update="ignore">
           <div class="panel-content h-full overflow-y-auto">
             <.live_component
               module={CadenceWeb.OpsConsoleLive.NavPanelComponent}
@@ -241,8 +241,8 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
             <!-- GridStack dashboard renders here via OpsConsole hook -->
           </div>
         </main>
-        <!-- Context Panel -->
-        <aside class="panel-context" id="panel-context">
+        <!-- Context Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
+        <aside class="panel-context" id="panel-context" phx-update="ignore">
           <!-- Toggle button -->
           <button
             class="panel-toggle panel-toggle-context"
@@ -272,7 +272,8 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
             />
           </div>
         </aside>
-        <!-- Inline script to apply saved panel state before first paint (prevents flash) -->
+        <!-- Inline script to apply saved panel widths before first paint (prevents layout flash) -->
+        <!-- Note: collapsed state is managed by the server to survive LiveView patches -->
         <script>
           (function() {
             try {
@@ -284,14 +285,14 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
                 var state = JSON.parse(saved);
                 var nav = document.getElementById('panel-nav');
                 var ctx = document.getElementById('panel-context');
-                // Set CSS custom properties on the layout element
-                if (state.navigation) {
-                  layout.style.setProperty('--nav-panel-width', state.navigation.width + 'px');
-                  if (!state.navigation.open && nav) nav.classList.add('collapsed');
+                // Apply widths only - collapsed state is server-managed
+                if (state.navigation && nav) {
+                  var navWidth = state.navigation.open === false ? 48 : (state.navigation.width || 220);
+                  nav.style.width = navWidth + 'px';
                 }
-                if (state.context) {
-                  layout.style.setProperty('--context-panel-width', state.context.width + 'px');
-                  if (!state.context.open && ctx) ctx.classList.add('collapsed');
+                if (state.context && ctx) {
+                  var ctxWidth = state.context.open === false ? 52 : (state.context.width || 260);
+                  ctx.style.width = ctxWidth + 'px';
                 }
               }
             } catch (e) {}
