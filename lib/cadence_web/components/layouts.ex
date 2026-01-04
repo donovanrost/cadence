@@ -494,8 +494,8 @@ defmodule CadenceWeb.Layouts do
         phx-hook=".PanelResize"
         data-mission-id={@mission.id}
       >
-        <!-- Nav Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
-        <aside class="panel-nav" id="panel-nav" phx-update="ignore">
+        <!-- Nav Panel -->
+        <aside class="panel-nav" id="panel-nav">
           <div class="panel-content h-full overflow-y-auto">
             <.live_component
               module={CadenceWeb.OpsConsoleLive.NavPanelComponent}
@@ -528,8 +528,8 @@ defmodule CadenceWeb.Layouts do
         <main class="panel-main">
           {@inner_content}
         </main>
-        <!-- Context Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
-        <aside class="panel-context" id="panel-context" phx-update="ignore">
+        <!-- Context Panel -->
+        <aside class="panel-context" id="panel-context">
           <!-- Toggle button -->
           <button
             class="panel-toggle panel-toggle-context"
@@ -625,6 +625,12 @@ defmodule CadenceWeb.Layouts do
           this.applyPanelStates()
           this.bindResizeHandlers()
           this.bindToggleButtons()
+        },
+
+        updated() {
+          // Re-apply saved panel states after LiveView updates
+          // This preserves panel width and collapsed state when content updates
+          this.applyPanelStates()
         },
 
         loadState() {
