@@ -63,7 +63,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       |> assign(:staging_view_mode, "table")
       |> assign(:show_param_modal, nil)
       |> assign(:param_form, %{})
-      |> assign(:dispatch_mode, :queue)
+      |> assign(:dispatch_mode, :stage)
       |> assign(:priority, 3)
       # Layout data
       |> assign(:alarm_counts, alarm_counts)
@@ -214,13 +214,20 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       class="cmd-slideout-backdrop visible"
       phx-click="close_param_modal"
     >
-      <div id="cmd-slideout" class="cmd-slideout visible" phx-click="ignore_slideout_click">
+      <.form
+        for={%{}}
+        phx-submit="stage_command"
+        id="cmd-slideout"
+        class="cmd-slideout visible"
+        phx-click="ignore_slideout_click"
+      >
         <div class="cmd-slideout-header">
           <div class="cmd-slideout-title">
             <div class="command-name">{@show_param_modal.name}</div>
             <div class="target-count">
-              {MapSet.size(@selected_targets)} target
-              {if MapSet.size(@selected_targets) != 1, do: "s", else: ""}
+              {MapSet.size(@selected_targets)} target{if MapSet.size(@selected_targets) != 1,
+                do: "s",
+                else: ""}
             </div>
           </div>
           <button
@@ -290,7 +297,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
                     end)
                   )
                 }
-                class="text-xs text-base-content/50"
+                class="cmd-empty-targets"
               >
                 No targets selected
               </span>
@@ -300,60 +307,101 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
           <div class="cmd-slideout-section">
             <div class="cmd-slideout-section-title">Parameters</div>
             <div class="cmd-param-form">
-              <.simple_form for={%{}} phx-submit="stage_command">
-                <div :if={@show_param_modal.arguments && length(@show_param_modal.arguments) > 0}>
-                  <.input
-                    :for={arg <- @show_param_modal.arguments}
-                    name={"params[#{arg.name}]"}
+              <div
+                :if={@show_param_modal.arguments && length(@show_param_modal.arguments) > 0}
+                class="cmd-param-inputs"
+              >
+                <div :for={arg <- @show_param_modal.arguments} class="cmd-param-field">
+                  <label class="cmd-param-label">{arg.name}</label>
+                  <input
                     type={param_input_type(arg)}
-                    label={arg.name}
+                    name={"params[#{arg.name}]"}
                     value={Map.get(@param_form, arg.name, arg.default_value)}
+                    class="cmd-param-input"
                   />
                 </div>
-                <div :if={!@show_param_modal.arguments || length(@show_param_modal.arguments) == 0}>
-                  <p class="text-base-content/60 text-sm">
-                    This command has no parameters.
-                  </p>
-                </div>
-
-                <div class="cmd-slideout-footer">
-                  <div class="cmd-slideout-priority">
-                    <label>Priority</label>
-                    <.input
-                      name="priority"
-                      type="select"
-                      label=""
-                      options={[
-                        {"Low (1)", "1"},
-                        {"Normal (3)", "3"},
-                        {"High (5)", "5"},
-                        {"Critical (7)", "7"}
-                      ]}
-                      value={to_string(@priority)}
-                    />
-                  </div>
-                  <div class="cmd-dispatch-actions">
-                    <button
-                      type="button"
-                      class="cmd-dispatch-btn cancel"
-                      phx-click="close_param_modal"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      class="cmd-dispatch-btn stage"
-                      phx-disable-with="Staging..."
-                    >
-                      Stage for {MapSet.size(@selected_targets)} target(s)
-                    </button>
-                  </div>
-                </div>
-              </.simple_form>
+              </div>
+              <div
+                :if={!@show_param_modal.arguments || length(@show_param_modal.arguments) == 0}
+                class="cmd-no-params"
+              >
+                This command has no parameters.
+              </div>
             </div>
           </div>
         </div>
-      </div>
+
+        <div class="cmd-slideout-footer">
+          <div class="cmd-slideout-options">
+            <div class="cmd-slideout-priority">
+              <label>Priority</label>
+              <select name="priority" class="cmd-priority-select">
+                <option value="1" selected={@priority == 1}>Low (1)</option>
+                <option value="3" selected={@priority == 3}>Normal (3)</option>
+                <option value="5" selected={@priority == 5}>High (5)</option>
+                <option value="7" selected={@priority == 7}>Critical (7)</option>
+              </select>
+            </div>
+            <div class="cmd-dispatch-mode">
+              <label>Action</label>
+              <div class="cmd-dispatch-mode-toggle">
+                <button
+                  type="button"
+                  class={["cmd-mode-btn", @dispatch_mode == :stage && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="stage"
+                >
+                  Stage
+                </button>
+                <button
+                  type="button"
+                  class={["cmd-mode-btn", @dispatch_mode == :queue && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="queue"
+                >
+                  Queue
+                </button>
+                <button
+                  type="button"
+                  class={["cmd-mode-btn send-now", @dispatch_mode == :immediate && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="immediate"
+                >
+                  Send Now
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="cmd-dispatch-actions">
+            <button type="button" class="cmd-dispatch-btn cancel" phx-click="close_param_modal">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class={[
+                "cmd-dispatch-btn",
+                @dispatch_mode == :stage && "stage",
+                @dispatch_mode == :queue && "queue",
+                @dispatch_mode == :immediate && "send-now"
+              ]}
+              phx-disable-with={dispatch_button_loading_text(@dispatch_mode)}
+            >
+              <%= if @per_target_mode do %>
+                <% active_target =
+                  Enum.at(
+                    Enum.filter(@targets, fn t -> MapSet.member?(@selected_targets, t.id) end),
+                    @active_target_index
+                  ) %>
+                {dispatch_button_text(@dispatch_mode)} {if active_target, do: active_target.name, else: "target"} ({@active_target_index + 1}/{MapSet.size(@selected_targets)})
+              <% else %>
+                {dispatch_button_text(@dispatch_mode)} {MapSet.size(@selected_targets)} target{if MapSet.size(@selected_targets) != 1,
+                  do: "s",
+                  else: ""}
+              <% end %>
+            </button>
+          </div>
+        </div>
+      </.form>
     </div>
     """
   end
@@ -604,7 +652,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     params = assigns.target_entry.params || %{}
 
     params_preview =
-      params |> Enum.take(3) |> Enum.map(fn {k, v} -> "#{k}=#{v}" end) |> Enum.join(", ")
+      params |> Enum.take(3) |> Enum.map_join(", ", fn {k, v} -> "#{k}=#{v}" end)
 
     has_more_params = map_size(params) > 3
 
@@ -794,6 +842,18 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     {:noreply, assign(socket, :per_target_mode, per_target)}
   end
 
+  def handle_event("set_dispatch_mode", %{"mode" => mode}, socket) do
+    dispatch_mode =
+      case mode do
+        "stage" -> :stage
+        "queue" -> :queue
+        "immediate" -> :immediate
+        _ -> :stage
+      end
+
+    {:noreply, assign(socket, :dispatch_mode, dispatch_mode)}
+  end
+
   def handle_event("select_param_target", %{"index" => index}, socket) do
     idx = String.to_integer(index)
     {:noreply, assign(socket, :active_target_index, idx)}
@@ -836,86 +896,16 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   def handle_event("stage_command", %{"priority" => priority} = params, socket) do
     command = socket.assigns.show_param_modal
     priority = String.to_integer(priority)
-
-    # Extract params
+    dispatch_mode = socket.assigns.dispatch_mode
     cmd_params = Map.get(params, "params", %{})
 
     user = socket.assigns.current_scope.user
     mission_id = socket.assigns.mission.id
 
     if socket.assigns.per_target_mode do
-      # Per-target mode: stage only the active target
-      target_ids = socket.assigns.selected_target_ids || []
-      active_index = socket.assigns.active_target_index || 0
-      target_id = Enum.at(target_ids, active_index)
-
-      if is_nil(target_id) do
-        {:noreply, socket}
-      else
-        target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
-
-        targets = [
-          %{
-            target_id: target_id,
-            target_name: if(target, do: target.name, else: target_id),
-            params: cmd_params
-          }
-        ]
-
-        case Commands.add_to_stage(user, mission_id, command, targets, priority: priority) do
-          {:ok, _} ->
-            staged_commands = Commands.list_staged(mission_id)
-
-            # Advance to next target (wrap around)
-            next_index =
-              case length(target_ids) do
-                0 -> 0
-                count -> rem(active_index + 1, count)
-              end
-
-            {:noreply,
-             socket
-             |> assign(:staged_commands, staged_commands)
-             |> assign(:active_target_index, next_index)
-             |> put_flash(:info, "Command staged for #{if(target, do: target.name, else: target_id)}")}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to stage command: #{inspect(reason)}")}
-        end
-      end
+      dispatch_per_target(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
     else
-      # Uniform mode: stage all selected targets with same params
-      target_ids = MapSet.to_list(socket.assigns.selected_targets)
-
-      targets =
-        Enum.map(target_ids, fn target_id ->
-          target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
-
-          %{
-            target_id: target_id,
-            target_name: if(target, do: target.name, else: target_id),
-            params: cmd_params
-          }
-        end)
-
-      case Commands.add_to_stage(user, mission_id, command, targets, priority: priority) do
-        {:ok, _} ->
-          staged_commands = Commands.list_staged(mission_id)
-
-          {:noreply,
-           socket
-           |> assign(:staged_commands, staged_commands)
-           |> assign(:show_param_modal, nil)
-           |> assign(:selected_command, nil)
-           |> assign(:selected_targets, MapSet.new())
-           |> assign(:selected_target_ids, [])
-           |> assign(:per_target_mode, false)
-           |> assign(:active_target_index, 0)
-           |> put_flash(:info, "Command staged for #{length(target_ids)} target(s)")}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to stage command: #{inspect(reason)}")}
-      end
+      dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
     end
   end
 
@@ -1155,6 +1145,14 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
   defp param_input_type(_), do: "text"
 
+  defp dispatch_button_text(:stage), do: "Stage"
+  defp dispatch_button_text(:queue), do: "Queue"
+  defp dispatch_button_text(:immediate), do: "Send"
+
+  defp dispatch_button_loading_text(:stage), do: "Staging..."
+  defp dispatch_button_loading_text(:queue), do: "Queueing..."
+  defp dispatch_button_loading_text(:immediate), do: "Sending..."
+
   defp calculate_alarm_counts(alarms) do
     %{
       critical: Enum.count(alarms, &(&1.severity == :critical)),
@@ -1212,4 +1210,123 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       |> Map.put(:target, target)
     end)
   end
+
+  # Dispatch helpers for different modes
+
+  defp dispatch_per_target(socket, command, cmd_params, priority, dispatch_mode, user, mission_id) do
+    target_ids = socket.assigns.selected_target_ids || []
+    active_index = socket.assigns.active_target_index || 0
+    target_id = Enum.at(target_ids, active_index)
+
+    if is_nil(target_id) do
+      {:noreply, socket}
+    else
+      target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
+      target_name = if target, do: target.name, else: target_id
+
+      result = execute_dispatch(dispatch_mode, mission_id, command, target_id, cmd_params, priority, user)
+
+      case result do
+        {:ok, _} ->
+          staged_commands = Commands.list_staged(mission_id)
+          queue_entries = build_context_queue_entries(mission_id, socket.assigns.targets)
+
+          next_index =
+            case length(target_ids) do
+              0 -> 0
+              count -> rem(active_index + 1, count)
+            end
+
+          {:noreply,
+           socket
+           |> assign(:staged_commands, staged_commands)
+           |> assign(:queue_entries, queue_entries)
+           |> assign(:active_target_index, next_index)
+           |> put_flash(:info, "#{dispatch_action_past(dispatch_mode)} #{target_name}")}
+
+        {:error, reason} ->
+          {:noreply,
+           put_flash(socket, :error, "Failed to #{dispatch_action_verb(dispatch_mode)}: #{format_error(reason)}")}
+      end
+    end
+  end
+
+  defp dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id) do
+    target_ids = MapSet.to_list(socket.assigns.selected_targets)
+
+    results =
+      Enum.map(target_ids, fn target_id ->
+        execute_dispatch(dispatch_mode, mission_id, command, target_id, cmd_params, priority, user)
+      end)
+
+    successes = Enum.count(results, &match?({:ok, _}, &1))
+    failures = length(results) - successes
+
+    cond do
+      failures == 0 ->
+        staged_commands = Commands.list_staged(mission_id)
+        queue_entries = build_context_queue_entries(mission_id, socket.assigns.targets)
+
+        {:noreply,
+         socket
+         |> assign(:staged_commands, staged_commands)
+         |> assign(:queue_entries, queue_entries)
+         |> assign(:show_param_modal, nil)
+         |> assign(:selected_command, nil)
+         |> assign(:selected_targets, MapSet.new())
+         |> assign(:selected_target_ids, [])
+         |> assign(:per_target_mode, false)
+         |> assign(:active_target_index, 0)
+         |> put_flash(:info, "#{dispatch_action_past(dispatch_mode)} #{successes} target(s)")}
+
+      successes == 0 ->
+        {:noreply, put_flash(socket, :error, "Failed to #{dispatch_action_verb(dispatch_mode)} commands")}
+
+      true ->
+        staged_commands = Commands.list_staged(mission_id)
+        queue_entries = build_context_queue_entries(mission_id, socket.assigns.targets)
+
+        {:noreply,
+         socket
+         |> assign(:staged_commands, staged_commands)
+         |> assign(:queue_entries, queue_entries)
+         |> put_flash(
+           :warning,
+           "#{dispatch_action_past(dispatch_mode)} #{successes} target(s), #{failures} failed"
+         )}
+    end
+  end
+
+  defp execute_dispatch(:stage, mission_id, command, target_id, cmd_params, priority, user) do
+    # For staging, we pass target info directly - target name will be resolved from context
+    targets = [
+      %{
+        target_id: target_id,
+        target_name: target_id,
+        params: cmd_params
+      }
+    ]
+
+    Commands.add_to_stage(user, mission_id, command, targets, priority: priority)
+  end
+
+  defp execute_dispatch(:queue, mission_id, command, target_id, cmd_params, priority, _user) do
+    Commands.enqueue(mission_id, command.name, cmd_params, target_id: target_id, priority: priority)
+  end
+
+  defp execute_dispatch(:immediate, mission_id, command, target_id, cmd_params, priority, _user) do
+    Commands.dispatch(mission_id, command.name, cmd_params, target_id: target_id, priority: priority)
+  end
+
+  defp dispatch_action_verb(:stage), do: "stage"
+  defp dispatch_action_verb(:queue), do: "queue"
+  defp dispatch_action_verb(:immediate), do: "send"
+
+  defp dispatch_action_past(:stage), do: "Staged"
+  defp dispatch_action_past(:queue), do: "Queued"
+  defp dispatch_action_past(:immediate), do: "Sent"
+
+  defp format_error(reason) when is_binary(reason), do: reason
+  defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_error(reason), do: inspect(reason)
 end

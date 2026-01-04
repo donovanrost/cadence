@@ -1580,6 +1580,106 @@
   border-bottom: 1px solid oklch(22% 0.02 265 / 0.5);
 }
 
+/* Parameter form inputs */
+.cmd-param-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cmd-param-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cmd-param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cmd-param-label {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(70% 0.02 250);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cmd-param-input {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-bright);
+  background: var(--surface-input);
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  transition: all 0.12s ease;
+}
+
+.cmd-param-input:focus {
+  outline: none;
+  border-color: var(--glow-cyan);
+  box-shadow: 0 0 0 2px oklch(from var(--glow-cyan) 50% 0.1 h / 0.2);
+}
+
+.cmd-param-input:hover:not(:focus) {
+  border-color: oklch(35% 0.02 265);
+}
+
+.cmd-param-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.cmd-param-input[type="number"]::-webkit-outer-spin-button,
+.cmd-param-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cmd-param-input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+}
+
+.cmd-no-params {
+  font-size: 0.7rem;
+  color: oklch(55% 0.02 250);
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+.cmd-empty-targets {
+  font-size: 0.65rem;
+  color: oklch(50% 0.02 250);
+  font-style: italic;
+}
+
+/* Priority select in slideout */
+.cmd-priority-select {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-bright);
+  background: var(--surface-input);
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.cmd-priority-select:focus {
+  outline: none;
+  border-color: var(--glow-cyan);
+}
+
+.cmd-priority-select:hover:not(:focus) {
+  border-color: oklch(35% 0.02 265);
+}
+
 /* Hazardous command warning in slideout */
 .cmd-slideout-hazard-warning {
   display: flex;
@@ -1929,6 +2029,98 @@
   border-radius: 2px;
   color: var(--text-bright);
   padding: 0.375rem 0.5rem;
+}
+
+/* Footer options row */
+.cmd-slideout-options {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.cmd-slideout-options .cmd-slideout-priority {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+/* Dispatch mode selector */
+.cmd-dispatch-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.cmd-dispatch-mode label {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmd-dispatch-mode-toggle {
+  display: flex;
+  border: 1px solid oklch(28% 0.02 265);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cmd-mode-btn {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: oklch(60% 0.02 250);
+  background: var(--surface-input);
+  border: none;
+  border-right: 1px solid oklch(28% 0.02 265);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.cmd-mode-btn:last-child {
+  border-right: none;
+}
+
+.cmd-mode-btn:hover:not(.active) {
+  background: oklch(18% 0.02 265);
+  color: oklch(75% 0.02 250);
+}
+
+.cmd-mode-btn.active {
+  background: oklch(from var(--glow-cyan) 20% 0.06 h);
+  color: oklch(from var(--glow-cyan) 85% 0.08 h);
+}
+
+.cmd-mode-btn.send-now.active {
+  background: oklch(20% 0.06 145);
+  color: oklch(85% 0.08 145);
+}
+
+/* Dispatch button variants */
+.cmd-dispatch-btn.queue {
+  background: oklch(from var(--glow-purple) 20% 0.06 h);
+  border-color: oklch(from var(--glow-purple) 45% 0.1 h);
+  color: oklch(from var(--glow-purple) 85% 0.08 h);
+}
+
+.cmd-dispatch-btn.queue:hover:not(:disabled) {
+  background: oklch(from var(--glow-purple) 25% 0.08 h);
+  border-color: oklch(from var(--glow-purple) 55% 0.12 h);
+}
+
+.cmd-dispatch-btn.send-now {
+  background: oklch(20% 0.06 145);
+  border-color: oklch(55% 0.12 145);
+  color: oklch(85% 0.08 145);
+}
+
+.cmd-dispatch-btn.send-now:hover:not(:disabled) {
+  background: oklch(25% 0.08 145);
+  border-color: oklch(65% 0.15 145);
 }
 
 /* Slideout scrollbar */

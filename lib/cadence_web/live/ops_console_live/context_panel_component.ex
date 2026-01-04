@@ -20,6 +20,7 @@ defmodule CadenceWeb.OpsConsoleLive.ContextPanelComponent do
       socket
       |> assign(assigns)
       |> assign_new(:alarms, fn -> [] end)
+      |> assign_new(:queue_entries, fn -> [] end)
       |> assign_new(:collapsed_sections, fn -> MapSet.new() end)
 
     {:ok, socket}
