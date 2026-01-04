@@ -2,6 +2,13 @@
    Alarms Mode Styles - HUD Mission Control Theme
    ============================================================================= */
 
+/* Disable text selection across all alarms mode elements */
+.alarms-mode-container,
+.alarms-mode-container * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* Alarms Mode Container - Standalone page layout */
 .alarms-mode-container {
   display: flex;
@@ -499,7 +506,7 @@
 
 /* Resize handle between panels */
 .alarms-resize-handle {
-  flex: 0 0 8px;
+  flex: 0 0 4px;
   background: transparent;
   cursor: col-resize;
   display: flex;

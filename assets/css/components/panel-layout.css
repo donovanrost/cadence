@@ -236,6 +236,12 @@
    ============================================ */
 
 .panel-layout {
+  /* CSS custom properties for panel state - set by JS, survive LiveView re-renders */
+  --nav-panel-width: 200px;
+  --context-panel-width: 280px;
+  --nav-panel-collapsed: 0;    /* 0 = open, 1 = collapsed */
+  --context-panel-collapsed: 0; /* 0 = open, 1 = collapsed */
+
   display: flex;
   flex-direction: row;
   height: 100%;
@@ -257,11 +263,14 @@
   flex-shrink: 0;
 }
 
+/* Use CSS custom properties for widths - these are set on the parent .panel-layout by JS */
 .panel-nav {
+  width: var(--nav-panel-width);
   border-right: 1px solid oklch(from var(--glow-cyan) l c h / 0.15);
 }
 
 .panel-context {
+  width: var(--context-panel-width);
   border-left: 1px solid oklch(from var(--glow-cyan) l c h / 0.15);
 }
 

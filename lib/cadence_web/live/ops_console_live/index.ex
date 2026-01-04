@@ -122,6 +122,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       |> assign(:current_layout, current_layout)
       |> assign(:token, token)
       |> assign(:telemetry_catalog, telemetry_catalog)
+      |> assign(:alarms, active_alarms)
       |> assign(:active_alarms, active_alarms)
       |> assign(:alarm_counts, alarm_counts)
       |> assign(:fleet_health, fleet_health)
@@ -156,34 +157,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <div
-      id="ops-console-wrapper"
-      phx-hook="OpsConsole"
-      data-mission-id={@mission.id}
-      data-mission-name={@mission.name}
-      data-layout={
-        Jason.encode!(@current_layout.frame_layout || DashboardLayouts.default_frame_layout())
-      }
-      data-widgets={Jason.encode!(@current_layout.widgets || [])}
-      data-targets={Jason.encode!(Enum.map(@targets, &target_json/1))}
-      data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
-      data-alarms={Jason.encode!(Enum.map(@active_alarms, &alarm_json/1))}
-      data-commands={
-        Jason.encode!(Enum.map(@queue_entries, &queue_entry_json(&1, targets_map(@targets))))
-      }
-      data-queue-entries={
-        Jason.encode!(Enum.map(@all_queue_entries, &queue_entry_json(&1, targets_map(@targets))))
-      }
-      data-command-definitions={
-        Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))
-      }
-      data-target-groups={Jason.encode!([])}
-      data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
-      data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
-      data-current-dashboard-id={@current_layout.id}
-      data-token={@token}
-      class="h-screen w-screen overflow-hidden bg-base-100 flex flex-col"
-    >
+    <div class="h-screen w-screen overflow-hidden bg-base-100 flex flex-col">
       <!-- Global Status Bar -->
       <.live_component
         module={CadenceWeb.OpsConsoleLive.StatusBarComponent}
@@ -194,10 +168,135 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
         running_procedures={@running_procedures}
         current_time={@current_time}
       />
-      
-    <!-- Main Content Area -->
-      <div id="ops-console" phx-update="ignore" class="flex-1 min-h-0">
-        <!-- Custom panel layout renders here -->
+      <!-- Main layout using panel-layout CSS classes for consistent styling -->
+      <div
+        class="panel-layout flex-1"
+        id="ops-panel-layout"
+        phx-hook=".PanelResize"
+        data-mission-id={@mission.id}
+      >
+        <!-- Nav Panel -->
+        <aside class="panel-nav" id="panel-nav">
+          <div class="panel-content h-full overflow-y-auto">
+            <.live_component
+              module={CadenceWeb.OpsConsoleLive.NavPanelComponent}
+              id="nav-panel"
+              mission={@mission}
+              dashboards={@dashboards}
+              current_mode={:dashboard}
+            />
+          </div>
+          <!-- Resize handle for nav panel -->
+          <div class="panel-resize-handle panel-resize-right" data-panel="navigation"></div>
+          <!-- Toggle button -->
+          <button
+            class="panel-toggle panel-toggle-nav"
+            data-panel="navigation"
+            title="Toggle Navigation"
+          >
+            <svg
+              class="toggle-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        </aside>
+        <!-- Main Content Area - GridStack dashboard -->
+        <main class="panel-main">
+          <div
+            id="ops-console-wrapper"
+            phx-hook="OpsConsole"
+            phx-update="ignore"
+            data-mission-id={@mission.id}
+            data-mission-name={@mission.name}
+            data-layout={
+              Jason.encode!(@current_layout.frame_layout || DashboardLayouts.default_frame_layout())
+            }
+            data-widgets={Jason.encode!(@current_layout.widgets || [])}
+            data-targets={Jason.encode!(Enum.map(@targets, &target_json/1))}
+            data-dashboards={Jason.encode!(Enum.map(@dashboards, &dashboard_json/1))}
+            data-alarms={Jason.encode!(Enum.map(@active_alarms, &alarm_json/1))}
+            data-commands={
+              Jason.encode!(Enum.map(@queue_entries, &queue_entry_json(&1, targets_map(@targets))))
+            }
+            data-queue-entries={
+              Jason.encode!(
+                Enum.map(@all_queue_entries, &queue_entry_json(&1, targets_map(@targets)))
+              )
+            }
+            data-command-definitions={
+              Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))
+            }
+            data-target-groups={Jason.encode!([])}
+            data-staged-commands={Jason.encode!(Enum.map(@staged_commands, &staged_command_json/1))}
+            data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
+            data-current-dashboard-id={@current_layout.id}
+            data-token={@token}
+            class="h-full w-full"
+          >
+            <!-- GridStack dashboard renders here via OpsConsole hook -->
+          </div>
+        </main>
+        <!-- Context Panel -->
+        <aside class="panel-context" id="panel-context">
+          <!-- Toggle button -->
+          <button
+            class="panel-toggle panel-toggle-context"
+            data-panel="context"
+            title="Toggle Context"
+          >
+            <svg
+              class="toggle-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+          <!-- Resize handle for context panel -->
+          <div class="panel-resize-handle panel-resize-left" data-panel="context"></div>
+          <div class="panel-content h-full overflow-y-auto">
+            <.live_component
+              module={CadenceWeb.OpsConsoleLive.ContextPanelComponent}
+              id="context-panel"
+              mission={@mission}
+              alarm_counts={@alarm_counts}
+              alarms={@alarms}
+              queue_entries={@queue_entries}
+            />
+          </div>
+        </aside>
+        <!-- Inline script to apply saved panel state before first paint (prevents flash) -->
+        <script>
+          (function() {
+            try {
+              var layout = document.getElementById('ops-panel-layout');
+              if (!layout) return;
+              var missionId = layout.dataset.missionId || 'default';
+              var saved = localStorage.getItem('ops-mode-panels-' + missionId);
+              if (saved) {
+                var state = JSON.parse(saved);
+                var nav = document.getElementById('panel-nav');
+                var ctx = document.getElementById('panel-context');
+                // Set CSS custom properties on the layout element
+                if (state.navigation) {
+                  layout.style.setProperty('--nav-panel-width', state.navigation.width + 'px');
+                  if (!state.navigation.open && nav) nav.classList.add('collapsed');
+                }
+                if (state.context) {
+                  layout.style.setProperty('--context-panel-width', state.context.width + 'px');
+                  if (!state.context.open && ctx) ctx.classList.add('collapsed');
+                }
+              }
+            } catch (e) {}
+          })();
+        </script>
       </div>
     </div>
 
@@ -351,6 +450,236 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
         </:actions>
       </.simple_form>
     </.modal>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".PanelResize">
+      export default {
+        mounted() {
+          this.config = {
+            navigation: {
+              openWidth: 220,
+              closedWidth: 48,
+              snapThreshold: 120,
+              minDragWidth: 48,
+              maxDragWidth: 300,
+              side: 'left'
+            },
+            context: {
+              openWidth: 260,
+              closedWidth: 52,
+              snapThreshold: 140,
+              minDragWidth: 52,
+              maxDragWidth: 400,
+              side: 'right'
+            }
+          }
+
+          this.panelStates = {
+            navigation: { open: true, width: this.config.navigation.openWidth },
+            context: { open: true, width: this.config.context.openWidth }
+          }
+
+          this.isDragging = false
+          this.dragPanel = null
+          this.dragStartX = 0
+          this.dragStartWidth = 0
+          this.navPanel = this.el.querySelector('#panel-nav')
+          this.contextPanel = this.el.querySelector('#panel-context')
+          this.storageKey = `ops-mode-panels-${this.el.dataset.missionId || 'default'}`
+
+          this.loadState()
+          this.applyPanelStates()
+          this.bindResizeHandlers()
+          this.bindToggleButtons()
+        },
+
+        loadState() {
+          try {
+            const saved = localStorage.getItem(this.storageKey)
+            if (saved) {
+              const parsed = JSON.parse(saved)
+              if (parsed.navigation) {
+                this.panelStates.navigation = { ...this.panelStates.navigation, ...parsed.navigation }
+              }
+              if (parsed.context) {
+                this.panelStates.context = { ...this.panelStates.context, ...parsed.context }
+              }
+            }
+          } catch (e) {
+            console.warn('[PanelResize] Failed to load panel state:', e)
+          }
+        },
+
+        saveState() {
+          try {
+            localStorage.setItem(this.storageKey, JSON.stringify(this.panelStates))
+          } catch (e) {
+            console.warn('[PanelResize] Failed to save panel state:', e)
+          }
+        },
+
+        bindResizeHandlers() {
+          const handles = this.el.querySelectorAll('.panel-resize-handle')
+          handles.forEach(handle => {
+            handle.addEventListener('mousedown', (event) => this.startDrag(event, handle))
+          })
+
+          this._onMouseMove = (event) => this.handleDrag(event)
+          this._onMouseUp = (event) => this.endDrag(event)
+          document.addEventListener('mousemove', this._onMouseMove)
+          document.addEventListener('mouseup', this._onMouseUp)
+        },
+
+        bindToggleButtons() {
+          const toggles = this.el.querySelectorAll('.panel-toggle')
+          toggles.forEach(btn => {
+            btn.addEventListener('click', () => {
+              const panel = btn.dataset.panel
+              this.togglePanel(panel)
+            })
+          })
+        },
+
+        applyPanelStates() {
+          if (this.navPanel) {
+            const navState = this.panelStates.navigation
+            this.navPanel.style.width = `${navState.width}px`
+            this.navPanel.classList.toggle('collapsed', !navState.open)
+            this.updateToggleIcon('navigation', navState.open)
+          }
+
+          if (this.contextPanel) {
+            const ctxState = this.panelStates.context
+            this.contextPanel.style.width = `${ctxState.width}px`
+            this.contextPanel.classList.toggle('collapsed', !ctxState.open)
+            this.updateToggleIcon('context', ctxState.open)
+          }
+        },
+
+        startDrag(event, handle) {
+          event.preventDefault()
+          this.isDragging = true
+          this.dragPanel = handle.dataset.panel
+          this.dragStartX = event.clientX
+          this.dragStartWidth =
+            this.panelStates[this.dragPanel].width ||
+            (this.dragPanel === 'navigation'
+              ? this.config.navigation.openWidth
+              : this.config.context.openWidth)
+
+          document.body.style.cursor = 'col-resize'
+          document.body.style.userSelect = 'none'
+          this.el.classList.add('is-dragging')
+        },
+
+        handleDrag(event) {
+          if (!this.isDragging || !this.dragPanel) return
+
+          const config = this.config[this.dragPanel]
+          const deltaX = event.clientX - this.dragStartX
+          let newWidth
+          if (config.side === 'left') {
+            newWidth = this.dragStartWidth + deltaX
+          } else {
+            newWidth = this.dragStartWidth - deltaX
+          }
+
+          newWidth = Math.max(config.minDragWidth, Math.min(config.maxDragWidth, newWidth))
+          this.setPanelWidth(this.dragPanel, newWidth)
+
+          const panelEl = this.dragPanel === 'navigation' ? this.navPanel : this.contextPanel
+          if (panelEl) {
+            panelEl.classList.toggle('in-snap-zone', newWidth < config.snapThreshold)
+          }
+        },
+
+        endDrag() {
+          if (!this.isDragging || !this.dragPanel) return
+
+          const config = this.config[this.dragPanel]
+          const currentWidth = this.panelStates[this.dragPanel].width
+
+          if (currentWidth < config.snapThreshold) {
+            this.closePanel(this.dragPanel)
+          } else {
+            const distToOpen = Math.abs(currentWidth - config.openWidth)
+            if (distToOpen < 30) {
+              this.setPanelWidth(this.dragPanel, config.openWidth)
+            }
+            this.panelStates[this.dragPanel].open = true
+          }
+
+          this.isDragging = false
+          this.dragPanel = null
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          this.el.classList.remove('is-dragging')
+
+          if (this.navPanel) this.navPanel.classList.remove('in-snap-zone')
+          if (this.contextPanel) this.contextPanel.classList.remove('in-snap-zone')
+          this.saveState()
+        },
+
+        setPanelWidth(panelName, width) {
+          const panelEl = panelName === 'navigation' ? this.navPanel : this.contextPanel
+          if (!panelEl) return
+
+          panelEl.style.width = `${width}px`
+          this.panelStates[panelName].width = width
+
+          const config = this.config[panelName]
+          const isCollapsed = width <= config.closedWidth + 10
+          panelEl.classList.toggle('collapsed', isCollapsed)
+        },
+
+        togglePanel(panelName) {
+          const state = this.panelStates[panelName]
+          if (state.open) {
+            this.closePanel(panelName)
+          } else {
+            this.openPanel(panelName)
+          }
+        },
+
+        openPanel(panelName) {
+          const config = this.config[panelName]
+          const panelEl = panelName === 'navigation' ? this.navPanel : this.contextPanel
+          if (!panelEl) return
+
+          this.setPanelWidth(panelName, config.openWidth)
+          panelEl.classList.remove('collapsed')
+          this.panelStates[panelName].open = true
+          this.updateToggleIcon(panelName, true)
+          this.saveState()
+        },
+
+        closePanel(panelName) {
+          const config = this.config[panelName]
+          const panelEl = panelName === 'navigation' ? this.navPanel : this.contextPanel
+          if (!panelEl) return
+
+          this.setPanelWidth(panelName, config.closedWidth)
+          panelEl.classList.add('collapsed')
+          this.panelStates[panelName].open = false
+          this.updateToggleIcon(panelName, false)
+          this.saveState()
+        },
+
+        updateToggleIcon(panelName, isOpen) {
+          const btn = this.el.querySelector(`.panel-toggle[data-panel="${panelName}"]`)
+          if (!btn) return
+
+          const icon = btn.querySelector('.toggle-icon')
+          if (icon) {
+            icon.style.transform = isOpen ? '' : 'rotate(180deg)'
+          }
+        },
+
+        destroyed() {
+          document.removeEventListener('mousemove', this._onMouseMove)
+          document.removeEventListener('mouseup', this._onMouseUp)
+        }
+      }
+    </script>
     """
   end
 
@@ -1345,6 +1674,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
      |> push_event("alarm_update", %{type: "triggered", alarm: alarm_json(alarm)})
@@ -1357,6 +1687,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
      |> push_event("alarm_update", %{type: "created", alarm: alarm_json(alarm)})
@@ -1378,6 +1709,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
      |> push_event("alarm_update", %{type: "updated", alarm: alarm_json(alarm)})}
@@ -1389,6 +1721,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> assign(:alarm_counts, alarm_counts)
      |> push_event("alarm_update", %{type: "cleared", alarm: alarm_json(alarm)})
@@ -1400,6 +1733,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> push_event("alarm_update", %{type: "acknowledged", alarm: alarm_json(alarm)})
      |> push_timeline_alarm_event(alarm, :acknowledged)}
@@ -1410,6 +1744,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> push_event("alarm_update", %{type: "shelved", alarm: alarm_json(alarm)})}
   end
@@ -1419,6 +1754,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
     {:noreply,
      socket
+     |> assign(:alarms, active_alarms)
      |> assign(:active_alarms, active_alarms)
      |> push_event("alarm_update", %{type: "unshelved", alarm: alarm_json(alarm)})}
   end
@@ -1440,6 +1776,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
         {:noreply,
          socket
+         |> assign(:alarms, active_alarms)
          |> assign(:active_alarms, active_alarms)
          |> assign(:alarm_counts, alarm_counts)}
 
@@ -1679,10 +2016,15 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       shelved_until: alarm.shelved_until && DateTime.to_iso8601(alarm.shelved_until),
       cleared_at: alarm.cleared_at && DateTime.to_iso8601(alarm.cleared_at),
       target_id: alarm.target_id,
+      target_name: get_alarm_target_name(alarm),
       current_value: alarm.current_value,
       limit_state: alarm.limit_state
     }
   end
+
+  defp get_alarm_target_name(%{target: %{name: name}}) when is_binary(name), do: name
+  defp get_alarm_target_name(%{target_name: name}) when is_binary(name), do: name
+  defp get_alarm_target_name(_), do: nil
 
   defp alarm_rule_json(rule) do
     %{

@@ -213,7 +213,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     ~H"""
     <div class="alarms-panels-row" id="alarms-panels-row">
       <!-- Left Panel: Target Selection -->
-      <div class="alarms-target-panel" id="alarms-target-panel">
+      <div class="alarms-target-panel" id="alarms-target-panel" phx-hook=".AlarmsTargetPanel">
         <div class="alarms-panel-header">
           <div class="alarms-panel-title">
             <span class="mc-label-subsystem">TARGETS</span>
@@ -277,12 +277,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
       </div>
 
       <!-- Resize Handle -->
-      <div class="alarms-resize-handle" id="alarms-target-resize-handle">
+      <div class="alarms-resize-handle" id="alarms-target-resize-handle" phx-hook=".AlarmsTargetResize">
         <div class="alarms-resize-grip"></div>
       </div>
 
       <!-- Middle Panel: Alarm List -->
-      <div class="alarms-list-panel" id="alarms-list-panel">
+      <div class="alarms-list-panel" id="alarms-list-panel" phx-hook=".AlarmsListPanel">
         <div class="alarms-panel-header">
           <div class="alarms-panel-title">
             <span class="mc-label-subsystem">ALARMS</span>
@@ -369,12 +369,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
       </div>
 
       <!-- Resize Handle -->
-      <div class="alarms-resize-handle" id="alarms-resize-handle">
+      <div class="alarms-resize-handle" id="alarms-detail-resize-handle" phx-hook=".AlarmsDetailResize">
         <div class="alarms-resize-grip"></div>
       </div>
 
       <!-- Right Panel: Alarm Detail -->
-      <div class="alarms-detail-panel" id="alarms-detail-panel">
+      <div class="alarms-detail-panel" id="alarms-detail-panel" phx-hook=".AlarmsDetailPanel">
         <.alarm_detail :if={@selected_alarm} alarm={@selected_alarm} targets={@targets} />
         <div :if={!@selected_alarm} class="alarms-detail-empty">
           <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -384,6 +384,183 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           <span>Select an alarm to view details</span>
         </div>
       </div>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AlarmsTargetPanel">
+        export default {
+          mounted() {
+            this.applySavedWidth()
+          },
+
+          updated() {
+            this.applySavedWidth()
+          },
+
+          applySavedWidth() {
+            const savedWidth = localStorage.getItem('alarms-target-panel-width')
+            if (savedWidth) {
+              this.el.style.flex = `0 0 ${savedWidth}`
+            }
+          }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AlarmsTargetResize">
+        export default {
+          mounted() {
+            this.isDragging = false
+            this.startX = 0
+            this.startWidth = 0
+            this.targetPanel = document.getElementById('alarms-target-panel')
+            this._startDrag = (event) => this.startDrag(event)
+            this._onDrag = (event) => this.onDrag(event)
+            this._endDrag = () => this.endDrag()
+            this.el.addEventListener('mousedown', this._startDrag)
+            document.addEventListener('mousemove', this._onDrag)
+            document.addEventListener('mouseup', this._endDrag)
+          },
+
+          updated() {
+            this.targetPanel = document.getElementById('alarms-target-panel')
+            const savedWidth = localStorage.getItem('alarms-target-panel-width')
+            if (savedWidth && this.targetPanel) {
+              this.targetPanel.style.flex = `0 0 ${savedWidth}`
+            }
+          },
+
+          startDrag(event) {
+            if (!this.targetPanel) {
+              this.targetPanel = document.getElementById('alarms-target-panel')
+            }
+            if (!this.targetPanel) return
+            this.isDragging = true
+            this.startX = event.clientX
+            this.startWidth = this.targetPanel.offsetWidth
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+            this.el.classList.add('dragging')
+          },
+
+          onDrag(event) {
+            if (!this.isDragging || !this.targetPanel) return
+            const diff = event.clientX - this.startX
+            const newWidth = Math.max(150, Math.min(500, this.startWidth + diff))
+            this.targetPanel.style.flex = `0 0 ${newWidth}px`
+            localStorage.setItem('alarms-target-panel-width', `${newWidth}px`)
+          },
+
+          endDrag() {
+            if (!this.isDragging) return
+            this.isDragging = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            this.el.classList.remove('dragging')
+          },
+
+          destroyed() {
+            this.el.removeEventListener('mousedown', this._startDrag)
+            document.removeEventListener('mousemove', this._onDrag)
+            document.removeEventListener('mouseup', this._endDrag)
+          }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AlarmsListPanel">
+        export default {
+          mounted() {
+            this.applySavedWidth()
+          },
+
+          updated() {
+            this.applySavedWidth()
+          },
+
+          applySavedWidth() {
+            const savedWidth = localStorage.getItem('alarms-list-panel-width')
+            if (savedWidth) {
+              this.el.style.flex = `0 0 ${savedWidth}`
+            }
+          }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AlarmsDetailResize">
+        export default {
+          mounted() {
+            this.isDragging = false
+            this.startX = 0
+            this.startWidth = 0
+            this.listPanel = document.getElementById('alarms-list-panel')
+            this._startDrag = (event) => this.startDrag(event)
+            this._onDrag = (event) => this.onDrag(event)
+            this._endDrag = () => this.endDrag()
+            this.el.addEventListener('mousedown', this._startDrag)
+            document.addEventListener('mousemove', this._onDrag)
+            document.addEventListener('mouseup', this._endDrag)
+          },
+
+          updated() {
+            this.listPanel = document.getElementById('alarms-list-panel')
+            const savedWidth = localStorage.getItem('alarms-list-panel-width')
+            if (savedWidth && this.listPanel) {
+              this.listPanel.style.flex = `0 0 ${savedWidth}`
+            }
+          },
+
+          startDrag(event) {
+            if (!this.listPanel) {
+              this.listPanel = document.getElementById('alarms-list-panel')
+            }
+            if (!this.listPanel) return
+            this.isDragging = true
+            this.startX = event.clientX
+            this.startWidth = this.listPanel.offsetWidth
+            document.body.style.cursor = 'col-resize'
+            document.body.style.userSelect = 'none'
+            this.el.classList.add('dragging')
+          },
+
+          onDrag(event) {
+            if (!this.isDragging || !this.listPanel) return
+            const diff = event.clientX - this.startX
+            const newWidth = Math.max(200, Math.min(800, this.startWidth + diff))
+            this.listPanel.style.flex = `0 0 ${newWidth}px`
+            localStorage.setItem('alarms-list-panel-width', `${newWidth}px`)
+          },
+
+          endDrag() {
+            if (!this.isDragging) return
+            this.isDragging = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            this.el.classList.remove('dragging')
+          },
+
+          destroyed() {
+            this.el.removeEventListener('mousedown', this._startDrag)
+            document.removeEventListener('mousemove', this._onDrag)
+            document.removeEventListener('mouseup', this._endDrag)
+          }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".AlarmsDetailPanel">
+        export default {
+          mounted() {
+            this.applySavedWidth()
+          },
+
+          updated() {
+            this.applySavedWidth()
+          },
+
+          applySavedWidth() {
+            const savedWidth = localStorage.getItem('alarms-detail-panel-width')
+            if (savedWidth) {
+              this.el.style.flex = `0 0 ${savedWidth}`
+            }
+          }
+        }
+      </script>
     </div>
     """
   end
