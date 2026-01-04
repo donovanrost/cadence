@@ -10,6 +10,11 @@ hooks {
                 check = "mix format --check-formatted {{files}}"
                 fix = "mix format {{files}}"
             }
+            ["precommit"] {
+                profiles = List("full")
+                check = "mix precommit"
+                exclusive = true
+            }
         }
     }
     ["fix"] {
