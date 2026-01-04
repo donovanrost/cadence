@@ -218,11 +218,11 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:events")
 
     # Look up the write interface for this target (if any)
-    # This is the only DB call needed - interfaces may change independently
+    # Check the interface's connection status rather than assuming connected
     {write_interface_id, interface_connected} =
       case Interfaces.list_interfaces_for_target(target, direction: "write") do
-        [interface | _] -> {interface.id, true}
-        [] -> {nil, true}
+        [interface | _] -> {interface.id, interface.status == "connected"}
+        [] -> {nil, false}
       end
 
     state = %State{

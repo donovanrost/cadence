@@ -76,6 +76,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:dashboards, [])
       |> assign(:current_mode, :timeline)
       |> assign(:lanes_scrubbing?, false)
+      |> assign(:show_system_events, true)
 
     {:ok, socket, layout: {CadenceWeb.Layouts, :ops_console_mode}}
   end
@@ -114,6 +115,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
               time_range={@time_range}
               current_time={@current_time}
               lanes_offset_minutes={@lanes_offset_minutes}
+              show_system_events={@show_system_events}
             />
         <% end %>
         
@@ -172,6 +174,77 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             return `${Math.floor(diffSeconds / 3600)}h ago`
           }
           return `${Math.floor(diffSeconds / 86400)}d ago`
+        }
+      }
+    </script>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".StreamPanelResize">
+      export default {
+        mounted() {
+          this.isDragging = false
+          this.startX = 0
+          this.startWidth = 0
+          this.targetPanel = document.querySelector('.stream-target-filter-panel')
+          this._startDrag = (event) => this.startDrag(event)
+          this._onDrag = (event) => this.onDrag(event)
+          this._endDrag = () => this.endDrag()
+          this.el.addEventListener('mousedown', this._startDrag)
+          document.addEventListener('mousemove', this._onDrag)
+          document.addEventListener('mouseup', this._endDrag)
+
+          // Load saved width
+          const savedWidth = localStorage.getItem('stream-target-panel-width')
+          if (savedWidth && this.targetPanel) {
+            this.targetPanel.style.flex = `0 0 ${savedWidth}px`
+          }
+        },
+
+        updated() {
+          // Re-query the target panel in case it was replaced
+          this.targetPanel = document.querySelector('.stream-target-filter-panel')
+          // Reapply saved width after LiveView DOM patches
+          const savedWidth = localStorage.getItem('stream-target-panel-width')
+          if (savedWidth && this.targetPanel) {
+            this.targetPanel.style.flex = `0 0 ${savedWidth}px`
+          }
+        },
+
+        startDrag(event) {
+          if (!this.targetPanel) {
+            this.targetPanel = document.querySelector('.stream-target-filter-panel')
+          }
+          if (!this.targetPanel) return
+          this.isDragging = true
+          this.startX = event.clientX
+          this.startWidth = this.targetPanel.offsetWidth
+          document.body.style.cursor = 'col-resize'
+          document.body.style.userSelect = 'none'
+          this.el.classList.add('dragging')
+        },
+
+        onDrag(event) {
+          if (!this.isDragging || !this.targetPanel) return
+          const container = this.targetPanel.parentElement
+          if (!container) return
+          const diff = event.clientX - this.startX
+          // Clamp between CSS min (150px) and max (400px) values
+          const newWidth = Math.max(150, Math.min(400, this.startWidth + diff))
+          this.targetPanel.style.flex = `0 0 ${newWidth}px`
+          localStorage.setItem('stream-target-panel-width', newWidth)
+        },
+
+        endDrag() {
+          if (!this.isDragging) return
+          this.isDragging = false
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          this.el.classList.remove('dragging')
+        },
+
+        destroyed() {
+          this.el.removeEventListener('mousedown', this._startDrag)
+          document.removeEventListener('mousemove', this._onDrag)
+          document.removeEventListener('mouseup', this._endDrag)
         }
       }
     </script>
@@ -345,7 +418,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             </button>
           </div>
         </div>
-        
+
+    <!-- Resize Handle -->
+        <div class="stream-resize-handle" id="stream-resize" phx-hook=".StreamPanelResize" phx-update="ignore"></div>
+
     <!-- Main Stream Panel -->
         <div class="stream-hud-panel">
           <div class="stream-hud-corners"></div>
@@ -423,7 +499,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   attr :selected, :boolean, default: false
 
   defp timeline_event(assigns) do
-    event_type = assigns.event.event_type || :command
+    event_type = assigns.event.type || :command
 
     assigns =
       assigns
@@ -463,8 +539,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           </span>
         </div>
 
-        <div :if={@event.message} class="timeline-event-description">
-          {@event.message}
+        <div :if={@event.description} class="timeline-event-description">
+          {@event.description}
         </div>
       </div>
 
@@ -572,7 +648,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   attr :event, :map, required: true
 
   defp event_detail(assigns) do
-    event_type = assigns.event.event_type || :command
+    event_type = assigns.event.type || :command
     assigns = assign(assigns, :event_type, event_type)
 
     ~H"""
@@ -608,9 +684,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           <dt>Status</dt>
           <dd><.event_status_badge status={@event.status} /></dd>
         </div>
-        <div :if={@event.message} class="stream-detail-field">
+        <div :if={@event.description} class="stream-detail-field">
           <dt>Message</dt>
-          <dd class="stream-detail-message">{@event.message}</dd>
+          <dd class="stream-detail-message">{@event.description}</dd>
         </div>
       </dl>
     </div>
@@ -659,6 +735,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   attr :time_range, :string, required: true
   attr :current_time, :any, required: true
   attr :lanes_offset_minutes, :integer, default: 0
+  attr :show_system_events, :boolean, default: true
 
   defp timeline_lanes_view(assigns) do
     # Calculate time window (accounts for pan offset)
@@ -689,6 +766,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         }
       end)
 
+    # Get system events (events with nil target_id)
+    system_events = get_system_events(assigns.events, start_time, end_time)
+    system_event_count = length(system_events)
+
     fleet_events = get_all_events(assigns.events, start_time, end_time)
 
     assigns =
@@ -701,6 +782,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:total_ms, total_ms)
       |> assign(:time_markers, time_markers)
       |> assign(:scrubber_position, scrubber_position)
+      |> assign(:system_events, system_events)
+      |> assign(:system_event_count, system_event_count)
 
     ~H"""
     <div class="lanes-view-layout">
@@ -709,6 +792,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           targets={@targets}
           selected_targets={@selected_targets}
           target_search={@target_search}
+          show_system_events={@show_system_events}
+          system_event_count={@system_event_count}
         />
 
         <.lanes_resize_handle />
@@ -722,6 +807,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           total_ms={@total_ms}
           fleet_events={@fleet_events}
           selected_target_count={@selected_target_count}
+          show_system_events={@show_system_events}
+          system_events={@system_events}
         />
       </div>
 
@@ -759,6 +846,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   def handle_event("filter_targets", %{"value" => value}, socket) do
     {:noreply, assign(socket, :target_search, value)}
+  end
+
+  def handle_event("toggle_system_events", _, socket) do
+    {:noreply, assign(socket, :show_system_events, !socket.assigns.show_system_events)}
   end
 
   def handle_event("toggle_event_filter", %{"type" => type}, socket) do
@@ -1040,8 +1131,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     mission_id = socket.assigns.mission.id
 
     events =
-      Timeline.list_events(mission_id, start_time, end_time,
-        mission_id: mission_id,
+      Timeline.list_events_for_mission(mission_id, start_time, end_time,
         limit: @lanes_fetch_limit
       )
 
@@ -1214,6 +1304,15 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     events
     |> Enum.filter(fn event ->
       DateTime.compare(event.timestamp, start_time) != :lt and
+        DateTime.compare(event.timestamp, end_time) != :gt
+    end)
+  end
+
+  defp get_system_events(events, start_time, end_time) do
+    events
+    |> Enum.filter(fn event ->
+      is_nil(event.target_id) and
+        DateTime.compare(event.timestamp, start_time) != :lt and
         DateTime.compare(event.timestamp, end_time) != :gt
     end)
   end

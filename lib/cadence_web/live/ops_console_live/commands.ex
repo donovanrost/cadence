@@ -1063,18 +1063,24 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   end
 
   def handle_event("stage_command", %{"priority" => priority} = params, socket) do
-    command = socket.assigns.show_param_modal
-    priority = String.to_integer(priority)
-    dispatch_mode = socket.assigns.dispatch_mode
-    cmd_params = Map.get(params, "params", %{})
+    case socket.assigns.show_param_modal do
+      nil ->
+        # Modal was closed before form submitted (race condition)
+        {:noreply, socket}
 
-    user = socket.assigns.current_scope.user
-    mission_id = socket.assigns.mission.id
+      command ->
+        priority = String.to_integer(priority)
+        dispatch_mode = socket.assigns.dispatch_mode
+        cmd_params = Map.get(params, "params", %{})
 
-    if socket.assigns.per_target_mode do
-      dispatch_per_target(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
-    else
-      dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
+        user = socket.assigns.current_scope.user
+        mission_id = socket.assigns.mission.id
+
+        if socket.assigns.per_target_mode do
+          dispatch_per_target(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
+        else
+          dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
+        end
     end
   end
 

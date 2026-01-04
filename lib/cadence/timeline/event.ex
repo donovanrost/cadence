@@ -61,6 +61,7 @@ defmodule Cadence.Timeline.Event do
   def from_recording(%Recording{} = recording, opts \\ []) do
     target = Keyword.get(opts, :target)
     user = Keyword.get(opts, :user)
+    target_id = Keyword.get(opts, :target_id)
 
     # Load the recordable if not already loaded
     recordable = Keyword.get(opts, :recordable) || Cadence.Recordings.load_recordable(recording)
@@ -74,7 +75,7 @@ defmodule Cadence.Timeline.Event do
       id: "rec-#{recording.id}",
       type: map_aggregate_to_event_type(recording.aggregate_type),
       timestamp: recording.timestamp,
-      target_id: nil,
+      target_id: target_id,
       target_name: target && target.name,
       target_group: nil,
       title: title,

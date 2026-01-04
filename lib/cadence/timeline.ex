@@ -14,6 +14,8 @@ defmodule Cadence.Timeline do
   """
 
   import Ecto.Query
+  alias Cadence.Alarms.Alarm
+  alias Cadence.Buckets
   alias Cadence.Commands.QueueEntry
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Recordings
@@ -34,12 +36,13 @@ defmodule Cadence.Timeline do
         ]
 
   # Map event types to aggregate types in recordings
+  # Note: Command queue events use "QueueEntry" as the aggregate type,
+  # not "Command". The Event module maps this back to :command for display.
   @type_to_aggregate %{
-    command: "Command",
+    command: "QueueEntry",
     alarm: "Alarm",
     procedure: "ProcedureExecution",
-    automation: "Automation",
-    queue: "QueueEntry"
+    automation: "Automation"
   }
 
   @doc """
@@ -86,10 +89,14 @@ defmodule Cadence.Timeline do
     # Batch load recordables to avoid N+1 queries
     recordings_with_recordables = Recordings.load_recordables_for_recordings(recordings)
 
-    # Convert recordings to timeline events (passing pre-loaded recordable)
+    # Batch load target_ids for all recordings
+    target_id_map = load_target_ids_for_recordings(recordings)
+
+    # Convert recordings to timeline events (passing pre-loaded recordable and target_id)
     events =
       Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
-        Event.from_recording(recording, recordable: recordable)
+        target_id = Map.get(target_id_map, recording.id)
+        Event.from_recording(recording, recordable: recordable, target_id: target_id)
       end)
 
     # Add scheduled future commands if requested
@@ -119,7 +126,26 @@ defmodule Cadence.Timeline do
     # Include future events up to 24 hours ahead
     end_time = DateTime.add(now, 24, :hour)
 
-    list_events(mission_id, start_time, end_time, opts)
+    # Get the mission's bucket to use its path for filtering recordings
+    bucket_path = get_mission_bucket_path(mission_id)
+
+    # Pass mission_id in opts for scheduled commands query
+    opts = Keyword.put(opts, :mission_id, mission_id)
+
+    list_events(bucket_path, start_time, end_time, opts)
+  end
+
+  @doc """
+  List timeline events for a mission within a time range.
+
+  This is a convenience wrapper around `list_events/4` that handles
+  looking up the mission's bucket path automatically.
+  """
+  @spec list_events_for_mission(binary(), DateTime.t(), DateTime.t(), list_opts()) :: [Event.t()]
+  def list_events_for_mission(mission_id, start_time, end_time, opts \\ []) do
+    bucket_path = get_mission_bucket_path(mission_id)
+    opts = Keyword.put(opts, :mission_id, mission_id)
+    list_events(bucket_path, start_time, end_time, opts)
   end
 
   @doc """
@@ -226,10 +252,13 @@ defmodule Cadence.Timeline do
     * `:limit` - Maximum events to return (default: 50)
   """
   @spec list_events_before(binary(), DateTime.t(), list_opts()) :: [Event.t()]
-  def list_events_before(path_prefix, cursor, opts \\ []) do
+  def list_events_before(mission_id, cursor, opts \\ []) do
     types = Keyword.get(opts, :types, [:command, :alarm, :procedure, :automation])
     limit = Keyword.get(opts, :limit, 50)
     organization_id = Keyword.get(opts, :organization_id)
+
+    # Get the mission's bucket path for filtering recordings
+    bucket_path = get_mission_bucket_path(mission_id)
 
     # Convert types to aggregate types for recordings query
     aggregate_types = Enum.map(types, &Map.get(@type_to_aggregate, &1)) |> Enum.reject(&is_nil/1)
@@ -238,7 +267,7 @@ defmodule Cadence.Timeline do
     recordings =
       Recordings.list_recordings_before(%{timestamp: cursor, id: nil},
         aggregate_types: aggregate_types,
-        path_prefix: path_prefix,
+        path_prefix: bucket_path,
         organization_id: organization_id,
         limit: limit
       )
@@ -246,10 +275,14 @@ defmodule Cadence.Timeline do
     # Batch load recordables to avoid N+1 queries
     recordings_with_recordables = Recordings.load_recordables_for_recordings(recordings)
 
-    # Convert recordings to timeline events (passing pre-loaded recordable)
+    # Batch load target_ids for all recordings
+    target_id_map = load_target_ids_for_recordings(recordings)
+
+    # Convert recordings to timeline events (passing pre-loaded recordable and target_id)
     events =
       Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
-        Event.from_recording(recording, recordable: recordable)
+        target_id = Map.get(target_id_map, recording.id)
+        Event.from_recording(recording, recordable: recordable, target_id: target_id)
       end)
 
     # Sort all events by timestamp descending and apply limit
@@ -281,4 +314,56 @@ defmodule Cadence.Timeline do
   end
 
   def get_event(_), do: nil
+
+  # Private helpers
+
+  defp get_mission_bucket_path(mission_id) do
+    case Buckets.get_bucket_by_bucketable("Mission", mission_id) do
+      nil -> nil
+      bucket -> bucket.path
+    end
+  end
+
+  @doc false
+  # Batch load target_ids for recordings based on their aggregate types.
+  # Returns a map of recording.id -> target_id
+  defp load_target_ids_for_recordings(recordings) do
+    recordings
+    |> Enum.group_by(& &1.aggregate_type)
+    |> Enum.reduce(%{}, &merge_target_ids_for_type/2)
+  end
+
+  defp merge_target_ids_for_type({aggregate_type, recs}, acc) do
+    aggregate_ids = Enum.map(recs, & &1.aggregate_id) |> Enum.uniq()
+    target_ids = load_target_ids_by_type(aggregate_type, aggregate_ids)
+    map_recordings_to_target_ids(recs, target_ids, acc)
+  end
+
+  defp load_target_ids_by_type("QueueEntry", aggregate_ids) do
+    QueueEntry
+    |> where([q], q.id in ^aggregate_ids)
+    |> select([q], {q.id, q.target_id})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp load_target_ids_by_type("Alarm", aggregate_ids) do
+    Alarm
+    |> where([a], a.id in ^aggregate_ids)
+    |> select([a], {a.id, a.target_id})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # Procedures and automations may not have target_id directly
+  defp load_target_ids_by_type(_aggregate_type, _aggregate_ids), do: %{}
+
+  defp map_recordings_to_target_ids(recs, target_ids, acc) do
+    Enum.reduce(recs, acc, fn rec, inner_acc ->
+      case Map.get(target_ids, rec.aggregate_id) do
+        nil -> inner_acc
+        target_id -> Map.put(inner_acc, rec.id, target_id)
+      end
+    end)
+  end
 end

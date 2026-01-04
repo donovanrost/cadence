@@ -905,7 +905,10 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   attr :targets, :list, required: true
   attr :selected_targets, :any, default: MapSet.new()
   attr :target_search, :string, default: ""
+  attr :show_system_events, :boolean, default: true
+  attr :system_event_count, :integer, default: 0
   attr :on_toggle, :string, default: "toggle_target_filter"
+  attr :on_toggle_system, :string, default: "toggle_system_events"
   attr :on_filter, :string, default: "filter_targets"
   attr :on_select_all, :string, default: "select_all_targets"
   attr :on_clear, :string, default: "clear_target_filter"
@@ -922,10 +925,15 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
         end)
       end
 
+    # Count includes system if selected
+    system_selected = if assigns.show_system_events, do: 1, else: 0
+    total_count = length(assigns.targets) + 1
+
     assigns =
       assigns
       |> assign(:filtered_targets, filtered_targets)
-      |> assign(:selected_count, MapSet.size(assigns.selected_targets))
+      |> assign(:selected_count, MapSet.size(assigns.selected_targets) + system_selected)
+      |> assign(:total_count, total_count)
 
     ~H"""
     <div class="lanes-target-picker-panel" id="lanes-target-picker" phx-hook=".LanesTargetPicker">
@@ -933,7 +941,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
         <div class="lanes-picker-title-row">
           <span class="lanes-picker-title">TARGETS</span>
           <span class="lanes-picker-count">
-            {@selected_count}/{length(@targets)}
+            {@selected_count}/{@total_count}
           </span>
         </div>
         <span class="lanes-picker-available">
@@ -953,6 +961,15 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
       </div>
 
       <div class="lanes-target-grid">
+        <!-- System pseudo-target (always first) -->
+        <div
+          class={["lanes-target-cell", "system-target", @show_system_events && "selected"]}
+          phx-click={@on_toggle_system}
+          title={"System events (#{@system_event_count} events)"}
+        >
+          <span class="lanes-target-name">◆ SYSTEM</span>
+        </div>
+
         <.lanes_target_cell
           :for={target <- @filtered_targets}
           target={target}
@@ -1081,7 +1098,10 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   attr :total_ms, :integer, required: true
   attr :fleet_events, :list, default: []
   attr :selected_target_count, :integer, default: 0
+  attr :show_system_events, :boolean, default: true
+  attr :system_events, :list, default: []
   attr :on_remove_lane, :string, default: "toggle_target_filter"
+  attr :on_toggle_system, :string, default: "toggle_system_events"
 
   def timeline_lanes_panel(assigns) do
     assigns =
@@ -1132,11 +1152,20 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
           </div>
 
           <div class="timeline-lanes-container">
-            <%= if Enum.empty?(@lanes) do %>
+            <%= if Enum.empty?(@lanes) and not @show_system_events do %>
               <div class="timeline-empty-state">
                 Select targets from the panel on the left to show lanes.
               </div>
             <% else %>
+              <!-- System lane (shown first when enabled) -->
+              <.system_lane
+                :if={@show_system_events}
+                events={@system_events}
+                start_time={@start_time}
+                total_ms={@total_ms}
+                on_toggle={@on_toggle_system}
+              />
+
               <.timeline_lane
                 :for={lane <- @lanes}
                 target={lane.target}
@@ -1829,6 +1858,37 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
     """
   end
 
+  attr :events, :list, required: true
+  attr :start_time, :any, required: true
+  attr :total_ms, :integer, required: true
+  attr :on_toggle, :string, default: "toggle_system_events"
+
+  def system_lane(assigns) do
+    ~H"""
+    <div class="timeline-lane system-lane" data-target-id="__SYSTEM__">
+      <div class="lane-header">
+        <span class="lane-target-name">◆ SYSTEM</span>
+        <button
+          type="button"
+          class="lane-unpin"
+          phx-click={@on_toggle}
+          title="Hide system events"
+        >
+          ×
+        </button>
+      </div>
+      <div class="lane-track">
+        <.lane_event
+          :for={event <- @events}
+          event={event}
+          start_time={@start_time}
+          total_ms={@total_ms}
+        />
+      </div>
+    </div>
+    """
+  end
+
   attr :target, :map, required: true
   attr :events, :list, required: true
   attr :start_time, :any, required: true
@@ -1869,7 +1929,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   def lane_event(assigns) do
     event_time = assigns.event.timestamp
     position = calculate_position(event_time, assigns.start_time, assigns.total_ms)
-    event_type = assigns.event.event_type || :command
+    event_type = assigns.event.type || :command
     type_class = "lane-event-#{event_type}"
 
     status_class =
@@ -1892,7 +1952,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
       data-event-id={@event.id}
       title={"#{event_title(@event)} - #{format_event_time(@event.timestamp)}"}
     >
-      {lane_event_symbol(@event.event_type || :command)}
+      {lane_event_symbol(@event.type || :command)}
     </div>
     """
   end
