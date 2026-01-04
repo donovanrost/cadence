@@ -630,8 +630,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     handle_failure_local(entry, entry_id, reason, state)
   end
 
-  defp apply_completion_result(entry, entry_id, {:error, reason, _details}, state) do
-    handle_failure_local(entry, entry_id, reason, state)
+  defp apply_completion_result(entry, entry_id, {:error, reason, details}, state) do
+    handle_failure_local(entry, entry_id, {reason, details}, state)
   end
 
   defp return_to_pending_local(entry, entry_id, reason, state) do
@@ -654,23 +654,19 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   defp handle_failure_local(entry, entry_id, reason, state) do
     error_msg = inspect(reason)
 
-    if QueuedCommand.retriable?(entry) do
-      updated_entry = %{entry | status: :failed, last_error: error_msg}
-      new_entries_by_id = Map.put(state.entries_by_id, entry_id, updated_entry)
+    failed_entry = %{entry | status: :failed, last_error: error_msg}
+
+    if QueuedCommand.retriable?(failed_entry) do
+      new_entries_by_id = Map.put(state.entries_by_id, entry_id, failed_entry)
       QueuePersistence.notify({:failed, entry_id, error_msg})
       Process.send_after(self(), {:retry_command, entry_id}, @retry_delay_ms)
 
       %{state | entries_by_id: new_entries_by_id, executing: nil}
       |> refresh_counts()
     else
-      updated_entry = %{
-        entry
-        | status: :failed,
-          last_error: "Max attempts reached. Last error: #{error_msg}"
-      }
-
+      final_error_msg = "Max attempts reached. Last error: #{error_msg}"
       new_state = remove_entry_local(state, entry_id)
-      QueuePersistence.notify({:failed, entry_id, updated_entry.last_error})
+      QueuePersistence.notify({:failed, entry_id, final_error_msg})
       %{new_state | executing: nil}
     end
   end

@@ -12,7 +12,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, Commands, Targets, Timeline}
+  alias Cadence.{Alarms, Commands, Outbox, Targets, Timeline}
+  alias Cadence.Procedures.Events.ProcedureExecutionEvent
+  alias Cadence.Timeline.Event, as: TimelineEvent
   import CadenceWeb.OpsConsoleLive.Components
 
   @event_types [:command, :alarm, :procedure, :automation]
@@ -37,6 +39,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     alarm_counts = calculate_alarm_counts(active_alarms)
 
     queue_entries = build_context_queue_entries(mission_id, targets)
+    queue_entry_status_by_id = Map.new(queue_entries, &{&1.id, &1.status})
 
     fleet_health = calculate_fleet_health(targets)
 
@@ -44,7 +47,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:timeline")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:procedures")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:automations")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
+      Outbox.subscribe_mission(mission_id)
       :timer.send_interval(1000, self(), :tick)
     end
 
@@ -59,7 +65,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:targets_by_id, targets_by_id)
       |> stream(:events, events)
       |> assign(:events_list, events)
-      |> assign(:selected_targets, MapSet.new())
+      |> assign(:selected_targets, MapSet.new(targets, & &1.id))
       |> assign(:event_type_filters, event_type_filters)
       |> assign(:target_search, "")
       |> assign(:expanded_events, MapSet.new())
@@ -71,6 +77,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:alarm_counts, alarm_counts)
       |> assign(:alarms, active_alarms)
       |> assign(:queue_entries, queue_entries)
+      |> assign(:queue_entry_status_by_id, queue_entry_status_by_id)
       |> assign(:fleet_health, fleet_health)
       |> assign(:running_procedures, [])
       |> assign(:current_time, DateTime.utc_now())
@@ -653,7 +660,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         s when s in [:pending, :queued] -> "status-pending"
         s when s in [:running, :executing] -> "status-running"
         s when s in [:active] -> "status-active"
-        s when s in [:error, :failed] -> "status-error"
+        s when s in [:error, :failed, :cancelled, :expired] -> "status-error"
         _ -> "status-default"
       end
 
@@ -701,10 +708,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   end
 
   defp target_visible?(event, selected_targets) do
-    # If no targets selected (deselected), show all events
-    # If targets are selected, HIDE events for those targets (filter them out)
-    # System events (no target_id) always show
-    event.target_id == nil || !MapSet.member?(selected_targets, event.target_id)
+    event.target_id == nil || MapSet.member?(selected_targets, event.target_id)
   end
 
   # Event detail panel (legacy, kept for reference)
@@ -937,11 +941,6 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
      |> reset_events_stream()}
   end
 
-  # Reset the events stream to apply current filters
-  defp reset_events_stream(socket) do
-    stream(socket, :events, socket.assigns.events_list, reset: true)
-  end
-
   def handle_event("toggle_event_expand", %{"id" => id}, socket) do
     expanded_events = socket.assigns.expanded_events
     event = Enum.find(socket.assigns.events_list, &(&1.id == id))
@@ -968,26 +967,6 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         {:noreply, stream_insert(socket, :events, event)}
       else
         {:noreply, socket}
-      end
-    end
-  end
-
-  defp maybe_load_event_history(socket, event_id) do
-    if Map.has_key?(socket.assigns.event_histories, event_id) do
-      socket
-    else
-      event = Enum.find(socket.assigns.events_list, &(&1.id == event_id))
-
-      if event do
-        history = Timeline.get_event_state_history(event)
-
-        assign(
-          socket,
-          :event_histories,
-          Map.put(socket.assigns.event_histories, event_id, history)
-        )
-      else
-        socket
       end
     end
   end
@@ -1126,14 +1105,65 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     end
   end
 
+  # Reset the events stream to apply current filters
+  defp reset_events_stream(socket) do
+    stream(socket, :events, socket.assigns.events_list, reset: true)
+  end
+
+  defp maybe_load_event_history(socket, event_id) do
+    if Map.has_key?(socket.assigns.event_histories, event_id) do
+      socket
+    else
+      event = Enum.find(socket.assigns.events_list, &(&1.id == event_id))
+
+      if event do
+        history = Timeline.get_event_state_history(event)
+
+        assign(
+          socket,
+          :event_histories,
+          Map.put(socket.assigns.event_histories, event_id, history)
+        )
+      else
+        socket
+      end
+    end
+  end
+
   # PubSub handlers
   @impl true
   def handle_info({:timeline_event, event}, socket) do
     {:noreply, insert_live_event(socket, maybe_attach_target_name(socket, event))}
   end
 
-  def handle_info({:queue_updated, _entry}, socket) do
-    {:noreply, refresh_queue_entries(socket)}
+  def handle_info({:queue_updated, entry}, socket) do
+    {socket, timeline_event} = maybe_queue_update_to_timeline_event(socket, entry)
+
+    socket =
+      socket
+      |> maybe_insert_timeline_event(timeline_event)
+      |> refresh_queue_entries()
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:outbox_event, %{event_type: event_type} = event}, socket)
+      when event_type in ["command_enqueued", "command_status_changed", "command_cancelled"] do
+    timeline_event = outbox_command_event_to_timeline_event(event)
+
+    {:noreply,
+     socket
+     |> refresh_queue_entries()
+     |> maybe_insert_timeline_event(timeline_event)}
+  end
+
+  def handle_info({:outbox_event, _event}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_info({:procedure_event, %ProcedureExecutionEvent{} = event}, socket) do
+    timeline_event = procedure_event_to_timeline_event(event)
+    {:noreply, maybe_insert_timeline_event(socket, timeline_event)}
   end
 
   def handle_info(:tick, %{assigns: %{live_action: :lanes, lanes_scrubbing?: true}} = socket) do
@@ -1144,24 +1174,28 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     {:noreply, assign(socket, :current_time, DateTime.utc_now())}
   end
 
-  def handle_info({:alarm_triggered, _alarm}, socket) do
+  def handle_info({:alarm_triggered, alarm}, socket) do
     active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
+    timeline_event = alarm_to_timeline_event(alarm, :triggered)
 
     socket =
       socket
       |> assign(:alarm_counts, calculate_alarm_counts(active_alarms))
       |> assign(:alarms, active_alarms)
+      |> maybe_insert_timeline_event(timeline_event)
 
     {:noreply, socket}
   end
 
-  def handle_info({:alarm_cleared, _alarm}, socket) do
+  def handle_info({:alarm_cleared, alarm}, socket) do
     active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
+    timeline_event = alarm_to_timeline_event(alarm, :cleared)
 
     socket =
       socket
       |> assign(:alarm_counts, calculate_alarm_counts(active_alarms))
       |> assign(:alarms, active_alarms)
+      |> maybe_insert_timeline_event(timeline_event)
 
     {:noreply, socket}
   end
@@ -1221,12 +1255,281 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   defp maybe_attach_target_name(_socket, event), do: event
 
+  defp maybe_insert_timeline_event(socket, nil), do: socket
+
+  defp maybe_insert_timeline_event(socket, event) do
+    insert_live_event(socket, maybe_attach_target_name(socket, event))
+  end
+
+  defp maybe_queue_update_to_timeline_event(socket, entry) do
+    entry_id = Map.get(entry, :id) || Map.get(entry, "id")
+
+    status =
+      entry
+      |> Map.get(:status, Map.get(entry, "status"))
+      |> normalize_queue_status()
+
+    if is_binary(entry_id) and not is_nil(status) do
+      status_by_id = Map.get(socket.assigns, :queue_entry_status_by_id, %{})
+      previous_status = Map.get(status_by_id, entry_id)
+      socket = assign(socket, :queue_entry_status_by_id, Map.put(status_by_id, entry_id, status))
+
+      if is_nil(previous_status) or previous_status != status do
+        {socket, queue_entry_to_timeline_event(entry, entry_id, status)}
+      else
+        {socket, nil}
+      end
+    else
+      {socket, nil}
+    end
+  end
+
+  defp normalize_queue_status(status) when is_atom(status), do: status
+  defp normalize_queue_status("pending"), do: :pending
+  defp normalize_queue_status("executing"), do: :executing
+  defp normalize_queue_status("completed"), do: :completed
+  defp normalize_queue_status("failed"), do: :failed
+  defp normalize_queue_status("cancelled"), do: :cancelled
+  defp normalize_queue_status("expired"), do: :expired
+  defp normalize_queue_status(_), do: nil
+
+  defp entry_field(entry, key, default \\ nil) when is_atom(key) do
+    Map.get(entry, key) || Map.get(entry, Atom.to_string(key)) || default
+  end
+
+  defp queue_entry_to_timeline_event(entry, entry_id, status) do
+    command_name = entry_field(entry, :command_name, "Command")
+    target_id = entry_field(entry, :target_id)
+    priority = entry_field(entry, :priority)
+    scheduled_at = entry_field(entry, :scheduled_at)
+    attempts = entry_field(entry, :attempts, 0)
+    user_id = entry_field(entry, :user_id)
+    created_at = entry_field(entry, :created_at)
+    last_attempt_at = entry_field(entry, :last_attempt_at)
+
+    timestamp =
+      case {status, created_at, last_attempt_at} do
+        {:pending, %DateTime{} = created_at, _} -> created_at
+        {:executing, _, %DateTime{} = last_attempt_at} -> last_attempt_at
+        _ -> DateTime.utc_now()
+      end
+
+    {description, badge_status} = queue_status_description_and_badge(status, scheduled_at)
+
+    %TimelineEvent{
+      id: "queue-#{entry_id}-#{badge_status}-#{attempts}",
+      type: :command,
+      timestamp: timestamp,
+      target_id: target_id,
+      target_name: nil,
+      target_group: nil,
+      title: command_name,
+      description: description,
+      status: badge_status,
+      status_label: badge_status |> to_string() |> String.upcase(),
+      user_id: user_id,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        priority: priority,
+        scheduled_at: scheduled_at,
+        attempts: attempts
+      },
+      source_id: entry_id,
+      source_table: :command_queue_entries
+    }
+  end
+
+  defp queue_status_description_and_badge(:pending, %DateTime{} = scheduled_at) do
+    now = DateTime.utc_now()
+
+    if DateTime.compare(scheduled_at, now) == :gt do
+      {"Scheduled", :queued}
+    else
+      {"Queued", :queued}
+    end
+  end
+
+  defp queue_status_description_and_badge(:pending, _), do: {"Queued", :queued}
+  defp queue_status_description_and_badge(:executing, _), do: {"Executing", :executing}
+  defp queue_status_description_and_badge(:completed, _), do: {"Completed", :completed}
+  defp queue_status_description_and_badge(:failed, _), do: {"Failed", :failed}
+  defp queue_status_description_and_badge(:cancelled, _), do: {"Cancelled", :cancelled}
+  defp queue_status_description_and_badge(:expired, _), do: {"Expired", :expired}
+  defp queue_status_description_and_badge(_status, _), do: {"Queued", :queued}
+
+  defp outbox_command_event_to_timeline_event(event) do
+    payload = Map.get(event, :payload, %{})
+    command_name = Map.get(payload, "command_name", "Command")
+    target_id = Map.get(payload, "target_id")
+    status = Map.get(payload, "status")
+
+    {description, badge_status} =
+      outbox_command_description_and_badge(Map.get(event, :event_type), status)
+
+    id =
+      case Map.get(event, :recording_id) do
+        recording_id when is_binary(recording_id) -> "rec-#{recording_id}"
+        _ -> "outbox-#{event.id}"
+      end
+
+    %TimelineEvent{
+      id: id,
+      type: :command,
+      timestamp: Map.get(event, :inserted_at) || DateTime.utc_now(),
+      target_id: target_id,
+      target_name: nil,
+      target_group: nil,
+      title: command_name,
+      description: description,
+      status: badge_status,
+      status_label: badge_status |> to_string() |> String.upcase(),
+      user_id: Map.get(event, :actor_id),
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        outbox_event_id: event.id,
+        event_type: Map.get(event, :event_type),
+        priority: Map.get(payload, "priority"),
+        scheduled_at: Map.get(payload, "scheduled_at")
+      },
+      source_id: Map.get(event, :aggregate_id),
+      source_table: :outbox_events
+    }
+  end
+
+  defp outbox_command_description_and_badge("command_enqueued", _status), do: {"Queued", :queued}
+
+  defp outbox_command_description_and_badge("command_status_changed", "completed"),
+    do: {"Completed", :completed}
+
+  defp outbox_command_description_and_badge("command_status_changed", "failed"),
+    do: {"Failed", :failed}
+
+  defp outbox_command_description_and_badge("command_status_changed", "executing"),
+    do: {"Executing", :executing}
+
+  defp outbox_command_description_and_badge("command_status_changed", "pending"),
+    do: {"Queued", :queued}
+
+  defp outbox_command_description_and_badge("command_cancelled", _status),
+    do: {"Cancelled", :cancelled}
+
+  defp outbox_command_description_and_badge(_event_type, _status), do: {"Queued", :queued}
+
+  defp procedure_event_to_timeline_event(%ProcedureExecutionEvent{} = proc_event) do
+    %TimelineEvent{
+      id: "proc-evt-#{proc_event.execution_id}-#{proc_event.id}",
+      type: :procedure,
+      timestamp: proc_event.timestamp,
+      target_id: proc_event.target_id,
+      target_name: nil,
+      target_group: nil,
+      title: proc_event.procedure_name || "Procedure",
+      description: format_procedure_event_description(proc_event),
+      status: map_procedure_event_status(proc_event.event_type),
+      status_label: proc_event.event_type |> to_string() |> String.upcase(),
+      user_id: proc_event.triggered_by_user_id,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        execution_id: proc_event.execution_id,
+        procedure_id: proc_event.procedure_id,
+        event_type: proc_event.event_type,
+        step_index: proc_event.step_index,
+        error_message: proc_event.error_message,
+        triggered_by: proc_event.triggered_by,
+        step_info: proc_event.step_info
+      },
+      source_id: proc_event.execution_id,
+      source_table: :procedure_executions
+    }
+  end
+
+  defp format_procedure_event_description(%{event_type: :started}), do: "Execution started"
+  defp format_procedure_event_description(%{event_type: :completed}), do: "Completed successfully"
+
+  defp format_procedure_event_description(%{event_type: :failed, error_message: msg})
+       when is_binary(msg) and msg != "",
+       do: "Failed: #{msg}"
+
+  defp format_procedure_event_description(%{event_type: :failed}), do: "Execution failed"
+
+  defp format_procedure_event_description(%{event_type: :paused, step_index: idx})
+       when is_integer(idx),
+       do: "Paused at step #{idx + 1}"
+
+  defp format_procedure_event_description(%{event_type: :paused}), do: "Paused"
+  defp format_procedure_event_description(%{event_type: :pausing}), do: "Pausing..."
+  defp format_procedure_event_description(%{event_type: :resumed}), do: "Resumed"
+  defp format_procedure_event_description(%{event_type: :cancelled}), do: "Cancelled"
+
+  defp format_procedure_event_description(%{event_type: :step_started, step_index: idx})
+       when is_integer(idx),
+       do: "Step #{idx + 1} started"
+
+  defp format_procedure_event_description(%{event_type: :step_completed, step_index: idx})
+       when is_integer(idx),
+       do: "Step #{idx + 1} completed"
+
+  defp format_procedure_event_description(_), do: nil
+
+  defp map_procedure_event_status(:started), do: :running
+  defp map_procedure_event_status(:completed), do: :success
+  defp map_procedure_event_status(:failed), do: :error
+  defp map_procedure_event_status(:paused), do: :pending
+  defp map_procedure_event_status(:pausing), do: :pending
+  defp map_procedure_event_status(:resumed), do: :running
+  defp map_procedure_event_status(:cancelled), do: :error
+  defp map_procedure_event_status(:step_started), do: :running
+  defp map_procedure_event_status(:step_completed), do: :running
+  defp map_procedure_event_status(_), do: :running
+
+  defp alarm_to_timeline_event(alarm, event_type) do
+    {description, status} = alarm_description_and_status(event_type)
+
+    %TimelineEvent{
+      id: "alm-#{alarm.id}-#{System.unique_integer([:positive])}",
+      type: :alarm,
+      timestamp: DateTime.utc_now(),
+      target_id: alarm.target_id,
+      target_name: nil,
+      target_group: nil,
+      title: alarm.message || alarm.alarm_type || "Alarm",
+      description: description,
+      status: status,
+      status_label: event_type |> to_string() |> String.upcase(),
+      user_id: nil,
+      user_name: nil,
+      is_future: false,
+      metadata: %{
+        severity: alarm.severity,
+        source_type: alarm.source_type,
+        source_id: alarm.source_id
+      },
+      source_id: alarm.id,
+      source_table: :alarms
+    }
+  end
+
+  defp alarm_description_and_status(:triggered), do: {"Alarm triggered", :active}
+  defp alarm_description_and_status(:cleared), do: {"Cleared", :success}
+  defp alarm_description_and_status(_), do: {nil, :active}
+
   defp refresh_queue_entries(socket) do
     mission_id = socket.assigns.mission.id
     targets = socket.assigns.targets
 
     queue_entries = build_context_queue_entries(mission_id, targets)
-    assign(socket, :queue_entries, queue_entries)
+
+    queue_entry_status_by_id =
+      socket.assigns
+      |> Map.get(:queue_entry_status_by_id, %{})
+      |> Map.merge(Map.new(queue_entries, &{&1.id, &1.status}))
+
+    socket
+    |> assign(:queue_entries, queue_entries)
+    |> assign(:queue_entry_status_by_id, queue_entry_status_by_id)
   end
 
   defp build_context_queue_entries(mission_id, targets) do

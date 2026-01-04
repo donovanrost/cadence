@@ -266,6 +266,29 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
     end
   end
 
+  describe "queue failure handling" do
+    test "retries a failed command under max_attempts", %{mission: mission, target: target} do
+      {:ok, entry} =
+        Commands.enqueue(mission.id, "WILL_FAIL", %{}, target: target.id, max_attempts: 3)
+
+      Cadence.PureCase.assert_eventually(fn ->
+        status = TargetQueue.status(mission.id, target.id)
+        status.pending == 1
+      end)
+
+      assert {:ok, _} = TargetQueue.mark_executing(mission.id, target.id, entry.id)
+      TargetQueue.complete(mission.id, target.id, entry.id, {:error, :validation_failed, []})
+
+      Cadence.PureCase.assert_eventually(
+        fn ->
+          status = TargetQueue.status(mission.id, target.id)
+          status.pending == 1 and status.executing == 0
+        end,
+        timeout: 3000
+      )
+    end
+  end
+
   describe "QueuedCommand helpers" do
     test "ready?/1 returns true for pending entry without scheduled time" do
       entry = %QueuedCommand{

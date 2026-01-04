@@ -39,10 +39,10 @@ defmodule Cadence.Timeline do
 
   # Map event types to aggregate types in recordings
   @type_to_aggregate %{
-    command: "Command",
-    alarm: "Alarm",
-    procedure: "ProcedureExecution",
-    automation: "Automation"
+    command: ["Command", "QueueEntry"],
+    alarm: ["Alarm"],
+    procedure: ["ProcedureExecution"],
+    automation: ["Automation"]
   }
 
   @doc """
@@ -75,7 +75,7 @@ defmodule Cadence.Timeline do
     mission_id = Keyword.get(opts, :mission_id)
 
     # Convert types to aggregate types for recordings query
-    aggregate_types = Enum.map(types, &Map.get(@type_to_aggregate, &1)) |> Enum.reject(&is_nil/1)
+    aggregate_types = aggregate_types_for(types)
 
     # Query recordings using path prefix
     recordings =
@@ -270,7 +270,7 @@ defmodule Cadence.Timeline do
     bucket_path = get_mission_bucket_path(mission_id)
 
     # Convert types to aggregate types for recordings query
-    aggregate_types = Enum.map(types, &Map.get(@type_to_aggregate, &1)) |> Enum.reject(&is_nil/1)
+    aggregate_types = aggregate_types_for(types)
 
     # Query recordings before cursor using path prefix
     recordings =
@@ -365,6 +365,12 @@ defmodule Cadence.Timeline do
       nil -> nil
       bucket -> bucket.path
     end
+  end
+
+  defp aggregate_types_for(types) when is_list(types) do
+    types
+    |> Enum.flat_map(fn type -> Map.get(@type_to_aggregate, type, []) end)
+    |> Enum.uniq()
   end
 
   @doc false
