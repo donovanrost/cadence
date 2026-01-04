@@ -78,7 +78,7 @@ defmodule Cadence.Application.Commanding.ManageQueueTest do
       {:ok, completed} = ManageQueue.complete(cmd.id, "log-123")
 
       assert completed.status == :completed
-      assert completed.command_log_id == "log-123"
+      assert completed.command_aggregate_id == "log-123"
     end
 
     test "records dequeue event" do

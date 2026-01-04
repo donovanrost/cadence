@@ -125,6 +125,7 @@ defmodule Cadence.Outbox.Event do
       :payload,
       :idempotency_key
     ])
+    |> update_change(:payload, &normalize_payload/1)
     |> validate_required([
       :organization_id,
       :event_type,
@@ -137,6 +138,32 @@ defmodule Cadence.Outbox.Event do
     |> foreign_key_constraint(:recording_id)
     |> unique_constraint(:idempotency_key)
   end
+
+  defp normalize_payload(nil), do: %{}
+  defp normalize_payload(payload) when is_map(payload), do: deep_stringify_keys(payload)
+  defp normalize_payload(payload), do: payload
+
+  defp deep_stringify_keys(%_{} = value), do: value
+
+  defp deep_stringify_keys(value) when is_list(value) do
+    Enum.map(value, &deep_stringify_keys/1)
+  end
+
+  defp deep_stringify_keys(value) when is_map(value) do
+    value
+    |> Enum.map(fn {key, nested} ->
+      {stringify_key(key), deep_stringify_keys(nested)}
+    end)
+    |> Map.new()
+  end
+
+  defp deep_stringify_keys(value), do: value
+
+  defp stringify_key(key) when is_binary(key), do: key
+  defp stringify_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp stringify_key(key) when is_integer(key), do: Integer.to_string(key)
+  defp stringify_key(key) when is_float(key), do: Float.to_string(key)
+  defp stringify_key(key), do: inspect(key)
 
   @doc """
   Creates a new outbox event struct with a changeset ready for insertion.

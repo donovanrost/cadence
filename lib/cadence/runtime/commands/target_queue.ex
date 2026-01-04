@@ -121,12 +121,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Attaches a command log ID to an executing entry.
+  Attaches a command aggregate ID to an executing entry.
   """
-  def attach_command_log(mission_id, target_id, entry_id, command_log_id) do
+  def attach_command_aggregate_id(mission_id, target_id, entry_id, command_aggregate_id) do
     GenServer.cast(
       via_tuple(mission_id, target_id),
-      {:attach_command_log, entry_id, command_log_id}
+      {:attach_command_aggregate_id, entry_id, command_aggregate_id}
     )
   end
 
@@ -340,11 +340,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     {:noreply, new_state}
   end
 
-  def handle_cast({:attach_command_log, entry_id, command_log_id}, state) do
-    {new_state, updated} = update_entry_local(state, entry_id, %{command_log_id: command_log_id})
+  def handle_cast({:attach_command_aggregate_id, entry_id, command_aggregate_id}, state) do
+    {new_state, updated} =
+      update_entry_local(state, entry_id, %{command_aggregate_id: command_aggregate_id})
 
     if updated do
-      QueuePersistence.notify({:attach_command_log, entry_id, command_log_id})
+      QueuePersistence.notify({:attach_command_aggregate_id, entry_id, command_aggregate_id})
     end
 
     {:noreply, new_state}
@@ -516,8 +517,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   defp opts_to_map(opts) do
     opts
-    |> Keyword.drop([:priority, :scheduled_at, :expires_at, :max_attempts, :user_id])
-    |> Map.new(fn {k, v} -> {to_string(k), v} end)
+    |> Keyword.take([:interface_id, :skip_verification, :skip_hazardous_check])
+    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
   end
 
   defp do_cancel(entry_id, state) do

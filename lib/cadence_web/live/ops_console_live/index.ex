@@ -2106,6 +2106,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
 
   defp broadcast_timeline_event(socket, %Cadence.Timeline.Event{} = event) do
     mission_id = socket.assigns.mission.id
+    event = maybe_attach_target_name(socket, event)
 
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
@@ -2114,6 +2115,22 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
     )
 
     push_event(socket, "timeline_event", %{event: timeline_event_json(event)})
+  end
+
+  defp maybe_attach_target_name(socket, %Cadence.Timeline.Event{} = event) do
+    cond do
+      is_binary(event.target_name) and event.target_name != "" ->
+        event
+
+      is_binary(event.target_id) ->
+        case Enum.find(socket.assigns.targets, &(&1.id == event.target_id)) do
+          nil -> event
+          target -> %{event | target_name: target.name}
+        end
+
+      true ->
+        event
+    end
   end
 
   defp update_staged_commands(socket) do
@@ -2132,10 +2149,10 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
          %{event_type: event_type, payload: payload} = event
        ) do
     command_name =
-      Map.get(payload, "command_name") || Map.get(payload, :command_name) || "Command"
+      Map.get(payload, "command_name", "Command")
 
-    target_id = Map.get(payload, "target_id") || Map.get(payload, :target_id)
-    status = Map.get(payload, "status") || Map.get(payload, :status)
+    target_id = Map.get(payload, "target_id")
+    status = Map.get(payload, "status")
 
     # Use recording_id if available, otherwise use aggregate_id for uniqueness
     event_id =
@@ -2161,8 +2178,8 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       is_future: false,
       metadata: %{
         event_type: event_type,
-        priority: Map.get(payload, "priority") || Map.get(payload, :priority),
-        scheduled_at: Map.get(payload, "scheduled_at") || Map.get(payload, :scheduled_at)
+        priority: Map.get(payload, "priority"),
+        scheduled_at: Map.get(payload, "scheduled_at")
       },
       source_id: event.aggregate_id,
       source_table: :command_queue_entries

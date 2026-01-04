@@ -67,7 +67,7 @@ defmodule Cadence.Commands.QueueEntry do
     field :last_error, :string
 
     # Result linking
-    field :command_log_id, :binary_id
+    field :command_aggregate_id, :binary_id, source: :command_log_id
 
     # Options passed to dispatch
     field :dispatch_opts, :map, default: %{}
@@ -118,7 +118,7 @@ defmodule Cadence.Commands.QueueEntry do
       :attempts,
       :last_attempt_at,
       :last_error,
-      :command_log_id
+      :command_aggregate_id
     ])
     |> validate_required([:status])
   end

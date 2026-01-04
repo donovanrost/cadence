@@ -313,7 +313,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
       max_attempts: schema.max_attempts,
       last_attempt_at: schema.last_attempt_at,
       last_error: schema.last_error,
-      command_log_id: schema.command_log_id,
+      command_aggregate_id: schema.command_aggregate_id,
       dispatch_opts: schema.dispatch_opts || %{},
       metadata: schema.metadata || %{},
       created_at: schema.inserted_at
@@ -369,7 +369,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
       attempts: entity.attempts,
       last_attempt_at: entity.last_attempt_at,
       last_error: entity.last_error,
-      command_log_id: entity.command_log_id,
+      command_aggregate_id: entity.command_aggregate_id,
       metadata: entity.metadata
     }
 

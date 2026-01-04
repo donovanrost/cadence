@@ -165,7 +165,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommandTest do
 
       assert {:ok, completed} = QueuedCommand.complete(executing, "log-123")
       assert completed.status == :completed
-      assert completed.command_log_id == "log-123"
+      assert completed.command_aggregate_id == "log-123"
       assert completed.last_error == nil
     end
 

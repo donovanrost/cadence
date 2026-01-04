@@ -50,6 +50,8 @@ defmodule Cadence.Commands.Encoder do
   """
   @spec encode(MetaCommand.t(), map()) :: {:ok, binary()} | {:error, term()}
   def encode(%MetaCommand{} = command, params) when is_map(params) do
+    params = normalize_param_keys(params)
+
     with :ok <- validate_required_args(command.arguments, params),
          {:ok, payload} <- build_payload(command.arguments, params) do
       # Build command packet: opcode (2 bytes big-endian) + payload
@@ -119,7 +121,7 @@ defmodule Cadence.Commands.Encoder do
       arguments
       |> Enum.filter(fn arg -> arg.required end)
       |> Enum.reject(fn arg ->
-        Map.has_key?(params, arg.name) || Map.has_key?(params, String.to_atom(arg.name))
+        Map.has_key?(params, arg.name)
       end)
       |> Enum.map(fn arg -> {arg.name, "is required"} end)
 
@@ -161,8 +163,7 @@ defmodule Cadence.Commands.Encoder do
   end
 
   defp get_arg_value(params, %Argument{} = arg) do
-    # Try string key first, then atom key, then default
-    value = Map.get(params, arg.name) || Map.get(params, String.to_atom(arg.name))
+    value = Map.get(params, arg.name)
 
     if is_nil(value) do
       parse_default(arg.default_value, arg.data_type_ref)
@@ -170,6 +171,18 @@ defmodule Cadence.Commands.Encoder do
       value
     end
   end
+
+  defp normalize_param_keys(params) when is_map(params) do
+    params
+    |> Enum.map(fn {key, value} -> {normalize_param_key(key), value} end)
+    |> Map.new()
+  end
+
+  defp normalize_param_key(key) when is_binary(key), do: key
+  defp normalize_param_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp normalize_param_key(key) when is_integer(key), do: Integer.to_string(key)
+  defp normalize_param_key(key) when is_float(key), do: Float.to_string(key)
+  defp normalize_param_key(key), do: inspect(key)
 
   defp parse_default(nil, _data_type), do: nil
   defp parse_default("", _data_type), do: nil

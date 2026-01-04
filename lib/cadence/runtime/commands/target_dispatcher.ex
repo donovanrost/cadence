@@ -60,6 +60,11 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   @confirmation_timeout_ms 60_000
   @default_dispatch_timeout_ms 30_000
   @queue_check_interval_ms 100
+  @dispatch_opts_key_map %{
+    "interface_id" => :interface_id,
+    "skip_verification" => :skip_verification,
+    "skip_hazardous_check" => :skip_hazardous_check
+  }
 
   defmodule State do
     @moduledoc false
@@ -163,7 +168,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   ## Returns
 
-  - `{:ok, command_log_id}` - Command sent successfully
+  - `{:ok, command_aggregate_id}` - Command sent successfully
   - `{:error, :paused}` - Dispatcher is paused
   - `{:error, :requires_confirmation, %{token: ..., hazard_description: ...}}` - Hazardous command
   - `{:error, :validation_failed, errors}` - Argument validation failed
@@ -188,15 +193,15 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   @doc """
   Cancels a pending verification.
   """
-  def cancel_verification(mission_id, target_id, command_log_id) do
-    GenServer.cast(via_tuple(mission_id, target_id), {:cancel_verification, command_log_id})
+  def cancel_verification(mission_id, target_id, command_aggregate_id) do
+    GenServer.cast(via_tuple(mission_id, target_id), {:cancel_verification, command_aggregate_id})
   end
 
   @doc """
   Gets the status of a pending verification.
   """
-  def verification_status(mission_id, target_id, command_log_id) do
-    GenServer.call(via_tuple(mission_id, target_id), {:verification_status, command_log_id})
+  def verification_status(mission_id, target_id, command_aggregate_id) do
+    GenServer.call(via_tuple(mission_id, target_id), {:verification_status, command_aggregate_id})
   end
 
   @doc """
@@ -296,9 +301,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  def handle_call({:verification_status, command_log_id}, _from, state) do
+  def handle_call({:verification_status, command_aggregate_id}, _from, state) do
     status =
-      case Map.get(state.pending_verifications, command_log_id) do
+      case Map.get(state.pending_verifications, command_aggregate_id) do
         nil -> :not_found
         verification -> {:pending, verification}
       end
@@ -323,8 +328,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   @impl true
-  def handle_cast({:cancel_verification, command_log_id}, state) do
-    case Map.get(state.pending_verifications, command_log_id) do
+  def handle_cast({:cancel_verification, command_aggregate_id}, state) do
+    case Map.get(state.pending_verifications, command_aggregate_id) do
       nil ->
         {:noreply, state}
 
@@ -333,7 +338,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
         new_state = %{
           state
-          | pending_verifications: Map.delete(state.pending_verifications, command_log_id)
+          | pending_verifications: Map.delete(state.pending_verifications, command_aggregate_id)
         }
 
         {:noreply, new_state}
@@ -781,7 +786,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         # Convert stored opts back to keyword list
         opts =
           entry.dispatch_opts
-          |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
+          |> dispatch_opts_to_keyword_list()
           |> Keyword.put(:user_id, entry.user_id)
 
         result = do_dispatch(entry, opts, state)
@@ -806,6 +811,21 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         executing_entry_id: entry.id
     }
   end
+
+  defp dispatch_opts_to_keyword_list(dispatch_opts) when is_map(dispatch_opts) do
+    Enum.flat_map(dispatch_opts, fn {key, value} ->
+      case Map.get(@dispatch_opts_key_map, normalize_dispatch_opt_key(key)) do
+        nil -> []
+        atom_key -> [{atom_key, value}]
+      end
+    end)
+  end
+
+  defp dispatch_opts_to_keyword_list(_dispatch_opts), do: []
+
+  defp normalize_dispatch_opt_key(key) when is_binary(key), do: key
+  defp normalize_dispatch_opt_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp normalize_dispatch_opt_key(_key), do: nil
 
   defp get_dispatch_timeout(target) do
     # Check target config for custom timeout, fall back to default
@@ -838,7 +858,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
            create_command_recording(state, command, target, entry.parameters, encoded, opts),
          :ok <- send_to_interface(interface, framed) do
       if entry.id do
-        TargetQueue.attach_command_log(
+        TargetQueue.attach_command_aggregate_id(
           state.mission_id,
           state.target_id,
           entry.id,

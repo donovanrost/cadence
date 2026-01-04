@@ -27,6 +27,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
     # Load targets
     targets = Targets.list_targets(mission)
+    targets_by_id = Map.new(targets, &{&1.id, &1})
 
     # Load recent timeline events
     events = Timeline.list_recent_events(mission_id, 120, limit: @events_page_size)
@@ -55,6 +56,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       socket
       |> assign(:page_title, "Timeline - #{mission.name}")
       |> assign(:targets, targets)
+      |> assign(:targets_by_id, targets_by_id)
       |> stream(:events, events)
       |> assign(:events_list, events)
       |> assign(:selected_targets, MapSet.new())
@@ -452,13 +454,15 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             <div class="timeline-spine-container">
               <div class="timeline-spine"></div>
               <div id="event-list" phx-update="stream">
-                <.timeline_event
-                  :for={{dom_id, event} <- @streams.events}
-                  dom_id={dom_id}
-                  event={event}
-                  expanded={MapSet.member?(@expanded_events, event.id)}
-                  history={Map.get(@event_histories, event.id, [])}
-                />
+                <%= for {dom_id, event} <- @streams.events do %>
+                  <.timeline_event
+                    :if={event_visible?(event, @event_type_filters, @selected_targets)}
+                    dom_id={dom_id}
+                    event={event}
+                    expanded={MapSet.member?(@expanded_events, event.id)}
+                    history={Map.get(@event_histories, event.id, [])}
+                  />
+                <% end %>
               </div>
             </div>
 
@@ -686,7 +690,24 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     """
   end
 
-  # Event detail panel
+  # Check if an event should be visible based on active filters
+  defp event_visible?(event, event_type_filters, selected_targets) do
+    type_visible?(event, event_type_filters) && target_visible?(event, selected_targets)
+  end
+
+  defp type_visible?(event, event_type_filters) do
+    event_type = event.type || :command
+    Map.get(event_type_filters, event_type, true)
+  end
+
+  defp target_visible?(event, selected_targets) do
+    # If no targets selected (deselected), show all events
+    # If targets are selected, HIDE events for those targets (filter them out)
+    # System events (no target_id) always show
+    event.target_id == nil || !MapSet.member?(selected_targets, event.target_id)
+  end
+
+  # Event detail panel (legacy, kept for reference)
   attr :event, :map, required: true
 
   defp event_detail(assigns) do
@@ -874,16 +895,26 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         MapSet.put(socket.assigns.selected_targets, id)
       end
 
-    {:noreply, assign(socket, :selected_targets, selected)}
+    {:noreply,
+     socket
+     |> assign(:selected_targets, selected)
+     |> reset_events_stream()}
   end
 
   def handle_event("select_all_targets", _, socket) do
     all_ids = socket.assigns.targets |> Enum.map(& &1.id) |> MapSet.new()
-    {:noreply, assign(socket, :selected_targets, all_ids)}
+
+    {:noreply,
+     socket
+     |> assign(:selected_targets, all_ids)
+     |> reset_events_stream()}
   end
 
   def handle_event("clear_target_filter", _, socket) do
-    {:noreply, assign(socket, :selected_targets, MapSet.new())}
+    {:noreply,
+     socket
+     |> assign(:selected_targets, MapSet.new())
+     |> reset_events_stream()}
   end
 
   def handle_event("filter_targets", %{"value" => value}, socket) do
@@ -900,7 +931,15 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     event_type_filters =
       Map.update!(socket.assigns.event_type_filters, type_atom, &(!&1))
 
-    {:noreply, assign(socket, :event_type_filters, event_type_filters)}
+    {:noreply,
+     socket
+     |> assign(:event_type_filters, event_type_filters)
+     |> reset_events_stream()}
+  end
+
+  # Reset the events stream to apply current filters
+  defp reset_events_stream(socket) do
+    stream(socket, :events, socket.assigns.events_list, reset: true)
   end
 
   def handle_event("toggle_event_expand", %{"id" => id}, socket) do
@@ -941,7 +980,12 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
       if event do
         history = Timeline.get_event_state_history(event)
-        assign(socket, :event_histories, Map.put(socket.assigns.event_histories, event_id, history))
+
+        assign(
+          socket,
+          :event_histories,
+          Map.put(socket.assigns.event_histories, event_id, history)
+        )
       else
         socket
       end
@@ -1085,7 +1129,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   # PubSub handlers
   @impl true
   def handle_info({:timeline_event, event}, socket) do
-    {:noreply, insert_live_event(socket, event)}
+    {:noreply, insert_live_event(socket, maybe_attach_target_name(socket, event))}
   end
 
   def handle_info({:queue_updated, _entry}, socket) do
@@ -1155,6 +1199,27 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       stream_delete(acc, :events, ev)
     end)
   end
+
+  defp maybe_attach_target_name(
+         %{assigns: %{targets_by_id: _targets_by_id}},
+         %{target_name: name} = event
+       )
+       when is_binary(name) and name != "" do
+    event
+  end
+
+  defp maybe_attach_target_name(
+         %{assigns: %{targets_by_id: targets_by_id}},
+         %{target_id: id} = event
+       )
+       when is_binary(id) and id != "" do
+    case Map.get(targets_by_id, id) do
+      nil -> event
+      target -> %{event | target_name: target.name}
+    end
+  end
+
+  defp maybe_attach_target_name(_socket, event), do: event
 
   defp refresh_queue_entries(socket) do
     mission_id = socket.assigns.mission.id

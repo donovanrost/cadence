@@ -146,6 +146,7 @@ defmodule Cadence.Commands do
   """
   def validate_arguments(%MetaCommand{} = command, args) when is_map(args) do
     command = commands_repo().ensure_loaded(command, associations: [:arguments])
+    args = normalize_argument_keys(args)
 
     errors =
       command.arguments
@@ -159,7 +160,7 @@ defmodule Cadence.Commands do
     unknown_errors =
       args
       |> Map.keys()
-      |> Enum.reject(&MapSet.member?(known_names, to_string(&1)))
+      |> Enum.reject(&MapSet.member?(known_names, &1))
       |> Enum.map(fn name -> {name, "unknown argument"} end)
 
     all_errors = errors ++ unknown_errors
@@ -172,7 +173,7 @@ defmodule Cadence.Commands do
   end
 
   defp validate_single_argument(%Argument{} = arg, args) do
-    value = Map.get(args, arg.name) || Map.get(args, String.to_atom(arg.name))
+    value = Map.get(args, arg.name)
 
     cond do
       # Required argument missing
@@ -188,6 +189,18 @@ defmodule Cadence.Commands do
         validate_argument_value(arg, value)
     end
   end
+
+  defp normalize_argument_keys(args) when is_map(args) do
+    args
+    |> Enum.map(fn {key, value} -> {normalize_argument_key(key), value} end)
+    |> Map.new()
+  end
+
+  defp normalize_argument_key(key) when is_binary(key), do: key
+  defp normalize_argument_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp normalize_argument_key(key) when is_integer(key), do: Integer.to_string(key)
+  defp normalize_argument_key(key) when is_float(key), do: Float.to_string(key)
+  defp normalize_argument_key(key), do: inspect(key)
 
   defp validate_argument_value(%Argument{} = arg, value) do
     errors = []
@@ -1168,7 +1181,7 @@ defmodule Cadence.Commands do
 
   defp dispatch_opts_from_opts(opts) do
     opts
-    |> Keyword.drop([:priority, :scheduled_at, :expires_at, :max_attempts, :user_id])
-    |> Map.new(fn {k, v} -> {to_string(k), v} end)
+    |> Keyword.take([:interface_id, :skip_verification, :skip_hazardous_check])
+    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
   end
 end

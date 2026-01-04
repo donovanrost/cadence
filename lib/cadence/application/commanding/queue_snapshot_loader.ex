@@ -74,9 +74,9 @@ defmodule Cadence.Application.Commanding.QueueSnapshotLoader do
     pending ++ recovered
   end
 
-  defp adjudicate_entry(%QueueEntry{command_log_id: command_log_id} = entry)
-       when is_binary(command_log_id) do
-    if command_sent?(command_log_id) do
+  defp adjudicate_entry(%QueueEntry{command_aggregate_id: command_aggregate_id} = entry)
+       when is_binary(command_aggregate_id) do
+    if command_sent?(command_aggregate_id) do
       update_entry(entry, %{status: :completed, last_error: nil})
       :drop
     else
@@ -90,7 +90,7 @@ defmodule Cadence.Application.Commanding.QueueSnapshotLoader do
   end
 
   defp adjudicate_entry(%QueueEntry{} = entry) do
-    reason = "Restarted while executing with no command log reference"
+    reason = "Restarted while executing with no command aggregate reference"
 
     update_entry(entry, %{
       status: :pending,

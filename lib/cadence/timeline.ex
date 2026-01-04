@@ -16,11 +16,13 @@ defmodule Cadence.Timeline do
   import Ecto.Query
   alias Cadence.Alarms.Alarm
   alias Cadence.Buckets
+  alias Cadence.Buckets.Bucket
   alias Cadence.Commands.QueueEntry
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Recordings
   alias Cadence.Recordings.Recording
   alias Cadence.Repo
+  alias Cadence.Targets.Target
   alias Cadence.Timeline.Event
 
   # Event publisher accessor
@@ -36,10 +38,8 @@ defmodule Cadence.Timeline do
         ]
 
   # Map event types to aggregate types in recordings
-  # Note: Command queue events use "QueueEntry" as the aggregate type,
-  # not "Command". The Event module maps this back to :command for display.
   @type_to_aggregate %{
-    command: "QueueEntry",
+    command: "Command",
     alarm: "Alarm",
     procedure: "ProcedureExecution",
     automation: "Automation"
@@ -92,11 +92,20 @@ defmodule Cadence.Timeline do
     # Batch load target_ids for all recordings
     target_id_map = load_target_ids_for_recordings(recordings)
 
+    # Batch load targets for display names
+    target_name_map = load_target_names(Map.values(target_id_map))
+
     # Convert recordings to timeline events (passing pre-loaded recordable and target_id)
     events =
       Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
         target_id = Map.get(target_id_map, recording.id)
-        Event.from_recording(recording, recordable: recordable, target_id: target_id)
+        target_name = Map.get(target_name_map, target_id)
+
+        Event.from_recording(recording,
+          recordable: recordable,
+          target_id: target_id,
+          target: if(is_binary(target_name), do: %{name: target_name}, else: nil)
+        )
       end)
 
     # Add scheduled future commands if requested
@@ -278,11 +287,20 @@ defmodule Cadence.Timeline do
     # Batch load target_ids for all recordings
     target_id_map = load_target_ids_for_recordings(recordings)
 
+    # Batch load targets for display names
+    target_name_map = load_target_names(Map.values(target_id_map))
+
     # Convert recordings to timeline events (passing pre-loaded recordable and target_id)
     events =
       Enum.map(recordings_with_recordables, fn %{recording: recording, recordable: recordable} ->
         target_id = Map.get(target_id_map, recording.id)
-        Event.from_recording(recording, recordable: recordable, target_id: target_id)
+        target_name = Map.get(target_name_map, target_id)
+
+        Event.from_recording(recording,
+          recordable: recordable,
+          target_id: target_id,
+          target: if(is_binary(target_name), do: %{name: target_name}, else: nil)
+        )
       end)
 
     # Sort all events by timestamp descending and apply limit
@@ -350,12 +368,27 @@ defmodule Cadence.Timeline do
   end
 
   @doc false
-  # Batch load target_ids for recordings based on their aggregate types.
+  # Batch load target_ids for recordings.
+  # Prefer deriving from target buckets (recording.bucket_id -> bucketable_id),
+  # then fall back to aggregate-specific lookups where needed.
   # Returns a map of recording.id -> target_id
   defp load_target_ids_for_recordings(recordings) do
+    target_ids_by_bucket = load_target_ids_for_buckets(recordings)
+
+    initial =
+      Enum.reduce(recordings, %{}, fn recording, acc ->
+        with bucket_id when is_binary(bucket_id) <- recording.bucket_id,
+             target_id when is_binary(target_id) <- Map.get(target_ids_by_bucket, bucket_id) do
+          Map.put(acc, recording.id, target_id)
+        else
+          _ -> acc
+        end
+      end)
+
     recordings
+    |> Enum.reject(&Map.has_key?(initial, &1.id))
     |> Enum.group_by(& &1.aggregate_type)
-    |> Enum.reduce(%{}, &merge_target_ids_for_type/2)
+    |> Enum.reduce(initial, &merge_target_ids_for_type/2)
   end
 
   defp merge_target_ids_for_type({aggregate_type, recs}, acc) do
@@ -364,10 +397,37 @@ defmodule Cadence.Timeline do
     map_recordings_to_target_ids(recs, target_ids, acc)
   end
 
+  defp load_target_ids_for_buckets(recordings) do
+    bucket_ids =
+      recordings
+      |> Enum.map(& &1.bucket_id)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if bucket_ids == [] do
+      %{}
+    else
+      Bucket
+      |> where([b], b.id in ^bucket_ids)
+      |> where([b], b.bucket_type == "target" or b.bucketable_type in ["Target", "target"])
+      |> select([b], {b.id, b.bucketable_id})
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
+
   defp load_target_ids_by_type("QueueEntry", aggregate_ids) do
     QueueEntry
     |> where([q], q.id in ^aggregate_ids)
     |> select([q], {q.id, q.target_id})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  defp load_target_ids_by_type("Command", aggregate_ids) do
+    QueueEntry
+    |> where([q], q.command_aggregate_id in ^aggregate_ids)
+    |> select([q], {q.command_aggregate_id, q.target_id})
     |> Repo.all()
     |> Map.new()
   end
@@ -382,6 +442,20 @@ defmodule Cadence.Timeline do
 
   # Procedures and automations may not have target_id directly
   defp load_target_ids_by_type(_aggregate_type, _aggregate_ids), do: %{}
+
+  defp load_target_names(target_ids) when is_list(target_ids) do
+    ids = target_ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    if ids == [] do
+      %{}
+    else
+      Target
+      |> where([t], t.id in ^ids)
+      |> select([t], {t.id, t.name})
+      |> Repo.all()
+      |> Map.new()
+    end
+  end
 
   defp map_recordings_to_target_ids(recs, target_ids, acc) do
     Enum.reduce(recs, acc, fn rec, inner_acc ->

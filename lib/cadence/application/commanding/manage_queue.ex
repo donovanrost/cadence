@@ -15,7 +15,7 @@ defmodule Cadence.Application.Commanding.ManageQueue do
       {:ok, entry} = ManageQueue.claim_next(target_id)
 
       # Mark as completed
-      {:ok, entry} = ManageQueue.complete(entry_id, command_log_id)
+      {:ok, entry} = ManageQueue.complete(entry_id, command_aggregate_id)
 
       # Mark as failed (may retry)
       {:ok, entry} = ManageQueue.fail(entry_id, "Connection timeout")
@@ -90,13 +90,13 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   @doc """
   Marks a command as successfully completed.
 
-  Records the command log ID for reference and transitions
+  Records the command aggregate ID for reference and transitions
   to terminal `:completed` status.
 
   ## Parameters
 
   - `entry_id` - Queue entry UUID
-  - `command_log_id` - Optional command log reference
+  - `command_aggregate_id` - Optional command aggregate reference
 
   ## Returns
 
@@ -105,9 +105,9 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   - `{:error, {:invalid_transition, from, to}}` - Not in executing status
   """
   @spec complete(entry_id(), String.t() | nil) :: {:ok, QueuedCommand.t()} | {:error, term()}
-  def complete(entry_id, command_log_id \\ nil) do
+  def complete(entry_id, command_aggregate_id \\ nil) do
     with {:ok, entry} <- CommandQueries.find(entry_id),
-         {:ok, updated} <- QueuedCommand.complete(entry, command_log_id),
+         {:ok, updated} <- QueuedCommand.complete(entry, command_aggregate_id),
          {:ok, saved} <- repo().save(updated) do
       broadcast_completed(saved)
       {:ok, saved}

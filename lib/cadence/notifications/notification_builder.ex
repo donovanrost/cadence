@@ -108,7 +108,7 @@ defmodule Cadence.Notifications.NotificationBuilder do
       recipients = Notifications.find_procedure_recipients(:rejected, version)
       procedure = version.procedure
       rejector_name = get_actor_name(event.actor_id)
-      reason = event.payload["reason"] || event.payload[:reason]
+      reason = event.payload["reason"]
 
       body =
         "#{rejector_name} rejected \"#{procedure.name}\" v#{version.version_number}." <>

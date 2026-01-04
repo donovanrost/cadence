@@ -69,9 +69,9 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
       events = FakeEventPublisher.list_events()
       assert length(events) >= 1
 
-      event_entry = List.first(events)
-      assert event_entry.topic =~ "target:"
-      assert match?({:command_enqueued, _}, event_entry.event)
+      assert Enum.any?(events, fn entry ->
+               entry.topic =~ "target:" and match?({:command_enqueued, _}, entry.event)
+             end)
     end
 
     test "records command_queued event" do

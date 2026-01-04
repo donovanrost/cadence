@@ -70,7 +70,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
           max_attempts: pos_integer(),
           last_attempt_at: DateTime.t() | nil,
           last_error: String.t() | nil,
-          command_log_id: String.t() | nil,
+          command_aggregate_id: String.t() | nil,
           dispatch_opts: map(),
           metadata: map(),
           created_at: DateTime.t() | nil
@@ -94,7 +94,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
     :max_attempts,
     :last_attempt_at,
     :last_error,
-    :command_log_id,
+    :command_aggregate_id,
     :created_at,
     parameters: %{},
     dispatch_opts: %{},
@@ -182,16 +182,16 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
   @doc """
   Marks the command as successfully completed.
 
-  Records the command log ID for reference.
+  Records the command aggregate ID for reference.
   """
   @spec complete(t(), String.t() | nil) :: {:ok, t()} | {:error, term()}
-  def complete(%__MODULE__{status: status} = cmd, command_log_id \\ nil) do
+  def complete(%__MODULE__{status: status} = cmd, command_aggregate_id \\ nil) do
     with :ok <- QueueStatus.validate_transition(status, :completed) do
       {:ok,
        %{
          cmd
          | status: :completed,
-           command_log_id: command_log_id,
+           command_aggregate_id: command_aggregate_id,
            last_error: nil
        }}
     end
