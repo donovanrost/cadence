@@ -48,9 +48,13 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           case Procedures.create_draft_from_version(version, user_id: user_id) do
             {:ok, new_version} ->
               socket
-              |> put_flash(:info, "Created new draft v#{new_version.version_number} from approved v#{version.version_number}")
+              |> put_flash(
+                :info,
+                "Created new draft v#{new_version.version_number} from approved v#{version.version_number}"
+              )
               |> push_navigate(
-                to: ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/versions/#{new_version.id}/edit"
+                to:
+                  ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/versions/#{new_version.id}/edit"
               )
 
             {:error, _reason} ->
@@ -293,7 +297,8 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
   end
 
   def handle_event("toggle_request_changes_form", _params, socket) do
-    {:noreply, assign(socket, :show_request_changes_form, !socket.assigns.show_request_changes_form)}
+    {:noreply,
+     assign(socket, :show_request_changes_form, !socket.assigns.show_request_changes_form)}
   end
 
   def handle_event("request_changes", %{"request_changes" => %{"body" => body}}, socket) do
@@ -351,7 +356,8 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
          |> put_flash(:info, "Version resubmitted for review")}
 
       {:error, :unresolved_threads} ->
-        {:noreply, put_flash(socket, :error, "Please resolve all review threads before resubmitting")}
+        {:noreply,
+         put_flash(socket, :error, "Please resolve all review threads before resubmitting")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to resubmit: #{inspect(reason)}")}
@@ -1039,8 +1045,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
         </div>
         <%= if @unresolved_count == 0 do %>
           <span class="text-success text-sm flex items-center gap-1">
-            <.icon name="hero-check-circle" class="h-4 w-4" />
-            All resolved
+            <.icon name="hero-check-circle" class="h-4 w-4" /> All resolved
           </span>
         <% end %>
       </div>
@@ -1063,8 +1068,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                 placeholder="Optional: Add a note about your changes..."
               />
               <button type="submit" class="btn btn-sm btn-primary w-full">
-                <.icon name="hero-arrow-path" class="h-4 w-4" />
-                Resubmit for Review
+                <.icon name="hero-arrow-path" class="h-4 w-4" /> Resubmit for Review
               </button>
             </div>
           </.form>
@@ -1111,8 +1115,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
           phx-click="resolve_thread"
           phx-value-thread_id={@thread.id}
         >
-          <.icon name="hero-check" class="h-3 w-3" />
-          Resolve
+          <.icon name="hero-check" class="h-3 w-3" /> Resolve
         </button>
       <% end %>
     </div>
@@ -1207,11 +1210,12 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
               <% end %>
               <%= if @version.status == :in_review do %>
                 <.link
-                  navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                  navigate={
+                    ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"
+                  }
                   class="btn btn-sm btn-info gap-1"
                 >
-                  <.icon name="hero-chat-bubble-left-right" class="h-4 w-4" />
-                  View Review
+                  <.icon name="hero-chat-bubble-left-right" class="h-4 w-4" /> View Review
                 </.link>
               <% end %>
               <%= if @version.status == :changes_requested do %>
@@ -1220,7 +1224,9 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                   {@unresolved_count} unresolved
                 </span>
                 <.link
-                  navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                  navigate={
+                    ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"
+                  }
                   class="btn btn-sm btn-warning btn-outline gap-1"
                 >
                   View Feedback
@@ -1245,8 +1251,7 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                       Cancel
                     </button>
                     <button type="submit" class="btn btn-sm btn-primary">
-                      <.icon name="hero-paper-airplane" class="h-4 w-4" />
-                      Submit for Review
+                      <.icon name="hero-paper-airplane" class="h-4 w-4" /> Submit for Review
                     </button>
                   </div>
                 </div>
@@ -1265,7 +1270,9 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
                 </span>
               </div>
               <.link
-                navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+                navigate={
+                  ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"
+                }
                 class="btn btn-sm btn-info btn-outline"
               >
                 View Review

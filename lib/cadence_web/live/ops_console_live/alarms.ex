@@ -32,18 +32,14 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     alarm_counts = calculate_alarm_counts(active_alarms)
 
     # Load data for layout (status bar and context panel)
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
+    queue_entries = build_context_queue_entries(mission_id, targets)
 
     fleet_health = calculate_fleet_health(targets)
 
-    # Subscribe to alarm updates
+    # Subscribe to alarm and queue updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
       :timer.send_interval(1000, self(), :tick)
     end
 
@@ -112,8 +108,8 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
             ANALYTICS
           </.link>
         </div>
-
-        <!-- View Content -->
+        
+    <!-- View Content -->
         <%= case @live_action do %>
           <% :active -> %>
             <.active_view
@@ -200,7 +196,14 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   defp active_view(assigns) do
     selected_count = MapSet.size(assigns.selected_targets)
     total_targets = length(assigns.targets)
-    filtered_alarms = filter_alarms(assigns.active_alarms, assigns.filter_status, assigns.filter_severity, assigns.selected_targets)
+
+    filtered_alarms =
+      filter_alarms(
+        assigns.active_alarms,
+        assigns.filter_status,
+        assigns.filter_severity,
+        assigns.selected_targets
+      )
 
     assigns =
       assigns
@@ -230,7 +233,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
               title="Compact view"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                />
               </svg>
             </button>
             <button
@@ -241,7 +249,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
               title="Detailed view"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 6h16M4 12h16m-7 6h7"
+                />
               </svg>
             </button>
           </div>
@@ -275,13 +288,17 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           </button>
         </div>
       </div>
-
-      <!-- Resize Handle -->
-      <div class="alarms-resize-handle" id="alarms-target-resize-handle" phx-hook=".AlarmsTargetResize">
+      
+    <!-- Resize Handle -->
+      <div
+        class="alarms-resize-handle"
+        id="alarms-target-resize-handle"
+        phx-hook=".AlarmsTargetResize"
+      >
         <div class="alarms-resize-grip"></div>
       </div>
-
-      <!-- Middle Panel: Alarm List -->
+      
+    <!-- Middle Panel: Alarm List -->
       <div class="alarms-list-panel" id="alarms-list-panel" phx-hook=".AlarmsListPanel">
         <div class="alarms-panel-header">
           <div class="alarms-panel-title">
@@ -289,8 +306,8 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
             <span class="alarms-count">{@filtered_count} total</span>
           </div>
         </div>
-
-        <!-- Filter Controls -->
+        
+    <!-- Filter Controls -->
         <div class="alarms-filters">
           <div class="alarms-filter-row">
             <div class="alarms-status-filters">
@@ -299,47 +316,71 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
                 class={["alarms-filter-btn", MapSet.member?(@filter_status, "active") && "active"]}
                 phx-click="toggle_status_filter"
                 phx-value-status="active"
-              >ACTIVE</button>
+              >
+                ACTIVE
+              </button>
               <button
                 type="button"
-                class={["alarms-filter-btn", MapSet.member?(@filter_status, "acknowledged") && "active"]}
+                class={[
+                  "alarms-filter-btn",
+                  MapSet.member?(@filter_status, "acknowledged") && "active"
+                ]}
                 phx-click="toggle_status_filter"
                 phx-value-status="acknowledged"
-              >ACK</button>
+              >
+                ACK
+              </button>
               <button
                 type="button"
                 class={["alarms-filter-btn", MapSet.member?(@filter_status, "shelved") && "active"]}
                 phx-click="toggle_status_filter"
                 phx-value-status="shelved"
-              >SHELVED</button>
+              >
+                SHELVED
+              </button>
             </div>
             <div class="alarms-severity-filters">
               <button
                 type="button"
-                class={["alarms-severity-btn severity-critical", MapSet.member?(@filter_severity, "critical") && "active"]}
+                class={[
+                  "alarms-severity-btn severity-critical",
+                  MapSet.member?(@filter_severity, "critical") && "active"
+                ]}
                 phx-click="toggle_severity_filter"
                 phx-value-severity="critical"
                 title="Critical"
-              >C</button>
+              >
+                C
+              </button>
               <button
                 type="button"
-                class={["alarms-severity-btn severity-warning", MapSet.member?(@filter_severity, "warning") && "active"]}
+                class={[
+                  "alarms-severity-btn severity-warning",
+                  MapSet.member?(@filter_severity, "warning") && "active"
+                ]}
                 phx-click="toggle_severity_filter"
                 phx-value-severity="warning"
                 title="Warning"
-              >W</button>
+              >
+                W
+              </button>
               <button
                 type="button"
-                class={["alarms-severity-btn severity-info", MapSet.member?(@filter_severity, "info") && "active"]}
+                class={[
+                  "alarms-severity-btn severity-info",
+                  MapSet.member?(@filter_severity, "info") && "active"
+                ]}
                 phx-click="toggle_severity_filter"
                 phx-value-severity="info"
                 title="Info"
-              >I</button>
+              >
+                I
+              </button>
             </div>
           </div>
         </div>
-
-        <!-- Alarm Groups -->
+        
+    <!-- Alarm Groups -->
         <div class="alarms-list">
           <.alarm_group
             :for={severity <- [:critical, :warning, :info]}
@@ -351,8 +392,8 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
             targets={@targets}
           />
         </div>
-
-        <!-- Bulk Actions -->
+        
+    <!-- Bulk Actions -->
         <div class="alarms-bulk-actions">
           <button
             type="button"
@@ -361,25 +402,38 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
             disabled={@active_count == 0}
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             ACK ALL VISIBLE ({@active_count})
           </button>
         </div>
       </div>
-
-      <!-- Resize Handle -->
-      <div class="alarms-resize-handle" id="alarms-detail-resize-handle" phx-hook=".AlarmsDetailResize">
+      
+    <!-- Resize Handle -->
+      <div
+        class="alarms-resize-handle"
+        id="alarms-detail-resize-handle"
+        phx-hook=".AlarmsDetailResize"
+      >
         <div class="alarms-resize-grip"></div>
       </div>
-
-      <!-- Right Panel: Alarm Detail -->
+      
+    <!-- Right Panel: Alarm Detail -->
       <div class="alarms-detail-panel" id="alarms-detail-panel" phx-hook=".AlarmsDetailPanel">
         <.alarm_detail :if={@selected_alarm} alarm={@selected_alarm} targets={@targets} />
         <div :if={!@selected_alarm} class="alarms-detail-empty">
           <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.5"
+              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+            />
           </svg>
           <span>Select an alarm to view details</span>
         </div>
@@ -620,7 +674,9 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
 
   defp alarm_group(assigns) do
     severity_label = %{critical: "CRITICAL", warning: "WARNING", info: "INFO"}
-    assigns = assign(assigns, :severity_label, Map.get(severity_label, assigns.severity, "UNKNOWN"))
+
+    assigns =
+      assign(assigns, :severity_label, Map.get(severity_label, assigns.severity, "UNKNOWN"))
 
     ~H"""
     <div class={"alarms-group severity-#{@severity}"}>
@@ -631,7 +687,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
         <span class={"alarms-group-dot severity-#{@severity}"}></span>
         <span class="alarms-group-label">{@severity_label}</span>
@@ -690,7 +746,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           title="Acknowledge"
         >
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
         </button>
         <button
@@ -702,7 +758,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           title="Shelve"
         >
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
         </button>
         <button
@@ -714,7 +775,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           title="Unshelve"
         >
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
         </button>
       </div>
@@ -749,14 +815,14 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           {String.upcase(to_string(@alarm.status))}
         </span>
       </div>
-
-      <!-- Message -->
+      
+    <!-- Message -->
       <div class="alarms-detail-section">
         <span class="alarms-detail-label">MESSAGE</span>
         <p class="alarms-detail-message">{@alarm.message || "No message provided"}</p>
       </div>
-
-      <!-- Details Grid -->
+      
+    <!-- Details Grid -->
       <div class="alarms-detail-grid">
         <div class="alarms-detail-item">
           <span class="alarms-detail-label">TARGET</span>
@@ -775,8 +841,8 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           <span class="alarms-detail-value">{@alarm.limit_value}</span>
         </div>
       </div>
-
-      <!-- Actions -->
+      
+    <!-- Actions -->
       <div class="alarms-detail-actions">
         <button
           :if={@alarm.status == :active}
@@ -786,7 +852,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
           phx-value-id={@alarm.id}
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
           Acknowledge
         </button>
@@ -808,7 +874,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
         >
           Unshelve
         </button>
-        <button type="button" class="btn btn-ghost btn-sm" phx-click="clear_alarm" phx-value-id={@alarm.id}>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          phx-click="clear_alarm"
+          phx-value-id={@alarm.id}
+        >
           Clear
         </button>
       </div>
@@ -927,7 +998,10 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   end
 
   def handle_event("acknowledge_alarm", %{"id" => id}, socket) do
-    case Alarms.acknowledge_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.acknowledge_alarm(alarm, user.id) do
       {:ok, updated_alarm} ->
         active_alarms = update_alarm_in_list(socket.assigns.active_alarms, updated_alarm)
         grouped_alarms = group_alarms_by_severity(active_alarms)
@@ -945,17 +1019,19 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
 
   def handle_event("acknowledge_all_visible", _, socket) do
     user = socket.assigns.current_scope.user
-    filtered = filter_alarms(
-      socket.assigns.active_alarms,
-      socket.assigns.filter_status,
-      socket.assigns.filter_severity,
-      socket.assigns.selected_targets
-    )
+
+    filtered =
+      filter_alarms(
+        socket.assigns.active_alarms,
+        socket.assigns.filter_status,
+        socket.assigns.filter_severity,
+        socket.assigns.selected_targets
+      )
 
     active_alarms =
       Enum.reduce(filtered, socket.assigns.active_alarms, fn alarm, acc ->
         if alarm.status == :active do
-          case Alarms.acknowledge_alarm(alarm.id, user) do
+          case Alarms.acknowledge_alarm(alarm, user.id) do
             {:ok, updated} -> update_alarm_in_list(acc, updated)
             _ -> acc
           end
@@ -985,7 +1061,12 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     alarm_id = socket.assigns.show_shelve_modal
     duration_minutes = String.to_integer(duration)
 
-    case Alarms.shelve_alarm(alarm_id, socket.assigns.current_scope.user, duration_minutes, reason) do
+    case Alarms.shelve_alarm(
+           alarm_id,
+           socket.assigns.current_scope.user,
+           duration_minutes,
+           reason
+         ) do
       {:ok, updated_alarm} ->
         active_alarms = update_alarm_in_list(socket.assigns.active_alarms, updated_alarm)
         grouped_alarms = group_alarms_by_severity(active_alarms)
@@ -1023,7 +1104,10 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   end
 
   def handle_event("clear_alarm", %{"id" => id}, socket) do
-    case Alarms.clear_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.clear_alarm(alarm, user.id) do
       {:ok, _cleared_alarm} ->
         active_alarms = Enum.reject(socket.assigns.active_alarms, &(&1.id == id))
         grouped_alarms = group_alarms_by_severity(active_alarms)
@@ -1085,6 +1169,10 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
      |> assign(:alarm_counts, calculate_alarm_counts(active_alarms))}
   end
 
+  def handle_info({:queue_updated, _entry}, socket) do
+    {:noreply, refresh_queue_entries(socket)}
+  end
+
   def handle_info(:tick, socket) do
     {:noreply, assign(socket, :current_time, DateTime.utc_now())}
   end
@@ -1129,6 +1217,36 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     end
   end
 
+  defp refresh_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+    targets = socket.assigns.targets
+
+    queue_entries = build_context_queue_entries(mission_id, targets)
+    assign(socket, :queue_entries, queue_entries)
+  end
+
+  defp build_context_queue_entries(mission_id, targets) do
+    entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        limit: 50
+      )
+
+    attach_targets_to_queue_entries(entries, targets)
+  end
+
+  defp attach_targets_to_queue_entries(queue_entries, targets) do
+    targets_by_id = Map.new(targets, &{&1.id, &1})
+
+    Enum.map(queue_entries, fn entry ->
+      target = Map.get(targets_by_id, entry.target_id)
+
+      entry
+      |> Map.from_struct()
+      |> Map.put(:target, target)
+    end)
+  end
+
   defp filter_targets(targets, search) do
     if search == "" do
       targets
@@ -1140,6 +1258,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
 
   defp count_alarms_for_target(alarms, target_id) do
     target_alarms = Enum.filter(alarms, &(&1.target_id == target_id))
+
     %{
       total: length(target_alarms),
       active: Enum.count(target_alarms, &(&1.status == :active)),
@@ -1152,7 +1271,9 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     |> Enum.filter(fn alarm ->
       status_match = MapSet.member?(filter_status, to_string(alarm.status))
       severity_match = MapSet.member?(filter_severity, to_string(alarm.severity))
-      target_match = MapSet.size(selected_targets) == 0 or MapSet.member?(selected_targets, alarm.target_id)
+
+      target_match =
+        MapSet.size(selected_targets) == 0 or MapSet.member?(selected_targets, alarm.target_id)
 
       status_match and severity_match and target_match
     end)
@@ -1165,6 +1286,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   end
 
   defp find_target_name(_targets, nil), do: "System"
+
   defp find_target_name(targets, target_id) do
     case Enum.find(targets, &(&1.id == target_id)) do
       nil -> "Unknown"
@@ -1173,6 +1295,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   end
 
   defp format_alarm_time(nil), do: "—"
+
   defp format_alarm_time(time) do
     diff = DateTime.diff(DateTime.utc_now(), time, :second)
 
@@ -1185,6 +1308,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   end
 
   defp format_alarm_datetime(nil), do: "—"
+
   defp format_alarm_datetime(time) do
     Calendar.strftime(time, "%Y-%m-%d %H:%M:%S UTC")
   end

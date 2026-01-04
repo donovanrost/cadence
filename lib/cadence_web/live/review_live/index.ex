@@ -22,9 +22,15 @@ defmodule CadenceWeb.ReviewLive.Index do
     organization_id = socket.assigns.current_scope.current_organization.id
 
     # Load all inbox data
-    requested = Reviews.list_requested_reviews(user_id, organization_id: organization_id, limit: 20)
-    awaiting = Reviews.list_awaiting_rereview(user_id, organization_id: organization_id, limit: 20)
-    submissions = Reviews.list_user_submissions(user_id, organization_id: organization_id, limit: 20)
+    requested =
+      Reviews.list_requested_reviews(user_id, organization_id: organization_id, limit: 20)
+
+    awaiting =
+      Reviews.list_awaiting_rereview(user_id, organization_id: organization_id, limit: 20)
+
+    submissions =
+      Reviews.list_user_submissions(user_id, organization_id: organization_id, limit: 20)
+
     activity = Reviews.list_recent_activity(user_id, organization_id: organization_id, limit: 20)
     counts = Reviews.get_inbox_counts(user_id, organization_id: organization_id)
 
@@ -319,9 +325,11 @@ defmodule CadenceWeb.ReviewLive.Index do
             </div>
             <div class="flex items-center gap-4 text-sm text-base-content/60 mb-2">
               <span :if={@item.review_summary}>
-                <span class="text-success">{@item.review_summary.approved_count}</span> approved
+                <span class="text-success">{@item.review_summary.approved_count}</span>
+                approved
                 <span :if={@item.review_summary.changes_requested_count > 0}>
-                  · <span class="text-warning">{@item.review_summary.changes_requested_count}</span> requesting changes
+                  · <span class="text-warning">{@item.review_summary.changes_requested_count}</span>
+                  requesting changes
                 </span>
               </span>
             </div>

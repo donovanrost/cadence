@@ -528,8 +528,8 @@ defmodule CadenceWeb.Layouts do
         <main class="panel-main">
           {@inner_content}
         </main>
-        <!-- Context Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
-        <aside class="panel-context" id="panel-context" phx-update="ignore">
+        <!-- Context Panel -->
+        <aside class="panel-context" id="panel-context">
           <!-- Toggle button -->
           <button
             class="panel-toggle panel-toggle-context"

@@ -90,8 +90,8 @@ defmodule CadenceWeb.OpsConsoleLive.NavPanelComponent do
           </div>
         </div>
       </div>
-
-      <!-- Rail view (shown when panel is collapsed) -->
+      
+    <!-- Rail view (shown when panel is collapsed) -->
       <div class="nav-rail hidden flex-col items-center py-2">
         <div class="rail-section">
           <.rail_mode_button

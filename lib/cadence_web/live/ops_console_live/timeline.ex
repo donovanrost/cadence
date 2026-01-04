@@ -35,19 +35,15 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     active_alarms = Alarms.list_active_alarms(mission_id)
     alarm_counts = calculate_alarm_counts(active_alarms)
 
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
+    queue_entries = build_context_queue_entries(mission_id, targets)
 
     fleet_health = calculate_fleet_health(targets)
 
-    # Subscribe to timeline and alarm updates
+    # Subscribe to timeline, alarm, and queue updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:timeline")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
+      Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
       :timer.send_interval(1000, self(), :tick)
     end
 
@@ -179,7 +175,6 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         }
       }
     </script>
-
     """
   end
 
@@ -883,7 +878,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   # Alarm action handlers (from context panel)
   def handle_event("acknowledge_alarm", %{"id" => id}, socket) do
-    case Alarms.acknowledge_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.acknowledge_alarm(alarm, user.id) do
       {:ok, _updated_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -898,7 +896,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   end
 
   def handle_event("clear_alarm", %{"id" => id}, socket) do
-    case Alarms.clear_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.clear_alarm(alarm, user.id) do
       {:ok, _cleared_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -916,6 +917,10 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   @impl true
   def handle_info({:timeline_event, event}, socket) do
     {:noreply, insert_live_event(socket, event)}
+  end
+
+  def handle_info({:queue_updated, _entry}, socket) do
+    {:noreply, refresh_queue_entries(socket)}
   end
 
   def handle_info(:tick, %{assigns: %{live_action: :lanes, lanes_scrubbing?: true}} = socket) do
@@ -979,6 +984,36 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
     Enum.reduce(dropped, socket, fn ev, acc ->
       stream_delete(acc, :events, ev)
+    end)
+  end
+
+  defp refresh_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+    targets = socket.assigns.targets
+
+    queue_entries = build_context_queue_entries(mission_id, targets)
+    assign(socket, :queue_entries, queue_entries)
+  end
+
+  defp build_context_queue_entries(mission_id, targets) do
+    entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        limit: 50
+      )
+
+    attach_targets_to_queue_entries(entries, targets)
+  end
+
+  defp attach_targets_to_queue_entries(queue_entries, targets) do
+    targets_by_id = Map.new(targets, &{&1.id, &1})
+
+    Enum.map(queue_entries, fn entry ->
+      target = Map.get(targets_by_id, entry.target_id)
+
+      entry
+      |> Map.from_struct()
+      |> Map.put(:target, target)
     end)
   end
 

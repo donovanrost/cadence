@@ -104,7 +104,8 @@ defmodule CadenceWeb.ReviewLive.Overview do
     user_request = Enum.find(review_requests, &(&1.reviewer_id == current_user_id))
 
     # Check if user is the author
-    is_author = version.created_by_id == current_user_id || version.submitted_by_id == current_user_id
+    is_author =
+      version.created_by_id == current_user_id || version.submitted_by_id == current_user_id
 
     # Build merge checklist
     merge_checklist = build_merge_checklist(review_status, blocking_threads)
@@ -413,13 +414,17 @@ defmodule CadenceWeb.ReviewLive.Overview do
           <%!-- Tab Navigation --%>
           <div class="flex items-center gap-1 border-b border-base-content/10 mt-3">
             <.link
-              patch={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+              patch={
+                ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"
+              }
               class="tab tab-bordered tab-active"
             >
               Overview
             </.link>
             <.link
-              navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review/changes"}
+              navigate={
+                ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review/changes"
+              }
               class="tab tab-bordered"
             >
               Changes
@@ -538,8 +543,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
     <div class="card bg-base-200 border border-base-content/10">
       <div class="card-body p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-4">
-          <.icon name="hero-pencil-square" class="h-5 w-5" />
-          Your Review
+          <.icon name="hero-pencil-square" class="h-5 w-5" /> Your Review
         </h3>
 
         <%= if @user_review do %>
@@ -550,13 +554,19 @@ defmodule CadenceWeb.ReviewLive.Overview do
               @user_review.decision == :request_changes && "bg-warning/20 text-warning"
             ]}>
               <.icon
-                name={if @user_review.decision == :approve, do: "hero-check", else: "hero-chat-bubble-left-ellipsis"}
+                name={
+                  if @user_review.decision == :approve,
+                    do: "hero-check",
+                    else: "hero-chat-bubble-left-ellipsis"
+                }
                 class="h-4 w-4"
               />
             </div>
             <div>
               <span class="font-medium">
-                {if @user_review.decision == :approve, do: "You approved", else: "You requested changes"}
+                {if @user_review.decision == :approve,
+                  do: "You approved",
+                  else: "You requested changes"}
               </span>
               <span class="text-sm text-base-content/60 block">
                 {format_relative_time(@user_review.inserted_at)}
@@ -576,8 +586,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
                 phx-click="quick_approve"
                 class="btn btn-success btn-sm gap-1"
               >
-                <.icon name="hero-check" class="h-4 w-4" />
-                Approve
+                <.icon name="hero-check" class="h-4 w-4" /> Approve
               </button>
               <button
                 type="button"
@@ -585,8 +594,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
                 phx-value-decision="request_changes"
                 class="btn btn-warning btn-outline btn-sm gap-1"
               >
-                <.icon name="hero-chat-bubble-left-ellipsis" class="h-4 w-4" />
-                Request Changes
+                <.icon name="hero-chat-bubble-left-ellipsis" class="h-4 w-4" /> Request Changes
               </button>
               <button
                 type="button"
@@ -594,8 +602,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
                 phx-value-decision="approve"
                 class="btn btn-ghost btn-sm gap-1"
               >
-                <.icon name="hero-chat-bubble-left" class="h-4 w-4" />
-                Approve with Comment
+                <.icon name="hero-chat-bubble-left" class="h-4 w-4" /> Approve with Comment
               </button>
             </div>
           <% end %>
@@ -633,7 +640,11 @@ defmodule CadenceWeb.ReviewLive.Overview do
         name="review[body]"
         class="textarea textarea-bordered w-full bg-base-100"
         rows="4"
-        placeholder={if @decision == :approve, do: "Add a comment (optional)...", else: "Describe what changes are needed..."}
+        placeholder={
+          if @decision == :approve,
+            do: "Add a comment (optional)...",
+            else: "Describe what changes are needed..."
+        }
         required={@decision == :request_changes}
       />
 
@@ -649,8 +660,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
             @decision == :request_changes && "btn-warning"
           ]}
         >
-          <.icon name="hero-paper-airplane" class="h-4 w-4" />
-          Submit Review
+          <.icon name="hero-paper-airplane" class="h-4 w-4" /> Submit Review
         </button>
       </div>
     </.form>
@@ -669,8 +679,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
     <div class="card bg-base-200">
       <div class="card-body p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-4">
-          <.icon name="hero-chat-bubble-left-right" class="h-5 w-5" />
-          Discussion Threads
+          <.icon name="hero-chat-bubble-left-right" class="h-5 w-5" /> Discussion Threads
         </h3>
 
         <%= if Enum.empty?(@threads) do %>
@@ -696,8 +705,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
           <%= if length(@blocking_threads) > 0 do %>
             <div class="space-y-2">
               <h4 class="text-sm font-medium text-error flex items-center gap-1">
-                <.icon name="hero-exclamation-triangle" class="h-4 w-4" />
-                Blocking Threads
+                <.icon name="hero-exclamation-triangle" class="h-4 w-4" /> Blocking Threads
               </h4>
               <%= for thread <- Enum.take(@blocking_threads, 3) do %>
                 <.thread_preview thread={thread} />
@@ -754,8 +762,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
     <div class="card bg-base-200">
       <div class="card-body p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-4">
-          <.icon name="hero-clock" class="h-5 w-5" />
-          Activity
+          <.icon name="hero-clock" class="h-5 w-5" /> Activity
         </h3>
 
         <%= if Enum.empty?(@activity) do %>
@@ -843,8 +850,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
     <div class="card bg-base-200">
       <div class="card-body p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-4">
-          <.icon name="hero-clipboard-document-check" class="h-5 w-5" />
-          Merge Checklist
+          <.icon name="hero-clipboard-document-check" class="h-5 w-5" /> Merge Checklist
         </h3>
 
         <div class="space-y-3">
@@ -878,8 +884,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
               phx-click="publish_version"
               class="btn btn-primary w-full gap-1"
             >
-              <.icon name="hero-rocket-launch" class="h-4 w-4" />
-              Publish Version
+              <.icon name="hero-rocket-launch" class="h-4 w-4" /> Publish Version
             </button>
             <p :if={!@is_author} class="text-sm text-success text-center">
               Ready to publish
@@ -889,8 +894,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
           <div class="mt-4 pt-4 border-t border-base-content/10">
             <%= if @all_passed do %>
               <p class="text-sm text-success text-center flex items-center justify-center gap-1">
-                <.icon name="hero-check-circle" class="h-4 w-4" />
-                Ready to merge
+                <.icon name="hero-check-circle" class="h-4 w-4" /> Ready to merge
               </p>
             <% else %>
               <p class="text-sm text-base-content/50 text-center">
@@ -915,7 +919,8 @@ defmodule CadenceWeb.ReviewLive.Overview do
     # Build a map of reviewers with their status
     reviewers =
       Enum.map(assigns.review_requests, fn request ->
-        review = Enum.find(assigns.reviews, &(&1.user_id == request.reviewer_id && !&1.superseded))
+        review =
+          Enum.find(assigns.reviews, &(&1.user_id == request.reviewer_id && !&1.superseded))
 
         %{
           user: request.reviewer,
@@ -956,8 +961,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
       <div class="card-body p-4">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-semibold flex items-center gap-2">
-            <.icon name="hero-users" class="h-5 w-5" />
-            Reviewers
+            <.icon name="hero-users" class="h-5 w-5" /> Reviewers
           </h3>
           <span class="text-xs text-base-content/60">
             {@review_status.approved_count}/{@review_status.required} required
@@ -1024,8 +1028,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
                 phx-click="toggle_add_reviewer"
                 class="btn btn-ghost btn-sm w-full gap-1"
               >
-                <.icon name="hero-plus" class="h-4 w-4" />
-                Add reviewer
+                <.icon name="hero-plus" class="h-4 w-4" /> Add reviewer
               </button>
             <% end %>
           </div>
@@ -1063,8 +1066,7 @@ defmodule CadenceWeb.ReviewLive.Overview do
     <div class="card bg-base-200">
       <div class="card-body p-4">
         <h3 class="font-semibold flex items-center gap-2 mb-4">
-          <.icon name="hero-user" class="h-5 w-5" />
-          Author
+          <.icon name="hero-user" class="h-5 w-5" /> Author
         </h3>
 
         <div :if={@author} class="flex items-center gap-3">
@@ -1077,7 +1079,10 @@ defmodule CadenceWeb.ReviewLive.Overview do
           </div>
         </div>
 
-        <div :if={@submitter && @author && @submitter.id != @author.id} class="flex items-center gap-3 mt-3 pt-3 border-t border-base-content/10">
+        <div
+          :if={@submitter && @author && @submitter.id != @author.id}
+          class="flex items-center gap-3 mt-3 pt-3 border-t border-base-content/10"
+        >
           <div class="w-8 h-8 rounded-full bg-info/20 flex items-center justify-center text-sm font-medium text-info">
             {@submitter.email |> String.first() |> String.upcase()}
           </div>

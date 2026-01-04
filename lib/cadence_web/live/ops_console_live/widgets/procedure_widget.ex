@@ -61,7 +61,10 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
     <.widget
       id={@widget_id}
       title={@title}
-      on_configure={@on_configure && JS.push("open_widget_config", value: widget_config_value(@widget_id, "procedure", @config))}
+      on_configure={
+        @on_configure &&
+          JS.push("open_widget_config", value: widget_config_value(@widget_id, "procedure", @config))
+      }
     >
       <div class="procedure-widget">
         <%= if @execution do %>
@@ -69,7 +72,10 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
           <div class="procedure-header mb-3">
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-2">
-                <.severity_dot severity={status_severity(@execution.status)} pulse={@execution.status == :running} />
+                <.severity_dot
+                  severity={status_severity(@execution.status)}
+                  pulse={@execution.status == :running}
+                />
                 <span class="text-sm font-medium">{format_status(@execution.status)}</span>
               </div>
               <div
@@ -82,8 +88,8 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
                 --:--
               </div>
             </div>
-
-            <!-- Progress bar -->
+            
+    <!-- Progress bar -->
             <div class="w-full bg-base-300 rounded-full h-1.5 mb-1">
               <div
                 class="h-1.5 rounded-full bg-primary transition-all"
@@ -95,8 +101,8 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
               Step {@current_step} of {@total_steps}
             </div>
           </div>
-
-          <!-- Control buttons -->
+          
+    <!-- Control buttons -->
           <div class="procedure-controls flex items-center gap-2 mb-3">
             <.widget_action_btn
               :if={@execution.status == :running && @on_pause}
@@ -121,12 +127,15 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
               <.icon name="hero-stop" class="w-3 h-3" /> Abort
             </.widget_action_btn>
           </div>
-
-          <!-- Step list -->
+          
+    <!-- Step list -->
           <div class="procedure-steps flex-1 overflow-y-auto space-y-1 mb-3">
             <div
               :for={{step, idx} <- Enum.with_index(@execution.steps || [])}
-              class={["step-item flex items-center gap-2 p-1.5 rounded text-sm", step_bg_class(step, idx, @current_step - 1)]}
+              class={[
+                "step-item flex items-center gap-2 p-1.5 rounded text-sm",
+                step_bg_class(step, idx, @current_step - 1)
+              ]}
             >
               <div class="step-indicator">
                 {step_icon(step, idx, @current_step - 1)}
@@ -134,9 +143,12 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ProcedureWidget do
               <span class="truncate flex-1">{step.name || "Step #{idx + 1}"}</span>
             </div>
           </div>
-
-          <!-- Log tail -->
-          <div :if={@show_logs && @execution.logs && length(@execution.logs) > 0} class="procedure-logs border-t border-base-300 pt-2">
+          
+    <!-- Log tail -->
+          <div
+            :if={@show_logs && @execution.logs && length(@execution.logs) > 0}
+            class="procedure-logs border-t border-base-300 pt-2"
+          >
             <div class="text-xs text-base-content/40 mb-1">Recent logs</div>
             <div class="space-y-0.5 font-mono text-xs">
               <div

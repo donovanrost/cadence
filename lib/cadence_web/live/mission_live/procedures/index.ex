@@ -76,7 +76,10 @@ defmodule CadenceWeb.MissionLive.Procedures.Index do
 
       Enum.filter(procedures, fn p ->
         name_match = String.contains?(String.downcase(p.name), query_lower)
-        desc_match = p.description && String.contains?(String.downcase(p.description), query_lower)
+
+        desc_match =
+          p.description && String.contains?(String.downcase(p.description), query_lower)
+
         tag_match = Enum.any?(p.tags || [], &String.contains?(&1, query_lower))
 
         name_match or desc_match or tag_match
@@ -265,8 +268,7 @@ defmodule CadenceWeb.MissionLive.Procedures.Index do
             class="btn btn-primary btn-sm"
             phx-click="create_procedure"
           >
-            <.icon name="hero-plus" class="h-4 w-4" />
-            New Procedure
+            <.icon name="hero-plus" class="h-4 w-4" /> New Procedure
           </button>
         </div>
 

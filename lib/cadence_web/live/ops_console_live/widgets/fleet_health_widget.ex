@@ -84,7 +84,12 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.FleetHealthWidget do
     <.widget
       id={@widget_id}
       title={@title}
-      on_configure={@on_configure && JS.push("open_widget_config", value: widget_config_value(@widget_id, "fleet_health", @config))}
+      on_configure={
+        @on_configure &&
+          JS.push("open_widget_config",
+            value: widget_config_value(@widget_id, "fleet_health", @config)
+          )
+      }
     >
       <div class="fleet-health-widget">
         <!-- Overall health summary -->
@@ -106,8 +111,8 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.FleetHealthWidget do
             {@fleet_health.healthy}/{@fleet_health.total} targets healthy
           </div>
         </div>
-
-        <!-- Groups -->
+        
+    <!-- Groups -->
         <div class="groups-list space-y-2">
           <div
             :for={{group_name, group_targets} <- @groups}
@@ -122,7 +127,11 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.FleetHealthWidget do
             >
               <div class="flex items-center gap-2">
                 <.icon
-                  name={if MapSet.member?(@expanded_groups, group_name), do: "hero-chevron-down", else: "hero-chevron-right"}
+                  name={
+                    if MapSet.member?(@expanded_groups, group_name),
+                      do: "hero-chevron-down",
+                      else: "hero-chevron-right"
+                  }
                   class="w-3 h-3"
                 />
                 <span class="text-sm font-medium">{group_name}</span>

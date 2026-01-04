@@ -170,77 +170,77 @@ defmodule CadenceWeb.MissionLive.Schedules do
         </:actions>
       </.header>
 
-    <.table id="schedules" rows={@schedules}>
-      <:col :let={schedule} label="Name">
-        <div>
-          <div class="font-medium">{schedule.name}</div>
-          <div class="text-xs text-gray-500">{schedule.procedure && schedule.procedure.name}</div>
-        </div>
-      </:col>
-      <:col :let={schedule} label="Schedule">
-        <%= if schedule.schedule_type == :cron do %>
-          <code class="text-sm bg-gray-100 px-2 py-1 rounded">{schedule.cron_expression}</code>
-        <% else %>
-          <span class="text-sm">
-            {Calendar.strftime(schedule.scheduled_at, "%Y-%m-%d %H:%M UTC")}
+      <.table id="schedules" rows={@schedules}>
+        <:col :let={schedule} label="Name">
+          <div>
+            <div class="font-medium">{schedule.name}</div>
+            <div class="text-xs text-gray-500">{schedule.procedure && schedule.procedure.name}</div>
+          </div>
+        </:col>
+        <:col :let={schedule} label="Schedule">
+          <%= if schedule.schedule_type == :cron do %>
+            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{schedule.cron_expression}</code>
+          <% else %>
+            <span class="text-sm">
+              {Calendar.strftime(schedule.scheduled_at, "%Y-%m-%d %H:%M UTC")}
+            </span>
+          <% end %>
+        </:col>
+        <:col :let={schedule} label="Type">
+          <span class={[
+            "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+            schedule.schedule_type == :cron && "bg-blue-50 text-blue-700 ring-blue-600/20",
+            schedule.schedule_type == :once && "bg-purple-50 text-purple-700 ring-purple-600/20"
+          ]}>
+            {if schedule.schedule_type == :cron, do: "Recurring", else: "One-time"}
           </span>
-        <% end %>
-      </:col>
-      <:col :let={schedule} label="Type">
-        <span class={[
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-          schedule.schedule_type == :cron && "bg-blue-50 text-blue-700 ring-blue-600/20",
-          schedule.schedule_type == :once && "bg-purple-50 text-purple-700 ring-purple-600/20"
-        ]}>
-          {if schedule.schedule_type == :cron, do: "Recurring", else: "One-time"}
-        </span>
-      </:col>
-      <:col :let={schedule} label="Last Run">
-        <%= if schedule.last_run_at do %>
-          <span class="text-sm text-gray-600">
-            {Calendar.strftime(schedule.last_run_at, "%Y-%m-%d %H:%M")}
-          </span>
-        <% else %>
-          <span class="text-sm text-gray-400">Never</span>
-        <% end %>
-      </:col>
-      <:col :let={schedule} label="Runs">
-        <span class="text-gray-500">{schedule.run_count}</span>
-      </:col>
-      <:col :let={schedule} label="Status">
-        <.status_badge status={schedule.enabled} true_label="Enabled" false_label="Disabled" />
-      </:col>
-      <:action :let={schedule}>
-        <.link phx-click={JS.push("run_now", value: %{id: schedule.id})}>Run Now</.link>
-        <.link phx-click={JS.push("toggle", value: %{id: schedule.id})}>
-          {if schedule.enabled, do: "Disable", else: "Enable"}
-        </.link>
-        <.link patch={~p"/missions/#{@mission}/schedules/#{schedule}/edit"}>Edit</.link>
-        <.link
-          phx-click={JS.push("delete", value: %{id: schedule.id})}
-          data-confirm="Are you sure you want to delete this schedule?"
-        >
-          Delete
-        </.link>
-      </:action>
-    </.table>
-
-    <%= if Enum.empty?(@schedules) do %>
-      <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
-        <.icon name="hero-clock" class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No schedules</h3>
-        <p class="mt-1 text-sm text-gray-500">
-          Create schedules to automatically run procedures at specific times.
-        </p>
-        <div class="mt-6">
-          <.link patch={~p"/missions/#{@mission}/schedules/new"}>
-            <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Schedule
-            </.button>
+        </:col>
+        <:col :let={schedule} label="Last Run">
+          <%= if schedule.last_run_at do %>
+            <span class="text-sm text-gray-600">
+              {Calendar.strftime(schedule.last_run_at, "%Y-%m-%d %H:%M")}
+            </span>
+          <% else %>
+            <span class="text-sm text-gray-400">Never</span>
+          <% end %>
+        </:col>
+        <:col :let={schedule} label="Runs">
+          <span class="text-gray-500">{schedule.run_count}</span>
+        </:col>
+        <:col :let={schedule} label="Status">
+          <.status_badge status={schedule.enabled} true_label="Enabled" false_label="Disabled" />
+        </:col>
+        <:action :let={schedule}>
+          <.link phx-click={JS.push("run_now", value: %{id: schedule.id})}>Run Now</.link>
+          <.link phx-click={JS.push("toggle", value: %{id: schedule.id})}>
+            {if schedule.enabled, do: "Disable", else: "Enable"}
           </.link>
+          <.link patch={~p"/missions/#{@mission}/schedules/#{schedule}/edit"}>Edit</.link>
+          <.link
+            phx-click={JS.push("delete", value: %{id: schedule.id})}
+            data-confirm="Are you sure you want to delete this schedule?"
+          >
+            Delete
+          </.link>
+        </:action>
+      </.table>
+
+      <%= if Enum.empty?(@schedules) do %>
+        <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
+          <.icon name="hero-clock" class="mx-auto h-12 w-12 text-gray-400" />
+          <h3 class="mt-2 text-sm font-semibold text-gray-900">No schedules</h3>
+          <p class="mt-1 text-sm text-gray-500">
+            Create schedules to automatically run procedures at specific times.
+          </p>
+          <div class="mt-6">
+            <.link patch={~p"/missions/#{@mission}/schedules/new"}>
+              <.button>
+                <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Schedule
+              </.button>
+            </.link>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
     </div>
 
     <!-- Schedule Modal -->

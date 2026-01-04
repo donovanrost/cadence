@@ -339,13 +339,17 @@ defmodule CadenceWeb.ReviewLive.Changes do
           <%!-- Tab Navigation --%>
           <div class="flex items-center gap-1 border-b border-base-content/10 -mb-3 -mx-4 px-4">
             <.link
-              navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"}
+              navigate={
+                ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review"
+              }
               class="tab tab-bordered"
             >
               Overview
             </.link>
             <.link
-              patch={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review/changes"}
+              patch={
+                ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@version.id}/review/changes"
+              }
               class="tab tab-bordered tab-active"
             >
               Changes
@@ -570,8 +574,10 @@ defmodule CadenceWeb.ReviewLive.Changes do
         @compact && "px-3 py-2",
         !@compact && "px-4 py-3",
         @selected && "bg-primary/10 border-l-primary",
-        !@selected && @is_blocking && @thread.status == :open && "border-l-error bg-error/5 hover:bg-error/10",
-        !@selected && !@is_blocking && @thread.status == :open && "border-l-warning hover:bg-warning/10",
+        !@selected && @is_blocking && @thread.status == :open &&
+          "border-l-error bg-error/5 hover:bg-error/10",
+        !@selected && !@is_blocking && @thread.status == :open &&
+          "border-l-warning hover:bg-warning/10",
         !@selected && @thread.status == :resolved && "border-l-success hover:bg-success/10"
       ]}
     >
@@ -602,8 +608,7 @@ defmodule CadenceWeb.ReviewLive.Changes do
               :if={@is_blocking && @thread.status == :open}
               class="badge badge-xs badge-error gap-0.5"
             >
-              <.icon name="hero-exclamation-triangle" class="h-2.5 w-2.5" />
-              Blocking
+              <.icon name="hero-exclamation-triangle" class="h-2.5 w-2.5" /> Blocking
             </span>
             <span class={[
               "badge badge-xs",
@@ -976,12 +981,13 @@ defmodule CadenceWeb.ReviewLive.Changes do
           {Phoenix.Naming.humanize(@thread.status)}
         </span>
         <span :if={@is_blocking && @thread.status == :open} class="badge badge-sm badge-error gap-1">
-          <.icon name="hero-exclamation-triangle" class="h-3 w-3" />
-          Blocking
+          <.icon name="hero-exclamation-triangle" class="h-3 w-3" /> Blocking
         </span>
-        <span :if={@is_blocking && @thread.status == :resolved} class="badge badge-sm badge-ghost gap-1">
-          <.icon name="hero-check" class="h-3 w-3" />
-          Was blocking
+        <span
+          :if={@is_blocking && @thread.status == :resolved}
+          class="badge badge-sm badge-ghost gap-1"
+        >
+          <.icon name="hero-check" class="h-3 w-3" /> Was blocking
         </span>
         <div class="flex-1" />
         <span class="text-xs text-base-content/50">{length(@thread.comments)} comments</span>
@@ -1016,8 +1022,7 @@ defmodule CadenceWeb.ReviewLive.Changes do
         />
         <div class="flex gap-2 mt-3">
           <button type="submit" class="btn btn-primary btn-sm gap-1">
-            <.icon name="hero-paper-airplane" class="h-3 w-3" />
-            Comment
+            <.icon name="hero-paper-airplane" class="h-3 w-3" /> Comment
           </button>
           <%= if @thread.status == :open do %>
             <button
@@ -1025,8 +1030,7 @@ defmodule CadenceWeb.ReviewLive.Changes do
               phx-click="resolve_thread"
               class="btn btn-success btn-outline btn-sm gap-1"
             >
-              <.icon name="hero-check" class="h-3 w-3" />
-              Resolve
+              <.icon name="hero-check" class="h-3 w-3" /> Resolve
             </button>
           <% else %>
             <button
@@ -1034,8 +1038,7 @@ defmodule CadenceWeb.ReviewLive.Changes do
               phx-click="reopen_thread"
               class="btn btn-warning btn-outline btn-sm gap-1"
             >
-              <.icon name="hero-arrow-path" class="h-3 w-3" />
-              Reopen
+              <.icon name="hero-arrow-path" class="h-3 w-3" /> Reopen
             </button>
           <% end %>
         </div>
@@ -1075,8 +1078,7 @@ defmodule CadenceWeb.ReviewLive.Changes do
 
       <div class="flex gap-2">
         <button type="submit" class="btn btn-primary btn-sm gap-1">
-          <.icon name="hero-chat-bubble-left" class="h-3 w-3" />
-          Start Thread
+          <.icon name="hero-chat-bubble-left" class="h-3 w-3" /> Start Thread
         </button>
         <button type="button" phx-click="cancel_new_thread" class="btn btn-ghost btn-sm">
           Cancel

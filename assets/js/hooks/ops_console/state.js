@@ -38,9 +38,6 @@ export function initializeState(hook) {
   hook.currentMode = "overview"
   hook.selectedTargetId = null
 
-  // Initialize commands mode state
-  initializeCommandsState(hook)
-
   // Initialize timeline mode state
   initializeTimelineState(hook)
 
@@ -56,28 +53,7 @@ export function initializeState(hook) {
  * @param {Object} hook - The LiveView hook instance
  */
 export function initializeCommandsState(hook) {
-  // Commands mode state
-  hook.cmdSelectedTargets = new Set()
-  hook.cmdSelectedCommand = null
-  hook.cmdTargetFilter = ""
-  hook.cmdCommandFilter = ""
-  hook.cmdQueuePaused = false
-  hook.cmdPriority = 3 // Normal priority by default
-  hook.cmdTargetViewMode = "compact" // "compact" or "detailed"
-
-  // Per-target parameterized command state
-  hook.cmdStagedParams = new Map()      // targetId -> { params: {...} }
-  hook.cmdActiveTargetIndex = 0         // Index of currently active target in selection
-  hook.cmdPerTargetMode = false         // Whether we're in per-target configuration mode
-  hook.cmdReviewMode = false            // Whether showing review screen before queue
-
-  // Persistent staging area (loaded from server)
-  hook.cmdStagedCommands = JSON.parse(hook.el.dataset.stagedCommands || '[]')
-  hook.cmdStagePanelExpanded = false    // Whether staging panel is expanded
-  hook.cmdStagePanelHeight = null       // Custom height when resized (null = auto)
-  hook.cmdStageFilter = ''              // Filter text for staging table
-  hook.cmdEditingStaged = null          // { cmdIndex, targetIndex } when editing a staged entry
-  hook.cmdStageViewMode = 'table'       // 'table' or 'cards' view mode
+  // Commands mode is now implemented via LiveView at /missions/:id/ops/commands
 }
 
 /**
@@ -133,15 +109,7 @@ export function initializeTimelineState(hook) {
  * @param {Object} hook - The LiveView hook instance
  */
 export function resetCommandsState(hook) {
-  hook.cmdSelectedTargets = new Set()
-  hook.cmdSelectedCommand = null
-  hook.cmdTargetFilter = ""
-  hook.cmdCommandFilter = ""
-  hook.cmdStagedParams = new Map()
-  hook.cmdActiveTargetIndex = 0
-  hook.cmdPerTargetMode = false
-  hook.cmdReviewMode = false
-  hook.cmdEditingStaged = null
+  // No-op: legacy JS commands mode has been removed
 }
 
 /**
@@ -209,4 +177,3 @@ export function resetQueueState(hook) {
   hook.queueManageSelectedTarget = null
   hook.queueTargetStatuses = new Map()
 }
-

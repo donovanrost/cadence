@@ -72,11 +72,15 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.CommandWidget do
     config = socket.assigns.config || %{}
 
     # Send event to parent LiveView
-    send(self(), {:widget_command, socket.assigns.widget_id, %{
-      target_id: config["target_id"],
-      command_name: config["command_name"],
-      parameters: config["parameters"] || %{}
-    }})
+    send(
+      self(),
+      {:widget_command, socket.assigns.widget_id,
+       %{
+         target_id: config["target_id"],
+         command_name: config["command_name"],
+         parameters: config["parameters"] || %{}
+       }}
+    )
 
     socket
     |> assign(status: :pending)
@@ -118,7 +122,10 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.CommandWidget do
     <.widget
       id={@widget_id}
       title={@title}
-      on_configure={@on_configure && JS.push("open_widget_config", value: widget_config_value(@widget_id, "command", @config))}
+      on_configure={
+        @on_configure &&
+          JS.push("open_widget_config", value: widget_config_value(@widget_id, "command", @config))
+      }
     >
       <div class="command-widget">
         <!-- Command info -->
@@ -132,8 +139,8 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.CommandWidget do
           </div>
           <div :if={@description} class="text-xs text-base-content/50 mt-1">{@description}</div>
         </div>
-
-        <!-- Execute button -->
+        
+    <!-- Execute button -->
         <div class="command-action flex-1 flex flex-col items-center justify-center">
           <.command_btn
             status={@status}
@@ -157,11 +164,15 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.CommandWidget do
             </button>
           </div>
         </div>
-
-        <!-- Status footer -->
+        
+    <!-- Status footer -->
         <div class="command-status mt-3 pt-2 border-t border-base-300">
           <div class="flex items-center justify-between">
-            <.status_indicator status={@status_info.status} label={@status_info.label} pulse={@status == :pending} />
+            <.status_indicator
+              status={@status_info.status}
+              label={@status_info.label}
+              pulse={@status == :pending}
+            />
             <span :if={@last_execution} class="text-xs text-base-content/40">
               {format_time(@last_execution)}
             </span>

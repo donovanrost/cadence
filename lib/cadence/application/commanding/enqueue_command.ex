@@ -216,9 +216,14 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
     end
   end
 
-  defp broadcast_enqueued(%QueuedCommand{target_id: target_id, user_id: user_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_enqueued, entry})
+  defp broadcast_enqueued(
+         %QueuedCommand{target_id: target_id, mission_id: mission_id, user_id: user_id} = entry
+       ) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_enqueued, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
 
     # Record the enqueue event
     recorder().record(:command_queued, entry, user_id, %{})
@@ -246,8 +251,11 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
       }
     })
     |> case do
-      {:ok, _event} -> :ok
-      {:error, changeset} -> Logger.warning("Failed to insert outbox event: #{inspect(changeset)}")
+      {:ok, _event} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.warning("Failed to insert outbox event: #{inspect(changeset)}")
     end
   end
 end

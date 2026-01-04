@@ -200,7 +200,10 @@ defmodule CadenceWeb.MissionLive.Procedures.Components do
         >
           {@procedure.description}
         </p>
-        <p :if={!@procedure.description || @procedure.description == ""} class="text-sm text-base-content/40 italic">
+        <p
+          :if={!@procedure.description || @procedure.description == ""}
+          class="text-sm text-base-content/40 italic"
+        >
           No description
         </p>
 
@@ -218,18 +221,18 @@ defmodule CadenceWeb.MissionLive.Procedures.Components do
         <div class="card-actions justify-end mt-1">
           <.link
             :if={@procedure.current_version_id}
-            navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@procedure.current_version_id}/edit"}
+            navigate={
+              ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@procedure.current_version_id}/edit"
+            }
             class="btn btn-ghost btn-sm"
           >
-            <.icon name="hero-pencil-square" class="h-4 w-4" />
-            Edit
+            <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit
           </.link>
           <.link
             navigate={~p"/missions/#{@mission}/procedures/#{@procedure.id}/execute"}
             class="btn btn-primary btn-sm"
           >
-            <.icon name="hero-play" class="h-4 w-4" />
-            Execute
+            <.icon name="hero-play" class="h-4 w-4" /> Execute
           </.link>
         </div>
       </div>

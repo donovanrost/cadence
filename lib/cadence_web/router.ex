@@ -155,8 +155,15 @@ defmodule CadenceWeb.Router do
 
       # Procedures - Detail View with Tabs
       live "/missions/:id/procedures/:procedure_id", MissionLive.Procedures.Show, :overview
-      live "/missions/:id/procedures/:procedure_id/versions", MissionLive.Procedures.Show, :versions
-      live "/missions/:id/procedures/:procedure_id/executions", MissionLive.Procedures.Show, :executions
+
+      live "/missions/:id/procedures/:procedure_id/versions",
+           MissionLive.Procedures.Show,
+           :versions
+
+      live "/missions/:id/procedures/:procedure_id/executions",
+           MissionLive.Procedures.Show,
+           :executions
+
       live "/missions/:id/procedures/:procedure_id/reviews", MissionLive.Procedures.Show, :reviews
       live "/missions/:id/procedures/:procedure_id/execute", MissionLive.Procedures.Show, :execute
 

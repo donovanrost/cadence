@@ -148,54 +148,54 @@ defmodule CadenceWeb.MissionLive.Automations do
         </:actions>
       </.header>
 
-    <.table id="automations" rows={@automations}>
-      <:col :let={automation} label="Name">{automation.name}</:col>
-      <:col :let={automation} label="Trigger">
-        <span class={trigger_badge_class(automation.trigger_type)}>
-          {format_trigger_type(automation.trigger_type)}
-        </span>
-      </:col>
-      <:col :let={automation} label="Action">
-        <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
-          {format_action_type(automation.action_type)}
-        </span>
-      </:col>
-      <:col :let={automation} label="Runs">
-        <span class="text-gray-500">{automation.trigger_count}</span>
-      </:col>
-      <:col :let={automation} label="Status">
-        <.status_badge status={automation.enabled} true_label="Enabled" false_label="Disabled" />
-      </:col>
-      <:action :let={automation}>
-        <.link phx-click={JS.push("toggle", value: %{id: automation.id})}>
-          {if automation.enabled, do: "Disable", else: "Enable"}
-        </.link>
-        <.link patch={~p"/missions/#{@mission}/automations/#{automation}/edit"}>Edit</.link>
-        <.link
-          phx-click={JS.push("delete", value: %{id: automation.id})}
-          data-confirm="Are you sure you want to delete this automation?"
-        >
-          Delete
-        </.link>
-      </:action>
-    </.table>
-
-    <%= if Enum.empty?(@automations) do %>
-      <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
-        <.icon name="hero-bolt" class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No automations</h3>
-        <p class="mt-1 text-sm text-gray-500">
-          Create automations to trigger procedures when events occur.
-        </p>
-        <div class="mt-6">
-          <.link patch={~p"/missions/#{@mission}/automations/new"}>
-            <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Automation
-            </.button>
+      <.table id="automations" rows={@automations}>
+        <:col :let={automation} label="Name">{automation.name}</:col>
+        <:col :let={automation} label="Trigger">
+          <span class={trigger_badge_class(automation.trigger_type)}>
+            {format_trigger_type(automation.trigger_type)}
+          </span>
+        </:col>
+        <:col :let={automation} label="Action">
+          <span class="inline-flex items-center rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 ring-1 ring-inset ring-purple-700/10">
+            {format_action_type(automation.action_type)}
+          </span>
+        </:col>
+        <:col :let={automation} label="Runs">
+          <span class="text-gray-500">{automation.trigger_count}</span>
+        </:col>
+        <:col :let={automation} label="Status">
+          <.status_badge status={automation.enabled} true_label="Enabled" false_label="Disabled" />
+        </:col>
+        <:action :let={automation}>
+          <.link phx-click={JS.push("toggle", value: %{id: automation.id})}>
+            {if automation.enabled, do: "Disable", else: "Enable"}
           </.link>
+          <.link patch={~p"/missions/#{@mission}/automations/#{automation}/edit"}>Edit</.link>
+          <.link
+            phx-click={JS.push("delete", value: %{id: automation.id})}
+            data-confirm="Are you sure you want to delete this automation?"
+          >
+            Delete
+          </.link>
+        </:action>
+      </.table>
+
+      <%= if Enum.empty?(@automations) do %>
+        <div class="text-center py-12 border border-dashed border-gray-300 rounded-lg mt-4">
+          <.icon name="hero-bolt" class="mx-auto h-12 w-12 text-gray-400" />
+          <h3 class="mt-2 text-sm font-semibold text-gray-900">No automations</h3>
+          <p class="mt-1 text-sm text-gray-500">
+            Create automations to trigger procedures when events occur.
+          </p>
+          <div class="mt-6">
+            <.link patch={~p"/missions/#{@mission}/automations/new"}>
+              <.button>
+                <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Automation
+              </.button>
+            </.link>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
     </div>
 
     <!-- Automation Modal -->

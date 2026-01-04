@@ -87,7 +87,12 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.ValueDisplayWidget do
     <.widget
       id={@widget_id}
       title={@title}
-      on_configure={@on_configure && JS.push("open_widget_config", value: widget_config_value(@widget_id, "value_display", @config))}
+      on_configure={
+        @on_configure &&
+          JS.push("open_widget_config",
+            value: widget_config_value(@widget_id, "value_display", @config)
+          )
+      }
     >
       <div
         id={"#{@widget_id}-content"}

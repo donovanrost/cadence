@@ -168,7 +168,9 @@ defmodule CadenceWeb.LiveAuth do
 
     if current_scope && current_scope.user do
       user_id = current_scope.user.id
-      organization_id = current_scope.current_organization && current_scope.current_organization.id
+
+      organization_id =
+        current_scope.current_organization && current_scope.current_organization.id
 
       if connected?(socket) do
         Notifications.subscribe(user_id)

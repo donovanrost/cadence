@@ -30,11 +30,11 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
     ~H"""
     <div id={@id} class={["flex flex-col h-full", @class]}>
       <div class="context-panel-v2 p-3">
-        <%= render_slot(@expanded) %>
+        {render_slot(@expanded)}
       </div>
 
       <div class="context-rail hidden flex-col items-center py-2 gap-1">
-        <%= render_slot(@rail) %>
+        {render_slot(@rail)}
       </div>
     </div>
     """
@@ -480,6 +480,422 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
       </div>
     </div>
     """
+  end
+
+  # ============================================================================
+  # Commands Mode Components
+  # ============================================================================
+
+  @doc """
+  Target cell for Commands mode target grid.
+
+  Used by the Commands LiveView and any future commands-related widgets.
+  """
+  attr :target, :map, required: true
+  attr :selected, :boolean, required: true
+  attr :view_mode, :string, required: true
+
+  def cmd_target_cell(assigns) do
+    status_class = assigns.target.status || :online
+    mode = assigns.target.mode || "NOMINAL"
+
+    assigns =
+      assigns
+      |> assign(:status_class, status_class)
+      |> assign(:mode, mode)
+
+    ~H"""
+    <div
+      class={[
+        "cmd-target-cell",
+        @selected && "selected",
+        "status-#{@status_class}"
+      ]}
+      phx-click="toggle_target"
+      phx-value-id={@target.id}
+    >
+      <%= if @view_mode == "detailed" do %>
+        <div class="cmd-target-main">
+          <span class="cmd-target-name">{@target.name}</span>
+          <span class="cmd-target-mode">{@mode}</span>
+        </div>
+        <div class="cmd-target-meta">
+          <span class="cmd-target-type">{@target.target_type || "Unknown"}</span>
+        </div>
+      <% else %>
+        <span class="cmd-target-name">{@target.name}</span>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
+  Command list item for Commands mode command browser.
+  """
+  attr :command, :map, required: true
+  attr :selected, :boolean, required: true
+
+  def cmd_command_item(assigns) do
+    opcode_hex =
+      if assigns.command.opcode do
+        "0x" <>
+          (assigns.command.opcode
+           |> Integer.to_string(16)
+           |> String.upcase()
+           |> String.pad_leading(4, "0"))
+      else
+        nil
+      end
+
+    assigns = assign(assigns, :opcode_hex, opcode_hex)
+
+    ~H"""
+    <div
+      class={[
+        "cmd-command-item",
+        @selected && "selected",
+        @command.is_hazardous && "hazardous"
+      ]}
+      phx-click="select_command"
+      phx-value-id={@command.id}
+    >
+      <div class="cmd-command-header">
+        <span class="cmd-command-name">{@command.name}</span>
+        <span :if={@command.is_hazardous} class="cmd-hazard-badge">HAZARD</span>
+      </div>
+      <div class="cmd-command-meta">
+        <span :if={@opcode_hex} class="cmd-opcode">{@opcode_hex}</span>
+        <span :if={@command.description} class="cmd-description">{@command.description}</span>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Staging panel for Commands mode, including table and card views.
+  """
+  attr :staged_commands, :list, required: true
+  attr :targets, :list, required: true
+  attr :command_definitions, :list, required: true
+  attr :expanded, :boolean, required: true
+  attr :filter, :string, required: true
+  attr :view_mode, :string, required: true
+
+  def staging_panel(assigns) do
+    total_items = count_staged_items(assigns.staged_commands)
+    is_empty = total_items == 0
+
+    assigns =
+      assigns
+      |> assign(:total_items, total_items)
+      |> assign(:is_empty, is_empty)
+
+    ~H"""
+    <div class={[
+      "cmd-staging-panel",
+      @is_empty && "empty",
+      !@is_empty && !@expanded && "minimized",
+      !@is_empty && @expanded && "expanded",
+      @view_mode == "cards" && "card-view",
+      @view_mode == "table" && "table-view"
+    ]}>
+      <div class="cmd-staging-resize-handle" id="staging-resize-handle"></div>
+      <div class="cmd-staging-header" phx-click="toggle_staging_panel">
+        <div class="cmd-staging-title">
+          <span class="mc-label-subsystem">STAGED</span>
+          <span class="cmd-staging-count">
+            {if @is_empty,
+              do: "empty",
+              else: "#{@total_items} item#{if @total_items != 1, do: "s", else: ""}"}
+          </span>
+        </div>
+        <div class="cmd-staging-actions">
+          <div :if={!@is_empty && @expanded} class="cmd-staging-view-toggle">
+            <button
+              type="button"
+              class={["cmd-view-btn", @view_mode == "table" && "active"]}
+              phx-click="set_staging_view_mode"
+              phx-value-mode="table"
+              title="Table view"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M3 12h18M3 18h18" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class={["cmd-view-btn", @view_mode == "cards" && "active"]}
+              phx-click="set_staging_view_mode"
+              phx-value-mode="cards"
+              title="Card view"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+          </div>
+          <button
+            type="button"
+            class="cmd-staging-btn queue-all"
+            phx-click="queue_all_staged"
+            disabled={@is_empty}
+          >
+            Queue All ({@total_items})
+          </button>
+          <button
+            type="button"
+            class="cmd-staging-btn clear"
+            phx-click="clear_staged"
+            disabled={@is_empty}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div :if={!@is_empty && @expanded} class="cmd-staging-filters">
+        <input
+          type="text"
+          class="cmd-staging-search"
+          placeholder="Filter by target or command..."
+          value={@filter}
+          phx-keyup="filter_staging"
+          phx-debounce="150"
+        />
+      </div>
+
+      <div :if={!@is_empty && @expanded} class="cmd-staging-body">
+        <%= if @view_mode == "table" do %>
+          <table class="cmd-staging-table">
+            <thead>
+              <tr>
+                <th>Target</th>
+                <th>Command</th>
+                <th>Parameters</th>
+                <th>Pri</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <%= for {staged, cmd_idx} <- Enum.with_index(@staged_commands),
+                      {target_entry, target_idx} <- Enum.with_index(staged.targets) do %>
+                <.staged_row
+                  staged={staged}
+                  target_entry={target_entry}
+                  cmd_idx={cmd_idx}
+                  target_idx={target_idx}
+                  targets={@targets}
+                  command_definitions={@command_definitions}
+                  filter={@filter}
+                />
+              <% end %>
+            </tbody>
+          </table>
+        <% else %>
+          <div class="cmd-staging-cards">
+            <%= for {staged, cmd_idx} <- Enum.with_index(@staged_commands),
+                    {target_entry, target_idx} <- Enum.with_index(staged.targets) do %>
+              <.staged_card
+                staged={staged}
+                target_entry={target_entry}
+                cmd_idx={cmd_idx}
+                target_idx={target_idx}
+                targets={@targets}
+                command_definitions={@command_definitions}
+                filter={@filter}
+              />
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="cmd-staging-panel-corners"></div>
+    </div>
+    """
+  end
+
+  @doc """
+  Table-row view for a staged command entry.
+  """
+  attr :staged, :map, required: true
+  attr :target_entry, :map, required: true
+  attr :cmd_idx, :integer, required: true
+  attr :target_idx, :integer, required: true
+  attr :targets, :list, required: true
+  attr :command_definitions, :list, required: true
+  attr :filter, :string, required: true
+
+  def staged_row(assigns) do
+    target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
+    target_name = if target, do: target.name, else: assigns.target_entry.target_id
+    cmd_def = Enum.find(assigns.command_definitions, &(&1.id == assigns.staged.command_id))
+    is_hazardous = cmd_def && cmd_def.is_hazardous
+
+    params = assigns.target_entry.params || %{}
+
+    # Build params preview with at most 3 entries
+    params_preview =
+      params
+      |> Enum.take(3)
+      |> Enum.map(fn {k, v} -> "#{k}=#{v}" end)
+      |> Enum.join(", ")
+
+    has_more_params = map_size(params) > 3
+
+    # Filter check
+    filter = String.downcase(assigns.filter)
+
+    matches =
+      filter == "" or
+        String.contains?(String.downcase(target_name), filter) or
+        String.contains?(String.downcase(assigns.staged.command_name), filter)
+
+    assigns =
+      assigns
+      |> assign(:target_name, target_name)
+      |> assign(:is_hazardous, is_hazardous)
+      |> assign(:params_preview, params_preview)
+      |> assign(:has_more_params, has_more_params)
+      |> assign(:matches, matches)
+
+    ~H"""
+    <tr :if={@matches} class={["cmd-staged-row", @is_hazardous && "hazardous"]}>
+      <td class="cmd-staged-target">{@target_name}</td>
+      <td class="cmd-staged-command">
+        {@staged.command_name}
+        <span :if={@is_hazardous} class="cmd-hazard-badge-sm">HAZ</span>
+      </td>
+      <td class="cmd-staged-params">
+        {@params_preview}{if @has_more_params, do: "...", else: ""}
+      </td>
+      <td class="cmd-staged-priority">P{@staged.priority}</td>
+      <td class="cmd-staged-actions">
+        <div class="cmd-staged-actions-inner">
+          <button
+            type="button"
+            class="cmd-staged-queue"
+            phx-click="queue_staged_item"
+            phx-value-cmd-idx={@cmd_idx}
+            phx-value-target-idx={@target_idx}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+            <span class="cmd-action-label">Queue</span>
+          </button>
+          <button
+            type="button"
+            class="cmd-staged-remove"
+            phx-click="remove_staged_item"
+            phx-value-cmd-idx={@cmd_idx}
+            phx-value-target-idx={@target_idx}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+            <span class="cmd-action-label">Remove</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+    """
+  end
+
+  @doc """
+  Card view for a staged command entry.
+  """
+  attr :staged, :map, required: true
+  attr :target_entry, :map, required: true
+  attr :cmd_idx, :integer, required: true
+  attr :target_idx, :integer, required: true
+  attr :targets, :list, required: true
+  attr :command_definitions, :list, required: true
+  attr :filter, :string, required: true
+
+  def staged_card(assigns) do
+    target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
+    target_name = if target, do: target.name, else: assigns.target_entry.target_id
+    cmd_def = Enum.find(assigns.command_definitions, &(&1.id == assigns.staged.command_id))
+    is_hazardous = cmd_def && cmd_def.is_hazardous
+
+    params = assigns.target_entry.params || %{}
+
+    # Filter check
+    filter = String.downcase(assigns.filter)
+
+    matches =
+      filter == "" or
+        String.contains?(String.downcase(target_name), filter) or
+        String.contains?(String.downcase(assigns.staged.command_name), filter)
+
+    assigns =
+      assigns
+      |> assign(:target_name, target_name)
+      |> assign(:is_hazardous, is_hazardous)
+      |> assign(:params, params)
+      |> assign(:matches, matches)
+
+    ~H"""
+    <div :if={@matches} class={["cmd-staged-card", @is_hazardous && "hazardous"]}>
+      <div class="cmd-card-header">
+        <span class="cmd-card-target">{@target_name}</span>
+        <span class="cmd-card-priority">P{@staged.priority}</span>
+      </div>
+      <div class="cmd-card-command">
+        {@staged.command_name}
+        <span :if={@is_hazardous} class="cmd-hazard-badge-sm">HAZ</span>
+      </div>
+      <div :if={map_size(@params) > 0} class="cmd-card-params">
+        <div :for={{key, val} <- Enum.take(@params, 4)} class="cmd-card-param">
+          <span class="cmd-card-param-key">{key}</span>
+          <span class="cmd-card-param-val">{val}</span>
+        </div>
+      </div>
+      <div class="cmd-card-actions">
+        <button
+          type="button"
+          class="cmd-card-btn queue"
+          phx-click="queue_staged_item"
+          phx-value-cmd-idx={@cmd_idx}
+          phx-value-target-idx={@target_idx}
+        >
+          Queue
+        </button>
+        <button
+          type="button"
+          class="cmd-card-btn remove"
+          phx-click="remove_staged_item"
+          phx-value-cmd-idx={@cmd_idx}
+          phx-value-target-idx={@target_idx}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  defp count_staged_items(staged_commands) do
+    Enum.reduce(staged_commands, 0, fn staged, acc ->
+      acc + length(staged.targets)
+    end)
   end
 
   # ============================================================================

@@ -32,12 +32,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     active_alarms = Alarms.list_active_alarms(mission_id)
     alarm_counts = calculate_alarm_counts(active_alarms)
 
-    queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
+    queue_entries = build_context_queue_entries(mission_id, targets)
 
     fleet_health = calculate_fleet_health(targets)
 
@@ -57,6 +52,9 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       |> assign(:staged_commands, staged_commands)
       |> assign(:selected_targets, MapSet.new())
       |> assign(:selected_command, nil)
+      |> assign(:selected_target_ids, [])
+      |> assign(:per_target_mode, false)
+      |> assign(:active_target_index, 0)
       |> assign(:target_search, "")
       |> assign(:command_search, "")
       |> assign(:target_view_mode, "compact")
@@ -105,7 +103,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
                   title="Compact view"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                    />
                   </svg>
                 </button>
                 <button
@@ -116,7 +119,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
                   title="Detailed view"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 6h16M4 12h16m-7 6h7"
+                    />
                   </svg>
                 </button>
               </div>
@@ -151,11 +159,11 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
               </button>
             </div>
           </div>
-
-          <!-- Resize Handle -->
+          
+    <!-- Resize Handle -->
           <div class="cmd-resize-handle" id="cmd-resize-handle"></div>
-
-          <!-- Right: Command Browser -->
+          
+    <!-- Right: Command Browser -->
           <div class="cmd-command-panel">
             <div class="cmd-panel-header">
               <span class="mc-label-subsystem">COMMANDS</span>
@@ -177,14 +185,17 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
                 command={cmd}
                 selected={@selected_command && @selected_command.id == cmd.id}
               />
-              <div :if={filter_commands(@command_definitions, @command_search) == []} class="cmd-empty-state">
+              <div
+                :if={filter_commands(@command_definitions, @command_search) == []}
+                class="cmd-empty-state"
+              >
                 No commands match filter
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Bottom: Staging Panel -->
+        
+    <!-- Bottom: Staging Panel -->
         <.staging_panel
           staged_commands={@staged_commands}
           targets={@targets}
@@ -196,45 +207,154 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       </div>
     </div>
 
-    <!-- Parameter Entry Modal -->
-    <.modal
+    <!-- Parameter Entry Slideout -->
+    <div
       :if={@show_param_modal}
-      id="param-modal"
-      show={true}
-      on_cancel={JS.push("close_param_modal")}
+      id="cmd-slideout-backdrop"
+      class="cmd-slideout-backdrop visible"
+      phx-click="close_param_modal"
     >
-      <.header>
-        Configure Command: {@show_param_modal.name}
-      </.header>
-      <.simple_form for={%{}} phx-submit="stage_command">
-        <div :if={@show_param_modal.parameters && length(@show_param_modal.parameters) > 0}>
-          <.input
-            :for={param <- @show_param_modal.parameters}
-            name={"params[#{param.name}]"}
-            type={param_input_type(param)}
-            label={param.name}
-            value={Map.get(@param_form, param.name, param.default_value)}
-          />
+      <div id="cmd-slideout" class="cmd-slideout visible" phx-click="ignore_slideout_click">
+        <div class="cmd-slideout-header">
+          <div class="cmd-slideout-title">
+            <div class="command-name">{@show_param_modal.name}</div>
+            <div class="target-count">
+              {MapSet.size(@selected_targets)} target
+              {if MapSet.size(@selected_targets) != 1, do: "s", else: ""}
+            </div>
+          </div>
+          <button
+            type="button"
+            class="cmd-slideout-close"
+            phx-click="close_param_modal"
+            title="Close"
+          >
+            ✕
+          </button>
         </div>
-        <div :if={!@show_param_modal.parameters || length(@show_param_modal.parameters) == 0}>
-          <p class="text-base-content/60 text-sm">This command has no parameters.</p>
+
+        <div class="cmd-slideout-breadcrumb-bar">
+          <span class="cmd-mode-label">
+            <%= if @per_target_mode do %>
+              Configuring each target
+            <% else %>
+              Uniform parameters
+            <% end %>
+          </span>
+          <span
+            :if={!@per_target_mode && MapSet.size(@selected_targets) > 1}
+            class="cmd-mode-switch"
+            phx-click="set_param_mode"
+            phx-value-mode="per_target"
+          >
+            Configure each →
+          </span>
+          <span
+            :if={@per_target_mode}
+            class="cmd-mode-switch"
+            phx-click="set_param_mode"
+            phx-value-mode="uniform"
+          >
+            ← Uniform
+          </span>
         </div>
-        <div class="flex gap-4 mt-4">
-          <.input
-            name="priority"
-            type="select"
-            label="Priority"
-            options={[{"Low (1)", "1"}, {"Normal (3)", "3"}, {"High (5)", "5"}, {"Critical (7)", "7"}]}
-            value={to_string(@priority)}
-          />
+
+        <div class="cmd-slideout-body">
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-header">
+              <div class="cmd-slideout-section-title">Targets</div>
+            </div>
+            <div class="cmd-slideout-targets">
+              <span
+                :for={{target, idx} <-
+                  Enum.with_index(
+                    Enum.filter(@targets, fn t ->
+                      MapSet.member?(@selected_targets, t.id)
+                    end)
+                  )}
+                class={[
+                  "cmd-slideout-target-chip",
+                  @per_target_mode && idx == @active_target_index && "active"
+                ]}
+                phx-click="select_param_target"
+                phx-value-index={idx}
+              >
+                <span class="status-dot"></span>
+                {target.name || target.identifier}
+              </span>
+              <span
+                :if={
+                  Enum.empty?(
+                    Enum.filter(@targets, fn t ->
+                      MapSet.member?(@selected_targets, t.id)
+                    end)
+                  )
+                }
+                class="text-xs text-base-content/50"
+              >
+                No targets selected
+              </span>
+            </div>
+          </div>
+
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-title">Parameters</div>
+            <div class="cmd-param-form">
+              <.simple_form for={%{}} phx-submit="stage_command">
+                <div :if={@show_param_modal.arguments && length(@show_param_modal.arguments) > 0}>
+                  <.input
+                    :for={arg <- @show_param_modal.arguments}
+                    name={"params[#{arg.name}]"}
+                    type={param_input_type(arg)}
+                    label={arg.name}
+                    value={Map.get(@param_form, arg.name, arg.default_value)}
+                  />
+                </div>
+                <div :if={!@show_param_modal.arguments || length(@show_param_modal.arguments) == 0}>
+                  <p class="text-base-content/60 text-sm">
+                    This command has no parameters.
+                  </p>
+                </div>
+
+                <div class="cmd-slideout-footer">
+                  <div class="cmd-slideout-priority">
+                    <label>Priority</label>
+                    <.input
+                      name="priority"
+                      type="select"
+                      label=""
+                      options={[
+                        {"Low (1)", "1"},
+                        {"Normal (3)", "3"},
+                        {"High (5)", "5"},
+                        {"Critical (7)", "7"}
+                      ]}
+                      value={to_string(@priority)}
+                    />
+                  </div>
+                  <div class="cmd-dispatch-actions">
+                    <button
+                      type="button"
+                      class="cmd-dispatch-btn cancel"
+                      phx-click="close_param_modal"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      class="cmd-dispatch-btn stage"
+                      phx-disable-with="Staging..."
+                    >
+                      Stage for {MapSet.size(@selected_targets)} target(s)
+                    </button>
+                  </div>
+                </div>
+              </.simple_form>
+            </div>
+          </div>
         </div>
-        <:actions>
-          <.button type="submit" phx-disable-with="Staging...">
-            Stage for {MapSet.size(@selected_targets)} target(s)
-          </.button>
-        </:actions>
-      </.simple_form>
-    </.modal>
+      </div>
+    </div>
     """
   end
 
@@ -244,13 +364,15 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   attr :view_mode, :string, required: true
 
   defp cmd_target_cell(assigns) do
-    status_class = assigns.target.status || :online
-    mode = assigns.target.mode || "NOMINAL"
+    status_class = Map.get(assigns.target, :status, :online)
+    mode = Map.get(assigns.target, :mode) || Map.get(assigns.target, :active_limit_set) || "NOMINAL"
+    target_type = Map.get(assigns.target, :target_type) || Map.get(assigns.target, :type) || "Unknown"
 
     assigns =
       assigns
       |> assign(:status_class, status_class)
       |> assign(:mode, mode)
+      |> assign(:target_type, target_type)
 
     ~H"""
     <div
@@ -268,7 +390,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
           <span class="cmd-target-mode">{@mode}</span>
         </div>
         <div class="cmd-target-meta">
-          <span class="cmd-target-type">{@target.target_type || "Unknown"}</span>
+          <span class="cmd-target-type">{@target_type}</span>
         </div>
       <% else %>
         <span class="cmd-target-name">{@target.name}</span>
@@ -284,7 +406,11 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   defp cmd_command_item(assigns) do
     opcode_hex =
       if assigns.command.opcode do
-        "0x" <> String.upcase(Integer.to_string(assigns.command.opcode, 16) |> String.pad_leading(4, "0"))
+        "0x" <>
+          String.upcase(
+            Integer.to_string(assigns.command.opcode, 16)
+            |> String.pad_leading(4, "0")
+          )
       else
         nil
       end
@@ -344,7 +470,9 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
         <div class="cmd-staging-title">
           <span class="mc-label-subsystem">STAGED</span>
           <span class="cmd-staging-count">
-            {if @is_empty, do: "empty", else: "#{@total_items} item#{if @total_items != 1, do: "s", else: ""}"}
+            {if @is_empty,
+              do: "empty",
+              else: "#{@total_items} item#{if @total_items != 1, do: "s", else: ""}"}
           </span>
         </div>
         <div class="cmd-staging-actions">
@@ -357,7 +485,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
               title="Table view"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M3 12h18M3 18h18"/>
+                <path d="M3 6h18M3 12h18M3 18h18" />
               </svg>
             </button>
             <button
@@ -368,10 +496,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
               title="Card view"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/>
-                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
             </button>
           </div>
@@ -467,19 +595,26 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   defp staged_row(assigns) do
     target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
     target_name = if target, do: target.name, else: assigns.target_entry.target_id
-    cmd_def = Enum.find(assigns.command_definitions, &(&1.id == assigns.staged.command_id))
+    cmd_def =
+      Enum.find(assigns.command_definitions, fn cmd ->
+        cmd.id == (assigns.staged.meta_command_id || assigns.staged.command_id)
+      end)
     is_hazardous = cmd_def && cmd_def.is_hazardous
 
     params = assigns.target_entry.params || %{}
-    params_preview = params |> Enum.take(3) |> Enum.map(fn {k, v} -> "#{k}=#{v}" end) |> Enum.join(", ")
+
+    params_preview =
+      params |> Enum.take(3) |> Enum.map(fn {k, v} -> "#{k}=#{v}" end) |> Enum.join(", ")
+
     has_more_params = map_size(params) > 3
 
     # Filter check
     filter = String.downcase(assigns.filter)
+
     matches =
       filter == "" or
-      String.contains?(String.downcase(target_name), filter) or
-      String.contains?(String.downcase(assigns.staged.command_name), filter)
+        String.contains?(String.downcase(target_name), filter) or
+        String.contains?(String.downcase(assigns.staged.command_name), filter)
 
     assigns =
       assigns
@@ -507,8 +642,15 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
             phx-value-cmd-idx={@cmd_idx}
             phx-value-target-idx={@target_idx}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
             <span class="cmd-action-label">Queue</span>
           </button>
@@ -519,8 +661,15 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
             phx-value-cmd-idx={@cmd_idx}
             phx-value-target-idx={@target_idx}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 6L6 18M6 6l12 12"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
             <span class="cmd-action-label">Remove</span>
           </button>
@@ -542,17 +691,21 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   defp staged_card(assigns) do
     target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
     target_name = if target, do: target.name, else: assigns.target_entry.target_id
-    cmd_def = Enum.find(assigns.command_definitions, &(&1.id == assigns.staged.command_id))
+    cmd_def =
+      Enum.find(assigns.command_definitions, fn cmd ->
+        cmd.id == (assigns.staged.meta_command_id || assigns.staged.command_id)
+      end)
     is_hazardous = cmd_def && cmd_def.is_hazardous
 
     params = assigns.target_entry.params || %{}
 
     # Filter check
     filter = String.downcase(assigns.filter)
+
     matches =
       filter == "" or
-      String.contains?(String.downcase(target_name), filter) or
-      String.contains?(String.downcase(assigns.staged.command_name), filter)
+        String.contains?(String.downcase(target_name), filter) or
+        String.contains?(String.downcase(assigns.staged.command_name), filter)
 
     assigns =
       assigns
@@ -636,17 +789,33 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     {:noreply, assign(socket, :command_search, value)}
   end
 
+  def handle_event("set_param_mode", %{"mode" => mode}, socket) do
+    per_target = mode == "per_target"
+    {:noreply, assign(socket, :per_target_mode, per_target)}
+  end
+
+  def handle_event("select_param_target", %{"index" => index}, socket) do
+    idx = String.to_integer(index)
+    {:noreply, assign(socket, :active_target_index, idx)}
+  end
+
   def handle_event("select_command", %{"id" => id}, socket) do
     command = Enum.find(socket.assigns.command_definitions, &(&1.id == id))
 
     if MapSet.size(socket.assigns.selected_targets) == 0 do
       {:noreply, put_flash(socket, :error, "Select at least one target first")}
     else
+      selected_ids = socket.assigns.selected_targets |> Enum.to_list()
+      has_multiple = length(selected_ids) > 1
+
       {:noreply,
        socket
        |> assign(:selected_command, command)
        |> assign(:show_param_modal, command)
-       |> assign(:param_form, %{})}
+       |> assign(:param_form, %{})
+       |> assign(:selected_target_ids, selected_ids)
+       |> assign(:per_target_mode, has_multiple)
+       |> assign(:active_target_index, 0)}
     end
   end
 
@@ -654,49 +823,99 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     {:noreply,
      socket
      |> assign(:show_param_modal, nil)
-     |> assign(:selected_command, nil)}
+     |> assign(:selected_command, nil)
+     |> assign(:per_target_mode, false)
+     |> assign(:active_target_index, 0)
+     |> assign(:selected_target_ids, [])}
+  end
+
+  def handle_event("ignore_slideout_click", _params, socket) do
+    {:noreply, socket}
   end
 
   def handle_event("stage_command", %{"priority" => priority} = params, socket) do
     command = socket.assigns.show_param_modal
-    target_ids = MapSet.to_list(socket.assigns.selected_targets)
     priority = String.to_integer(priority)
 
     # Extract params
     cmd_params = Map.get(params, "params", %{})
 
-    # Build targets list with params for each target
-    targets =
-      Enum.map(target_ids, fn target_id ->
+    user = socket.assigns.current_scope.user
+    mission_id = socket.assigns.mission.id
+
+    if socket.assigns.per_target_mode do
+      # Per-target mode: stage only the active target
+      target_ids = socket.assigns.selected_target_ids || []
+      active_index = socket.assigns.active_target_index || 0
+      target_id = Enum.at(target_ids, active_index)
+
+      if is_nil(target_id) do
+        {:noreply, socket}
+      else
         target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
 
-        %{
-          target_id: target_id,
-          target_name: if(target, do: target.name, else: target_id),
-          params: cmd_params
-        }
-      end)
+        targets = [
+          %{
+            target_id: target_id,
+            target_name: if(target, do: target.name, else: target_id),
+            params: cmd_params
+          }
+        ]
 
-    case Commands.add_to_stage(
-           socket.assigns.current_user,
-           socket.assigns.mission.id,
-           command,
-           targets,
-           priority: priority
-         ) do
-      {:ok, _} ->
-        staged_commands = Commands.list_staged(socket.assigns.mission.id)
+        case Commands.add_to_stage(user, mission_id, command, targets, priority: priority) do
+          {:ok, _} ->
+            staged_commands = Commands.list_staged(mission_id)
 
-        {:noreply,
-         socket
-         |> assign(:staged_commands, staged_commands)
-         |> assign(:show_param_modal, nil)
-         |> assign(:selected_command, nil)
-         |> assign(:selected_targets, MapSet.new())
-         |> put_flash(:info, "Command staged for #{length(target_ids)} target(s)")}
+            # Advance to next target (wrap around)
+            next_index =
+              case length(target_ids) do
+                0 -> 0
+                count -> rem(active_index + 1, count)
+              end
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to stage command: #{inspect(reason)}")}
+            {:noreply,
+             socket
+             |> assign(:staged_commands, staged_commands)
+             |> assign(:active_target_index, next_index)
+             |> put_flash(:info, "Command staged for #{if(target, do: target.name, else: target_id)}")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Failed to stage command: #{inspect(reason)}")}
+        end
+      end
+    else
+      # Uniform mode: stage all selected targets with same params
+      target_ids = MapSet.to_list(socket.assigns.selected_targets)
+
+      targets =
+        Enum.map(target_ids, fn target_id ->
+          target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
+
+          %{
+            target_id: target_id,
+            target_name: if(target, do: target.name, else: target_id),
+            params: cmd_params
+          }
+        end)
+
+      case Commands.add_to_stage(user, mission_id, command, targets, priority: priority) do
+        {:ok, _} ->
+          staged_commands = Commands.list_staged(mission_id)
+
+          {:noreply,
+           socket
+           |> assign(:staged_commands, staged_commands)
+           |> assign(:show_param_modal, nil)
+           |> assign(:selected_command, nil)
+           |> assign(:selected_targets, MapSet.new())
+           |> assign(:selected_target_ids, [])
+           |> assign(:per_target_mode, false)
+           |> assign(:active_target_index, 0)
+           |> put_flash(:info, "Command staged for #{length(target_ids)} target(s)")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to stage command: #{inspect(reason)}")}
+      end
     end
   end
 
@@ -739,7 +958,11 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
      |> put_flash(:info, "Staging area cleared")}
   end
 
-  def handle_event("queue_staged_item", %{"cmd-idx" => cmd_idx, "target-idx" => target_idx}, socket) do
+  def handle_event(
+        "queue_staged_item",
+        %{"cmd-idx" => cmd_idx, "target-idx" => target_idx},
+        socket
+      ) do
     cmd_idx = String.to_integer(cmd_idx)
     target_idx = String.to_integer(target_idx)
 
@@ -761,7 +984,11 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     end
   end
 
-  def handle_event("remove_staged_item", %{"cmd-idx" => cmd_idx, "target-idx" => target_idx}, socket) do
+  def handle_event(
+        "remove_staged_item",
+        %{"cmd-idx" => cmd_idx, "target-idx" => target_idx},
+        socket
+      ) do
     cmd_idx = String.to_integer(cmd_idx)
     target_idx = String.to_integer(target_idx)
 
@@ -776,7 +1003,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
   # Alarm action handlers (from context panel)
   def handle_event("acknowledge_alarm", %{"id" => id}, socket) do
-    case Alarms.acknowledge_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.acknowledge_alarm(alarm, user.id) do
       {:ok, _updated_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -791,7 +1021,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   end
 
   def handle_event("clear_alarm", %{"id" => id}, socket) do
-    case Alarms.clear_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.clear_alarm(alarm, user.id) do
       {:ok, _cleared_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -811,6 +1044,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   def handle_info({:staging_updated, _}, socket) do
     staged_commands = Commands.list_staged(socket.assigns.mission.id)
     {:noreply, assign(socket, :staged_commands, staged_commands)}
+  end
+
+  def handle_info({:queue_updated, _entry}, socket) do
+    {:noreply, refresh_queue_entries(socket)}
   end
 
   def handle_info({:alarm_triggered, _alarm}, socket) do
@@ -879,6 +1116,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       targets
     else
       search_lower = String.downcase(search)
+
       Enum.filter(targets, fn t ->
         String.contains?(String.downcase(t.name || ""), search_lower)
       end)
@@ -890,9 +1128,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       commands
     else
       search_lower = String.downcase(search)
+
       Enum.filter(commands, fn cmd ->
         String.contains?(String.downcase(cmd.name || ""), search_lower) or
-        String.contains?(String.downcase(cmd.description || ""), search_lower)
+          String.contains?(String.downcase(cmd.description || ""), search_lower)
       end)
     end
   end
@@ -903,9 +1142,17 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     end)
   end
 
-  defp param_input_type(%{type: :integer}), do: "number"
-  defp param_input_type(%{type: :float}), do: "number"
-  defp param_input_type(%{type: :boolean}), do: "checkbox"
+  defp param_input_type(%{data_type_ref: ref}) when is_binary(ref) do
+    down = String.downcase(ref)
+
+    cond do
+      String.contains?(down, "bool") -> "checkbox"
+      String.contains?(down, "int") -> "number"
+      String.contains?(down, "float") or String.contains?(down, "double") -> "number"
+      true -> "text"
+    end
+  end
+
   defp param_input_type(_), do: "text"
 
   defp calculate_alarm_counts(alarms) do
@@ -934,5 +1181,35 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
         percentage: round(healthy / total * 100)
       }
     end
+  end
+
+  defp refresh_queue_entries(socket) do
+    mission_id = socket.assigns.mission.id
+    targets = socket.assigns.targets
+
+    queue_entries = build_context_queue_entries(mission_id, targets)
+    assign(socket, :queue_entries, queue_entries)
+  end
+
+  defp build_context_queue_entries(mission_id, targets) do
+    entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        limit: 50
+      )
+
+    attach_targets_to_queue_entries(entries, targets)
+  end
+
+  defp attach_targets_to_queue_entries(queue_entries, targets) do
+    targets_by_id = Map.new(targets, &{&1.id, &1})
+
+    Enum.map(queue_entries, fn entry ->
+      target = Map.get(targets_by_id, entry.target_id)
+
+      entry
+      |> Map.from_struct()
+      |> Map.put(:target, target)
+    end)
   end
 end

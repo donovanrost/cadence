@@ -77,7 +77,10 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.AlarmWidget do
     <.widget
       id={@widget_id}
       title={@title}
-      on_configure={@on_configure && JS.push("open_widget_config", value: widget_config_value(@widget_id, "alarm", @config))}
+      on_configure={
+        @on_configure &&
+          JS.push("open_widget_config", value: widget_config_value(@widget_id, "alarm", @config))
+      }
     >
       <div class="alarm-widget">
         <!-- Summary header -->
@@ -85,10 +88,13 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.AlarmWidget do
           critical={@counts.critical}
           warning={@counts.warning}
           info={@counts.info}
-          on_acknowledge_all={@on_acknowledge && JS.push("acknowledge_alarms", value: %{alarm_ids: Enum.map(@filtered_alarms, & &1.id)})}
+          on_acknowledge_all={
+            @on_acknowledge &&
+              JS.push("acknowledge_alarms", value: %{alarm_ids: Enum.map(@filtered_alarms, & &1.id)})
+          }
         />
-
-        <!-- Alarm list -->
+        
+    <!-- Alarm list -->
         <div class="alarm-list mt-2">
           <.alarm_item
             :for={alarm <- @filtered_alarms}
@@ -105,8 +111,8 @@ defmodule CadenceWeb.OpsConsoleLive.Widgets.AlarmWidget do
             message="No alarms"
           />
         </div>
-
-        <!-- Filter indicator -->
+        
+    <!-- Filter indicator -->
         <div :if={@has_filters} class="alarm-filter-info">
           <div class="text-xs text-base-content/40 flex items-center gap-2">
             <.icon name="hero-funnel" class="w-3 h-3" />

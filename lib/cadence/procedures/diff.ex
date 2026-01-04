@@ -184,7 +184,12 @@ defmodule Cadence.Procedures.Diff do
         mov_acc =
           if position_changed do
             [
-              %{id: new.id, name: new.name, from_position: old.position, to_position: new.position}
+              %{
+                id: new.id,
+                name: new.name,
+                from_position: old.position,
+                to_position: new.position
+              }
               | mov_acc
             ]
           else
@@ -259,7 +264,12 @@ defmodule Cadence.Procedures.Diff do
         mov_acc =
           if position_changed do
             [
-              %{id: new.id, name: new.name, from_position: old.position, to_position: new.position}
+              %{
+                id: new.id,
+                name: new.name,
+                from_position: old.position,
+                to_position: new.position
+              }
               | mov_acc
             ]
           else

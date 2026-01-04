@@ -146,51 +146,51 @@ defmodule CadenceWeb.MissionLive.Targets do
         </:actions>
       </.header>
 
-    <.table id="targets" rows={@targets}>
-      <:col :let={target} label="Name">{target.name}</:col>
-      <:col :let={target} label="Identifier">{target.identifier}</:col>
-      <:col :let={target} label="Type">{target.type}</:col>
-      <:col :let={target} label="Database">
-        <%= if target.definition_set do %>
-          <span class="text-sm">
-            {target.definition_set.database.name}
-            <span class="text-base-content/40 text-xs ml-1">v{target.definition_set.version}</span>
-          </span>
-        <% else %>
-          <span class="text-base-content/50 text-sm italic">Not assigned</span>
-        <% end %>
-      </:col>
-      <:col :let={target} label="Status">
-        <.status_badge status={target.status} />
-      </:col>
-      <:col :let={target} label="Circuit Breaker">
-        <.status_badge status={target.circuit_breaker_status} />
-      </:col>
-      <:action :let={target}>
-        <.link patch={~p"/missions/#{@mission}/targets/#{target}/edit"}>Edit</.link>
-        <.link
-          phx-click={JS.push("delete", value: %{id: target.id})}
-          data-confirm="Are you sure you want to delete this target?"
-        >
-          Delete
-        </.link>
-      </:action>
-    </.table>
-
-    <%= if Enum.empty?(@targets) do %>
-      <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
-        <.icon name="hero-cpu-chip" class="mx-auto h-12 w-12 text-base-content/30" />
-        <h3 class="mt-2 text-sm font-semibold text-base-content">No targets</h3>
-        <p class="mt-1 text-sm text-base-content/60">Get started by creating a new target.</p>
-        <div class="mt-6">
-          <.link patch={~p"/missions/#{@mission}/targets/new"}>
-            <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Target
-            </.button>
+      <.table id="targets" rows={@targets}>
+        <:col :let={target} label="Name">{target.name}</:col>
+        <:col :let={target} label="Identifier">{target.identifier}</:col>
+        <:col :let={target} label="Type">{target.type}</:col>
+        <:col :let={target} label="Database">
+          <%= if target.definition_set do %>
+            <span class="text-sm">
+              {target.definition_set.database.name}
+              <span class="text-base-content/40 text-xs ml-1">v{target.definition_set.version}</span>
+            </span>
+          <% else %>
+            <span class="text-base-content/50 text-sm italic">Not assigned</span>
+          <% end %>
+        </:col>
+        <:col :let={target} label="Status">
+          <.status_badge status={target.status} />
+        </:col>
+        <:col :let={target} label="Circuit Breaker">
+          <.status_badge status={target.circuit_breaker_status} />
+        </:col>
+        <:action :let={target}>
+          <.link patch={~p"/missions/#{@mission}/targets/#{target}/edit"}>Edit</.link>
+          <.link
+            phx-click={JS.push("delete", value: %{id: target.id})}
+            data-confirm="Are you sure you want to delete this target?"
+          >
+            Delete
           </.link>
+        </:action>
+      </.table>
+
+      <%= if Enum.empty?(@targets) do %>
+        <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
+          <.icon name="hero-cpu-chip" class="mx-auto h-12 w-12 text-base-content/30" />
+          <h3 class="mt-2 text-sm font-semibold text-base-content">No targets</h3>
+          <p class="mt-1 text-sm text-base-content/60">Get started by creating a new target.</p>
+          <div class="mt-6">
+            <.link patch={~p"/missions/#{@mission}/targets/new"}>
+              <.button>
+                <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Target
+              </.button>
+            </.link>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
     </div>
 
     <.modal

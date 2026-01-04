@@ -309,16 +309,22 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   # Private Helpers
   # ===========================================================================
 
-  defp broadcast_claimed(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_claimed, entry})
+  defp broadcast_claimed(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_claimed, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
   rescue
     _ -> :ok
   end
 
-  defp broadcast_completed(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_completed, entry})
+  defp broadcast_completed(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_completed, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
 
     # Record the dequeue event
     recorder().record(:command_dequeued, entry, nil, %{reason: "completed"})
@@ -326,9 +332,12 @@ defmodule Cadence.Application.Commanding.ManageQueue do
     _ -> :ok
   end
 
-  defp broadcast_failed(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_failed, entry})
+  defp broadcast_failed(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_failed, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
 
     # Record the dequeue event
     recorder().record(:command_dequeued, entry, nil, %{reason: "failed"})
@@ -336,9 +345,12 @@ defmodule Cadence.Application.Commanding.ManageQueue do
     _ -> :ok
   end
 
-  defp broadcast_cancelled(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_cancelled, entry})
+  defp broadcast_cancelled(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_cancelled, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
 
     # Record the dequeue event
     recorder().record(:command_dequeued, entry, nil, %{reason: "cancelled"})
@@ -346,16 +358,22 @@ defmodule Cadence.Application.Commanding.ManageQueue do
     _ -> :ok
   end
 
-  defp broadcast_retried(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_retried, entry})
+  defp broadcast_retried(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_retried, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
   rescue
     _ -> :ok
   end
 
-  defp broadcast_reordered(%QueuedCommand{target_id: target_id} = entry) do
-    topic = "target:#{target_id}:queue"
-    event_publisher().publish(topic, {:command_reordered, entry})
+  defp broadcast_reordered(%QueuedCommand{target_id: target_id, mission_id: mission_id} = entry) do
+    target_topic = "target:#{target_id}:queue"
+    mission_topic = "mission:#{mission_id}:queue"
+
+    event_publisher().publish(target_topic, {:command_reordered, entry})
+    event_publisher().publish(mission_topic, {:queue_updated, entry})
   rescue
     _ -> :ok
   end

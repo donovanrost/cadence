@@ -139,54 +139,54 @@ defmodule CadenceWeb.MissionLive.Settings do
     ~H"""
     <div class="px-4 py-4">
       <%= if @active_tab == :general do %>
-      <.header>
-        General Settings
-        <:subtitle>Mission information</:subtitle>
-      </.header>
+        <.header>
+          General Settings
+          <:subtitle>Mission information</:subtitle>
+        </.header>
 
-      <div class="mt-6">
-        <.settings_section title="Mission Information">
-          <div class="card bg-base-100 border border-base-300 p-4">
-            <dl class="space-y-2">
-              <div>
-                <dt class="text-sm text-base-content/60">Name</dt>
-                <dd class="font-medium">{@mission.name}</dd>
-              </div>
-              <div>
-                <dt class="text-sm text-base-content/60">Status</dt>
-                <dd class="font-medium">{@mission.status}</dd>
-              </div>
-            </dl>
-          </div>
-        </.settings_section>
-      </div>
-    <% else %>
-      <.header>
-        Procedures Settings
-        <:subtitle>Override organization defaults for procedure approvals</:subtitle>
-      </.header>
+        <div class="mt-6">
+          <.settings_section title="Mission Information">
+            <div class="card bg-base-100 border border-base-300 p-4">
+              <dl class="space-y-2">
+                <div>
+                  <dt class="text-sm text-base-content/60">Name</dt>
+                  <dd class="font-medium">{@mission.name}</dd>
+                </div>
+                <div>
+                  <dt class="text-sm text-base-content/60">Status</dt>
+                  <dd class="font-medium">{@mission.status}</dd>
+                </div>
+              </dl>
+            </div>
+          </.settings_section>
+        </div>
+      <% else %>
+        <.header>
+          Procedures Settings
+          <:subtitle>Override organization defaults for procedure approvals</:subtitle>
+        </.header>
 
-      <div class="mt-6">
-        <.settings_section title="Approval Workflow">
-          <%= for setting <- @settings do %>
-            <.setting_override_card
-              label={setting.label}
-              description={setting.description}
-              type={setting.type}
-              org_value={setting.org_value}
-              effective_value={setting.effective_value}
-              min_value={setting.min_value}
-              max_value={setting.max_value}
-              restrictiveness={setting.restrictiveness}
-              name={setting.key}
-              error={Map.get(@errors, setting.key)}
-              can_override={setting.can_override}
-              phx-change="save_setting"
-            />
-          <% end %>
-        </.settings_section>
-      </div>
-    <% end %>
+        <div class="mt-6">
+          <.settings_section title="Approval Workflow">
+            <%= for setting <- @settings do %>
+              <.setting_override_card
+                label={setting.label}
+                description={setting.description}
+                type={setting.type}
+                org_value={setting.org_value}
+                effective_value={setting.effective_value}
+                min_value={setting.min_value}
+                max_value={setting.max_value}
+                restrictiveness={setting.restrictiveness}
+                name={setting.key}
+                error={Map.get(@errors, setting.key)}
+                can_override={setting.can_override}
+                phx-change="save_setting"
+              />
+            <% end %>
+          </.settings_section>
+        </div>
+      <% end %>
     </div>
     """
   end

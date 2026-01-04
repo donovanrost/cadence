@@ -1295,7 +1295,10 @@ defmodule Cadence.Procedures do
       version = Repo.preload(version, :procedure)
 
       Multi.new()
-      |> Multi.insert(:request, ProcedureReviewRequest.changeset(%ProcedureReviewRequest{}, attrs))
+      |> Multi.insert(
+        :request,
+        ProcedureReviewRequest.changeset(%ProcedureReviewRequest{}, attrs)
+      )
       |> Recordings.append(
         :recorded,
         ProcedureReviewRequested,

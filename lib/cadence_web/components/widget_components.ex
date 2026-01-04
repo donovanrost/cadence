@@ -201,7 +201,10 @@ defmodule CadenceWeb.WidgetComponents do
     assigns = assign(assigns, :text_class, text_class)
 
     ~H"""
-    <div :if={@count > 0} class={["flex items-center gap-1", @pulse && "status-critical-pulse", @class]}>
+    <div
+      :if={@count > 0}
+      class={["flex items-center gap-1", @pulse && "status-critical-pulse", @class]}
+    >
       <.severity_dot severity={@severity} />
       <span class={["text-xs font-bold", @text_class]}>{@count}</span>
     </div>
@@ -316,7 +319,8 @@ defmodule CadenceWeb.WidgetComponents do
   attr :class, :string, default: nil
 
   def telemetry_value(assigns) do
-    formatted_value = format_telemetry_value(assigns.value, assigns.precision, assigns.placeholder)
+    formatted_value =
+      format_telemetry_value(assigns.value, assigns.precision, assigns.placeholder)
 
     limits_color =
       case to_string(assigns.limits_state) do

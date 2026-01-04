@@ -26,7 +26,6 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
     all_queue_entries =
       Commands.list_queue_entries(mission_id,
         status: [:pending, :executing, :completed, :failed, :cancelled],
-        preload: [:target],
         limit: 200
       )
 
@@ -34,12 +33,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
     active_alarms = Alarms.list_active_alarms(mission_id)
     alarm_counts = calculate_alarm_counts(active_alarms)
 
-    context_queue_entries =
-      Commands.list_queue_entries(mission_id,
-        status: [:pending, :executing],
-        preload: [:target],
-        limit: 50
-      )
+    context_queue_entries = build_context_queue_entries(mission_id, targets)
 
     fleet_health = calculate_fleet_health(targets)
 
@@ -117,8 +111,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
               metrics_expanded={@metrics_expanded}
             />
         <% end %>
-
-        <!-- View Tabs / Controls Bar -->
+        
+    <!-- View Tabs / Controls Bar -->
         <.queue_controls
           live_action={@live_action}
           mission_id={@mission.id}
@@ -192,7 +186,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   defp queue_overview_view(assigns) do
     # Calculate status breakdown
-    status_breakdown = calculate_status_breakdown(assigns.all_queue_entries, assigns.metrics.total)
+    status_breakdown =
+      calculate_status_breakdown(assigns.all_queue_entries, assigns.metrics.total)
 
     # Top targets by queue count
     top_targets =
@@ -237,8 +232,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           <span class="queue-metric-card-label">SUCCESS RATE</span>
         </div>
       </div>
-
-      <!-- Charts Row -->
+      
+    <!-- Charts Row -->
       <div class="queue-overview-charts">
         <!-- Status Breakdown -->
         <div class="queue-chart-panel">
@@ -255,8 +250,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
             />
           </div>
         </div>
-
-        <!-- Target Activity -->
+        
+    <!-- Target Activity -->
         <div class="queue-chart-panel">
           <div class="queue-chart-header">
             <span class="mc-label-subsystem">TARGET ACTIVITY</span>
@@ -274,8 +269,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           </div>
         </div>
       </div>
-
-      <!-- Quick Actions -->
+      
+    <!-- Quick Actions -->
       <div class="queue-overview-actions">
         <span class="mc-label-subsystem">QUICK ACTIONS</span>
         <div class="queue-quick-actions">
@@ -292,7 +287,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           </button>
           <button type="button" phx-click="clear_completed" class="btn btn-ghost btn-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
             </svg>
             Clear Completed
           </button>
@@ -326,7 +326,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
         <span class="queue-status-bar-count">{@count}</span>
       </div>
       <div class="queue-status-bar-track">
-        <div class="queue-status-bar-fill" style={"width: #{@percentage}%; background: #{@color};"}></div>
+        <div class="queue-status-bar-fill" style={"width: #{@percentage}%; background: #{@color};"}>
+        </div>
       </div>
     </div>
     """
@@ -420,8 +421,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           />
         </div>
       </div>
-
-      <!-- Queue Detail Panel -->
+      
+    <!-- Queue Detail Panel -->
       <div class="queue-manage-detail-panel">
         <div :if={!@selected_target} class="queue-manage-empty-state">
           <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -444,21 +445,33 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
             </div>
             <div class="queue-detail-stats">
               <span>Queued: <strong>{length(@target_entries)}</strong></span>
-              <span>Pending: <strong>{Enum.count(@target_entries, &(&1.status == :pending))}</strong></span>
+              <span>
+                Pending: <strong>{Enum.count(@target_entries, &(&1.status == :pending))}</strong>
+              </span>
             </div>
           </div>
-
-          <!-- Detail Actions -->
+          
+    <!-- Detail Actions -->
           <div class="queue-detail-actions">
-            <button type="button" phx-click="pause_target" phx-value-id={@selected_target.id} class="btn btn-ghost btn-xs">
+            <button
+              type="button"
+              phx-click="pause_target"
+              phx-value-id={@selected_target.id}
+              class="btn btn-ghost btn-xs"
+            >
               Pause Queue
             </button>
-            <button type="button" phx-click="clear_target_queue" phx-value-id={@selected_target.id} class="btn btn-ghost btn-xs">
+            <button
+              type="button"
+              phx-click="clear_target_queue"
+              phx-value-id={@selected_target.id}
+              class="btn btn-ghost btn-xs"
+            >
               Clear Queue
             </button>
           </div>
-
-          <!-- Detail Table -->
+          
+    <!-- Detail Table -->
           <div class="queue-detail-table-wrapper">
             <div :if={@target_entries == []} class="queue-detail-empty">
               No commands in queue
@@ -526,7 +539,9 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
     <tr class={["queue-detail-row", "queue-status-#{@entry.status}"]}>
       <td class="queue-detail-td-pos">{@position}</td>
       <td>
-        <span class={"queue-priority-badge queue-priority-#{@entry.priority}"}>{@entry.priority}</span>
+        <span class={"queue-priority-badge queue-priority-#{@entry.priority}"}>
+          {@entry.priority}
+        </span>
       </td>
       <td class="queue-detail-td-cmd">{@entry.command_name}</td>
       <td><.queue_status_badge status={@entry.status} /></td>
@@ -540,7 +555,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           title="Cancel"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </td>
@@ -584,7 +604,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
       <div class={["queue-metrics-bar", !@metrics_expanded && "collapsed"]}>
         <button type="button" class="queue-metrics-toggle" phx-click="toggle_metrics">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={if @metrics_expanded, do: "M19 9l-7 7-7-7", else: "M5 15l7-7 7 7"} />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d={if @metrics_expanded, do: "M19 9l-7 7-7-7", else: "M5 15l7-7 7 7"}
+            />
           </svg>
         </button>
         <div class="queue-metrics-summary">
@@ -610,8 +635,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           </div>
         </div>
       </div>
-
-      <!-- Two-Panel Row -->
+      
+    <!-- Two-Panel Row -->
       <div class="queue-panels-row">
         <!-- Target Selection Panel -->
         <div class="queue-target-panel">
@@ -631,7 +656,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
                 title="Compact view"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                  />
                 </svg>
               </button>
               <button
@@ -642,7 +672,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
                 title="Detailed view"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                  />
                 </svg>
               </button>
             </div>
@@ -672,13 +707,17 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           </div>
 
           <div :if={MapSet.size(@selected_targets) > 0} class="queue-selection-actions">
-            <button type="button" phx-click="clear_target_selection" class="btn btn-ghost btn-xs btn-block">
+            <button
+              type="button"
+              phx-click="clear_target_selection"
+              class="btn btn-ghost btn-xs btn-block"
+            >
               Clear Selection
             </button>
           </div>
         </div>
-
-        <!-- Main Queue Panel -->
+        
+    <!-- Main Queue Panel -->
         <div class="queue-main-panel">
           <!-- Filter Bar -->
           <div class="queue-filter-bar">
@@ -732,8 +771,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
               </div>
             </div>
           </div>
-
-          <!-- Queue Table -->
+          
+    <!-- Queue Table -->
           <div class="queue-table-container">
             <table class="queue-table">
               <thead>
@@ -773,8 +812,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           </div>
         </div>
       </div>
-
-      <!-- Bulk Actions Bar -->
+      
+    <!-- Bulk Actions Bar -->
       <div :if={MapSet.size(@selected_entries) > 0} class="queue-bulk-bar">
         <span class="queue-selected-count">{MapSet.size(@selected_entries)} selected</span>
         <button type="button" phx-click="cancel_selected" class="btn btn-ghost btn-xs">
@@ -839,7 +878,9 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
         <.queue_status_badge status={@entry.status} />
       </td>
       <td class="queue-td queue-td-priority">
-        <span class={"queue-priority-badge queue-priority-#{@entry.priority}"}>{@entry.priority}</span>
+        <span class={"queue-priority-badge queue-priority-#{@entry.priority}"}>
+          {@entry.priority}
+        </span>
       </td>
       <td class="queue-td queue-td-scheduled">
         <.format_queue_time time={@entry.inserted_at} />
@@ -855,7 +896,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
             title="Cancel"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
           <button
@@ -921,21 +967,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   @impl true
   def handle_event("refresh", _, socket) do
-    queue_entries =
-      Commands.list_queue_entries(socket.assigns.mission.id,
-        status: [:pending, :executing, :completed, :failed, :cancelled],
-        preload: [:target],
-        limit: 200
-      )
-
-    target_queue_counts = calculate_target_queue_counts(queue_entries)
-
-    {:noreply,
-     socket
-     |> assign(:all_queue_entries, queue_entries)
-     |> stream(:queue_entries, queue_entries, reset: true)
-     |> assign(:queue_metrics, calculate_metrics(queue_entries))
-     |> assign(:target_queue_counts, target_queue_counts)}
+    {:noreply, refresh_queue_state(socket)}
   end
 
   def handle_event("select_target", %{"id" => id}, socket) do
@@ -1067,7 +1099,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   def handle_event("clear_target_queue", %{"id" => id}, socket) do
     case Commands.cancel_all_queued_for_target(socket.assigns.mission.id, id) do
       {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "Target queue cleared")}
+        socket =
+          socket
+          |> put_flash(:info, "Target queue cleared")
+          |> refresh_queue_state()
+
+        {:noreply, socket}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to clear queue")}
@@ -1076,7 +1113,10 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   # Alarm action handlers (from context panel)
   def handle_event("acknowledge_alarm", %{"id" => id}, socket) do
-    case Alarms.acknowledge_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.acknowledge_alarm(alarm, user.id) do
       {:ok, _updated_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -1091,7 +1131,10 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   end
 
   def handle_event("clear_alarm", %{"id" => id}, socket) do
-    case Alarms.clear_alarm(id, socket.assigns.current_scope.user) do
+    alarm = Alarms.get_alarm!(id)
+    user = socket.assigns.current_scope.user
+
+    case Alarms.clear_alarm(alarm, user.id) do
       {:ok, _cleared_alarm} ->
         active_alarms = Alarms.list_active_alarms(socket.assigns.mission.id)
 
@@ -1107,7 +1150,8 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   @impl true
   def handle_info({:queue_updated, entry}, socket) do
-    {:noreply, stream_insert(socket, :queue_entries, entry)}
+    _ = entry
+    {:noreply, refresh_queue_state(socket)}
   end
 
   def handle_info(:tick, socket) do
@@ -1141,6 +1185,28 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   # ============================================================================
   # Private helpers
   # ============================================================================
+
+  defp refresh_queue_state(socket) do
+    mission_id = socket.assigns.mission.id
+    targets = socket.assigns.targets
+
+    all_queue_entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing, :completed, :failed, :cancelled],
+        limit: 200
+      )
+
+    target_queue_counts = calculate_target_queue_counts(all_queue_entries)
+    queue_metrics = calculate_metrics(all_queue_entries)
+    context_queue_entries = build_context_queue_entries(mission_id, targets)
+
+    socket
+    |> assign(:all_queue_entries, all_queue_entries)
+    |> stream(:queue_entries, all_queue_entries, reset: true)
+    |> assign(:queue_metrics, queue_metrics)
+    |> assign(:target_queue_counts, target_queue_counts)
+    |> assign(:queue_entries, context_queue_entries)
+  end
 
   defp calculate_metrics(entries) do
     total = length(entries)
@@ -1229,5 +1295,27 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
         percentage: round(healthy / total * 100)
       }
     end
+  end
+
+  defp build_context_queue_entries(mission_id, targets) do
+    entries =
+      Commands.list_queue_entries(mission_id,
+        status: [:pending, :executing],
+        limit: 50
+      )
+
+    attach_targets_to_queue_entries(entries, targets)
+  end
+
+  defp attach_targets_to_queue_entries(queue_entries, targets) do
+    targets_by_id = Map.new(targets, &{&1.id, &1})
+
+    Enum.map(queue_entries, fn entry ->
+      target = Map.get(targets_by_id, entry.target_id)
+
+      entry
+      |> Map.from_struct()
+      |> Map.put(:target, target)
+    end)
   end
 end

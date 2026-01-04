@@ -265,10 +265,17 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
   defp normalize_optional(""), do: nil
   defp normalize_optional(value), do: value
 
-  defp tab_path(mission, procedure, :overview), do: ~p"/missions/#{mission}/procedures/#{procedure}"
-  defp tab_path(mission, procedure, :versions), do: ~p"/missions/#{mission}/procedures/#{procedure}/versions"
-  defp tab_path(mission, procedure, :executions), do: ~p"/missions/#{mission}/procedures/#{procedure}/executions"
-  defp tab_path(mission, procedure, :reviews), do: ~p"/missions/#{mission}/procedures/#{procedure}/reviews"
+  defp tab_path(mission, procedure, :overview),
+    do: ~p"/missions/#{mission}/procedures/#{procedure}"
+
+  defp tab_path(mission, procedure, :versions),
+    do: ~p"/missions/#{mission}/procedures/#{procedure}/versions"
+
+  defp tab_path(mission, procedure, :executions),
+    do: ~p"/missions/#{mission}/procedures/#{procedure}/executions"
+
+  defp tab_path(mission, procedure, :reviews),
+    do: ~p"/missions/#{mission}/procedures/#{procedure}/reviews"
 
   # ==========================================================================
   # Render
@@ -296,9 +303,15 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                   {@procedure.description}
                 </span>
                 <span :if={!@procedure.description} class="italic">No description</span>
-                <span :if={@procedure.tags && length(@procedure.tags) > 0} class="flex items-center gap-1">
+                <span
+                  :if={@procedure.tags && length(@procedure.tags) > 0}
+                  class="flex items-center gap-1"
+                >
                   <span class="text-base-content/30">•</span>
-                  <span :for={tag <- Enum.take(@procedure.tags, 3)} class="badge badge-outline badge-xs">
+                  <span
+                    :for={tag <- Enum.take(@procedure.tags, 3)}
+                    class="badge badge-outline badge-xs"
+                  >
                     {tag}
                   </span>
                   <span :if={length(@procedure.tags) > 3} class="text-xs">
@@ -313,18 +326,18 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
           <div class="flex items-center gap-2 shrink-0">
             <.link
               :if={@procedure.current_version_id}
-              navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@procedure.current_version_id}/edit"}
+              navigate={
+                ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@procedure.current_version_id}/edit"
+              }
               class="btn btn-ghost btn-sm"
             >
-              <.icon name="hero-pencil-square" class="h-4 w-4" />
-              Edit
+              <.icon name="hero-pencil-square" class="h-4 w-4" /> Edit
             </.link>
             <.link
               navigate={~p"/missions/#{@mission}/procedures/#{@procedure.id}/execute"}
               class="btn btn-primary btn-sm"
             >
-              <.icon name="hero-play" class="h-4 w-4" />
-              Execute
+              <.icon name="hero-play" class="h-4 w-4" /> Execute
             </.link>
           </div>
         </div>
@@ -419,14 +432,21 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 <Components.version_status_badge status={@current_version.status} />
               </div>
               <div class="text-sm text-base-content/60 mt-2">
-                <p>Execution mode: <span class="font-medium">{format_execution_mode(@current_version.execution_mode)}</span></p>
+                <p>
+                  Execution mode:
+                  <span class="font-medium">
+                    {format_execution_mode(@current_version.execution_mode)}
+                  </span>
+                </p>
                 <p :if={@current_version.change_summary} class="mt-1">
                   {@current_version.change_summary}
                 </p>
               </div>
               <div class="card-actions justify-end mt-4">
                 <.link
-                  navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@current_version.id}/edit"}
+                  navigate={
+                    ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{@current_version.id}/edit"
+                  }
                   class="btn btn-sm btn-ghost"
                 >
                   Open in Editor
@@ -499,16 +519,14 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 navigate={~p"/missions/#{@mission}/procedures/#{@procedure.id}/execute"}
                 class="btn btn-primary btn-block"
               >
-                <.icon name="hero-play" class="h-4 w-4" />
-                Execute Procedure
+                <.icon name="hero-play" class="h-4 w-4" /> Execute Procedure
               </.link>
               <button
                 type="button"
                 phx-click="create_version"
                 class="btn btn-ghost btn-block"
               >
-                <.icon name="hero-plus" class="h-4 w-4" />
-                New Version
+                <.icon name="hero-plus" class="h-4 w-4" /> New Version
               </button>
             </div>
           </div>
@@ -532,8 +550,7 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
       <div class="flex items-center justify-between">
         <h3 class="text-lg font-semibold">{length(@versions)} Versions</h3>
         <button type="button" phx-click="create_version" class="btn btn-primary btn-sm">
-          <.icon name="hero-plus" class="h-4 w-4" />
-          New Version
+          <.icon name="hero-plus" class="h-4 w-4" /> New Version
         </button>
       </div>
 
@@ -562,14 +579,17 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 <div class="flex items-center gap-2">
                   <.link
                     :if={version.status in [:in_review, :changes_requested]}
-                    navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{version.id}/review"}
+                    navigate={
+                      ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{version.id}/review"
+                    }
                     class="btn btn-ghost btn-sm gap-1"
                   >
-                    <.icon name="hero-chat-bubble-left-right" class="h-4 w-4" />
-                    Review
+                    <.icon name="hero-chat-bubble-left-right" class="h-4 w-4" /> Review
                   </.link>
                   <.link
-                    navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{version.id}/edit"}
+                    navigate={
+                      ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/versions/#{version.id}/edit"
+                    }
                     class="btn btn-ghost btn-sm"
                   >
                     Open
@@ -589,7 +609,9 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 <p :if={version.change_summary}>{version.change_summary}</p>
                 <p class="mt-1">
                   Created {format_datetime(version.inserted_at)}
-                  {if version.submitted_at, do: " · Submitted #{format_datetime(version.submitted_at)}", else: ""}
+                  {if version.submitted_at,
+                    do: " · Submitted #{format_datetime(version.submitted_at)}",
+                    else: ""}
                 </p>
               </div>
             </div>
@@ -617,8 +639,7 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
           navigate={~p"/missions/#{@mission}/procedures/#{@procedure.id}/execute"}
           class="btn btn-primary btn-sm"
         >
-          <.icon name="hero-play" class="h-4 w-4" />
-          Start New
+          <.icon name="hero-play" class="h-4 w-4" /> Start New
         </.link>
       </div>
 
@@ -659,7 +680,9 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 <td class="text-sm text-base-content/70">{format_duration(execution)}</td>
                 <td>
                   <.link
-                    navigate={~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/executions/#{execution.id}"}
+                    navigate={
+                      ~p"/missions/#{@mission}/procedures-v2/#{@procedure.id}/executions/#{execution.id}"
+                    }
                     class="btn btn-ghost btn-xs"
                   >
                     View
@@ -694,7 +717,12 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
             Configure parameters and start a new execution of <span class="font-medium">{@procedure.name}</span>.
           </p>
 
-          <.form for={@execution_form} id="procedure-execution-form" phx-submit="start_execution" class="space-y-4">
+          <.form
+            for={@execution_form}
+            id="procedure-execution-form"
+            phx-submit="start_execution"
+            class="space-y-4"
+          >
             <.input
               field={@execution_form[:target_id]}
               type="text"
@@ -729,8 +757,7 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
                 Cancel
               </.link>
               <button type="submit" class="btn btn-primary">
-                <.icon name="hero-play" class="h-4 w-4" />
-                Start Execution
+                <.icon name="hero-play" class="h-4 w-4" /> Start Execution
               </button>
             </div>
           </.form>
@@ -782,6 +809,7 @@ defmodule CadenceWeb.MissionLive.Procedures.Show do
   end
 
   defp format_duration(%{completed_at: nil}), do: "—"
+
   defp format_duration(%{completed_at: completed, inserted_at: started}) do
     seconds = DateTime.diff(completed, started, :second)
 

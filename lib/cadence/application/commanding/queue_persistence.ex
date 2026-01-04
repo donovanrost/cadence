@@ -59,8 +59,19 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
 
   defp apply_event({:enqueue, entry}) do
     case repo().save(entry) do
-      {:ok, saved} -> publish_event(saved.target_id, {:command_enqueued, saved})
-      _ -> :ok
+      {:ok, saved} ->
+        publish_event(saved.target_id, {:command_enqueued, saved})
+
+        Phoenix.PubSub.broadcast(
+          Cadence.PubSub,
+          "mission:#{saved.mission_id}:queue",
+          {:queue_updated, saved}
+        )
+
+        :ok
+
+      _ ->
+        :ok
     end
   end
 
@@ -69,8 +80,19 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
       updated = %{entry | status: :executing, attempts: attempts, last_attempt_at: claimed_at}
 
       case repo().save(updated) do
-        {:ok, saved} -> publish_event(saved.target_id, {:command_claimed, saved})
-        _ -> :ok
+        {:ok, saved} ->
+          publish_event(saved.target_id, {:command_claimed, saved})
+
+          Phoenix.PubSub.broadcast(
+            Cadence.PubSub,
+            "mission:#{saved.mission_id}:queue",
+            {:queue_updated, saved}
+          )
+
+          :ok
+
+        _ ->
+          :ok
       end
     end
   end
@@ -98,8 +120,19 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
       updated = %{entry | status: :pending, last_error: reason}
 
       case repo().save(updated) do
-        {:ok, saved} -> publish_event(saved.target_id, {:command_retried, saved})
-        _ -> :ok
+        {:ok, saved} ->
+          publish_event(saved.target_id, {:command_retried, saved})
+
+          Phoenix.PubSub.broadcast(
+            Cadence.PubSub,
+            "mission:#{saved.mission_id}:queue",
+            {:queue_updated, saved}
+          )
+
+          :ok
+
+        _ ->
+          :ok
       end
     end
   end

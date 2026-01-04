@@ -308,76 +308,76 @@ defmodule CadenceWeb.MissionLive.Alarms do
         </:actions>
       </.header>
 
-    <.table id="alarm-rules" rows={@alarm_rules}>
-      <:col :let={rule} label="Name">{rule.name}</:col>
-      <:col :let={rule} label="Event Type">
-        <%= case rule.event_type do %>
-          <% "telemetry_limit" -> %>
-            <span class="text-info">Telemetry Limit</span>
-          <% other -> %>
-            {other}
-        <% end %>
-      </:col>
-      <:col :let={rule} label="Conditions">
-        <div class="flex flex-wrap gap-1">
-          <%= if rule.conditions["limit_state"] do %>
-            <%= for state <- rule.conditions["limit_state"] do %>
-              <span class={[
-                "badge badge-sm",
-                state == "red" && "badge-error",
-                state == "yellow" && "badge-warning",
-                state == "blue" && "badge-info"
-              ]}>
-                {state}
+      <.table id="alarm-rules" rows={@alarm_rules}>
+        <:col :let={rule} label="Name">{rule.name}</:col>
+        <:col :let={rule} label="Event Type">
+          <%= case rule.event_type do %>
+            <% "telemetry_limit" -> %>
+              <span class="text-info">Telemetry Limit</span>
+            <% other -> %>
+              {other}
+          <% end %>
+        </:col>
+        <:col :let={rule} label="Conditions">
+          <div class="flex flex-wrap gap-1">
+            <%= if rule.conditions["limit_state"] do %>
+              <%= for state <- rule.conditions["limit_state"] do %>
+                <span class={[
+                  "badge badge-sm",
+                  state == "red" && "badge-error",
+                  state == "yellow" && "badge-warning",
+                  state == "blue" && "badge-info"
+                ]}>
+                  {state}
+                </span>
+              <% end %>
+            <% end %>
+            <%= if rule.conditions["item_name_pattern"] do %>
+              <span class="badge badge-sm badge-neutral font-mono">
+                {rule.conditions["item_name_pattern"]}
               </span>
             <% end %>
-          <% end %>
-          <%= if rule.conditions["item_name_pattern"] do %>
-            <span class="badge badge-sm badge-neutral font-mono">
-              {rule.conditions["item_name_pattern"]}
-            </span>
-          <% end %>
-          <%= if rule.conditions == %{} do %>
-            <span class="text-base-content/40 italic text-xs">All events</span>
-          <% end %>
-        </div>
-      </:col>
-      <:col :let={rule} label="Severity">
-        <.status_badge status={to_string(rule.severity)} />
-      </:col>
-      <:col :let={rule} label="Status">
-        <.status_badge status={rule.enabled} true_label="Enabled" false_label="Disabled" />
-      </:col>
-      <:action :let={rule}>
-        <.link phx-click={JS.push("toggle", value: %{id: rule.id})}>
-          {if rule.enabled, do: "Disable", else: "Enable"}
-        </.link>
-        <.link patch={~p"/missions/#{@mission}/alarms/#{rule}/edit"}>Edit</.link>
-        <.link
-          phx-click={JS.push("delete", value: %{id: rule.id})}
-          data-confirm="Are you sure you want to delete this alarm rule?"
-        >
-          Delete
-        </.link>
-      </:action>
-    </.table>
-
-    <%= if Enum.empty?(@alarm_rules) do %>
-      <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
-        <.icon name="hero-bell-alert" class="mx-auto h-12 w-12 text-base-content/30" />
-        <h3 class="mt-2 text-sm font-semibold text-base-content">No alarm rules</h3>
-        <p class="mt-1 text-sm text-base-content/60">
-          Create rules to generate alarms when telemetry exceeds limits.
-        </p>
-        <div class="mt-6">
-          <.link patch={~p"/missions/#{@mission}/alarms/new"}>
-            <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Rule
-            </.button>
+            <%= if rule.conditions == %{} do %>
+              <span class="text-base-content/40 italic text-xs">All events</span>
+            <% end %>
+          </div>
+        </:col>
+        <:col :let={rule} label="Severity">
+          <.status_badge status={to_string(rule.severity)} />
+        </:col>
+        <:col :let={rule} label="Status">
+          <.status_badge status={rule.enabled} true_label="Enabled" false_label="Disabled" />
+        </:col>
+        <:action :let={rule}>
+          <.link phx-click={JS.push("toggle", value: %{id: rule.id})}>
+            {if rule.enabled, do: "Disable", else: "Enable"}
           </.link>
+          <.link patch={~p"/missions/#{@mission}/alarms/#{rule}/edit"}>Edit</.link>
+          <.link
+            phx-click={JS.push("delete", value: %{id: rule.id})}
+            data-confirm="Are you sure you want to delete this alarm rule?"
+          >
+            Delete
+          </.link>
+        </:action>
+      </.table>
+
+      <%= if Enum.empty?(@alarm_rules) do %>
+        <div class="text-center py-12 border border-dashed border-base-300 rounded-sm mt-4 bg-base-200/30">
+          <.icon name="hero-bell-alert" class="mx-auto h-12 w-12 text-base-content/30" />
+          <h3 class="mt-2 text-sm font-semibold text-base-content">No alarm rules</h3>
+          <p class="mt-1 text-sm text-base-content/60">
+            Create rules to generate alarms when telemetry exceeds limits.
+          </p>
+          <div class="mt-6">
+            <.link patch={~p"/missions/#{@mission}/alarms/new"}>
+              <.button>
+                <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Rule
+              </.button>
+            </.link>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
     </div>
 
     <!-- Alarm Rule Modal -->

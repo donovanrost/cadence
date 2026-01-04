@@ -224,98 +224,105 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         </:actions>
       </.header>
 
-    <.table id="interfaces" rows={@interfaces}>
-      <:col :let={interface} label="Name">{interface.name}</:col>
-      <:col :let={interface} label="Connection Type">
-        {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
-      </:col>
-      <:col :let={interface} label="Targets">
-        <% targets = Map.get(@interface_targets, interface.id, []) %>
-        <%= if Enum.empty?(targets) do %>
-          <span class="text-gray-400 italic text-sm">No targets</span>
-        <% else %>
-          <div class="flex flex-wrap gap-1">
-            <%= for target <- targets do %>
-              <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                {target.identifier}
+      <.table id="interfaces" rows={@interfaces}>
+        <:col :let={interface} label="Name">{interface.name}</:col>
+        <:col :let={interface} label="Connection Type">
+          {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
+        </:col>
+        <:col :let={interface} label="Targets">
+          <% targets = Map.get(@interface_targets, interface.id, []) %>
+          <%= if Enum.empty?(targets) do %>
+            <span class="text-gray-400 italic text-sm">No targets</span>
+          <% else %>
+            <div class="flex flex-wrap gap-1">
+              <%= for target <- targets do %>
+                <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                  {target.identifier}
+                </span>
+              <% end %>
+            </div>
+          <% end %>
+        </:col>
+        <:col :let={interface} label="Protocols">
+          <%= case Map.get(@interface_protocol_counts, interface.id, 0) do %>
+            <% 0 -> %>
+              <span class="text-gray-500">No protocols</span>
+            <% 1 -> %>
+              <.link
+                navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
+                class="text-blue-600 hover:underline"
+              >
+                1 protocol
+              </.link>
+            <% count -> %>
+              <.link
+                navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
+                class="text-blue-600 hover:underline"
+              >
+                {count} protocols
+              </.link>
+          <% end %>
+        </:col>
+        <:col :let={interface} label="Status">
+          <.status_badge status={interface.status} />
+        </:col>
+        <:col :let={interface} label="Connection">
+          <% conn_status =
+            Map.get(@interface_connection_status, interface.id, %{
+              state: :disconnected,
+              client_count: 0
+            }) %>
+          <%= case conn_status.state do %>
+            <% :connected -> %>
+              <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                <span class="mr-1.5 h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                Connected ({conn_status.client_count})
               </span>
-            <% end %>
-          </div>
-        <% end %>
-      </:col>
-      <:col :let={interface} label="Protocols">
-        <%= case Map.get(@interface_protocol_counts, interface.id, 0) do %>
-          <% 0 -> %>
-            <span class="text-gray-500">No protocols</span>
-          <% 1 -> %>
-            <.link
-              navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
-              class="text-blue-600 hover:underline"
-            >
-              1 protocol
-            </.link>
-          <% count -> %>
-            <.link
-              navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
-              class="text-blue-600 hover:underline"
-            >
-              {count} protocols
-            </.link>
-        <% end %>
-      </:col>
-      <:col :let={interface} label="Status">
-        <.status_badge status={interface.status} />
-      </:col>
-      <:col :let={interface} label="Connection">
-        <% conn_status =
-          Map.get(@interface_connection_status, interface.id, %{state: :disconnected, client_count: 0}) %>
-        <%= case conn_status.state do %>
-          <% :connected -> %>
-            <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-              <span class="mr-1.5 h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-              Connected ({conn_status.client_count})
-            </span>
-          <% :disconnected -> %>
-            <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-              <span class="mr-1.5 h-2 w-2 rounded-full bg-gray-400"></span> Disconnected
-            </span>
-          <% _ -> %>
-            <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
-              Unknown
-            </span>
-        <% end %>
-      </:col>
-      <:col :let={interface} label="Auto Reconnect">
-        <.status_badge status={interface.auto_reconnect} true_label="Enabled" false_label="Disabled" />
-      </:col>
-      <:action :let={interface}>
-        <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>
-          Protocols
-        </.link>
-        <.link patch={~p"/missions/#{@mission}/interfaces/#{interface}/edit"}>Edit</.link>
-        <.link
-          phx-click={JS.push("delete", value: %{id: interface.id})}
-          data-confirm="Are you sure you want to delete this interface?"
-        >
-          Delete
-        </.link>
-      </:action>
-    </.table>
-
-    <%= if Enum.empty?(@interfaces) do %>
-      <div class="text-center py-12">
-        <.icon name="hero-signal" class="mx-auto h-12 w-12 text-gray-400" />
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No interfaces</h3>
-        <p class="mt-1 text-sm text-gray-500">Get started by creating a new interface.</p>
-        <div class="mt-6">
-          <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
-            <.button>
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Interface
-            </.button>
+            <% :disconnected -> %>
+              <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                <span class="mr-1.5 h-2 w-2 rounded-full bg-gray-400"></span> Disconnected
+              </span>
+            <% _ -> %>
+              <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                Unknown
+              </span>
+          <% end %>
+        </:col>
+        <:col :let={interface} label="Auto Reconnect">
+          <.status_badge
+            status={interface.auto_reconnect}
+            true_label="Enabled"
+            false_label="Disabled"
+          />
+        </:col>
+        <:action :let={interface}>
+          <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>
+            Protocols
           </.link>
+          <.link patch={~p"/missions/#{@mission}/interfaces/#{interface}/edit"}>Edit</.link>
+          <.link
+            phx-click={JS.push("delete", value: %{id: interface.id})}
+            data-confirm="Are you sure you want to delete this interface?"
+          >
+            Delete
+          </.link>
+        </:action>
+      </.table>
+
+      <%= if Enum.empty?(@interfaces) do %>
+        <div class="text-center py-12">
+          <.icon name="hero-signal" class="mx-auto h-12 w-12 text-gray-400" />
+          <h3 class="mt-2 text-sm font-semibold text-gray-900">No interfaces</h3>
+          <p class="mt-1 text-sm text-gray-500">Get started by creating a new interface.</p>
+          <div class="mt-6">
+            <.link patch={~p"/missions/#{@mission}/interfaces/new"}>
+              <.button>
+                <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-5 w-5" /> New Interface
+              </.button>
+            </.link>
+          </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
     </div>
 
     <.modal

@@ -325,9 +325,11 @@ defmodule CadenceWeb.MissionLive.Procedures.Reviews do
             </div>
             <div class="flex items-center gap-4 text-sm text-base-content/60 mb-2">
               <span :if={@item.review_summary}>
-                <span class="text-success">{@item.review_summary.approved_count}</span> approved
+                <span class="text-success">{@item.review_summary.approved_count}</span>
+                approved
                 <span :if={@item.review_summary.changes_requested_count > 0}>
-                  · <span class="text-warning">{@item.review_summary.changes_requested_count}</span> requesting changes
+                  · <span class="text-warning">{@item.review_summary.changes_requested_count}</span>
+                  requesting changes
                 </span>
               </span>
             </div>
