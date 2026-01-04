@@ -161,7 +161,13 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
           </div>
           
     <!-- Resize Handle -->
-          <div class="cmd-resize-handle" id="cmd-resize-handle" phx-hook=".CmdPanelResize" phx-update="ignore"></div>
+          <div
+            class="cmd-resize-handle"
+            id="cmd-resize-handle"
+            phx-hook=".CmdPanelResize"
+            phx-update="ignore"
+          >
+          </div>
           
     <!-- Right: Command Browser -->
           <div class="cmd-command-panel">
@@ -226,7 +232,9 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
               <div class="command-name-row">
                 <span class="command-name">{@show_param_modal.name}</span>
                 <span :if={@show_param_modal.opcode} class="command-opcode">
-                  0x{Integer.to_string(@show_param_modal.opcode, 16) |> String.upcase() |> String.pad_leading(4, "0")}
+                  0x{Integer.to_string(@show_param_modal.opcode, 16)
+                  |> String.upcase()
+                  |> String.pad_leading(4, "0")}
                 </span>
               </div>
               <div :if={@show_param_modal.description} class="command-description">
@@ -276,12 +284,14 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
               </div>
               <div class="cmd-slideout-targets">
                 <span
-                  :for={{target, idx} <-
-                    Enum.with_index(
-                      Enum.filter(@targets, fn t ->
-                        MapSet.member?(@selected_targets, t.id)
-                      end)
-                    )}
+                  :for={
+                    {target, idx} <-
+                      Enum.with_index(
+                        Enum.filter(@targets, fn t ->
+                          MapSet.member?(@selected_targets, t.id)
+                        end)
+                      )
+                  }
                   class={[
                     "cmd-slideout-target-chip",
                     @per_target_mode && idx == @active_target_index && "active"
@@ -391,11 +401,18 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
                       Enum.filter(@targets, fn t -> MapSet.member?(@selected_targets, t.id) end),
                       @active_target_index
                     ) %>
-                  {dispatch_button_text(@dispatch_mode)} {if active_target, do: active_target.name, else: "target"} ({@active_target_index + 1}/{MapSet.size(@selected_targets)})
+                  {dispatch_button_text(@dispatch_mode)} {if active_target,
+                    do: active_target.name,
+                    else: "target"} ({@active_target_index + 1}/{MapSet.size(@selected_targets)})
                 <% else %>
-                  {dispatch_button_text(@dispatch_mode)} {MapSet.size(@selected_targets)} target{if MapSet.size(@selected_targets) != 1,
-                    do: "s",
-                    else: ""}
+                  {dispatch_button_text(@dispatch_mode)} {MapSet.size(@selected_targets)} target{if MapSet.size(
+                                                                                                      @selected_targets
+                                                                                                    ) !=
+                                                                                                      1,
+                                                                                                    do:
+                                                                                                      "s",
+                                                                                                    else:
+                                                                                                      ""}
                 <% end %>
               </button>
             </div>
@@ -511,8 +528,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
   defp cmd_target_cell(assigns) do
     status_class = Map.get(assigns.target, :status, :online)
-    mode = Map.get(assigns.target, :mode) || Map.get(assigns.target, :active_limit_set) || "NOMINAL"
-    target_type = Map.get(assigns.target, :target_type) || Map.get(assigns.target, :type) || "Unknown"
+
+    mode =
+      Map.get(assigns.target, :mode) || Map.get(assigns.target, :active_limit_set) || "NOMINAL"
+
+    target_type =
+      Map.get(assigns.target, :target_type) || Map.get(assigns.target, :type) || "Unknown"
 
     assigns =
       assigns
@@ -581,7 +602,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       <%= cond do %>
         <% @use_buttons -> %>
           <div class="cmd-param-buttons">
-            <input type="hidden" name={"params[#{@arg.name}]"} value={@current_value || ""} id={"param-#{@arg.name}"} />
+            <input
+              type="hidden"
+              name={"params[#{@arg.name}]"}
+              value={@current_value || ""}
+              id={"param-#{@arg.name}"}
+            />
             <button
               :for={item <- @button_items}
               type="button"
@@ -812,10 +838,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   defp staged_row(assigns) do
     target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
     target_name = if target, do: target.name, else: assigns.target_entry.target_id
+
     cmd_def =
       Enum.find(assigns.command_definitions, fn cmd ->
         cmd.id == (assigns.staged.meta_command_id || assigns.staged.command_id)
       end)
+
     is_hazardous = cmd_def && cmd_def.is_hazardous
 
     params = assigns.target_entry.params || %{}
@@ -908,10 +936,12 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   defp staged_card(assigns) do
     target = Enum.find(assigns.targets, &(&1.id == assigns.target_entry.target_id))
     target_name = if target, do: target.name, else: assigns.target_entry.target_id
+
     cmd_def =
       Enum.find(assigns.command_definitions, fn cmd ->
         cmd.id == (assigns.staged.meta_command_id || assigns.staged.command_id)
       end)
+
     is_hazardous = cmd_def && cmd_def.is_hazardous
 
     params = assigns.target_entry.params || %{}
@@ -1077,7 +1107,15 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
         mission_id = socket.assigns.mission.id
 
         if socket.assigns.per_target_mode do
-          dispatch_per_target(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
+          dispatch_per_target(
+            socket,
+            command,
+            cmd_params,
+            priority,
+            dispatch_mode,
+            user,
+            mission_id
+          )
         else
           dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id)
         end
@@ -1399,7 +1437,16 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
       target_name = if target, do: target.name, else: target_id
 
-      result = execute_dispatch(dispatch_mode, mission_id, command, target_id, cmd_params, priority, user)
+      result =
+        execute_dispatch(
+          dispatch_mode,
+          mission_id,
+          command,
+          target_id,
+          cmd_params,
+          priority,
+          user
+        )
 
       case result do
         {:ok, _} ->
@@ -1421,7 +1468,11 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
         {:error, reason} ->
           {:noreply,
-           put_flash(socket, :error, "Failed to #{dispatch_action_verb(dispatch_mode)}: #{format_error(reason)}")}
+           put_flash(
+             socket,
+             :error,
+             "Failed to #{dispatch_action_verb(dispatch_mode)}: #{format_error(reason)}"
+           )}
       end
     end
   end
@@ -1431,7 +1482,15 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
     results =
       Enum.map(target_ids, fn target_id ->
-        execute_dispatch(dispatch_mode, mission_id, command, target_id, cmd_params, priority, user)
+        execute_dispatch(
+          dispatch_mode,
+          mission_id,
+          command,
+          target_id,
+          cmd_params,
+          priority,
+          user
+        )
       end)
 
     successes = Enum.count(results, &match?({:ok, _}, &1))
@@ -1455,7 +1514,8 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
          |> put_flash(:info, "#{dispatch_action_past(dispatch_mode)} #{successes} target(s)")}
 
       successes == 0 ->
-        {:noreply, put_flash(socket, :error, "Failed to #{dispatch_action_verb(dispatch_mode)} commands")}
+        {:noreply,
+         put_flash(socket, :error, "Failed to #{dispatch_action_verb(dispatch_mode)} commands")}
 
       true ->
         staged_commands = Commands.list_staged(mission_id)
@@ -1486,11 +1546,17 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   end
 
   defp execute_dispatch(:queue, mission_id, command, target_id, cmd_params, priority, _user) do
-    Commands.enqueue(mission_id, command.name, cmd_params, target_id: target_id, priority: priority)
+    Commands.enqueue(mission_id, command.name, cmd_params,
+      target_id: target_id,
+      priority: priority
+    )
   end
 
   defp execute_dispatch(:immediate, mission_id, command, target_id, cmd_params, priority, _user) do
-    Commands.dispatch(mission_id, command.name, cmd_params, target_id: target_id, priority: priority)
+    Commands.dispatch(mission_id, command.name, cmd_params,
+      target_id: target_id,
+      priority: priority
+    )
   end
 
   defp dispatch_action_verb(:stage), do: "stage"

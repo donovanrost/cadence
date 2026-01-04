@@ -418,10 +418,16 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             </button>
           </div>
         </div>
-
+        
     <!-- Resize Handle -->
-        <div class="stream-resize-handle" id="stream-resize" phx-hook=".StreamPanelResize" phx-update="ignore"></div>
-
+        <div
+          class="stream-resize-handle"
+          id="stream-resize"
+          phx-hook=".StreamPanelResize"
+          phx-update="ignore"
+        >
+        </div>
+        
     <!-- Main Stream Panel -->
         <div class="stream-hud-panel">
           <div class="stream-hud-corners"></div>
