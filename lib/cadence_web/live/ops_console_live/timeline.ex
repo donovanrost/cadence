@@ -60,7 +60,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:selected_targets, MapSet.new())
       |> assign(:event_type_filters, event_type_filters)
       |> assign(:target_search, "")
-      |> assign(:selected_event, nil)
+      |> assign(:expanded_events, MapSet.new())
+      |> assign(:event_histories, %{})
       |> assign(:has_more_events, length(events) >= @events_page_size)
       |> assign(:follow_mode, true)
       |> assign(:time_range, "1h")
@@ -94,7 +95,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
               target_search={@target_search}
               streams={@streams}
               event_type_filters={@event_type_filters}
-              selected_event={@selected_event}
+              expanded_events={@expanded_events}
+              event_histories={@event_histories}
               has_more={@has_more_events}
               current_time={@current_time}
             />
@@ -358,7 +360,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   attr :target_search, :string, required: true
   attr :streams, :map, required: true
   attr :event_type_filters, :map, required: true
-  attr :selected_event, :map, default: nil
+  attr :expanded_events, :any, required: true
+  attr :event_histories, :map, required: true
   attr :has_more, :boolean, default: false
   attr :current_time, :any, required: true
 
@@ -439,20 +442,24 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             <div class="timeline-now-line"></div>
           </div>
           
-    <!-- Event Stream -->
+    <!-- Event Stream with Timeline Spine -->
           <div
             id="event-stream"
             class="timeline-events-list"
             phx-hook=".TimelineStream"
             data-has-more={to_string(@has_more)}
           >
-            <div id="event-list" phx-update="stream">
-              <.timeline_event
-                :for={{dom_id, event} <- @streams.events}
-                dom_id={dom_id}
-                event={event}
-                selected={@selected_event && @selected_event.id == event.id}
-              />
+            <div class="timeline-spine-container">
+              <div class="timeline-spine"></div>
+              <div id="event-list" phx-update="stream">
+                <.timeline_event
+                  :for={{dom_id, event} <- @streams.events}
+                  dom_id={dom_id}
+                  event={event}
+                  expanded={MapSet.member?(@expanded_events, event.id)}
+                  history={Map.get(@event_histories, event.id, [])}
+                />
+              </div>
             </div>
 
             <div :if={@has_more} class="text-center py-4">
@@ -465,11 +472,6 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           <div :if={stream_empty?(@streams)} class="timeline-empty-state">
             No events match current filters
           </div>
-        </div>
-        
-    <!-- Event Detail Panel -->
-        <div :if={@selected_event} class="stream-detail-panel">
-          <.event_detail event={@selected_event} />
         </div>
       </div>
     </div>
@@ -502,55 +504,76 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   attr :dom_id, :string, required: true
   attr :event, :map, required: true
-  attr :selected, :boolean, default: false
+  attr :expanded, :boolean, default: false
+  attr :history, :list, default: []
 
   defp timeline_event(assigns) do
     event_type = assigns.event.type || :command
+    # Events from recordings can potentially have state history
+    # Scheduled commands (source_table: :command_queue_entries) don't have history yet
+    can_expand = assigns.event.source_table == :recordings
+    has_loaded_history = length(assigns.history) > 0
 
     assigns =
       assigns
       |> assign(:event_type, event_type)
       |> assign(:type_class, "timeline-event-#{event_type}")
       |> assign(:badge_class, "timeline-badge-#{event_type}")
+      |> assign(:can_expand, can_expand)
+      |> assign(:has_loaded_history, has_loaded_history)
 
     ~H"""
-    <div
-      id={@dom_id}
-      class={["timeline-event", @type_class, @selected && "selected"]}
-      phx-click="select_event"
-      phx-value-id={@event.id}
-    >
-      <span class="timeline-event-marker">
-        <.event_type_icon type={@event_type} />
-      </span>
+    <div id={@dom_id} class={["timeline-event-wrapper", @type_class, @expanded && "expanded"]}>
+      <div class="timeline-event-marker-dot"></div>
 
-      <div class="timeline-event-content">
-        <div class="timeline-event-header">
-          <span class="timeline-event-time">{format_event_time(@event.timestamp)}</span>
-          <span
-            class="timeline-event-relative"
-            data-timestamp={@event.timestamp && DateTime.to_iso8601(@event.timestamp)}
-          >
-            {timeline_relative_time(@event.timestamp)}
-          </span>
+      <div
+        class={["timeline-event", @can_expand && "expandable"]}
+        phx-click="toggle_event_expand"
+        phx-value-id={@event.id}
+      >
+        <span class="timeline-event-icon">
+          <.event_type_icon type={@event_type} />
+        </span>
+
+        <div class="timeline-event-content">
+          <div class="timeline-event-header">
+            <span class="timeline-event-time">{format_event_time(@event.timestamp)}</span>
+            <span
+              class="timeline-event-relative"
+              data-timestamp={@event.timestamp && DateTime.to_iso8601(@event.timestamp)}
+            >
+              {timeline_relative_time(@event.timestamp)}
+            </span>
+          </div>
+
+          <div class="timeline-event-body">
+            <span class={["timeline-event-type-badge", @badge_class]}>
+              {event_type_label(@event_type)}
+            </span>
+            <span class="timeline-event-title">{event_title(@event)}</span>
+            <span :if={event_source(@event) != "System"} class="timeline-event-target">
+              {event_source(@event)}
+            </span>
+          </div>
+
+          <div :if={@event.description} class="timeline-event-description">
+            {@event.description}
+          </div>
         </div>
 
-        <div class="timeline-event-body">
-          <span class={["timeline-event-type-badge", @badge_class]}>
-            {event_type_label(@event_type)}
-          </span>
-          <span class="timeline-event-title">{event_title(@event)}</span>
-          <span :if={event_source(@event) != "System"} class="timeline-event-target">
-            {event_source(@event)}
-          </span>
-        </div>
+        <.event_status_badge :if={@event.status} status={@event.status} />
 
-        <div :if={@event.description} class="timeline-event-description">
-          {@event.description}
-        </div>
+        <span :if={@can_expand} class="timeline-event-chevron">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
       </div>
 
-      <.event_status_badge :if={@event.status} status={@event.status} />
+      <div :if={@expanded && @has_loaded_history} class="timeline-event-history">
+        <div class="state-change-header">STATE HISTORY ({length(@history)} events)</div>
+        <.state_change_item :for={state <- @history} state={state} />
+      </div>
     </div>
     """
   end
@@ -649,6 +672,19 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   defp status_label(:error), do: "ERROR"
   defp status_label(:failed), do: "FAILED"
   defp status_label(other), do: other |> to_string() |> String.upcase()
+
+  # State change item for expandable event history
+  attr :state, :map, required: true
+
+  defp state_change_item(assigns) do
+    ~H"""
+    <div class="state-change-item">
+      <span class="state-change-time">{format_event_time(@state.timestamp)}</span>
+      <span class="state-change-type">{@state.description || @state.title}</span>
+      <.event_status_badge :if={@state.status} status={@state.status} />
+    </div>
+    """
+  end
 
   # Event detail panel
   attr :event, :map, required: true
@@ -867,13 +903,49 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     {:noreply, assign(socket, :event_type_filters, event_type_filters)}
   end
 
-  def handle_event("select_event", %{"id" => id}, socket) do
-    event = Timeline.get_event(id)
-    {:noreply, assign(socket, :selected_event, event)}
+  def handle_event("toggle_event_expand", %{"id" => id}, socket) do
+    expanded_events = socket.assigns.expanded_events
+    event = Enum.find(socket.assigns.events_list, &(&1.id == id))
+
+    if MapSet.member?(expanded_events, id) do
+      # Collapse - update stream to trigger re-render
+      socket =
+        socket
+        |> assign(:expanded_events, MapSet.delete(expanded_events, id))
+
+      if event do
+        {:noreply, stream_insert(socket, :events, event)}
+      else
+        {:noreply, socket}
+      end
+    else
+      # Expand - load history if not cached, then update stream to trigger re-render
+      socket =
+        socket
+        |> maybe_load_event_history(id)
+        |> assign(:expanded_events, MapSet.put(socket.assigns.expanded_events, id))
+
+      if event do
+        {:noreply, stream_insert(socket, :events, event)}
+      else
+        {:noreply, socket}
+      end
+    end
   end
 
-  def handle_event("close_detail", _, socket) do
-    {:noreply, assign(socket, :selected_event, nil)}
+  defp maybe_load_event_history(socket, event_id) do
+    if Map.has_key?(socket.assigns.event_histories, event_id) do
+      socket
+    else
+      event = Enum.find(socket.assigns.events_list, &(&1.id == event_id))
+
+      if event do
+        history = Timeline.get_event_state_history(event)
+        assign(socket, :event_histories, Map.put(socket.assigns.event_histories, event_id, history))
+      else
+        socket
+      end
+    end
   end
 
   def handle_event("toggle_follow", _, socket) do

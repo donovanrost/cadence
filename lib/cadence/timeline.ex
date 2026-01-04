@@ -315,6 +315,31 @@ defmodule Cadence.Timeline do
 
   def get_event(_), do: nil
 
+  @doc """
+  Get the full state change history for an event.
+
+  Returns all recordings for the same aggregate, ordered by timestamp ascending.
+  This shows the progression of state changes (e.g., CommandDispatched → CommandSent → CommandVerified).
+
+  Returns an empty list if the event has no aggregate metadata or if no history is found.
+  """
+  @spec get_event_state_history(Event.t()) :: [Event.t()]
+  def get_event_state_history(%Event{metadata: metadata}) when is_map(metadata) do
+    aggregate_type = Map.get(metadata, :aggregate_type)
+    aggregate_id = Map.get(metadata, :aggregate_id)
+
+    if aggregate_type && aggregate_id do
+      Recordings.get_aggregate_history_with_recordables(aggregate_type, aggregate_id)
+      |> Enum.map(fn %{recording: recording, recordable: recordable} ->
+        Event.from_recording(recording, recordable: recordable)
+      end)
+    else
+      []
+    end
+  end
+
+  def get_event_state_history(_), do: []
+
   # Private helpers
 
   defp get_mission_bucket_path(mission_id) do

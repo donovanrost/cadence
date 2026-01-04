@@ -134,6 +134,180 @@
 .timeline-event-procedure .timeline-event-marker { color: var(--event-procedure); }
 .timeline-event-automation .timeline-event-marker { color: var(--event-automation); }
 
+/* ========================================
+   TIMELINE SPINE & EXPANDABLE EVENTS
+   ======================================== */
+
+/* Timeline Spine Container */
+.timeline-spine-container {
+  position: relative;
+  padding-left: 2rem;
+}
+
+/* Vertical Timeline Spine */
+.timeline-spine {
+  position: absolute;
+  left: 0.75rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    oklch(50% 0.08 265 / 0.4) 5%,
+    oklch(50% 0.08 265 / 0.4) 95%,
+    transparent 100%);
+  pointer-events: none;
+}
+
+/* Event Wrapper - Contains marker dot, card, and expansion */
+.timeline-event-wrapper {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+
+/* Timeline Marker Dot */
+.timeline-event-marker-dot {
+  position: absolute;
+  left: -1.5rem;
+  top: 1rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  border: 2px solid oklch(50% 0.08 265);
+  z-index: 1;
+  transition: all var(--transition-fast);
+}
+
+/* Type-specific dot colors */
+.timeline-event-wrapper.timeline-event-command .timeline-event-marker-dot {
+  border-color: var(--event-command);
+}
+.timeline-event-wrapper.timeline-event-alarm .timeline-event-marker-dot {
+  border-color: var(--event-alarm);
+}
+.timeline-event-wrapper.timeline-event-procedure .timeline-event-marker-dot {
+  border-color: var(--event-procedure);
+}
+.timeline-event-wrapper.timeline-event-automation .timeline-event-marker-dot {
+  border-color: var(--event-automation);
+}
+
+/* Expanded state - filled dot */
+.timeline-event-wrapper.expanded .timeline-event-marker-dot {
+  background: var(--event-command);
+}
+.timeline-event-wrapper.expanded.timeline-event-alarm .timeline-event-marker-dot {
+  background: var(--event-alarm);
+}
+.timeline-event-wrapper.expanded.timeline-event-procedure .timeline-event-marker-dot {
+  background: var(--event-procedure);
+}
+.timeline-event-wrapper.expanded.timeline-event-automation .timeline-event-marker-dot {
+  background: var(--event-automation);
+}
+
+/* Event Icon (replacing the marker inside card) */
+.timeline-event-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+  padding-top: 0.25rem;
+  color: var(--neutral-text);
+  flex-shrink: 0;
+}
+
+.timeline-event-wrapper.timeline-event-command .timeline-event-icon { color: var(--event-command); }
+.timeline-event-wrapper.timeline-event-alarm .timeline-event-icon { color: var(--event-alarm); }
+.timeline-event-wrapper.timeline-event-procedure .timeline-event-icon { color: var(--event-procedure); }
+.timeline-event-wrapper.timeline-event-automation .timeline-event-icon { color: var(--event-automation); }
+
+/* Chevron for expandable events */
+.timeline-event-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--neutral-text);
+  opacity: 0.5;
+  transition: transform var(--transition-normal), opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.timeline-event.expandable:hover .timeline-event-chevron {
+  opacity: 0.8;
+}
+
+.timeline-event-wrapper.expanded .timeline-event-chevron {
+  transform: rotate(90deg);
+  opacity: 1;
+}
+
+/* Expanded Event History */
+.timeline-event-history {
+  margin-left: 0.75rem;
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+  border-left: 1px dashed var(--neutral-border);
+  overflow: hidden;
+  animation: expand-in 0.2s ease;
+}
+
+@keyframes expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* State Change Item */
+.state-change-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+  font-size: 0.7rem;
+}
+
+.state-change-item:first-child {
+  padding-top: 0;
+}
+
+.state-change-item:last-child {
+  padding-bottom: 0;
+}
+
+.state-change-time {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--neutral-text-light);
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.state-change-type {
+  color: var(--neutral-text);
+  flex: 1;
+  min-width: 0;
+}
+
+.state-change-item .timeline-event-status {
+  font-size: 0.55rem;
+  padding: 0.125rem 0.375rem;
+}
+
+.state-change-header {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--neutral-text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--neutral-border);
+}
+
 /* Event Content */
 .timeline-event-content {
   flex: 1;
