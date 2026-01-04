@@ -84,9 +84,9 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     <div class="commands-mode-container">
       <div class="commands-mode-layout">
         <!-- Top: Target Selection and Command Browser -->
-        <div class="cmd-panels-row">
+        <div class="cmd-panels-row" id="cmd-panels-row">
           <!-- Left: Target Selection -->
-          <div class="cmd-target-panel" id="cmd-target-panel">
+          <div class="cmd-target-panel" id="cmd-target-panel" phx-hook=".CmdTargetPanel">
             <div class="cmd-panel-header">
               <div class="cmd-panel-title">
                 <span class="mc-label-subsystem">TARGET SELECTION</span>
@@ -161,7 +161,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
           </div>
           
     <!-- Resize Handle -->
-          <div class="cmd-resize-handle" id="cmd-resize-handle"></div>
+          <div class="cmd-resize-handle" id="cmd-resize-handle" phx-hook=".CmdPanelResize" phx-update="ignore"></div>
           
     <!-- Right: Command Browser -->
           <div class="cmd-command-panel">
@@ -403,6 +403,104 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
         </div>
       </.form>
     </div>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CmdTargetPanel">
+      export default {
+        mounted() {
+          this.applySavedWidth()
+        },
+
+        updated() {
+          this.applySavedWidth()
+        },
+
+        applySavedWidth() {
+          const savedWidth = localStorage.getItem('cmd-target-panel-width')
+          if (savedWidth) {
+            this.el.style.flex = `0 0 ${savedWidth}%`
+          }
+        }
+      }
+    </script>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CmdPanelResize">
+      export default {
+        mounted() {
+          this.isDragging = false
+          this.startX = 0
+          this.startWidth = 0
+          this.targetPanel = document.getElementById('cmd-target-panel')
+          this._startDrag = (event) => this.startDrag(event)
+          this._onDrag = (event) => this.onDrag(event)
+          this._endDrag = () => this.endDrag()
+          this.el.addEventListener('mousedown', this._startDrag)
+          document.addEventListener('mousemove', this._onDrag)
+          document.addEventListener('mouseup', this._endDrag)
+
+          // Load saved width
+          const savedWidth = localStorage.getItem('cmd-target-panel-width')
+          if (savedWidth && this.targetPanel) {
+            this.targetPanel.style.flex = `0 0 ${savedWidth}%`
+          }
+        },
+
+        updated() {
+          // Re-query the target panel in case it was replaced
+          this.targetPanel = document.getElementById('cmd-target-panel')
+          // Reapply saved width after LiveView DOM patches
+          const savedWidth = localStorage.getItem('cmd-target-panel-width')
+          if (savedWidth && this.targetPanel) {
+            this.targetPanel.style.flex = `0 0 ${savedWidth}%`
+          }
+        },
+
+        startDrag(event) {
+          if (!this.targetPanel) {
+            this.targetPanel = document.getElementById('cmd-target-panel')
+          }
+          if (!this.targetPanel) return
+          this.isDragging = true
+          this.startX = event.clientX
+          this.startWidth = this.targetPanel.offsetWidth
+          document.body.style.cursor = 'col-resize'
+          document.body.style.userSelect = 'none'
+          this.el.classList.add('dragging')
+        },
+
+        onDrag(event) {
+          if (!this.isDragging || !this.targetPanel) return
+          const panelsRow = document.getElementById('cmd-panels-row')
+          if (!panelsRow) return
+          const diff = event.clientX - this.startX
+          const newWidth = Math.max(150, Math.min(panelsRow.offsetWidth * 0.6, this.startWidth + diff))
+          this.targetPanel.style.flex = `0 0 ${newWidth}px`
+          // Save as percentage for persistence
+          const newPercent = (newWidth / panelsRow.offsetWidth) * 100
+          localStorage.setItem('cmd-target-panel-width', newPercent.toFixed(1))
+        },
+
+        endDrag() {
+          if (!this.isDragging) return
+          this.isDragging = false
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          this.el.classList.remove('dragging')
+          if (this.targetPanel) {
+            const panelsRow = document.getElementById('cmd-panels-row')
+            if (panelsRow) {
+              const percent = (this.targetPanel.offsetWidth / panelsRow.offsetWidth) * 100
+              localStorage.setItem('cmd-target-panel-width', percent.toFixed(1))
+            }
+          }
+        },
+
+        destroyed() {
+          this.el.removeEventListener('mousedown', this._startDrag)
+          document.removeEventListener('mousemove', this._onDrag)
+          document.removeEventListener('mouseup', this._endDrag)
+        }
+      }
+    </script>
     """
   end
 
