@@ -203,29 +203,6 @@
     border-color: oklch(from var(--glow-cyan) l c h / 0.2);
   }
 
-  /* Alerts - mission control style */
-  .alert {
-    border-radius: 2px !important;
-    border-left: 3px solid;
-    background: oklch(15% 0.02 260 / 0.8);
-  }
-
-  .alert-info {
-    border-left-color: var(--status-info);
-  }
-
-  .alert-success {
-    border-left-color: var(--status-success);
-  }
-
-  .alert-warning {
-    border-left-color: oklch(72% 0.15 50);
-  }
-
-  .alert-error {
-    border-left-color: oklch(68% 0.20 10);
-  }
-
   /* Dropdowns - sharp, panel style */
   .dropdown-content {
     border-radius: 2px !important;

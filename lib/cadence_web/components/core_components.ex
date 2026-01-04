@@ -35,17 +35,20 @@ defmodule CadenceWeb.CoreComponents do
   alias Phoenix.LiveView.JS
 
   @doc """
-  Renders flash notices.
+  Renders flash notices with mission control HUD styling.
 
   ## Examples
 
       <.flash kind={:info} flash={@flash} />
+      <.flash kind={:success} flash={@flash} />
+      <.flash kind={:warning} flash={@flash} />
+      <.flash kind={:error} flash={@flash} />
       <.flash kind={:info} phx-mounted={show("#flash")}>Welcome Back!</.flash>
   """
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :kind, :atom, values: [:info, :success, :warning, :error], doc: "used for styling and flash lookup"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -65,12 +68,16 @@ defmodule CadenceWeb.CoreComponents do
       <div class={[
         "alert w-80 sm:w-96 max-w-[90vw] sm:max-w-96 text-wrap break-words whitespace-pre-wrap max-h-64 overflow-auto",
         @kind == :info && "alert-info",
+        @kind == :success && "alert-success",
+        @kind == :warning && "alert-warning",
         @kind == :error && "alert-error"
       ]}>
         <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :success} name="hero-check-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :warning} name="hero-exclamation-triangle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="hero-x-circle" class="size-5 shrink-0" />
         <div>
-          <p :if={@title} class="font-semibold">{@title}</p>
+          <p :if={@title} class="font-semibold text-xs uppercase tracking-wider">{@title}</p>
           <p class="break-words">{msg}</p>
         </div>
         <div class="flex-1" />
