@@ -491,6 +491,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
           this.applyPanelStates()
           this.bindResizeHandlers()
           this.bindToggleButtons()
+          this.bindRailClickHandlers()
         },
 
         loadState() {
@@ -536,6 +537,27 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
             btn.addEventListener('click', () => {
               const panel = btn.dataset.panel
               this.togglePanel(panel)
+            })
+          })
+        },
+
+        bindRailClickHandlers() {
+          if (!this.contextPanel) return
+
+          const railSelectors = [
+            '.rail-alarm-badge',
+            '.rail-command-badge',
+            '.rail-queue-badge'
+          ]
+
+          railSelectors.forEach(selector => {
+            const elements = this.contextPanel.querySelectorAll(selector)
+            elements.forEach(el => {
+              el.addEventListener('click', () => {
+                if (!this.panelStates.context.open) {
+                  this.openPanel('context')
+                }
+              })
             })
           })
         },
