@@ -6,7 +6,6 @@ defmodule Cadence.AccountsTest do
   alias Cadence.Domain.Accounts.Entities.UserToken, as: UserTokenEntity
   alias Cadence.Test.Adapters.FakePasswordHasher
   alias Cadence.Test.Adapters.InMemoryTokenRepository
-  alias Cadence.Test.Adapters.InMemoryUserRepository
 
   alias Cadence.Accounts.User
 

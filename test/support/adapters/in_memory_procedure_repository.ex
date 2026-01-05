@@ -342,7 +342,6 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     end)
   end
 
-  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
   def list_logs(execution_id, opts \\ []) do
     level = Keyword.get(opts, :level)
     limit = Keyword.get(opts, :limit, 100)
@@ -359,7 +358,6 @@ defmodule Cadence.Test.Adapters.InMemoryProcedureRepository do
     end)
   end
 
-  @impl Cadence.Ports.Repository.Procedures.ExecutionOperations
   def create_log(attrs) do
     log = build_log(attrs)
 

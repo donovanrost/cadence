@@ -9,7 +9,6 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
   alias Cadence.Application.Commanding.EnqueueCommand
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryEventRecorder
-  alias Cadence.Test.Adapters.InMemoryQueueRepository
 
   describe "enqueue/2" do
     test "enqueues a command with default priority" do
