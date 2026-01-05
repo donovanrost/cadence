@@ -161,6 +161,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   end
 
   attr :queue_entries, :list, required: true
+  attr :targets_map, :map, default: %{}
   attr :collapsed_sections, :any, default: MapSet.new()
   attr :toggle_target, :any, default: nil
 
@@ -203,6 +204,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
         <.context_queue_entry_item
           :for={entry <- Enum.take(@queue_entries, 10)}
           entry={entry}
+          targets_map={@targets_map}
         />
         <p
           :if={@queue_entries == []}
@@ -216,6 +218,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   end
 
   attr :entry, :map, required: true
+  attr :targets_map, :map, default: %{}
 
   def context_queue_entry_item(assigns) do
     status = assigns.entry.status || :pending
@@ -233,6 +236,8 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
         other -> other |> to_string() |> String.upcase() |> String.slice(0, 4)
       end
 
+    target_name = queue_target_name(assigns.entry, assigns.targets_map)
+
     assigns =
       assigns
       |> assign(:status_class, status_class)
@@ -241,11 +246,12 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
       |> assign(:status_label, status_label)
       |> assign(:is_executing, status == :executing)
       |> assign(:is_failed, status == :failed)
+      |> assign(:target_name, target_name)
 
     ~H"""
     <div class={"qe #{@status_class}"} data-id={@entry.id}>
       <div class="qe-meta-row">
-        <span class="qe-target">{queue_target_name(@entry)}</span>
+        <span class="qe-target">{@target_name}</span>
         <div class="qe-badges">
           <span class={"qe-priority #{@priority_class}"}>P{@priority}</span>
           <span class="qe-status">{@status_label}</span>
@@ -2471,9 +2477,17 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   defp priority_class(p) when p >= 4, do: "priority-low"
   defp priority_class(_), do: ""
 
-  defp queue_target_name(%{target: %{name: name}}), do: name
-  defp queue_target_name(%{target_name: name}) when is_binary(name), do: name
-  defp queue_target_name(_), do: "?"
+  defp queue_target_name(%{target: %{name: name}}, _targets_map), do: name
+  defp queue_target_name(%{target_name: name}, _targets_map) when is_binary(name), do: name
+
+  defp queue_target_name(%{target_id: target_id}, targets_map) when is_map(targets_map) do
+    case Map.get(targets_map, target_id) do
+      %{name: name} -> name
+      _ -> "?"
+    end
+  end
+
+  defp queue_target_name(_, _), do: "?"
 
   # ============================================================================
   # Action Toolbar Component

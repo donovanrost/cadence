@@ -269,6 +269,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
               alarm_counts={@alarm_counts}
               alarms={@alarms}
               queue_entries={@queue_entries}
+              targets={@targets}
             />
           </div>
         </aside>

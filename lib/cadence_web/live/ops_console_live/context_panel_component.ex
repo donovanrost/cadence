@@ -16,9 +16,13 @@ defmodule CadenceWeb.OpsConsoleLive.ContextPanelComponent do
 
   @impl true
   def update(assigns, socket) do
+    targets = Map.get(assigns, :targets, [])
+    targets_map = Map.new(targets, fn t -> {t.id, t} end)
+
     socket =
       socket
       |> assign(assigns)
+      |> assign(:targets_map, targets_map)
       |> assign_new(:alarms, fn -> [] end)
       |> assign_new(:queue_entries, fn -> [] end)
       |> assign_new(:collapsed_sections, fn -> MapSet.new() end)
@@ -41,6 +45,7 @@ defmodule CadenceWeb.OpsConsoleLive.ContextPanelComponent do
 
           <OpsComponents.context_queue_section
             queue_entries={@queue_entries}
+            targets_map={@targets_map}
             collapsed_sections={@collapsed_sections}
             toggle_target={@myself}
           />
