@@ -15,6 +15,10 @@ hooks {
                 check = "mix precommit"
                 exclusive = true
             }
+            ["test"] {
+                check = "mix test"
+                exclusive = true
+            }
         }
     }
     ["fix"] {
