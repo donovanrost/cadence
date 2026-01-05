@@ -547,6 +547,14 @@ defmodule Cadence.Commands do
   end
 
   @doc """
+  Returns whether a target's command dispatch is paused.
+  """
+  @spec target_paused?(String.t(), String.t()) :: boolean()
+  def target_paused?(mission_id, target_id) do
+    TargetDispatcher.paused?(mission_id, target_id)
+  end
+
+  @doc """
   Pauses command dispatch for all targets in a mission.
 
   Useful for mission-wide anomaly handling.

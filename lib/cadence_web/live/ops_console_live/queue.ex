@@ -40,6 +40,9 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
     # Calculate queue status per target
     target_queue_counts = calculate_target_queue_counts(all_queue_entries)
 
+    # Load paused state for each target
+    paused_targets = load_paused_targets(mission_id, targets)
+
     # Subscribe to queue and alarm updates
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
@@ -57,6 +60,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
       |> assign(:selected_target, nil)
       |> assign(:selected_targets, MapSet.new())
       |> assign(:target_queue_counts, target_queue_counts)
+      |> assign(:paused_targets, paused_targets)
       |> assign(:target_search, "")
       |> assign(:status_filter, :all)
       |> assign(:search, "")
@@ -96,6 +100,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
               all_queue_entries={@all_queue_entries}
               target_queue_counts={@target_queue_counts}
               target_search={@target_search}
+              paused_targets={@paused_targets}
             />
           <% _table_or_default -> %>
             <.queue_table_view
@@ -363,6 +368,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   attr :all_queue_entries, :list, required: true
   attr :target_queue_counts, :map, required: true
   attr :target_search, :string, required: true
+  attr :paused_targets, :any, required: true
 
   defp queue_manage_view(assigns) do
     # Get entries for selected target
@@ -418,6 +424,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
             target={target}
             queue_count={Map.get(@target_queue_counts, target.id, 0)}
             selected={@selected_target && @selected_target.id == target.id}
+            paused={MapSet.member?(@paused_targets, target.id)}
           />
         </div>
       </div>
@@ -504,28 +511,37 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   attr :target, :map, required: true
   attr :queue_count, :integer, required: true
   attr :selected, :boolean, required: true
+  attr :paused, :boolean, required: true
 
   defp manage_target_item(assigns) do
     ~H"""
     <div
-      class={["queue-manage-target-item", @selected && "selected"]}
+      class={["queue-manage-target-item", @selected && "selected", @paused && "paused"]}
       phx-click="select_target"
       phx-value-id={@target.id}
     >
       <div class="queue-manage-target-info">
         <span class="queue-manage-target-name">{@target.name}</span>
-        <span class="queue-manage-target-stats">{@queue_count} queued</span>
+        <span class="queue-manage-target-stats">
+          {if @paused, do: "PAUSED", else: "#{@queue_count} queued"}
+        </span>
       </div>
       <button
         type="button"
-        class="queue-manage-pause-btn"
+        class={["queue-manage-pause-btn", @paused && "paused"]}
         phx-click="toggle_target_pause"
         phx-value-id={@target.id}
-        title="Pause/Resume"
+        title={if @paused, do: "Resume", else: "Pause"}
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6" />
-        </svg>
+        <%= if @paused do %>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          </svg>
+        <% else %>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6" />
+          </svg>
+        <% end %>
       </button>
     </div>
     """
@@ -1076,24 +1092,25 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   end
 
   def handle_event("pause_target", %{"id" => id}, socket) do
-    case Commands.pause_target(socket.assigns.mission.id, id) do
-      {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "Target paused")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to pause target")}
-    end
+    Commands.pause_target(socket.assigns.mission.id, id)
+    {:noreply, put_flash(socket, :info, "Target paused")}
   end
 
   def handle_event("toggle_target_pause", %{"id" => id}, socket) do
-    # TODO: Check current pause state and toggle
-    case Commands.pause_target(socket.assigns.mission.id, id) do
-      {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "Target pause toggled")}
+    mission_id = socket.assigns.mission.id
+    paused_targets = socket.assigns.paused_targets
+    is_paused = MapSet.member?(paused_targets, id)
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to toggle pause")}
-    end
+    new_paused_targets =
+      if is_paused do
+        Commands.resume_target(mission_id, id)
+        MapSet.delete(paused_targets, id)
+      else
+        Commands.pause_target(mission_id, id)
+        MapSet.put(paused_targets, id)
+      end
+
+    {:noreply, assign(socket, :paused_targets, new_paused_targets)}
   end
 
   def handle_event("clear_target_queue", %{"id" => id}, socket) do
@@ -1317,5 +1334,20 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
       |> Map.from_struct()
       |> Map.put(:target, target)
     end)
+  end
+
+  defp load_paused_targets(mission_id, targets) do
+    targets
+    |> Enum.filter(fn target ->
+      try do
+        Commands.target_paused?(mission_id, target.id)
+      rescue
+        # TargetDispatcher not running yet
+        _ -> false
+      catch
+        :exit, _ -> false
+      end
+    end)
+    |> MapSet.new(& &1.id)
   end
 end
