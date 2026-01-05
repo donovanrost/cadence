@@ -844,7 +844,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     interface_id = Keyword.get(opts, :interface_id)
 
     # Get aggregate_id from entry (generated at enqueue time) or generate for direct dispatch
-    aggregate_id = entry.command_aggregate_id || Ecto.UUID.generate()
+    aggregate_id = Map.get(entry, :command_aggregate_id) || Ecto.UUID.generate()
 
     Logger.info(
       "[DISPATCH] command_name=#{inspect(entry.command_name)}, " <>
@@ -860,7 +860,15 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
          {:ok, interface} <- get_interface(target, opts),
          {:ok, framed} <- process_protocol_chain(interface, encoded),
          {:ok, cmd_info} <-
-           create_command_recording(state, command, target, entry.parameters, encoded, opts, aggregate_id),
+           create_command_recording(
+             state,
+             command,
+             target,
+             entry.parameters,
+             encoded,
+             opts,
+             aggregate_id
+           ),
          :ok <- send_to_interface(interface, framed) do
       # Record command sent event
       record_command_sent(
@@ -1221,9 +1229,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         )
 
       {:error, _, changeset, _} ->
-        Logger.warning(
-          "[DISPATCH] Failed to record command error: #{inspect(changeset.errors)}"
-        )
+        Logger.warning("[DISPATCH] Failed to record command error: #{inspect(changeset.errors)}")
     end
   end
 

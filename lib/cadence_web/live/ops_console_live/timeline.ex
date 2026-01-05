@@ -734,7 +734,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       end
 
     display_label = assigns.label || status_label(assigns.status)
-    assigns = assigns |> assign(:status_class, status_class) |> assign(:display_label, display_label)
+
+    assigns =
+      assigns |> assign(:status_class, status_class) |> assign(:display_label, display_label)
 
     ~H"""
     <span class={["timeline-event-status", @status_class]}>
@@ -756,8 +758,13 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   # Custom label for command events based on recordable_type
   defp command_status_label(%{metadata: %{recordable_type: "CommandQueued"}}), do: "QUEUED"
-  defp command_status_label(%{metadata: %{recordable_type: "CommandDispatched"}}), do: "DISPATCHED"
-  defp command_status_label(%{metadata: %{recordable_type: "CommandSent"}}), do: "AWAITING VERIFICATION"
+
+  defp command_status_label(%{metadata: %{recordable_type: "CommandDispatched"}}),
+    do: "DISPATCHED"
+
+  defp command_status_label(%{metadata: %{recordable_type: "CommandSent"}}),
+    do: "AWAITING VERIFICATION"
+
   defp command_status_label(_), do: nil
 
   # State change item for expandable event history
