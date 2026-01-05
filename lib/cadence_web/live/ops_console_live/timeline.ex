@@ -147,15 +147,28 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       export default {
         mounted() {
           this.isLoading = false
+          this.lastScrollHeight = this.el.scrollHeight
+          this.loadCooldown = false
           this.updateRelativeTimes()
           this._interval = setInterval(() => this.updateRelativeTimes(), 1000)
           this._onScroll = () => this.handleScroll()
           this.el.addEventListener('scroll', this._onScroll)
+          // Check on mount if we need to load more (content doesn't fill container)
+          setTimeout(() => this.checkLoadMore(), 100)
         },
 
         updated() {
           this.updateRelativeTimes()
           this.isLoading = false
+          // Track if content grew - if not, add cooldown to prevent rapid re-triggers
+          const newScrollHeight = this.el.scrollHeight
+          if (newScrollHeight <= this.lastScrollHeight) {
+            this.loadCooldown = true
+            setTimeout(() => { this.loadCooldown = false }, 1000)
+          }
+          this.lastScrollHeight = newScrollHeight
+          // Check if we still need more content after update
+          setTimeout(() => this.checkLoadMore(), 100)
         },
 
         destroyed() {
@@ -169,7 +182,11 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         },
 
         handleScroll() {
-          if (this.isLoading) return
+          this.checkLoadMore()
+        },
+
+        checkLoadMore() {
+          if (this.isLoading || this.loadCooldown) return
           const hasMore = this.el.dataset.hasMore === 'true'
           if (!hasMore) return
 
@@ -178,7 +195,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
           const clientHeight = this.el.clientHeight
           const scrollBottom = scrollHeight - scrollTop - clientHeight
 
-          // Load more when within 200px of the bottom
+          // Load more when within 200px of the bottom OR content doesn't fill container
           if (scrollBottom < 200) {
             this.isLoading = true
             this.pushEvent('load_more', {})
@@ -583,54 +600,54 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       <div class={["timeline-event-wrapper", @type_class, @expanded && "expanded"]}>
         <div class="timeline-event-marker-dot"></div>
 
-      <div
-        class={["timeline-event", @can_expand && "expandable"]}
-        phx-click="toggle_event_expand"
-        phx-value-id={@event.id}
-      >
-        <span class="timeline-event-icon">
-          <.event_type_icon type={@event_type} />
-        </span>
+        <div
+          class={["timeline-event", @can_expand && "expandable"]}
+          phx-click="toggle_event_expand"
+          phx-value-id={@event.id}
+        >
+          <span class="timeline-event-icon">
+            <.event_type_icon type={@event_type} />
+          </span>
 
-        <div class="timeline-event-content">
-          <div class="timeline-event-header">
-            <span class="timeline-event-time">{format_event_time(@event.timestamp)}</span>
-            <span
-              class="timeline-event-relative"
-              data-timestamp={@event.timestamp && DateTime.to_iso8601(@event.timestamp)}
-            >
-              {timeline_relative_time(@event.timestamp)}
-            </span>
+          <div class="timeline-event-content">
+            <div class="timeline-event-header">
+              <span class="timeline-event-time">{format_event_time(@event.timestamp)}</span>
+              <span
+                class="timeline-event-relative"
+                data-timestamp={@event.timestamp && DateTime.to_iso8601(@event.timestamp)}
+              >
+                {timeline_relative_time(@event.timestamp)}
+              </span>
+            </div>
+
+            <div class="timeline-event-body">
+              <span class={["timeline-event-type-badge", @badge_class]}>
+                {event_type_label(@event_type)}
+              </span>
+              <span class="timeline-event-title">{event_title(@event)}</span>
+              <span :if={event_source(@event) != "System"} class="timeline-event-target">
+                {event_source(@event)}
+              </span>
+            </div>
+
+            <div :if={@event.description} class="timeline-event-description">
+              {@event.description}
+            </div>
           </div>
 
-          <div class="timeline-event-body">
-            <span class={["timeline-event-type-badge", @badge_class]}>
-              {event_type_label(@event_type)}
-            </span>
-            <span class="timeline-event-title">{event_title(@event)}</span>
-            <span :if={event_source(@event) != "System"} class="timeline-event-target">
-              {event_source(@event)}
-            </span>
-          </div>
+          <.event_status_badge :if={@event.status} status={@event.status} />
 
-          <div :if={@event.description} class="timeline-event-description">
-            {@event.description}
-          </div>
+          <span :if={@can_expand} class="timeline-event-chevron">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
         </div>
 
-        <.event_status_badge :if={@event.status} status={@event.status} />
-
-        <span :if={@can_expand} class="timeline-event-chevron">
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </span>
-      </div>
-
-      <div :if={@expanded && @has_loaded_history} class="timeline-event-history">
-        <div class="state-change-header">STATE HISTORY ({length(@history)} events)</div>
-        <.state_change_item :for={state <- @history} state={state} />
-      </div>
+        <div :if={@expanded && @has_loaded_history} class="timeline-event-history">
+          <div class="state-change-header">STATE HISTORY ({length(@history)} events)</div>
+          <.state_change_item :for={state <- @history} state={state} />
+        </div>
       </div>
     </div>
     """
@@ -1254,13 +1271,13 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   defp append_older_events(socket, events) do
     existing_ids = MapSet.new(Enum.map(socket.assigns.events_list, & &1.id))
-    deduped = Enum.reject(events, &MapSet.member?(existing_ids, &1.id))
+    new_events = Enum.reject(events, &MapSet.member?(existing_ids, &1.id))
 
-    new_list = socket.assigns.events_list ++ deduped
+    new_list = socket.assigns.events_list ++ new_events
 
     socket
     |> assign(:events_list, new_list)
-    |> stream(:events, deduped, at: -1)
+    |> reset_events_stream()
   end
 
   defp insert_live_event(socket, event) do
@@ -1812,6 +1829,38 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   end
 
   # ============================================================================
+  # Event Aggregation - Dedupe related state transitions
+  # ============================================================================
+
+  @doc false
+  # Deduplicate events by aggregate_id, keeping only the latest state.
+  # Events with the same aggregate_id (e.g., CommandQueued → CommandVerified)
+  # are collapsed into a single entry showing the most recent state.
+  defp dedupe_by_aggregate(events) do
+    # Group events by aggregate_id (from metadata)
+    # Events without aggregate_id get a unique key to stay separate
+    {with_aggregate, without_aggregate} =
+      Enum.split_with(events, fn event ->
+        get_in(event, [Access.key(:metadata, %{}), :aggregate_id]) != nil
+      end)
+
+    # Group by aggregate_id and keep the latest (most recent state)
+    deduped =
+      with_aggregate
+      |> Enum.group_by(fn event ->
+        get_in(event, [Access.key(:metadata, %{}), :aggregate_id])
+      end)
+      |> Enum.map(fn {_aggregate_id, group} ->
+        # Keep the most recent event (latest timestamp = current state)
+        Enum.max_by(group, & &1.timestamp, DateTime)
+      end)
+
+    # Combine and re-sort by timestamp descending
+    (deduped ++ without_aggregate)
+    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+  end
+
+  # ============================================================================
   # Time Context - Bucket Headers & Gap Indicators
   # ============================================================================
 
@@ -1820,12 +1869,13 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   @doc false
   defp add_time_context(events) do
     now = DateTime.utc_now()
+    deduped = dedupe_by_aggregate(events)
 
-    events
+    deduped
     |> Enum.with_index()
     |> Enum.map(fn {event, index} ->
       bucket = time_bucket(event.timestamp, now)
-      prev_event = if index > 0, do: Enum.at(events, index - 1)
+      prev_event = if index > 0, do: Enum.at(deduped, index - 1)
       prev_bucket = if prev_event, do: time_bucket(prev_event.timestamp, now)
 
       gap_minutes =
