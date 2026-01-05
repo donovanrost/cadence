@@ -219,13 +219,13 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       class={["cmd-slideout-backdrop", @show_param_modal && "visible"]}
       phx-click="close_param_modal"
     >
-      <.form
-        for={%{}}
-        phx-submit="stage_command"
-        id="cmd-slideout"
-        class={["cmd-slideout", @show_param_modal && "visible"]}
-        phx-click="ignore_slideout_click"
-      >
+    </div>
+    <.form
+      for={%{}}
+      phx-submit="stage_command"
+      id="cmd-slideout"
+      class={["cmd-slideout", @show_param_modal && "visible"]}
+    >
         <%= if @show_param_modal do %>
           <div class="cmd-slideout-header">
             <div class="cmd-slideout-title">
@@ -344,11 +344,13 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
             <div class="cmd-slideout-options">
               <div class="cmd-slideout-priority">
                 <label>Priority</label>
-                <select name="priority" class="cmd-priority-select">
-                  <option value="1" selected={@priority == 1}>Low (1)</option>
+                <select name="priority" class="cmd-priority-select" phx-change="set_priority">
+                  <option value="5" selected={@priority == 5}>Background (5)</option>
+                  <option value="4" selected={@priority == 4}>Low (4)</option>
                   <option value="3" selected={@priority == 3}>Normal (3)</option>
-                  <option value="5" selected={@priority == 5}>High (5)</option>
-                  <option value="7" selected={@priority == 7}>Critical (7)</option>
+                  <option value="2" selected={@priority == 2}>High (2)</option>
+                  <option value="1" selected={@priority == 1}>Critical (1)</option>
+                  <option value="0" selected={@priority == 0}>Emergency (0)</option>
                 </select>
               </div>
               <div class="cmd-dispatch-mode">
@@ -418,8 +420,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
             </div>
           </div>
         <% end %>
-      </.form>
-    </div>
+    </.form>
 
     <script :type={Phoenix.LiveView.ColocatedHook} name=".CmdTargetPanel">
       export default {
@@ -1053,6 +1054,10 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     {:noreply, assign(socket, :dispatch_mode, dispatch_mode)}
   end
 
+  def handle_event("set_priority", %{"priority" => priority}, socket) do
+    {:noreply, assign(socket, :priority, String.to_integer(priority))}
+  end
+
   def handle_event("set_param_value", %{"name" => name, "val" => value}, socket) do
     param_form = Map.put(socket.assigns.param_form, name, value)
     {:noreply, assign(socket, :param_form, param_form)}
@@ -1086,10 +1091,6 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
      |> assign(:per_target_mode, false)
      |> assign(:active_target_index, 0)
      |> assign(:selected_target_ids, [])}
-  end
-
-  def handle_event("ignore_slideout_click", _params, socket) do
-    {:noreply, socket}
   end
 
   def handle_event("stage_command", %{"priority" => priority} = params, socket) do
@@ -1244,7 +1245,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   # PubSub handlers
 
   @impl true
-  def handle_info({:staging_updated, _}, socket) do
+  def handle_info({:staging_changed, _action, _staged_command_id}, socket) do
     staged_commands = Commands.list_staged(socket.assigns.mission.id)
     {:noreply, assign(socket, :staged_commands, staged_commands)}
   end
@@ -1478,8 +1479,34 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
   end
 
   defp dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id) do
-    target_ids = MapSet.to_list(socket.assigns.selected_targets)
+    target_ids = socket.assigns.selected_target_ids || []
 
+    if Enum.empty?(target_ids) do
+      {:noreply, socket}
+    else
+      dispatch_uniform_to_targets(
+        socket,
+        command,
+        target_ids,
+        cmd_params,
+        priority,
+        dispatch_mode,
+        user,
+        mission_id
+      )
+    end
+  end
+
+  defp dispatch_uniform_to_targets(
+         socket,
+         command,
+         target_ids,
+         cmd_params,
+         priority,
+         dispatch_mode,
+         user,
+         mission_id
+       ) do
     results =
       Enum.map(target_ids, fn target_id ->
         execute_dispatch(

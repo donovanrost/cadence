@@ -58,6 +58,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
       |> stream(:queue_entries, all_queue_entries)
       |> assign(:queue_metrics, calculate_metrics(all_queue_entries))
       |> assign(:selected_target, nil)
+      |> assign(:target_entries, [])
       |> assign(:selected_targets, MapSet.new())
       |> assign(:target_queue_counts, target_queue_counts)
       |> assign(:paused_targets, paused_targets)
@@ -97,10 +98,11 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
             <.queue_manage_view
               targets={@targets}
               selected_target={@selected_target}
-              all_queue_entries={@all_queue_entries}
+              target_entries={@target_entries}
               target_queue_counts={@target_queue_counts}
               target_search={@target_search}
               paused_targets={@paused_targets}
+              mission_id={@mission.id}
             />
           <% _table_or_default -> %>
             <.queue_table_view
@@ -365,21 +367,13 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   attr :targets, :list, required: true
   attr :selected_target, :map, default: nil
-  attr :all_queue_entries, :list, required: true
+  attr :target_entries, :list, required: true
   attr :target_queue_counts, :map, required: true
   attr :target_search, :string, required: true
   attr :paused_targets, :any, required: true
+  attr :mission_id, :string, required: true
 
   defp queue_manage_view(assigns) do
-    # Get entries for selected target
-    target_entries =
-      if assigns.selected_target do
-        Enum.filter(assigns.all_queue_entries, &(&1.target_id == assigns.selected_target.id))
-        |> Enum.sort_by(& &1.priority)
-      else
-        []
-      end
-
     # Filter targets by search
     filtered_targets =
       if assigns.target_search == "" do
@@ -392,10 +386,7 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
         end)
       end
 
-    assigns =
-      assigns
-      |> assign(:target_entries, target_entries)
-      |> assign(:filtered_targets, filtered_targets)
+    assigns = assign(assigns, :filtered_targets, filtered_targets)
 
     ~H"""
     <div class="queue-manage-view">
@@ -535,7 +526,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
       >
         <%= if @paused do %>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+            />
           </svg>
         <% else %>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -551,6 +547,9 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
   attr :position, :integer, required: true
 
   defp queue_detail_row(assigns) do
+    has_params = assigns.entry.parameters && map_size(assigns.entry.parameters) > 0
+    assigns = assign(assigns, :has_params, has_params)
+
     ~H"""
     <tr class={["queue-detail-row", "queue-status-#{@entry.status}"]}>
       <td class="queue-detail-td-pos">{@position}</td>
@@ -559,7 +558,12 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
           {@entry.priority}
         </span>
       </td>
-      <td class="queue-detail-td-cmd">{@entry.command_name}</td>
+      <td class="queue-detail-td-cmd">
+        <span class={["queue-cmd-name", @has_params && "has-params"]}>
+          {@entry.command_name}
+          <.params_tooltip :if={@has_params} params={@entry.parameters} />
+        </span>
+      </td>
       <td><.queue_status_badge status={@entry.status} /></td>
       <td>
         <button
@@ -583,6 +587,25 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
     </tr>
     """
   end
+
+  attr :params, :map, required: true
+
+  defp params_tooltip(assigns) do
+    ~H"""
+    <span class="queue-params-tooltip">
+      <div :for={{key, value} <- @params} class="queue-param-row">
+        <span class="queue-param-key">{key}:</span>
+        <span class="queue-param-value">{format_param_value(value)}</span>
+      </div>
+    </span>
+    """
+  end
+
+  defp format_param_value(value) when is_binary(value), do: "\"#{value}\""
+  defp format_param_value(value) when is_number(value), do: to_string(value)
+  defp format_param_value(value) when is_boolean(value), do: to_string(value)
+  defp format_param_value(value) when is_nil(value), do: "null"
+  defp format_param_value(value), do: inspect(value)
 
   # ============================================================================
   # Table View
@@ -988,7 +1011,17 @@ defmodule CadenceWeb.OpsConsoleLive.Queue do
 
   def handle_event("select_target", %{"id" => id}, socket) do
     target = Enum.find(socket.assigns.targets, &(&1.id == id))
-    {:noreply, assign(socket, :selected_target, target)}
+    mission_id = socket.assigns.mission.id
+
+    # Fetch entries from runtime queue (sorted by priority, sequence)
+    target_entries = Commands.list_target_queue(mission_id, id)
+
+    socket =
+      socket
+      |> assign(:selected_target, target)
+      |> assign(:target_entries, target_entries)
+
+    {:noreply, socket}
   end
 
   def handle_event("toggle_target", %{"id" => id}, socket) do

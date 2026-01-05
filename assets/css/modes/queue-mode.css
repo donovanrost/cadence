@@ -2043,6 +2043,60 @@
   font-weight: 500;
 }
 
+/* Command name */
+.queue-cmd-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Command name with tooltip */
+.queue-cmd-name {
+  position: relative;
+  cursor: default;
+}
+
+.queue-cmd-name.has-params {
+  cursor: help;
+  border-bottom: 1px dotted var(--text-muted);
+}
+
+/* Parameters tooltip */
+.queue-params-tooltip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--neutral-mid);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+.queue-cmd-name:hover .queue-params-tooltip {
+  display: block;
+}
+
+.queue-param-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.125rem 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.queue-param-key {
+  color: var(--text-muted);
+}
+
+.queue-param-value {
+  color: var(--glow-cyan);
+}
+
 /* Status badges for detail table */
 .queue-detail-row .queue-status-badge {
   font-size: var(--text-2xs);

@@ -1038,6 +1038,21 @@ defmodule Cadence.Commands do
   end
 
   @doc """
+  Lists pending queue entries from the runtime TargetQueue.
+
+  Returns entries in dispatch order (by priority, then sequence number).
+  This is the live view of what the queue will execute next.
+  """
+  @spec list_target_queue(String.t(), String.t(), keyword()) :: list()
+  def list_target_queue(mission_id, target_id, opts \\ []) do
+    TargetQueue.list_pending(mission_id, target_id, opts)
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
+  end
+
+  @doc """
   Gets aggregated queue metrics for a mission.
 
   Returns counts by status, success rate, and total.
