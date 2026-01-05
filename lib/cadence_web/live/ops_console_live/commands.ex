@@ -226,200 +226,200 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       id="cmd-slideout"
       class={["cmd-slideout", @show_param_modal && "visible"]}
     >
-        <%= if @show_param_modal do %>
-          <div class="cmd-slideout-header">
-            <div class="cmd-slideout-title">
-              <div class="command-name-row">
-                <span class="command-name">{@show_param_modal.name}</span>
-                <span :if={@show_param_modal.opcode} class="command-opcode">
-                  0x{Integer.to_string(@show_param_modal.opcode, 16)
-                  |> String.upcase()
-                  |> String.pad_leading(4, "0")}
-                </span>
-              </div>
-              <div :if={@show_param_modal.description} class="command-description">
-                {@show_param_modal.description}
-              </div>
+      <%= if @show_param_modal do %>
+        <div class="cmd-slideout-header">
+          <div class="cmd-slideout-title">
+            <div class="command-name-row">
+              <span class="command-name">{@show_param_modal.name}</span>
+              <span :if={@show_param_modal.opcode} class="command-opcode">
+                0x{Integer.to_string(@show_param_modal.opcode, 16)
+                |> String.upcase()
+                |> String.pad_leading(4, "0")}
+              </span>
             </div>
-            <button
-              type="button"
-              class="cmd-slideout-close"
-              phx-click="close_param_modal"
-              title="Close"
-            >
-              ✕
-            </button>
+            <div :if={@show_param_modal.description} class="command-description">
+              {@show_param_modal.description}
+            </div>
           </div>
+          <button
+            type="button"
+            class="cmd-slideout-close"
+            phx-click="close_param_modal"
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
 
-          <div class="cmd-slideout-breadcrumb-bar">
-            <span class="cmd-mode-label">
-              <%= if @per_target_mode do %>
-                Configuring each target
-              <% else %>
-                Uniform parameters
-              <% end %>
-            </span>
-            <span
-              :if={!@per_target_mode && MapSet.size(@selected_targets) > 1}
-              class="cmd-mode-switch"
-              phx-click="set_param_mode"
-              phx-value-mode="per_target"
-            >
-              Configure each →
-            </span>
-            <span
-              :if={@per_target_mode}
-              class="cmd-mode-switch"
-              phx-click="set_param_mode"
-              phx-value-mode="uniform"
-            >
-              ← Uniform
-            </span>
-          </div>
+        <div class="cmd-slideout-breadcrumb-bar">
+          <span class="cmd-mode-label">
+            <%= if @per_target_mode do %>
+              Configuring each target
+            <% else %>
+              Uniform parameters
+            <% end %>
+          </span>
+          <span
+            :if={!@per_target_mode && MapSet.size(@selected_targets) > 1}
+            class="cmd-mode-switch"
+            phx-click="set_param_mode"
+            phx-value-mode="per_target"
+          >
+            Configure each →
+          </span>
+          <span
+            :if={@per_target_mode}
+            class="cmd-mode-switch"
+            phx-click="set_param_mode"
+            phx-value-mode="uniform"
+          >
+            ← Uniform
+          </span>
+        </div>
 
-          <div class="cmd-slideout-body">
-            <div class="cmd-slideout-section">
-              <div class="cmd-slideout-section-header">
-                <div class="cmd-slideout-section-title">Targets</div>
-              </div>
-              <div class="cmd-slideout-targets">
-                <span
-                  :for={
-                    {target, idx} <-
-                      Enum.with_index(
-                        Enum.filter(@targets, fn t ->
-                          MapSet.member?(@selected_targets, t.id)
-                        end)
-                      )
-                  }
-                  class={[
-                    "cmd-slideout-target-chip",
-                    @per_target_mode && idx == @active_target_index && "active"
-                  ]}
-                  phx-click="select_param_target"
-                  phx-value-index={idx}
-                >
-                  <span class="status-dot"></span>
-                  {target.name || target.identifier}
-                </span>
-                <span
-                  :if={
-                    Enum.empty?(
+        <div class="cmd-slideout-body">
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-header">
+              <div class="cmd-slideout-section-title">Targets</div>
+            </div>
+            <div class="cmd-slideout-targets">
+              <span
+                :for={
+                  {target, idx} <-
+                    Enum.with_index(
                       Enum.filter(@targets, fn t ->
                         MapSet.member?(@selected_targets, t.id)
                       end)
                     )
-                  }
-                  class="cmd-empty-targets"
-                >
-                  No targets selected
-                </span>
-              </div>
-            </div>
-
-            <div class="cmd-slideout-section">
-              <div class="cmd-slideout-section-title">Parameters</div>
-              <div class="cmd-param-form">
-                <div
-                  :if={@show_param_modal.arguments && length(@show_param_modal.arguments) > 0}
-                  class="cmd-param-inputs"
-                >
-                  <.param_input
-                    :for={arg <- @show_param_modal.arguments}
-                    arg={arg}
-                    param_form={@param_form}
-                  />
-                </div>
-                <div
-                  :if={!@show_param_modal.arguments || length(@show_param_modal.arguments) == 0}
-                  class="cmd-no-params"
-                >
-                  This command has no parameters.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="cmd-slideout-footer">
-            <div class="cmd-slideout-options">
-              <div class="cmd-slideout-priority">
-                <label>Priority</label>
-                <select name="priority" class="cmd-priority-select" phx-change="set_priority">
-                  <option value="5" selected={@priority == 5}>Background (5)</option>
-                  <option value="4" selected={@priority == 4}>Low (4)</option>
-                  <option value="3" selected={@priority == 3}>Normal (3)</option>
-                  <option value="2" selected={@priority == 2}>High (2)</option>
-                  <option value="1" selected={@priority == 1}>Critical (1)</option>
-                  <option value="0" selected={@priority == 0}>Emergency (0)</option>
-                </select>
-              </div>
-              <div class="cmd-dispatch-mode">
-                <label>Action</label>
-                <div class="cmd-dispatch-mode-toggle">
-                  <button
-                    type="button"
-                    class={["cmd-mode-btn", @dispatch_mode == :stage && "active"]}
-                    phx-click="set_dispatch_mode"
-                    phx-value-mode="stage"
-                  >
-                    Stage
-                  </button>
-                  <button
-                    type="button"
-                    class={["cmd-mode-btn", @dispatch_mode == :queue && "active"]}
-                    phx-click="set_dispatch_mode"
-                    phx-value-mode="queue"
-                  >
-                    Queue
-                  </button>
-                  <button
-                    type="button"
-                    class={["cmd-mode-btn send-now", @dispatch_mode == :immediate && "active"]}
-                    phx-click="set_dispatch_mode"
-                    phx-value-mode="immediate"
-                  >
-                    Send Now
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div class="cmd-dispatch-actions">
-              <button type="button" class="cmd-dispatch-btn cancel" phx-click="close_param_modal">
-                Cancel
-              </button>
-              <button
-                type="submit"
+                }
                 class={[
-                  "cmd-dispatch-btn",
-                  @dispatch_mode == :stage && "stage",
-                  @dispatch_mode == :queue && "queue",
-                  @dispatch_mode == :immediate && "send-now"
+                  "cmd-slideout-target-chip",
+                  @per_target_mode && idx == @active_target_index && "active"
                 ]}
-                phx-disable-with={dispatch_button_loading_text(@dispatch_mode)}
+                phx-click="select_param_target"
+                phx-value-index={idx}
               >
-                <%= if @per_target_mode do %>
-                  <% active_target =
-                    Enum.at(
-                      Enum.filter(@targets, fn t -> MapSet.member?(@selected_targets, t.id) end),
-                      @active_target_index
-                    ) %>
-                  {dispatch_button_text(@dispatch_mode)} {if active_target,
-                    do: active_target.name,
-                    else: "target"} ({@active_target_index + 1}/{MapSet.size(@selected_targets)})
-                <% else %>
-                  {dispatch_button_text(@dispatch_mode)} {MapSet.size(@selected_targets)} target{if MapSet.size(
-                                                                                                      @selected_targets
-                                                                                                    ) !=
-                                                                                                      1,
-                                                                                                    do:
-                                                                                                      "s",
-                                                                                                    else:
-                                                                                                      ""}
-                <% end %>
-              </button>
+                <span class="status-dot"></span>
+                {target.name || target.identifier}
+              </span>
+              <span
+                :if={
+                  Enum.empty?(
+                    Enum.filter(@targets, fn t ->
+                      MapSet.member?(@selected_targets, t.id)
+                    end)
+                  )
+                }
+                class="cmd-empty-targets"
+              >
+                No targets selected
+              </span>
             </div>
           </div>
-        <% end %>
+
+          <div class="cmd-slideout-section">
+            <div class="cmd-slideout-section-title">Parameters</div>
+            <div class="cmd-param-form">
+              <div
+                :if={@show_param_modal.arguments && length(@show_param_modal.arguments) > 0}
+                class="cmd-param-inputs"
+              >
+                <.param_input
+                  :for={arg <- @show_param_modal.arguments}
+                  arg={arg}
+                  param_form={@param_form}
+                />
+              </div>
+              <div
+                :if={!@show_param_modal.arguments || length(@show_param_modal.arguments) == 0}
+                class="cmd-no-params"
+              >
+                This command has no parameters.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-slideout-footer">
+          <div class="cmd-slideout-options">
+            <div class="cmd-slideout-priority">
+              <label>Priority</label>
+              <select name="priority" class="cmd-priority-select" phx-change="set_priority">
+                <option value="5" selected={@priority == 5}>Background (5)</option>
+                <option value="4" selected={@priority == 4}>Low (4)</option>
+                <option value="3" selected={@priority == 3}>Normal (3)</option>
+                <option value="2" selected={@priority == 2}>High (2)</option>
+                <option value="1" selected={@priority == 1}>Critical (1)</option>
+                <option value="0" selected={@priority == 0}>Emergency (0)</option>
+              </select>
+            </div>
+            <div class="cmd-dispatch-mode">
+              <label>Action</label>
+              <div class="cmd-dispatch-mode-toggle">
+                <button
+                  type="button"
+                  class={["cmd-mode-btn", @dispatch_mode == :stage && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="stage"
+                >
+                  Stage
+                </button>
+                <button
+                  type="button"
+                  class={["cmd-mode-btn", @dispatch_mode == :queue && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="queue"
+                >
+                  Queue
+                </button>
+                <button
+                  type="button"
+                  class={["cmd-mode-btn send-now", @dispatch_mode == :immediate && "active"]}
+                  phx-click="set_dispatch_mode"
+                  phx-value-mode="immediate"
+                >
+                  Send Now
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="cmd-dispatch-actions">
+            <button type="button" class="cmd-dispatch-btn cancel" phx-click="close_param_modal">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class={[
+                "cmd-dispatch-btn",
+                @dispatch_mode == :stage && "stage",
+                @dispatch_mode == :queue && "queue",
+                @dispatch_mode == :immediate && "send-now"
+              ]}
+              phx-disable-with={dispatch_button_loading_text(@dispatch_mode)}
+            >
+              <%= if @per_target_mode do %>
+                <% active_target =
+                  Enum.at(
+                    Enum.filter(@targets, fn t -> MapSet.member?(@selected_targets, t.id) end),
+                    @active_target_index
+                  ) %>
+                {dispatch_button_text(@dispatch_mode)} {if active_target,
+                  do: active_target.name,
+                  else: "target"} ({@active_target_index + 1}/{MapSet.size(@selected_targets)})
+              <% else %>
+                {dispatch_button_text(@dispatch_mode)} {MapSet.size(@selected_targets)} target{if MapSet.size(
+                                                                                                    @selected_targets
+                                                                                                  ) !=
+                                                                                                    1,
+                                                                                                  do:
+                                                                                                    "s",
+                                                                                                  else:
+                                                                                                    ""}
+              <% end %>
+            </button>
+          </div>
+        </div>
+      <% end %>
     </.form>
 
     <script :type={Phoenix.LiveView.ColocatedHook} name=".CmdTargetPanel">
