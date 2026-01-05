@@ -70,7 +70,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:target_search, "")
       |> assign(:expanded_events, MapSet.new())
       |> assign(:event_histories, %{})
-      |> assign(:has_more_events, length(events) >= @events_page_size)
+      |> assign(:has_more_events, length(events) > 0)
       |> assign(:follow_mode, true)
       |> assign(:time_range, "1h")
       # Layout data
@@ -144,18 +144,42 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".TimelineStream">
       export default {
         mounted() {
+          this.isLoading = false
           this.updateRelativeTimes()
           this._interval = setInterval(() => this.updateRelativeTimes(), 1000)
+          this._onScroll = () => this.handleScroll()
+          this.el.addEventListener('scroll', this._onScroll)
         },
 
         updated() {
           this.updateRelativeTimes()
+          this.isLoading = false
         },
 
         destroyed() {
           if (this._interval) {
             clearInterval(this._interval)
             this._interval = null
+          }
+          if (this._onScroll) {
+            this.el.removeEventListener('scroll', this._onScroll)
+          }
+        },
+
+        handleScroll() {
+          if (this.isLoading) return
+          const hasMore = this.el.dataset.hasMore === 'true'
+          if (!hasMore) return
+
+          const scrollHeight = this.el.scrollHeight
+          const scrollTop = this.el.scrollTop
+          const clientHeight = this.el.clientHeight
+          const scrollBottom = scrollHeight - scrollTop - clientHeight
+
+          // Load more when within 200px of the bottom
+          if (scrollBottom < 200) {
+            this.isLoading = true
+            this.pushEvent('load_more', {})
           }
         },
 
@@ -473,10 +497,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
               </div>
             </div>
 
-            <div :if={@has_more} class="text-center py-4">
-              <button type="button" class="timeline-action-btn" phx-click="load_more">
-                Load More
-              </button>
+            <div :if={@has_more} class="stream-loading-more">
+              <span class="stream-loading-spinner"></span>
+              <span>LOADING</span>
             </div>
           </div>
 
@@ -991,7 +1014,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:events_list, events)
       |> assign(:lanes_events, events)
       |> assign(:lanes_offset_minutes, 0)
-      |> assign(:has_more_events, length(events) >= @events_page_size)
+      |> assign(:has_more_events, length(events) > 0)
       |> assign(:follow_mode, true)
       |> stream(:events, events, reset: true)
       |> push_scrubber_reset()
