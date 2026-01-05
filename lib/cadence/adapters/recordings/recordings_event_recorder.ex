@@ -250,7 +250,8 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
   end
 
   defp get_aggregate_id(aggregate) do
-    Map.get(aggregate, :id)
+    # For queue entries and commands, prefer command_aggregate_id for consistent lifecycle tracking
+    Map.get(aggregate, :command_aggregate_id) || Map.get(aggregate, :id)
   end
 
   defp calculate_shelve_duration(%{shelved_at: shelved_at, shelved_until: shelved_until})

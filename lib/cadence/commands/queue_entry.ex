@@ -97,7 +97,8 @@ defmodule Cadence.Commands.QueueEntry do
       :expires_at,
       :max_attempts,
       :dispatch_opts,
-      :metadata
+      :metadata,
+      :command_aggregate_id
     ])
     |> validate_required([:organization_id, :mission_id, :target_id, :command_name])
     |> validate_inclusion(:priority, @priority_levels)

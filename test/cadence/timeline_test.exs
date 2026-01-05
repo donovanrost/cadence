@@ -83,13 +83,17 @@ defmodule Cadence.TimelineTest do
         name: mission.name
       })
 
-    entry =
+    # Generate command_aggregate_id upfront (like the real enqueue flow does)
+    command_aggregate_id = Ecto.UUID.generate()
+
+    _entry =
       Commands.QueueEntry.changeset(%Commands.QueueEntry{}, %{
         organization_id: org.id,
         mission_id: mission.id,
         target_id: target.id,
         command_name: "POWER_ON",
-        status: :pending
+        status: :pending,
+        command_aggregate_id: command_aggregate_id
       })
       |> Repo.insert!()
 
@@ -102,7 +106,7 @@ defmodule Cadence.TimelineTest do
         %{
           organization_id: org.id,
           bucket_id: mission_bucket.id,
-          aggregate_id: entry.id,
+          aggregate_id: command_aggregate_id,
           timestamp: now
         }
       )

@@ -121,16 +121,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Attaches a command aggregate ID to an executing entry.
-  """
-  def attach_command_aggregate_id(mission_id, target_id, entry_id, command_aggregate_id) do
-    GenServer.cast(
-      via_tuple(mission_id, target_id),
-      {:attach_command_aggregate_id, entry_id, command_aggregate_id}
-    )
-  end
-
-  @doc """
   Reports execution result for a queue entry.
   """
   def complete(mission_id, target_id, entry_id, result) do
@@ -337,17 +327,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   @impl true
   def handle_cast({:complete, entry_id, result}, state) do
     new_state = handle_command_complete(entry_id, result, state)
-    {:noreply, new_state}
-  end
-
-  def handle_cast({:attach_command_aggregate_id, entry_id, command_aggregate_id}, state) do
-    {new_state, updated} =
-      update_entry_local(state, entry_id, %{command_aggregate_id: command_aggregate_id})
-
-    if updated do
-      QueuePersistence.notify({:attach_command_aggregate_id, entry_id, command_aggregate_id})
-    end
-
     {:noreply, new_state}
   end
 

@@ -48,6 +48,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   alias Cadence.Recordings.Recordables.{
     CommandDispatched,
+    CommandErrored,
+    CommandRejected,
     CommandSent,
     CommandVerificationFailed,
     CommandVerified
@@ -841,6 +843,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     target = state.target
     interface_id = Keyword.get(opts, :interface_id)
 
+    # Get aggregate_id from entry (generated at enqueue time) or generate for direct dispatch
+    aggregate_id = entry.command_aggregate_id || Ecto.UUID.generate()
+
     Logger.info(
       "[DISPATCH] command_name=#{inspect(entry.command_name)}, " <>
         "mission_id=#{inspect(state.mission_id)}, target_id=#{target.id}, " <>
@@ -855,17 +860,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
          {:ok, interface} <- get_interface(target, opts),
          {:ok, framed} <- process_protocol_chain(interface, encoded),
          {:ok, cmd_info} <-
-           create_command_recording(state, command, target, entry.parameters, encoded, opts),
+           create_command_recording(state, command, target, entry.parameters, encoded, opts, aggregate_id),
          :ok <- send_to_interface(interface, framed) do
-      if entry.id do
-        TargetQueue.attach_command_aggregate_id(
-          state.mission_id,
-          state.target_id,
-          entry.id,
-          cmd_info.aggregate_id
-        )
-      end
-
       # Record command sent event
       record_command_sent(
         state,
@@ -888,6 +884,62 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       {:error, :requires_confirmation, _} ->
         # Handle hazardous command - store confirmation request and return info
         create_hazardous_confirmation(entry.command_name, entry.parameters, opts, state)
+
+      {:error, :unknown_command} = error ->
+        record_command_rejected(state, aggregate_id, entry.command_name, %{
+          rejection_type: "validation",
+          error_reason: "Unknown command: #{entry.command_name}"
+        })
+
+        error
+
+      {:error, :not_allowed_in_phase, phase} = error ->
+        record_command_rejected(state, aggregate_id, entry.command_name, %{
+          rejection_type: "phase",
+          error_reason: "Command not allowed in phase: #{phase}"
+        })
+
+        error
+
+      {:error, :validation_failed, errors} = error ->
+        record_command_rejected(state, aggregate_id, entry.command_name, %{
+          rejection_type: "validation",
+          error_reason: inspect(errors)
+        })
+
+        error
+
+      {:error, :encoding_failed, reason} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "encoding",
+          error_reason: inspect(reason)
+        })
+
+        error
+
+      {:error, :no_interface} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "no_interface",
+          error_reason: "No interface available for target"
+        })
+
+        error
+
+      {:error, :interface_not_running} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "interface_disconnected",
+          error_reason: "Interface not running"
+        })
+
+        error
+
+      {:error, :send_failed, reason} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "send_failed",
+          error_reason: inspect(reason)
+        })
+
+        error
 
       {:error, _} = error ->
         error
@@ -1020,9 +1072,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   # RECORDING CREATION
   # ============================================
 
-  defp create_command_recording(state, command, target, params, encoded, opts) do
+  defp create_command_recording(state, command, target, params, encoded, opts, aggregate_id) do
     user_id = Keyword.get(opts, :user_id)
-    aggregate_id = Ecto.UUID.generate()
     now = DateTime.utc_now()
 
     recordable_attrs = %{
@@ -1114,6 +1165,66 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     }
 
     Recordings.create(CommandVerificationFailed, recordable_attrs, recording_attrs)
+  end
+
+  defp record_command_rejected(state, aggregate_id, command_name, error_info) do
+    now = DateTime.utc_now()
+
+    recordable_attrs = %{
+      error_reason: error_info[:error_reason],
+      rejection_type: error_info[:rejection_type]
+    }
+
+    recording_attrs = %{
+      organization_id: state.mission.organization_id,
+      bucket_id: state.target.bucket_id,
+      aggregate_id: aggregate_id,
+      actor_type: "system",
+      timestamp: now
+    }
+
+    case Recordings.create(CommandRejected, recordable_attrs, recording_attrs) do
+      {:ok, _} ->
+        Logger.info(
+          "[DISPATCH] Recorded command rejection: command=#{command_name}, " <>
+            "type=#{error_info[:rejection_type]}, reason=#{error_info[:error_reason]}"
+        )
+
+      {:error, _, changeset, _} ->
+        Logger.warning(
+          "[DISPATCH] Failed to record command rejection: #{inspect(changeset.errors)}"
+        )
+    end
+  end
+
+  defp record_command_errored(state, aggregate_id, command_name, error_info) do
+    now = DateTime.utc_now()
+
+    recordable_attrs = %{
+      error_reason: error_info[:error_reason],
+      error_type: error_info[:error_type]
+    }
+
+    recording_attrs = %{
+      organization_id: state.mission.organization_id,
+      bucket_id: state.target.bucket_id,
+      aggregate_id: aggregate_id,
+      actor_type: "system",
+      timestamp: now
+    }
+
+    case Recordings.create(CommandErrored, recordable_attrs, recording_attrs) do
+      {:ok, _} ->
+        Logger.info(
+          "[DISPATCH] Recorded command error: command=#{command_name}, " <>
+            "type=#{error_info[:error_type]}, reason=#{error_info[:error_reason]}"
+        )
+
+      {:error, _, changeset, _} ->
+        Logger.warning(
+          "[DISPATCH] Failed to record command error: #{inspect(changeset.errors)}"
+        )
+    end
   end
 
   defp create_hazardous_confirmation(command_name, params, opts, state) do

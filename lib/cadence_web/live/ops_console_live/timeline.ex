@@ -635,7 +635,11 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
             </div>
           </div>
 
-          <.event_status_badge :if={@event.status} status={@event.status} />
+          <.event_status_badge
+            :if={@event.status}
+            status={@event.status}
+            label={command_status_label(@event)}
+          />
 
           <span :if={@can_expand} class="timeline-event-chevron">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -716,6 +720,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   end
 
   attr :status, :atom, required: true
+  attr :label, :string, default: nil
 
   defp event_status_badge(assigns) do
     status_class =
@@ -728,11 +733,12 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         _ -> "status-default"
       end
 
-    assigns = assign(assigns, :status_class, status_class)
+    display_label = assigns.label || status_label(assigns.status)
+    assigns = assigns |> assign(:status_class, status_class) |> assign(:display_label, display_label)
 
     ~H"""
     <span class={["timeline-event-status", @status_class]}>
-      {status_label(@status)}
+      {@display_label}
     </span>
     """
   end
@@ -748,6 +754,12 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   defp status_label(:failed), do: "FAILED"
   defp status_label(other), do: other |> to_string() |> String.upcase()
 
+  # Custom label for command events based on recordable_type
+  defp command_status_label(%{metadata: %{recordable_type: "CommandQueued"}}), do: "QUEUED"
+  defp command_status_label(%{metadata: %{recordable_type: "CommandDispatched"}}), do: "DISPATCHED"
+  defp command_status_label(%{metadata: %{recordable_type: "CommandSent"}}), do: "AWAITING VERIFICATION"
+  defp command_status_label(_), do: nil
+
   # State change item for expandable event history
   attr :state, :map, required: true
 
@@ -756,10 +768,24 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     <div class="state-change-item">
       <span class="state-change-time">{format_event_time(@state.timestamp)}</span>
       <span class="state-change-type">{@state.description || @state.title}</span>
-      <.event_status_badge :if={@state.status} status={@state.status} />
+      <.event_status_badge
+        :if={terminal_state?(@state)}
+        status={@state.status}
+        label={command_status_label(@state)}
+      />
     </div>
     """
   end
+
+  defp terminal_state?(%{metadata: %{recordable_type: type}})
+       when type in ~w(CommandVerified CommandErrored CommandRejected CommandVerificationFailed),
+       do: true
+
+  defp terminal_state?(%{status: status})
+       when status in [:success, :completed, :error, :failed],
+       do: true
+
+  defp terminal_state?(_), do: false
 
   # Check if an event should be visible based on active filters
   defp event_visible?(event, event_type_filters, selected_targets) do

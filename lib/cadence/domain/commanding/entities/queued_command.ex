@@ -147,6 +147,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
         expires_at: Map.get(attrs, :expires_at),
         attempts: 0,
         max_attempts: Map.get(attrs, :max_attempts, 3),
+        command_aggregate_id: Map.get(attrs, :command_aggregate_id) || Ecto.UUID.generate(),
         dispatch_opts: Map.get(attrs, :dispatch_opts, %{}),
         metadata: Map.get(attrs, :metadata, %{}),
         created_at: DateTime.utc_now()

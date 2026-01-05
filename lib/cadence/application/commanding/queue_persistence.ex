@@ -97,14 +97,6 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
     end
   end
 
-  defp apply_event({:attach_command_aggregate_id, entry_id, command_aggregate_id}) do
-    with {:ok, entry} <- CommandQueries.find(entry_id) do
-      updated = %{entry | command_aggregate_id: command_aggregate_id}
-      _ = repo().save(updated)
-      :ok
-    end
-  end
-
   defp apply_event({:complete, entry_id, command_aggregate_id}) do
     _ = ManageQueue.complete(entry_id, command_aggregate_id)
     :ok

@@ -40,7 +40,7 @@ end
 
 defimpl Cadence.Recordings.Recordable, for: Cadence.Recordings.Recordables.CommandQueued do
   def recording_type(_), do: "CommandQueued"
-  def aggregate_type(_), do: "QueueEntry"
+  def aggregate_type(_), do: "Command"
   def title(r), do: "Queued: #{r.command_name}"
   def status(_), do: "pending"
   def severity(_), do: nil

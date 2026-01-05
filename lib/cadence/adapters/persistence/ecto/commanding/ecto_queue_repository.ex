@@ -339,7 +339,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
       expires_at: entity.expires_at,
       max_attempts: entity.max_attempts,
       dispatch_opts: entity.dispatch_opts,
-      metadata: entity.metadata
+      metadata: entity.metadata,
+      command_aggregate_id: entity.command_aggregate_id
     }
   end
 
