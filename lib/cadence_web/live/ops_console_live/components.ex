@@ -29,11 +29,11 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
   def context_panel(assigns) do
     ~H"""
     <div id={@id} class={["flex flex-col h-full", @class]}>
-      <div class="context-panel-v2 p-3">
+      <div class="context-panel-v2 p-3 hud-grid">
         {render_slot(@expanded)}
       </div>
 
-      <div class="context-rail flex-col items-center py-2 gap-1">
+      <div class="context-rail flex-col items-center py-2 gap-1 hud-grid">
         {render_slot(@rail)}
       </div>
     </div>

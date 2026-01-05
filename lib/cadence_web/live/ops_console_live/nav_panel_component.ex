@@ -38,7 +38,7 @@ defmodule CadenceWeb.OpsConsoleLive.NavPanelComponent do
     ~H"""
     <div class="nav-panel-v2 flex flex-col h-full">
       <!-- Expanded view (hidden when panel is collapsed) -->
-      <div class="nav-expanded flex flex-col h-full">
+      <div class="nav-expanded flex flex-col h-full hud-grid">
         <!-- Header with mission name -->
         <div class="flex items-center gap-2 px-3 py-2 border-b border-base-300/50">
           <span class="text-xs font-medium text-base-content/70 truncate">
@@ -92,7 +92,7 @@ defmodule CadenceWeb.OpsConsoleLive.NavPanelComponent do
       </div>
       
     <!-- Rail view (shown when panel is collapsed) -->
-      <div class="nav-rail hidden flex-col items-center py-2">
+      <div class="nav-rail hidden flex-col items-center py-2 hud-grid">
         <div class="rail-section">
           <.rail_mode_button
             :for={mode <- @modes}
