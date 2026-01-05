@@ -58,12 +58,14 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     event_type_filters =
       Enum.reduce(@event_types, %{}, fn type, acc -> Map.put(acc, type, true) end)
 
+    events_with_context = add_time_context(events)
+
     socket =
       socket
       |> assign(:page_title, "Timeline - #{mission.name}")
       |> assign(:targets, targets)
       |> assign(:targets_by_id, targets_by_id)
-      |> stream(:events, events)
+      |> stream(:events, events_with_context)
       |> assign(:events_list, events)
       |> assign(:selected_targets, MapSet.new(targets, & &1.id))
       |> assign(:event_type_filters, event_type_filters)
@@ -547,6 +549,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     # Scheduled commands (source_table: :command_queue_entries) don't have history yet
     can_expand = assigns.event.source_table == :recordings
     has_loaded_history = length(assigns.history) > 0
+    gap_minutes = Map.get(assigns.event, :gap_minutes)
+    show_gap = show_gap_indicator?(gap_minutes)
+    gap_text = if show_gap, do: format_gap(gap_minutes)
 
     assigns =
       assigns
@@ -555,10 +560,28 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       |> assign(:badge_class, "timeline-badge-#{event_type}")
       |> assign(:can_expand, can_expand)
       |> assign(:has_loaded_history, has_loaded_history)
+      |> assign(:show_bucket_header, Map.get(assigns.event, :show_bucket_header, false))
+      |> assign(:time_bucket, Map.get(assigns.event, :time_bucket))
+      |> assign(:show_gap, show_gap)
+      |> assign(:gap_text, gap_text)
 
     ~H"""
-    <div id={@dom_id} class={["timeline-event-wrapper", @type_class, @expanded && "expanded"]}>
-      <div class="timeline-event-marker-dot"></div>
+    <div id={@dom_id} class="timeline-event-container">
+      <!-- Time Bucket Header - outside wrapper for proper sticky behavior -->
+      <div :if={@show_bucket_header} class="timeline-bucket-header">
+        <div class="timeline-bucket-line"></div>
+        <span class="timeline-bucket-label">{@time_bucket}</span>
+        <div class="timeline-bucket-line"></div>
+      </div>
+      <!-- Gap Indicator -->
+      <div :if={@show_gap && !@show_bucket_header} class="timeline-gap-indicator">
+        <div class="timeline-gap-line"></div>
+        <span class="timeline-gap-label">{@gap_text}</span>
+        <div class="timeline-gap-line"></div>
+      </div>
+
+      <div class={["timeline-event-wrapper", @type_class, @expanded && "expanded"]}>
+        <div class="timeline-event-marker-dot"></div>
 
       <div
         class={["timeline-event", @can_expand && "expandable"]}
@@ -607,6 +630,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       <div :if={@expanded && @has_loaded_history} class="timeline-event-history">
         <div class="state-change-header">STATE HISTORY ({length(@history)} events)</div>
         <.state_change_item :for={state <- @history} state={state} />
+      </div>
       </div>
     </div>
     """
@@ -1130,7 +1154,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   # Reset the events stream to apply current filters
   defp reset_events_stream(socket) do
-    stream(socket, :events, socket.assigns.events_list, reset: true)
+    events_with_context = add_time_context(socket.assigns.events_list)
+    stream(socket, :events, events_with_context, reset: true)
   end
 
   defp maybe_load_event_history(socket, event_id) do
@@ -1785,4 +1810,73 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         DateTime.compare(event.timestamp, end_time) != :gt
     end)
   end
+
+  # ============================================================================
+  # Time Context - Bucket Headers & Gap Indicators
+  # ============================================================================
+
+  @gap_threshold_minutes 5
+
+  @doc false
+  defp add_time_context(events) do
+    now = DateTime.utc_now()
+
+    events
+    |> Enum.with_index()
+    |> Enum.map(fn {event, index} ->
+      bucket = time_bucket(event.timestamp, now)
+      prev_event = if index > 0, do: Enum.at(events, index - 1)
+      prev_bucket = if prev_event, do: time_bucket(prev_event.timestamp, now)
+
+      gap_minutes =
+        if prev_event && prev_event.timestamp && event.timestamp do
+          abs(DateTime.diff(prev_event.timestamp, event.timestamp, :second)) / 60
+        end
+
+      event
+      |> Map.put(:time_bucket, bucket)
+      |> Map.put(:show_bucket_header, bucket != prev_bucket)
+      |> Map.put(:gap_minutes, gap_minutes)
+    end)
+  end
+
+  defp time_bucket(nil, _now), do: "UNKNOWN"
+
+  defp time_bucket(timestamp, now) do
+    diff_seconds = DateTime.diff(now, timestamp, :second)
+    diff_minutes = div(diff_seconds, 60)
+    diff_hours = div(diff_minutes, 60)
+    diff_days = div(diff_hours, 24)
+
+    cond do
+      diff_seconds < 0 -> "UPCOMING"
+      diff_minutes < 5 -> "NOW"
+      diff_minutes < 15 -> "15 MIN AGO"
+      diff_minutes < 30 -> "30 MIN AGO"
+      diff_hours < 1 -> "1 HOUR AGO"
+      diff_hours < 2 -> "2 HOURS AGO"
+      diff_hours < 4 -> "4 HOURS AGO"
+      diff_hours < 8 -> "8 HOURS AGO"
+      diff_hours < 24 -> "TODAY"
+      diff_days < 2 -> "YESTERDAY"
+      diff_days < 7 -> "THIS WEEK"
+      true -> "OLDER"
+    end
+  end
+
+  defp format_gap(minutes) when is_number(minutes) do
+    cond do
+      minutes < 60 -> "#{round(minutes)} min"
+      minutes < 1440 -> "#{Float.round(minutes / 60, 1)} hrs"
+      true -> "#{round(minutes / 1440)} days"
+    end
+  end
+
+  defp format_gap(_), do: nil
+
+  defp show_gap_indicator?(gap_minutes) when is_number(gap_minutes) do
+    gap_minutes >= @gap_threshold_minutes
+  end
+
+  defp show_gap_indicator?(_), do: false
 end

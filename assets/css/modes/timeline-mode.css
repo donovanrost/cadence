@@ -2140,6 +2140,85 @@
   padding: 0.5rem 0;
 }
 
+/* Timeline Event Container - wraps bucket header + event for proper sticky behavior */
+.timeline-event-container {
+  display: contents;
+}
+
+/* Timeline Event Bucket Headers - Sticky temporal markers */
+.timeline-bucket-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0 0.5rem 0;
+  margin-bottom: 0.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg,
+    var(--surface-inset) 0%,
+    var(--surface-inset) 70%,
+    transparent 100%
+  );
+}
+
+.timeline-bucket-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg,
+    oklch(from var(--timeline-accent) 40% 0.06 h / 0.5),
+    oklch(from var(--timeline-accent) 25% 0.04 h / 0.2)
+  );
+}
+
+.timeline-bucket-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: oklch(from var(--timeline-accent) 65% 0.1 h);
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.6rem;
+  background: oklch(from var(--timeline-accent) 12% 0.02 h);
+  border: 1px solid oklch(from var(--timeline-accent) 30% 0.05 h);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* First event in list - no top padding on bucket header */
+.timeline-event-container:first-child .timeline-bucket-header,
+#event-list > .timeline-bucket-header:first-child {
+  padding-top: 0;
+}
+
+/* Timeline Gap Indicators - Subtle time gaps between events */
+.timeline-gap-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  margin-bottom: 0.25rem;
+  opacity: 0.7;
+}
+
+.timeline-gap-line {
+  flex: 1;
+  height: 1px;
+  background: oklch(from var(--timeline-accent) 25% 0.03 h / 0.4);
+  border-style: dashed;
+}
+
+.timeline-gap-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 500;
+  color: oklch(from var(--timeline-accent) 50% 0.06 h);
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.4rem;
+  background: oklch(from var(--timeline-accent) 10% 0.01 h / 0.5);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
 /* ============================================================================
    Stream View - Target Filter Panel (Side-by-Side Layout)
    ============================================================================ */
