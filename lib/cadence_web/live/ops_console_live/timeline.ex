@@ -510,7 +510,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
                     dom_id={dom_id}
                     event={event}
                     expanded={MapSet.member?(@expanded_events, event.id)}
-                    history={Map.get(@event_histories, event.id, [])}
+                    history={get_event_history(@event_histories, event)}
                   />
                 <% end %>
               </div>
@@ -562,10 +562,11 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   defp timeline_event(assigns) do
     event_type = assigns.event.type || :command
-    # Events from recordings can potentially have state history
-    # Scheduled commands (source_table: :command_queue_entries) don't have history yet
-    can_expand = assigns.event.source_table == :recordings
+    # Events are expandable if:
+    # 1. They're from recordings (can load history from DB)
+    # 2. They have live state history from aggregation
     has_loaded_history = length(assigns.history) > 0
+    can_expand = assigns.event.source_table == :recordings || has_loaded_history
     gap_minutes = Map.get(assigns.event, :gap_minutes)
     show_gap = show_gap_indicator?(gap_minutes)
     gap_text = if show_gap, do: format_gap(gap_minutes)
@@ -1314,22 +1315,133 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
   end
 
   defp insert_live_event(socket, event) do
+    event_aggregate_id = get_event_aggregate_id(event)
+
+    # Find existing event with same aggregate_id to replace in the stream
+    existing_event =
+      if event_aggregate_id do
+        Enum.find(socket.assigns.events_list, fn existing ->
+          get_event_aggregate_id(existing) == event_aggregate_id
+        end)
+      end
+
+    # Track state history when replacing an event
+    socket =
+      if existing_event && event_aggregate_id do
+        append_to_aggregate_history(socket, event_aggregate_id, existing_event)
+      else
+        socket
+      end
+
+    # Merge the new event into the events list, replacing any with the same aggregate_id
     merged =
-      [event | socket.assigns.events_list]
-      |> Enum.uniq_by(& &1.id)
-      |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+      if event_aggregate_id do
+        # Remove old event with same aggregate_id, add new one
+        socket.assigns.events_list
+        |> Enum.reject(fn existing ->
+          get_event_aggregate_id(existing) == event_aggregate_id
+        end)
+        |> then(fn list -> [event | list] end)
+        |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+      else
+        # No aggregate_id, just merge by event id
+        [event | socket.assigns.events_list]
+        |> Enum.uniq_by(& &1.id)
+        |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+      end
 
     {trimmed, dropped} = trim_events(merged, socket.assigns)
+
+    # Add time context to the new event for proper rendering
+    event_with_context = add_time_context_to_event(event, trimmed)
 
     socket =
       socket
       |> assign(:events_list, trimmed)
       |> maybe_add_event_to_lanes(event)
-      |> stream_insert(:events, event, at: 0)
+      |> then(fn s ->
+        # If replacing an existing event, delete the old one from stream first
+        if existing_event do
+          stream_delete(s, :events, existing_event)
+        else
+          s
+        end
+      end)
+      |> stream_insert(:events, event_with_context, at: 0)
 
     Enum.reduce(dropped, socket, fn ev, acc ->
       stream_delete(acc, :events, ev)
     end)
+  end
+
+  # Append old event state to history for the aggregate
+  defp append_to_aggregate_history(socket, aggregate_id, old_event) do
+    histories = socket.assigns.event_histories
+
+    # Get existing history for this aggregate, or start empty
+    existing_history = Map.get(histories, aggregate_id, [])
+
+    # Create a history entry from the old event
+    history_entry = %{
+      timestamp: old_event.timestamp,
+      title: old_event.title,
+      description: old_event.description,
+      status: old_event.status,
+      metadata: old_event.metadata
+    }
+
+    # Append to history (keeping chronological order - oldest first)
+    updated_history = existing_history ++ [history_entry]
+
+    assign(socket, :event_histories, Map.put(histories, aggregate_id, updated_history))
+  end
+
+  defp get_event_aggregate_id(event) do
+    get_in(event, [Access.key(:metadata, %{}), :aggregate_id])
+  end
+
+  # Get history for an event - check by aggregate_id first, then event id
+  defp get_event_history(histories, event) do
+    aggregate_id = get_event_aggregate_id(event)
+
+    cond do
+      # Check aggregate_id first (for live state aggregation)
+      aggregate_id && Map.has_key?(histories, aggregate_id) ->
+        Map.get(histories, aggregate_id, [])
+
+      # Fall back to event id (for DB-loaded history)
+      Map.has_key?(histories, event.id) ->
+        Map.get(histories, event.id, [])
+
+      true ->
+        []
+    end
+  end
+
+  defp add_time_context_to_event(event, events_list) do
+    now = DateTime.utc_now()
+    bucket = time_bucket(event.timestamp, now)
+
+    # Find the event that would come before this one (next older event)
+    prev_event =
+      events_list
+      |> Enum.find(fn e ->
+        e.id != event.id &&
+          e.timestamp &&
+          DateTime.compare(e.timestamp, event.timestamp) == :lt
+      end)
+
+    prev_bucket = if prev_event, do: time_bucket(prev_event.timestamp, now)
+
+    gap_minutes =
+      if prev_event && prev_event.timestamp && event.timestamp do
+        abs(DateTime.diff(prev_event.timestamp, event.timestamp, :second)) / 60
+      end
+
+    event
+    |> Map.put(:time_bucket, bucket)
+    |> Map.put(:show_bucket_header, bucket != prev_bucket)
+    |> Map.put(:gap_minutes, gap_minutes)
   end
 
   defp maybe_attach_target_name(
@@ -1404,6 +1516,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     user_id = entry_field(entry, :user_id)
     created_at = entry_field(entry, :created_at)
     last_attempt_at = entry_field(entry, :last_attempt_at)
+    # Use command_aggregate_id for aggregation (matches recording events)
+    command_aggregate_id = entry_field(entry, :command_aggregate_id)
 
     timestamp =
       case {status, created_at, last_attempt_at} do
@@ -1413,6 +1527,9 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       end
 
     {description, badge_status} = queue_status_description_and_badge(status, scheduled_at)
+
+    # Use command_aggregate_id if available, otherwise fall back to entry_id
+    aggregate_id = command_aggregate_id || entry_id
 
     %TimelineEvent{
       id: "queue-#{entry_id}-#{badge_status}-#{attempts}",
@@ -1429,6 +1546,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       user_name: nil,
       is_future: false,
       metadata: %{
+        aggregate_id: aggregate_id,
         priority: priority,
         scheduled_at: scheduled_at,
         attempts: attempts
@@ -1471,6 +1589,8 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
         _ -> "outbox-#{event.id}"
       end
 
+    aggregate_id = Map.get(event, :aggregate_id)
+
     %TimelineEvent{
       id: id,
       type: :command,
@@ -1486,12 +1606,13 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       user_name: nil,
       is_future: false,
       metadata: %{
+        aggregate_id: aggregate_id,
         outbox_event_id: event.id,
         event_type: Map.get(event, :event_type),
         priority: Map.get(payload, "priority"),
         scheduled_at: Map.get(payload, "scheduled_at")
       },
-      source_id: Map.get(event, :aggregate_id),
+      source_id: aggregate_id,
       source_table: :outbox_events
     }
   end
@@ -1531,6 +1652,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       user_name: nil,
       is_future: false,
       metadata: %{
+        aggregate_id: proc_event.execution_id,
         execution_id: proc_event.execution_id,
         procedure_id: proc_event.procedure_id,
         event_type: proc_event.event_type,
@@ -1601,6 +1723,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       user_name: nil,
       is_future: false,
       metadata: %{
+        aggregate_id: alarm.id,
         severity: alarm.severity,
         source_type: alarm.source_type,
         source_id: alarm.source_id
