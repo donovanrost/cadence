@@ -475,6 +475,7 @@ defmodule CadenceWeb.Layouts do
   attr :fleet_health, :map, default: %{}
   attr :running_procedures, :list, default: []
   attr :current_mode, :atom, default: :dashboard
+  attr :current_dashboard_id, :any, default: nil
   attr :inner_content, :any, required: true
 
   def ops_console_mode(assigns) do
@@ -506,6 +507,7 @@ defmodule CadenceWeb.Layouts do
               mission={@mission}
               dashboards={@dashboards}
               current_mode={@current_mode}
+              current_dashboard_id={@current_dashboard_id}
             />
           </div>
           <!-- Resize handle for nav panel -->
@@ -629,6 +631,7 @@ defmodule CadenceWeb.Layouts do
           this.applyPanelStates()
           this.bindResizeHandlers()
           this.bindToggleButtons()
+          this.bindRailClickHandlers()
         },
 
         updated() {
@@ -680,6 +683,27 @@ defmodule CadenceWeb.Layouts do
             btn.addEventListener('click', () => {
               const panel = btn.dataset.panel
               this.togglePanel(panel)
+            })
+          })
+        },
+
+        bindRailClickHandlers() {
+          if (!this.contextPanel) return
+
+          const railSelectors = [
+            '.rail-alarm-badge',
+            '.rail-command-badge',
+            '.rail-queue-badge'
+          ]
+
+          railSelectors.forEach(selector => {
+            const elements = this.contextPanel.querySelectorAll(selector)
+            elements.forEach(el => {
+              el.addEventListener('click', () => {
+                if (!this.panelStates.context.open) {
+                  this.openPanel('context')
+                }
+              })
             })
           })
         },
