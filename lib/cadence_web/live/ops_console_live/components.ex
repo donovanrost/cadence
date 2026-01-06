@@ -1612,7 +1612,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
           </button>
         </div>
       </div>
-      <div class="lanes-activity-body">
+      <div class="lanes-activity-body" id="lanes-activity-body" phx-update="ignore">
         <div class="lanes-activity-empty">
           <span class="empty-icon">⊙</span>
           <span class="empty-text">Click an event or drag the timeline to see activity</span>
