@@ -22,6 +22,7 @@ const DEFAULT_OPTIONS = {
   removable: true,
   acceptWidgets: true,
   animate: true,
+  styleInHead: true,  // Ensure dynamic styles go in <head> to survive LiveView patches
   resizable: {
     handles: "e, se, s, sw, w"
   }
@@ -49,6 +50,13 @@ export class GridStackManager {
    */
   init() {
     this.grid = GridStack.init(this.options, this.container)
+
+    // Explicitly enable float mode after init (required in GridStack 10.x)
+    // This allows widgets to be positioned anywhere on the grid without
+    // automatically floating to the top
+    if (this.options.float) {
+      this.grid.float(true)
+    }
 
     this._setupEventHandlers()
 
@@ -165,10 +173,20 @@ export class GridStackManager {
     // Clear existing widgets
     this.clear()
 
+    // Use batchUpdate to prevent auto-compacting while adding widgets
+    // This preserves the saved Y positions when float mode is enabled
+    this.grid.batchUpdate()
+
     // Add saved widgets
     for (const config of widgetConfigs) {
       this.addWidget(config)
     }
+
+    this.grid.batchUpdate(false)
+
+    // Force style update after batch load (GridStack 10.x requires this
+    // to apply inline top/left positioning based on gs-x/gs-y attributes)
+    this.grid._updateStyles()
   }
 
   /**

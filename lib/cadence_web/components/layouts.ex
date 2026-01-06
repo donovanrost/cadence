@@ -469,6 +469,7 @@ defmodule CadenceWeb.Layouts do
   attr :alarm_counts, :map, default: %{critical: 0, warning: 0, info: 0}
   attr :alarms, :list, default: []
   attr :queue_entries, :list, default: []
+  attr :targets, :list, default: []
   attr :current_time, :any, default: nil
   attr :dashboards, :list, default: []
   attr :fleet_health, :map, default: %{}
@@ -558,6 +559,7 @@ defmodule CadenceWeb.Layouts do
               alarm_counts={@alarm_counts}
               alarms={@alarms}
               queue_entries={@queue_entries}
+              targets={@targets}
             />
           </div>
         </aside>

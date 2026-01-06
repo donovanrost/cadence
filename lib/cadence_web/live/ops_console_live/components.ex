@@ -746,8 +746,7 @@ defmodule CadenceWeb.OpsConsoleLive.Components do
     params_preview =
       params
       |> Enum.take(3)
-      |> Enum.map(fn {k, v} -> "#{k}=#{v}" end)
-      |> Enum.join(", ")
+      |> Enum.map_join(", ", fn {k, v} -> "#{k}=#{v}" end)
 
     has_more_params = map_size(params) > 3
 

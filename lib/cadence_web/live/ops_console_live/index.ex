@@ -184,6 +184,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
               mission={@mission}
               dashboards={@dashboards}
               current_mode={:dashboard}
+              current_dashboard_id={@current_layout.id}
             />
           </div>
           <!-- Resize handle for nav panel -->
@@ -206,7 +207,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
           </button>
         </aside>
         <!-- Main Content Area - GridStack dashboard -->
-        <main class="panel-main">
+        <main class="panel-main relative">
           <div
             id="ops-console-wrapper"
             phx-hook="OpsConsole"
@@ -236,10 +237,21 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
             data-timeline-events={Jason.encode!(Enum.map(@timeline_events, &timeline_event_json/1))}
             data-current-dashboard-id={@current_layout.id}
             data-token={@token}
-            class="h-full w-full"
+            class="grid-stack h-full w-full"
           >
             <!-- GridStack dashboard renders here via OpsConsole hook -->
           </div>
+          <!-- Floating Action Button for adding widgets -->
+          <button
+            type="button"
+            phx-click="open_widget_palette"
+            class="absolute bottom-4 right-4 btn btn-primary btn-circle shadow-lg z-10"
+            title="Add Widget"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
         </main>
         <!-- Context Panel - phx-update="ignore" prevents LiveView from resetting JS-managed styles -->
         <aside class="panel-context" id="panel-context" phx-update="ignore">
