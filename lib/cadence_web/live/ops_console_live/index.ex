@@ -179,9 +179,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
           Jason.encode!(Enum.map(@queue_entries, &queue_entry_json(&1, targets_map(@targets))))
         }
         data-queue-entries={
-          Jason.encode!(
-            Enum.map(@all_queue_entries, &queue_entry_json(&1, targets_map(@targets)))
-          )
+          Jason.encode!(Enum.map(@all_queue_entries, &queue_entry_json(&1, targets_map(@targets))))
         }
         data-command-definitions={
           Jason.encode!(Enum.map(@command_definitions, &command_definition_json/1))
