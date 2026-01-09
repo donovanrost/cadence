@@ -34,7 +34,9 @@ defmodule Cadence.Simulator.PacketSimulator do
   require Logger
 
   alias Cadence.Interfaces
+  alias Cadence.Telemetry.Packet
   alias Cadence.Telemetry.ProtocolChain.Processor
+  alias Phoenix.PubSub
 
   @default_rate_hz 1.0
   @default_packet_types [:health, :attitude, :power]
@@ -317,6 +319,9 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   end
 
+  # NOTE: calculate_write_chain_trailer_size was removed as unused.
+  # Keeping comment for future reference if needed for CRC protocol trailer calculation.
+
   # Check if CCSDSProtocol is in the write chain
   defp has_ccsds_protocol?(nil), do: false
   defp has_ccsds_protocol?([]), do: false
@@ -406,7 +411,19 @@ defmodule Cadence.Simulator.PacketSimulator do
     state = send_packet_network(state, processed_packet)
 
     # Always publish to PubSub for testing
-    publish_packet(state.mission_id, target_id, packet_type, packet)
+    pubsub_packet =
+      case state.encoding do
+        :ccsds ->
+          encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
+
+        :json ->
+          strip_length_prefix(binary_packet)
+
+        _ ->
+          binary_packet
+      end
+
+    publish_packet(state.mission_id, target_id, packet_type, pubsub_packet, state.encoding)
 
     %{state | packet_count: state.packet_count + 1}
   end
@@ -697,13 +714,45 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   end
 
-  defp publish_packet(mission_id, target_id, packet_type, data) do
-    topic = "mission:#{mission_id}:simulator"
+  defp publish_packet(mission_id, target_id, packet_type, binary_packet, encoding) do
+    metadata = %{
+      mission_id: mission_id,
+      stored: false,
+      target_id: target_id,
+      received_at: DateTime.utc_now(),
+      interface_id: nil,
+      source: %{simulator: true, packet_type: packet_type}
+    }
 
-    Phoenix.PubSub.broadcast(
-      Cadence.PubSub,
-      topic,
-      {:simulated_packet, target_id, packet_type, data}
+    packet =
+      case encoding do
+        :ccsds ->
+          case Packet.from_ccsds(binary_packet, metadata) do
+            {:ok, packet} -> packet
+            {:error, reason} -> log_failed_packet(mission_id, reason)
+          end
+
+        _ ->
+          Packet.from_simulator(binary_packet, metadata)
+      end
+
+    if packet do
+      PubSub.broadcast(
+        Cadence.PubSub,
+        "mission:#{mission_id}:telemetry:raw",
+        {:telemetry_packet, packet, metadata}
+      )
+    end
+  end
+
+  defp strip_length_prefix(<<_length::32, rest::binary>>), do: rest
+  defp strip_length_prefix(other), do: other
+
+  defp log_failed_packet(mission_id, reason) do
+    Logger.warning(
+      "Simulator failed to build CCSDS packet for mission #{mission_id}: #{inspect(reason)}"
     )
+
+    nil
   end
 end

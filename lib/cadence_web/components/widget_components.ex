@@ -230,28 +230,26 @@ defmodule CadenceWeb.WidgetComponents do
   attr :size, :string, default: "sm", values: ~w(xs sm md)
   attr :class, :string, default: nil
 
+  @limits_badge_config %{
+    "green" => {"badge-success", "Normal"},
+    "yellow" => {"badge-warning", "Warning"},
+    "yellow_low" => {"badge-warning", "Low Warning"},
+    "yellow_high" => {"badge-warning", "High Warning"},
+    "red" => {"badge-error", "Critical"},
+    "red_low" => {"badge-error", "Low Critical"},
+    "red_high" => {"badge-error", "High Critical"},
+    "blue" => {"badge-info", "Stale"}
+  }
+
+  @limits_badge_sizes %{"xs" => "badge-xs", "sm" => "badge-sm", "md" => ""}
+
   def limits_badge(assigns) do
     state = to_string(assigns.state)
 
     {badge_class, label} =
-      case state do
-        "green" -> {"badge-success", "Normal"}
-        "yellow" -> {"badge-warning", "Warning"}
-        "yellow_low" -> {"badge-warning", "Low Warning"}
-        "yellow_high" -> {"badge-warning", "High Warning"}
-        "red" -> {"badge-error", "Critical"}
-        "red_low" -> {"badge-error", "Low Critical"}
-        "red_high" -> {"badge-error", "High Critical"}
-        "blue" -> {"badge-info", "Stale"}
-        _ -> {"badge-neutral", "Unknown"}
-      end
+      Map.get(@limits_badge_config, state, {"badge-neutral", "Unknown"})
 
-    size_class =
-      case assigns.size do
-        "xs" -> "badge-xs"
-        "sm" -> "badge-sm"
-        "md" -> ""
-      end
+    size_class = Map.get(@limits_badge_sizes, assigns.size, "")
 
     assigns =
       assigns
@@ -318,26 +316,30 @@ defmodule CadenceWeb.WidgetComponents do
   attr :size, :string, default: "lg", values: ~w(sm md lg xl)
   attr :class, :string, default: nil
 
+  @limits_color_map %{
+    "green" => "text-success",
+    "yellow" => "text-warning",
+    "yellow_low" => "text-warning",
+    "yellow_high" => "text-warning",
+    "red" => "text-error",
+    "red_low" => "text-error",
+    "red_high" => "text-error",
+    "blue" => "text-info"
+  }
+
+  @telemetry_size_map %{
+    "sm" => "text-lg",
+    "md" => "text-2xl",
+    "lg" => "text-4xl",
+    "xl" => "text-5xl"
+  }
+
   def telemetry_value(assigns) do
     formatted_value =
       format_telemetry_value(assigns.value, assigns.precision, assigns.placeholder)
 
-    limits_color =
-      case to_string(assigns.limits_state) do
-        "green" -> "text-success"
-        s when s in ~w(yellow yellow_low yellow_high) -> "text-warning"
-        s when s in ~w(red red_low red_high) -> "text-error"
-        "blue" -> "text-info"
-        _ -> ""
-      end
-
-    size_class =
-      case assigns.size do
-        "sm" -> "text-lg"
-        "md" -> "text-2xl"
-        "lg" -> "text-4xl"
-        "xl" -> "text-5xl"
-      end
+    limits_color = Map.get(@limits_color_map, to_string(assigns.limits_state), "")
+    size_class = Map.get(@telemetry_size_map, assigns.size, "text-4xl")
 
     assigns =
       assigns
@@ -637,22 +639,23 @@ defmodule CadenceWeb.WidgetComponents do
   # Private Helpers
   # =============================================================================
 
+  @severity_map %{
+    "critical" => :critical,
+    "warning" => :warning,
+    "info" => :info,
+    "nominal" => :nominal,
+    "success" => :nominal,
+    "pending" => :pending,
+    "idle" => :idle,
+    "sent" => :nominal,
+    "verified" => :nominal,
+    "failed" => :critical
+  }
+
   defp normalize_severity(severity) when is_atom(severity), do: severity
 
   defp normalize_severity(severity) when is_binary(severity) do
-    case severity do
-      "critical" -> :critical
-      "warning" -> :warning
-      "info" -> :info
-      "nominal" -> :nominal
-      "success" -> :nominal
-      "pending" -> :pending
-      "idle" -> :idle
-      "sent" -> :nominal
-      "verified" -> :nominal
-      "failed" -> :critical
-      _ -> :unknown
-    end
+    Map.get(@severity_map, severity, :unknown)
   end
 
   defp normalize_severity(_), do: :unknown

@@ -30,7 +30,7 @@ defmodule Cadence.MissionDatabaseFixtures do
   import Cadence.MissionsFixtures
 
   # ============================================================================
-  # Database (Container for DefinitionSets)
+  # Database (Catalog Entry)
   # ============================================================================
 
   def database_fixture(attrs \\ %{}) do
@@ -42,9 +42,9 @@ defmodule Cadence.MissionDatabaseFixtures do
       |> Map.drop([:organization, :mission])
       |> Enum.into(%{
         mission_id: mission.id,
-        name: "Test Database #{System.unique_integer([:positive])}",
-        slug: "test-database-#{Ecto.UUID.generate()}",
-        description: "Test database"
+        name: "Test Database",
+        slug: "test-database-#{System.unique_integer([:positive])}",
+        description: "Test database for fixtures"
       })
 
     %Database{}
@@ -58,10 +58,7 @@ defmodule Cadence.MissionDatabaseFixtures do
 
   def definition_set_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
-    {org, mission} = get_or_create_org_mission(attrs)
-
-    # Get or create a database
-    database = get_or_create_database(attrs, mission)
+    {org, mission, database} = get_or_create_org_mission_database(attrs)
 
     attrs =
       attrs
@@ -69,11 +66,12 @@ defmodule Cadence.MissionDatabaseFixtures do
       |> Enum.into(%{
         organization_id: org.id,
         database_id: database.id,
+        name: "Test Definition Set",
         version: "1.0.#{System.unique_integer([:positive])}",
         description: "Test definition set",
         source_format: :yaml,
         source_filename: "test_database.yaml",
-        source_hash: "abc123"
+        source_hash: "abc123#{System.unique_integer([:positive])}"
       })
 
     %DefinitionSet{}
@@ -681,10 +679,20 @@ defmodule Cadence.MissionDatabaseFixtures do
     {org, mission}
   end
 
+  defp get_or_create_org_mission_database(attrs) do
+    {org, mission} = get_or_create_org_mission(attrs)
+
+    database =
+      attrs[:database] ||
+        database_fixture(organization: org, mission: mission)
+
+    {org, mission, database}
+  end
+
   defp get_or_create_definition_set(attrs) do
     case attrs[:definition_set] do
       nil ->
-        definition_set_fixture(Map.take(attrs, [:organization, :mission]))
+        definition_set_fixture(Map.take(attrs, [:organization, :mission, :database]))
 
       %DefinitionSet{} = ds ->
         ds

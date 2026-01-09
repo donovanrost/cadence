@@ -19,6 +19,8 @@ defmodule Cadence.Procedures do
     V2
   }
 
+  alias Cadence.Procedures.V2.ExecutionProcess
+
   alias Cadence.Outbox
   alias Cadence.Recordings
   alias Cadence.Repo
@@ -492,49 +494,50 @@ defmodule Cadence.Procedures do
   defp clone_version_content(source_version_id, target_version_id) do
     # Load source sections with steps and blocks
     source_sections = V2.list_sections_with_steps(source_version_id)
+    Enum.each(source_sections, &clone_section(&1, target_version_id))
+  end
 
-    # Clone each section
-    Enum.each(source_sections, fn source_section ->
-      # Create new section
-      {:ok, new_section} =
-        V2.create_section(target_version_id, %{
-          name: source_section.name,
-          description: source_section.description,
-          position: source_section.position,
-          collapsed_by_default: source_section.collapsed_by_default
-        })
+  defp clone_section(source_section, target_version_id) do
+    {:ok, new_section} =
+      V2.create_section(target_version_id, %{
+        name: source_section.name,
+        description: source_section.description,
+        position: source_section.position,
+        collapsed_by_default: source_section.collapsed_by_default
+      })
 
-      # Clone each step in the section
-      Enum.each(source_section.steps, fn source_step ->
-        {:ok, new_step} =
-          V2.create_step(new_section.id, %{
-            name: source_step.name,
-            title: source_step.title,
-            position: source_step.position,
-            requires_signoff: source_step.requires_signoff,
-            required_roles: source_step.required_roles,
-            signoff_logic: source_step.signoff_logic,
-            depends_on: source_step.depends_on,
-            dependency_logic: source_step.dependency_logic,
-            condition: source_step.condition,
-            on_fail: source_step.on_fail,
-            estimated_duration_seconds: source_step.estimated_duration_seconds
-          })
+    Enum.each(source_section.steps, &clone_step(&1, new_section.id))
+  end
 
-        # Clone each block in the step
-        Enum.each(source_step.blocks, fn source_block ->
-          {:ok, _new_block} =
-            V2.create_block(new_step.id, %{
-              block_type: source_block.block_type,
-              position: source_block.position,
-              name: source_block.name,
-              label: source_block.label,
-              required: source_block.required,
-              content: source_block.content
-            })
-        end)
-      end)
-    end)
+  defp clone_step(source_step, new_section_id) do
+    {:ok, new_step} =
+      V2.create_step(new_section_id, %{
+        name: source_step.name,
+        title: source_step.title,
+        position: source_step.position,
+        requires_signoff: source_step.requires_signoff,
+        required_roles: source_step.required_roles,
+        signoff_logic: source_step.signoff_logic,
+        depends_on: source_step.depends_on,
+        dependency_logic: source_step.dependency_logic,
+        condition: source_step.condition,
+        on_fail: source_step.on_fail,
+        estimated_duration_seconds: source_step.estimated_duration_seconds
+      })
+
+    Enum.each(source_step.blocks, &clone_block(&1, new_step.id))
+  end
+
+  defp clone_block(source_block, new_step_id) do
+    {:ok, _new_block} =
+      V2.create_block(new_step_id, %{
+        block_type: source_block.block_type,
+        position: source_block.position,
+        name: source_block.name,
+        label: source_block.label,
+        required: source_block.required,
+        content: source_block.content
+      })
   end
 
   # ============================================================================
@@ -1641,7 +1644,7 @@ defmodule Cadence.Procedures do
              triggered_by: triggered_by,
              trigger_context: trigger_context
            ) do
-      {:ok, Cadence.Procedures.V2.ExecutionProcess.get_execution(pid)}
+      {:ok, ExecutionProcess.get_execution(pid)}
     end
   end
 

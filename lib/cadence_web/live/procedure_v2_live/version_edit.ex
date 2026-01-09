@@ -43,34 +43,40 @@ defmodule CadenceWeb.ProcedureV2Live.VersionEdit do
 
     case load_version_for_mission(mission, procedure_id, version_id) do
       {:ok, procedure, version} ->
-        # If the version is approved, create a new draft and redirect to it
-        if version.status == :approved do
-          case Procedures.create_draft_from_version(version, user_id: user_id) do
-            {:ok, new_version} ->
-              socket
-              |> put_flash(
-                :info,
-                "Created new draft v#{new_version.version_number} from approved v#{version.version_number}"
-              )
-              |> push_navigate(
-                to:
-                  ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/versions/#{new_version.id}/edit"
-              )
-
-            {:error, _reason} ->
-              socket
-              |> put_flash(:error, "Failed to create new draft version")
-              |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure.id}")
-          end
-        else
-          # Normal edit flow for draft/in_review/changes_requested versions
-          setup_edit_socket(socket, procedure, version)
-        end
+        handle_version_edit(socket, mission, procedure, version, user_id)
 
       {:error, message} ->
         socket
         |> put_flash(:error, message)
         |> push_navigate(to: ~p"/missions/#{mission}/procedures")
+    end
+  end
+
+  defp handle_version_edit(socket, mission, procedure, version, user_id) do
+    if version.status == :approved do
+      create_draft_and_redirect(socket, mission, procedure, version, user_id)
+    else
+      setup_edit_socket(socket, procedure, version)
+    end
+  end
+
+  defp create_draft_and_redirect(socket, mission, procedure, version, user_id) do
+    case Procedures.create_draft_from_version(version, user_id: user_id) do
+      {:ok, new_version} ->
+        socket
+        |> put_flash(
+          :info,
+          "Created new draft v#{new_version.version_number} from approved v#{version.version_number}"
+        )
+        |> push_navigate(
+          to:
+            ~p"/missions/#{mission}/procedures-v2/#{procedure.id}/versions/#{new_version.id}/edit"
+        )
+
+      {:error, _reason} ->
+        socket
+        |> put_flash(:error, "Failed to create new draft version")
+        |> push_navigate(to: ~p"/missions/#{mission}/procedures/#{procedure.id}")
     end
   end
 

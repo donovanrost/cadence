@@ -16,6 +16,63 @@ defmodule Cadence.Telemetry.Decommutation do
   alias Cadence.Telemetry.BinaryExtractor
 
   @doc """
+  Extracts a single field from a binary packet.
+
+  This is a convenience wrapper around BinaryExtractor.extract/5 for testing
+  and simple use cases.
+
+  ## Parameters
+
+  - `packet` - The binary packet data
+  - `item_def` - Map containing:
+    - `:name` - Field name (optional, for error messages)
+    - `:bit_offset` - Bit offset from start of packet
+    - `:bit_length` - Size in bits
+    - `:data_type` - Data type string ("uint", "int", "float", "string", "boolean")
+    - `:endianness` - Byte order (optional, defaults to "big_endian")
+
+  ## Returns
+
+  - `{:ok, value}` - Extracted value
+  - `{:error, reason}` - Extraction failed
+  """
+  @spec extract_field(binary(), map()) :: {:ok, term()} | {:error, term()}
+  def extract_field(packet, item_def) do
+    bit_offset = item_def.bit_offset
+    bit_length = item_def[:bit_length] || item_def[:bit_size]
+    data_type = normalize_data_type(item_def.data_type)
+    endianness = normalize_endianness(item_def[:endianness])
+
+    case data_type do
+      :boolean ->
+        # Special handling for boolean - extract as uint then convert
+        case BinaryExtractor.extract(packet, bit_offset, bit_length, :uint, endianness) do
+          {:ok, value} -> {:ok, value != 0}
+          error -> error
+        end
+
+      :float when bit_length not in [32, 64] ->
+        {:error, {:unsupported_float_size, bit_length}}
+
+      _ ->
+        BinaryExtractor.extract(packet, bit_offset, bit_length, data_type, endianness)
+    end
+  end
+
+  defp normalize_data_type("uint"), do: :uint
+  defp normalize_data_type("int"), do: :int
+  defp normalize_data_type("float"), do: :float
+  defp normalize_data_type("string"), do: :string
+  defp normalize_data_type("boolean"), do: :boolean
+  defp normalize_data_type("block"), do: :block
+  defp normalize_data_type(atom) when is_atom(atom), do: atom
+
+  defp normalize_endianness(nil), do: :big_endian
+  defp normalize_endianness("big_endian"), do: :big_endian
+  defp normalize_endianness("little_endian"), do: :little_endian
+  defp normalize_endianness(atom) when is_atom(atom), do: atom
+
+  @doc """
   Decommutates a packet and returns extracted telemetry items.
 
   Returns `{:ok, items}` where items is a map of item_name => raw_value.
@@ -70,12 +127,10 @@ defmodule Cadence.Telemetry.Decommutation do
   end
 
   def decommutate(packet_data, packet_def, :binary) when is_binary(packet_data) do
-    # Debug: Log payload size (commented out for performance)
-    # Logger.debug("Decommutating #{packet_def.name}: payload size=#{byte_size(packet_data)} bytes, expecting items with max offset=#{max_bit_offset(packet_def.items)}")
+    # Get field specs - either pre-compiled or build from items
+    field_specs = get_field_specs(packet_def)
 
-    # Use pre-compiled field_specs from packet_def (built once at mission start)
-    # Field names are already strings, no conversion needed
-    case BinaryExtractor.extract_fields(packet_data, packet_def.field_specs) do
+    case BinaryExtractor.extract_fields(packet_data, field_specs) do
       {:ok, items} ->
         {:ok, items}
 
@@ -128,5 +183,23 @@ defmodule Cadence.Telemetry.Decommutation do
     else
       {:error, {:missing_item_fields, item_def.name, missing_fields}}
     end
+  end
+
+  # Get field specs from packet_def - either pre-compiled field_specs or convert from items
+  defp get_field_specs(%{field_specs: field_specs}) when is_list(field_specs) do
+    field_specs
+  end
+
+  defp get_field_specs(%{items: items}) when is_list(items) do
+    # Convert items to field_specs format expected by BinaryExtractor
+    Enum.map(items, fn item ->
+      %{
+        name: item.name,
+        bit_offset: item.bit_offset,
+        bit_size: item[:bit_length] || item[:bit_size],
+        data_type: normalize_data_type(item.data_type),
+        endianness: normalize_endianness(item[:endianness])
+      }
+    end)
   end
 end

@@ -1435,48 +1435,101 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
     if is_nil(target_id) do
       {:noreply, socket}
     else
-      target = Enum.find(socket.assigns.targets, &(&1.id == target_id))
-      target_name = if target, do: target.name, else: target_id
+      dispatch_opts = %{
+        priority: priority,
+        dispatch_mode: dispatch_mode,
+        user: user,
+        mission_id: mission_id
+      }
 
-      result =
-        execute_dispatch(
-          dispatch_mode,
-          mission_id,
-          command,
-          target_id,
-          cmd_params,
-          priority,
-          user
-        )
-
-      case result do
-        {:ok, _} ->
-          staged_commands = Commands.list_staged(mission_id)
-          queue_entries = build_context_queue_entries(mission_id, socket.assigns.targets)
-
-          next_index =
-            case length(target_ids) do
-              0 -> 0
-              count -> rem(active_index + 1, count)
-            end
-
-          {:noreply,
-           socket
-           |> assign(:staged_commands, staged_commands)
-           |> assign(:queue_entries, queue_entries)
-           |> assign(:active_target_index, next_index)
-           |> put_flash(:info, "#{dispatch_action_past(dispatch_mode)} #{target_name}")}
-
-        {:error, reason} ->
-          {:noreply,
-           put_flash(
-             socket,
-             :error,
-             "Failed to #{dispatch_action_verb(dispatch_mode)}: #{format_error(reason)}"
-           )}
-      end
+      do_dispatch_per_target(
+        socket,
+        command,
+        cmd_params,
+        target_id,
+        target_ids,
+        active_index,
+        dispatch_opts
+      )
     end
   end
+
+  defp do_dispatch_per_target(
+         socket,
+         command,
+         cmd_params,
+         target_id,
+         target_ids,
+         active_index,
+         dispatch_opts
+       ) do
+    target_name = target_name(socket.assigns.targets, target_id)
+
+    dispatch_result =
+      execute_dispatch(
+        dispatch_opts.dispatch_mode,
+        dispatch_opts.mission_id,
+        command,
+        target_id,
+        cmd_params,
+        dispatch_opts.priority,
+        dispatch_opts.user
+      )
+
+    case dispatch_result do
+      {:ok, _} ->
+        handle_dispatch_success(
+          socket,
+          dispatch_opts.mission_id,
+          target_ids,
+          active_index,
+          dispatch_opts.dispatch_mode,
+          target_name
+        )
+
+      {:error, reason} ->
+        handle_dispatch_error(socket, dispatch_opts.dispatch_mode, reason)
+    end
+  end
+
+  defp handle_dispatch_success(
+         socket,
+         mission_id,
+         target_ids,
+         active_index,
+         dispatch_mode,
+         target_name
+       ) do
+    staged_commands = Commands.list_staged(mission_id)
+    queue_entries = build_context_queue_entries(mission_id, socket.assigns.targets)
+    next_index = next_target_index(target_ids, active_index)
+
+    {:noreply,
+     socket
+     |> assign(:staged_commands, staged_commands)
+     |> assign(:queue_entries, queue_entries)
+     |> assign(:active_target_index, next_index)
+     |> put_flash(:info, "#{dispatch_action_past(dispatch_mode)} #{target_name}")}
+  end
+
+  defp handle_dispatch_error(socket, dispatch_mode, reason) do
+    {:noreply,
+     put_flash(
+       socket,
+       :error,
+       "Failed to #{dispatch_action_verb(dispatch_mode)}: #{format_error(reason)}"
+     )}
+  end
+
+  defp target_name(targets, target_id) do
+    case Enum.find(targets, &(&1.id == target_id)) do
+      nil -> target_id
+      target -> target.name
+    end
+  end
+
+  defp next_target_index([], _active_index), do: 0
+  defp next_target_index(target_ids, active_index), do: rem(active_index + 1, length(target_ids))
 
   defp dispatch_uniform(socket, command, cmd_params, priority, dispatch_mode, user, mission_id) do
     target_ids = socket.assigns.selected_target_ids || []

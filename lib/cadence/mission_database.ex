@@ -349,6 +349,8 @@ defmodule Cadence.MissionDatabase do
     |> Repo.one()
   end
 
+  # NOTE: count_derived_items removed - unused after refactor
+
   defp search_parameters(nil, _query, _limit, _offset), do: {[], 0}
 
   defp search_parameters(definition_set_id, query, limit, offset) do

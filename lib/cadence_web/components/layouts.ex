@@ -276,22 +276,6 @@ defmodule CadenceWeb.Layouts do
         Targets
       </.sidebar_nav_item>
 
-      <.sidebar_nav_item
-        navigate={~p"/reviews"}
-        active={String.contains?(@current_path, "/reviews")}
-      >
-        <:icon><.icon name="hero-chat-bubble-left-right" class="h-5 w-5" /></:icon>
-        <span class="flex items-center gap-2">
-          Reviews
-          <span
-            :if={@review_pending_count > 0}
-            class="badge badge-xs badge-primary"
-          >
-            {format_review_count(@review_pending_count)}
-          </span>
-        </span>
-      </.sidebar_nav_item>
-
       <.sidebar_nav_group
         label="Settings"
         icon="hero-cog-6-tooth"
@@ -304,6 +288,13 @@ defmodule CadenceWeb.Layouts do
           Procedures
         </.sidebar_nav_child>
       </.sidebar_nav_group>
+
+      <%!-- TODO: Uncomment when team management is implemented
+      <.sidebar_nav_item navigate={~p"/team"} active={String.contains?(@current_path, "/team")}>
+        <:icon><.icon name="hero-user-group" class="h-5 w-5" /></:icon>
+        Team
+      </.sidebar_nav_item>
+      --%>
     <% end %>
     """
   end
@@ -354,17 +345,39 @@ defmodule CadenceWeb.Layouts do
           <.icon name="hero-chevron-down" class={chevron_class(@size)} />
         </div>
       </:trigger>
+
+      <%!-- TODO: Uncomment when org switcher routes are implemented
+      <!-- Organizations Section -->
+      <%= if @all_orgs != [] do %>
+        <li class="menu-title px-4 py-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/50">Organizations</span>
+        </li>
+        <%= for org <- @all_orgs do %>
+          <li>
+            <.link navigate={"/org/#{org.slug}"} class="hover-glow-cyan transition-glow">
+              <div class="flex items-center justify-between w-full">
+                <span>{org.name}</span>
+                <%= if @current_org && org.id == @current_org.id do %>
+                  <.icon name="hero-check" class="h-4 w-4 text-primary" />
+                <% end %>
+              </div>
+            </.link>
+          </li>
+        <% end %>
+        <li class="border-t border-base-300 my-1"></li>
+      <% end %>
+      --%>
       
     <!-- User Actions -->
       <li>
-        <.link navigate={~p"/profile"} class="hover-glow-cyan transition-glow">
-          <.icon name="hero-user" class="h-4 w-4" /> Profile Settings
+        <.link navigate={~p"/users/settings"} class="hover-glow-cyan transition-glow">
+          <.icon name="hero-user" class="h-4 w-4" /> Your Profile
         </.link>
       </li>
 
       <li>
-        <.link navigate={~p"/settings"} class="hover-glow-cyan transition-glow">
-          <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Organization Settings
+        <.link navigate={~p"/users/settings"} class="hover-glow-cyan transition-glow">
+          <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Account Settings
         </.link>
       </li>
       
@@ -1291,10 +1304,6 @@ defmodule CadenceWeb.Layouts do
     </.sidebar_nav_item>
     """
   end
-
-  # Format review count for display (shows "99+" for counts > 99)
-  defp format_review_count(count) when count > 99, do: "99+"
-  defp format_review_count(count), do: to_string(count)
 
   # Helper for chevron icon size in user menu
   defp chevron_class("sm"), do: "hidden sm:block h-3 w-3"

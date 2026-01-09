@@ -33,6 +33,7 @@ defmodule Cadence.Procedures.V2 do
     DataSourceConfig,
     Diff,
     ExecutionComment,
+    ExecutionSupervisor,
     Parameters,
     ProcedureBlock,
     ProcedureExecution,
@@ -44,6 +45,8 @@ defmodule Cadence.Procedures.V2 do
     StepSignoff,
     SuggestedEdit
   }
+
+  alias Cadence.Procedures.V2.ExecutionProcess
 
   alias Cadence.Repo
   alias Cadence.Targets
@@ -334,8 +337,8 @@ defmodule Cadence.Procedures.V2 do
          {:ok, target_id} <- resolve_target_id(opts[:target_id], mission_id),
          {:ok, pid} <-
            DynamicSupervisor.start_child(
-             Cadence.Procedures.ExecutionSupervisor,
-             {Cadence.Procedures.V2.ExecutionProcess,
+             ExecutionSupervisor,
+             {ExecutionProcess,
               [
                 procedure_version: version,
                 params: validated_params,
@@ -345,7 +348,7 @@ defmodule Cadence.Procedures.V2 do
                 trigger_context: opts[:trigger_context]
               ]}
            ) do
-      {:ok, Cadence.Procedures.V2.ExecutionProcess.get_execution(pid)}
+      {:ok, ExecutionProcess.get_execution(pid)}
     end
   end
 

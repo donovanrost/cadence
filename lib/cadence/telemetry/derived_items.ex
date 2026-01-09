@@ -116,6 +116,29 @@ defmodule Cadence.Telemetry.DerivedItems do
   end
 
   @doc """
+  Computes stateless derived items using preloaded definitions.
+  """
+  @spec compute_stateless_with_defs(item_values(), list(), map(), String.t()) ::
+          {:ok, item_values()} | {:error, term()}
+  def compute_stateless_with_defs(converted_items, defs, packet_index, mission_id)
+      when is_list(defs) and is_map(packet_index) do
+    relevant_defs =
+      case map_size(packet_index) do
+        0 -> defs
+        1 -> defs
+        _ -> get_relevant_defs(converted_items, packet_index)
+      end
+
+    stateless_defs = Enum.filter(relevant_defs, &(&1.has_stateful == false))
+
+    if Enum.empty?(stateless_defs) do
+      {:ok, converted_items}
+    else
+      compute_with_sorted_defs(converted_items, stateless_defs, mission_id)
+    end
+  end
+
+  @doc """
   Computes stateful derived items only, returning a map of derived values.
   """
   @spec compute_stateful(item_values(), String.t()) ::

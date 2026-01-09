@@ -65,8 +65,18 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   """
   @spec init_protocol(map() | struct()) :: protocol_instance() | nil
   def init_protocol(protocol_config) do
-    protocol_module = protocol_module_for_type(protocol_config.protocol_type)
-    do_init_protocol(protocol_module, protocol_config)
+    case protocol_module_for_type(protocol_config.protocol_type) do
+      nil ->
+        Logger.warning("Unknown protocol type: #{protocol_config.protocol_type}")
+        nil
+
+      protocol_module when is_atom(protocol_module) and not is_nil(protocol_module) ->
+        raw_config = get_protocol_config(protocol_config)
+        opts = atomize_protocol_config(raw_config)
+        # credo:disable-for-next-line Credo.Check.Refactor.Apply
+        protocol_state = apply(protocol_module, :new, [opts])
+        {protocol_module, protocol_state}
+    end
   rescue
     error ->
       Logger.error(
@@ -74,19 +84,6 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
       )
 
       nil
-  end
-
-  defp do_init_protocol(nil, protocol_config) do
-    Logger.warning("Unknown protocol type: #{protocol_config.protocol_type}")
-    nil
-  end
-
-  defp do_init_protocol(protocol_module, protocol_config) do
-    # Handle both domain entity (.config) and legacy schema (.protocol_config)
-    raw_config = get_protocol_config(protocol_config)
-    opts = atomize_protocol_config(raw_config)
-    protocol_state = protocol_module.new(opts)
-    {protocol_module, protocol_state}
   end
 
   # Get config from either domain entity or legacy schema
@@ -138,20 +135,19 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   """
   @spec clone_chain([{String.t(), map()}]) :: protocol_chain()
   def clone_chain(protocol_configs) do
-    protocol_configs
-    |> Enum.map(fn {protocol_type, config} ->
-      protocol_module = protocol_module_for_type(protocol_type)
-      do_clone_protocol(protocol_module, config)
+    Enum.map(protocol_configs, fn {protocol_type, config} ->
+      case protocol_module_for_type(protocol_type) do
+        nil ->
+          nil
+
+        protocol_module when is_atom(protocol_module) and not is_nil(protocol_module) ->
+          opts = atomize_protocol_config(config)
+          # credo:disable-for-next-line Credo.Check.Refactor.Apply
+          protocol_state = apply(protocol_module, :new, [opts])
+          {protocol_module, protocol_state}
+      end
     end)
     |> Enum.reject(&is_nil/1)
-  end
-
-  defp do_clone_protocol(nil, _config), do: nil
-
-  defp do_clone_protocol(protocol_module, config) do
-    opts = atomize_protocol_config(config)
-    protocol_state = protocol_module.new(opts)
-    {protocol_module, protocol_state}
   end
 
   @doc """

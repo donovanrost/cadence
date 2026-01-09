@@ -198,7 +198,7 @@ defmodule CadenceWeb.DesignSystemLive.Index do
 
         <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <pre class="text-sm"><code>&lt;.avatar email="user@example.com" /&gt;
-    &lt;.avatar email="user@example.com" name="Full Name" size="lg" /&gt;</code></pre>
+          &lt;.avatar email="user@example.com" name="Full Name" size="lg" /&gt;</code></pre>
         </div>
       </div>
       

@@ -2,7 +2,7 @@ defmodule Cadence.Telemetry.Stats do
   @moduledoc """
   ETS-based statistics tracker for telemetry pipeline performance.
 
-  Provides atomic counters that can be updated from any process (Broadway, GenServer, etc.)
+  Provides atomic counters that can be updated from any process (GenServer, Task, etc.)
   without requiring GenServer calls.
 
   ## Usage
@@ -30,14 +30,14 @@ defmodule Cadence.Telemetry.Stats do
     :items_processed,
     :cvt_writes,
     :pubsub_broadcasts,
-    # V2 pipeline counters
+    # Pipeline counters
     :stage_errors,
     :packets_dropped
   ]
 
   # Timing stages we track (in microseconds)
   @timing_stages [
-    # V1 Broadway pipeline stages
+    # Pipeline stages
     :identify,
     :decommutate,
     :convert,
@@ -47,7 +47,7 @@ defmodule Cadence.Telemetry.Stats do
     # Granular CVT timing
     :ets_write,
     :pubsub_broadcast,
-    # V2 GenStage pipeline stages (shorter names)
+    # Shorter stage name for decommutation.
     :decom,
     # Limits evaluation timing
     :limits,

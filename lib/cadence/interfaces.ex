@@ -95,7 +95,11 @@ defmodule Cadence.Interfaces do
   @doc """
   Gets an interface by name within a mission.
 
+  <<<<<<< Updated upstream
   Accepts either a `%Mission{}` struct or a mission ID string.
+  =======
+  Accepts either a Mission struct or a mission ID string.
+  >>>>>>> Stashed changes
   """
   def get_interface_by_name(mission_or_id, name)
 
@@ -179,7 +183,11 @@ defmodule Cadence.Interfaces do
   @doc """
   Returns the list of protocols for an interface, ordered by execution order.
 
+  <<<<<<< Updated upstream
   Accepts either an `%Interface{}` struct or an interface ID string.
+  =======
+  Accepts either an InterfaceSchema struct or an interface ID string.
+  >>>>>>> Stashed changes
   """
   def list_protocols(interface_or_id)
 

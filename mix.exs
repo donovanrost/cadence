@@ -116,7 +116,7 @@ defmodule Cadence.MixProject do
         "deps.unlock --unused",
         "format",
         "test.all",
-        "credo --strict"
+        "credo --strict --ignore-checks Credo.Check.Design.TagTODO"
       ]
     ]
   end

@@ -35,7 +35,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Application.Missions.MissionQueries
-  alias Cadence.Runtime.Missions.MissionInstance
+  alias Cadence.Runtime.Missions.{ConfigManager, MissionInstance}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Missions.MissionTracker
 
@@ -269,8 +269,8 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
       nil ->
         {:error, :not_running}
 
-      pid ->
-        send(pid, {:apply_config, config})
+      _pid ->
+        ConfigManager.apply_config(mission_id, config)
         :ok
     end
   end

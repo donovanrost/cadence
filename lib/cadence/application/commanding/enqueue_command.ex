@@ -203,16 +203,16 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
         {:ok, uuid}
 
       :error ->
-        case mission_id do
-          nil ->
-            {:error, :missing_mission_id}
+        resolve_target_identifier(mission_id, target_id)
+    end
+  end
 
-          _ ->
-            case Targets.get_target_by_identifier(mission_id, target_id) do
-              {:ok, target} -> {:ok, target.id}
-              {:error, :not_found} -> {:error, {:target_not_found, target_id}}
-            end
-        end
+  defp resolve_target_identifier(nil, _target_id), do: {:error, :missing_mission_id}
+
+  defp resolve_target_identifier(mission_id, target_id) do
+    case Targets.get_target_by_identifier(mission_id, target_id) do
+      {:ok, target} -> {:ok, target.id}
+      {:error, :not_found} -> {:error, {:target_not_found, target_id}}
     end
   end
 

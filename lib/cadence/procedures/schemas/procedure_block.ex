@@ -236,69 +236,20 @@ defmodule Cadence.Procedures.ProcedureBlock do
   end
 
   defp validate_content_for_type(:telemetry_check, content) do
-    case require_any_key(
-           content,
-           [:item, "item"],
-           "telemetry_check block requires 'item' field"
-         ) do
-      :ok ->
-        case require_any_key(
-               content,
-               [:operator, "operator"],
-               "telemetry_check block requires 'operator' field"
-             ) do
-          :ok ->
-            require_any_key(
-              content,
-              [:expected, "expected"],
-              "telemetry_check block requires 'expected' field"
-            )
-
-          {:error, _} = error ->
-            error
-        end
-
-      {:error, _} = error ->
-        error
-    end
+    require_all_keys(content, [
+      {[:item, "item"], "telemetry_check block requires 'item' field"},
+      {[:operator, "operator"], "telemetry_check block requires 'operator' field"},
+      {[:expected, "expected"], "telemetry_check block requires 'expected' field"}
+    ])
   end
 
   defp validate_content_for_type(:telemetry_wait, content) do
-    case require_any_key(
-           content,
-           [:item, "item"],
-           "telemetry_wait block requires 'item' field"
-         ) do
-      :ok ->
-        case require_any_key(
-               content,
-               [:operator, "operator"],
-               "telemetry_wait block requires 'operator' field"
-             ) do
-          :ok ->
-            case require_any_key(
-                   content,
-                   [:expected, "expected"],
-                   "telemetry_wait block requires 'expected' field"
-                 ) do
-              :ok ->
-                require_any_key(
-                  content,
-                  [:timeout_ms, "timeout_ms"],
-                  "telemetry_wait block requires 'timeout_ms' field"
-                )
-
-              {:error, _} = error ->
-                error
-            end
-
-          {:error, _} = error ->
-            error
-        end
-
-      {:error, _} = error ->
-        error
-    end
+    require_all_keys(content, [
+      {[:item, "item"], "telemetry_wait block requires 'item' field"},
+      {[:operator, "operator"], "telemetry_wait block requires 'operator' field"},
+      {[:expected, "expected"], "telemetry_wait block requires 'expected' field"},
+      {[:timeout_ms, "timeout_ms"], "telemetry_wait block requires 'timeout_ms' field"}
+    ])
   end
 
   defp validate_content_for_type(:command, content) do
@@ -341,6 +292,15 @@ defmodule Cadence.Procedures.ProcedureBlock do
 
   # Default: no specific validation
   defp validate_content_for_type(_type, _content), do: :ok
+
+  defp require_all_keys(content, checks) do
+    Enum.reduce_while(checks, :ok, fn {keys, message}, :ok ->
+      case require_any_key(content, keys, message) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
 
   defp require_any_key(content, keys, message) do
     if has_any_key?(content, keys) do

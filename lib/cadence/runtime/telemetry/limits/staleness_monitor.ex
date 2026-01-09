@@ -42,6 +42,8 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
 
   @default_check_interval_ms 5_000
+  # Note: stale_timeout_ms is passed via opts, default value for reference only
+  # @default_stale_timeout_ms 30_000
 
   # ============================================================================
   # Client API

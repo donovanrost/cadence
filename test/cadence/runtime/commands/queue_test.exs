@@ -1,6 +1,8 @@
 defmodule Cadence.Runtime.Commands.TargetQueueTest do
   use Cadence.IntegrationCase
 
+  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Commands
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
@@ -67,10 +69,9 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
       })
       |> Repo.insert!()
 
-    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+    mission_entity = MissionQueries.find!(mission.id)
 
-    target_entity =
-      Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+    target_entity = TargetQueries.find_with_definition_set!(target.id)
 
     # Start the queue for this target
     {:ok, _pid} = start_supervised({TargetQueue, mission: mission_entity, target: target_entity})
@@ -228,10 +229,9 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
         })
         |> Repo.insert!()
 
-      mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+      mission_entity = MissionQueries.find!(mission.id)
 
-      target2_entity =
-        Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target2.id)
+      target2_entity = TargetQueries.find_with_definition_set!(target2.id)
 
       # Start queue for second target
       start_supervised!(

@@ -8,10 +8,12 @@ defmodule Cadence.UseCaseCase do
 
   use ExUnit.CaseTemplate
   alias Ecto.Adapters.SQL.Sandbox
+  alias Ecto.Changeset
 
   using do
     quote do
       use Cadence.PureCase, async: false
+      import Cadence.UseCaseCase
 
       @moduletag :use_case
     end
@@ -26,5 +28,16 @@ defmodule Cadence.UseCaseCase do
     cleanup = Cadence.TestSupport.enable_in_memory_adapters()
     on_exit(cleanup)
     :ok
+  end
+
+  @doc """
+  A helper that transforms changeset errors into a map of messages.
+  """
+  def errors_on(changeset) do
+    Changeset.traverse_errors(changeset, fn {message, opts} ->
+      Regex.replace(~r"%{(\w+)}", message, fn _, key ->
+        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+      end)
+    end)
   end
 end

@@ -14,12 +14,14 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
     Unit
   }
 
+  import Cadence.MissionsFixtures
   import Cadence.MissionDatabaseFixtures
 
   describe "import_string/3" do
     setup do
-      database = database_fixture()
-      {:ok, database: database}
+      mission = mission_fixture()
+      database = database_fixture(mission: mission)
+      {:ok, mission: mission, database: database}
     end
 
     test "imports a simple telemetry packet", %{database: database} do
@@ -331,8 +333,9 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
 
   describe "validation errors" do
     setup do
-      database = database_fixture()
-      {:ok, database: database}
+      mission = mission_fixture()
+      database = database_fixture(mission: mission)
+      {:ok, mission: mission, database: database}
     end
 
     test "rejects YAML without packets or commands", %{database: database} do
@@ -418,8 +421,9 @@ defmodule Cadence.MissionDatabase.YamlImporterTest do
 
   describe "import_file/3" do
     setup do
-      database = database_fixture()
-      {:ok, database: database}
+      mission = mission_fixture()
+      database = database_fixture(mission: mission)
+      {:ok, mission: mission, database: database}
     end
 
     test "imports from file path", %{database: database} do

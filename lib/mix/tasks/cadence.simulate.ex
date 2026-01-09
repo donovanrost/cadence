@@ -61,6 +61,9 @@ defmodule Mix.Tasks.Cadence.Simulate do
   and elapsed time. Press Ctrl+C to stop gracefully.
   """
 
+  alias Cadence.Application.Missions.MissionConfig
+  alias Cadence.Runtime.Missions.MissionSupervisor
+
   use Mix.Task
 
   require Logger
@@ -211,9 +214,9 @@ defmodule Mix.Tasks.Cadence.Simulate do
         Mix.raise("Mission not found: #{mission_id}")
 
       {:ok, mission} ->
-        {:ok, config} = Cadence.Application.Missions.MissionConfig.load(mission.id)
+        {:ok, config} = MissionConfig.load(mission.id)
 
-        case Cadence.Runtime.Missions.MissionSupervisor.start_mission(config) do
+        case MissionSupervisor.start_mission(config) do
           {:ok, _pid} ->
             Mix.shell().info("Mission started")
             # Give interfaces time to start

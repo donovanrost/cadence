@@ -2054,20 +2054,22 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
     diff_hours = div(diff_minutes, 60)
     diff_days = div(diff_hours, 24)
 
-    cond do
-      diff_seconds < 0 -> "UPCOMING"
-      diff_minutes < 5 -> "NOW"
-      diff_minutes < 15 -> "15 MIN AGO"
-      diff_minutes < 30 -> "30 MIN AGO"
-      diff_hours < 1 -> "1 HOUR AGO"
-      diff_hours < 2 -> "2 HOURS AGO"
-      diff_hours < 4 -> "4 HOURS AGO"
-      diff_hours < 8 -> "8 HOURS AGO"
-      diff_hours < 24 -> "TODAY"
-      diff_days < 2 -> "YESTERDAY"
-      diff_days < 7 -> "THIS WEEK"
-      true -> "OLDER"
-    end
+    [
+      {diff_seconds < 0, "UPCOMING"},
+      {diff_minutes < 5, "NOW"},
+      {diff_minutes < 15, "15 MIN AGO"},
+      {diff_minutes < 30, "30 MIN AGO"},
+      {diff_hours < 1, "1 HOUR AGO"},
+      {diff_hours < 2, "2 HOURS AGO"},
+      {diff_hours < 4, "4 HOURS AGO"},
+      {diff_hours < 8, "8 HOURS AGO"},
+      {diff_hours < 24, "TODAY"},
+      {diff_days < 2, "YESTERDAY"},
+      {diff_days < 7, "THIS WEEK"}
+    ]
+    |> Enum.find_value("OLDER", fn {predicate, label} ->
+      predicate && label
+    end)
   end
 
   defp format_gap(minutes) when is_number(minutes) do

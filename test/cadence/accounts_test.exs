@@ -2,6 +2,7 @@ defmodule Cadence.AccountsTest do
   use Cadence.UseCaseCase
 
   alias Cadence.Accounts
+  alias Cadence.Application.Accounts.MagicLinkOperations
   alias Cadence.Domain.Accounts.Entities.User, as: UserEntity
   alias Cadence.Domain.Accounts.Entities.UserToken, as: UserTokenEntity
   alias Cadence.Test.Adapters.FakePasswordHasher
@@ -437,7 +438,7 @@ defmodule Cadence.AccountsTest do
   end
 
   defp generate_user_magic_link_token(user) do
-    {:ok, token} = Cadence.Application.Accounts.MagicLinkOperations.generate_for_user(user)
+    {:ok, token} = MagicLinkOperations.generate_for_user(user)
     {token, nil}
   end
 

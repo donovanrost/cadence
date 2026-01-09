@@ -39,6 +39,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
           targets: list(),
           queue_snapshots: map(),
           packet_defs: list(),
+          packet_catalog_defs: list(),
           command_defs: map(),
           limit_defs: map(),
           derived_item_defs: list(),
@@ -55,6 +56,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     targets: [],
     queue_snapshots: %{},
     packet_defs: [],
+    packet_catalog_defs: [],
     command_defs: %{},
     limit_defs: %{},
     derived_item_defs: [],
@@ -74,6 +76,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, interfaces} <- load_interfaces(mission_id),
          {:ok, targets} <- load_targets(mission_id),
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
+         {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
          {:ok, command_defs} <- load_command_definitions(mission_id),
          {:ok, limit_defs} <- load_limit_definitions(mission_id),
@@ -90,6 +93,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          targets: targets,
          queue_snapshots: queue_snapshots,
          packet_defs: packet_defs,
+         packet_catalog_defs: packet_catalog_defs,
          command_defs: command_defs,
          limit_defs: limit_defs,
          derived_item_defs: derived_item_defs,
@@ -136,6 +140,29 @@ defmodule Cadence.Application.Missions.MissionConfig do
       |> Repo.all()
 
     {:ok, packet_defs}
+  end
+
+  defp load_packet_catalog_defs(_mission_id, []), do: {:ok, []}
+
+  defp load_packet_catalog_defs(_mission_id, targets) do
+    definition_set_ids =
+      targets
+      |> Enum.map(&Map.get(&1, :definition_set_id))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if definition_set_ids == [] do
+      {:ok, []}
+    else
+      containers =
+        Cadence.MissionDatabase.Container
+        |> where([c], c.definition_set_id in ^definition_set_ids)
+        |> where([c], c.abstract == false or is_nil(c.abstract))
+        |> preload(container_entries: [parameter: [data_type: [:default_calibrator, :unit]]])
+        |> Repo.all()
+
+      {:ok, containers}
+    end
   end
 
   defp load_queue_snapshots(mission_id, targets) do

@@ -1020,25 +1020,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   def handle_event("acknowledge_all_visible", _, socket) do
     user = socket.assigns.current_scope.user
 
-    filtered =
-      filter_alarms(
-        socket.assigns.active_alarms,
-        socket.assigns.filter_status,
-        socket.assigns.filter_severity,
-        socket.assigns.selected_targets
-      )
-
-    active_alarms =
-      Enum.reduce(filtered, socket.assigns.active_alarms, fn alarm, acc ->
-        if alarm.status == :active do
-          case Alarms.acknowledge_alarm(alarm, user.id) do
-            {:ok, updated} -> update_alarm_in_list(acc, updated)
-            _ -> acc
-          end
-        else
-          acc
-        end
-      end)
+    active_alarms = acknowledge_filtered_alarms(socket.assigns, user.id)
 
     grouped_alarms = group_alarms_by_severity(active_alarms)
 
@@ -1195,6 +1177,31 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
       warning: Enum.count(alarms, &(&1.severity == :warning)),
       info: Enum.count(alarms, &(&1.severity == :info))
     }
+  end
+
+  defp acknowledge_filtered_alarms(assigns, user_id) do
+    filtered =
+      filter_alarms(
+        assigns.active_alarms,
+        assigns.filter_status,
+        assigns.filter_severity,
+        assigns.selected_targets
+      )
+
+    Enum.reduce(filtered, assigns.active_alarms, fn alarm, acc ->
+      acknowledge_alarm_if_active(acc, alarm, user_id)
+    end)
+  end
+
+  defp acknowledge_alarm_if_active(acc, alarm, user_id) do
+    if alarm.status == :active do
+      case Alarms.acknowledge_alarm(alarm, user_id) do
+        {:ok, updated} -> update_alarm_in_list(acc, updated)
+        _ -> acc
+      end
+    else
+      acc
+    end
   end
 
   defp calculate_fleet_health(targets) do

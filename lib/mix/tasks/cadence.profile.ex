@@ -426,7 +426,6 @@ defmodule Mix.Tasks.Cadence.Profile do
 
     print_cvt_stats(snapshot[:cvt])
     print_stats_snapshot(snapshot, prev)
-    print_pipeline_v2_snapshot(snapshot[:pipeline_v2])
     print_lanes_snapshot(snapshot[:lanes])
     print_queue_warnings(snapshot[:process_queues] || [])
 
@@ -447,33 +446,45 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp print_lanes_snapshot(%{error: :not_found}), do: :ok
 
-  defp print_lanes_snapshot(
-         %{router_queue: router_q, shard_count: shard_count, shards: shards} = lanes
-       ) do
+  defp print_lanes_snapshot(%{router_queue: router_q, lanes: lane_stats} = lanes) do
     mailbox = Map.get(lanes, :router_mailbox, 0)
-    worker_count = Map.get(lanes, :worker_count, shard_count)
-    workers = Map.get(lanes, :workers, [])
-
     mailbox_info = if mailbox > 0, do: ", mailbox=#{mailbox}", else: ""
-    worker_info = "workers=#{worker_count}/#{shard_count}"
-    Mix.shell().info("Lanes: router_q=#{router_q}#{mailbox_info}, #{worker_info}")
 
-    # Show per-shard stats with worker info
-    shards
-    |> Enum.take(5)
-    |> Enum.each(fn %{shard: shard, counters: counters} ->
-      recv = Map.get(counters, :packets_received, 0)
-      proc = Map.get(counters, :packets_processed, 0)
-      drop = Map.get(counters, :packets_dropped, 0)
+    Mix.shell().info("Lanes: router_q=#{router_q}#{mailbox_info}")
 
-      worker = Enum.find(workers, fn w -> w.shard == shard end)
-      {pid_str, worker_status} = format_worker_info(worker)
-
-      Mix.shell().info("  shard #{shard} #{pid_str}: recv=#{recv} proc=#{proc} drop=#{drop}#{worker_status}")
-    end)
+    Enum.each(lane_stats, &print_lane_snapshot/1)
   end
 
   defp print_lanes_snapshot(_), do: :ok
+
+  defp print_lane_snapshot(%{
+         lane: lane,
+         shard_count: shard_count,
+         workers: workers,
+         shards: shards
+       }) do
+    worker_count = length(Enum.filter(workers, & &1.alive?))
+    Mix.shell().info("  lane #{lane}: workers=#{worker_count}/#{shard_count}")
+
+    shards
+    |> Enum.take(3)
+    |> Enum.each(fn shard_stats ->
+      print_lane_shard(shard_stats, workers)
+    end)
+  end
+
+  defp print_lane_shard(%{shard: shard, counters: counters}, workers) do
+    recv = Map.get(counters, :packets_received, 0)
+    proc = Map.get(counters, :packets_processed, 0)
+    drop = Map.get(counters, :packets_dropped, 0)
+
+    worker = Enum.find(workers, fn w -> w.shard == shard end)
+    {pid_str, worker_status} = format_worker_info(worker)
+
+    Mix.shell().info(
+      "    shard #{shard} #{pid_str}: recv=#{recv} proc=#{proc} drop=#{drop}#{worker_status}"
+    )
+  end
 
   defp format_worker_info(nil), do: {"(?)", ""}
   defp format_worker_info(%{alive?: false}), do: {"(DEAD)", ""}
@@ -489,11 +500,7 @@ defmodule Mix.Tasks.Cadence.Profile do
         other -> " [#{other}]"
       end
 
-    worker_status =
-      cond do
-        q > 0 -> " | #{mem}KB q=#{q}#{status_icon}"
-        true -> "#{status_icon}"
-      end
+    worker_status = if(q > 0, do: " | #{mem}KB q=#{q}#{status_icon}", else: "#{status_icon}")
 
     {pid_str, worker_status}
   end
@@ -516,7 +523,7 @@ defmodule Mix.Tasks.Cadence.Profile do
            snapshot,
          prev
        ) do
-    # V1 uses packets_failed, V2 uses packets_dropped
+    # Stats may use packets_failed or packets_dropped depending on pipeline
     failed = Map.get(stats, :packets_failed) || Map.get(stats, :packets_dropped, 0)
     delta = stats_delta(prev, proc)
 
@@ -572,38 +579,6 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp print_stage_errors_snapshot(_errors), do: :ok
 
-  defp print_pipeline_v2_snapshot(%{error: :not_found}), do: :ok
-
-  defp print_pipeline_v2_snapshot(
-         %{
-           router_queue: router_queue,
-           partition_count: partition_count
-         } = v2
-       ) do
-    router_q = if is_integer(router_queue), do: router_queue, else: 0
-    Mix.shell().info("V2 Pipeline: #{partition_count} partitions, router queue: #{router_q}")
-
-    stage_errors = Map.get(v2, :stage_errors, 0)
-    dropped = Map.get(v2, :packets_dropped, 0)
-
-    if stage_errors > 0 or dropped > 0 do
-      Mix.shell().info("V2 Errors: #{stage_errors} stage errors, #{dropped} dropped")
-    end
-
-    partitions = Map.get(v2, :partitions, %{})
-    backed_up_stages = find_backed_up_v2_stages(partitions)
-
-    if length(backed_up_stages) > 0 do
-      Mix.shell().info("⚠️  V2 backed up stages:")
-
-      Enum.each(backed_up_stages, fn {partition, stage, queue_len} ->
-        Mix.shell().info("   p#{partition}:#{stage}: #{queue_len} messages")
-      end)
-    end
-  end
-
-  defp print_pipeline_v2_snapshot(_snapshot), do: :ok
-
   defp print_queue_warnings(queues) do
     backed_up =
       queues
@@ -616,20 +591,6 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.shell().info("   #{q.name}: #{q.queue_len} messages")
       end)
     end
-  end
-
-  defp find_backed_up_v2_stages(partitions) do
-    partitions
-    |> Enum.flat_map(fn {partition, stages} ->
-      stages
-      |> Enum.filter(fn {_stage, stats} ->
-        is_map(stats) && Map.get(stats, :queue_len, 0) > 10
-      end)
-      |> Enum.map(fn {stage, stats} ->
-        {partition, stage, stats.queue_len}
-      end)
-    end)
-    |> Enum.sort_by(fn {_, _, q} -> -q end)
   end
 
   defp print_queues(queues) do
@@ -700,12 +661,12 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp all_timing_stages do
     [
-      # V1 Broadway stages
+      # Stage timing keys tracked in stats.
       :identify,
       :decommutate,
       :convert,
       :derive,
-      # V2 GenStage stages (decom is shorter name for decommutation)
+      # Decom is shorter name for decommutation
       :decom,
       # Limits evaluation
       :limits,
@@ -799,7 +760,6 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp print_summary(initial, final, duration_ms) do
     print_summary_header()
     print_summary_stats(initial[:stats], final[:stats], duration_ms)
-    print_pipeline_summary(final[:pipeline_v2])
     print_max_queue(final[:process_queues] || [])
     Mix.shell().info("")
   end
@@ -818,7 +778,7 @@ defmodule Mix.Tasks.Cadence.Profile do
          %{packets_processed: p2, items_processed: i2, packets_received: r2} = stats2,
          duration_ms
        ) do
-    # V1 uses packets_failed, V2 uses packets_dropped
+    # Stats may use packets_failed or packets_dropped depending on pipeline
     f1 = Map.get(stats1, :packets_failed) || Map.get(stats1, :packets_dropped, 0)
     f2 = Map.get(stats2, :packets_failed) || Map.get(stats2, :packets_dropped, 0)
     duration_sec = duration_ms / 1000
@@ -885,7 +845,7 @@ defmodule Mix.Tasks.Cadence.Profile do
         stage_errors = total_errors2 - total_errors1
 
         if stage_errors > 0 do
-          Mix.shell().info("V2 Errors: #{stage_errors} stage errors")
+          Mix.shell().info("Stage errors: #{stage_errors}")
         end
 
       _ ->
@@ -898,18 +858,6 @@ defmodule Mix.Tasks.Cadence.Profile do
       Mix.shell().info("\n⚠️  Backpressure detected: #{received - packets} packets pending")
     end
   end
-
-  defp print_pipeline_summary(%{partition_count: partition_count, router_queue: router_queue})
-       when partition_count > 0 do
-    router_q = if is_integer(router_queue), do: router_queue, else: 0
-    Mix.shell().info("\nV2 Pipeline: #{partition_count} partitions")
-
-    if router_q > 0 do
-      Mix.shell().info("Router queue: #{router_q} pending")
-    end
-  end
-
-  defp print_pipeline_summary(_pipeline_v2), do: :ok
 
   defp print_max_queue(queues) do
     max_queue = Enum.max_by(queues, & &1[:queue_len], fn -> %{queue_len: 0} end)

@@ -1,6 +1,8 @@
 defmodule Cadence.Commands.FleetTest do
   use Cadence.IntegrationCase
 
+  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Commands
   alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
   alias Cadence.Missions.Mission
@@ -53,7 +55,7 @@ defmodule Cadence.Commands.FleetTest do
       })
       |> Repo.insert!()
 
-    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+    mission_entity = MissionQueries.find!(mission.id)
 
     # Create multiple targets for fleet operations
     targets =
@@ -123,8 +125,7 @@ defmodule Cadence.Commands.FleetTest do
     targets
     |> Enum.with_index(1)
     |> Enum.each(fn {target, i} ->
-      target_entity =
-        Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+      target_entity = TargetQueries.find_with_definition_set!(target.id)
 
       {:ok, _queue_pid} =
         start_supervised(

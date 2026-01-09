@@ -154,6 +154,30 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     end)
   end
 
+  @doc """
+  Batch evaluates limits without persistence tracking.
+
+  This is intended for stateless limits evaluation in the ingest path.
+  """
+  @spec evaluate_stateless_batch(String.t(), String.t(), [{String.t(), any()}]) ::
+          [{String.t(), any(), atom()}]
+  def evaluate_stateless_batch(mission_id, target_id, items) do
+    cache_data = Cache.get_cached_data(mission_id, target_id)
+
+    Enum.map(items, fn {item_name, value} ->
+      state =
+        case get_limits_from_cache_data(cache_data, item_name) do
+          {:ok, limits, _persistence, _stale_timeout_ms} ->
+            value |> Evaluator.evaluate(limits) |> Evaluator.normalize_state()
+
+          _ ->
+            :green
+        end
+
+      {item_name, value, state}
+    end)
+  end
+
   # Optimized per-item evaluation for batch processing
   defp evaluate_item_batch(
          mission_id,

@@ -151,6 +151,16 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   end
 
   @doc """
+  Prepares derived item definitions for runtime evaluation without caching.
+
+  Returns enriched definitions and a packet index.
+  """
+  @spec prepare_defs([map()]) :: {:ok, {list(), map()}} | {:error, term()}
+  def prepare_defs(derived_defs) when is_list(derived_defs) do
+    build_enriched_defs(derived_defs)
+  end
+
+  @doc """
   Returns cache statistics for monitoring.
   """
   @spec stats() :: map()

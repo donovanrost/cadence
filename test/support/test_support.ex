@@ -213,20 +213,24 @@ defmodule Cadence.TestSupport do
   defp start_if_needed(module) do
     case Code.ensure_loaded(module) do
       {:module, ^module} ->
-        if function_exported?(module, :start_link, 0) do
-          case module.start_link() do
-            {:ok, _pid} -> :ok
-            {:error, {:already_started, _pid}} -> :ok
-            {:error, _} -> :ok
-          end
-        else
-          :ok
-        end
+        maybe_start_module(module)
 
       _ ->
         :ok
     end
   end
+
+  defp maybe_start_module(module) do
+    if function_exported?(module, :start_link, 0) do
+      handle_start_result(module.start_link())
+    else
+      :ok
+    end
+  end
+
+  defp handle_start_result({:ok, _pid}), do: :ok
+  defp handle_start_result({:error, {:already_started, _pid}}), do: :ok
+  defp handle_start_result(_), do: :ok
 
   defp stop_if_needed(module) do
     case Code.ensure_loaded(module) do

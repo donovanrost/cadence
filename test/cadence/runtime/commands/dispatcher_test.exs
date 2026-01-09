@@ -1,73 +1,46 @@
 defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
   use Cadence.IntegrationCase
 
+  import Cadence.OrganizationsFixtures
+  import Cadence.MissionsFixtures
+  import Cadence.MissionDatabaseFixtures
+  import Cadence.TargetsFixtures
+
+  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Commands
-  alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
-  alias Cadence.Missions.Mission
-  alias Cadence.Organizations.Organization
+  alias Cadence.MissionDatabase.{Argument, MetaCommand}
   alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
-  alias Cadence.Targets.Target
 
   # Setup creates an org, mission, target, and commands for testing
   setup do
-    # Create organization
-    org =
-      %Organization{}
-      |> Organization.changeset(%{
-        name: "Test Org",
-        slug: "test-org-#{System.unique_integer([:positive])}",
-        status: "active",
-        subscription_tier: "free"
-      })
-      |> Repo.insert!()
+    # Create organization and mission using fixtures
+    org = organization_fixture()
 
-    # Create mission
     mission =
-      %Mission{}
-      |> Mission.changeset(%{
-        organization_id: org.id,
-        name: "Test Mission",
-        slug: "test-mission-#{System.unique_integer([:positive])}",
-        status: "active",
+      mission_fixture(
+        organization: org,
         phase: "operational"
-      })
-      |> Repo.insert!()
+      )
 
-    # Create database for the mission
-    database =
-      %Database{}
-      |> Database.changeset(%{
-        mission_id: mission.id,
-        name: "Test Database",
-        slug: "test-database-#{System.unique_integer([:positive])}"
-      })
-      |> Repo.insert!()
+    # Create database and definition_set for the target
+    database = database_fixture(organization: org, mission: mission)
 
-    # Create definition set
     definition_set =
-      %DefinitionSet{}
-      |> DefinitionSet.changeset(%{
-        organization_id: org.id,
-        database_id: database.id,
-        version: "1.0.0",
-        source_format: :yaml
-      })
-      |> Repo.insert!()
+      definition_set_fixture(organization: org, mission: mission, database: database)
 
-    # Create target
+    # Create target using fixture
     target =
-      %Target{}
-      |> Target.changeset(%{
-        mission_id: mission.id,
-        definition_set_id: definition_set.id,
+      target_fixture(
+        organization: org,
+        mission: mission,
+        definition_set: definition_set,
         name: "SC1",
-        type: "spacecraft",
-        identifier: "SC1_#{System.unique_integer([:positive])}",
+        identifier: "SC1-#{System.unique_integer([:positive])}",
         status: "online"
-      })
-      |> Repo.insert!()
+      )
 
-    # Create a simple MetaCommand (linked to definition_set for lookup)
+    # Create a simple command (linked to definition_set so dispatcher can find it)
     simple_command =
       %MetaCommand{}
       |> MetaCommand.changeset(%{
@@ -122,10 +95,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
       })
       |> Repo.insert!()
 
-    mission_entity = Cadence.Application.Missions.MissionQueries.find!(mission.id)
+    mission_entity = MissionQueries.find!(mission.id)
 
-    target_entity =
-      Cadence.Application.Targeting.TargetQueries.find_with_definition_set!(target.id)
+    target_entity = TargetQueries.find_with_definition_set!(target.id)
 
     # Start the target queue and dispatcher for this target
     {:ok, _queue_pid} =

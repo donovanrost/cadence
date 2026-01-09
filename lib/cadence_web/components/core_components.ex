@@ -320,10 +320,7 @@ defmodule CadenceWeb.CoreComponents do
 
   def header(assigns) do
     ~H"""
-    <header class={[
-      @actions != [] && "flex items-center justify-between gap-4",
-      "pb-3 mb-4 border-b border-primary/20"
-    ]}>
+    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4", @class]}>
       <div>
         <h1 class="text-xl font-bold text-base-content">
           {render_slot(@inner_block)}

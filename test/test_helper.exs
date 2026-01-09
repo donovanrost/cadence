@@ -108,8 +108,6 @@ case System.get_env("CADENCE_TEST_VERBOSE") do
       Cadence.Runtime.Interfaces.TcpServerInterface,
       Cadence.Runtime.Missions.CacheWarmer,
       Cadence.Runtime.Missions.MissionSupervisor,
-      Cadence.Runtime.Telemetry.PipelineV2.Stages.IdentifyStage,
-      Cadence.Runtime.Telemetry.PipelineV2.Stages.StageBehaviour,
       Cadence.Telemetry.Decommutation,
       Cadence.Telemetry.Protocols.CCSDSProtocol,
       Cadence.Telemetry.Protocols.CRCProtocol,

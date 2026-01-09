@@ -41,6 +41,55 @@ defmodule Cadence.Telemetry.Protocol do
 
   """
 
+  # Protocol type to module mapping (resolved at runtime to avoid circular deps)
+  @protocol_modules %{
+    length_prefixed: Cadence.Telemetry.Protocols.LengthProtocol,
+    terminated: Cadence.Telemetry.Protocols.TerminatedProtocol,
+    fixed: Cadence.Telemetry.Protocols.FixedProtocol,
+    template: Cadence.Telemetry.Protocols.TemplateProtocol
+  }
+
+  @doc """
+  Creates a new protocol instance by type.
+
+  Supports the following types:
+  - `:length_prefixed` - Length-prefixed packets (uses LengthProtocol)
+  - `:terminated` - Terminator-delimited packets (uses TerminatedProtocol)
+  - `:fixed` - Fixed-length packets (uses FixedProtocol)
+  - `:template` - Sync pattern with header parsing (uses TemplateProtocol)
+
+  ## Examples
+
+      Protocol.new(type: :length_prefixed, length_bytes: 4)
+      Protocol.new(type: :terminated, terminator: "\\r\\n")
+      Protocol.new(type: :fixed, packet_length: 100)
+      Protocol.new(type: :template, sync_pattern: <<0x1A, 0xCF, 0xFC, 0x1D>>, header_length: 6)
+  """
+  def new(opts) when is_list(opts) do
+    type = Keyword.fetch!(opts, :type)
+    opts = Keyword.delete(opts, :type)
+
+    module =
+      Map.get(@protocol_modules, type) ||
+        raise ArgumentError, "Unknown protocol type: #{inspect(type)}"
+
+    # Translate convenience options for length_prefixed
+    opts =
+      if type == :length_prefixed do
+        if length_bytes = Keyword.get(opts, :length_bytes) do
+          opts
+          |> Keyword.delete(:length_bytes)
+          |> Keyword.put_new(:length_bit_size, length_bytes * 8)
+        else
+          opts
+        end
+      else
+        opts
+      end
+
+    module.new(opts)
+  end
+
   @doc """
   Creates a new protocol instance.
 
@@ -48,6 +97,15 @@ defmodule Cadence.Telemetry.Protocol do
   """
   def new(module, opts) when is_atom(module) do
     module.new(opts)
+  end
+
+  @doc """
+  Process incoming data through a protocol.
+
+  Dispatches to the appropriate protocol's `read_data/2` function based on state struct type.
+  """
+  def process(data, %{__struct__: module} = state) do
+    module.read_data(data, state)
   end
 
   @doc """

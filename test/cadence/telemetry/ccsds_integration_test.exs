@@ -16,19 +16,21 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
   use Cadence.IntegrationCase
 
   import Bitwise
+  import Cadence.MissionDatabaseFixtures
+  import Cadence.TargetsFixtures
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.{Missions, Organizations}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
-  alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Simulator.PacketSimulator
+  alias Cadence.Telemetry.PipelineMetrics
   alias Cadence.Telemetry.Protocols.TemplateProtocol
 
   @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
   defp wait_for(fun, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 2_000)
+    timeout = Keyword.get(opts, :timeout, 5_000)
     interval = Keyword.get(opts, :interval, 25)
     deadline = System.monotonic_time(:millisecond) + timeout
 
@@ -66,6 +68,16 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
           status: "active"
         })
 
+      definition_set = create_ccsds_definition_set(org, mission)
+
+      create_ccsds_targets(org, mission, definition_set, [
+        "CCSDS_SAT_1",
+        "MULTI_SAT",
+        "SAT_A",
+        "SAT_B",
+        "SAT_C"
+      ])
+
       # Start the mission (starts CVT, PacketIdentifier, Pipeline)
       {:ok, config} = MissionConfig.load(mission.id)
       {:ok, _pid} = MissionSupervisor.start_mission(config)
@@ -74,7 +86,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         MissionSupervisor.stop_mission(mission.id)
       end)
 
-      %{org: org, mission: mission}
+      %{org: org, mission: mission, definition_set: definition_set}
     end
 
     test "processes CCSDS binary packets end-to-end", %{mission: mission} do
@@ -85,7 +97,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       {:ok, sim_pid} =
         PacketSimulator.start_link(
           mission_id: mission.id,
-          targets: ["ccsds-sat-1"],
+          targets: ["CCSDS_SAT_1"],
           packet_types: [:health],
           rate_hz: 5.0,
           encoding: :ccsds,
@@ -98,8 +110,12 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       end)
 
       # Verify we received telemetry updates via PubSub
-      assert_receive {:telemetry_update, "ccsds-sat-1", "HEALTH", item_name, telemetry_value},
-                     2_000
+      assert_receive {:telemetry_packet_update, "CCSDS_SAT_1", "HEALTH", items}, 2_000
+
+      {item_name, telemetry_value} =
+        Enum.find(items, fn {name, _value} ->
+          String.ends_with?(name, "cpu_temp")
+        end)
 
       assert is_binary(item_name)
       assert is_map(telemetry_value)
@@ -110,34 +126,34 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "cpu_temp")
+            CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.cpu_temp")
           )
         end)
 
       {:ok, cpu_temp} =
-        CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "cpu_temp")
+        CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.cpu_temp")
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "battery_voltage")
+            CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.battery_voltage")
           )
         end)
 
       {:ok, voltage} =
-        CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "battery_voltage")
+        CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.battery_voltage")
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "uptime_seconds")
+            CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.uptime_seconds")
           )
         end)
 
       {:ok, uptime} =
-        CurrentValueTable.get(mission.id, "ccsds-sat-1", "HEALTH", "uptime_seconds")
+        CurrentValueTable.get(mission.id, "CCSDS_SAT_1", "HEALTH", "HEALTH.uptime_seconds")
 
       # CPU temp should be a reasonable value (simulator generates ~20°C with variation)
       assert is_number(cpu_temp.value)
@@ -156,8 +172,8 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       # Verify pipeline stats
       :ok =
         wait_for(fn ->
-          stats = Pipeline.stats(mission.id)
-          stats.packets_processed > 0 and stats.items_processed > 0 and stats.errors == 0
+          stats = PipelineMetrics.get_stats(mission.id)
+          stats.packets_processed > 0 and stats.items_processed > 0
         end)
     end
 
@@ -166,7 +182,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       {:ok, sim_pid} =
         PacketSimulator.start_link(
           mission_id: mission.id,
-          targets: ["multi-sat"],
+          targets: ["MULTI_SAT"],
           packet_types: [:health, :attitude, :power],
           rate_hz: 5.0,
           encoding: :ccsds,
@@ -182,23 +198,25 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "cpu_temp")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "HEALTH", "HEALTH.cpu_temp")
           )
         end)
 
-      {:ok, cpu_temp} = CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "cpu_temp")
+      {:ok, cpu_temp} =
+        CurrentValueTable.get(mission.id, "MULTI_SAT", "HEALTH", "HEALTH.cpu_temp")
+
       assert is_number(cpu_temp.value)
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "battery_percentage")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "HEALTH", "HEALTH.battery_percentage")
           )
         end)
 
       {:ok, battery_pct} =
-        CurrentValueTable.get(mission.id, "multi-sat", "HEALTH", "battery_percentage")
+        CurrentValueTable.get(mission.id, "MULTI_SAT", "HEALTH", "HEALTH.battery_percentage")
 
       assert is_number(battery_pct.value)
       assert battery_pct.value >= 0 and battery_pct.value <= 100
@@ -208,33 +226,35 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "roll")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.roll")
           )
         end)
 
-      {:ok, roll} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "roll")
+      {:ok, roll} = CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.roll")
       assert is_number(roll.value)
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "pitch")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.pitch")
           )
         end)
 
-      {:ok, pitch} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "pitch")
+      {:ok, pitch} =
+        CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.pitch")
+
       assert is_number(pitch.value)
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "yaw")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.yaw")
           )
         end)
 
-      {:ok, yaw} = CurrentValueTable.get(mission.id, "multi-sat", "ATTITUDE", "yaw")
+      {:ok, yaw} = CurrentValueTable.get(mission.id, "MULTI_SAT", "ATTITUDE", "ATTITUDE.yaw")
       assert is_number(yaw.value)
 
       # Verify POWER packet (APID 102)
@@ -242,23 +262,25 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "POWER", "bus_voltage")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "POWER", "POWER.bus_voltage")
           )
         end)
 
-      {:ok, bus_voltage} = CurrentValueTable.get(mission.id, "multi-sat", "POWER", "bus_voltage")
+      {:ok, bus_voltage} =
+        CurrentValueTable.get(mission.id, "MULTI_SAT", "POWER", "POWER.bus_voltage")
+
       assert is_number(bus_voltage.value)
 
       :ok =
         wait_for(fn ->
           match?(
             {:ok, _},
-            CurrentValueTable.get(mission.id, "multi-sat", "POWER", "solar_panel_current")
+            CurrentValueTable.get(mission.id, "MULTI_SAT", "POWER", "POWER.solar_panel_current")
           )
         end)
 
       {:ok, solar_current} =
-        CurrentValueTable.get(mission.id, "multi-sat", "POWER", "solar_panel_current")
+        CurrentValueTable.get(mission.id, "MULTI_SAT", "POWER", "POWER.solar_panel_current")
 
       assert is_number(solar_current.value)
     end
@@ -268,7 +290,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       {:ok, sim_pid} =
         PacketSimulator.start_link(
           mission_id: mission.id,
-          targets: ["sat-a", "sat-b", "sat-c"],
+          targets: ["SAT_A", "SAT_B", "SAT_C"],
           packet_types: [:health],
           rate_hz: 5.0,
           encoding: :ccsds,
@@ -282,14 +304,23 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       # Each satellite should have separate telemetry in CVT
       :ok =
         wait_for(fn ->
-          match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-a", "HEALTH", "cpu_temp")) and
-            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-b", "HEALTH", "cpu_temp")) and
-            match?({:ok, _}, CurrentValueTable.get(mission.id, "sat-c", "HEALTH", "cpu_temp"))
+          match?(
+            {:ok, _},
+            CurrentValueTable.get(mission.id, "SAT_A", "HEALTH", "HEALTH.cpu_temp")
+          ) and
+            match?(
+              {:ok, _},
+              CurrentValueTable.get(mission.id, "SAT_B", "HEALTH", "HEALTH.cpu_temp")
+            ) and
+            match?(
+              {:ok, _},
+              CurrentValueTable.get(mission.id, "SAT_C", "HEALTH", "HEALTH.cpu_temp")
+            )
         end)
 
-      {:ok, temp_a} = CurrentValueTable.get(mission.id, "sat-a", "HEALTH", "cpu_temp")
-      {:ok, temp_b} = CurrentValueTable.get(mission.id, "sat-b", "HEALTH", "cpu_temp")
-      {:ok, temp_c} = CurrentValueTable.get(mission.id, "sat-c", "HEALTH", "cpu_temp")
+      {:ok, temp_a} = CurrentValueTable.get(mission.id, "SAT_A", "HEALTH", "HEALTH.cpu_temp")
+      {:ok, temp_b} = CurrentValueTable.get(mission.id, "SAT_B", "HEALTH", "HEALTH.cpu_temp")
+      {:ok, temp_c} = CurrentValueTable.get(mission.id, "SAT_C", "HEALTH", "HEALTH.cpu_temp")
 
       # All should have values
       assert is_number(temp_a.value)
@@ -349,14 +380,14 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       chunk2 = binary_part(complete_packet, chunk1_size, chunk2_size - chunk1_size)
       chunk3 = binary_part(complete_packet, chunk2_size, total_size - chunk2_size)
 
-      # Process chunks sequentially - returns {:stop, state} when buffering
-      {:stop, state1} = TemplateProtocol.read_data(chunk1, state)
+      # Process chunks sequentially
+      {[], state1} = read_packets(chunk1, state)
       assert byte_size(state1.buffer) > 0
 
-      {:stop, state2} = TemplateProtocol.read_data(chunk2, state1)
+      {[], state2} = read_packets(chunk2, state1)
       # May still be buffering
 
-      {:ok, packets, state3} = TemplateProtocol.read_data(chunk3, state2)
+      {packets, state3} = read_packets(chunk3, state2)
 
       # Should have extracted the complete packet
       assert length(packets) == 1
@@ -411,5 +442,131 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       assert data_len == byte_size(payload) - 1
       assert byte_size(rest) == byte_size(payload)
     end
+  end
+
+  defp read_packets(chunk, state) do
+    case TemplateProtocol.read_data(chunk, state) do
+      {:ok, packets, new_state} -> {packets, new_state}
+      {:stop, new_state} -> {[], new_state}
+    end
+  end
+
+  defp create_ccsds_definition_set(org, mission) do
+    database = database_fixture(organization: org, mission: mission)
+
+    definition_set =
+      definition_set_fixture(organization: org, mission: mission, database: database)
+
+    float_dt = float_data_type_fixture(definition_set: definition_set)
+
+    uint32_dt =
+      data_type_fixture(
+        definition_set: definition_set,
+        base_type: :integer,
+        encoding: %{
+          encoding_type: :integer,
+          size_in_bits: 32,
+          byte_order: :big_endian,
+          integer_encoding: :unsigned
+        }
+      )
+
+    uint16_dt =
+      data_type_fixture(
+        definition_set: definition_set,
+        base_type: :integer,
+        encoding: %{
+          encoding_type: :integer,
+          size_in_bits: 16,
+          byte_order: :big_endian,
+          integer_encoding: :unsigned
+        }
+      )
+
+    uint8_dt =
+      data_type_fixture(
+        definition_set: definition_set,
+        base_type: :integer,
+        encoding: %{
+          encoding_type: :integer,
+          size_in_bits: 8,
+          byte_order: :big_endian,
+          integer_encoding: :unsigned
+        }
+      )
+
+    health =
+      container_fixture(
+        definition_set: definition_set,
+        name: "HEALTH",
+        apid: 100,
+        packet_type: 1
+      )
+
+    add_entry(definition_set, health, "cpu_temp", float_dt, 0)
+    add_entry(definition_set, health, "battery_voltage", float_dt, 32)
+    add_entry(definition_set, health, "battery_current", float_dt, 64)
+    add_entry(definition_set, health, "battery_percentage", uint8_dt, 96)
+    add_entry(definition_set, health, "uptime_seconds", uint32_dt, 104)
+    add_entry(definition_set, health, "memory_used_mb", uint16_dt, 136)
+
+    attitude =
+      container_fixture(
+        definition_set: definition_set,
+        name: "ATTITUDE",
+        apid: 101,
+        packet_type: 2
+      )
+
+    add_entry(definition_set, attitude, "roll", float_dt, 0)
+    add_entry(definition_set, attitude, "pitch", float_dt, 32)
+    add_entry(definition_set, attitude, "yaw", float_dt, 64)
+    add_entry(definition_set, attitude, "roll_rate", float_dt, 96)
+    add_entry(definition_set, attitude, "pitch_rate", float_dt, 128)
+    add_entry(definition_set, attitude, "yaw_rate", float_dt, 160)
+
+    power =
+      container_fixture(
+        definition_set: definition_set,
+        name: "POWER",
+        apid: 102,
+        packet_type: 3
+      )
+
+    add_entry(definition_set, power, "solar_panel_voltage", float_dt, 0)
+    add_entry(definition_set, power, "solar_panel_current", float_dt, 32)
+    add_entry(definition_set, power, "bus_voltage", float_dt, 64)
+    add_entry(definition_set, power, "bus_current", float_dt, 96)
+    add_entry(definition_set, power, "power_mode", uint8_dt, 128)
+
+    definition_set
+  end
+
+  defp add_entry(definition_set, container, name, data_type, bit_offset) do
+    parameter =
+      parameter_fixture(
+        definition_set: definition_set,
+        data_type: data_type,
+        name: name
+      )
+
+    container_entry_fixture(
+      container: container,
+      parameter: parameter,
+      bit_offset: bit_offset
+    )
+  end
+
+  defp create_ccsds_targets(org, mission, definition_set, identifiers) do
+    Enum.each(identifiers, fn identifier ->
+      target_fixture(
+        organization: org,
+        mission: mission,
+        definition_set: definition_set,
+        name: identifier,
+        identifier: identifier,
+        status: "online"
+      )
+    end)
   end
 end

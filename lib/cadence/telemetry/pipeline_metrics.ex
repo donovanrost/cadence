@@ -49,6 +49,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     errors_convert: 7,
     errors_derive: 8,
     errors_batcher: 9,
+    errors_identify_missing_catalog: 27,
+    errors_identify_unknown_packet: 28,
 
     # Latency tracking (sum + count pairs for calculating avg)
     latency_sum_identify: 10,
@@ -72,7 +74,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     bytes_received: 26
   }
 
-  @slot_count 27
+  @slot_count 28
 
   # Atomics slot indices for min/max (per partition)
   # Uses :atomics for compare-and-exchange operations
@@ -113,7 +115,15 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   ]
 
   # Error stages we track
-  @error_stages [:identify, :decom, :convert, :derive, :batcher]
+  @error_stages [
+    :identify,
+    :decom,
+    :convert,
+    :derive,
+    :batcher,
+    :identify_missing_catalog,
+    :identify_unknown_packet
+  ]
 
   @doc """
   Ensures the metrics ETS table exists.
@@ -141,10 +151,38 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   Also stores metadata like partition_count and start_time.
   """
   def init(mission_id, partition_count) do
+    partitions =
+      if partition_count > 0 do
+        Enum.to_list(0..(partition_count - 1))
+      else
+        []
+      end
+
+    init_partitions(mission_id, partitions)
+  end
+
+  @doc """
+  Initializes metrics for a mission with lane/shard partitions.
+  """
+  def init_lanes(mission_id, lanes) when is_list(lanes) do
+    partitions =
+      lanes
+      |> Enum.flat_map(fn lane ->
+        Enum.map(0..(lane.shard_count - 1), fn shard_id ->
+          {lane.name, shard_id}
+        end)
+      end)
+
+    init_partitions(mission_id, partitions)
+    :ets.insert(@table_name, {{mission_id, :lane_shards}, lane_shard_map(lanes)})
+    :ok
+  end
+
+  defp init_partitions(mission_id, partitions) do
     ensure_table()
 
     # Create counter and atomics references for each partition
-    for partition <- 0..(partition_count - 1) do
+    for partition <- partitions do
       # Counters for sum/count/throughput
       counter_ref = :counters.new(@slot_count, [:write_concurrency])
       :ets.insert(@table_name, {{mission_id, :counters, partition}, counter_ref})
@@ -162,7 +200,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
 
     # Store metadata
-    :ets.insert(@table_name, {{mission_id, :partition_count}, partition_count})
+    :ets.insert(@table_name, {{mission_id, :partition_keys}, partitions})
+    :ets.insert(@table_name, {{mission_id, :partition_count}, length(partitions)})
     :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
 
     :ok
@@ -290,13 +329,14 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   def get_stats(mission_id) do
     ensure_table()
 
-    partition_count = get_partition_count(mission_id)
+    partition_keys = get_partition_keys(mission_id)
+    partition_count = length(partition_keys)
 
     if partition_count == 0 do
       empty_stats()
     else
-      merged = merge_all_partitions(mission_id, partition_count)
-      minmax = merge_all_minmax(mission_id, partition_count)
+      merged = merge_all_partitions(mission_id, partition_keys)
+      minmax = merge_all_minmax(mission_id, partition_keys)
       {duration_ms, duration_sec} = get_duration(mission_id)
       timing = build_timing_stats(merged, minmax)
       errors = build_error_stats(merged)
@@ -321,6 +361,29 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     case :ets.lookup(@table_name, {mission_id, :partition_count}) do
       [{{^mission_id, :partition_count}, count}] -> count
       _ -> 0
+    end
+  end
+
+  @doc """
+  Returns the partition count for a specific lane.
+  """
+  def get_partition_count(mission_id, lane) do
+    case :ets.lookup(@table_name, {mission_id, :lane_shards}) do
+      [{{^mission_id, :lane_shards}, lane_map}] ->
+        Map.get(lane_map, lane, 0)
+
+      _ ->
+        get_partition_count(mission_id)
+    end
+  end
+
+  @doc """
+  Returns the partition keys for a mission.
+  """
+  def get_partition_keys(mission_id) do
+    case :ets.lookup(@table_name, {mission_id, :partition_keys}) do
+      [{{^mission_id, :partition_keys}, keys}] -> keys
+      _ -> []
     end
   end
 
@@ -442,9 +505,9 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   Resets all counters for a mission.
   """
   def reset(mission_id) do
-    partition_count = get_partition_count(mission_id)
+    partition_keys = get_partition_keys(mission_id)
 
-    for partition <- 0..(partition_count - 1) do
+    for partition <- partition_keys do
       reset_partition_counters(mission_id, partition)
       reset_partition_atomics(mission_id, partition)
     end
@@ -490,14 +553,16 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   def cleanup(mission_id) do
     ensure_table()
 
-    partition_count = get_partition_count(mission_id)
+    partition_keys = get_partition_keys(mission_id)
 
-    for partition <- 0..(partition_count - 1) do
+    for partition <- partition_keys do
       :ets.delete(@table_name, {mission_id, :counters, partition})
       :ets.delete(@table_name, {mission_id, :atomics, partition})
     end
 
     :ets.delete(@table_name, {mission_id, :partition_count})
+    :ets.delete(@table_name, {mission_id, :partition_keys})
+    :ets.delete(@table_name, {mission_id, :lane_shards})
     :ets.delete(@table_name, {mission_id, :started_at})
 
     :ok
@@ -530,9 +595,9 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
   end
 
-  defp merge_all_partitions(mission_id, partition_count) do
+  defp merge_all_partitions(mission_id, partition_keys) do
     # Collect values from all partitions and sum them
-    Enum.reduce(0..(partition_count - 1), %{}, fn partition, acc ->
+    Enum.reduce(partition_keys, %{}, fn partition, acc ->
       case get_counter_ref(mission_id, partition) do
         nil ->
           acc
@@ -550,11 +615,11 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end)
   end
 
-  defp merge_all_minmax(mission_id, partition_count) do
+  defp merge_all_minmax(mission_id, partition_keys) do
     # Collect min/max values from all partitions
     # For min: take minimum across partitions
     # For max: take maximum across partitions
-    Enum.reduce(0..(partition_count - 1), %{}, fn partition, acc ->
+    Enum.reduce(partition_keys, %{}, fn partition, acc ->
       merge_partition_minmax(mission_id, partition, acc)
     end)
   end
@@ -577,6 +642,12 @@ defmodule Cadence.Telemetry.PipelineMetrics do
 
     Map.update(acc, name, value, fn existing ->
       if is_min, do: min(existing, value), else: max(existing, value)
+    end)
+  end
+
+  defp lane_shard_map(lanes) do
+    Enum.reduce(lanes, %{}, fn lane, acc ->
+      Map.put(acc, lane.name, lane.shard_count)
     end)
   end
 end
