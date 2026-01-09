@@ -427,6 +427,7 @@ defmodule Mix.Tasks.Cadence.Profile do
     print_cvt_stats(snapshot[:cvt])
     print_stats_snapshot(snapshot, prev)
     print_pipeline_v2_snapshot(snapshot[:pipeline_v2])
+    print_lanes_snapshot(snapshot[:lanes])
     print_queue_warnings(snapshot[:process_queues] || [])
 
     Mix.shell().info("")
@@ -443,6 +444,69 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp print_cvt_stats(other) do
     Mix.shell().info("CVT: #{inspect(other)}")
   end
+
+  defp print_lanes_snapshot(%{error: :not_found}), do: :ok
+
+  defp print_lanes_snapshot(
+         %{router_queue: router_q, shard_count: shard_count, shards: shards} = lanes
+       ) do
+    mailbox = Map.get(lanes, :router_mailbox, 0)
+    worker_count = Map.get(lanes, :worker_count, shard_count)
+    workers = Map.get(lanes, :workers, [])
+
+    mailbox_info = if mailbox > 0, do: ", mailbox=#{mailbox}", else: ""
+    worker_info = "workers=#{worker_count}/#{shard_count}"
+    Mix.shell().info("Lanes: router_q=#{router_q}#{mailbox_info}, #{worker_info}")
+
+    # Show per-shard stats with worker info
+    shards
+    |> Enum.take(5)
+    |> Enum.each(fn %{shard: shard, counters: counters} ->
+      recv = Map.get(counters, :packets_received, 0)
+      proc = Map.get(counters, :packets_processed, 0)
+      drop = Map.get(counters, :packets_dropped, 0)
+
+      worker = Enum.find(workers, fn w -> w.shard == shard end)
+      {pid_str, worker_status} = format_worker_info(worker)
+
+      Mix.shell().info("  shard #{shard} #{pid_str}: recv=#{recv} proc=#{proc} drop=#{drop}#{worker_status}")
+    end)
+  end
+
+  defp print_lanes_snapshot(_), do: :ok
+
+  defp format_worker_info(nil), do: {"(?)", ""}
+  defp format_worker_info(%{alive?: false}), do: {"(DEAD)", ""}
+
+  defp format_worker_info(%{alive?: true, pid: pid, queue_len: q, memory_kb: mem, status: status}) do
+    pid_str = "(#{format_pid(pid)})"
+
+    status_icon =
+      case status do
+        :running -> ""
+        :waiting -> ""
+        :suspended -> " [SUSP]"
+        other -> " [#{other}]"
+      end
+
+    worker_status =
+      cond do
+        q > 0 -> " | #{mem}KB q=#{q}#{status_icon}"
+        true -> "#{status_icon}"
+      end
+
+    {pid_str, worker_status}
+  end
+
+  defp format_pid(pid) when is_pid(pid) do
+    pid
+    |> :erlang.pid_to_list()
+    |> to_string()
+    |> String.trim_leading("<")
+    |> String.trim_trailing(">")
+  end
+
+  defp format_pid(_), do: "?"
 
   defp print_stats_snapshot(
          %{

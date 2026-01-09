@@ -30,7 +30,6 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   require Logger
 
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Runtime.Telemetry.Pipeline
   alias Cadence.Telemetry.Packet
   alias Cadence.Telemetry.ProtocolChain
   alias Cadence.Telemetry.ProtocolChain.Processor
@@ -203,8 +202,11 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
           # Construct Packet struct based on format
           packet = construct_packet(packet_binary, metadata, format)
 
-          # Send to pipeline
-          Pipeline.process_packet(state.interface.mission_id, packet, metadata)
+          Phoenix.PubSub.broadcast(
+            Cadence.PubSub,
+            "mission:#{state.interface.mission_id}:telemetry:raw",
+            {:telemetry_packet, packet, metadata}
+          )
         end)
 
         {:noreply,

@@ -465,6 +465,7 @@ defmodule Cadence.Simulator.Coordinator do
   end
 
   defp connect_output(%{output: nil} = state), do: state
+  defp connect_output(%{output: :pubsub} = state), do: state
 
   defp connect_output(%{output: {:tcp, host, port}} = state) do
     opts = [
@@ -501,6 +502,7 @@ defmodule Cadence.Simulator.Coordinator do
   defp connect_output(state), do: state
 
   defp close_socket(%{socket: nil}), do: :ok
+  defp close_socket(%{output: :pubsub}), do: :ok
   defp close_socket(%{output: {:tcp, _, _}, socket: socket}), do: :gen_tcp.close(socket)
   defp close_socket(%{output: {:udp, _, _}, socket: socket}), do: :gen_udp.close(socket)
   defp close_socket(_), do: :ok

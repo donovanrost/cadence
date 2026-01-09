@@ -79,7 +79,7 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-config :cadence, :pipeline_version, :v2
+# config :cadence, :pipeline_version, :v2
 
 # Configure Oban for background job processing
 config :cadence, Oban,
@@ -139,6 +139,8 @@ config :cadence,
 config :cadence,
        :target_repository,
        Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository
+
+config :cadence, :pipeline_version, :lanes
 
 # Messaging adapters
 config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender

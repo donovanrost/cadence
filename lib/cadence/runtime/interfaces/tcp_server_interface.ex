@@ -382,6 +382,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         total_clients_connected: state.total_clients_connected + 1
     }
 
+    Logger.debug(
+      "Accepted client #{address_str}:#{port}, total=#{map_size(new_clients)} (interface #{state.interface.id})",
+      mission_id: state.interface.mission_id
+    )
+
     maybe_broadcast_connect(state, new_state, client_state)
     {:noreply, new_state}
   end
@@ -397,6 +402,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       client_state
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
+
+    Logger.debug(
+      "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
+      mission_id: state.interface.mission_id
+    )
 
     case process_incoming_data(data, updated_client_state, state) do
       {:ok, packets_with_format, new_chain} ->
@@ -416,10 +426,12 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
       {:disconnect, reason} ->
         Logger.warning(
-          "Protocol error for client #{client_state.remote_address}:#{client_state.remote_port}: #{reason}"
+          "Protocol error for client #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)} - keeping connection open"
         )
 
-        handle_client_disconnect(client_socket, state)
+        # Keep the connection open but preserve the existing chain so we can keep reading.
+        new_clients = Map.put(state.clients, client_socket, updated_client_state)
+        {:noreply, %{state | clients: new_clients}}
     end
   end
 
@@ -540,7 +552,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     end
   end
 
-  defp process_incoming_data(data, client_state, _state) do
+  defp process_incoming_data(data, client_state, state) do
     # Use the Processor module directly for client-specific chains
     alias Cadence.Telemetry.ProtocolChain.Processor
 
@@ -554,6 +566,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
           Enum.map(packets, fn packet_binary ->
             {packet_binary, format, %{}}
           end)
+
+        if packets_with_format == [] do
+          Logger.debug(
+            "Protocol chain yielded no packets for #{byte_size(data)} bytes (interface #{state.interface.id})",
+            mission_id: state.interface.mission_id
+          )
+        end
 
         {:ok, packets_with_format, updated_chain}
 

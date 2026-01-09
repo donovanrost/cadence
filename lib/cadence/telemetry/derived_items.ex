@@ -94,6 +94,50 @@ defmodule Cadence.Telemetry.DerivedItems do
     end
   end
 
+  @doc """
+  Computes stateless derived items only, skipping stateful expressions.
+  """
+  @spec compute_stateless(item_values(), String.t()) ::
+          {:ok, item_values()} | {:error, term()}
+  def compute_stateless(converted_items, mission_id) do
+    case load_defs(converted_items, mission_id) do
+      {:ok, []} ->
+        {:ok, converted_items}
+
+      {:ok, defs} ->
+        stateless_defs = Enum.filter(defs, &(&1.has_stateful == false))
+
+        if Enum.empty?(stateless_defs) do
+          {:ok, converted_items}
+        else
+          compute_with_sorted_defs(converted_items, stateless_defs, mission_id)
+        end
+    end
+  end
+
+  @doc """
+  Computes stateful derived items only, returning a map of derived values.
+  """
+  @spec compute_stateful(item_values(), String.t()) ::
+          {:ok, item_values()} | {:error, term()}
+  def compute_stateful(converted_items, mission_id) do
+    case load_defs(converted_items, mission_id) do
+      {:ok, []} ->
+        {:ok, %{}}
+
+      {:ok, defs} ->
+        stateful_defs = Enum.filter(defs, &(&1.has_stateful == true))
+
+        if Enum.empty?(stateful_defs) do
+          {:ok, %{}}
+        else
+          {:ok, all_items} = compute_with_sorted_defs(converted_items, stateful_defs, mission_id)
+          derived_names = Enum.map(stateful_defs, & &1.name)
+          {:ok, Map.take(all_items, derived_names)}
+        end
+    end
+  end
+
   # Extract packet names from converted_items keys and get relevant derived items
   # Optimized hot path - avoids allocations for common single-packet case
   defp get_relevant_defs(converted_items, packet_index) do
@@ -159,6 +203,30 @@ defmodule Cadence.Telemetry.DerivedItems do
     |> Enum.flat_map(&Map.get(packet_index, &1, []))
     |> Enum.uniq_by(& &1.name)
     |> Enum.sort_by(&Map.get(&1, :topo_order, 0))
+  end
+
+  defp load_defs(converted_items, mission_id) do
+    case Cache.get_definitions(mission_id) do
+      {:ok, {[], _packet_index}} ->
+        {:ok, []}
+
+      {:ok, {all_defs, packet_index}} ->
+        relevant_defs =
+          case map_size(packet_index) do
+            0 -> []
+            1 -> all_defs
+            _ -> get_relevant_defs(converted_items, packet_index)
+          end
+
+        {:ok, relevant_defs}
+
+      {:ok, sorted_defs} when is_list(sorted_defs) ->
+        {:ok, sorted_defs}
+
+      {:error, reason} ->
+        Logger.warning("Failed to load derived items from cache: #{inspect(reason)}")
+        {:ok, []}
+    end
   end
 
   defp packet_name_from_key(key) do

@@ -48,6 +48,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Telemetry.PipelineV2
 
   @default_partition_count 16
+  @default_lane_shards 8
 
   def start_link(opts) do
     config = Keyword.fetch!(opts, :config)
@@ -76,8 +77,9 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       "Initializing mission instance for mission_id=#{mission_id}, name=#{mission_name}"
     )
 
-    # Check which pipeline version to use
-    pipeline_version = Application.get_env(:cadence, :pipeline_version, :v1)
+    # Check which pipeline version to use (env override wins)
+    pipeline_version = resolve_pipeline_version()
+    Logger.info("Using pipeline_version=#{pipeline_version} for mission_id=#{mission_id}")
 
     pipeline_children = pipeline_children(pipeline_version, mission_id)
 
@@ -133,6 +135,19 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
+  defp resolve_pipeline_version do
+    env_override =
+      case System.get_env("PIPELINE_VERSION") do
+        nil -> nil
+        "lanes" -> :lanes
+        "v2" -> :v2
+        "v1" -> :v1
+        other -> String.to_atom(other)
+      end
+
+    env_override || Application.get_env(:cadence, :pipeline_version, :lanes)
+  end
+
   # Pipeline children based on version flag
   defp pipeline_children(:v1, mission_id) do
     [
@@ -157,6 +172,34 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
        [
          mission_id: mission_id,
          partition_count: partition_count
+       ]}
+    ]
+  end
+
+  defp pipeline_children(:lanes, mission_id) do
+    shard_count = Application.get_env(:cadence, :pipeline_lane_shards, @default_lane_shards)
+    router_version = Application.get_env(:cadence, :pipeline_lane_router_version, 1)
+    config_version = Application.get_env(:cadence, :pipeline_lane_config_version, 0)
+    sink = Application.get_env(:cadence, :pipeline_lane_sink, Cadence.Telemetry.LogSink.File)
+
+    source =
+      Application.get_env(:cadence, :pipeline_lane_source, Cadence.Telemetry.LogSource.File)
+
+    sink_opts = Application.get_env(:cadence, :pipeline_lane_sink_opts, [])
+
+    [
+      # Keep legacy GenServer pipeline available for direct callers during transition
+      {Cadence.Runtime.Telemetry.Pipeline, mission_id: mission_id},
+      # New lanes/shards pipeline
+      {Cadence.Runtime.Telemetry.Lanes.Supervisor,
+       [
+         mission_id: mission_id,
+         shard_count: shard_count,
+         router_version: router_version,
+         config_version: config_version,
+         sink: sink,
+         sink_opts: sink_opts,
+         source: source
        ]}
     ]
   end

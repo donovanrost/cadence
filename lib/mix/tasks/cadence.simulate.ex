@@ -258,6 +258,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp parse_duration(duration), do: Mix.raise("Duration must be non-negative, got: #{duration}")
 
   defp parse_output(nil), do: nil
+  defp parse_output("pubsub"), do: :pubsub
 
   defp parse_output("tcp:" <> rest) do
     case String.split(rest, ":") do
@@ -345,6 +346,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
   end
 
   defp format_output(nil), do: "none (dry run)"
+  defp format_output(:pubsub), do: "pubsub (mission:<id>:telemetry:raw)"
   defp format_output({:tcp, host, port}), do: "TCP #{host}:#{port}"
   defp format_output({:udp, host, port}), do: "UDP #{host}:#{port}"
   defp format_output(other), do: inspect(other)

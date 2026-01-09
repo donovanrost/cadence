@@ -140,9 +140,11 @@ defmodule Cadence.Telemetry.Profiler do
     print_pipeline_lookup(mission_id)
     print_cvt_lookup(mission_id)
     print_broadway_lookup(mission_id)
+    print_lanes_lookup(mission_id)
     print_cvt_table(mission_id)
     print_stats_counters(mission_id)
     print_pipeline_v2_lookup(mission_id)
+    print_lanes_lookup(mission_id)
 
     IO.puts("\n=== END DEBUG ===\n")
     :ok
@@ -230,6 +232,15 @@ defmodule Cadence.Telemetry.Profiler do
     end
   end
 
+  defp print_lanes_lookup(mission_id) do
+    IO.puts("\n5. Lanes lookup:")
+    router_key = {:lanes, mission_id, :router}
+    lanes_key = {:lanes, mission_id, :supervisor}
+
+    IO.puts("   Router: #{inspect(Registry.lookup(Cadence.MissionRegistry, router_key))}")
+    IO.puts("   Supervisor: #{inspect(Registry.lookup(Cadence.MissionRegistry, lanes_key))}")
+  end
+
   defp print_cvt_table(mission_id) do
     IO.puts("\n5. ETS tables:")
     cvt_table = String.to_atom("cvt_mission_#{mission_id}")
@@ -313,12 +324,13 @@ defmodule Cadence.Telemetry.Profiler do
   Returns a snapshot of all observable metrics for a mission.
   """
   def snapshot(mission_id) do
-    # Check if V2 pipeline is running
+    # Check if V2 or lanes pipeline is running
     v2_active = v2_pipeline_active?(mission_id)
+    lanes_active = lanes_pipeline_active?(mission_id)
 
     # Use PipelineMetrics for V2, Stats for V1 (Broadway)
     stats =
-      if v2_active do
+      if v2_active or lanes_active do
         safe_call(fn -> PipelineMetrics.get_stats(mission_id) end)
       else
         safe_call(fn -> Stats.get(mission_id) end)
@@ -341,8 +353,19 @@ defmodule Cadence.Telemetry.Profiler do
       pipeline: safe_call(fn -> Pipeline.stats(mission_id) end),
       broadway: broadway_stats(mission_id),
       pipeline_v2: pipeline_v2_stats(mission_id),
+      lanes:
+        if lanes_active do
+          lanes_stats(mission_id)
+        else
+          %{error: :not_found}
+        end,
       process_queues: check_queues(mission_id),
-      pipeline_version: if(v2_active, do: :v2, else: :v1)
+      pipeline_version:
+        cond do
+          lanes_active -> :lanes
+          v2_active -> :v2
+          true -> :v1
+        end
     }
   end
 
@@ -353,6 +376,18 @@ defmodule Cadence.Telemetry.Profiler do
       [{_pid, _}] -> true
       [] -> false
     end
+  end
+
+  defp lanes_pipeline_active?(mission_id) do
+    router_key = {:lanes, mission_id, :router}
+
+    registry_active? =
+      case Registry.lookup(Cadence.MissionRegistry, router_key) do
+        [{_pid, _}] -> true
+        [] -> false
+      end
+
+    registry_active? or PipelineMetrics.get_partition_count(mission_id) > 0
   end
 
   @doc """
@@ -483,6 +518,69 @@ defmodule Cadence.Telemetry.Profiler do
           packets_dropped: safe_call(fn -> get_v2_counter(mission_id, :packets_dropped) end)
         }
     end
+  end
+
+  @doc """
+  Returns stats about lanes/shards pipeline.
+  """
+  def lanes_stats(mission_id) do
+    router_key = {:via, Registry, {Cadence.MissionRegistry, {:lanes, mission_id, :router}}}
+
+    case GenServer.whereis(router_key) do
+      nil ->
+        %{error: :not_found}
+
+      router_pid ->
+        alias Cadence.Runtime.Telemetry.Lanes.Router
+        shard_count = PipelineMetrics.get_partition_count(mission_id)
+        workers = worker_stats(mission_id, shard_count)
+
+        %{
+          router_pid: router_pid,
+          router_queue: safe_call(fn -> Router.queue_depth(router_pid) end),
+          router_mailbox: safe_call(fn -> get_queue_len(router_pid) end),
+          shard_count: shard_count,
+          worker_count: length(Enum.filter(workers, & &1.alive?)),
+          workers: workers,
+          shards: shard_stats(mission_id, shard_count),
+          packets_dropped: safe_call(fn -> get_v2_counter(mission_id, :packets_dropped) end)
+        }
+    end
+  end
+
+  defp shard_stats(mission_id, shard_count) do
+    Enum.map(0..(shard_count - 1), fn shard ->
+      counters = PipelineMetrics.get_counters(mission_id, shard)
+      %{shard: shard, counters: counters}
+    end)
+  end
+
+  defp worker_stats(mission_id, shard_count) do
+    Enum.map(0..(shard_count - 1), fn shard ->
+      worker_key = {:lanes, mission_id, {:shard, :payload, shard}}
+
+      case Registry.lookup(Cadence.MissionRegistry, worker_key) do
+        [{pid, _}] ->
+          case Process.info(pid, [:message_queue_len, :memory, :reductions, :status]) do
+            nil ->
+              %{shard: shard, alive?: false}
+
+            info ->
+              %{
+                shard: shard,
+                alive?: true,
+                pid: pid,
+                queue_len: info[:message_queue_len],
+                memory_kb: div(info[:memory], 1024),
+                reductions: info[:reductions],
+                status: info[:status]
+              }
+          end
+
+        [] ->
+          %{shard: shard, alive?: false}
+      end
+    end)
   end
 
   defp count_partitions(mission_id) do

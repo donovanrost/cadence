@@ -314,6 +314,31 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
   end
 
+  @doc """
+  Returns the partition count for a mission (lanes shard count).
+  """
+  def get_partition_count(mission_id) do
+    case :ets.lookup(@table_name, {mission_id, :partition_count}) do
+      [{{^mission_id, :partition_count}, count}] -> count
+      _ -> 0
+    end
+  end
+
+  @doc """
+  Returns raw counters for a specific partition (shard).
+  """
+  def get_counters(mission_id, partition) do
+    case get_counter_ref(mission_id, partition) do
+      nil ->
+        %{}
+
+      ref ->
+        Enum.reduce(@slots, %{}, fn {name, slot}, acc ->
+          Map.put(acc, name, :counters.get(ref, slot))
+        end)
+    end
+  end
+
   defp empty_stats do
     %{
       packets_received: 0,
@@ -495,13 +520,6 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     case :ets.lookup(@table_name, key) do
       [{^key, ref}] -> ref
       [] -> nil
-    end
-  end
-
-  defp get_partition_count(mission_id) do
-    case :ets.lookup(@table_name, {mission_id, :partition_count}) do
-      [{_, count}] -> count
-      [] -> 0
     end
   end
 

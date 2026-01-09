@@ -250,7 +250,18 @@ MissionInstance
 - Dual-mode:
   - Same LogSink/LogSource behaviour; choose `:disk_log` adapter for local/dev, Kafka/Redpanda for cluster. Support dual-write in staging for cutover validation.
 - Monitoring:
-- Metrics: append latency, fsync lag, segment count/size, retention drops, consumer lag; alert on corruption/truncation events.
+  - Metrics: append latency, fsync lag, segment count/size, retention drops, consumer lag; alert on corruption/truncation events.
+
+## Testing & Determinism Considerations
+- Time control: inject a time provider (`Clock` behaviour) into router/shard workers/consumers; use a frozen/advancing clock in tests. Avoid direct `System.*time` in logic.
+- Randomness: avoid `:rand.uniform` in production paths; make sampling (e.g., timing sample rate) configurable/disable-able in tests or seed deterministically.
+- Hashing/assignment: fix vnode count and vnode→worker map in tests; use stable `router_version`; avoid wall-clock inputs for hashing in tests.
+- Batching/timers: make batch size/timeouts configurable; allow manual flush hooks in tests; set watermarks high in unit tests to prevent unintended backpressure.
+- Backpressure/autoscale: allow disabling autoscale; assert backpressure signals explicitly when needed.
+- Log sink: for `:disk_log`, use per-test temp dirs; disable wrap/retention in correctness tests; provide fake sink for corruption/error paths; keep offsets in-memory for tests.
+- Replay: fix `router_version` and vnode map; disable autoscale; use deterministic sequences; assert envelope fields (`shard_id`, `config_version`) in outputs.
+- Lua sandbox: inject deterministic VM config; disallow non-deterministic libs (no os/time); use fake clock for scripts if needed.
+- Metrics sampling: make sampling rate configurable; allow disabling sampling so counters match expectations in tests.
 
 ## Pseudocode Sketches
 
@@ -369,3 +380,45 @@ end
   - Retention rotation for `:disk_log`, recovery from corruption, dual-write cutover to Kafka, dashboards/alerts to stand up first.
 - Stateful lane checkpoints:
   - Checkpoint format/location, handoff protocol on reassignment, migration hooks for state shape changes.
+
+## Proposed Decisions for the Open Items (P0/P1 focus)
+- Architecture & semantics
+  - Ordering: per-lane/per-shard FIFO; no ordering guarantees across lanes. Replays pin `router_version` + vnode map; “at-least-once, per-shard ordered”.
+  - Idempotency: envelope carries `{target, apid, seq, shard_id, router_version, config_version, checksum}`; consumers dedup on `{target, apid, seq}` or checksum when seq is missing.
+  - Time: include `ingest_monotonic_ns` and `source_wall_clock_ms`; store as integers (no floats); little-endian encodings.
+  - Fairness/backpressure: weighted demand with reserved capacity for critical lane; when global pressure hits, drop cold first, pause/resume per lane on watermarks.
+- Durable sink & data handling (encryption at rest deferred for hardening)
+  - Corruption handling: on startup scan the tail, truncate to last good record, mark segment bad and alert; continue ingest with a fresh segment.
+  - Retention: per-tenant byte/time caps; wrap in dev, rolling delete in prod-like; emit “retention drop” metrics.
+  - Offsets/dup handling: at-least-once delivery; per-consumer-group offset files flushed on N records or M seconds; accept dupes on dual-write and rely on envelope dedup keys.
+- Config & rollout safety
+  - Preflight: schema validation, derived topo sort/cycle check, limits lint, Lua allowlist/static checks, bundle checksum/signature.
+  - Rollout: canary a small shard set per lane, then full roll; rollback by reapplying last good bundle. If a shard rejects, pause that lane, alert, auto-retry.
+  - Discoverability: publish `router_version` + vnode manifest via control plane endpoint and log on change for tooling/replays.
+- Stateful lane & limits
+  - Checkpoints: per-shard snapshots of stateful lane every T seconds or N updates; versioned binary with checksum, stored alongside sink segments with matching retention.
+  - Restart: load last checkpoint then catch up from stored offsets; if absent, replay from sink retention boundary.
+  - Limits: stateless limits reset on bundle swap; stateful limits get a migration hook, otherwise reset with an alert; dedup alarms by `{target, mnemonic, config_version, state_hash}`.
+- Observability & SLOs
+  - SLOs: ingest→sink p95 < 500ms (payload lane), backlog half-life < 30s, drop rate ~0; alert on half-life > budget for 5m or drops >0.01%.
+  - Logs/traces: include mission, lane, shard_id, router_version, config_version, offset, consumer group; sample slow flushes.
+  - Probes: synthetic packet per mission per lane each minute; alert on missing/delayed probe.
+- Testing & benchmarking
+  - Harness: frozen `router_version`/vnode map, fixed clock/seeded hash, manual batch flush hook, per-test temp sink dir.
+  - Faults: inject fsync stall, disk_full, config apply failure, Lua timeout, router crash/restart; assert backpressure/recovery paths.
+  - Benchmarks: sweep batch size/watermarks against latency targets; record append latency, fsync lag, backlog half-life.
+- Security & runbooks
+  - Security hardening and detailed runbooks are deferred; add after POC once the above behaviors are proven.
+
+## Config Delivery Model (supervisor-managed)
+- Control/data plane boundary: control plane assembles a mission-scoped bundle (packet defs, conversions, derived, limits, routing policy, user scripts) and sends it to the mission supervisor as domain structs plus `config_version` and checksum/signature metadata. Workers never fetch from storage.
+- Mission supervisor (or a config manager under it):
+  - Verifies checksum/signature, caches the bundle locally (memory and optional temp dir for assets), tracks desired vs current version.
+  - Broadcasts `{:apply_config, config, config_version}` to child supervisors/workers; workers only handle swap logic at batch boundaries.
+  - Keeps current + next bundle in memory if needed; can resend if a worker missed an update.
+  - On verify/fetch failure, keeps current version, emits metrics/alerts.
+- Workers:
+  - Hold the active bundle and optionally the next bundle; swap after flush; tag outputs with `config_version`.
+  - Do not perform I/O or fetching; they trust the supervisor-delivered config.
+- Observability:
+  - Metrics for fetch/verify latency, adoption lag (desired vs applied), last error; status endpoint per mission reporting current/desired versions.

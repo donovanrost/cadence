@@ -224,19 +224,18 @@ defmodule Cadence.Simulator.SendBuffer do
 
       {:error, reason} ->
         Logger.warning(
-          "SendBuffer flush failed: #{inspect(reason)}, dropping #{packets_buffered} packets"
+          "SendBuffer flush failed: #{inspect(reason)}, dropping #{packets_buffered} packets; attempting reconnect"
         )
 
-        %{
-          state
-          | buffer: [],
-            buffer_bytes: 0,
-            packets_buffered: 0
-        }
+        state
+        |> reconnect_output()
+        |> Map.merge(%{buffer: [], buffer_bytes: 0, packets_buffered: 0})
     end
   end
 
-  defp do_send(%{socket: nil}, _iolist), do: :ok
+  defp do_send(%{socket: nil} = state, _iolist) do
+    {:error, missing_socket_reason(state.output)}
+  end
 
   defp do_send(%{output: {:tcp, _, _}, socket: socket}, iolist) do
     :gen_tcp.send(socket, iolist)
@@ -248,7 +247,12 @@ defmodule Cadence.Simulator.SendBuffer do
     :gen_udp.send(socket, String.to_charlist(host), port, binary)
   end
 
-  defp do_send(_, _), do: :ok
+  defp do_send(_, _), do: {:error, :invalid_output}
+
+  defp missing_socket_reason(nil), do: :no_output_configured
+  defp missing_socket_reason({:tcp, _, _}), do: :not_connected
+  defp missing_socket_reason({:udp, _, _}), do: :not_connected
+  defp missing_socket_reason(_), do: :not_connected
 
   defp connect_output(%{output: nil} = state), do: state
 
@@ -285,6 +289,20 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   defp connect_output(state), do: state
+
+  defp reconnect_output(%{output: {:tcp, _host, _port}} = state) do
+    %{state | socket: nil} |> connect_output()
+  rescue
+    _ -> %{state | socket: nil}
+  end
+
+  defp reconnect_output(%{output: {:udp, _host, _port}} = state) do
+    %{state | socket: nil} |> connect_output()
+  rescue
+    _ -> %{state | socket: nil}
+  end
+
+  defp reconnect_output(state), do: %{state | socket: nil}
 
   defp close_socket(%{socket: nil}), do: :ok
   defp close_socket(%{output: {:tcp, _, _}, socket: socket}), do: :gen_tcp.close(socket)
