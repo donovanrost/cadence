@@ -3,7 +3,9 @@ defmodule Mix.Tasks.Cadence.Simulate do
   Generates continuous telemetry to exercise the telemetry pipeline.
 
   This Mix task starts the simulator Coordinator to generate telemetry data
-  for testing, development, and alarm verification purposes.
+  for testing, development, and alarm verification purposes. By default it
+  runs in a lightweight, standalone mode and does not boot the full Cadence
+  application runtime.
 
   ## Usage
 
@@ -61,9 +63,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
   and elapsed time. Press Ctrl+C to stop gracefully.
   """
 
-  alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.Runtime.Missions.MissionSupervisor
-
   use Mix.Task
 
   require Logger
@@ -79,7 +78,23 @@ defmodule Mix.Tasks.Cadence.Simulate do
 
   @impl Mix.Task
   def run(args) do
-    # Parse command-line arguments
+    config = parse_args(args)
+
+    start_runtime(config)
+    print_banner(config)
+
+    coordinator_opts = build_coordinator_opts(config)
+
+    case Coordinator.start_link(coordinator_opts) do
+      {:ok, pid} ->
+        run_simulation(pid, config)
+
+      {:error, reason} ->
+        Mix.raise("Failed to start simulator: #{inspect(reason)}")
+    end
+  end
+
+  defp parse_args(args) do
     {opts, _remaining, invalid} =
       OptionParser.parse(
         args,
@@ -92,7 +107,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
           scenario: :string,
           definitions: :string,
           provider: :string,
-          start_mission: :boolean,
           parallel: :boolean,
           generators: :integer,
           batch_timeout: :integer,
@@ -110,19 +124,22 @@ defmodule Mix.Tasks.Cadence.Simulate do
         ]
       )
 
-    # Show help if requested or invalid options
-    if opts[:help] || invalid != [] do
+    if opts[:help] do
       print_help()
-      if invalid != [], do: Mix.raise("Invalid options: #{inspect(invalid)}")
       System.halt(0)
     end
 
-    # Validate and extract mission_id
-    mission_id = validate_mission_id!(opts)
+    if invalid != [] do
+      print_help()
+      Mix.raise("Invalid options: #{inspect(invalid)}")
+    end
 
-    # Parse configuration
-    config = %{
-      mission_id: mission_id,
+    build_config(opts)
+  end
+
+  defp build_config(opts) do
+    %{
+      mission_id: validate_mission_id!(opts),
       target_id: opts[:target] || @default_target,
       rate_hz: parse_rate(opts[:rate]),
       duration: parse_duration(opts[:duration]),
@@ -130,36 +147,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
       scenario_path: opts[:scenario],
       definitions_path: opts[:definitions],
       provider: parse_provider(opts[:provider]),
-      start_mission: opts[:start_mission] || false,
       parallel_mode: if(opts[:parallel], do: :parallel, else: :sequential),
       generator_count: opts[:generators],
       send_batch_timeout: opts[:batch_timeout],
       send_batch_size: opts[:batch_size]
     }
-
-    # Start the application with reconcilers disabled.
-    # The simulator only needs to SEND telemetry to a running Cadence instance,
-    # not run its own mission infrastructure. Without this, the reconciler would
-    # try to start missions/interfaces, conflicting with the main Cadence process.
-    Application.put_env(:cadence, :start_reconcilers, false)
-    Mix.Task.run("app.start")
-
-    # Start the mission runtime directly if requested (interfaces, pipeline, etc.)
-    maybe_start_mission(config)
-
-    # Display configuration
-    print_banner(config)
-
-    # Build coordinator options
-    coordinator_opts = build_coordinator_opts(config)
-
-    case Coordinator.start_link(coordinator_opts) do
-      {:ok, pid} ->
-        run_simulation(pid, config)
-
-      {:error, reason} ->
-        Mix.raise("Failed to start simulator: #{inspect(reason)}")
-    end
   end
 
   defp build_coordinator_opts(config) do
@@ -205,30 +197,34 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp parse_provider("scenario"), do: :scenario
   defp parse_provider(other), do: Mix.raise("Invalid provider: #{other}. Valid: basic, scenario")
 
-  defp maybe_start_mission(%{start_mission: true, mission_id: mission_id}) do
-    Mix.shell().info("Starting mission runtime (interfaces, pipeline, etc.)...")
+  defp start_runtime(_config), do: start_standalone_runtime()
 
-    # Mix task - use unscoped for CLI access
-    case Cadence.Missions.get_mission(mission_id) do
-      {:error, :not_found} ->
-        Mix.raise("Mission not found: #{mission_id}")
+  defp start_standalone_runtime do
+    ensure_simulator_dependencies()
 
-      {:ok, mission} ->
-        {:ok, config} = MissionConfig.load(mission.id)
+    children = [
+      {Registry, keys: :unique, name: Cadence.MissionRegistry}
+    ]
 
-        case MissionSupervisor.start_mission(config) do
-          {:ok, _pid} ->
-            Mix.shell().info("Mission started")
-            # Give interfaces time to start
-            :timer.sleep(500)
+    opts = [strategy: :one_for_one, name: Cadence.Simulator.RuntimeSupervisor]
 
-          {:error, reason} ->
-            Mix.raise("Failed to start mission: #{inspect(reason)}")
-        end
+    case Supervisor.start_link(children, opts) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      {:error, reason} ->
+        Mix.raise("Failed to start simulator runtime: #{inspect(reason)}")
     end
   end
 
-  defp maybe_start_mission(_config), do: :ok
+  defp ensure_simulator_dependencies do
+    {:ok, _} = Application.ensure_all_started(:crypto)
+    {:ok, _} = Application.ensure_all_started(:yaml_elixir)
+    {:ok, _} = Application.ensure_all_started(:yamerl)
+  end
 
   ## Private Functions
 
@@ -261,7 +257,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp parse_duration(duration), do: Mix.raise("Duration must be non-negative, got: #{duration}")
 
   defp parse_output(nil), do: nil
-  defp parse_output("pubsub"), do: :pubsub
 
   defp parse_output("tcp:" <> rest) do
     case String.split(rest, ":") do
@@ -290,7 +285,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
   end
 
   defp parse_output(invalid) do
-    Mix.raise("Invalid output: #{invalid}. Valid: pubsub, tcp:host:port, udp:host:port")
+    Mix.raise("Invalid output: #{invalid}. Valid: tcp:host:port, udp:host:port")
   end
 
   defp print_banner(config) do
@@ -349,7 +344,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
   end
 
   defp format_output(nil), do: "none (dry run)"
-  defp format_output(:pubsub), do: "pubsub (mission:<id>:telemetry:raw)"
   defp format_output({:tcp, host, port}), do: "TCP #{host}:#{port}"
   defp format_output({:udp, host, port}), do: "UDP #{host}:#{port}"
   defp format_output(other), do: inspect(other)
@@ -501,6 +495,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Usage:
       mix cadence.simulate [options]
 
+    By default this runs in standalone mode without starting the full Cadence app.
+
     Required Options:
       --mission-id, -m <uuid>    Mission UUID to simulate telemetry for
 
@@ -512,7 +508,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --scenario, -s <path>      Path to YAML scenario file for deterministic testing
       --definitions <path>       Path to YAML packet definitions for encoding
       --provider <type>          Provider: basic (default) or scenario
-      --start-mission            Start the mission runtime directly (interfaces, pipeline)
       --help, -h                 Show this help
 
     Parallel Mode (for high-throughput testing):
@@ -528,12 +523,6 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Examples:
       # Basic simulation with hardcoded encoding
       mix cadence.simulate -m <uuid> --output tcp:localhost:9999
-
-      # With mission runtime started directly (for end-to-end testing)
-      mix cadence.simulate -m <uuid> \\
-        --start-mission \\
-        --definitions ~/mission/telemetry.yaml \\
-        --output tcp:localhost:9000
 
       # Using packet definitions for proper encoding
       mix cadence.simulate -m <uuid> \\

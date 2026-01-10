@@ -79,8 +79,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   - `:targets` - List of target IDs to simulate (default: ["sim-target-1"])
   - `:packet_types` - List of packet types to generate (default: [:health, :attitude, :power])
   - `:rate_hz` - Packet generation rate in Hz (default: 1.0)
-  - `:encoding` - Packet encoding format (default: :json)
-    - `:json` - Simple length-prefixed with JSON payload (for testing)
+  - `:encoding` - Packet encoding format (default: :ccsds)
     - `:ccsds` - CCSDS Space Packet Protocol with binary payload (realistic)
   - `:output` - Output configuration:
     - `{:tcp, host, port}` - Send to TCP server
@@ -128,7 +127,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     targets = Keyword.get(opts, :targets, ["sim-target-1"])
     packet_types = Keyword.get(opts, :packet_types, @default_packet_types)
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
-    encoding = Keyword.get(opts, :encoding, :json)
+    encoding = parse_encoding(Keyword.get(opts, :encoding, :ccsds))
     output = Keyword.get(opts, :output)
 
     # Clamp rate to maximum supported
@@ -412,18 +411,9 @@ defmodule Cadence.Simulator.PacketSimulator do
 
     # Always publish to PubSub for testing
     pubsub_packet =
-      case state.encoding do
-        :ccsds ->
-          encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
+      encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
 
-        :json ->
-          strip_length_prefix(binary_packet)
-
-        _ ->
-          binary_packet
-      end
-
-    publish_packet(state.mission_id, target_id, packet_type, pubsub_packet, state.encoding)
+    publish_packet(state.mission_id, target_id, packet_type, pubsub_packet)
 
     %{state | packet_count: state.packet_count + 1}
   end
@@ -476,42 +466,17 @@ defmodule Cadence.Simulator.PacketSimulator do
     (:rand.uniform() - 0.5) * 2.0 * amplitude
   end
 
-  ## Packet Encoding
+  defp parse_encoding(:ccsds), do: :ccsds
+  defp parse_encoding("ccsds"), do: :ccsds
 
-  defp encode_packet(:json, packet_type, target_id, data, _packet_count) do
-    encode_packet_json(packet_type, target_id, data)
+  defp parse_encoding(other) do
+    raise ArgumentError, "Unsupported encoding: #{inspect(other)} (supported: :ccsds)"
   end
+
+  ## Packet Encoding
 
   defp encode_packet(:ccsds, packet_type, target_id, data, packet_count) do
     encode_packet_ccsds(packet_type, target_id, data, packet_count)
-  end
-
-  # JSON encoding (original format for simple testing)
-  defp encode_packet_json(packet_type, target_id, data) do
-    # Simple length-prefixed encoding for testing
-    # Format: [length:32][packet_type:8][target_id_len:8][target_id][json_payload]
-
-    packet_type_byte =
-      case packet_type do
-        :health -> 1
-        :attitude -> 2
-        :power -> 3
-        _ -> 0
-      end
-
-    target_id_bytes = target_id
-    target_id_len = byte_size(target_id_bytes)
-
-    payload = Jason.encode!(data)
-    payload_bytes = payload
-
-    packet_content =
-      <<packet_type_byte::8, target_id_len::8>> <>
-        target_id_bytes <> payload_bytes
-
-    length = byte_size(packet_content)
-
-    <<length::32, packet_content::binary>>
   end
 
   # CCSDS Space Packet Protocol encoding (realistic spacecraft format)
@@ -714,7 +679,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   end
 
-  defp publish_packet(mission_id, target_id, packet_type, binary_packet, encoding) do
+  defp publish_packet(mission_id, target_id, packet_type, binary_packet) do
     metadata = %{
       mission_id: mission_id,
       stored: false,
@@ -725,15 +690,9 @@ defmodule Cadence.Simulator.PacketSimulator do
     }
 
     packet =
-      case encoding do
-        :ccsds ->
-          case Packet.from_ccsds(binary_packet, metadata) do
-            {:ok, packet} -> packet
-            {:error, reason} -> log_failed_packet(mission_id, reason)
-          end
-
-        _ ->
-          Packet.from_simulator(binary_packet, metadata)
+      case Packet.from_ccsds(binary_packet, metadata) do
+        {:ok, packet} -> packet
+        {:error, reason} -> log_failed_packet(mission_id, reason)
       end
 
     if packet do
@@ -744,9 +703,6 @@ defmodule Cadence.Simulator.PacketSimulator do
       )
     end
   end
-
-  defp strip_length_prefix(<<_length::32, rest::binary>>), do: rest
-  defp strip_length_prefix(other), do: other
 
   defp log_failed_packet(mission_id, reason) do
     Logger.warning(

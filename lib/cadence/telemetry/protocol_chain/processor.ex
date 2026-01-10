@@ -193,8 +193,8 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
 
   The last protocol in the read chain determines the format of extracted packets.
   """
-  @spec chain_format(protocol_chain()) :: :ccsds | :raw | :simulator
-  def chain_format([]), do: :simulator
+  @spec chain_format(protocol_chain()) :: :ccsds | :raw
+  def chain_format([]), do: :raw
 
   def chain_format(chain) do
     {module, _state} = List.last(chain)

@@ -475,13 +475,17 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         client_port: client_state.remote_port
       }
 
-      packet = construct_packet(packet_binary, metadata, format)
+      case construct_packet(packet_binary, metadata, format) do
+        %Packet{} = packet ->
+          Phoenix.PubSub.broadcast(
+            Cadence.PubSub,
+            "mission:#{state.interface.mission_id}:telemetry:raw",
+            {:telemetry_packet, packet, metadata}
+          )
 
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
-        "mission:#{state.interface.mission_id}:telemetry:raw",
-        {:telemetry_packet, packet, metadata}
-      )
+        nil ->
+          :ok
+      end
     end)
   end
 
@@ -642,25 +646,24 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   defp construct_packet(binary, metadata, format) do
     case format do
       :ccsds ->
-        case Packet.from_ccsds(binary, metadata) do
-          {:ok, packet} ->
-            packet
+        build_ccsds_packet(binary, metadata)
 
-          {:error, reason} ->
-            Logger.error(
-              "Failed to parse CCSDS packet for target=#{metadata.target_id}: #{inspect(reason)}"
-            )
+      :raw ->
+        build_ccsds_packet(binary, metadata)
+    end
+  end
 
-            # Fallback to simulator format on parse error
-            Packet.from_simulator(binary, metadata)
-        end
+  defp build_ccsds_packet(binary, metadata) do
+    case Packet.from_ccsds(binary, metadata) do
+      {:ok, packet} ->
+        packet
 
-      :simulator ->
-        Packet.from_simulator(binary, metadata)
+      {:error, reason} ->
+        Logger.error(
+          "Failed to parse CCSDS packet for target=#{metadata.target_id}: #{inspect(reason)}"
+        )
 
-      _raw ->
-        # For raw format, create a generic packet
-        Packet.from_simulator(binary, metadata)
+        nil
     end
   end
 end

@@ -190,24 +190,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
     case process_incoming_data(data, new_state) do
       {:ok, packets_with_format, updated_chain} ->
         # Forward extracted packets to pipeline
-        Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
-          metadata = %{
-            mission_id: state.interface.mission_id,
-            stored: false,
-            target_id: state.target_id,
-            received_at: DateTime.utc_now(),
-            interface_id: state.interface.id
-          }
-
-          # Construct Packet struct based on format
-          packet = construct_packet(packet_binary, metadata, format)
-
-          Phoenix.PubSub.broadcast(
-            Cadence.PubSub,
-            "mission:#{state.interface.mission_id}:telemetry:raw",
-            {:telemetry_packet, packet, metadata}
-          )
-        end)
+        broadcast_packets(packets_with_format, state)
 
         {:noreply,
          %{
@@ -255,6 +238,34 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
 
   ## Private Functions
 
+  defp broadcast_packets(packets_with_format, state) do
+    Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
+      metadata = %{
+        mission_id: state.interface.mission_id,
+        stored: false,
+        target_id: state.target_id,
+        received_at: DateTime.utc_now(),
+        interface_id: state.interface.id
+      }
+
+      broadcast_packet(packet_binary, format, metadata, state.interface.mission_id)
+    end)
+  end
+
+  defp broadcast_packet(packet_binary, format, metadata, mission_id) do
+    case construct_packet(packet_binary, metadata, format) do
+      %Packet{} = packet ->
+        Phoenix.PubSub.broadcast(
+          Cadence.PubSub,
+          "mission:#{mission_id}:telemetry:raw",
+          {:telemetry_packet, packet, metadata}
+        )
+
+      nil ->
+        :ok
+    end
+  end
+
   defp start_protocol_chain(mission_id, interface_id, protocols) do
     case ProtocolChainSupervisor.start_chain(mission_id, interface_id, protocols: protocols) do
       {:ok, pid} ->
@@ -300,8 +311,8 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   defp process_incoming_data(data, %State{protocol_chain: []}) do
-    # No protocols - return data as single packet with simulator format
-    {:ok, [{data, :simulator, %{}}], []}
+    # No protocols - return data as single raw packet
+    {:ok, [{data, :raw, %{}}], []}
   end
 
   defp process_incoming_data(data, %State{protocol_chain: chain}) do
@@ -328,23 +339,24 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   defp construct_packet(binary, metadata, format) do
     case format do
       :ccsds ->
-        case Packet.from_ccsds(binary, metadata) do
-          {:ok, packet} ->
-            packet
+        build_ccsds_packet(binary, metadata)
 
-          {:error, reason} ->
-            Logger.error(
-              "Failed to parse CCSDS packet for target=#{metadata.target_id}: #{inspect(reason)}"
-            )
+      :raw ->
+        build_ccsds_packet(binary, metadata)
+    end
+  end
 
-            Packet.from_simulator(binary, metadata)
-        end
+  defp build_ccsds_packet(binary, metadata) do
+    case Packet.from_ccsds(binary, metadata) do
+      {:ok, packet} ->
+        packet
 
-      :simulator ->
-        Packet.from_simulator(binary, metadata)
+      {:error, reason} ->
+        Logger.error(
+          "Failed to parse CCSDS packet for target=#{metadata.target_id}: #{inspect(reason)}"
+        )
 
-      _raw ->
-        Packet.from_simulator(binary, metadata)
+        nil
     end
   end
 end

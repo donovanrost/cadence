@@ -3,7 +3,7 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   Fast packet identification using ETS lookup tables.
 
   For each mission, maintains an ETS table mapping packet identifiers
-  (APID, packet type byte, etc.) to packet definitions. This enables
+  (APID, etc.) to packet definitions. This enables
   O(1) identification of incoming packets.
 
   ## Target-Scoped Definition Sets
@@ -14,10 +14,9 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
 
   ## Identification Strategies
 
-  1. **Type Byte** - Single byte packet type (simulator format)
-  2. **APID** - CCSDS Application Process Identifier
-  3. **Pattern** - First N bytes match pattern
-  4. **Custom** - User-defined identification function
+  1. **APID** - CCSDS Application Process Identifier
+  2. **Pattern** - First N bytes match pattern
+  3. **Custom** - User-defined identification function
 
   The identifier loads packet definitions from the database on initialization
   and provides fast lookup during packet processing.
@@ -31,6 +30,7 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   alias Cadence.Config.VersionRegistry
   alias Cadence.MissionDatabase.Container
   alias Cadence.Repo
+  alias Cadence.Telemetry.Packet
 
   defmodule State do
     @moduledoc false
@@ -57,32 +57,14 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   @doc """
   Identifies a packet from binary data.
 
-  Returns `{:ok, packet_definition}` or `{:error, :unknown_packet}`.
-
-  Uses cached target → definition_set_id mapping for O(1) lookup.
-  Targets must have a definition_set_id assigned.
-
-  ## Identification Process
-
-  1. Extract packet type byte (byte 0 after length header)
-  2. Look up cached definition_set_id for the target
-  3. Look up packet definition in ETS table
-  4. Return packet definition with items
+  Returns `{:error, :missing_target_id}` since CCSDS packets do not encode a
+  target identifier. Use `identify_for_target/3` or `identify_by_apid/3` instead.
   """
-  @spec identify(binary(), binary()) ::
-          {:ok, map()} | {:error, :unknown_packet | :malformed_packet}
+  @spec identify(binary(), binary()) :: {:ok, map()} | {:error, :missing_target_id}
   def identify(mission_id, binary_packet) when is_binary(binary_packet) do
-    table_name = table_name(mission_id)
-
-    # For simulator format: [packet_type:8][target_id_len:8][target_id][json_payload]
-    with {:ok, packet_type_byte, target_id} <- decode_simulator_packet(binary_packet),
-         definition_set_id <- get_cached_definition_set_id(table_name, mission_id, target_id),
-         {:ok, packet_def} <- lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
-      {:ok, Map.put(packet_def, :target_id, target_id)}
-    else
-      :not_found -> {:error, :unknown_packet}
-      {:error, :malformed_packet} -> {:error, :malformed_packet}
-    end
+    _mission_id = mission_id
+    _binary_packet = binary_packet
+    {:error, :missing_target_id}
   end
 
   @doc """
@@ -91,19 +73,15 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
   Uses cached target → definition_set_id mapping for O(1) lookup.
   """
   @spec identify_for_target(binary(), binary(), binary()) ::
-          {:ok, map()} | {:error, :unknown_packet | :malformed_packet}
+          {:ok, map()} | {:error, :unknown_packet | term()}
   def identify_for_target(mission_id, target_identifier, binary_packet)
       when is_binary(binary_packet) do
-    table_name = table_name(mission_id)
-    definition_set_id = get_cached_definition_set_id(table_name, mission_id, target_identifier)
-
-    # For simulator format: [packet_type:8][target_id_len:8][target_id][json_payload]
-    with {:ok, packet_type_byte, target_id} <- decode_simulator_packet(binary_packet),
-         {:ok, packet_def} <- lookup_by_type_byte(table_name, definition_set_id, packet_type_byte) do
-      {:ok, Map.put(packet_def, :target_id, target_id)}
+    with {:ok, apid} <- decode_ccsds_apid(binary_packet),
+         {:ok, packet_def} <- identify_by_apid(mission_id, target_identifier, apid) do
+      {:ok, Map.put(packet_def, :target_id, target_identifier)}
     else
-      :not_found -> {:error, :unknown_packet}
-      {:error, :malformed_packet} -> {:error, :malformed_packet}
+      {:error, :unknown_packet} -> {:error, :unknown_packet}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -318,14 +296,6 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     String.to_atom("packet_id_mission_#{mission_id}")
   end
 
-  # Look up by type byte, scoped by definition_set_id
-  defp lookup_by_type_byte(table_name, definition_set_id, type_byte) do
-    case :ets.lookup(table_name, {definition_set_id, :type_byte, type_byte}) do
-      [{_key, packet_def}] -> {:ok, packet_def}
-      [] -> :not_found
-    end
-  end
-
   # Load packet definitions for all definition_sets used by mission targets
   defp load_all_definition_sets(state) do
     # Clear existing entries
@@ -424,36 +394,16 @@ defmodule Cadence.Runtime.Telemetry.PacketIdentifier do
     end
   end
 
-  defp decode_simulator_packet(<<packet_type_byte::8, target_id_len::8, rest::binary>>) do
-    if byte_size(rest) >= target_id_len do
-      <<target_id::binary-size(target_id_len), _payload::binary>> = rest
-      {:ok, packet_type_byte, target_id}
-    else
-      {:error, :malformed_packet}
+  defp decode_ccsds_apid(binary_packet) do
+    case Packet.parse_ccsds_header(binary_packet) do
+      {:ok, %Packet.CCSDSHeader{apid: apid}} -> {:ok, apid}
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp decode_simulator_packet(_), do: {:error, :malformed_packet}
-
   defp insert_container_packet(table_name, definition_set_id, container) do
     packet_map = build_packet_map_from_container(container, definition_set_id)
-    maybe_insert_packet_type(table_name, definition_set_id, container, packet_map)
     maybe_insert_packet_apid(table_name, definition_set_id, container, packet_map)
-  end
-
-  defp maybe_insert_packet_type(
-         _table_name,
-         _definition_set_id,
-         %{packet_type: nil},
-         _packet_map
-       ),
-       do: :ok
-
-  defp maybe_insert_packet_type(table_name, definition_set_id, container, packet_map) do
-    :ets.insert(
-      table_name,
-      {{definition_set_id, :type_byte, container.packet_type}, packet_map}
-    )
   end
 
   defp maybe_insert_packet_apid(_table_name, _definition_set_id, %{apid: nil}, _packet_map),

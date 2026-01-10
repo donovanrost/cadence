@@ -246,12 +246,12 @@ defmodule Cadence.Telemetry.ProtocolBehaviour do
   Returns:
   - `:ccsds` - CCSDS Space Packet Protocol (identify by APID)
   - `:raw` - Raw binary packets (generic framing)
-  - `:json` - JSON-formatted packets (simulator format)
-  - `:simulator` - Legacy simulator format (type byte identification)
+  - `:ccsds` - CCSDS Space Packet format
+  - `:raw` - Raw binary packets (no CCSDS parsing applied)
 
   Defaults to `:raw` if not implemented.
   """
-  @callback packet_format() :: :ccsds | :raw | :json | :simulator
+  @callback packet_format() :: :ccsds | :raw
 
   @optional_callbacks [post_write_interface: 3, protocol_cmd: 3, packet_format: 0]
 end

@@ -34,7 +34,7 @@ defmodule Cadence.Telemetry.ProtocolChain do
         {:ok, packets} ->
           # packets is a list of {binary, format, metadata}
           Enum.each(packets, fn {packet_binary, format, metadata} ->
-            # format is :ccsds, :raw, or :simulator
+            # format is :ccsds or :raw
           end)
 
         :need_more_data ->
@@ -133,7 +133,7 @@ defmodule Cadence.Telemetry.ProtocolChain do
   @doc """
   Returns the packet format this chain produces.
   """
-  @spec get_format(pid() | GenServer.name()) :: :ccsds | :raw | :simulator
+  @spec get_format(pid() | GenServer.name()) :: :ccsds | :raw
   def get_format(chain) do
     GenServer.call(chain, :get_format)
   end

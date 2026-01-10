@@ -17,11 +17,6 @@ defmodule Cadence.Telemetry.Packet do
       packet.ccsds_header.apid
       #=> 100
 
-      # Simulator packet
-      packet = Packet.from_simulator(sim_binary, metadata)
-      packet.ccsds_header
-      #=> nil
-
       # Extract payload for decommutation
       {:ok, payload} = Packet.get_payload(packet)
   """
@@ -138,36 +133,6 @@ defmodule Cadence.Telemetry.Packet do
     end
   end
 
-  @doc """
-  Creates a Packet from simulator format binary data.
-
-  Simulator format: `[type:8][target_id_len:8][target_id][JSON]`
-
-  ## Examples
-
-      metadata = %{
-        mission_id: "abc-123",
-        target_id: "SIM-1"
-      }
-
-      packet = Packet.from_simulator(sim_binary, metadata)
-      packet.ccsds_header
-      #=> nil
-  """
-  def from_simulator(binary, metadata \\ %{}) when is_binary(binary) do
-    %__MODULE__{
-      mission_id: metadata[:mission_id],
-      target_id: metadata[:target_id],
-      received_time: metadata[:received_at] || DateTime.utc_now(),
-      raw: binary,
-      # No CCSDS header for simulator packets
-      ccsds_header: nil,
-      stored: metadata[:stored] || false,
-      interface_id: metadata[:interface_id],
-      source: metadata
-    }
-  end
-
   ## Header Parsing
 
   @doc """
@@ -238,28 +203,28 @@ defmodule Cadence.Telemetry.Packet do
   ## Helper Functions
 
   @doc """
-  Returns the packet format (`:ccsds` or `:simulator`).
+  Returns the packet format (`:ccsds` or `:raw`).
 
   ## Examples
 
       Packet.get_format(ccsds_packet)
       #=> :ccsds
 
-      Packet.get_format(sim_packet)
-      #=> :simulator
+      Packet.get_format(packet_without_header)
+      #=> :raw
   """
-  def get_format(%__MODULE__{ccsds_header: nil}), do: :simulator
+  def get_format(%__MODULE__{ccsds_header: nil}), do: :raw
   def get_format(%__MODULE__{ccsds_header: %CCSDSHeader{}}), do: :ccsds
 
   @doc """
-  Extracts the APID from a CCSDS packet, or nil for simulator packets.
+  Extracts the APID from a CCSDS packet, or nil for raw packets.
 
   ## Examples
 
       Packet.get_apid(ccsds_packet)
       #=> 100
 
-      Packet.get_apid(sim_packet)
+      Packet.get_apid(packet_without_header)
       #=> nil
   """
   def get_apid(%__MODULE__{ccsds_header: %CCSDSHeader{apid: apid}}), do: apid
@@ -279,7 +244,6 @@ defmodule Cadence.Telemetry.Packet do
   Extracts the payload from the packet based on format.
 
   For CCSDS: Skips primary header (6 bytes) + secondary header (8 bytes)
-  For simulator: Skips type byte + target_id_len + target_id
 
   ## Examples
 
@@ -293,44 +257,9 @@ defmodule Cadence.Telemetry.Packet do
     end
   end
 
-  def get_payload(%__MODULE__{raw: raw, ccsds_header: nil}) do
-    # Simulator format: [type:8][target_id_len:8][target_id][payload]
-    case raw do
-      <<_type::8, target_id_len::8, rest::binary>> ->
-        if byte_size(rest) >= target_id_len do
-          <<_target_id::binary-size(target_id_len), payload::binary>> = rest
-          {:ok, payload}
-        else
-          {:error, :malformed_packet}
-        end
-
-      _ ->
-        {:error, :invalid_packet_structure}
-    end
+  def get_payload(%__MODULE__{ccsds_header: nil}) do
+    {:error, :missing_ccsds_header}
   end
-
-  @doc """
-  Extracts the packet type byte from simulator format packets.
-
-  Returns `{:ok, type_byte}` or `{:error, reason}`.
-
-  ## Examples
-
-      {:ok, type_byte} = Packet.get_type_byte(sim_packet)
-      #=> {:ok, 1}
-
-      Packet.get_type_byte(ccsds_packet)
-      #=> {:error, :not_simulator_format}
-  """
-  def get_type_byte(%__MODULE__{raw: raw, ccsds_header: nil}) do
-    case raw do
-      <<type_byte::8, _rest::binary>> -> {:ok, type_byte}
-      _ -> {:error, :invalid_packet_structure}
-    end
-  end
-
-  def get_type_byte(%__MODULE__{ccsds_header: %CCSDSHeader{}}),
-    do: {:error, :not_simulator_format}
 
   @doc """
   Adds a decoded item to the packet.

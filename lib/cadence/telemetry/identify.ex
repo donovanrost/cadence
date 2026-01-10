@@ -30,21 +30,9 @@ defmodule Cadence.Telemetry.Identify do
     fetch_packet_def_from_catalog(packet, :ccsds, event, state)
   end
 
-  defp identify_packet(%Packet{} = packet, :simulator, event, state) do
-    fetch_packet_def_from_catalog(packet, :simulator, event, state)
-  end
-
   defp identify_packet(_packet, format, _event, _state) do
     {:error, {:unsupported_format, format}}
   end
-
-  defp extract_target_id(<<_type::8, target_id_len::8, rest::binary>>)
-       when byte_size(rest) >= target_id_len do
-    <<target_id::binary-size(target_id_len), _payload::binary>> = rest
-    {:ok, target_id}
-  end
-
-  defp extract_target_id(_raw), do: {:error, :malformed_packet}
 
   defp fetch_packet_def_from_catalog(packet, format, event, state) do
     case state[:config_bundle] do
@@ -69,18 +57,6 @@ defmodule Cadence.Telemetry.Identify do
 
       _ ->
         {:error, :unknown_packet}
-    end
-  end
-
-  defp lookup_packet_def(packet, :simulator, _event, targets, catalog) do
-    with {:ok, type_byte} <- Packet.get_type_byte(packet),
-         {:ok, target_id} <- extract_target_id(packet.raw),
-         definition_set_id when not is_nil(definition_set_id) <- Map.get(targets, target_id),
-         packet_def when not is_nil(packet_def) <-
-           Map.get(catalog.by_type, {definition_set_id, type_byte}) do
-      {:ok, Map.put(packet_def, :target_id, target_id)}
-    else
-      _ -> {:error, :unknown_packet}
     end
   end
 end

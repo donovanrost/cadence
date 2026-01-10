@@ -350,13 +350,11 @@ defmodule Cadence.Telemetry.IntegrationTest do
         }
       )
 
-    string_dt = string_data_type_fixture(definition_set: definition_set)
-
     health =
       container_fixture(
         definition_set: definition_set,
         name: "HEALTH",
-        packet_type: 1
+        apid: 100
       )
 
     add_entry(definition_set, health, "cpu_temp", float_dt, 0)
@@ -370,7 +368,7 @@ defmodule Cadence.Telemetry.IntegrationTest do
       container_fixture(
         definition_set: definition_set,
         name: "ATTITUDE",
-        packet_type: 2
+        apid: 101
       )
 
     add_entry(definition_set, attitude, "roll", float_dt, 0)
@@ -384,14 +382,14 @@ defmodule Cadence.Telemetry.IntegrationTest do
       container_fixture(
         definition_set: definition_set,
         name: "POWER",
-        packet_type: 3
+        apid: 102
       )
 
     add_entry(definition_set, power, "solar_panel_voltage", float_dt, 0)
     add_entry(definition_set, power, "solar_panel_current", float_dt, 32)
     add_entry(definition_set, power, "bus_voltage", float_dt, 64)
     add_entry(definition_set, power, "bus_current", float_dt, 96)
-    add_entry(definition_set, power, "power_mode", string_dt, 128)
+    add_entry(definition_set, power, "power_mode", uint8_dt, 128)
 
     definition_set
   end

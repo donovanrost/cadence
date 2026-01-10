@@ -233,59 +233,6 @@ defmodule Cadence.Telemetry.DecommutationTest do
     end
   end
 
-  describe "JSON decommutation" do
-    test "extracts items from JSON packet" do
-      json_data = ~s({"cpu_temp": 25.5, "battery_voltage": 14.2, "uptime": 3600})
-
-      packet_def = %{
-        id: 1,
-        name: "HEALTH",
-        items: [
-          %{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float},
-          %{name: "battery_voltage", bit_offset: 32, bit_size: 32, data_type: :float},
-          %{name: "uptime", bit_offset: 64, bit_size: 32, data_type: :uint}
-        ]
-      }
-
-      {:ok, items} = Decommutation.decommutate(json_data, packet_def, :json)
-
-      assert items["cpu_temp"] == 25.5
-      assert items["battery_voltage"] == 14.2
-      assert items["uptime"] == 3600
-    end
-
-    test "handles missing fields in JSON" do
-      json_data = ~s({"cpu_temp": 25.5})
-
-      packet_def = %{
-        id: 1,
-        name: "HEALTH",
-        items: [
-          %{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float},
-          %{name: "battery_voltage", bit_offset: 32, bit_size: 32, data_type: :float}
-        ]
-      }
-
-      {:ok, items} = Decommutation.decommutate(json_data, packet_def, :json)
-
-      assert items["cpu_temp"] == 25.5
-      assert items["battery_voltage"] == nil
-    end
-
-    test "returns error for invalid JSON" do
-      invalid_json = ~s({"cpu_temp": 25.5)
-
-      packet_def = %{
-        id: 1,
-        name: "HEALTH",
-        items: [%{name: "cpu_temp", bit_offset: 0, bit_size: 32, data_type: :float}]
-      }
-
-      {:error, {:json_parse_error, _reason}} =
-        Decommutation.decommutate(invalid_json, packet_def, :json)
-    end
-  end
-
   describe "binary decommutation (full packet)" do
     test "decommutates realistic CCSDS health packet" do
       # CCSDS health packet layout (after sync and headers):

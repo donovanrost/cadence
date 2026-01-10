@@ -2,14 +2,12 @@ defmodule Cadence.Telemetry.Decommutation do
   @moduledoc """
   Decommutation engine for extracting telemetry items from packets.
 
-  Supports two formats:
-  1. **Binary** - Bit-level extraction from raw spacecraft data
-  2. **JSON** - For simulators and testing (what PacketSimulator generates)
+  Supports binary CCSDS payloads extracted from spacecraft data.
 
   For binary packets, extracts fields based on bit_offset and bit_length
   from the packet definition. Handles endianness and data type conversions.
 
-  For JSON packets, parses the JSON and maps fields to items.
+  For CCSDS packets, extracts fields from the binary payload.
   """
 
   require Logger
@@ -78,52 +76,21 @@ defmodule Cadence.Telemetry.Decommutation do
   Returns `{:ok, items}` where items is a map of item_name => raw_value.
 
   Accepts format as:
-  - `:json` or `:simulator` - JSON packet from simulator
   - `:binary` or `:ccsds` - Binary CCSDS packet from spacecraft
 
   ## Examples
-
-      # JSON packet (from simulator)
-      packet_data = ~s({"cpu_temp": 25.5, "battery_voltage": 14.2})
-      {:ok, items} = Decommutation.decommutate(packet_data, packet_def, :simulator)
 
       # Binary packet (from spacecraft)
       packet_data = <<0x00, 0x01, 0x02, 0x03, ...>>
       {:ok, items} = Decommutation.decommutate(packet_data, packet_def, :ccsds)
   """
-  @spec decommutate(binary(), map(), :json | :binary | :simulator | :ccsds) ::
+  @spec decommutate(binary(), map(), :binary | :ccsds) ::
           {:ok, map()} | {:error, term()}
-  def decommutate(packet_data, packet_def, format \\ :json)
-
-  # Map :simulator format to :json
-  def decommutate(packet_data, packet_def, :simulator) do
-    decommutate(packet_data, packet_def, :json)
-  end
+  def decommutate(packet_data, packet_def, format \\ :ccsds)
 
   # Map :ccsds format to :binary
   def decommutate(packet_data, packet_def, :ccsds) do
     decommutate(packet_data, packet_def, :binary)
-  end
-
-  def decommutate(packet_data, packet_def, :json) when is_binary(packet_data) do
-    case Jason.decode(packet_data) do
-      {:ok, json_data} ->
-        items =
-          packet_def.items
-          |> Enum.map(fn item_def ->
-            value =
-              Map.get(json_data, item_def.name) || Map.get(json_data, to_string(item_def.name))
-
-            {item_def.name, value}
-          end)
-          |> Enum.into(%{})
-
-        {:ok, items}
-
-      {:error, reason} ->
-        Logger.error("Failed to parse JSON packet: #{inspect(reason)}")
-        {:error, {:json_parse_error, reason}}
-    end
   end
 
   def decommutate(packet_data, packet_def, :binary) when is_binary(packet_data) do
