@@ -33,6 +33,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
   require Logger
 
   alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
+  alias Cadence.Telemetry.ProtocolChain.Processor
 
   defstruct [
     :worker_id,
@@ -41,6 +42,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
     :provider_state,
     :encoder,
     :target_id,
+    :write_chain,
     :sequence_allocator,
     :send_buffer,
     :sample_rate
@@ -127,6 +129,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
     provider_state = Keyword.fetch!(opts, :provider_state)
     encoder = Keyword.get(opts, :encoder)
     target_id = Keyword.fetch!(opts, :target_id)
+    write_chain_configs = Keyword.get(opts, :write_chain_configs)
+    write_chain = init_write_chain(write_chain_configs)
     sequence_allocator = Keyword.fetch!(opts, :sequence_allocator)
     send_buffer = Keyword.fetch!(opts, :send_buffer)
     sample_rate = Keyword.get(opts, :sample_rate, @default_sample_rate)
@@ -138,6 +142,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
       provider_state: provider_state,
       encoder: encoder,
       target_id: target_id,
+      write_chain: write_chain,
       sequence_allocator: sequence_allocator,
       send_buffer: send_buffer,
       sample_rate: sample_rate
@@ -150,14 +155,14 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
   @impl true
   def handle_cast({:generate, step}, state) do
-    do_generate(state, step)
-    {:noreply, state}
+    {_result, new_state} = do_generate(state, step)
+    {:noreply, new_state}
   end
 
   @impl true
   def handle_call({:generate, step}, _from, state) do
-    result = do_generate(state, step)
-    {:reply, result, state}
+    {result, new_state} = do_generate(state, step)
+    {:reply, result, new_state}
   end
 
   @impl true
@@ -204,34 +209,62 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
         # Encode and send
         encode_start = if should_time, do: System.monotonic_time(:microsecond)
-        encode_and_send(encoder, target_id, values, sequence_allocator, send_buffer)
+
+        {_result, updated_state} =
+          encode_and_send(
+            encoder,
+            target_id,
+            values,
+            sequence_allocator,
+            send_buffer,
+            state
+          )
 
         if should_time do
           encode_time = System.monotonic_time(:microsecond) - encode_start
           SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
         end
 
-        :ok
+        {:ok, updated_state}
 
       {:error, reason, _new_provider_state} ->
         Logger.warning(
           "GeneratorWorker #{state.worker_id} generation error at step #{step}: #{inspect(reason)}"
         )
 
-        {:error, reason}
+        {{:error, reason}, state}
     end
   end
 
-  defp encode_and_send(nil, target_id, values, _sequence_allocator, send_buffer) do
+  defp encode_and_send(
+         nil,
+         target_id,
+         values,
+         _sequence_allocator,
+         send_buffer,
+         state
+       ) do
     # No encoder - use hardcoded legacy encoding
     packets = encode_hardcoded(target_id, values)
 
-    Enum.each(packets, fn binary ->
-      SendBuffer.send_packet(send_buffer, binary)
-    end)
+    updated_state =
+      Enum.reduce(packets, state, fn binary, acc_state ->
+        {processed, next_state} = process_write_chain(acc_state, binary)
+        SendBuffer.send_packet(send_buffer, processed)
+        next_state
+      end)
+
+    {:ok, updated_state}
   end
 
-  defp encode_and_send(encoder, target_id, values, sequence_allocator, send_buffer) do
+  defp encode_and_send(
+         encoder,
+         target_id,
+         values,
+         sequence_allocator,
+         send_buffer,
+         state
+       ) do
     # Use encoder with external sequence allocation
     sequence_fn = fn apid ->
       SequenceAllocator.next(sequence_allocator, apid)
@@ -239,10 +272,32 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
     {:ok, packets} = PacketEncoder.encode_with_sequence(encoder, target_id, values, sequence_fn)
 
-    Enum.each(packets, fn {_packet_name, binary} ->
-      SendBuffer.send_packet(send_buffer, binary)
-    end)
+    updated_state =
+      Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
+        {processed, next_state} = process_write_chain(acc_state, binary)
+        SendBuffer.send_packet(send_buffer, processed)
+        next_state
+      end)
+
+    {:ok, updated_state}
   end
+
+  defp process_write_chain(%{write_chain: nil} = state, packet), do: {packet, state}
+  defp process_write_chain(%{write_chain: []} = state, packet), do: {packet, state}
+
+  defp process_write_chain(%{write_chain: write_chain} = state, packet) do
+    case Processor.process_write(write_chain, packet) do
+      {:ok, encoded_packet, updated_chain} ->
+        {encoded_packet, %{state | write_chain: updated_chain}}
+
+      {:error, reason} ->
+        Logger.warning("Write chain processing failed: #{inspect(reason)}, sending raw packet")
+        {packet, state}
+    end
+  end
+
+  defp init_write_chain(nil), do: nil
+  defp init_write_chain(configs), do: Processor.clone_chain(configs)
 
   # Hardcoded encoding for when no encoder is provided (legacy behavior)
   defp encode_hardcoded(target_id, values) do

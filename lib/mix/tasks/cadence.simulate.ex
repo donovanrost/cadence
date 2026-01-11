@@ -35,6 +35,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--scenario` - Path to YAML scenario file for deterministic testing
     * `--definitions` - Path to YAML packet definitions for proper encoding
     * `--provider` - Provider: basic (default) or scenario
+    * `--frame` - Frame format for network output (tm)
+    * `--scid` - Spacecraft ID for frames (tm only)
+    * `--vcid` - Virtual channel ID for frames (tm only)
+    * `--frame-size` - Frame size in bytes (tm only)
+    * `--oid-rate` - OID (idle) frame rate in Hz (tm only)
     * `--parallel` - Enable parallel mode for high throughput
     * `--generators` - Number of generator workers (default: CPU cores)
     * `--batch-timeout` - Send buffer flush interval in ms (default: 10)
@@ -107,6 +112,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
           scenario: :string,
           definitions: :string,
           provider: :string,
+          frame: :string,
+          scid: :integer,
+          vcid: :integer,
+          frame_size: :integer,
+          oid_rate: :float,
           parallel: :boolean,
           generators: :integer,
           batch_timeout: :integer,
@@ -147,6 +157,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       scenario_path: opts[:scenario],
       definitions_path: opts[:definitions],
       provider: parse_provider(opts[:provider]),
+      frame: parse_frame(opts),
       parallel_mode: if(opts[:parallel], do: :parallel, else: :sequential),
       generator_count: opts[:generators],
       send_batch_timeout: opts[:batch_timeout],
@@ -185,6 +196,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       |> maybe_add_opt(:generator_count, config.generator_count)
       |> maybe_add_opt(:send_batch_timeout, config.send_batch_timeout)
       |> maybe_add_opt(:send_batch_size, config.send_batch_size)
+      |> maybe_add_opt(:frame, config.frame)
 
     opts
   end
@@ -288,6 +300,36 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Mix.raise("Invalid output: #{invalid}. Valid: tcp:host:port, udp:host:port")
   end
 
+  defp parse_frame(opts) do
+    case opts[:frame] do
+      nil ->
+        if opts[:oid_rate] do
+          Mix.raise("--oid-rate requires --frame tm")
+        end
+
+        nil
+
+      "tm" ->
+        frame_size = opts[:frame_size] || Mix.raise("Missing required option: --frame-size")
+        oid_rate_hz = parse_oid_rate(opts[:oid_rate])
+
+        %{
+          format: :tm,
+          scid: opts[:scid] || 0,
+          vcid: opts[:vcid] || 0,
+          frame_size: frame_size,
+          oid_rate_hz: oid_rate_hz
+        }
+
+      other ->
+        Mix.raise("Invalid frame format: #{other}. Valid: tm")
+    end
+  end
+
+  defp parse_oid_rate(nil), do: nil
+  defp parse_oid_rate(rate) when rate > 0, do: rate
+  defp parse_oid_rate(rate), do: Mix.raise("OID rate must be positive, got: #{rate}")
+
   defp print_banner(config) do
     # Calculate rate mode info
     {mode, mode_detail} =
@@ -335,6 +377,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       Rate:          #{config.rate_hz} Hz (#{mode} mode: #{mode_detail})
       Mode:          #{parallel_info}
       Output:        #{format_output(config.output)}
+      Frame:         #{format_frame(config.frame)}
       Duration:      #{format_duration(config.duration)}
 
     ───────────────────────────────────────────────────────────────
@@ -350,6 +393,20 @@ defmodule Mix.Tasks.Cadence.Simulate do
 
   defp format_duration(0), do: "Infinite (until Ctrl+C)"
   defp format_duration(seconds), do: "#{seconds} seconds"
+
+  defp format_frame(nil), do: "none"
+
+  defp format_frame(%{format: :tm, scid: scid, vcid: vcid, frame_size: frame_size} = frame) do
+    oid_info =
+      case Map.get(frame, :oid_rate_hz) do
+        nil -> ""
+        oid_rate_hz -> ", oid=#{oid_rate_hz} Hz"
+      end
+
+    "TM (scid=#{scid}, vcid=#{vcid}, size=#{frame_size}#{oid_info})"
+  end
+
+  defp format_frame(other), do: inspect(other)
 
   defp run_simulation(pid, config) do
     start_time = System.monotonic_time(:second)
@@ -508,6 +565,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --scenario, -s <path>      Path to YAML scenario file for deterministic testing
       --definitions <path>       Path to YAML packet definitions for encoding
       --provider <type>          Provider: basic (default) or scenario
+      --frame <format>           Frame format for network output: tm
+      --scid <id>                Spacecraft ID for frames (tm only)
+      --vcid <id>                Virtual channel ID for frames (tm only)
+      --frame-size <bytes>       Frame size in bytes (tm only)
+      --oid-rate <hz>            OID (idle) frame rate in Hz (tm only)
       --help, -h                 Show this help
 
     Parallel Mode (for high-throughput testing):
@@ -527,6 +589,16 @@ defmodule Mix.Tasks.Cadence.Simulate do
       # Using packet definitions for proper encoding
       mix cadence.simulate -m <uuid> \\
         --definitions ~/mission/telemetry.yaml \\
+        --output tcp:localhost:9999
+
+      # Emit TM framed CCSDS packets
+      mix cadence.simulate -m <uuid> \\
+        --frame tm --frame-size 1115 --scid 42 --vcid 0 \\
+        --output tcp:localhost:9999
+
+      # Emit OID idle frames periodically
+      mix cadence.simulate -m <uuid> \\
+        --frame tm --frame-size 1115 --scid 42 --vcid 0 --oid-rate 2 \\
         --output tcp:localhost:9999
 
       # Run alarm test scenario

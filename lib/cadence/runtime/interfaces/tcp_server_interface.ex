@@ -464,8 +464,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp broadcast_packets(packets_with_format, client_state, state, target_id) do
-    Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
-      metadata = %{
+    Enum.each(packets_with_format, fn {packet_binary, format, chain_metadata} ->
+      base_metadata = %{
         mission_id: state.interface.mission_id,
         stored: false,
         target_id: target_id,
@@ -474,6 +474,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         client_address: client_state.remote_address,
         client_port: client_state.remote_port
       }
+
+      metadata = Map.merge(base_metadata, chain_metadata || %{})
 
       case construct_packet(packet_binary, metadata, format) do
         %Packet{} = packet ->
@@ -560,15 +562,15 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     # Use the Processor module directly for client-specific chains
     alias Cadence.Telemetry.ProtocolChain.Processor
 
-    case Processor.process_read(client_state.protocol_chain, data) do
+    case Processor.process_read(client_state.protocol_chain, data, %{}) do
       {:ok, packets, updated_chain} ->
         # Get format from the chain
         format = Processor.chain_format(updated_chain)
 
         # Wrap each packet with format
         packets_with_format =
-          Enum.map(packets, fn packet_binary ->
-            {packet_binary, format, %{}}
+          Enum.map(packets, fn {packet_binary, metadata} ->
+            {packet_binary, format, metadata}
           end)
 
         if packets_with_format == [] do

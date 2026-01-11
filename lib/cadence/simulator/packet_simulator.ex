@@ -58,6 +58,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       :socket,
       :timer_ref,
       :encoding,
+      :frame,
       :write_chain,
       # Burst mode fields for high-rate sending
       interval_ms: 1,
@@ -81,6 +82,11 @@ defmodule Cadence.Simulator.PacketSimulator do
   - `:rate_hz` - Packet generation rate in Hz (default: 1.0)
   - `:encoding` - Packet encoding format (default: :ccsds)
     - `:ccsds` - CCSDS Space Packet Protocol with binary payload (realistic)
+  - `:frame` - Frame format for network output (default: nil)
+    - `:tm` - TM transfer frame wrapper
+  - `:frame_size` - Frame size in bytes (tm only)
+  - `:scid` - Spacecraft ID for frames (tm only)
+  - `:vcid` - Virtual channel ID for frames (tm only)
   - `:output` - Output configuration:
     - `{:tcp, host, port}` - Send to TCP server
     - `{:udp, host, port}` - Send via UDP
@@ -129,6 +135,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     encoding = parse_encoding(Keyword.get(opts, :encoding, :ccsds))
     output = Keyword.get(opts, :output)
+    frame = parse_frame_opts(opts)
 
     # Clamp rate to maximum supported
     rate_hz = min(rate_hz, @max_rate_hz)
@@ -139,6 +146,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
     # Initialize write chain from interface protocols if interface_id provided
     write_chain = init_write_chain(interface_id)
+    write_chain = maybe_add_frame_protocol(write_chain, frame)
 
     mode_info =
       if packets_per_tick > 1 do
@@ -166,6 +174,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       packet_types: packet_types,
       rate_hz: rate_hz,
       encoding: encoding,
+      frame: frame,
       output: output,
       write_chain: write_chain,
       interval_ms: interval_ms,
@@ -321,15 +330,27 @@ defmodule Cadence.Simulator.PacketSimulator do
   # NOTE: calculate_write_chain_trailer_size was removed as unused.
   # Keeping comment for future reference if needed for CRC protocol trailer calculation.
 
-  # Check if CCSDSProtocol is in the write chain
+  # Check if SpacePacketProtocol is in the write chain
   defp has_ccsds_protocol?(nil), do: false
   defp has_ccsds_protocol?([]), do: false
 
   defp has_ccsds_protocol?(write_chain) do
-    alias Cadence.Telemetry.Protocols.CCSDSProtocol
+    alias Cadence.Protocols.CCSDS.SpacePacketProtocol
 
     Enum.any?(write_chain, fn
-      {CCSDSProtocol, _} -> true
+      {SpacePacketProtocol, _} -> true
+      _ -> false
+    end)
+  end
+
+  defp has_tm_frame_protocol?(nil), do: false
+  defp has_tm_frame_protocol?([]), do: false
+
+  defp has_tm_frame_protocol?(write_chain) do
+    alias Cadence.Protocols.CCSDS.TMFrameProtocol
+
+    Enum.any?(write_chain, fn
+      {TMFrameProtocol, _} -> true
       _ -> false
     end)
   end
@@ -395,8 +416,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     # Build packet based on encoding and whether we have a write chain
     binary_packet =
       if state.write_chain && state.encoding == :ccsds && has_ccsds_protocol?(state.write_chain) do
-        # CCSDSProtocol will handle all framing - just send header + payload
-        # CCSDSProtocol.write_data detects pre-built packets and adds sync + CRC
+        # SpacePacketProtocol will handle all framing - just send header + payload
+        # SpacePacketProtocol.write_data detects pre-built packets and adds sync + CRC
         encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
       else
         # Normal path - full packet encoding
@@ -526,8 +547,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     @ccsds_sync <> primary_header <> payload
   end
 
-  # CCSDS encoding without sync pattern - for CCSDSProtocol
-  # CCSDSProtocol will add sync and handle CRC, updating length field as needed
+  # CCSDS encoding without sync pattern - for SpacePacketProtocol
+  # SpacePacketProtocol will add sync and handle CRC, updating length field as needed
   defp encode_packet_ccsds_no_sync_raw(packet_type, target_id, data, packet_count) do
     apid =
       case packet_type do
@@ -548,7 +569,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     sequence_count = rem(packet_count, 16_384)
     seq_control = sequence_flags <<< 14 ||| sequence_count
 
-    # CCSDS data_length = payload_size - 1 (CCSDSProtocol will add CRC size if needed)
+    # CCSDS data_length = payload_size - 1 (SpacePacketProtocol will add CRC size if needed)
     data_length = byte_size(payload) - 1
     primary_header = <<packet_id::16, seq_control::16, data_length::16>>
 
@@ -651,9 +672,11 @@ defmodule Cadence.Simulator.PacketSimulator do
   defp send_packet_network(state, _binary_packet) when is_nil(state.socket), do: state
 
   defp send_packet_network(state, binary_packet) do
+    framed_packet = binary_packet
+
     case state.output do
       {:tcp, _host, _port} ->
-        case :gen_tcp.send(state.socket, binary_packet) do
+        case :gen_tcp.send(state.socket, framed_packet) do
           :ok ->
             state
 
@@ -665,7 +688,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       {:udp, host, port} ->
         host_charlist = String.to_charlist(host)
 
-        case :gen_udp.send(state.socket, host_charlist, port, binary_packet) do
+        case :gen_udp.send(state.socket, host_charlist, port, framed_packet) do
           :ok ->
             state
 
@@ -703,6 +726,53 @@ defmodule Cadence.Simulator.PacketSimulator do
       )
     end
   end
+
+  defp parse_frame_opts(opts) do
+    case Keyword.get(opts, :frame) do
+      nil ->
+        nil
+
+      :tm ->
+        frame_size = Keyword.fetch!(opts, :frame_size)
+
+        %{
+          format: :tm,
+          frame_size: frame_size,
+          scid: Keyword.get(opts, :scid, 0),
+          vcid: Keyword.get(opts, :vcid, 0)
+        }
+
+      "tm" ->
+        parse_frame_opts(Keyword.put(opts, :frame, :tm))
+
+      other ->
+        raise ArgumentError, "Unsupported frame format: #{inspect(other)} (supported: :tm)"
+    end
+  end
+
+  defp maybe_add_frame_protocol(write_chain, nil), do: write_chain
+  defp maybe_add_frame_protocol(nil, frame), do: init_frame_chain(frame)
+
+  defp maybe_add_frame_protocol(write_chain, frame) do
+    if has_tm_frame_protocol?(write_chain) do
+      write_chain
+    else
+      write_chain ++ init_frame_chain(frame)
+    end
+  end
+
+  defp init_frame_chain(%{format: :tm} = frame) do
+    Processor.clone_chain([
+      {"tm_frame",
+       %{
+         frame_size: frame.frame_size,
+         scid: frame.scid,
+         vcid: frame.vcid
+       }}
+    ])
+  end
+
+  defp init_frame_chain(_frame), do: []
 
   defp log_failed_packet(mission_id, reason) do
     Logger.warning(

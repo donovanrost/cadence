@@ -239,14 +239,16 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   ## Private Functions
 
   defp broadcast_packets(packets_with_format, state) do
-    Enum.each(packets_with_format, fn {packet_binary, format, _chain_metadata} ->
-      metadata = %{
+    Enum.each(packets_with_format, fn {packet_binary, format, chain_metadata} ->
+      base_metadata = %{
         mission_id: state.interface.mission_id,
         stored: false,
         target_id: state.target_id,
         received_at: DateTime.utc_now(),
         interface_id: state.interface.id
       }
+
+      metadata = Map.merge(base_metadata, chain_metadata || %{})
 
       broadcast_packet(packet_binary, format, metadata, state.interface.mission_id)
     end)
@@ -316,13 +318,13 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   defp process_incoming_data(data, %State{protocol_chain: chain}) do
-    case Processor.process_read(chain, data) do
+    case Processor.process_read(chain, data, %{}) do
       {:ok, packets, updated_chain} ->
         format = Processor.chain_format(updated_chain)
 
         packets_with_format =
-          Enum.map(packets, fn packet_binary ->
-            {packet_binary, format, %{}}
+          Enum.map(packets, fn {packet_binary, metadata} ->
+            {packet_binary, format, metadata}
           end)
 
         {:ok, packets_with_format, updated_chain}

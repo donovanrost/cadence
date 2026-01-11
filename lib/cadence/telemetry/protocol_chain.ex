@@ -241,12 +241,12 @@ defmodule Cadence.Telemetry.ProtocolChain do
 
   @impl true
   def handle_call({:process_read, data, metadata}, _from, state) do
-    case Processor.process_read(state.read_chain, data) do
+    case Processor.process_read(state.read_chain, data, metadata) do
       {:ok, packets, updated_chain} ->
         # Wrap each packet with format and metadata
         packets_with_format =
-          Enum.map(packets, fn packet_binary ->
-            {packet_binary, state.format, metadata}
+          Enum.map(packets, fn {packet_binary, packet_metadata} ->
+            {packet_binary, state.format, packet_metadata}
           end)
 
         {:reply, {:ok, packets_with_format}, %{state | read_chain: updated_chain}}

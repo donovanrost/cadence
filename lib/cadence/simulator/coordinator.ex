@@ -73,6 +73,8 @@ defmodule Cadence.Simulator.Coordinator do
   }
 
   alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
+  alias Cadence.Protocols.CCSDS.TMFrameProtocol
+  alias Cadence.Telemetry.ProtocolChain.Processor
 
   @default_rate_hz 1.0
   @default_target_id "SIM-1"
@@ -90,6 +92,10 @@ defmodule Cadence.Simulator.Coordinator do
     :socket,
     :rate_hz,
     :timer_ref,
+    :frame,
+    :write_chain,
+    :write_chain_configs,
+    :oid_lfsr_by_vcid,
     # Parallel mode fields
     :parallel_mode,
     :generator_pool,
@@ -144,6 +150,9 @@ defmodule Cadence.Simulator.Coordinator do
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
     parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
+    frame = configure_oid(Keyword.get(opts, :frame), rate_hz)
+    write_chain_configs = build_write_chain_configs(frame)
+    write_chain = init_write_chain(write_chain_configs)
 
     # Determine provider based on options
     {provider_module, provider_config} = determine_provider(opts)
@@ -162,6 +171,10 @@ defmodule Cadence.Simulator.Coordinator do
           encoder: encoder,
           output: output,
           rate_hz: rate_hz,
+          frame: frame,
+          write_chain: write_chain,
+          write_chain_configs: write_chain_configs,
+          oid_lfsr_by_vcid: %{},
           parallel_mode: parallel_mode,
           socket: nil
         }
@@ -237,6 +250,7 @@ defmodule Cadence.Simulator.Coordinator do
             provider_state: state.provider_state,
             encoder: state.encoder,
             target_id: state.target_id,
+            write_chain_configs: state.write_chain_configs,
             sequence_allocator: sequence_allocator,
             send_buffer: send_buffer,
             name: nil
@@ -270,13 +284,21 @@ defmodule Cadence.Simulator.Coordinator do
         {ceil(state.rate_hz / 1000), 1}
       end
 
-    # Dispatch steps to workers
-    Enum.each(0..(steps_per_tick - 1), fn offset ->
-      step = state.step + offset
-      worker_index = rem(step, worker_count)
-      worker = Enum.at(state.generator_pool, worker_index)
-      GeneratorWorker.generate(worker, step)
-    end)
+    # Dispatch steps to workers (or emit OID frames)
+    state =
+      Enum.reduce(0..(steps_per_tick - 1), state, fn offset, acc_state ->
+        step = acc_state.step + offset
+
+        if oid_due?(acc_state, step) do
+          {updated_state, _sent} = send_oid_frame(acc_state)
+          updated_state
+        else
+          worker_index = rem(step, worker_count)
+          worker = Enum.at(acc_state.generator_pool, worker_index)
+          GeneratorWorker.generate(worker, step)
+          acc_state
+        end
+      end)
 
     # Schedule next tick
     timer_ref = Process.send_after(self(), :generate, interval_ms)
@@ -293,19 +315,24 @@ defmodule Cadence.Simulator.Coordinator do
 
   def handle_info(:generate, state) do
     # Sequential mode: original behavior
-    # Generate values from provider
-    {values, provider_state} =
-      case state.provider_module.generate_values(state.provider_state, state.step) do
-        {:ok, values, new_state} ->
-          {values, new_state}
+    {state, provider_state} =
+      if oid_due?(state, state.step) do
+        {updated_state, _sent} = send_oid_frame(state)
+        {updated_state, state.provider_state}
+      else
+        # Generate values from provider
+        {values, new_state} =
+          case state.provider_module.generate_values(state.provider_state, state.step) do
+            {:ok, values, next_state} ->
+              {values, next_state}
 
-        {:error, reason, new_state} ->
-          Logger.error("Provider error: #{inspect(reason)}")
-          {%{}, new_state}
+            {:error, reason, next_state} ->
+              Logger.error("Provider error: #{inspect(reason)}")
+              {%{}, next_state}
+          end
+
+        {send_telemetry(state, values), new_state}
       end
-
-    # Encode and send packets
-    state = send_telemetry(state, values)
 
     # Schedule next generation
     interval_ms = max(trunc(1000 / state.rate_hz), 1)
@@ -518,9 +545,10 @@ defmodule Cadence.Simulator.Coordinator do
     # Use encoder for proper packet construction
     {:ok, packets, updated_encoder} = PacketEncoder.encode(encoder, state.target_id, values)
 
-    Enum.each(packets, fn {_packet_name, binary} ->
-      send_packet(state, binary)
-    end)
+    state =
+      Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
+        send_packet(acc_state, binary)
+      end)
 
     %{state | encoder: updated_encoder}
   end
@@ -530,11 +558,9 @@ defmodule Cadence.Simulator.Coordinator do
     # Group by packet and encode
     packets = group_and_encode_legacy(values, state.target_id, state.step)
 
-    Enum.each(packets, fn binary ->
-      send_packet(state, binary)
+    Enum.reduce(packets, state, fn binary, acc_state ->
+      send_packet(acc_state, binary)
     end)
-
-    state
   end
 
   defp group_and_encode_legacy(values, target_id, step) do
@@ -669,23 +695,135 @@ defmodule Cadence.Simulator.Coordinator do
     sync <> primary_header <> payload
   end
 
-  defp send_packet(%{socket: nil}, _binary), do: :ok
+  defp send_packet(state, binary) do
+    {processed_packet, state} = process_write_chain(state, binary)
+    send_frame(state, processed_packet)
+    state
+  end
 
-  defp send_packet(%{output: {:tcp, _, _}, socket: socket}, binary) do
-    case :gen_tcp.send(socket, binary) do
+  defp send_frame(%{parallel_mode: :parallel, send_buffer: send_buffer}, frame_binary) do
+    SendBuffer.send_packet(send_buffer, frame_binary)
+  end
+
+  defp send_frame(%{output: {:tcp, _, _}, socket: socket}, frame_binary) do
+    case :gen_tcp.send(socket, frame_binary) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("TCP send failed: #{inspect(reason)}")
     end
   end
 
-  defp send_packet(%{output: {:udp, host, port}, socket: socket}, binary) do
-    case :gen_udp.send(socket, String.to_charlist(host), port, binary) do
+  defp send_frame(%{output: {:udp, host, port}, socket: socket}, frame_binary) do
+    case :gen_udp.send(socket, String.to_charlist(host), port, frame_binary) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("UDP send failed: #{inspect(reason)}")
     end
   end
 
-  defp send_packet(_, _), do: :ok
+  defp send_frame(_, _frame_binary), do: :ok
+
+  defp process_write_chain(%{write_chain: nil} = state, packet), do: {packet, state}
+  defp process_write_chain(%{write_chain: []} = state, packet), do: {packet, state}
+
+  defp process_write_chain(%{write_chain: write_chain} = state, packet) do
+    case Processor.process_write(write_chain, packet) do
+      {:ok, encoded_packet, updated_chain} ->
+        {encoded_packet, %{state | write_chain: updated_chain}}
+
+      {:error, reason} ->
+        Logger.warning("Write chain processing failed: #{inspect(reason)}, sending raw packet")
+        {packet, state}
+    end
+  end
+
+  defp configure_oid(nil, _rate_hz), do: nil
+
+  defp configure_oid(%{format: :tm} = frame, rate_hz) do
+    case Map.get(frame, :oid_rate_hz) do
+      nil ->
+        frame
+
+      oid_rate when is_number(oid_rate) and oid_rate > 0 ->
+        Map.put(frame, :oid_every, oid_every(rate_hz, oid_rate))
+
+      _ ->
+        frame
+    end
+  end
+
+  defp configure_oid(frame, _rate_hz), do: frame
+
+  defp oid_every(rate_hz, oid_rate_hz) do
+    rate_hz = max(rate_hz, 0.001)
+    oid_rate_hz = min(oid_rate_hz, rate_hz)
+    interval = rate_hz / oid_rate_hz
+    max(round(interval), 1)
+  end
+
+  defp oid_due?(%{frame: %{format: :tm, oid_every: oid_every}}, step)
+       when is_integer(oid_every) do
+    if oid_every == 1 do
+      true
+    else
+      step > 0 and rem(step, oid_every) == 0
+    end
+  end
+
+  defp oid_due?(_state, _step), do: false
+
+  defp send_oid_frame(%{frame: %{format: :tm} = frame} = state) do
+    pn_state = Map.get(state.oid_lfsr_by_vcid, frame.vcid)
+
+    {updated_chain, result} =
+      update_tm_frame_in_chain(state.write_chain, fn tm_state ->
+        TMFrameProtocol.encode_oid(tm_state, pn_state)
+      end)
+
+    case result do
+      {oid_frame, next_tm_state, next_pn_state} ->
+        updated_state = %{
+          state
+          | write_chain: updated_chain,
+            oid_lfsr_by_vcid: Map.put(state.oid_lfsr_by_vcid, next_tm_state.vcid, next_pn_state)
+        }
+
+        send_frame(updated_state, oid_frame)
+        {updated_state, :ok}
+
+      nil ->
+        {state, :ok}
+    end
+  end
+
+  defp send_oid_frame(state), do: {state, :ok}
+
+  defp update_tm_frame_in_chain(nil, _fun), do: {nil, nil}
+
+  defp update_tm_frame_in_chain(write_chain, fun) do
+    Enum.map_reduce(write_chain, nil, fn
+      {TMFrameProtocol, tm_state}, nil ->
+        {frame, next_tm_state, next_pn_state} = fun.(tm_state)
+        {{TMFrameProtocol, next_tm_state}, {frame, next_tm_state, next_pn_state}}
+
+      entry, acc ->
+        {entry, acc}
+    end)
+  end
+
+  defp build_write_chain_configs(nil), do: nil
+
+  defp build_write_chain_configs(%{format: :tm} = frame) do
+    [
+      {"tm_frame",
+       %{
+         frame_size: frame.frame_size,
+         scid: frame.scid,
+         vcid: frame.vcid
+       }}
+    ]
+  end
+
+  defp init_write_chain(nil), do: nil
+  defp init_write_chain(configs), do: Processor.clone_chain(configs)
 
   defp format_output(nil), do: "none"
   defp format_output({:tcp, host, port}), do: "tcp:#{host}:#{port}"

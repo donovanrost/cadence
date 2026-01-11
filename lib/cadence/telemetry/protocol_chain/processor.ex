@@ -10,8 +10,8 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
 
   require Logger
 
+  alias Cadence.Protocols.CCSDS.{SpacePacketProtocol, TMFrameProtocol}
   alias Cadence.Telemetry.Protocols.{
-    CCSDSProtocol,
     CRCProtocol,
     FixedProtocol,
     LengthProtocol,
@@ -32,6 +32,8 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
     sync_pattern_hex terminator_hex length_endian length_encoding
     algorithm endian on_failure crc_algorithm crc_endian crc_on_failure
     crc_enabled packet_length_field_offset packet_length_field_size
+    oid_validation oid_validation_prefix_bytes
+    scid vcid mcfc vcfc
   )
 
   @doc """
@@ -40,18 +42,20 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   Accepts both atom (domain entity) and string (legacy) formats.
   """
   @spec protocol_module_for_type(atom() | String.t()) :: module() | nil
-  def protocol_module_for_type(:ccsds), do: CCSDSProtocol
+  def protocol_module_for_type(:ccsds), do: SpacePacketProtocol
   def protocol_module_for_type(:crc), do: CRCProtocol
   def protocol_module_for_type(:length), do: LengthProtocol
   def protocol_module_for_type(:template), do: TemplateProtocol
   def protocol_module_for_type(:terminated), do: TerminatedProtocol
   def protocol_module_for_type(:fixed), do: FixedProtocol
-  def protocol_module_for_type("ccsds"), do: CCSDSProtocol
+  def protocol_module_for_type(:tm_frame), do: TMFrameProtocol
+  def protocol_module_for_type("ccsds"), do: SpacePacketProtocol
   def protocol_module_for_type("crc"), do: CRCProtocol
   def protocol_module_for_type("length"), do: LengthProtocol
   def protocol_module_for_type("template"), do: TemplateProtocol
   def protocol_module_for_type("terminated"), do: TerminatedProtocol
   def protocol_module_for_type("fixed"), do: FixedProtocol
+  def protocol_module_for_type("tm_frame"), do: TMFrameProtocol
   def protocol_module_for_type(_), do: nil
 
   @doc """
@@ -161,12 +165,12 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   - `{:stop, updated_chain}` - Protocol is buffering, needs more data
   - `{:disconnect, reason}` - Protocol requested disconnect
   """
-  @spec process_read(protocol_chain(), binary()) ::
-          {:ok, [binary()], protocol_chain()}
+  @spec process_read(protocol_chain(), binary(), map()) ::
+          {:ok, [{binary(), map()}], protocol_chain()}
           | {:stop, protocol_chain()}
           | {:disconnect, term()}
-  def process_read(protocol_chain, data) do
-    process_through_read_chain([data], protocol_chain, [])
+  def process_read(protocol_chain, data, metadata \\ %{}) do
+    process_through_read_chain([{data, metadata}], protocol_chain, [])
   end
 
   @doc """
@@ -230,21 +234,7 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   end
 
   defp process_through_read_chain(packets, [{module, state} | rest_chain], processed_states) do
-    result =
-      Enum.reduce_while(packets, {:ok, [], state}, fn packet, {:ok, acc_packets, current_state} ->
-        case module.read_data(packet, current_state) do
-          {:ok, new_packets, new_state} ->
-            {:cont, {:ok, acc_packets ++ new_packets, new_state}}
-
-          {:stop, new_state} ->
-            {:halt, {:stop, new_state}}
-
-          {:disconnect, reason} ->
-            {:halt, {:disconnect, reason}}
-        end
-      end)
-
-    case result do
+    case read_packets_for_module(module, packets, state) do
       {:ok, new_packets, new_state} ->
         process_through_read_chain(new_packets, rest_chain, [
           {module, new_state} | processed_states
@@ -256,6 +246,34 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
       {:disconnect, reason} ->
         {:disconnect, reason}
     end
+  end
+
+  defp read_packets_for_module(module, packets, state) do
+    Enum.reduce_while(packets, {:ok, [], state}, fn {packet, metadata},
+                                                    {:ok, acc_packets, current_state} ->
+      case module.read_data(packet, current_state) do
+        {:ok, new_packets, new_state} ->
+          {processed_packets, final_state} =
+            process_packets_with_metadata(module, new_packets, metadata, new_state)
+
+          {:cont, {:ok, acc_packets ++ processed_packets, final_state}}
+
+        {:stop, new_state} ->
+          {:halt, {:stop, new_state}}
+
+        {:disconnect, reason} ->
+          {:halt, {:disconnect, reason}}
+      end
+    end)
+  end
+
+  defp process_packets_with_metadata(module, packets, metadata, state) do
+    Enum.map_reduce(packets, state, fn packet, state_acc ->
+      {packet_out, metadata_out, updated_state} =
+        module.read_packet(packet, metadata, state_acc)
+
+      {{packet_out, metadata_out}, updated_state}
+    end)
   end
 
   # Process data through WRITE protocol chain (reverse order: 2 → 1 → 0)
