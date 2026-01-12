@@ -54,6 +54,7 @@ defmodule Cadence.Interfaces do
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
   alias Cadence.Interfaces.InterfaceProtocol
   alias Cadence.Interfaces.InterfaceSchema
+  alias Cadence.Interfaces.InterfaceVcid
   alias Cadence.Interfaces.TargetInterface
   alias Cadence.Missions.Mission
   alias Cadence.Repo
@@ -298,7 +299,7 @@ defmodule Cadence.Interfaces do
 
       protocol_map = Map.new(protocols, &{&1.id, &1})
       :ok = validate_protocol_order(protocol_map, protocol_ids)
-      update_protocol_order(protocol_map, protocol_ids)
+      update_protocol_order(interface_id, protocol_map, protocol_ids)
       list_protocols(interface_id)
     end)
   end
@@ -314,7 +315,16 @@ defmodule Cadence.Interfaces do
     end
   end
 
-  defp update_protocol_order(protocol_map, protocol_ids) do
+  defp update_protocol_order(interface_id, protocol_map, protocol_ids) do
+    offset = length(protocol_ids) + 1
+
+    bump_query =
+      from p in InterfaceProtocol,
+        where: p.interface_id == ^interface_id,
+        update: [set: [order: fragment("? + ?", p.order, ^offset)]]
+
+    Repo.update_all(bump_query, [])
+
     protocol_ids
     |> Enum.with_index()
     |> Enum.each(fn {protocol_id, new_order} ->
@@ -454,6 +464,31 @@ defmodule Cadence.Interfaces do
   end
 
   @doc """
+  Lists target-interface mappings for an interface with target preloaded.
+  """
+  def list_target_interfaces_for_interface(%InterfaceSchema{id: interface_id}) do
+    list_target_interfaces_for_interface(interface_id)
+  end
+
+  def list_target_interfaces_for_interface(interface_id) when is_binary(interface_id) do
+    TargetInterface
+    |> where([ti], ti.interface_id == ^interface_id)
+    |> join(:left, [ti], t in assoc(ti, :target))
+    |> preload([_ti, t], target: t)
+    |> order_by([_ti, t], asc: t.identifier)
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a target-interface mapping by ID with target preloaded.
+  """
+  def get_target_interface_by_id!(id) do
+    TargetInterface
+    |> Repo.get!(id)
+    |> Repo.preload(:target)
+  end
+
+  @doc """
   Gets the target-interface association.
 
   Returns nil if no association exists.
@@ -477,6 +512,66 @@ defmodule Cadence.Interfaces do
         |> TargetInterface.changeset(%{direction: new_direction})
         |> Repo.update()
     end
+  end
+
+  @doc """
+  Updates the SCID for a target-interface mapping.
+  """
+  def update_target_interface_scid(%TargetInterface{} = target_interface, scid) do
+    target_interface
+    |> TargetInterface.changeset(%{scid: scid})
+    |> Repo.update()
+  end
+
+  # ===========================================================================
+  # VCID Mappings
+  # ===========================================================================
+
+  @doc """
+  Lists VCID mappings for an interface.
+  """
+  def list_vcids_for_interface(%InterfaceSchema{id: interface_id}) do
+    list_vcids_for_interface(interface_id)
+  end
+
+  def list_vcids_for_interface(interface_id) when is_binary(interface_id) do
+    InterfaceVcid
+    |> where([v], v.interface_id == ^interface_id)
+    |> order_by([v], asc: v.vcid)
+    |> preload([:target])
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a single VCID mapping by ID.
+  """
+  def get_interface_vcid!(id), do: Repo.get!(InterfaceVcid, id)
+
+  @doc """
+  Creates a VCID mapping for an interface.
+  """
+  def create_interface_vcid(%InterfaceSchema{id: interface_id}, attrs) do
+    attrs = Map.put(attrs, "interface_id", interface_id)
+
+    %InterfaceVcid{}
+    |> InterfaceVcid.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates a VCID mapping.
+  """
+  def update_interface_vcid(%InterfaceVcid{} = mapping, attrs) do
+    mapping
+    |> InterfaceVcid.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a VCID mapping.
+  """
+  def delete_interface_vcid(%InterfaceVcid{} = mapping) do
+    Repo.delete(mapping)
   end
 
   # ===========================================================================

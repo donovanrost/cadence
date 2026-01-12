@@ -110,8 +110,7 @@ Decisions:
 
 ### OID (Only Idle Data) handling
 OID frames signal "no packets" for a Virtual Channel and should be discarded.
-The deframer treats OID frames as empty and clears any partial packet buffer
-for the VCID to avoid cross-contamination.
+The deframer treats OID frames as empty and does not emit data field segments.
 
 Optional idle-data validation modes:
 - `:none` (default): trust FHP=2046, do not validate PN pattern
@@ -121,7 +120,7 @@ Optional idle-data validation modes:
 Protocol config example:
 ```
 %{
-  protocol_type: :tm_frame,
+  protocol_type: :ccsds_132_0_b_3_tm,
   protocol_config: %{
     frame_size: 1115,
     scid_target_map: %{42 => "SAT-42"},

@@ -109,7 +109,6 @@ case System.get_env("CADENCE_TEST_VERBOSE") do
       Cadence.Runtime.Missions.CacheWarmer,
       Cadence.Runtime.Missions.MissionSupervisor,
       Cadence.Telemetry.Decommutation,
-      Cadence.Protocols.CCSDS.SpacePacketProtocol,
       Cadence.Telemetry.Protocols.CRCProtocol,
       Postgrex.Protocol
     ]

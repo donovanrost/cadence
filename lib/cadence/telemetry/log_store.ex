@@ -87,10 +87,21 @@ defmodule Cadence.Telemetry.LogStore do
 
     case File.read(path) do
       {:ok, contents} ->
-        contents |> String.trim() |> String.to_integer()
+        contents
+        |> String.trim()
+        |> parse_offset()
 
       _ ->
         nil
+    end
+  end
+
+  defp parse_offset(""), do: nil
+
+  defp parse_offset(value) do
+    case Integer.parse(value) do
+      {offset, ""} -> offset
+      _ -> nil
     end
   end
 

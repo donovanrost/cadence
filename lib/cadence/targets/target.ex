@@ -94,7 +94,14 @@ defmodule Cadence.Targets.Target do
   """
   def update_changeset(target, attrs) do
     target
-    |> cast(attrs, [:name, :status, :config, :metadata, :active_limit_set, :definition_set_id])
+    |> cast(attrs, [
+      :name,
+      :status,
+      :config,
+      :metadata,
+      :active_limit_set,
+      :definition_set_id
+    ])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["offline", "online", "standby", "fault"])
     |> foreign_key_constraint(:definition_set_id)

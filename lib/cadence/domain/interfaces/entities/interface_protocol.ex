@@ -51,7 +51,7 @@ defmodule Cadence.Domain.Interfaces.Entities.InterfaceProtocol do
 
   Required:
   - `:interface_id` - ID of the parent interface
-  - `:protocol_type` - Type of protocol (:ccsds, :length, :template, etc.)
+  - `:protocol_type` - Type of protocol (:ccsds_sdlp, :length, :template, etc.)
   - `:order` - Position in the protocol chain (0-indexed)
 
   Optional:

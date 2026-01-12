@@ -33,18 +33,17 @@ defmodule Cadence.Simulator.PacketSimulator do
   import Bitwise
   require Logger
 
+  alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Interfaces
+  alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Telemetry.Packet
-  alias Cadence.Telemetry.ProtocolChain.Processor
   alias Phoenix.PubSub
 
   @default_rate_hz 1.0
   @default_packet_types [:health, :attitude, :power]
   # Maximum supported rate (10,000 packets per second)
   @max_rate_hz 15_000
-
-  # CCSDS sync pattern (standard)
-  @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
   defmodule State do
     @moduledoc false
@@ -59,7 +58,8 @@ defmodule Cadence.Simulator.PacketSimulator do
       :timer_ref,
       :encoding,
       :frame,
-      :write_chain,
+      :uplink_pipeline,
+      :uplink_opts,
       # Burst mode fields for high-rate sending
       interval_ms: 1,
       packets_per_tick: 1,
@@ -83,7 +83,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   - `:encoding` - Packet encoding format (default: :ccsds)
     - `:ccsds` - CCSDS Space Packet Protocol with binary payload (realistic)
   - `:frame` - Frame format for network output (default: nil)
-    - `:tm` - TM transfer frame wrapper
+    - `:tm` - TM transfer frame wrapper (SDLP pipeline)
   - `:frame_size` - Frame size in bytes (tm only)
   - `:scid` - Spacecraft ID for frames (tm only)
   - `:vcid` - Virtual channel ID for frames (tm only)
@@ -93,9 +93,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     - `:pubsub` - Publish to Phoenix PubSub only
     - `nil` - No network output (PubSub only)
 
-  When `:interface_id` is provided, the simulator will process outgoing packets
-  through the interface's write protocol chain. This allows testing protocols
-  like CRC that need to append data to outgoing packets.
+  When `:interface_id` is provided, the simulator uses the interface's SDLP
+  configuration to frame outgoing packets via the uplink pipeline.
   """
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
@@ -144,9 +143,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     # At rates > 1000 Hz, we can't send one packet per ms, so we send bursts
     {interval_ms, packets_per_tick} = calculate_burst_params(rate_hz)
 
-    # Initialize write chain from interface protocols if interface_id provided
-    write_chain = init_write_chain(interface_id)
-    write_chain = maybe_add_frame_protocol(write_chain, frame)
+    {uplink_pipeline, uplink_opts} = init_uplink_pipeline(interface_id, frame)
 
     mode_info =
       if packets_per_tick > 1 do
@@ -164,7 +161,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       rate_hz: #{rate_hz} (#{mode_info})
       encoding: #{encoding}
       output: #{inspect(output)}
-      write_chain: #{length(write_chain || [])} protocol(s)
+      uplink_pipeline: #{pipeline_label(uplink_pipeline)}
     """)
 
     state = %State{
@@ -176,7 +173,8 @@ defmodule Cadence.Simulator.PacketSimulator do
       encoding: encoding,
       frame: frame,
       output: output,
-      write_chain: write_chain,
+      uplink_pipeline: uplink_pipeline,
+      uplink_opts: uplink_opts,
       interval_ms: interval_ms,
       packets_per_tick: packets_per_tick,
       socket: nil,
@@ -284,76 +282,44 @@ defmodule Cadence.Simulator.PacketSimulator do
     {:via, Registry, {Cadence.MissionRegistry, {mission_id, :simulator}}}
   end
 
-  # Initialize write protocol chain from interface configuration
-  defp init_write_chain(nil), do: nil
+  defp init_uplink_pipeline(nil, frame) do
+    init_uplink_from_frame(frame)
+  end
 
-  defp init_write_chain(interface_id) do
+  defp init_uplink_pipeline(interface_id, frame) do
     protocols = Interfaces.list_protocols(interface_id)
 
-    if Enum.empty?(protocols) do
-      nil
-    else
-      chain = Processor.init_chain(protocols, "write")
+    case SDLPConfig.fetch(protocols) do
+      {:ok, %{opts: opts}} ->
+        case UplinkPipeline.init(opts) do
+          {:ok, pipeline} -> {pipeline, opts}
+          {:error, _} -> init_uplink_from_frame(frame)
+        end
 
-      Logger.debug(
-        "Initialized write chain with #{length(chain)} protocol(s) for interface #{interface_id}"
-      )
-
-      chain
+      :error ->
+        init_uplink_from_frame(frame)
     end
   rescue
     error ->
-      Logger.warning("Failed to initialize write chain: #{inspect(error)}")
-      nil
+      Logger.warning("Failed to initialize uplink pipeline: #{inspect(error)}")
+      init_uplink_from_frame(frame)
   end
 
-  # Process packet through write protocol chain
-  defp process_write_chain(%{write_chain: nil} = state, packet) do
-    {packet, state}
-  end
+  defp init_uplink_from_frame(nil), do: {nil, nil}
 
-  defp process_write_chain(%{write_chain: []} = state, packet) do
-    {packet, state}
-  end
+  defp init_uplink_from_frame(%{format: :tm, frame_size: frame_size, scid: scid, vcid: vcid}) do
+    opts = [profile: :tm, frame_size: frame_size, uplink_scid: scid, uplink_vcid: vcid]
 
-  defp process_write_chain(%{write_chain: write_chain} = state, packet) do
-    case Processor.process_write(write_chain, packet) do
-      {:ok, encoded_packet, updated_chain} ->
-        {encoded_packet, %{state | write_chain: updated_chain}}
-
-      {:error, reason} ->
-        Logger.warning("Write chain processing failed: #{inspect(reason)}, sending raw packet")
-        {packet, state}
+    case UplinkPipeline.init(opts) do
+      {:ok, pipeline} -> {pipeline, opts}
+      {:error, _} -> {nil, nil}
     end
   end
 
-  # NOTE: calculate_write_chain_trailer_size was removed as unused.
-  # Keeping comment for future reference if needed for CRC protocol trailer calculation.
+  defp init_uplink_from_frame(_), do: {nil, nil}
 
-  # Check if SpacePacketProtocol is in the write chain
-  defp has_ccsds_protocol?(nil), do: false
-  defp has_ccsds_protocol?([]), do: false
-
-  defp has_ccsds_protocol?(write_chain) do
-    alias Cadence.Protocols.CCSDS.SpacePacketProtocol
-
-    Enum.any?(write_chain, fn
-      {SpacePacketProtocol, _} -> true
-      _ -> false
-    end)
-  end
-
-  defp has_tm_frame_protocol?(nil), do: false
-  defp has_tm_frame_protocol?([]), do: false
-
-  defp has_tm_frame_protocol?(write_chain) do
-    alias Cadence.Protocols.CCSDS.TMFrameProtocol
-
-    Enum.any?(write_chain, fn
-      {TMFrameProtocol, _} -> true
-      _ -> false
-    end)
-  end
+  defp pipeline_label(nil), do: "none"
+  defp pipeline_label(_), do: "sdlp"
 
   defp connect_tcp(state) do
     {:tcp, host, port} = state.output
@@ -413,19 +379,11 @@ defmodule Cadence.Simulator.PacketSimulator do
   defp generate_and_send_packet(state, target_id, packet_type) do
     packet = generate_packet_data(packet_type, state.cycle_count)
 
-    # Build packet based on encoding and whether we have a write chain
+    # Build packet based on encoding
     binary_packet =
-      if state.write_chain && state.encoding == :ccsds && has_ccsds_protocol?(state.write_chain) do
-        # SpacePacketProtocol will handle all framing - just send header + payload
-        # SpacePacketProtocol.write_data detects pre-built packets and adds sync + CRC
-        encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
-      else
-        # Normal path - full packet encoding
-        encode_packet(state.encoding, packet_type, target_id, packet, state.packet_count)
-      end
+      encode_packet_ccsds_no_sync_raw(packet_type, target_id, packet, state.packet_count)
 
-    # Process through write protocol chain if configured
-    {processed_packet, state} = process_write_chain(state, binary_packet)
+    {processed_packet, state} = encode_uplink(state, binary_packet)
 
     # Send via network if configured
     state = send_packet_network(state, processed_packet)
@@ -496,59 +454,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   ## Packet Encoding
 
-  defp encode_packet(:ccsds, packet_type, target_id, data, packet_count) do
-    encode_packet_ccsds(packet_type, target_id, data, packet_count)
-  end
-
-  # CCSDS Space Packet Protocol encoding (realistic spacecraft format)
-  defp encode_packet_ccsds(packet_type, target_id, data, packet_count) do
-    # CCSDS Space Packet Protocol structure:
-    # [sync:4][primary_header:6][secondary_header:variable][user_data:variable]
-
-    # Assign APIDs based on packet type (Application Process Identifier)
-    apid =
-      case packet_type do
-        :health -> 100
-        :attitude -> 101
-        :power -> 102
-        _ -> 0
-      end
-
-    # Encode telemetry data as binary
-    payload = encode_telemetry_binary(packet_type, target_id, data)
-
-    # CCSDS Primary Header (6 bytes)
-    # Bits 0-2: Version (always 000 for Space Packet Protocol)
-    # Bit 3: Type (0=telemetry, 1=command)
-    # Bit 4: Secondary header flag (1=present)
-    # Bits 5-15: APID (Application Process Identifier)
-    version = 0
-    type = 0
-    # telemetry
-    sec_hdr_flag = 1
-    # secondary header present
-    packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
-
-    # Sequence control (2 bytes)
-    # Bits 0-1: Sequence flags (11=unsegmented)
-    # Bits 2-15: Sequence count (0-16383)
-    sequence_flags = 3
-    # unsegmented
-    sequence_count = rem(packet_count, 16_384)
-    seq_control = sequence_flags <<< 14 ||| sequence_count
-
-    # Data length (2 bytes) - length of (secondary header + user data - 1)
-    data_length = byte_size(payload) - 1
-
-    # Assemble primary header
-    primary_header = <<packet_id::16, seq_control::16, data_length::16>>
-
-    # Complete CCSDS packet with sync pattern
-    @ccsds_sync <> primary_header <> payload
-  end
-
-  # CCSDS encoding without sync pattern - for SpacePacketProtocol
-  # SpacePacketProtocol will add sync and handle CRC, updating length field as needed
+  # CCSDS Space Packet encoding (no sync pattern).
   defp encode_packet_ccsds_no_sync_raw(packet_type, target_id, data, packet_count) do
     apid =
       case packet_type do
@@ -569,7 +475,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     sequence_count = rem(packet_count, 16_384)
     seq_control = sequence_flags <<< 14 ||| sequence_count
 
-    # CCSDS data_length = payload_size - 1 (SpacePacketProtocol will add CRC size if needed)
+    # CCSDS data_length = payload_size - 1
     data_length = byte_size(payload) - 1
     primary_header = <<packet_id::16, seq_control::16, data_length::16>>
 
@@ -750,29 +656,39 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   end
 
-  defp maybe_add_frame_protocol(write_chain, nil), do: write_chain
-  defp maybe_add_frame_protocol(nil, frame), do: init_frame_chain(frame)
+  defp encode_uplink(%{uplink_pipeline: nil} = state, packet), do: {packet, state}
 
-  defp maybe_add_frame_protocol(write_chain, frame) do
-    if has_tm_frame_protocol?(write_chain) do
-      write_chain
-    else
-      write_chain ++ init_frame_chain(frame)
+  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet) do
+    ctx = %{
+      frame_size: opts[:frame_size],
+      scid: opts[:uplink_scid] || opts[:scid],
+      vcid: opts[:uplink_vcid] || opts[:vcid],
+      map_id: opts[:uplink_map_id]
+    }
+
+    sdu = %SDUOctets{
+      profile: opts[:profile],
+      scid: ctx.scid,
+      vcid: ctx.vcid,
+      map_id: ctx.map_id,
+      direction: :uplink,
+      sdu_kind_hint: :space_packet,
+      octets: packet,
+      quality: :good,
+      source_frames: [],
+      timestamp: nil,
+      meta: %{}
+    }
+
+    case UplinkPipeline.encode(sdu, ctx, pipeline, opts) do
+      {:ok, encoded, new_pipeline} ->
+        {encoded, %{state | uplink_pipeline: new_pipeline}}
+
+      {:error, reason, new_pipeline} ->
+        Logger.warning("Uplink pipeline failed: #{inspect(reason)}, sending raw packet")
+        {packet, %{state | uplink_pipeline: new_pipeline}}
     end
   end
-
-  defp init_frame_chain(%{format: :tm} = frame) do
-    Processor.clone_chain([
-      {"tm_frame",
-       %{
-         frame_size: frame.frame_size,
-         scid: frame.scid,
-         vcid: frame.vcid
-       }}
-    ])
-  end
-
-  defp init_frame_chain(_frame), do: []
 
   defp log_failed_packet(mission_id, reason) do
     Logger.warning(

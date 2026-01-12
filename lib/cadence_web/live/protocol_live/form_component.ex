@@ -13,6 +13,20 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
         <:subtitle>Configure protocol type and packet framing settings.</:subtitle>
       </.header>
 
+      <%= if @form.source.action in [:insert, :update, :validate] and @form.source.errors != [] do %>
+        <div
+          id="protocol-form-errors"
+          class="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          <p class="font-medium">Please fix the errors below.</p>
+          <ul class="mt-2 list-disc pl-5">
+            <%= for {field, {message, _}} <- @form.source.errors do %>
+              <li>{String.capitalize(to_string(field))}: {message}</li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
       <.simple_form
         for={@form}
         id="protocol-form"
@@ -26,7 +40,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
           label="Protocol Type"
           prompt="Choose protocol type"
           options={[
-            {"CCSDS Space Packet", "ccsds"},
+            {"CCSDS SDLP (TM/AOS/USLP)", "ccsds_sdlp"},
             {"Length-Prefixed", "length"},
             {"Template (Generic)", "template"},
             {"Terminated", "terminated"},
@@ -219,74 +233,120 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
           </div>
         <% end %>
 
-        <%= if @protocol_type == "ccsds" do %>
+        <%= if @protocol_type == "ccsds_sdlp" do %>
           <div class="space-y-4 rounded-sm bg-base-200/50 p-4 border border-base-300">
-            <p class="text-sm font-semibold text-base-content">CCSDS Space Packet Configuration</p>
-
-            <.input
-              field={@form[:sync_pattern_hex]}
-              type="text"
-              label="Sync Pattern (Hex)"
-              placeholder="1ACFFC1D"
-            />
-            <p class="mt-1 text-xs text-base-content/60">
-              CCSDS standard ASM: 1ACFFC1D
+            <p class="text-sm font-semibold text-base-content">
+              CCSDS SDLP Configuration
             </p>
 
             <.input
-              field={@form[:include_sync]}
-              type="checkbox"
-              label="Include sync pattern when writing packets"
-              checked={@form[:include_sync].value != false}
+              field={@form[:sdlp_profile]}
+              type="select"
+              label="Profile"
+              options={[
+                {"TM", "tm"},
+                {"AOS", "aos"},
+                {"USLP", "uslp"}
+              ]}
             />
-            <p class="mt-1 text-xs text-base-content/60">
-              Sync pattern is always stripped from incoming packets for proper header parsing.
-            </p>
 
-            <div class="border-t border-base-300 pt-4 mt-4">
-              <p class="text-sm font-medium text-base-content mb-3">CRC Validation (Optional)</p>
-
+            <div class="grid grid-cols-2 gap-4">
               <.input
-                field={@form[:ccsds_crc_enabled]}
-                type="checkbox"
-                label="Enable CRC validation"
+                field={@form[:sdlp_frame_size]}
+                type="number"
+                label="Frame Size (bytes)"
+                placeholder="1115"
               />
+              <.input
+                field={@form[:sdlp_ocf_length]}
+                type="number"
+                label="OCF Length (bytes)"
+                placeholder="4"
+              />
+            </div>
 
-              <%= if @ccsds_crc_enabled do %>
-                <div class="mt-3 space-y-3 pl-4 border-l-2 border-base-300">
-                  <.input
-                    field={@form[:ccsds_crc_algorithm]}
-                    type="select"
-                    label="CRC Algorithm"
-                    options={[
-                      {"CRC-16-CCITT (CCSDS standard)", "crc16_ccitt"},
-                      {"CRC-32", "crc32"},
-                      {"CRC-16-XMODEM", "crc16_xmodem"}
-                    ]}
-                  />
+            <.input
+              field={@form[:sdlp_secondary_header_length]}
+              type="number"
+              label="Secondary Header Length (bytes)"
+              placeholder="0"
+            />
 
-                  <.input
-                    field={@form[:ccsds_crc_endian]}
-                    type="select"
-                    label="CRC Byte Order"
-                    options={[
-                      {"Big Endian", "big"},
-                      {"Little Endian", "little"}
-                    ]}
-                  />
+            <div class="grid grid-cols-2 gap-4">
+              <.input
+                field={@form[:sdlp_default_sdu_type]}
+                type="select"
+                label="Default SDU Type"
+                options={[
+                  {"Space Packet", "space_packet"},
+                  {"Encapsulation Packet", "encap"}
+                ]}
+              />
+              <.input
+                field={@form[:sdlp_uplink_scid]}
+                type="number"
+                label="Uplink SCID"
+                placeholder="1"
+              />
+            </div>
 
-                  <.input
-                    field={@form[:ccsds_crc_on_failure]}
-                    type="select"
-                    label="On CRC Failure"
-                    options={[
-                      {"Skip packet (log warning)", "skip"},
-                      {"Disconnect (trigger reconnect)", "disconnect"},
-                      {"Pass packet anyway (log warning)", "pass"}
-                    ]}
-                  />
-                </div>
-              <% end %>
+            <div class="grid grid-cols-2 gap-4">
+              <.input
+                field={@form[:sdlp_uplink_vcid]}
+                type="number"
+                label="Uplink VCID"
+                placeholder="0"
+              />
+              <.input
+                field={@form[:sdlp_uplink_map_id]}
+                type="number"
+                label="Uplink MAP ID"
+                placeholder="0"
+              />
+            </div>
+
+            <.input
+              field={@form[:sdlp_sdu_mapping_json]}
+              type="textarea"
+              label="SDU Mapping (JSON)"
+              placeholder={sdu_mapping_placeholder()}
+              rows="6"
+            />
+            <p class="mt-1 text-xs text-base-content/60">
+              Provide a JSON array of mapping entries keyed by scid/vcid/map_id/direction.
+            </p>
+
+            <div class="grid grid-cols-2 gap-4">
+              <.input
+                field={@form[:sdlp_default_target_id]}
+                type="text"
+                label="Default Target ID"
+                placeholder="SIM-1"
+              />
+              <.input
+                field={@form[:sdlp_scid_target_map_json]}
+                type="textarea"
+                label="SCID -> Target ID Map (JSON)"
+                placeholder={scid_target_map_placeholder()}
+                rows="3"
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <.input
+                field={@form[:sdlp_vcid_target_map_json]}
+                type="textarea"
+                label="SCID/VCID Metadata Map (JSON)"
+                placeholder={vcid_target_map_placeholder()}
+                rows="3"
+              />
+              <.input
+                field={@form[:sdlp_default_vcid_map_json]}
+                type="textarea"
+                label="Default VCID Metadata Map (JSON)"
+                placeholder={default_vcid_map_placeholder()}
+                rows="3"
+              />
             </div>
           </div>
         <% end %>
@@ -321,23 +381,26 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       |> Map.put(:crc_algorithm, protocol_config["algorithm"])
       |> Map.put(:crc_endian, protocol_config["endian"])
       |> Map.put(:crc_on_failure, protocol_config["on_failure"])
-      # CCSDS protocol fields
-      |> Map.put(:include_sync, Map.get(protocol_config, "include_sync", true))
-      |> Map.put(:ccsds_crc_enabled, Map.get(protocol_config, "crc_enabled", false))
-      |> Map.put(:ccsds_crc_algorithm, protocol_config["crc_algorithm"])
-      |> Map.put(:ccsds_crc_endian, protocol_config["crc_endian"])
-      |> Map.put(:ccsds_crc_on_failure, protocol_config["crc_on_failure"])
+      |> Map.put(:sdlp_profile, protocol_config["profile"])
+      |> Map.put(:sdlp_frame_size, protocol_config["frame_size"])
+      |> Map.put(:sdlp_secondary_header_length, protocol_config["secondary_header_length"])
+      |> Map.put(:sdlp_ocf_length, protocol_config["ocf_length"])
+      |> Map.put(:sdlp_default_sdu_type, protocol_config["default_sdu_type"])
+      |> Map.put(:sdlp_uplink_scid, protocol_config["uplink_scid"])
+      |> Map.put(:sdlp_uplink_vcid, protocol_config["uplink_vcid"])
+      |> Map.put(:sdlp_uplink_map_id, protocol_config["uplink_map_id"])
+      |> Map.put(:sdlp_sdu_mapping_json, format_sdu_mapping(protocol_config["sdu_mapping"]))
+      |> Map.put(:sdlp_default_target_id, protocol_config["default_target_id"])
+      |> Map.put(:sdlp_scid_target_map_json, format_json(protocol_config["scid_target_map"]))
+      |> Map.put(:sdlp_vcid_target_map_json, format_json(protocol_config["vcid_target_map"]))
+      |> Map.put(:sdlp_default_vcid_map_json, format_json(protocol_config["default_vcid_map"]))
 
     changeset = InterfaceProtocol.changeset(protocol_with_fields, %{})
-
-    # Track CCSDS CRC enabled state for conditional rendering
-    ccsds_crc_enabled = Map.get(protocol_config, "crc_enabled", false)
 
     {:ok,
      socket
      |> assign(assigns)
      |> assign(:protocol_type, protocol.protocol_type)
-     |> assign(:ccsds_crc_enabled, ccsds_crc_enabled)
      |> assign_form(changeset)}
   end
 
@@ -345,7 +408,6 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
   def handle_event("validate", %{"interface_protocol" => protocol_params}, socket) do
     # Update reactive assigns
     protocol_type = Map.get(protocol_params, "protocol_type")
-    ccsds_crc_enabled = Map.get(protocol_params, "ccsds_crc_enabled") == "true"
 
     changeset =
       socket.assigns.protocol
@@ -355,7 +417,6 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
     {:noreply,
      socket
      |> assign(:protocol_type, protocol_type)
-     |> assign(:ccsds_crc_enabled, ccsds_crc_enabled)
      |> assign_form(changeset)}
   end
 
@@ -402,29 +463,7 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
   defp build_protocol_config(params) do
     protocol_type = Map.get(params, "protocol_type")
 
-    protocol_config =
-      case protocol_type do
-        "template" ->
-          build_config_template(params)
-
-        "length" ->
-          build_config_length(params)
-
-        "terminated" ->
-          build_config_terminated(params)
-
-        "fixed" ->
-          build_config_fixed(params)
-
-        "crc" ->
-          build_config_crc(params)
-
-        "ccsds" ->
-          build_config_ccsds(params)
-
-        _ ->
-          %{}
-      end
+    protocol_config = config_builder_for_type(protocol_type).(params)
 
     # Remove protocol config form fields and add the built config
     params
@@ -442,12 +481,20 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       "crc_algorithm",
       "crc_endian",
       "crc_on_failure",
-      # CCSDS specific fields
-      "include_sync",
-      "ccsds_crc_enabled",
-      "ccsds_crc_algorithm",
-      "ccsds_crc_endian",
-      "ccsds_crc_on_failure"
+      # SDLP fields
+      "sdlp_profile",
+      "sdlp_frame_size",
+      "sdlp_secondary_header_length",
+      "sdlp_ocf_length",
+      "sdlp_default_sdu_type",
+      "sdlp_uplink_scid",
+      "sdlp_uplink_vcid",
+      "sdlp_uplink_map_id",
+      "sdlp_sdu_mapping_json",
+      "sdlp_default_target_id",
+      "sdlp_scid_target_map_json",
+      "sdlp_vcid_target_map_json",
+      "sdlp_default_vcid_map_json"
     ])
     |> Map.put("protocol_config", protocol_config)
   end
@@ -497,27 +544,32 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
     }
   end
 
-  defp build_config_ccsds(params) do
-    crc_enabled = params["ccsds_crc_enabled"] == "true"
-    include_sync = Map.get(params, "include_sync", "true") == "true"
-
-    base_config = %{
-      "sync_pattern_hex" => normalize_hex(params["sync_pattern_hex"]) || "1ACFFC1D",
-      "include_sync" => include_sync,
-      # Always discard sync - required for proper CCSDS header parsing
-      "discard_sync" => true,
-      "crc_enabled" => crc_enabled
+  defp build_config_sdlp(params) do
+    %{
+      "profile" => params["sdlp_profile"],
+      "frame_size" => parse_int(params["sdlp_frame_size"]),
+      "secondary_header_length" => parse_int(params["sdlp_secondary_header_length"]),
+      "ocf_length" => parse_int(params["sdlp_ocf_length"]),
+      "default_sdu_type" => params["sdlp_default_sdu_type"],
+      "uplink_scid" => parse_int(params["sdlp_uplink_scid"]),
+      "uplink_vcid" => parse_int(params["sdlp_uplink_vcid"]),
+      "uplink_map_id" => parse_int(params["sdlp_uplink_map_id"]),
+      "sdu_mapping" => parse_sdu_mapping(params["sdlp_sdu_mapping_json"]),
+      "default_target_id" => params["sdlp_default_target_id"],
+      "scid_target_map" => parse_json(params["sdlp_scid_target_map_json"]),
+      "vcid_target_map" => parse_json(params["sdlp_vcid_target_map_json"]),
+      "default_vcid_map" => parse_json(params["sdlp_default_vcid_map_json"])
     }
-
-    if crc_enabled do
-      base_config
-      |> Map.put("crc_algorithm", params["ccsds_crc_algorithm"] || "crc16_ccitt")
-      |> Map.put("crc_endian", params["ccsds_crc_endian"] || "big")
-      |> Map.put("crc_on_failure", params["ccsds_crc_on_failure"] || "skip")
-    else
-      base_config
-    end
+    |> compact_config()
   end
+
+  defp config_builder_for_type("template"), do: &build_config_template/1
+  defp config_builder_for_type("length"), do: &build_config_length/1
+  defp config_builder_for_type("terminated"), do: &build_config_terminated/1
+  defp config_builder_for_type("fixed"), do: &build_config_fixed/1
+  defp config_builder_for_type("crc"), do: &build_config_crc/1
+  defp config_builder_for_type("ccsds_sdlp"), do: &build_config_sdlp/1
+  defp config_builder_for_type(_protocol_type), do: fn _params -> %{} end
 
   defp compact_config(config) do
     config
@@ -551,6 +603,74 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
   end
 
   defp parse_int(value) when is_integer(value), do: value
+
+  defp parse_sdu_mapping(nil), do: nil
+  defp parse_sdu_mapping(""), do: nil
+
+  defp parse_sdu_mapping(value) when is_binary(value) do
+    case Jason.decode(value) do
+      {:ok, decoded} -> decoded
+      _ -> :invalid
+    end
+  end
+
+  defp parse_json(nil), do: nil
+  defp parse_json(""), do: nil
+
+  defp parse_json(value) when is_binary(value) do
+    case Jason.decode(value) do
+      {:ok, decoded} -> decoded
+      _ -> :invalid
+    end
+  end
+
+  defp format_sdu_mapping(nil), do: nil
+
+  defp format_sdu_mapping(mapping) when is_list(mapping) or is_map(mapping) do
+    case Jason.encode(mapping, pretty: true) do
+      {:ok, json} -> json
+      _ -> nil
+    end
+  end
+
+  defp format_sdu_mapping(_), do: nil
+
+  defp format_json(nil), do: nil
+
+  defp format_json(value) when is_list(value) or is_map(value) do
+    case Jason.encode(value, pretty: true) do
+      {:ok, json} -> json
+      _ -> nil
+    end
+  end
+
+  defp format_json(_), do: nil
+
+  defp sdu_mapping_placeholder do
+    """
+    [
+      {"scid": 1, "vcid": 0, "map_id": null, "direction": "downlink", "type": "space_packet"}
+    ]
+    """
+  end
+
+  defp scid_target_map_placeholder do
+    """
+    {"1": "SIM-1"}
+    """
+  end
+
+  defp vcid_target_map_placeholder do
+    """
+    {"1": {"0": {"lane": "payload", "qos": "realtime"}}}
+    """
+  end
+
+  defp default_vcid_map_placeholder do
+    """
+    {"0": {"lane": "payload", "qos": "realtime"}}
+    """
+  end
 
   defp assign_form(socket, %Ecto.Changeset{} = changeset) do
     assign(socket, :form, to_form(changeset))

@@ -225,7 +225,11 @@ defmodule CadenceWeb.MissionLive.Interfaces do
       </.header>
 
       <.table id="interfaces" rows={@interfaces}>
-        <:col :let={interface} label="Name">{interface.name}</:col>
+        <:col :let={interface} label="Name">
+          <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}"}>
+            {interface.name}
+          </.link>
+        </:col>
         <:col :let={interface} label="Connection Type">
           {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
         </:col>
@@ -296,6 +300,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
           />
         </:col>
         <:action :let={interface}>
+          <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}"}>Details</.link>
           <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>
             Protocols
           </.link>

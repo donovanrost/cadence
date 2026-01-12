@@ -8,6 +8,7 @@ defmodule Cadence.Repo.Migrations.CreateTargetInterfaces do
       add :interface_id, references(:interfaces, type: :uuid, on_delete: :delete_all), null: false
 
       add :direction, :text, null: false
+      add :scid, :integer
 
       timestamps()
     end
@@ -25,5 +26,42 @@ defmodule Cadence.Repo.Migrations.CreateTargetInterfaces do
 
     # Prevent duplicate target-interface mappings
     create unique_index(:target_interfaces, [:target_id, :interface_id])
+
+    # Prevent duplicate SCID assignments within an interface
+    create unique_index(:target_interfaces, [:interface_id, :scid],
+             where: "scid IS NOT NULL",
+             name: :target_interfaces_interface_id_scid_index
+           )
+
+    create table(:interface_vcids, primary_key: false) do
+      add :id, :binary_id, primary_key: true
+
+      add :interface_id, references(:interfaces, type: :binary_id, on_delete: :delete_all),
+        null: false
+
+      add :target_id, references(:targets, type: :binary_id, on_delete: :delete_all)
+      add :vcid, :integer, null: false
+      add :lane, :string
+      add :qos, :string
+      add :notes, :string
+
+      timestamps(type: :utc_datetime)
+    end
+
+    create index(:interface_vcids, [:interface_id])
+    create index(:interface_vcids, [:target_id])
+
+    create unique_index(
+             :interface_vcids,
+             [:interface_id, :target_id, :vcid],
+             name: :interface_vcids_interface_id_target_id_vcid_index
+           )
+
+    create unique_index(
+             :interface_vcids,
+             [:interface_id, :vcid],
+             where: "target_id IS NULL",
+             name: :interface_vcids_interface_id_vcid_default_index
+           )
   end
 end

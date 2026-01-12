@@ -4,6 +4,14 @@ defmodule CadenceWeb.ProtocolLive.Index do
   alias Cadence.{Interfaces, Missions}
   alias Cadence.Interfaces.InterfaceProtocol
 
+  @protocol_type_labels %{
+    "ccsds_sdlp" => "CCSDS SDLP (TM/AOS/USLP)",
+    "length" => "Length-Prefixed Protocol",
+    "template" => "Template Protocol (CCSDS)",
+    "terminated" => "Terminated Protocol",
+    "fixed" => "Fixed-Size Protocol"
+  }
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok, socket}
@@ -189,13 +197,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
   # View helpers
 
   defp format_protocol_type(protocol_type) do
-    case protocol_type do
-      "length" -> "Length-Prefixed Protocol"
-      "template" -> "Template Protocol (CCSDS)"
-      "terminated" -> "Terminated Protocol"
-      "fixed" -> "Fixed-Size Protocol"
-      other -> String.capitalize(other)
-    end
+    Map.get(@protocol_type_labels, protocol_type, String.capitalize(protocol_type))
   end
 
   defp protocol_config_summary(protocol) do
@@ -204,6 +206,7 @@ defmodule CadenceWeb.ProtocolLive.Index do
       "template" -> template_config_summary(protocol.protocol_config)
       "terminated" -> terminated_config_summary(protocol.protocol_config)
       "fixed" -> fixed_config_summary(protocol.protocol_config)
+      "ccsds_sdlp" -> sdlp_config_summary(protocol.protocol_config)
       _ -> "Custom configuration"
     end
   end
@@ -262,4 +265,16 @@ defmodule CadenceWeb.ProtocolLive.Index do
     size = get_in(protocol_config, ["packet_size"]) || "N/A"
     "Packet size: #{size} bytes"
   end
+
+  defp sdlp_config_summary(protocol_config) do
+    profile = get_in(protocol_config, ["profile"]) || "N/A"
+    frame_size = get_in(protocol_config, ["frame_size"]) || "N/A"
+    mapping = get_in(protocol_config, ["sdu_mapping"])
+    mapping_count = mapping_count(mapping)
+    "Profile: #{profile}, frame size: #{frame_size}, mappings: #{mapping_count}"
+  end
+
+  defp mapping_count(list) when is_list(list), do: length(list)
+  defp mapping_count(map) when is_map(map), do: map_size(map)
+  defp mapping_count(_), do: 0
 end

@@ -68,7 +68,7 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
   end
 
   @protocol_types [
-    "ccsds",
+    "ccsds_sdlp",
     "length",
     "template",
     "terminated",
@@ -99,6 +99,7 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
     |> validate_inclusion(:protocol_direction, @protocol_directions)
     |> validate_number(:order, greater_than_or_equal_to: 0)
     |> validate_protocol_config()
+    |> check_constraint(:protocol_type, name: :valid_protocol_type)
     |> foreign_key_constraint(:interface_id)
     |> unique_constraint([:interface_id, :order],
       name: :interface_protocols_interface_id_order_index
@@ -118,16 +119,19 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
   end
 
   defp apply_protocol_config_validation(changeset, protocol_type, protocol_config) do
-    case protocol_type do
-      "length" -> validate_length_protocol_config(changeset, protocol_config)
-      "template" -> validate_template_protocol_config(changeset, protocol_config)
-      "terminated" -> validate_terminated_protocol_config(changeset, protocol_config)
-      "fixed" -> validate_fixed_protocol_config(changeset, protocol_config)
-      "crc" -> validate_crc_protocol_config(changeset, protocol_config)
-      "ccsds" -> validate_ccsds_protocol_config(changeset, protocol_config)
-      _ -> changeset
+    case protocol_config_validator(protocol_type) do
+      nil -> changeset
+      validator -> validator.(changeset, protocol_config)
     end
   end
+
+  defp protocol_config_validator("length"), do: &validate_length_protocol_config/2
+  defp protocol_config_validator("template"), do: &validate_template_protocol_config/2
+  defp protocol_config_validator("terminated"), do: &validate_terminated_protocol_config/2
+  defp protocol_config_validator("fixed"), do: &validate_fixed_protocol_config/2
+  defp protocol_config_validator("crc"), do: &validate_crc_protocol_config/2
+  defp protocol_config_validator("ccsds_sdlp"), do: &validate_sdlp_protocol_config/2
+  defp protocol_config_validator(_protocol_type), do: nil
 
   defp validate_length_protocol_config(changeset, _config) do
     # length_bit_size has a default, so no required keys
@@ -210,31 +214,52 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
     end
   end
 
-  defp validate_ccsds_protocol_config(changeset, config) do
-    valid_algorithms = ["crc32", "crc16_ccitt", "crc16_xmodem"]
-    valid_on_failure = ["skip", "disconnect", "pass"]
-
-    crc_enabled = Map.get(config, "crc_enabled", false)
-    crc_algorithm = Map.get(config, "crc_algorithm", "crc16_ccitt")
-    crc_on_failure = Map.get(config, "crc_on_failure", "skip")
+  defp validate_sdlp_protocol_config(changeset, config) do
+    required_keys = ["profile", "sdu_mapping"]
+    profile = Map.get(config, "profile")
+    sdu_mapping = Map.get(config, "sdu_mapping")
 
     cond do
-      crc_enabled == true and crc_algorithm not in valid_algorithms ->
+      not Enum.all?(required_keys, &Map.has_key?(config, &1)) ->
         add_error(
           changeset,
           :protocol_config,
-          "ccsds protocol: invalid crc_algorithm '#{crc_algorithm}'"
+          "ccsds_sdlp protocol requires: #{Enum.join(required_keys, ", ")}"
         )
 
-      crc_enabled == true and crc_on_failure not in valid_on_failure ->
+      not valid_sdlp_profile?(profile) ->
         add_error(
           changeset,
           :protocol_config,
-          "ccsds protocol: invalid crc_on_failure '#{crc_on_failure}'"
+          "ccsds_sdlp protocol: invalid profile '#{profile}'"
+        )
+
+      sdu_mapping == :invalid ->
+        add_error(
+          changeset,
+          :protocol_config,
+          "ccsds_sdlp protocol: sdu_mapping must be valid JSON"
+        )
+
+      not is_map(sdu_mapping) and not is_list(sdu_mapping) ->
+        add_error(
+          changeset,
+          :protocol_config,
+          "ccsds_sdlp protocol: sdu_mapping must be a map or list"
         )
 
       true ->
         changeset
     end
   end
+
+  defp valid_sdlp_profile?(value) when is_binary(value) do
+    value in ["tm", "aos", "uslp"]
+  end
+
+  defp valid_sdlp_profile?(value) when is_atom(value) do
+    value in [:tm, :aos, :uslp]
+  end
+
+  defp valid_sdlp_profile?(_value), do: false
 end

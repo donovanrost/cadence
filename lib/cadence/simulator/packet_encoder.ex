@@ -25,7 +25,6 @@ defmodule Cadence.Simulator.PacketEncoder do
   ## CCSDS Encoding
 
   When encoding CCSDS packets, the encoder:
-  - Adds the 4-byte sync pattern (0x1ACFFC1D)
   - Creates a 6-byte primary header with APID and sequence count
   - Creates an 8-byte secondary header with timestamp and target hash
   - Packs user data according to item definitions
@@ -42,7 +41,8 @@ defmodule Cadence.Simulator.PacketEncoder do
     :sequence_counts
   ]
 
-  @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
+  # Note: Sync pattern removed - TM frames provide framing via frame structure
+  # @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
   @type t :: %__MODULE__{
           packets: %{String.t() => packet_def()},
@@ -560,7 +560,7 @@ defmodule Cadence.Simulator.PacketEncoder do
     prefix <> binary_part(value_binary, 0, min(byte_size, byte_size(value_binary))) <> suffix
   end
 
-  # Build a CCSDS packet
+  # Build a CCSDS packet (no sync pattern - TM frames provide framing)
   defp build_ccsds_packet(apid, sequence, target_id, payload) do
     # Secondary header (8 bytes): timestamp + target hash
     timestamp = System.system_time(:second)
@@ -584,7 +584,8 @@ defmodule Cadence.Simulator.PacketEncoder do
 
     primary_header = <<packet_id::16, seq_control::16, data_length::16>>
 
-    # Complete packet with sync
-    @ccsds_sync <> primary_header <> user_data
+    # No sync pattern - when used with TM frames, framing is provided by the frame structure
+    # The sync pattern was causing APID misalignment (0x1ACF parsed as APID 719)
+    primary_header <> user_data
   end
 end

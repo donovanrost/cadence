@@ -216,6 +216,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
           meta: %{
             packet_format: event.packet_format,
             packet_def: event.packet_def && event.packet_def.name,
+            link_meta: extract_link_meta(event.metadata),
             qualified_items: event.qualified_items,
             items_with_limits: event.items_with_limits
           }
@@ -396,4 +397,25 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   end
 
   defp maybe_record_identify_reason(_stage, _reason, _state), do: :ok
+
+  defp extract_link_meta(metadata) when is_map(metadata) do
+    Map.take(metadata, [
+      :scid,
+      :vcid,
+      :map_id,
+      :mcfc,
+      :vcfc,
+      :fhp,
+      :ocf,
+      :ocf_flag,
+      :secondary_header_flag,
+      :sync_flag,
+      :packet_order_flag,
+      :segment_length_id,
+      :lane,
+      :qos
+    ])
+  end
+
+  defp extract_link_meta(_), do: %{}
 end

@@ -57,6 +57,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   alias Cadence.Repo
   alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue}
+  alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Telemetry.ProtocolChain
 
   @confirmation_timeout_ms 60_000
@@ -1049,13 +1050,18 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp process_protocol_chain(interface, command_binary) do
-    case ProtocolChain.whereis(interface.id) do
-      nil ->
-        # No protocol chain - return raw binary
+    case SDLPConfig.fetch(interface.protocols) do
+      {:ok, _config} ->
         {:ok, command_binary}
 
-      chain_pid ->
-        ProtocolChain.process_write(chain_pid, command_binary)
+      :error ->
+        case ProtocolChain.whereis(interface.id) do
+          nil ->
+            {:ok, command_binary}
+
+          chain_pid ->
+            ProtocolChain.process_write(chain_pid, command_binary)
+        end
     end
   end
 

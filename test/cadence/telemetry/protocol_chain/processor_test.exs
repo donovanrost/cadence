@@ -95,9 +95,6 @@ defmodule Cadence.Telemetry.ProtocolChain.ProcessorTest do
 
   describe "protocol_module_for_type/1" do
     test "returns correct module for known types" do
-      assert Processor.protocol_module_for_type("ccsds") ==
-               Cadence.Protocols.CCSDS.SpacePacketProtocol
-
       assert Processor.protocol_module_for_type("crc") == Cadence.Telemetry.Protocols.CRCProtocol
 
       assert Processor.protocol_module_for_type("length") ==

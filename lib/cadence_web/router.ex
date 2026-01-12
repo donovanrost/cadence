@@ -114,6 +114,19 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/interfaces", MissionLive.Interfaces, :index
       live "/missions/:id/interfaces/new", MissionLive.Interfaces, :new
       live "/missions/:id/interfaces/:interface_id/edit", MissionLive.Interfaces, :edit
+      live "/missions/:id/interfaces/:interface_id", MissionLive.InterfaceShow, :show
+
+      live "/missions/:id/interfaces/:interface_id/vcids/new",
+           MissionLive.InterfaceShow,
+           :new_vcid
+
+      live "/missions/:id/interfaces/:interface_id/vcids/:vcid_id/edit",
+           MissionLive.InterfaceShow,
+           :edit_vcid
+
+      live "/missions/:id/interfaces/:interface_id/targets/:target_interface_id/scid/edit",
+           MissionLive.InterfaceShow,
+           :edit_scid
 
       # Protocol management for interfaces
       live "/missions/:id/interfaces/:interface_id/protocols", ProtocolLive.Index, :index

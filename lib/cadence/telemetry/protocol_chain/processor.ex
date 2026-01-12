@@ -10,7 +10,8 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
 
   require Logger
 
-  alias Cadence.Protocols.CCSDS.{SpacePacketProtocol, TMFrameProtocol}
+  alias Cadence.Telemetry.Protocols.SDLPPassthroughProtocol
+
   alias Cadence.Telemetry.Protocols.{
     CRCProtocol,
     FixedProtocol,
@@ -33,8 +34,22 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
     algorithm endian on_failure crc_algorithm crc_endian crc_on_failure
     crc_enabled packet_length_field_offset packet_length_field_size
     oid_validation oid_validation_prefix_bytes
-    scid vcid mcfc vcfc
+    scid vcid mcfc vcfc scid_target_map default_target_id
+    vcid_target_map default_vcid_map
   )
+  @known_protocol_key_atoms ~w(
+    sync_pattern length_bit_size fill_fields include_sync discard_sync
+    terminator strip_terminator frame_size min_frame_size max_frame_size
+    sync_pattern_hex terminator_hex length_endian length_encoding
+    algorithm endian on_failure crc_algorithm crc_endian crc_on_failure
+    crc_enabled packet_length_field_offset packet_length_field_size
+    oid_validation oid_validation_prefix_bytes
+    scid vcid mcfc vcfc scid_target_map default_target_id
+    vcid_target_map default_vcid_map
+  )a
+  @known_protocol_key_map Map.new(@known_protocol_key_atoms, fn atom ->
+                            {Atom.to_string(atom), atom}
+                          end)
 
   @doc """
   Maps protocol type to its implementing module.
@@ -42,20 +57,18 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
   Accepts both atom (domain entity) and string (legacy) formats.
   """
   @spec protocol_module_for_type(atom() | String.t()) :: module() | nil
-  def protocol_module_for_type(:ccsds), do: SpacePacketProtocol
   def protocol_module_for_type(:crc), do: CRCProtocol
   def protocol_module_for_type(:length), do: LengthProtocol
   def protocol_module_for_type(:template), do: TemplateProtocol
   def protocol_module_for_type(:terminated), do: TerminatedProtocol
   def protocol_module_for_type(:fixed), do: FixedProtocol
-  def protocol_module_for_type(:tm_frame), do: TMFrameProtocol
-  def protocol_module_for_type("ccsds"), do: SpacePacketProtocol
+  def protocol_module_for_type(:ccsds_sdlp), do: SDLPPassthroughProtocol
   def protocol_module_for_type("crc"), do: CRCProtocol
   def protocol_module_for_type("length"), do: LengthProtocol
   def protocol_module_for_type("template"), do: TemplateProtocol
   def protocol_module_for_type("terminated"), do: TerminatedProtocol
   def protocol_module_for_type("fixed"), do: FixedProtocol
-  def protocol_module_for_type("tm_frame"), do: TMFrameProtocol
+  def protocol_module_for_type("ccsds_sdlp"), do: SDLPPassthroughProtocol
   def protocol_module_for_type(_), do: nil
 
   @doc """
@@ -375,7 +388,7 @@ defmodule Cadence.Telemetry.ProtocolChain.Processor do
 
       # Convert known string keys to atoms, keep unknown keys as strings
       {key, value} when is_binary(key) and key in @known_protocol_keys ->
-        {String.to_existing_atom(key), value}
+        {Map.fetch!(@known_protocol_key_map, key), value}
 
       # Keep unknown keys as strings to avoid atom exhaustion
       {key, value} when is_binary(key) ->

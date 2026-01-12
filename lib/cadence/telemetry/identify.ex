@@ -3,6 +3,8 @@ defmodule Cadence.Telemetry.Identify do
   Pure entry point for packet identification.
   """
 
+  require Logger
+
   alias Cadence.Telemetry.Packet
 
   def run(event, state) do
@@ -47,16 +49,47 @@ defmodule Cadence.Telemetry.Identify do
   defp lookup_packet_def(packet, :ccsds, event, targets, catalog) do
     apid = event.apid || Packet.get_apid(packet)
     target_id = event.target_id || packet.target_id || "UNKNOWN"
+    definition_set_id = Map.get(targets, target_id)
 
-    case {Map.get(targets, target_id), apid} do
-      {definition_set_id, apid} when is_integer(apid) and not is_nil(definition_set_id) ->
-        case Map.get(catalog.by_apid, {definition_set_id, apid}) do
-          nil -> {:error, :unknown_packet}
-          packet_def -> {:ok, packet_def}
-        end
+    with {:ok, def_set_id} <- validate_definition_set(definition_set_id, targets, target_id),
+         {:ok, apid} <- validate_apid(apid, target_id),
+         {:ok, packet_def} <- fetch_packet_def(catalog, def_set_id, apid, target_id) do
+      {:ok, packet_def}
+    else
+      {:error, :unknown_packet} -> {:error, :unknown_packet}
+    end
+  end
 
-      _ ->
+  defp validate_definition_set(nil, targets, target_id) do
+    available_targets = Map.keys(targets) |> Enum.take(5)
+
+    Logger.debug(
+      "Identify: target_id=#{inspect(target_id)} not in catalog. available targets (first 5): #{inspect(available_targets)}"
+    )
+
+    {:error, :unknown_packet}
+  end
+
+  defp validate_definition_set(def_set_id, _targets, _target_id), do: {:ok, def_set_id}
+
+  defp validate_apid(apid, _target_id) when is_integer(apid), do: {:ok, apid}
+
+  defp validate_apid(apid, target_id) do
+    Logger.debug("Identify: invalid APID=#{inspect(apid)} for target=#{target_id}")
+    {:error, :unknown_packet}
+  end
+
+  defp fetch_packet_def(catalog, def_set_id, apid, target_id) do
+    case Map.get(catalog.by_apid, {def_set_id, apid}) do
+      nil ->
+        Logger.debug(
+          "Identify: APID #{apid} not found for target=#{target_id}, definition_set=#{def_set_id}"
+        )
+
         {:error, :unknown_packet}
+
+      packet_def ->
+        {:ok, packet_def}
     end
   end
 end

@@ -43,6 +43,7 @@ defmodule Cadence.Interfaces.TargetInterface do
     belongs_to :interface, Cadence.Interfaces.InterfaceSchema
 
     field :direction, :string
+    field :scid, :integer
 
     timestamps()
   end
@@ -52,16 +53,21 @@ defmodule Cadence.Interfaces.TargetInterface do
   """
   def changeset(target_interface, attrs) do
     target_interface
-    |> cast(attrs, [:target_id, :interface_id, :direction])
+    |> cast(attrs, [:target_id, :interface_id, :direction, :scid])
     |> validate_required([:target_id, :interface_id, :direction])
     |> validate_inclusion(:direction, @directions,
       message: "must be one of: #{Enum.join(@directions, ", ")}"
     )
+    |> validate_number(:scid, greater_than_or_equal_to: 0, less_than: 1024)
     |> foreign_key_constraint(:target_id)
     |> foreign_key_constraint(:interface_id)
     |> unique_constraint([:target_id, :interface_id],
       name: :target_interfaces_target_id_interface_id_index,
       message: "This target-interface mapping already exists"
+    )
+    |> unique_constraint([:interface_id, :scid],
+      name: :target_interfaces_interface_id_scid_index,
+      message: "This SCID is already in use on the interface"
     )
   end
 

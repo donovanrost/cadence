@@ -32,8 +32,9 @@ defmodule Cadence.Simulator.GeneratorWorker do
   use GenServer
   require Logger
 
+  alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
-  alias Cadence.Telemetry.ProtocolChain.Processor
 
   defstruct [
     :worker_id,
@@ -42,7 +43,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
     :provider_state,
     :encoder,
     :target_id,
-    :write_chain,
+    :uplink_pipeline,
+    :uplink_opts,
     :sequence_allocator,
     :send_buffer,
     :sample_rate
@@ -63,7 +65,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
   - `:coordinator_id` - ID for metrics tracking
   - `:provider_module` - Provider module (e.g., BasicDynamics)
   - `:provider_state` - Initial provider state
-  - `:encoder` - PacketEncoder struct
+  - `:encoder` - PacketEncoder struct (required)
   - `:target_id` - Target identifier
   - `:sequence_allocator` - SequenceAllocator struct
   - `:send_buffer` - SendBuffer PID
@@ -129,8 +131,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
     provider_state = Keyword.fetch!(opts, :provider_state)
     encoder = Keyword.get(opts, :encoder)
     target_id = Keyword.fetch!(opts, :target_id)
-    write_chain_configs = Keyword.get(opts, :write_chain_configs)
-    write_chain = init_write_chain(write_chain_configs)
+    uplink_opts = Keyword.get(opts, :uplink_opts)
+    uplink_pipeline = init_uplink_pipeline(uplink_opts)
     sequence_allocator = Keyword.fetch!(opts, :sequence_allocator)
     send_buffer = Keyword.fetch!(opts, :send_buffer)
     sample_rate = Keyword.get(opts, :sample_rate, @default_sample_rate)
@@ -142,13 +144,16 @@ defmodule Cadence.Simulator.GeneratorWorker do
       provider_state: provider_state,
       encoder: encoder,
       target_id: target_id,
-      write_chain: write_chain,
+      uplink_pipeline: uplink_pipeline,
+      uplink_opts: uplink_opts,
       sequence_allocator: sequence_allocator,
       send_buffer: send_buffer,
       sample_rate: sample_rate
     }
 
-    Logger.debug("GeneratorWorker #{worker_id} started")
+    Logger.debug(
+      "GeneratorWorker #{worker_id} started, uplink_pipeline: #{if uplink_pipeline, do: "initialized", else: "none (raw packets)"}"
+    )
 
     {:ok, state}
   end
@@ -185,8 +190,6 @@ defmodule Cadence.Simulator.GeneratorWorker do
     %{
       provider_module: provider_module,
       provider_state: provider_state,
-      encoder: encoder,
-      target_id: target_id,
       sequence_allocator: sequence_allocator,
       send_buffer: send_buffer,
       coordinator_id: coordinator_id,
@@ -200,32 +203,17 @@ defmodule Cadence.Simulator.GeneratorWorker do
     # Generate values from provider
     case provider_module.generate_values(provider_state, step) do
       {:ok, values, _new_provider_state} ->
-        if should_time do
-          gen_time = System.monotonic_time(:microsecond) - start_time
-          SimulatorMetrics.record_timing(coordinator_id, :generation, gen_time)
-        end
-
+        maybe_record_generation(coordinator_id, should_time, start_time)
         SimulatorMetrics.inc(coordinator_id, :packets_generated)
 
-        # Encode and send
         encode_start = if should_time, do: System.monotonic_time(:microsecond)
 
-        {_result, updated_state} =
-          encode_and_send(
-            encoder,
-            target_id,
-            values,
-            sequence_allocator,
-            send_buffer,
-            state
-          )
+        {result, updated_state} =
+          encode_and_send_values(state, values, sequence_allocator, send_buffer)
 
-        if should_time do
-          encode_time = System.monotonic_time(:microsecond) - encode_start
-          SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
-        end
+        maybe_record_encoding(coordinator_id, should_time, encode_start)
 
-        {:ok, updated_state}
+        {result, updated_state}
 
       {:error, reason, _new_provider_state} ->
         Logger.warning(
@@ -236,25 +224,42 @@ defmodule Cadence.Simulator.GeneratorWorker do
     end
   end
 
-  defp encode_and_send(
-         nil,
-         target_id,
-         values,
-         _sequence_allocator,
-         send_buffer,
-         state
-       ) do
-    # No encoder - use hardcoded legacy encoding
-    packets = encode_hardcoded(target_id, values)
+  defp maybe_record_generation(_coordinator_id, false, _start_time), do: :ok
 
-    updated_state =
-      Enum.reduce(packets, state, fn binary, acc_state ->
-        {processed, next_state} = process_write_chain(acc_state, binary)
-        SendBuffer.send_packet(send_buffer, processed)
-        next_state
-      end)
+  defp maybe_record_generation(coordinator_id, true, start_time) do
+    gen_time = System.monotonic_time(:microsecond) - start_time
+    SimulatorMetrics.record_timing(coordinator_id, :generation, gen_time)
+  end
 
-    {:ok, updated_state}
+  defp maybe_record_encoding(_coordinator_id, false, _start_time), do: :ok
+
+  defp maybe_record_encoding(coordinator_id, true, start_time) do
+    encode_time = System.monotonic_time(:microsecond) - start_time
+    SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
+  end
+
+  defp encode_and_send_values(state, values, sequence_allocator, send_buffer) do
+    case state.encoder do
+      nil ->
+        Logger.error(
+          "GeneratorWorker #{state.worker_id} missing encoder; skipping telemetry generation"
+        )
+
+        {{:error, :missing_encoder}, state}
+
+      encoder ->
+        {:ok, updated_state} =
+          encode_and_send(
+            encoder,
+            state.target_id,
+            values,
+            sequence_allocator,
+            send_buffer,
+            state
+          )
+
+        {:ok, updated_state}
+    end
   end
 
   defp encode_and_send(
@@ -274,7 +279,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
     updated_state =
       Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
-        {processed, next_state} = process_write_chain(acc_state, binary)
+        {processed, next_state} = encode_uplink(acc_state, binary)
         SendBuffer.send_packet(send_buffer, processed)
         next_state
       end)
@@ -282,155 +287,60 @@ defmodule Cadence.Simulator.GeneratorWorker do
     {:ok, updated_state}
   end
 
-  defp process_write_chain(%{write_chain: nil} = state, packet), do: {packet, state}
-  defp process_write_chain(%{write_chain: []} = state, packet), do: {packet, state}
+  defp encode_uplink(%{uplink_pipeline: nil} = state, packet), do: {packet, state}
 
-  defp process_write_chain(%{write_chain: write_chain} = state, packet) do
-    case Processor.process_write(write_chain, packet) do
-      {:ok, encoded_packet, updated_chain} ->
-        {encoded_packet, %{state | write_chain: updated_chain}}
+  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet) do
+    ctx = %{
+      frame_size: opts[:frame_size],
+      scid: opts[:uplink_scid] || opts[:scid],
+      vcid: opts[:uplink_vcid] || opts[:vcid],
+      map_id: opts[:uplink_map_id]
+    }
 
-      {:error, reason} ->
-        Logger.warning("Write chain processing failed: #{inspect(reason)}, sending raw packet")
-        {packet, state}
+    sdu = %SDUOctets{
+      profile: opts[:profile],
+      scid: ctx.scid,
+      vcid: ctx.vcid,
+      map_id: ctx.map_id,
+      direction: :uplink,
+      sdu_kind_hint: :space_packet,
+      octets: packet,
+      quality: :good,
+      source_frames: [],
+      timestamp: nil,
+      meta: %{}
+    }
+
+    case UplinkPipeline.encode(sdu, ctx, pipeline, opts) do
+      {:ok, encoded, new_pipeline} ->
+        {encoded, %{state | uplink_pipeline: new_pipeline}}
+
+      {:error, reason, new_pipeline} ->
+        Logger.warning("Uplink pipeline failed: #{inspect(reason)}, sending raw packet")
+        {packet, %{state | uplink_pipeline: new_pipeline}}
     end
   end
 
-  defp init_write_chain(nil), do: nil
-  defp init_write_chain(configs), do: Processor.clone_chain(configs)
-
-  # Hardcoded encoding for when no encoder is provided (legacy behavior)
-  defp encode_hardcoded(target_id, values) do
-    import Bitwise
-
-    # Group by packet
-    by_packet =
-      Enum.group_by(values, fn {qualified_name, _} ->
-        case String.split(qualified_name, ".", parts: 2) do
-          [packet_name, _] -> packet_name
-          _ -> "UNKNOWN"
-        end
-      end)
-
-    sync = <<0x1A, 0xCF, 0xFC, 0x1D>>
-
-    Enum.flat_map(by_packet, fn {packet_name, items} ->
-      item_values =
-        Enum.into(items, %{}, fn {qualified, value} ->
-          [_, item] = String.split(qualified, ".", parts: 2)
-          {item, value}
-        end)
-
-      case encode_legacy_packet(packet_name, target_id, item_values, sync) do
-        nil -> []
-        binary -> [binary]
-      end
-    end)
+  defp init_uplink_pipeline(nil) do
+    Logger.debug("GeneratorWorker init_uplink_pipeline: opts is nil")
+    nil
   end
 
-  defp encode_legacy_packet("HEALTH", target_id, data, sync) do
-    import Bitwise
+  defp init_uplink_pipeline(opts) do
+    case UplinkPipeline.init(opts) do
+      {:ok, pipeline} ->
+        Logger.debug(
+          "GeneratorWorker init_uplink_pipeline: initialized with opts=#{inspect(opts)}"
+        )
 
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-    secondary_header = <<timestamp::48, target_hash::16>>
+        pipeline
 
-    cpu_temp = Map.get(data, "cpu_temp", 25.0)
-    battery_voltage = Map.get(data, "battery_voltage", 14.5)
-    battery_current = Map.get(data, "battery_current", 2.3)
-    battery_percentage = Map.get(data, "battery_percentage", 75.0)
-    uptime = Map.get(data, "uptime_seconds", 0)
-    memory = Map.get(data, "memory_used_mb", 512)
+      {:error, reason} ->
+        Logger.warning(
+          "GeneratorWorker init_uplink_pipeline: failed with reason=#{inspect(reason)}"
+        )
 
-    user_data = <<
-      cpu_temp::float-32,
-      battery_voltage::float-32,
-      battery_current::float-32,
-      trunc(battery_percentage)::8,
-      uptime::32,
-      memory::16
-    >>
-
-    payload = secondary_header <> user_data
-    build_ccsds(100, 0, payload, sync)
-  end
-
-  defp encode_legacy_packet("ATTITUDE", target_id, data, sync) do
-    import Bitwise
-
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    roll = Map.get(data, "roll", 0.0)
-    pitch = Map.get(data, "pitch", 0.0)
-    yaw = Map.get(data, "yaw", 0.0)
-    roll_rate = Map.get(data, "roll_rate", 0.0)
-    pitch_rate = Map.get(data, "pitch_rate", 0.0)
-    yaw_rate = Map.get(data, "yaw_rate", 0.0)
-
-    user_data = <<
-      roll::float-32,
-      pitch::float-32,
-      yaw::float-32,
-      roll_rate::float-32,
-      pitch_rate::float-32,
-      yaw_rate::float-32
-    >>
-
-    payload = secondary_header <> user_data
-    build_ccsds(101, 0, payload, sync)
-  end
-
-  defp encode_legacy_packet("POWER", target_id, data, sync) do
-    import Bitwise
-
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    solar_voltage = Map.get(data, "solar_panel_voltage", 28.0)
-    solar_current = Map.get(data, "solar_panel_current", 5.0)
-    bus_voltage = Map.get(data, "bus_voltage", 27.5)
-    bus_current = Map.get(data, "bus_current", 3.2)
-
-    power_mode =
-      case Map.get(data, "power_mode", "NOMINAL") do
-        "NOMINAL" -> 0
-        "BATTERY" -> 1
-        "CHARGING" -> 2
-        _ -> 255
-      end
-
-    user_data = <<
-      solar_voltage::float-32,
-      solar_current::float-32,
-      bus_voltage::float-32,
-      bus_current::float-32,
-      power_mode::8
-    >>
-
-    payload = secondary_header <> user_data
-    build_ccsds(102, 0, payload, sync)
-  end
-
-  defp encode_legacy_packet(_packet_name, _target_id, _data, _sync), do: nil
-
-  defp build_ccsds(apid, sequence, payload, sync) do
-    import Bitwise
-
-    version = 0
-    type = 0
-    sec_hdr_flag = 1
-    packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
-
-    sequence_flags = 3
-    seq_control = sequence_flags <<< 14 ||| sequence
-
-    data_length = byte_size(payload) - 1
-
-    primary_header = <<packet_id::16, seq_control::16, data_length::16>>
-
-    sync <> primary_header <> payload
+        nil
+    end
   end
 end

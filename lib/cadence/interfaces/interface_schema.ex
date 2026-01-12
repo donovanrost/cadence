@@ -91,6 +91,7 @@ defmodule Cadence.Interfaces.InterfaceSchema do
     # Associations
     belongs_to :mission, Cadence.Missions.Mission
     has_many :protocols, Cadence.Interfaces.InterfaceProtocol, foreign_key: :interface_id
+    has_many :vcids, Cadence.Interfaces.InterfaceVcid, foreign_key: :interface_id
 
     timestamps(type: :utc_datetime)
   end

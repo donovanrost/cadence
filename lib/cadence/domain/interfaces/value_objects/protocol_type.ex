@@ -9,12 +9,12 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
 
   ## Protocol Types
 
-  - `:ccsds` - CCSDS space packet protocol (header parsing, optional CRC)
   - `:length` - Length-prefixed framing (packet size in header)
   - `:template` - Sync pattern with configurable header parsing
   - `:terminated` - Terminator-delimited packets
   - `:fixed` - Fixed-size packets
   - `:crc` - CRC validation layer
+  - `:ccsds_sdlp` - CCSDS SDLP pipeline (TM/AOS/USLP)
 
   ## Configuration Requirements
 
@@ -24,18 +24,45 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
   - **:terminated** requires: `terminator_hex`
   - **:fixed** requires: `packet_size`
   - **:crc** optional: `algorithm`, `on_failure`
-  - **:ccsds** optional: `crc_enabled`, `crc_algorithm`
   """
 
-  @type t :: :ccsds | :length | :template | :terminated | :fixed | :crc
+  @type t ::
+          :ccsds_sdlp
+          | :length
+          | :template
+          | :terminated
+          | :fixed
+          | :crc
 
-  @values [:ccsds, :length, :template, :terminated, :fixed, :crc]
+  @values [
+    :ccsds_sdlp,
+    :length,
+    :template,
+    :terminated,
+    :fixed,
+    :crc
+  ]
+
+  @parse_map %{
+    "ccsds_sdlp" => :ccsds_sdlp,
+    "length" => :length,
+    "template" => :template,
+    "terminated" => :terminated,
+    "fixed" => :fixed,
+    "crc" => :crc
+  }
 
   # Protocols that perform CRC operations
-  @crc_protocols [:crc, :ccsds]
+  @crc_protocols [:crc]
 
   # Protocols that handle packet framing
-  @framing_protocols [:length, :template, :terminated, :fixed, :ccsds]
+  @framing_protocols [
+    :length,
+    :template,
+    :terminated,
+    :fixed,
+    :ccsds_sdlp
+  ]
 
   @doc """
   Returns all valid protocol type values.
@@ -64,14 +91,11 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
   def parse(value) when is_atom(value) and value in @values, do: {:ok, value}
 
   def parse(value) when is_binary(value) do
-    case String.downcase(value) do
-      "ccsds" -> {:ok, :ccsds}
-      "length" -> {:ok, :length}
-      "template" -> {:ok, :template}
-      "terminated" -> {:ok, :terminated}
-      "fixed" -> {:ok, :fixed}
-      "crc" -> {:ok, :crc}
-      _ -> {:error, :invalid_protocol_type}
+    value = String.downcase(value)
+
+    case Map.fetch(@parse_map, value) do
+      {:ok, protocol} -> {:ok, protocol}
+      :error -> {:error, :invalid_protocol_type}
     end
   end
 
@@ -98,9 +122,9 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
   def required_config_keys(:template), do: ["sync_pattern_hex"]
   def required_config_keys(:terminated), do: ["terminator_hex"]
   def required_config_keys(:fixed), do: ["packet_size"]
-  def required_config_keys(:ccsds), do: []
   def required_config_keys(:length), do: []
   def required_config_keys(:crc), do: []
+  def required_config_keys(:ccsds_sdlp), do: ["profile", "sdu_mapping"]
 
   @doc """
   Returns the optional configuration keys for a protocol type.
@@ -125,8 +149,16 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
     ["algorithm", "on_failure"]
   end
 
-  def optional_config_keys(:ccsds) do
-    ["crc_enabled", "crc_algorithm", "crc_on_failure"]
+  def optional_config_keys(:ccsds_sdlp) do
+    [
+      "frame_size",
+      "ocf_length",
+      "secondary_header_length",
+      "default_sdu_type",
+      "uplink_scid",
+      "uplink_vcid",
+      "uplink_map_id"
+    ]
   end
 
   def optional_config_keys(:terminated) do
@@ -158,21 +190,17 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
   Returns the display name for a protocol type.
   """
   @spec display_name(t()) :: String.t()
-  def display_name(:ccsds), do: "CCSDS Space Packet"
   def display_name(:length), do: "Length Prefix"
   def display_name(:template), do: "Sync Template"
   def display_name(:terminated), do: "Terminator Delimited"
   def display_name(:fixed), do: "Fixed Size"
   def display_name(:crc), do: "CRC Validation"
+  def display_name(:ccsds_sdlp), do: "CCSDS SDLP (TM/AOS/USLP)"
 
   @doc """
   Returns a description of what the protocol does.
   """
   @spec description(t()) :: String.t()
-  def description(:ccsds) do
-    "Parses CCSDS space packets with optional CRC validation"
-  end
-
   def description(:length) do
     "Frames packets using a length field in the header"
   end
@@ -191,5 +219,9 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
 
   def description(:crc) do
     "Validates and/or appends CRC checksums"
+  end
+
+  def description(:ccsds_sdlp) do
+    "Processes CCSDS SDLP frames (TM/AOS/USLP) with SDU mapping and reassembly"
   end
 end

@@ -23,6 +23,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
           target_id: String.t(),
           interface_id: String.t(),
           direction: DataDirection.t(),
+          scid: non_neg_integer() | nil,
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -33,6 +34,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
     :target_id,
     :interface_id,
     :direction,
+    :scid,
     :created_at,
     :updated_at
   ]
@@ -50,13 +52,15 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(attrs) when is_map(attrs) do
     with :ok <- validate_required(attrs),
-         {:ok, direction} <- parse_direction(attrs[:direction]) do
+         {:ok, direction} <- parse_direction(attrs[:direction]),
+         :ok <- validate_scid(attrs) do
       {:ok,
        %__MODULE__{
          id: attrs[:id],
          target_id: attrs[:target_id],
          interface_id: attrs[:interface_id],
          direction: direction,
+         scid: Map.get(attrs, :scid),
          created_at: attrs[:created_at],
          updated_at: attrs[:updated_at]
        }}
@@ -87,6 +91,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
       target_id: attrs[:target_id],
       interface_id: attrs[:interface_id],
       direction: parse_direction_from_persistence(attrs[:direction]),
+      scid: attrs[:scid],
       created_at: attrs[:created_at] || attrs[:inserted_at],
       updated_at: attrs[:updated_at]
     }
@@ -156,4 +161,12 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   end
 
   defp parse_direction_from_persistence(_), do: :read_write
+
+  defp validate_scid(attrs) when is_map(attrs) do
+    case Map.get(attrs, :scid) do
+      nil -> :ok
+      scid when is_integer(scid) and scid >= 0 and scid < 1024 -> :ok
+      scid -> {:error, {:invalid, :scid, scid}}
+    end
+  end
 end

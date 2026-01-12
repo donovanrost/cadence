@@ -58,7 +58,7 @@ defmodule Cadence.MissionDatabaseFixtures do
 
   def definition_set_fixture(attrs \\ %{}) do
     attrs = ensure_map(attrs)
-    {org, mission, database} = get_or_create_org_mission_database(attrs)
+    {org, _mission, database} = get_or_create_org_mission_database(attrs)
 
     attrs =
       attrs
@@ -699,19 +699,6 @@ defmodule Cadence.MissionDatabaseFixtures do
 
       other ->
         raise "definition_set must be a DefinitionSet struct, got: #{inspect(other)}"
-    end
-  end
-
-  defp get_or_create_database(attrs, mission) do
-    case attrs[:database] do
-      nil ->
-        database_fixture(mission: mission)
-
-      %Database{} = db ->
-        db
-
-      other ->
-        raise "database must be a Database struct, got: #{inspect(other)}"
     end
   end
 end

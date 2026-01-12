@@ -49,7 +49,7 @@ defmodule Cadence.Simulator.Coordinator do
   - `:rate_hz` - Generation rate in Hz (default: 1.0)
   - `:provider` - Provider module (default: BasicDynamics)
   - `:provider_config` - Config passed to provider init
-  - `:definitions_path` - Path to YAML packet definitions
+  - `:definitions_path` - Path to YAML packet definitions (required)
   - `:scenario_path` - Path to scenario file (for ScenarioProvider)
 
   ## Parallel Mode Options
@@ -64,6 +64,9 @@ defmodule Cadence.Simulator.Coordinator do
 
   require Logger
 
+  alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
+
   alias Cadence.Simulator.{
     GeneratorWorker,
     PacketEncoder,
@@ -73,8 +76,6 @@ defmodule Cadence.Simulator.Coordinator do
   }
 
   alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
-  alias Cadence.Protocols.CCSDS.TMFrameProtocol
-  alias Cadence.Telemetry.ProtocolChain.Processor
 
   @default_rate_hz 1.0
   @default_target_id "SIM-1"
@@ -93,9 +94,8 @@ defmodule Cadence.Simulator.Coordinator do
     :rate_hz,
     :timer_ref,
     :frame,
-    :write_chain,
-    :write_chain_configs,
-    :oid_lfsr_by_vcid,
+    :uplink_pipeline,
+    :uplink_opts,
     # Parallel mode fields
     :parallel_mode,
     :generator_pool,
@@ -150,62 +150,48 @@ defmodule Cadence.Simulator.Coordinator do
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
     parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
-    frame = configure_oid(Keyword.get(opts, :frame), rate_hz)
-    write_chain_configs = build_write_chain_configs(frame)
-    write_chain = init_write_chain(write_chain_configs)
+    frame = Keyword.get(opts, :frame)
+    {uplink_pipeline, uplink_opts} = init_uplink_pipeline(frame)
 
     # Determine provider based on options
     {provider_module, provider_config} = determine_provider(opts)
 
-    # Initialize provider
-    case provider_module.init(provider_config) do
-      {:ok, provider_state} ->
-        # Load encoder if definitions provided
-        encoder = load_encoder(opts)
+    with {:ok, provider_state} <- provider_module.init(provider_config),
+         {:ok, encoder} <- require_encoder(opts),
+         {:ok, state} <-
+           build_state(%{
+             mission_id: mission_id,
+             target_id: target_id,
+             provider_module: provider_module,
+             provider_state: provider_state,
+             encoder: encoder,
+             output: output,
+             rate_hz: rate_hz,
+             frame: frame,
+             uplink_pipeline: uplink_pipeline,
+             uplink_opts: uplink_opts,
+             parallel_mode: parallel_mode,
+             opts: opts
+           }) do
+      Logger.info("""
+      Simulator Coordinator started:
+        mission_id: #{mission_id}
+        target_id: #{target_id}
+        provider: #{inspect(provider_module)}
+        rate_hz: #{rate_hz}
+        output: #{inspect(output)}
+        parallel_mode: #{parallel_mode}
+        encoder: loaded
+        frame: #{inspect(frame)}
+        uplink_pipeline: #{if uplink_pipeline, do: "initialized", else: "none (raw packets)"}
+      """)
 
-        state = %__MODULE__{
-          mission_id: mission_id,
-          target_id: target_id,
-          provider_module: provider_module,
-          provider_state: provider_state,
-          encoder: encoder,
-          output: output,
-          rate_hz: rate_hz,
-          frame: frame,
-          write_chain: write_chain,
-          write_chain_configs: write_chain_configs,
-          oid_lfsr_by_vcid: %{},
-          parallel_mode: parallel_mode,
-          socket: nil
-        }
-
-        # Initialize based on parallel mode
-        state =
-          case parallel_mode do
-            :parallel ->
-              init_parallel_mode(state, opts)
-
-            :sequential ->
-              # Connect output for sequential mode
-              connect_output(state)
-          end
-
-        Logger.info("""
-        Simulator Coordinator started:
-          mission_id: #{mission_id}
-          target_id: #{target_id}
-          provider: #{inspect(provider_module)}
-          rate_hz: #{rate_hz}
-          output: #{inspect(output)}
-          parallel_mode: #{parallel_mode}
-          encoder: #{if encoder, do: "loaded", else: "none (using hardcoded encoding)"}
-        """)
-
-        # Schedule first generation
-        interval_ms = max(trunc(1000 / rate_hz), 1)
-        timer_ref = Process.send_after(self(), :generate, interval_ms)
-
-        {:ok, %{state | timer_ref: timer_ref}}
+      interval_ms = max(trunc(1000 / rate_hz), 1)
+      timer_ref = Process.send_after(self(), :generate, interval_ms)
+      {:ok, %{state | timer_ref: timer_ref}}
+    else
+      {:error, :missing_definitions} ->
+        {:stop, {:missing_definitions, "definitions_path is required for simulator output"}}
 
       {:error, reason} ->
         {:stop, {:provider_init_failed, reason}}
@@ -250,7 +236,7 @@ defmodule Cadence.Simulator.Coordinator do
             provider_state: state.provider_state,
             encoder: state.encoder,
             target_id: state.target_id,
-            write_chain_configs: state.write_chain_configs,
+            uplink_opts: state.uplink_opts,
             sequence_allocator: sequence_allocator,
             send_buffer: send_buffer,
             name: nil
@@ -267,6 +253,51 @@ defmodule Cadence.Simulator.Coordinator do
         send_buffer: send_buffer,
         generator_pool: generator_pool
     }
+  end
+
+  defp require_encoder(opts) do
+    case load_encoder(opts) do
+      nil -> {:error, :missing_definitions}
+      encoder -> {:ok, encoder}
+    end
+  end
+
+  defp build_state(%{
+         mission_id: mission_id,
+         target_id: target_id,
+         provider_module: provider_module,
+         provider_state: provider_state,
+         encoder: encoder,
+         output: output,
+         rate_hz: rate_hz,
+         frame: frame,
+         uplink_pipeline: uplink_pipeline,
+         uplink_opts: uplink_opts,
+         parallel_mode: parallel_mode,
+         opts: opts
+       }) do
+    state = %__MODULE__{
+      mission_id: mission_id,
+      target_id: target_id,
+      provider_module: provider_module,
+      provider_state: provider_state,
+      encoder: encoder,
+      output: output,
+      rate_hz: rate_hz,
+      frame: frame,
+      uplink_pipeline: uplink_pipeline,
+      uplink_opts: uplink_opts,
+      parallel_mode: parallel_mode,
+      socket: nil
+    }
+
+    state =
+      case parallel_mode do
+        :parallel -> init_parallel_mode(state, opts)
+        :sequential -> connect_output(state)
+      end
+
+    {:ok, state}
   end
 
   @impl true
@@ -289,15 +320,10 @@ defmodule Cadence.Simulator.Coordinator do
       Enum.reduce(0..(steps_per_tick - 1), state, fn offset, acc_state ->
         step = acc_state.step + offset
 
-        if oid_due?(acc_state, step) do
-          {updated_state, _sent} = send_oid_frame(acc_state)
-          updated_state
-        else
-          worker_index = rem(step, worker_count)
-          worker = Enum.at(acc_state.generator_pool, worker_index)
-          GeneratorWorker.generate(worker, step)
-          acc_state
-        end
+        worker_index = rem(step, worker_count)
+        worker = Enum.at(acc_state.generator_pool, worker_index)
+        GeneratorWorker.generate(worker, step)
+        acc_state
       end)
 
     # Schedule next tick
@@ -315,24 +341,17 @@ defmodule Cadence.Simulator.Coordinator do
 
   def handle_info(:generate, state) do
     # Sequential mode: original behavior
-    {state, provider_state} =
-      if oid_due?(state, state.step) do
-        {updated_state, _sent} = send_oid_frame(state)
-        {updated_state, state.provider_state}
-      else
-        # Generate values from provider
-        {values, new_state} =
-          case state.provider_module.generate_values(state.provider_state, state.step) do
-            {:ok, values, next_state} ->
-              {values, next_state}
+    {values, provider_state} =
+      case state.provider_module.generate_values(state.provider_state, state.step) do
+        {:ok, values, next_state} ->
+          {values, next_state}
 
-            {:error, reason, next_state} ->
-              Logger.error("Provider error: #{inspect(reason)}")
-              {%{}, next_state}
-          end
-
-        {send_telemetry(state, values), new_state}
+        {:error, reason, next_state} ->
+          Logger.error("Provider error: #{inspect(reason)}")
+          {%{}, next_state}
       end
+
+    state = send_telemetry(state, values)
 
     # Schedule next generation
     interval_ms = max(trunc(1000 / state.rate_hz), 1)
@@ -536,11 +555,6 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp send_telemetry(state, values) when map_size(values) == 0, do: state
 
-  defp send_telemetry(%{encoder: nil} = state, values) do
-    # No encoder - use hardcoded encoding (legacy behavior)
-    send_hardcoded_packets(state, values)
-  end
-
   defp send_telemetry(%{encoder: encoder} = state, values) do
     # Use encoder for proper packet construction
     {:ok, packets, updated_encoder} = PacketEncoder.encode(encoder, state.target_id, values)
@@ -553,150 +567,8 @@ defmodule Cadence.Simulator.Coordinator do
     %{state | encoder: updated_encoder}
   end
 
-  # Legacy hardcoded packet encoding (for backwards compatibility)
-  defp send_hardcoded_packets(state, values) do
-    # Group by packet and encode
-    packets = group_and_encode_legacy(values, state.target_id, state.step)
-
-    Enum.reduce(packets, state, fn binary, acc_state ->
-      send_packet(acc_state, binary)
-    end)
-  end
-
-  defp group_and_encode_legacy(values, target_id, step) do
-    # Group by packet name
-    by_packet =
-      Enum.group_by(values, fn {qualified_name, _} ->
-        case String.split(qualified_name, ".", parts: 2) do
-          [packet_name, _] -> packet_name
-          _ -> "UNKNOWN"
-        end
-      end)
-
-    # Encode each packet
-    Enum.flat_map(by_packet, fn {packet_name, items} ->
-      item_values =
-        Enum.into(items, %{}, fn {qualified, value} ->
-          [_, item] = String.split(qualified, ".", parts: 2)
-          {item, value}
-        end)
-
-      case encode_legacy_packet(packet_name, target_id, item_values, step) do
-        nil -> []
-        binary -> [binary]
-      end
-    end)
-  end
-
-  # Legacy encoding for known packet types
-  defp encode_legacy_packet("HEALTH", target_id, data, _step) do
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    cpu_temp = Map.get(data, "cpu_temp", 25.0)
-    battery_voltage = Map.get(data, "battery_voltage", 14.5)
-    battery_current = Map.get(data, "battery_current", 2.3)
-    battery_percentage = Map.get(data, "battery_percentage", 75.0)
-    uptime = Map.get(data, "uptime_seconds", 0)
-    memory = Map.get(data, "memory_used_mb", 512)
-
-    user_data = <<
-      cpu_temp::float-32,
-      battery_voltage::float-32,
-      battery_current::float-32,
-      trunc(battery_percentage)::8,
-      uptime::32,
-      memory::16
-    >>
-
-    build_ccsds(100, secondary_header <> user_data)
-  end
-
-  defp encode_legacy_packet("ATTITUDE", target_id, data, _step) do
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    roll = Map.get(data, "roll", 0.0)
-    pitch = Map.get(data, "pitch", 0.0)
-    yaw = Map.get(data, "yaw", 0.0)
-    roll_rate = Map.get(data, "roll_rate", 0.0)
-    pitch_rate = Map.get(data, "pitch_rate", 0.0)
-    yaw_rate = Map.get(data, "yaw_rate", 0.0)
-
-    user_data = <<
-      roll::float-32,
-      pitch::float-32,
-      yaw::float-32,
-      roll_rate::float-32,
-      pitch_rate::float-32,
-      yaw_rate::float-32
-    >>
-
-    build_ccsds(101, secondary_header <> user_data)
-  end
-
-  defp encode_legacy_packet("POWER", target_id, data, _step) do
-    timestamp = System.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    solar_voltage = Map.get(data, "solar_panel_voltage", 28.0)
-    solar_current = Map.get(data, "solar_panel_current", 5.0)
-    bus_voltage = Map.get(data, "bus_voltage", 27.5)
-    bus_current = Map.get(data, "bus_current", 3.2)
-
-    power_mode =
-      case Map.get(data, "power_mode", "NOMINAL") do
-        "NOMINAL" -> 0
-        "BATTERY" -> 1
-        "CHARGING" -> 2
-        _ -> 255
-      end
-
-    user_data = <<
-      solar_voltage::float-32,
-      solar_current::float-32,
-      bus_voltage::float-32,
-      bus_current::float-32,
-      power_mode::8
-    >>
-
-    build_ccsds(102, secondary_header <> user_data)
-  end
-
-  defp encode_legacy_packet(packet_name, _target_id, _data, _step) do
-    Logger.warning("Unknown packet type for legacy encoding: #{packet_name}")
-    nil
-  end
-
-  defp build_ccsds(apid, payload) do
-    import Bitwise
-
-    sync = <<0x1A, 0xCF, 0xFC, 0x1D>>
-
-    version = 0
-    type = 0
-    sec_hdr_flag = 1
-    packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
-
-    sequence_flags = 3
-    sequence_count = 0
-    seq_control = sequence_flags <<< 14 ||| sequence_count
-
-    data_length = byte_size(payload) - 1
-
-    primary_header = <<packet_id::16, seq_control::16, data_length::16>>
-
-    sync <> primary_header <> payload
-  end
-
   defp send_packet(state, binary) do
-    {processed_packet, state} = process_write_chain(state, binary)
+    {processed_packet, state} = encode_uplink(state, binary)
     send_frame(state, processed_packet)
     state
   end
@@ -721,109 +593,68 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp send_frame(_, _frame_binary), do: :ok
 
-  defp process_write_chain(%{write_chain: nil} = state, packet), do: {packet, state}
-  defp process_write_chain(%{write_chain: []} = state, packet), do: {packet, state}
+  defp encode_uplink(%{uplink_pipeline: nil} = state, packet), do: {packet, state}
 
-  defp process_write_chain(%{write_chain: write_chain} = state, packet) do
-    case Processor.process_write(write_chain, packet) do
-      {:ok, encoded_packet, updated_chain} ->
-        {encoded_packet, %{state | write_chain: updated_chain}}
+  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet) do
+    ctx = %{
+      frame_size: opts[:frame_size],
+      scid: opts[:uplink_scid] || opts[:scid],
+      vcid: opts[:uplink_vcid] || opts[:vcid],
+      map_id: opts[:uplink_map_id]
+    }
+
+    sdu = %SDUOctets{
+      profile: opts[:profile],
+      scid: ctx.scid,
+      vcid: ctx.vcid,
+      map_id: ctx.map_id,
+      direction: :uplink,
+      sdu_kind_hint: :space_packet,
+      octets: packet,
+      quality: :good,
+      source_frames: [],
+      timestamp: nil,
+      meta: %{}
+    }
+
+    case UplinkPipeline.encode(sdu, ctx, pipeline, opts) do
+      {:ok, encoded, new_pipeline} ->
+        {encoded, %{state | uplink_pipeline: new_pipeline}}
+
+      {:error, reason, new_pipeline} ->
+        Logger.warning("Uplink pipeline failed: #{inspect(reason)}, sending raw packet")
+        {packet, %{state | uplink_pipeline: new_pipeline}}
+    end
+  end
+
+  defp init_uplink_pipeline(nil) do
+    Logger.debug("init_uplink_pipeline: frame is nil, no TM framing")
+    {nil, nil}
+  end
+
+  defp init_uplink_pipeline(%{format: :tm} = frame) do
+    opts = [
+      profile: :tm,
+      frame_size: frame.frame_size,
+      uplink_scid: frame.scid,
+      uplink_vcid: frame.vcid
+    ]
+
+    case UplinkPipeline.init(opts) do
+      {:ok, pipeline} ->
+        Logger.debug("init_uplink_pipeline: TM pipeline initialized successfully")
+        {pipeline, opts}
 
       {:error, reason} ->
-        Logger.warning("Write chain processing failed: #{inspect(reason)}, sending raw packet")
-        {packet, state}
+        Logger.warning("init_uplink_pipeline: TM pipeline failed to init: #{inspect(reason)}")
+        {nil, nil}
     end
   end
 
-  defp configure_oid(nil, _rate_hz), do: nil
-
-  defp configure_oid(%{format: :tm} = frame, rate_hz) do
-    case Map.get(frame, :oid_rate_hz) do
-      nil ->
-        frame
-
-      oid_rate when is_number(oid_rate) and oid_rate > 0 ->
-        Map.put(frame, :oid_every, oid_every(rate_hz, oid_rate))
-
-      _ ->
-        frame
-    end
+  defp init_uplink_pipeline(other) do
+    Logger.debug("init_uplink_pipeline: unrecognized frame format: #{inspect(other)}")
+    {nil, nil}
   end
-
-  defp configure_oid(frame, _rate_hz), do: frame
-
-  defp oid_every(rate_hz, oid_rate_hz) do
-    rate_hz = max(rate_hz, 0.001)
-    oid_rate_hz = min(oid_rate_hz, rate_hz)
-    interval = rate_hz / oid_rate_hz
-    max(round(interval), 1)
-  end
-
-  defp oid_due?(%{frame: %{format: :tm, oid_every: oid_every}}, step)
-       when is_integer(oid_every) do
-    if oid_every == 1 do
-      true
-    else
-      step > 0 and rem(step, oid_every) == 0
-    end
-  end
-
-  defp oid_due?(_state, _step), do: false
-
-  defp send_oid_frame(%{frame: %{format: :tm} = frame} = state) do
-    pn_state = Map.get(state.oid_lfsr_by_vcid, frame.vcid)
-
-    {updated_chain, result} =
-      update_tm_frame_in_chain(state.write_chain, fn tm_state ->
-        TMFrameProtocol.encode_oid(tm_state, pn_state)
-      end)
-
-    case result do
-      {oid_frame, next_tm_state, next_pn_state} ->
-        updated_state = %{
-          state
-          | write_chain: updated_chain,
-            oid_lfsr_by_vcid: Map.put(state.oid_lfsr_by_vcid, next_tm_state.vcid, next_pn_state)
-        }
-
-        send_frame(updated_state, oid_frame)
-        {updated_state, :ok}
-
-      nil ->
-        {state, :ok}
-    end
-  end
-
-  defp send_oid_frame(state), do: {state, :ok}
-
-  defp update_tm_frame_in_chain(nil, _fun), do: {nil, nil}
-
-  defp update_tm_frame_in_chain(write_chain, fun) do
-    Enum.map_reduce(write_chain, nil, fn
-      {TMFrameProtocol, tm_state}, nil ->
-        {frame, next_tm_state, next_pn_state} = fun.(tm_state)
-        {{TMFrameProtocol, next_tm_state}, {frame, next_tm_state, next_pn_state}}
-
-      entry, acc ->
-        {entry, acc}
-    end)
-  end
-
-  defp build_write_chain_configs(nil), do: nil
-
-  defp build_write_chain_configs(%{format: :tm} = frame) do
-    [
-      {"tm_frame",
-       %{
-         frame_size: frame.frame_size,
-         scid: frame.scid,
-         vcid: frame.vcid
-       }}
-    ]
-  end
-
-  defp init_write_chain(nil), do: nil
-  defp init_write_chain(configs), do: Processor.clone_chain(configs)
 
   defp format_output(nil), do: "none"
   defp format_output({:tcp, host, port}), do: "tcp:#{host}:#{port}"
