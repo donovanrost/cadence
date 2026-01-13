@@ -173,7 +173,7 @@ defmodule CadenceWeb.TelemetryChannel do
 
   defp parse_subscription(%{"target" => t, "packet" => p, "item" => i})
        when is_binary(t) and is_binary(p) and is_binary(i) do
-    {t, p, i}
+    {t, p, qualify_item_name(p, i)}
   end
 
   defp parse_subscription(_), do: nil
@@ -204,14 +204,34 @@ defmodule CadenceWeb.TelemetryChannel do
   end
 
   defp format_telemetry_item({target_id, packet_name, item_name}, telemetry_value) do
+    display_item = display_item_name(packet_name, item_name)
+
     %{
-      key: "#{target_id}:#{packet_name}:#{item_name}",
+      key: "#{target_id}:#{packet_name}:#{display_item}",
       target: target_id,
       packet: packet_name,
-      item: item_name,
+      item: display_item,
       value: telemetry_value.value,
       limits_state: to_string(telemetry_value.limits_state),
       received_time: DateTime.to_unix(telemetry_value.received_time, :millisecond)
     }
+  end
+
+  defp qualify_item_name(packet_name, item_name) do
+    if String.contains?(item_name, ".") do
+      item_name
+    else
+      "#{packet_name}.#{item_name}"
+    end
+  end
+
+  defp display_item_name(packet_name, item_name) do
+    prefix = packet_name <> "."
+
+    if String.starts_with?(item_name, prefix) do
+      String.replace_prefix(item_name, prefix, "")
+    else
+      item_name
+    end
   end
 end

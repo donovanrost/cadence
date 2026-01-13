@@ -79,13 +79,17 @@ defmodule Cadence.Telemetry.Stats do
   def ensure_table do
     case :ets.whereis(@table_name) do
       :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          write_concurrency: true,
-          read_concurrency: true
-        ])
+        try do
+          :ets.new(@table_name, [
+            :set,
+            :named_table,
+            :public,
+            write_concurrency: true,
+            read_concurrency: true
+          ])
+        rescue
+          ArgumentError -> :ok
+        end
 
       _ref ->
         :ok

@@ -26,7 +26,7 @@ defmodule Cadence.Telemetry.Convert do
 
     qualified_items =
       converted_items
-      |> Enum.map(fn {name, value} -> {"#{packet_name}.#{name}", value} end)
+      |> Enum.map(fn {name, value} -> {qualify_item_name(packet_name, name), value} end)
       |> Map.new()
 
     qualified_items = inject_timestamp_items(qualified_items, packet_name, packet)
@@ -96,6 +96,16 @@ defmodule Cadence.Telemetry.Convert do
     }
 
     Map.merge(qualified_items, timestamp_items)
+  end
+
+  defp qualify_item_name(packet_name, item_name) do
+    prefix = packet_name <> "."
+
+    if String.starts_with?(item_name, prefix) do
+      item_name
+    else
+      prefix <> item_name
+    end
   end
 
   defp datetime_to_unix_float(%DateTime{} = dt) do

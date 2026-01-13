@@ -21,6 +21,29 @@
 
 import { connect as connectSocket, joinTelemetryChannel } from "./user_socket"
 
+function normalizeKeyParts(key) {
+  if (!key) return { normalizedKey: key, target: null, packet: null, item: null, qualifiedItem: null }
+
+  const [target, packet, ...rest] = key.split(":")
+  const item = rest.join(":")
+
+  if (!target || !packet || !item) {
+    return { normalizedKey: key, target, packet, item, qualifiedItem: item }
+  }
+
+  const prefix = `${packet}.`
+  const normalizedItem = item.startsWith(prefix) ? item.slice(prefix.length) : item
+  const qualifiedItem = item.includes(".") ? item : `${packet}.${item}`
+
+  return {
+    normalizedKey: `${target}:${packet}:${normalizedItem}`,
+    target,
+    packet,
+    item: normalizedItem,
+    qualifiedItem
+  }
+}
+
 /**
  * Simple circular buffer for storing telemetry history.
  */
@@ -191,23 +214,25 @@ export class TelemetryStore {
    * @returns {Function} Unsubscribe function
    */
   subscribe(key, callback) {
-    if (!this.subscribers.has(key)) {
-      this.subscribers.set(key, new Set())
+    const { normalizedKey } = normalizeKeyParts(key)
+
+    if (!this.subscribers.has(normalizedKey)) {
+      this.subscribers.set(normalizedKey, new Set())
       // Request server subscription
-      this._serverSubscribe([key])
+      this._serverSubscribe([normalizedKey])
     }
 
-    this.subscribers.get(key).add(callback)
+    this.subscribers.get(normalizedKey).add(callback)
 
     // Return unsubscribe function
     return () => {
-      const subs = this.subscribers.get(key)
+      const subs = this.subscribers.get(normalizedKey)
       if (subs) {
         subs.delete(callback)
         if (subs.size === 0) {
-          this.subscribers.delete(key)
+          this.subscribers.delete(normalizedKey)
           // Unsubscribe from server to stop receiving updates
-          this._serverUnsubscribe([key])
+          this._serverUnsubscribe([normalizedKey])
         }
       }
     }
@@ -224,12 +249,14 @@ export class TelemetryStore {
     const newKeys = []
 
     for (const key of keys) {
-      if (!this.subscribers.has(key)) {
-        this.subscribers.set(key, new Set())
-        newKeys.push(key)
+      const { normalizedKey } = normalizeKeyParts(key)
+
+      if (!this.subscribers.has(normalizedKey)) {
+        this.subscribers.set(normalizedKey, new Set())
+        newKeys.push(normalizedKey)
       }
-      this.subscribers.get(key).add((value, timestamp, limitsState) => {
-        callback(key, value, timestamp, limitsState)
+      this.subscribers.get(normalizedKey).add((value, timestamp, limitsState) => {
+        callback(normalizedKey, value, timestamp, limitsState)
       })
     }
 
@@ -242,12 +269,13 @@ export class TelemetryStore {
     return () => {
       const keysToUnsubscribe = []
       for (const key of keys) {
-        const subs = this.subscribers.get(key)
+        const { normalizedKey } = normalizeKeyParts(key)
+        const subs = this.subscribers.get(normalizedKey)
         if (subs) {
           // Note: This removes ALL subscribers for this key, not just the one callback
           // For fine-grained control, use individual subscribe() calls
-          this.subscribers.delete(key)
-          keysToUnsubscribe.push(key)
+          this.subscribers.delete(normalizedKey)
+          keysToUnsubscribe.push(normalizedKey)
         }
       }
       if (keysToUnsubscribe.length > 0) {
@@ -264,7 +292,8 @@ export class TelemetryStore {
    * @returns {Array<{value: any, timestamp: number, limitsState: string}>}
    */
   getHistory(key, count = 100) {
-    const buffer = this.data.get(key)
+    const { normalizedKey } = normalizeKeyParts(key)
+    const buffer = this.data.get(normalizedKey)
     if (!buffer) return []
 
     const arr = buffer.toArray()
@@ -278,7 +307,8 @@ export class TelemetryStore {
    * @returns {{value: any, timestamp: number, limitsState: string}|undefined}
    */
   getCurrent(key) {
-    const buffer = this.data.get(key)
+    const { normalizedKey } = normalizeKeyParts(key)
+    const buffer = this.data.get(normalizedKey)
     return buffer?.last()
   }
 
@@ -289,7 +319,8 @@ export class TelemetryStore {
    * @returns {boolean}
    */
   has(key) {
-    return this.data.has(key) && this.data.get(key).length > 0
+    const { normalizedKey } = normalizeKeyParts(key)
+    return this.data.has(normalizedKey) && this.data.get(normalizedKey).length > 0
   }
 
   /**
@@ -353,10 +384,11 @@ export class TelemetryStore {
 
   _updateItem(item) {
     const { key, value, limits_state, received_time } = item
+    const { normalizedKey } = normalizeKeyParts(key)
 
     // Ensure buffer exists
-    if (!this.data.has(key)) {
-      this.data.set(key, new CircularBuffer(this.maxSamples))
+    if (!this.data.has(normalizedKey)) {
+      this.data.set(normalizedKey, new CircularBuffer(this.maxSamples))
     }
 
     const entry = {
@@ -366,10 +398,10 @@ export class TelemetryStore {
     }
 
     // Add to buffer
-    this.data.get(key).push(entry)
+    this.data.get(normalizedKey).push(entry)
 
     // Notify subscribers
-    const subs = this.subscribers.get(key)
+    const subs = this.subscribers.get(normalizedKey)
     if (subs) {
       for (const callback of subs) {
         try {
@@ -391,8 +423,8 @@ export class TelemetryStore {
     }
 
     const items = keys.map(key => {
-      const [target, packet, item] = key.split(":")
-      return { target, packet, item }
+      const { target, packet, qualifiedItem } = normalizeKeyParts(key)
+      return { target, packet, item: qualifiedItem }
     })
 
     this.channel
@@ -409,8 +441,8 @@ export class TelemetryStore {
     if (!this.channel || !this.connected) return
 
     const items = keys.map(key => {
-      const [target, packet, item] = key.split(":")
-      return { target, packet, item }
+      const { target, packet, qualifiedItem } = normalizeKeyParts(key)
+      return { target, packet, item: qualifiedItem }
     })
 
     this.channel
