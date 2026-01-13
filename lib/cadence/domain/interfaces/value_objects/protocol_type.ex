@@ -154,6 +154,8 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.ProtocolType do
       "frame_size",
       "ocf_length",
       "secondary_header_length",
+      "oid_validation",
+      "oid_validation_prefix_bytes",
       "default_sdu_type",
       "uplink_scid",
       "uplink_vcid",

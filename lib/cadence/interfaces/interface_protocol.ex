@@ -218,6 +218,8 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
     required_keys = ["profile", "sdu_mapping"]
     profile = Map.get(config, "profile")
     sdu_mapping = Map.get(config, "sdu_mapping")
+    oid_validation = Map.get(config, "oid_validation")
+    oid_prefix_bytes = Map.get(config, "oid_validation_prefix_bytes")
 
     cond do
       not Enum.all?(required_keys, &Map.has_key?(config, &1)) ->
@@ -232,6 +234,20 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
           changeset,
           :protocol_config,
           "ccsds_sdlp protocol: invalid profile '#{profile}'"
+        )
+
+      not valid_oid_validation?(oid_validation) ->
+        add_error(
+          changeset,
+          :protocol_config,
+          "ccsds_sdlp protocol: invalid oid_validation '#{oid_validation}'"
+        )
+
+      not valid_oid_prefix_bytes?(oid_prefix_bytes) ->
+        add_error(
+          changeset,
+          :protocol_config,
+          "ccsds_sdlp protocol: oid_validation_prefix_bytes must be a positive integer"
         )
 
       sdu_mapping == :invalid ->
@@ -262,4 +278,36 @@ defmodule Cadence.Interfaces.InterfaceProtocol do
   end
 
   defp valid_sdlp_profile?(_value), do: false
+
+  defp valid_oid_validation?(nil), do: true
+
+  defp valid_oid_validation?(value) when is_binary(value) do
+    value in ["none", "prefix", "strict"]
+  end
+
+  defp valid_oid_validation?(value) when is_atom(value) do
+    value in [:none, :prefix, :strict]
+  end
+
+  defp valid_oid_validation?(_value), do: false
+
+  defp valid_oid_prefix_bytes?(nil), do: true
+  defp valid_oid_prefix_bytes?(value) when is_integer(value), do: value > 0
+
+  defp valid_oid_prefix_bytes?(value) when is_binary(value) do
+    valid_positive_integer?(value)
+  end
+
+  defp valid_oid_prefix_bytes?(_value), do: false
+
+  defp valid_positive_integer?(value) when is_integer(value), do: value > 0
+
+  defp valid_positive_integer?(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int > 0
+      _ -> false
+    end
+  end
+
+  defp valid_positive_integer?(_value), do: false
 end

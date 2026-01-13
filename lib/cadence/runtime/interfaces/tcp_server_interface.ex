@@ -3,8 +3,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   TCP Server interface for receiving telemetry from multiple spacecraft or simulators.
 
   This GenServer listens on a configured port and accepts multiple simultaneous
-  TCP client connections. Protocol processing is delegated to ProtocolChain processes
-  managed by the ProtocolChainSupervisor.
+  TCP client connections. Downlink processing is delegated to the DownlinkPipeline.
+  Uplink encoding is delegated to the UplinkPipeline.
 
   ## Data Plane Architecture
 
@@ -14,7 +14,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   ## Features
 
   - Accepts multiple concurrent client connections
-  - Per-client protocol chain instances (isolated state, fault-tolerant)
   - Automatic client disconnect handling
   - Statistics tracking per client and overall
   - Integration with Phoenix.PubSub telemetry pipeline
@@ -26,27 +25,19 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   - `config.max_clients` - Maximum concurrent clients (default: 100)
   - `config.client_timeout` - Client idle timeout in ms (default: 300000)
 
-  ## Protocol Chain Architecture
+  ## Downlink Pipeline Architecture
 
-  Protocol chains are managed separately from this interface by the ProtocolChainSupervisor.
-  This provides:
-  1. Fault isolation - protocol crashes don't affect TCP connections
-  2. Reusability - same protocol chain logic for TCP, UDP, Kafka, etc.
-  3. Testability - chains can be tested independently
+  Downlink processing is handled outside this GenServer to keep transport
+  concerns separate from protocol decoding.
   """
 
   use GenServer
   require Logger
 
-  alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.Downlink.Pipeline
-  alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
-  alias Cadence.Runtime.Interfaces.SDLPConfig
-  alias Cadence.Telemetry.Packet
-  alias Cadence.Telemetry.ProtocolChain
-  alias Cadence.Telemetry.ProtocolChainSupervisor
+  alias Cadence.Runtime.Telemetry.DownlinkPipeline
+  alias Cadence.Runtime.Telemetry.UplinkPipeline
 
   @registry Cadence.MissionRegistry
 
@@ -60,10 +51,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       :bind_port,
       :max_clients,
       :client_timeout,
-      :downlink_mapping,
-      :downlink_opts,
-      :uplink_pipeline,
-      :uplink_opts,
       clients: %{},
       listening: false,
       total_clients_connected: 0,
@@ -79,8 +66,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       :socket,
       :remote_address,
       :remote_port,
-      :protocol_chain,
-      :downlink_state,
       :connected_at,
       bytes_received: 0,
       bytes_sent: 0,
@@ -156,13 +141,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       target_ids: #{inspect(target_ids)}
     """)
 
-    # Start the shared protocol chain for this interface with injected protocols
-    # Clients will clone from this template
-    start_protocol_chain(interface.mission_id, interface.id, interface.protocols)
-
-    {downlink_mapping, downlink_opts} = init_downlink_config(interface)
-    {uplink_pipeline, uplink_opts} = init_uplink_pipeline(interface)
-
     state = %State{
       interface: interface,
       target_ids: target_ids,
@@ -170,10 +148,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       bind_port: interface.bind_port,
       max_clients: max_clients,
       client_timeout: client_timeout,
-      downlink_mapping: downlink_mapping,
-      downlink_opts: downlink_opts,
-      uplink_pipeline: uplink_pipeline,
-      uplink_opts: uplink_opts,
       clients: %{}
     }
 
@@ -258,6 +232,29 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   @impl true
+  def handle_cast({:downlink_packets, connection_id, count}, state) do
+    case Map.get(state.clients, connection_id) do
+      nil ->
+        {:noreply, state}
+
+      client_state ->
+        updated_client_state = %{
+          client_state
+          | packets_received: client_state.packets_received + count
+        }
+
+        new_clients = Map.put(state.clients, connection_id, updated_client_state)
+
+        {:noreply,
+         %{
+           state
+           | clients: new_clients,
+             packets_received: state.packets_received + count
+         }}
+    end
+  end
+
+  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
       mission_id: state.interface.mission_id,
@@ -310,32 +307,32 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       count ->
         warn_if_broadcasting(count)
 
-        case encode_uplink(data, state) do
-          {:ok, encoded, new_state} ->
-            {successful, failed} = send_to_all_clients(new_state.clients, encoded)
-            updated = update_bytes_sent(new_state, encoded, successful)
+        case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
+          {:ok, encoded} ->
+            {successful, failed} = send_to_all_clients(state.clients, encoded)
+            updated = update_bytes_sent(state, encoded, successful)
             reply_for_broadcast(successful, failed, updated, state)
 
-          {:error, reason, new_state} ->
-            {:reply, {:error, reason}, new_state}
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
         end
     end
   end
 
   @impl true
   def handle_call({:send_data, data, :all}, _from, state) do
-    case encode_uplink(data, state) do
-      {:ok, encoded, new_state} ->
+    case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
+      {:ok, encoded} ->
         results =
-          Enum.map(new_state.clients, fn {socket, _client_state} ->
+          Enum.map(state.clients, fn {socket, _client_state} ->
             :gen_tcp.send(socket, encoded)
           end)
 
         successful = Enum.count(results, fn result -> result == :ok end)
-        {:reply, {:ok, successful}, new_state}
+        {:reply, {:ok, successful}, state}
 
-      {:error, reason, new_state} ->
-        {:reply, {:error, reason}, new_state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -346,13 +343,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         {:reply, {:error, :client_not_found}, state}
 
       _client_state ->
-        case encode_uplink(data, state) do
-          {:ok, encoded, new_state} ->
+        case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
+          {:ok, encoded} ->
             result = :gen_tcp.send(socket, encoded)
-            {:reply, result, new_state}
+            {:reply, result, state}
 
-          {:error, reason, new_state} ->
-            {:reply, {:error, reason}, new_state}
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
         end
     end
   end
@@ -366,9 +363,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
     # Close listen socket
     if state.listen_socket, do: :gen_tcp.close(state.listen_socket)
-
-    # Stop the protocol chain
-    ProtocolChainSupervisor.stop_chain(state.interface.mission_id, state.interface.id)
 
     :ok
   end
@@ -396,15 +390,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp accept_client(client_socket, address_str, port, state) do
-    protocol_chain = clone_protocol_chain_for_client(state.interface.id)
-    downlink_state = init_client_downlink(state)
-
     client_state = %ClientState{
       socket: client_socket,
       remote_address: address_str,
       remote_port: port,
-      protocol_chain: protocol_chain,
-      downlink_state: downlink_state,
       connected_at: DateTime.utc_now()
     }
 
@@ -419,10 +408,16 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         total_clients_connected: state.total_clients_connected + 1
     }
 
-    Logger.debug(
-      "Accepted client #{address_str}:#{port}, total=#{map_size(new_clients)} (interface #{state.interface.id})",
-      mission_id: state.interface.mission_id
+    DownlinkPipeline.reset_connection(
+      state.interface.mission_id,
+      state.interface.id,
+      client_socket
     )
+
+    # Logger.debug(
+    #   "Accepted client #{address_str}:#{port}, total=#{map_size(new_clients)} (interface #{state.interface.id})",
+    #   mission_id: state.interface.mission_id
+    # )
 
     maybe_broadcast_connect(state, new_state, client_state)
     {:noreply, new_state}
@@ -440,156 +435,27 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
 
-    Logger.debug(
-      "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
-      mission_id: state.interface.mission_id
+    # Logger.debug(
+    #   "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
+    #   mission_id: state.interface.mission_id
+    # )
+
+    DownlinkPipeline.ingest(
+      state.interface.mission_id,
+      state.interface.id,
+      client_socket,
+      data,
+      downlink_metadata(state, updated_client_state)
     )
 
-    case process_incoming_data(data, updated_client_state, state) do
-      {:ok, packets, new_client_state} ->
-        handle_incoming_pipeline_packets(
-          packets,
-          client_socket,
-          new_client_state,
-          state,
-          byte_size(data)
-        )
-
-      {:ok_chain, packets_with_format, new_chain} ->
-        handle_incoming_packets(
-          packets_with_format,
-          new_chain,
-          client_socket,
-          updated_client_state,
-          state,
-          byte_size(data)
-        )
-
-      {:stop, new_chain} ->
-        updated_client_state = %{updated_client_state | protocol_chain: new_chain}
-        new_clients = Map.put(state.clients, client_socket, updated_client_state)
-        {:noreply, %{state | clients: new_clients}}
-
-      {:disconnect, reason} ->
-        Logger.warning(
-          "Protocol error for client #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)} - keeping connection open"
-        )
-
-        new_clients = Map.put(state.clients, client_socket, updated_client_state)
-        {:noreply, %{state | clients: new_clients}}
-
-      {:error, reason, new_client_state} ->
-        Logger.warning(
-          "Downlink pipeline error for client #{client_state.remote_address}:#{client_state.remote_port}: #{inspect(reason)}"
-        )
-
-        new_clients = Map.put(state.clients, client_socket, new_client_state)
-        {:noreply, %{state | clients: new_clients}}
-    end
-  end
-
-  defp handle_incoming_packets(
-         packets_with_format,
-         new_chain,
-         client_socket,
-         client_state,
-         state,
-         data_size
-       ) do
-    target_id = List.first(state.target_ids) || "unknown"
-    broadcast_packets(packets_with_format, client_state, state, target_id)
-
-    updated_client_state = %{
-      client_state
-      | protocol_chain: new_chain,
-        packets_received: client_state.packets_received + length(packets_with_format)
-    }
-
     new_clients = Map.put(state.clients, client_socket, updated_client_state)
 
     {:noreply,
      %{
        state
        | clients: new_clients,
-         bytes_received: state.bytes_received + data_size,
-         packets_received: state.packets_received + length(packets_with_format)
+         bytes_received: state.bytes_received + byte_size(data)
      }}
-  end
-
-  defp handle_incoming_pipeline_packets(
-         packets,
-         client_socket,
-         client_state,
-         state,
-         data_size
-       ) do
-    target_id = List.first(state.target_ids) || "unknown"
-    broadcast_pipeline_packets(packets, client_state, state, target_id)
-
-    updated_client_state = %{
-      client_state
-      | packets_received: client_state.packets_received + length(packets)
-    }
-
-    new_clients = Map.put(state.clients, client_socket, updated_client_state)
-
-    {:noreply,
-     %{
-       state
-       | clients: new_clients,
-         bytes_received: state.bytes_received + data_size,
-         packets_received: state.packets_received + length(packets)
-     }}
-  end
-
-  defp broadcast_packets(packets_with_format, client_state, state, target_id) do
-    Enum.each(packets_with_format, fn {packet_binary, format, chain_metadata} ->
-      base_metadata = %{
-        mission_id: state.interface.mission_id,
-        stored: false,
-        target_id: target_id,
-        received_at: DateTime.utc_now(),
-        interface_id: state.interface.id,
-        client_address: client_state.remote_address,
-        client_port: client_state.remote_port
-      }
-
-      metadata = Map.merge(base_metadata, chain_metadata || %{})
-
-      case construct_packet(packet_binary, metadata, format) do
-        %Packet{} = packet ->
-          Phoenix.PubSub.broadcast(
-            Cadence.PubSub,
-            "mission:#{state.interface.mission_id}:telemetry:raw",
-            {:telemetry_packet, packet, metadata}
-          )
-
-        nil ->
-          :ok
-      end
-    end)
-  end
-
-  defp broadcast_pipeline_packets(packets, client_state, state, target_id) do
-    Enum.each(packets, fn %Packet{} = packet ->
-      metadata =
-        %{
-          mission_id: state.interface.mission_id,
-          stored: false,
-          target_id: target_id,
-          received_at: DateTime.utc_now(),
-          interface_id: state.interface.id,
-          client_address: client_state.remote_address,
-          client_port: client_state.remote_port
-        }
-        |> Map.merge(packet.source || %{})
-
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
-        "mission:#{state.interface.mission_id}:telemetry:raw",
-        {:telemetry_packet, packet, metadata}
-      )
-    end)
   end
 
   defp warn_if_broadcasting(count) when count > 1 do
@@ -604,9 +470,9 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     Enum.reduce(clients, {0, 0}, fn {socket, client_state}, {ok, err} ->
       case :gen_tcp.send(socket, data) do
         :ok ->
-          Logger.debug(
-            "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
-          )
+          # Logger.debug(
+          #   "Sent #{byte_size(data)} bytes to #{client_state.remote_address}:#{client_state.remote_port}"
+          # )
 
           {ok + 1, err}
 
@@ -632,152 +498,17 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     {:reply, {:error, :all_sends_failed, failed}, state}
   end
 
-  defp start_protocol_chain(mission_id, interface_id, protocols) do
-    case ProtocolChainSupervisor.start_chain(mission_id, interface_id, protocols: protocols) do
-      {:ok, pid} ->
-        Logger.debug("Started protocol chain #{inspect(pid)} for interface #{interface_id}")
-        {:ok, pid}
-
-      {:error, {:already_started, pid}} ->
-        Logger.debug("Protocol chain already running for interface #{interface_id}")
-        {:ok, pid}
-
-      {:error, reason} ->
-        Logger.error(
-          "Failed to start protocol chain for interface #{interface_id}: #{inspect(reason)}"
-        )
-
-        {:error, reason}
-    end
-  end
-
-  defp clone_protocol_chain_for_client(interface_id) do
-    # Clone the protocol chain from the template
-    case ProtocolChain.clone(ProtocolChain.via_tuple(interface_id)) do
-      {:ok, chain} -> chain
-      {:error, _} -> []
-    end
-  end
-
-  defp process_incoming_data(
-         data,
-         %ClientState{downlink_state: downlink_state} = client_state,
-         state
-       )
-       when not is_nil(downlink_state) do
-    ctx = %{direction: :downlink}
-
-    case Pipeline.decode(data, ctx, state.downlink_mapping, downlink_state, state.downlink_opts) do
-      {:ok, packets, updated_downlink} ->
-        {:ok, packets, %{client_state | downlink_state: updated_downlink}}
-
-      {:error, reason, updated_downlink} ->
-        {:error, reason, %{client_state | downlink_state: updated_downlink}}
-    end
-  end
-
-  defp process_incoming_data(data, client_state, state) do
-    alias Cadence.Telemetry.ProtocolChain.Processor
-
-    case Processor.process_read(client_state.protocol_chain, data, %{}) do
-      {:ok, packets, updated_chain} ->
-        format = Processor.chain_format(updated_chain)
-
-        packets_with_format =
-          Enum.map(packets, fn {packet_binary, metadata} ->
-            {packet_binary, format, metadata}
-          end)
-
-        if packets_with_format == [] do
-          Logger.debug(
-            "Protocol chain yielded no packets for #{byte_size(data)} bytes (interface #{state.interface.id})",
-            mission_id: state.interface.mission_id
-          )
-        end
-
-        {:ok_chain, packets_with_format, updated_chain}
-
-      {:stop, updated_chain} ->
-        {:stop, updated_chain}
-
-      {:disconnect, reason} ->
-        {:disconnect, reason}
-    end
-  end
-
-  defp init_downlink_config(interface) do
-    case SDLPConfig.fetch(interface.protocols) do
-      {:ok, %{mapping: mapping, opts: opts}} -> {mapping, opts}
-      :error -> {nil, nil}
-    end
-  end
-
-  defp init_client_downlink(%State{downlink_opts: nil}), do: nil
-
-  defp init_client_downlink(%State{downlink_opts: opts}) do
-    case Pipeline.init(opts) do
-      {:ok, pipeline} -> pipeline
-      {:error, _} -> nil
-    end
-  end
-
-  defp init_uplink_pipeline(interface) do
-    case SDLPConfig.fetch(interface.protocols) do
-      {:ok, %{opts: opts}} ->
-        case UplinkPipeline.init(opts) do
-          {:ok, pipeline} -> {pipeline, opts}
-          {:error, _} -> {nil, nil}
-        end
-
-      :error ->
-        {nil, nil}
-    end
-  end
-
-  defp encode_uplink(data, %State{uplink_pipeline: nil} = state) do
-    {:ok, data, state}
-  end
-
-  defp encode_uplink(data, %State{} = state) do
-    ctx = uplink_ctx(state.uplink_opts)
-
-    sdu = %SDUOctets{
-      profile: state.uplink_opts[:profile],
-      scid: ctx[:scid],
-      vcid: ctx[:vcid],
-      map_id: ctx[:map_id],
-      direction: :uplink,
-      sdu_kind_hint: :space_packet,
-      octets: data,
-      quality: :good,
-      source_frames: [],
-      timestamp: nil,
-      meta: %{}
-    }
-
-    case UplinkPipeline.encode(sdu, ctx, state.uplink_pipeline, state.uplink_opts) do
-      {:ok, encoded, new_pipeline} ->
-        {:ok, encoded, %{state | uplink_pipeline: new_pipeline}}
-
-      {:error, reason, new_pipeline} ->
-        {:error, reason, %{state | uplink_pipeline: new_pipeline}}
-    end
-  end
-
-  defp uplink_ctx(opts) do
-    %{
-      frame_size: opts[:frame_size],
-      scid: opts[:uplink_scid] || opts[:scid],
-      vcid: opts[:uplink_vcid] || opts[:vcid],
-      map_id: opts[:uplink_map_id]
-    }
-  end
-
   defp handle_client_disconnect(client_socket, state) do
     client_state = Map.get(state.clients, client_socket)
     :gen_tcp.close(client_socket)
     new_clients = Map.delete(state.clients, client_socket)
     new_state = %{state | clients: new_clients}
+
+    DownlinkPipeline.drop_connection(
+      state.interface.mission_id,
+      state.interface.id,
+      client_socket
+    )
 
     # Broadcast disconnection event when last client disconnects
     if map_size(new_clients) == 0 and map_size(state.clients) > 0 do
@@ -827,28 +558,15 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
   defp parse_bind_address(_), do: {0, 0, 0, 0}
 
-  # Construct a Packet struct from binary data based on format
-  defp construct_packet(binary, metadata, format) do
-    case format do
-      :ccsds ->
-        build_ccsds_packet(binary, metadata)
-
-      :raw ->
-        build_ccsds_packet(binary, metadata)
-    end
-  end
-
-  defp build_ccsds_packet(binary, metadata) do
-    case Packet.from_ccsds(binary, metadata) do
-      {:ok, packet} ->
-        packet
-
-      {:error, reason} ->
-        Logger.error(
-          "Failed to parse CCSDS packet for target=#{metadata.target_id}: #{inspect(reason)}"
-        )
-
-        nil
-    end
+  defp downlink_metadata(state, client_state) do
+    %{
+      mission_id: state.interface.mission_id,
+      stored: false,
+      target_id: List.first(state.target_ids) || "unknown",
+      received_at: DateTime.utc_now(),
+      interface_id: state.interface.id,
+      client_address: client_state.remote_address,
+      client_port: client_state.remote_port
+    }
   end
 end

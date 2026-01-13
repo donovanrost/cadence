@@ -2,7 +2,7 @@ defmodule Cadence.Runtime.Interfaces.Factory do
   @moduledoc """
   Factory for building interface child specifications based on connection type.
 
-  Maps Interface domain entities to the appropriate GenServer implementation:
+  Maps Interface domain entities to the appropriate transport implementation:
   - `:tcp_client` → `TcpClientInterface`
   - `:tcp_server` → `TcpServerInterface`
   - `:udp_client` → `UdpClientInterface` (TODO)
@@ -28,12 +28,16 @@ defmodule Cadence.Runtime.Interfaces.Factory do
       }
 
       child_spec = Factory.child_spec_for(interface)
-      # Returns a child_spec for TcpClientInterface
+      # Returns a child_spec for a per-interface supervisor
   """
 
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Runtime.Interfaces.TcpClientInterface
-  alias Cadence.Runtime.Interfaces.TcpServerInterface
+
+  alias Cadence.Runtime.Interfaces.{
+    PerInterfaceSupervisor,
+    TcpClientInterface,
+    TcpServerInterface
+  }
 
   @doc """
   Builds a child specification for the given interface domain entity.
@@ -45,11 +49,8 @@ defmodule Cadence.Runtime.Interfaces.Factory do
   Raises if the connection_type is not implemented yet.
   """
   def child_spec_for(%Interface{} = interface) do
-    module = module_for_connection_type(interface.connection_type)
-
-    # Pass the domain entity directly to the GenServer
-    # No more config maps - the entity IS the config
-    {module, interface}
+    _ = module_for_connection_type(interface.connection_type)
+    {PerInterfaceSupervisor, interface}
   end
 
   @doc """

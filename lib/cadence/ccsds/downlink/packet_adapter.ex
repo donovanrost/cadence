@@ -13,9 +13,9 @@ defmodule Cadence.CCSDS.Downlink.PacketAdapter do
   def to_packet(%PDU{type: :space_packet, value: %SpacePacket{} = sp}, sdu, _opts) do
     metadata = build_metadata(sdu)
 
-    Logger.debug(
-      "PacketAdapter: APID=#{sp.apid}, target_id=#{inspect(metadata[:target_id])}, scid=#{sdu.scid}, vcid=#{sdu.vcid}, packet_size=#{byte_size(sp.raw)} bytes"
-    )
+    # Logger.debug(
+    #   "PacketAdapter: APID=#{sp.apid}, target_id=#{inspect(metadata[:target_id])}, scid=#{sdu.scid}, vcid=#{sdu.vcid}, packet_size=#{byte_size(sp.raw)} bytes"
+    # )
 
     case Packet.from_ccsds(sp.raw, metadata) do
       {:ok, packet} -> {:ok, packet}

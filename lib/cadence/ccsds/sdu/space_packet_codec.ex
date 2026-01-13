@@ -9,21 +9,36 @@ defmodule Cadence.CCSDS.SDU.SpacePacketCodec do
   alias Cadence.CCSDS.SDU.SpacePacket
 
   @secondary_header_size 8
+  @idle_apid 0x7FF
 
   @impl true
   def id, do: :space_packet
 
   @impl true
   def decode(%SDUOctets{octets: octets, timestamp: timestamp}, _opts) do
-    with {:ok, packet} <- parse_space_packet(octets, timestamp) do
-      {:ok,
-       %PDU{
-         type: :space_packet,
-         value: packet,
-         quality: :good,
-         timestamp: timestamp,
-         meta: %{}
-       }}
+    case parse_space_packet(octets, timestamp) do
+      {:ok, %SpacePacket{} = packet} ->
+        {:ok,
+         %PDU{
+           type: :space_packet,
+           value: packet,
+           quality: :good,
+           timestamp: timestamp,
+           meta: %{}
+         }}
+
+      {:ok, :idle} ->
+        {:ok,
+         %PDU{
+           type: :space_packet,
+           value: :idle,
+           quality: :good,
+           timestamp: timestamp,
+           meta: %{}
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -69,25 +84,33 @@ defmodule Cadence.CCSDS.SDU.SpacePacketCodec do
          >> = raw,
          timestamp
        ) do
-    if byte_size(rest) < @secondary_header_size do
-      {:error, :missing_secondary_header}
-    else
-      <<timestamp_bytes::binary-size(6), target_hash::16, user_data::binary>> = rest
+    cond do
+      secondary_header_flag == 0 and apid == @idle_apid ->
+        {:ok, :idle}
 
-      {:ok,
-       %SpacePacket{
-         apid: apid,
-         sequence_flags: sequence_flags,
-         sequence_count: sequence_count,
-         packet_length: packet_length,
-         version: version,
-         type: type,
-         secondary_header_flag: secondary_header_flag,
-         timestamp: timestamp || parse_ccsds_timestamp(timestamp_bytes),
-         target_hash: target_hash,
-         user_data: user_data,
-         raw: raw
-       }}
+      secondary_header_flag == 0 ->
+        {:error, :missing_secondary_header}
+
+      byte_size(rest) < @secondary_header_size ->
+        {:error, :missing_secondary_header}
+
+      true ->
+        <<timestamp_bytes::binary-size(6), target_hash::16, user_data::binary>> = rest
+
+        {:ok,
+         %SpacePacket{
+           apid: apid,
+           sequence_flags: sequence_flags,
+           sequence_count: sequence_count,
+           packet_length: packet_length,
+           version: version,
+           type: type,
+           secondary_header_flag: secondary_header_flag,
+           timestamp: timestamp || parse_ccsds_timestamp(timestamp_bytes),
+           target_hash: target_hash,
+           user_data: user_data,
+           raw: raw
+         }}
     end
   end
 

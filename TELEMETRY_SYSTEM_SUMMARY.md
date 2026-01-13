@@ -285,6 +285,7 @@ ALTER TABLE packet_items
 ### Standards
 - COSMOS-style protocol architecture
 - CCSDS packet format support
+- CCSDS SDLP TM OID idle-frame validation (none/prefix/strict)
 - Aerospace naming conventions
 - Follows Elixir/Phoenix patterns
 

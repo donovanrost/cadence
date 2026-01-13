@@ -342,15 +342,18 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       errors = build_error_stats(merged)
       bytes_received = Map.get(merged, :bytes_received, 0)
 
-      build_stats_summary(
-        merged,
-        bytes_received,
-        errors,
-        timing,
-        duration_ms,
-        duration_sec,
-        partition_count
-      )
+      summary =
+        build_stats_summary(
+          merged,
+          bytes_received,
+          errors,
+          timing,
+          duration_ms,
+          duration_sec,
+          partition_count
+        )
+
+      Map.merge(summary, build_rolling_stats(mission_id, summary))
     end
   end
 
@@ -484,6 +487,53 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       bytes_per_sec: Float.round(bytes_received / duration_sec, 1),
       partition_count: partition_count
     }
+  end
+
+  defp build_rolling_stats(mission_id, summary) do
+    now_ms = System.monotonic_time(:millisecond)
+
+    {packets_processed, items_processed, bytes_received} =
+      {summary.packets_processed, summary.items_processed, summary.bytes_received}
+
+    rolling_key = {mission_id, :rolling_snapshot}
+
+    rolling =
+      case :ets.lookup(@table_name, rolling_key) do
+        [{{^mission_id, :rolling_snapshot}, %{timestamp_ms: prev_ms} = prev}] ->
+          duration_ms = max(now_ms - prev_ms, 0)
+          duration_sec = max(duration_ms / 1000, 0.001)
+
+          packets_diff = packets_processed - Map.get(prev, :packets_processed, 0)
+          items_diff = items_processed - Map.get(prev, :items_processed, 0)
+          bytes_diff = bytes_received - Map.get(prev, :bytes_received, 0)
+
+          %{
+            packets_per_sec_rolling: Float.round(packets_diff / duration_sec, 1),
+            items_per_sec_rolling: Float.round(items_diff / duration_sec, 1),
+            bytes_per_sec_rolling: Float.round(bytes_diff / duration_sec, 1),
+            rolling_duration_ms: duration_ms
+          }
+
+        _ ->
+          %{
+            packets_per_sec_rolling: 0.0,
+            items_per_sec_rolling: 0.0,
+            bytes_per_sec_rolling: 0.0,
+            rolling_duration_ms: 0
+          }
+      end
+
+    :ets.insert(@table_name, {
+      rolling_key,
+      %{
+        timestamp_ms: now_ms,
+        packets_processed: packets_processed,
+        items_processed: items_processed,
+        bytes_received: bytes_received
+      }
+    })
+
+    rolling
   end
 
   @doc """

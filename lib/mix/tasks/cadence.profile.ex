@@ -426,6 +426,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
     print_cvt_stats(snapshot[:cvt])
     print_stats_snapshot(snapshot, prev)
+    print_ccsds_snapshot(snapshot[:ccsds])
     print_lanes_snapshot(snapshot[:lanes])
     print_queue_warnings(snapshot[:process_queues] || [])
 
@@ -551,6 +552,21 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp stats_delta(_prev, _proc), do: ""
 
+  defp print_stats_throughput(%{packets_per_sec_rolling: pps, bytes_per_sec_rolling: bps} = stats)
+       when pps > 0 do
+    mbps = Float.round(bps * 8 / 1_000_000, 1)
+    mb_per_sec = Float.round(bps / 1_000_000, 2)
+    window_ms = Map.get(stats, :rolling_duration_ms, 0)
+
+    Mix.shell().info(
+      "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps, rolling #{window_ms}ms)"
+    )
+  end
+
+  defp print_stats_throughput(%{packets_per_sec_rolling: pps}) when pps > 0 do
+    Mix.shell().info("Throughput: #{format_number(round(pps))} packets/sec (rolling)")
+  end
+
   defp print_stats_throughput(%{packets_per_sec: pps, bytes_per_sec: bps}) when bps > 0 do
     mbps = Float.round(bps * 8 / 1_000_000, 1)
     mb_per_sec = Float.round(bps / 1_000_000, 2)
@@ -565,6 +581,39 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp print_stats_throughput(_stats), do: :ok
+
+  defp print_ccsds_snapshot(stats) when is_map(stats) and map_size(stats) > 0 do
+    stats
+    |> build_ccsds_totals()
+    |> Enum.each(&print_ccsds_totals/1)
+  end
+
+  defp print_ccsds_snapshot(_stats), do: :ok
+
+  defp build_ccsds_totals(stats) do
+    Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
+      Enum.reduce(profiles, acc, fn {profile, metrics}, acc ->
+        Map.put(acc, profile, accumulate_ccsds_metrics(Map.get(acc, profile, %{}), metrics))
+      end)
+    end)
+  end
+
+  defp accumulate_ccsds_metrics(acc, metrics) do
+    Enum.reduce(metrics, acc, fn {metric, count}, acc_metrics ->
+      Map.update(acc_metrics, metric, count, &(&1 + count))
+    end)
+  end
+
+  defp print_ccsds_totals({profile, metrics}) do
+    errors =
+      Map.get(metrics, :frame_decode_errors, 0) +
+        Map.get(metrics, :reassembly_errors, 0) +
+        Map.get(metrics, :sdu_decode_errors, 0)
+
+    Mix.shell().info(
+      "CCSDS #{profile}: frames=#{Map.get(metrics, :frames_decoded, 0)}, sdu=#{Map.get(metrics, :sdu_octets, 0)}, packets=#{Map.get(metrics, :packets_emitted, 0)}, idle=#{Map.get(metrics, :idle_packets, 0)}, errors=#{errors}"
+    )
+  end
 
   defp print_stats_timing(%{timing: timing}, percentiles)
        when is_map(timing) and map_size(timing) > 0 do

@@ -26,6 +26,7 @@ defmodule Cadence.Telemetry.Profiler do
       Cadence.Telemetry.Profiler.analyze(mission_id)
   """
 
+  alias Cadence.CCSDS.Metrics
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.{Cache, StateTracker}
   alias Cadence.Telemetry.PipelineMetrics
@@ -246,6 +247,7 @@ defmodule Cadence.Telemetry.Profiler do
       stats: stats,
       percentiles: nil,
       stage_errors: Map.get(stats, :errors, %{}),
+      ccsds: safe_call(fn -> Metrics.get_stats(mission_id) end),
       cvt: safe_call(fn -> CurrentValueTable.stats(mission_id) end),
       lanes:
         if lanes_active do
@@ -620,6 +622,7 @@ defmodule Cadence.Telemetry.Profiler do
 
     print_cvt_snapshot(snapshot.cvt)
     print_stats_snapshot(snapshot, prev)
+    print_ccsds_snapshot(snapshot)
     print_queue_warnings(snapshot.process_queues)
 
     IO.puts("")
@@ -655,10 +658,63 @@ defmodule Cadence.Telemetry.Profiler do
     IO.puts("Stats: #{inspect(other)}")
   end
 
+  defp print_ccsds_snapshot(%{ccsds: stats}) when is_map(stats) and map_size(stats) > 0 do
+    stats
+    |> build_ccsds_totals()
+    |> Enum.each(&print_ccsds_totals/1)
+  end
+
+  defp print_ccsds_snapshot(_snapshot), do: :ok
+
+  defp build_ccsds_totals(stats) do
+    Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
+      accumulate_profiles(acc, profiles)
+    end)
+  end
+
+  defp accumulate_profiles(acc, profiles) do
+    Enum.reduce(profiles, acc, fn {profile, metrics}, acc ->
+      Map.put(acc, profile, accumulate_metrics(Map.get(acc, profile, %{}), metrics))
+    end)
+  end
+
+  defp accumulate_metrics(acc, metrics) do
+    Enum.reduce(metrics, acc, fn {metric, count}, acc_metrics ->
+      Map.update(acc_metrics, metric, count, &(&1 + count))
+    end)
+  end
+
+  defp print_ccsds_totals({profile, metrics}) do
+    IO.puts(
+      "CCSDS #{profile}: frames=#{Map.get(metrics, :frames_decoded, 0)}, sdu=#{Map.get(metrics, :sdu_octets, 0)}, packets=#{Map.get(metrics, :packets_emitted, 0)}, idle=#{Map.get(metrics, :idle_packets, 0)}, errors=#{ccsds_error_count(metrics)}"
+    )
+  end
+
+  defp ccsds_error_count(metrics) do
+    Map.get(metrics, :frame_decode_errors, 0) +
+      Map.get(metrics, :reassembly_errors, 0) +
+      Map.get(metrics, :sdu_decode_errors, 0)
+  end
+
   defp packet_delta(%{stats: %{packets_processed: prev_proc}}, proc),
     do: " (+#{proc - prev_proc}/s)"
 
   defp packet_delta(_prev, _proc), do: ""
+
+  defp print_throughput(%{packets_per_sec_rolling: pps, bytes_per_sec_rolling: bps} = stats)
+       when pps > 0 do
+    mbps = Float.round(bps * 8 / 1_000_000, 1)
+    mb_per_sec = Float.round(bps / 1_000_000, 2)
+    window_ms = Map.get(stats, :rolling_duration_ms, 0)
+
+    IO.puts(
+      "Throughput: #{format_number(round(pps))} packets/sec, #{mb_per_sec} MB/sec (#{mbps} Mbps, rolling #{window_ms}ms)"
+    )
+  end
+
+  defp print_throughput(%{packets_per_sec_rolling: pps}) when pps > 0 do
+    IO.puts("Throughput: #{format_number(round(pps))} packets/sec (rolling)")
+  end
 
   defp print_throughput(%{packets_per_sec: pps, bytes_per_sec: bps}) when bps > 0 do
     mbps = Float.round(bps * 8 / 1_000_000, 1)

@@ -274,6 +274,25 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
 
             <div class="grid grid-cols-2 gap-4">
               <.input
+                field={@form[:sdlp_oid_validation]}
+                type="select"
+                label="OID Idle Data Validation"
+                options={[
+                  {"None", "none"},
+                  {"Prefix Only", "prefix"},
+                  {"Strict", "strict"}
+                ]}
+              />
+              <.input
+                field={@form[:sdlp_oid_validation_prefix_bytes]}
+                type="number"
+                label="OID Prefix Bytes (prefix validation)"
+                placeholder="10"
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <.input
                 field={@form[:sdlp_default_sdu_type]}
                 type="select"
                 label="Default SDU Type"
@@ -385,6 +404,11 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       |> Map.put(:sdlp_frame_size, protocol_config["frame_size"])
       |> Map.put(:sdlp_secondary_header_length, protocol_config["secondary_header_length"])
       |> Map.put(:sdlp_ocf_length, protocol_config["ocf_length"])
+      |> Map.put(:sdlp_oid_validation, protocol_config["oid_validation"])
+      |> Map.put(
+        :sdlp_oid_validation_prefix_bytes,
+        protocol_config["oid_validation_prefix_bytes"]
+      )
       |> Map.put(:sdlp_default_sdu_type, protocol_config["default_sdu_type"])
       |> Map.put(:sdlp_uplink_scid, protocol_config["uplink_scid"])
       |> Map.put(:sdlp_uplink_vcid, protocol_config["uplink_vcid"])
@@ -486,6 +510,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       "sdlp_frame_size",
       "sdlp_secondary_header_length",
       "sdlp_ocf_length",
+      "sdlp_oid_validation",
+      "sdlp_oid_validation_prefix_bytes",
       "sdlp_default_sdu_type",
       "sdlp_uplink_scid",
       "sdlp_uplink_vcid",
@@ -550,6 +576,8 @@ defmodule CadenceWeb.ProtocolLive.FormComponent do
       "frame_size" => parse_int(params["sdlp_frame_size"]),
       "secondary_header_length" => parse_int(params["sdlp_secondary_header_length"]),
       "ocf_length" => parse_int(params["sdlp_ocf_length"]),
+      "oid_validation" => params["sdlp_oid_validation"],
+      "oid_validation_prefix_bytes" => parse_int(params["sdlp_oid_validation_prefix_bytes"]),
       "default_sdu_type" => params["sdlp_default_sdu_type"],
       "uplink_scid" => parse_int(params["sdlp_uplink_scid"]),
       "uplink_vcid" => parse_int(params["sdlp_uplink_vcid"]),
