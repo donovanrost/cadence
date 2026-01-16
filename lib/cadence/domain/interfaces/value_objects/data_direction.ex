@@ -1,22 +1,17 @@
 defmodule Cadence.Domain.Interfaces.ValueObjects.DataDirection do
   @moduledoc """
-  Value object representing protocol data direction.
+  Value object representing target-interface routing direction.
 
-  Protocols in an interface chain can handle read, write, or both directions.
-  Following OpenC3 COSMOS architecture:
+  Used to describe how data flows between targets and interfaces:
 
-  - READ protocols process incoming data (from interface to application)
-  - WRITE protocols process outgoing data (from application to interface)
-
-  Protocol chain execution order:
-  - READ: Execute in order (protocol 0 → 1 → 2 ...)
-  - WRITE: Execute in reverse order (... 2 → 1 → 0)
+  - READ handles incoming telemetry (interface to application)
+  - WRITE handles outgoing commands (application to interface)
 
   ## Direction Values
 
-  - `:read` - Protocol only handles incoming data
-  - `:write` - Protocol only handles outgoing data
-  - `:read_write` - Protocol handles both directions
+  - `:read` - Incoming data only
+  - `:write` - Outgoing data only
+  - `:read_write` - Bidirectional
   """
 
   @type t :: :read | :write | :read_write
@@ -30,7 +25,7 @@ defmodule Cadence.Domain.Interfaces.ValueObjects.DataDirection do
   def values, do: @values
 
   @doc """
-  Returns the default direction for protocols.
+  Returns the default direction.
   """
   @spec default() :: t()
   def default, do: :read_write

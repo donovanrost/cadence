@@ -3,7 +3,7 @@ defmodule Cadence.Telemetry.Packet do
   Universal packet structure that normalizes different telemetry formats.
 
   Packets progress through stages:
-  - **Delineated**: Raw packet extracted from stream by protocol chain
+  - **Delineated**: Raw packet extracted from stream framing
   - **Identified**: Packet definition matched via PacketIdentifier
   - **Processed**: Telemetry items extracted and converted
 

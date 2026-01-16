@@ -17,7 +17,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   3. **Hazard Handling** - Require confirmation for hazardous commands
   4. **Encoding** - Encode command to binary format
   5. **Routing** - Find appropriate interface for target
-  6. **Transmission** - Send through protocol chain and interface
+  6. **Transmission** - Send through interface framing and transport
   7. **Verification** - Monitor CVT for verification (if configured)
   8. **Logging** - Record all activity to command_logs table
   9. **Pause/Resume** - Control whether commands are sent to this target
@@ -857,7 +857,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
          :ok <- validate_args(command, entry.parameters),
          {:ok, encoded} <- encode_command(command, entry.parameters),
          {:ok, interface} <- get_interface(target, opts),
-         {:ok, framed} <- process_protocol_chain(interface, encoded),
+         {:ok, framed} <- apply_interface_framing(interface, encoded),
          {:ok, cmd_info} <-
            create_command_recording(
              state,
@@ -1047,7 +1047,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp process_protocol_chain(_interface, command_binary) do
+  defp apply_interface_framing(_interface, command_binary) do
     {:ok, command_binary}
   end
 

@@ -9,9 +9,6 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
       # Find an interface by ID
       {:ok, interface} = InterfaceQueries.find(interface_id)
 
-      # Find with protocols for runtime use
-      {:ok, interface} = InterfaceQueries.find_with_protocols(interface_id)
-
       # List interfaces for a mission
       interfaces = InterfaceQueries.list_for_mission(mission_id)
   """
@@ -41,7 +38,6 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
   Finds an interface by ID.
 
   Returns `{:ok, interface}` if found, `{:error, :not_found}` otherwise.
-  Protocols are NOT loaded - use `find_with_protocols/1` for that.
   """
   @spec find(interface_id()) :: {:ok, Interface.t()} | {:error, :not_found}
   def find(interface_id), do: interface_repo().find(interface_id)
@@ -55,17 +51,6 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
       {:ok, interface} -> interface
       {:error, :not_found} -> raise ArgumentError, "Interface not found: #{interface_id}"
     end
-  end
-
-  @doc """
-  Finds an interface by ID with protocols preloaded.
-
-  This is the preferred method for loading interfaces that will be used
-  by GenServers, as it includes all protocol chain configuration.
-  """
-  @spec find_with_protocols(interface_id()) :: {:ok, Interface.t()} | {:error, :not_found}
-  def find_with_protocols(interface_id) do
-    interface_repo().find_with_protocols(interface_id)
   end
 
   @doc """
@@ -86,15 +71,8 @@ defmodule Cadence.Application.Interfaces.InterfaceQueries do
   ## Options
 
   - `:connection_type` - Filter by connection type (:tcp_client, :tcp_server, etc.)
-  - `:preload_protocols` - Whether to preload protocols (default: false)
   - `:limit` - Maximum number of results
   - `:offset` - Pagination offset
-
-  ## Data Plane Usage
-
-  For initializing interface supervisors, use `preload_protocols: true`:
-
-      interfaces = InterfaceQueries.list_for_mission(mission_id, preload_protocols: true)
   """
   @spec list_for_mission(mission_id(), opts()) :: [Interface.t()]
   def list_for_mission(mission_id, opts \\ []) do

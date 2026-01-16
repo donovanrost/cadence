@@ -20,14 +20,8 @@ defmodule Cadence.Interfaces do
 
       alias Cadence.Application.Interfaces.{InterfaceQueries, InterfaceOperations}
 
-      # Find interface with protocols (for GenServers)
-      {:ok, interface} = InterfaceQueries.find_with_protocols(id)
-
       # Create interface
       {:ok, interface} = InterfaceOperations.create(attrs)
-
-      # Add protocol to chain
-      {:ok, interface} = InterfaceOperations.add_protocol(interface_id, protocol_attrs)
 
   ## Data Plane Compatibility
 
@@ -52,7 +46,6 @@ defmodule Cadence.Interfaces do
   alias Cadence.Application.Interfaces.InterfaceQueries
   alias Cadence.Application.Interfaces.RoutingOperations
   alias Cadence.Domain.Missions.Entities.Mission, as: MissionEntity
-  alias Cadence.Interfaces.InterfaceProtocol
   alias Cadence.Interfaces.InterfaceSchema
   alias Cadence.Interfaces.InterfaceVcid
   alias Cadence.Interfaces.TargetInterface
@@ -96,11 +89,7 @@ defmodule Cadence.Interfaces do
   @doc """
   Gets an interface by name within a mission.
 
-  <<<<<<< Updated upstream
   Accepts either a `%Mission{}` struct or a mission ID string.
-  =======
-  Accepts either a Mission struct or a mission ID string.
-  >>>>>>> Stashed changes
   """
   def get_interface_by_name(mission_or_id, name)
 
@@ -177,163 +166,6 @@ defmodule Cadence.Interfaces do
     interface
     |> InterfaceSchema.status_changeset(%{status: status, metadata: metadata})
     |> Repo.update()
-  end
-
-  ## Protocol Chain Management
-
-  @doc """
-  Returns the list of protocols for an interface, ordered by execution order.
-
-  <<<<<<< Updated upstream
-  Accepts either an `%Interface{}` struct or an interface ID string.
-  =======
-  Accepts either an InterfaceSchema struct or an interface ID string.
-  >>>>>>> Stashed changes
-  """
-  def list_protocols(interface_or_id)
-
-  def list_protocols(%InterfaceSchema{id: interface_id}) do
-    InterfaceProtocol
-    |> where([p], p.interface_id == ^interface_id)
-    |> order_by([p], asc: p.order)
-    |> Repo.all()
-  end
-
-  def list_protocols(interface_id) when is_binary(interface_id) do
-    InterfaceProtocol
-    |> where([p], p.interface_id == ^interface_id)
-    |> order_by([p], asc: p.order)
-    |> Repo.all()
-  end
-
-  @doc """
-  Gets a single protocol.
-
-  Raises `Ecto.NoResultsError` if the Protocol does not exist.
-  """
-  def get_protocol!(id), do: Repo.get!(InterfaceProtocol, id)
-
-  @doc """
-  Creates a protocol and adds it to an interface's protocol chain.
-
-  The protocol will be appended to the end of the chain (highest order number).
-  """
-  def add_protocol(%InterfaceSchema{id: interface_id}, attrs) do
-    # Get current max order for this interface
-    max_order =
-      InterfaceProtocol
-      |> where([p], p.interface_id == ^interface_id)
-      |> select([p], max(p.order))
-      |> Repo.one() || -1
-
-    # Add protocol at next order position
-    attrs_with_interface =
-      Map.merge(attrs, %{
-        "interface_id" => interface_id,
-        "order" => max_order + 1
-      })
-
-    %InterfaceProtocol{}
-    |> InterfaceProtocol.changeset(attrs_with_interface)
-    |> Repo.insert()
-  end
-
-  @doc """
-  Updates a protocol in the chain.
-
-  Note: Updating the order field will require reordering other protocols.
-  Use `reorder_protocols/2` instead for changing protocol positions.
-  """
-  def update_protocol(%InterfaceProtocol{} = protocol, attrs) do
-    protocol
-    |> InterfaceProtocol.changeset(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Deletes a protocol from the chain and reorders remaining protocols.
-  """
-  def delete_protocol(%InterfaceProtocol{} = protocol) do
-    interface_id = protocol.interface_id
-    deleted_order = protocol.order
-
-    Repo.transaction(fn ->
-      with {:ok, deleted} <- Repo.delete(protocol),
-           :ok <- reorder_after_delete(interface_id, deleted_order) do
-        deleted
-      else
-        {:error, %Ecto.Changeset{} = changeset} -> Repo.rollback(changeset)
-        {:error, reason} -> Repo.rollback(reason)
-      end
-    end)
-  end
-
-  defp reorder_after_delete(interface_id, deleted_order) do
-    InterfaceProtocol
-    |> where([p], p.interface_id == ^interface_id and p.order > ^deleted_order)
-    |> Repo.all()
-    |> Enum.each(&decrement_protocol_order/1)
-
-    :ok
-  end
-
-  defp decrement_protocol_order(protocol) do
-    protocol
-    |> InterfaceProtocol.changeset(%{"order" => protocol.order - 1})
-    |> Repo.update!()
-  end
-
-  @doc """
-  Reorders protocols in an interface's chain.
-
-  Accepts a list of protocol IDs in the desired order.
-  All protocols for the interface must be included.
-  """
-  def reorder_protocols(%InterfaceSchema{id: interface_id}, protocol_ids)
-      when is_list(protocol_ids) do
-    Repo.transaction(fn ->
-      protocols =
-        InterfaceProtocol
-        |> where([p], p.interface_id == ^interface_id)
-        |> Repo.all()
-
-      protocol_map = Map.new(protocols, &{&1.id, &1})
-      :ok = validate_protocol_order(protocol_map, protocol_ids)
-      update_protocol_order(interface_id, protocol_map, protocol_ids)
-      list_protocols(interface_id)
-    end)
-  end
-
-  defp validate_protocol_order(protocol_map, protocol_ids) do
-    protocol_id_set = MapSet.new(Map.keys(protocol_map))
-    provided_id_set = MapSet.new(protocol_ids)
-
-    if protocol_id_set != provided_id_set do
-      Repo.rollback(:invalid_protocol_list)
-    else
-      :ok
-    end
-  end
-
-  defp update_protocol_order(interface_id, protocol_map, protocol_ids) do
-    offset = length(protocol_ids) + 1
-
-    bump_query =
-      from p in InterfaceProtocol,
-        where: p.interface_id == ^interface_id,
-        update: [set: [order: fragment("? + ?", p.order, ^offset)]]
-
-    Repo.update_all(bump_query, [])
-
-    protocol_ids
-    |> Enum.with_index()
-    |> Enum.each(fn {protocol_id, new_order} ->
-      protocol = Map.fetch!(protocol_map, protocol_id)
-
-      protocol
-      |> InterfaceProtocol.changeset(%{"order" => new_order})
-      |> Repo.update!()
-    end)
   end
 
   ## Target-Interface Routing
@@ -588,16 +420,6 @@ defmodule Cadence.Interfaces do
   def find_interface(id), do: InterfaceQueries.find(id)
 
   @doc """
-  Finds an interface with protocols preloaded and returns a domain entity.
-
-  This is the preferred method for loading interfaces that will be used
-  by GenServers, as it includes all protocol chain configuration.
-  """
-  @spec find_interface_with_protocols(String.t()) ::
-          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, :not_found}
-  def find_interface_with_protocols(id), do: InterfaceQueries.find_with_protocols(id)
-
-  @doc """
   Lists interfaces for a mission as domain entities.
   """
   @spec list_interfaces_as_entities(String.t(), keyword()) ::
@@ -634,17 +456,6 @@ defmodule Cadence.Interfaces do
   @spec delete_interface_entity(String.t()) ::
           {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
   def delete_interface_entity(interface_id), do: InterfaceOperations.delete(interface_id)
-
-  @doc """
-  Adds a protocol to an interface's chain using the hexagonal architecture.
-
-  Returns a domain entity. Emits `:interface_protocols_updated` event.
-  """
-  @spec add_protocol_entity(String.t(), map()) ::
-          {:ok, Cadence.Domain.Interfaces.Entities.Interface.t()} | {:error, term()}
-  def add_protocol_entity(interface_id, protocol_attrs) do
-    InterfaceOperations.add_protocol(interface_id, protocol_attrs)
-  end
 
   @doc """
   Creates a target-interface routing using the hexagonal architecture.

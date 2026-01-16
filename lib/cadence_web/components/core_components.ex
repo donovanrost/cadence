@@ -474,7 +474,7 @@ defmodule CadenceWeb.CoreComponents do
 
     ~H"""
     <div class="hud-panel overflow-visible">
-      <div class="overflow-x-auto">
+      <div>
         <table class="table table-zebra">
           <thead>
             <tr>
@@ -645,15 +645,15 @@ defmodule CadenceWeb.CoreComponents do
       phx-mounted={@show && show_modal(@id)}
       phx-remove={hide_modal(@id)}
       data-cancel={JS.exec(@on_cancel, "phx-remove")}
-      class="relative z-50 hidden"
+      class="fixed inset-0 z-[100] hidden"
     >
       <div
         id={"#{@id}-bg"}
-        class="fixed inset-0 bg-base-300/80 dark:bg-black/80 backdrop-blur-sm transition-opacity"
+        class="absolute inset-0 bg-base-300/80 dark:bg-black/80 backdrop-blur-sm transition-opacity"
         aria-hidden="true"
       />
       <div
-        class="fixed inset-0 overflow-y-auto"
+        class="absolute inset-0 overflow-y-auto"
         aria-labelledby={"#{@id}-title"}
         aria-describedby={"#{@id}-description"}
         role="dialog"

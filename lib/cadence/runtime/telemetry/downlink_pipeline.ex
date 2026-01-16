@@ -10,16 +10,14 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Telemetry.DeframeSupervisor
+  alias Cadence.Runtime.Telemetry.SpacePacketFramer
   alias Cadence.Telemetry.Packet
-  alias Cadence.Telemetry.ProtocolChain
-  alias Cadence.Telemetry.ProtocolChain.Processor
-  alias Cadence.Telemetry.ProtocolChainSupervisor
 
   defmodule ConnectionState do
     @moduledoc false
     defstruct [
       :frame_buffer,
-      :protocol_chain
+      :space_packet_framer
     ]
   end
 
@@ -47,8 +45,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
 
   @impl true
   def init(%Interface{} = interface) do
-    sdlp_config = SDLPConfig.fetch(interface.protocols)
-    _ = start_protocol_chain(interface)
+    sdlp_config = SDLPConfig.fetch(interface)
 
     state = %{
       interface: interface,
@@ -62,11 +59,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   end
 
   @impl true
-  def terminate(reason, state) do
-    if shutdown_reason?(reason) do
-      ProtocolChainSupervisor.stop_chain(state.mission_id, state.interface_id)
-    end
-
+  def terminate(_reason, _state) do
     :ok
   end
 
@@ -80,7 +73,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
         {:noreply, state}
 
       :error ->
-        state = handle_protocol_chain_data(state, connection_id, data, base_meta)
+        state = handle_space_packet_data(state, connection_id, data, base_meta)
         {:noreply, state}
     end
   end
@@ -88,7 +81,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   def handle_cast({:reset_connection, connection_id}, state) do
     updated =
       update_connection(state, connection_id, fn _conn ->
-        %ConnectionState{frame_buffer: <<>>, protocol_chain: nil}
+        %ConnectionState{frame_buffer: <<>>, space_packet_framer: SpacePacketFramer.new()}
       end)
 
     {:noreply, updated}
@@ -141,40 +134,41 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     end
   end
 
-  defp handle_protocol_chain_data(state, connection_id, data, base_meta) do
+  defp handle_space_packet_data(state, connection_id, data, base_meta) do
     connection_state =
-      Map.get(state.connections, connection_id, %ConnectionState{protocol_chain: nil})
+      Map.get(
+        state.connections,
+        connection_id,
+        %ConnectionState{space_packet_framer: SpacePacketFramer.new()}
+      )
 
-    chain = connection_state.protocol_chain || clone_protocol_chain(state.interface_id)
+    {packet_binaries, framer, errors} =
+      SpacePacketFramer.ingest(connection_state.space_packet_framer, data)
 
-    case Processor.process_read(chain, data, base_meta) do
-      {:ok, packets, updated_chain} ->
-        format = Processor.chain_format(updated_chain)
+    Enum.each(errors, fn reason ->
+      Logger.warning(
+        "Space packet framing error for interface=#{state.interface_id}: #{inspect(reason)}"
+      )
+    end)
 
-        packets_with_format =
-          Enum.map(packets, fn {packet_binary, metadata} ->
-            {packet_binary, format, metadata}
-          end)
+    packets =
+      packet_binaries
+      |> Enum.map(&build_ccsds_packet(&1, base_meta))
+      |> Enum.reject(&is_nil/1)
 
-        broadcast_packets(packets_with_format, base_meta, state)
-        notify_interface(length(packets_with_format), connection_id, state)
+    Enum.each(packets, fn %Packet{} = packet ->
+      Phoenix.PubSub.broadcast(
+        Cadence.PubSub,
+        "mission:#{state.mission_id}:telemetry:raw",
+        {:telemetry_packet, packet, base_meta}
+      )
+    end)
 
-        update_connection(state, connection_id, fn conn ->
-          %{conn | protocol_chain: updated_chain}
-        end)
+    notify_interface(length(packets), connection_id, state)
 
-      {:stop, updated_chain} ->
-        update_connection(state, connection_id, fn conn ->
-          %{conn | protocol_chain: updated_chain}
-        end)
-
-      {:disconnect, reason} ->
-        Logger.warning(
-          "Protocol chain disconnect for interface=#{state.interface_id}: #{inspect(reason)}"
-        )
-
-        update_connection(state, connection_id, fn conn -> conn end)
-    end
+    update_connection(state, connection_id, fn conn ->
+      %{conn | space_packet_framer: framer}
+    end)
   end
 
   defp dispatch_frame(state, connection_id, frame, ctx, base_meta, mapping, opts) do
@@ -229,62 +223,6 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     %{state | connections: updated}
   end
 
-  defp start_protocol_chain(%Interface{} = interface) do
-    case ProtocolChainSupervisor.start_chain(interface.mission_id, interface.id,
-           protocols: interface.protocols
-         ) do
-      {:ok, pid} ->
-        Logger.debug("Started protocol chain #{inspect(pid)} for interface #{interface.id}")
-        {:ok, pid}
-
-      {:error, {:already_started, pid}} ->
-        Logger.debug("Protocol chain already running for interface #{interface.id}")
-        {:ok, pid}
-
-      {:error, reason} ->
-        Logger.error(
-          "Failed to start protocol chain for interface #{interface.id}: #{inspect(reason)}"
-        )
-
-        {:error, reason}
-    end
-  end
-
-  defp clone_protocol_chain(interface_id) do
-    case ProtocolChain.clone(ProtocolChain.via_tuple(interface_id)) do
-      {:ok, chain} -> chain
-      {:error, _} -> []
-    end
-  end
-
-  defp broadcast_packets(packets_with_format, base_meta, state) do
-    Enum.each(packets_with_format, fn {packet_binary, format, chain_metadata} ->
-      metadata = Map.merge(base_meta, chain_metadata || %{})
-
-      case construct_packet(packet_binary, metadata, format) do
-        %Packet{} = packet ->
-          Phoenix.PubSub.broadcast(
-            Cadence.PubSub,
-            "mission:#{state.mission_id}:telemetry:raw",
-            {:telemetry_packet, packet, metadata}
-          )
-
-        nil ->
-          :ok
-      end
-    end)
-  end
-
-  defp construct_packet(binary, metadata, format) do
-    case format do
-      :ccsds ->
-        build_ccsds_packet(binary, metadata)
-
-      :raw ->
-        build_ccsds_packet(binary, metadata)
-    end
-  end
-
   defp build_ccsds_packet(binary, metadata) do
     case Packet.from_ccsds(binary, metadata) do
       {:ok, packet} ->
@@ -321,9 +259,4 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     |> Map.put_new(:received_at, DateTime.utc_now())
     |> Map.put_new(:stored, false)
   end
-
-  defp shutdown_reason?(:normal), do: true
-  defp shutdown_reason?(:shutdown), do: true
-  defp shutdown_reason?({:shutdown, _}), do: true
-  defp shutdown_reason?(_), do: false
 end

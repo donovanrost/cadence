@@ -1,28 +1,34 @@
 defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   @moduledoc """
-  Helpers for extracting SDLP config from interface protocol definitions.
+  Helpers for extracting SDLP config from interface config maps.
   """
 
   alias Cadence.CCSDS.SDU.Mapping
+  alias Cadence.Domain.Interfaces.Entities.Interface
 
-  @spec fetch([map() | struct()]) ::
-          {:ok, %{mapping: Mapping.t(), opts: keyword()}} | :error
-  def fetch(protocols) when is_list(protocols) do
-    protocols
-    |> Enum.find(&sdlp_protocol?/1)
-    |> case do
-      nil -> :error
-      protocol -> build(protocol)
+  @spec fetch(Interface.t() | map()) :: {:ok, %{mapping: Mapping.t(), opts: keyword()}} | :error
+  def fetch(%Interface{} = interface), do: fetch(interface.config || %{})
+
+  def fetch(config) when is_map(config) do
+    case framing_mode(config) do
+      :sdlp ->
+        sdlp_config = fetch_value(config, "sdlp") || %{}
+        build_from_config(sdlp_config)
+
+      _ ->
+        :error
     end
   end
 
-  defp sdlp_protocol?(%{protocol_type: type}) when is_atom(type), do: type == :ccsds_sdlp
-  defp sdlp_protocol?(%{protocol_type: type}) when is_binary(type), do: type == "ccsds_sdlp"
-  defp sdlp_protocol?(_), do: false
+  defp framing_mode(config) do
+    case fetch_value(config, "framing") do
+      "sdlp" -> :sdlp
+      :sdlp -> :sdlp
+      _ -> :other
+    end
+  end
 
-  defp build(protocol) do
-    config = Map.get(protocol, :config) || Map.get(protocol, :protocol_config) || %{}
-
+  defp build_from_config(config) do
     with {:ok, profile} <- normalize_profile(fetch_value(config, "profile")),
          {:ok, mapping} <- build_mapping(fetch_value(config, "sdu_mapping")),
          {:ok, default_sdu_type} <-

@@ -128,14 +128,6 @@ defmodule CadenceWeb.Router do
            MissionLive.InterfaceShow,
            :edit_scid
 
-      # Protocol management for interfaces
-      live "/missions/:id/interfaces/:interface_id/protocols", ProtocolLive.Index, :index
-      live "/missions/:id/interfaces/:interface_id/protocols/new", ProtocolLive.Index, :new
-
-      live "/missions/:id/interfaces/:interface_id/protocols/:protocol_id/edit",
-           ProtocolLive.Index,
-           :edit
-
       # Database catalog section (database and version management)
       live "/missions/:id/database", MissionLive.Database, :index
       live "/missions/:id/database/new", MissionLive.Database, :new_database

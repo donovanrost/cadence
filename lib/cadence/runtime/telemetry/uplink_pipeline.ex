@@ -10,7 +10,6 @@ defmodule Cadence.Runtime.Telemetry.UplinkPipeline do
   alias Cadence.CCSDS.Uplink.Pipeline
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.SDLPConfig
-  alias Cadence.Telemetry.ProtocolChain
 
   defmodule State do
     @moduledoc false
@@ -64,13 +63,7 @@ defmodule Cadence.Runtime.Telemetry.UplinkPipeline do
   end
 
   def handle_call({:encode, data}, _from, %State{sdlp?: false} = state) do
-    result =
-      case ProtocolChain.whereis(state.interface_id) do
-        nil -> {:ok, data}
-        pid -> ProtocolChain.process_write(pid, data)
-      end
-
-    {:reply, result, state}
+    {:reply, {:ok, data}, state}
   end
 
   @impl true
@@ -91,7 +84,7 @@ defmodule Cadence.Runtime.Telemetry.UplinkPipeline do
   def handle_cast(:reset, state), do: {:noreply, state}
 
   defp init_uplink_pipeline(%Interface{} = interface) do
-    case SDLPConfig.fetch(interface.protocols) do
+    case SDLPConfig.fetch(interface) do
       {:ok, %{opts: opts}} ->
         case Pipeline.init(opts) do
           {:ok, pipeline} -> {true, pipeline, opts}

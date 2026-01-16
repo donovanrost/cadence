@@ -30,7 +30,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
       target_interfaces = Interfaces.list_target_interfaces_for_interface(interface)
       targets = Enum.map(target_interfaces, & &1.target)
       vcids = Interfaces.list_vcids_for_interface(interface)
-      protocols = Interfaces.list_protocols(interface)
 
       vcid =
         case action do
@@ -54,7 +53,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
        |> assign(:targets, targets)
        |> assign(:target_interfaces, target_interfaces)
        |> assign(:vcids, vcids)
-       |> assign(:protocols, protocols)
        |> assign(:vcid, vcid)
        |> assign(:target_interface, target_interface)}
     else
@@ -86,6 +84,10 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
      socket
      |> assign(:target_interfaces, target_interfaces)
      |> assign(:targets, targets)}
+  end
+
+  def handle_info({CadenceWeb.InterfaceLive.ProtocolConfigComponent, {:config_saved, interface}}, socket) do
+    {:noreply, assign(socket, :interface, interface)}
   end
 
   @impl true
@@ -151,17 +153,13 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="px-4 py-4 space-y-6">
+    <div class="px-4 py-4 space-y-6">
         <.header>
           {@interface.name}
           <:subtitle>Interface details, targets, and VCID routing.</:subtitle>
           <:actions>
             <.link navigate={~p"/missions/#{@mission}/interfaces"}>
               <.button class="btn-ghost">Back</.button>
-            </.link>
-            <.link navigate={~p"/missions/#{@mission}/interfaces/#{@interface}/protocols"}>
-              <.button class="btn-outline">Protocols</.button>
             </.link>
             <.link patch={~p"/missions/#{@mission}/interfaces/#{@interface}/edit"}>
               <.button>Edit</.button>
@@ -177,15 +175,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
             </p>
             <p class="text-xs text-base-content/60 mt-1">
               {interface_endpoint(@interface)}
-            </p>
-          </div>
-          <div class="rounded-sm border border-base-300 bg-base-200/40 p-4">
-            <p class="text-xs uppercase tracking-wide text-base-content/60">Protocols</p>
-            <p class="mt-2 text-sm font-semibold text-base-content">
-              {length(@protocols)} configured
-            </p>
-            <p class="text-xs text-base-content/60 mt-1">
-              Manage protocol chain and framing
             </p>
           </div>
           <div class="rounded-sm border border-base-300 bg-base-200/40 p-4">
@@ -224,6 +213,12 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
             </.table>
           </div>
         </div>
+
+        <.live_component
+          module={CadenceWeb.InterfaceLive.ProtocolConfigComponent}
+          id="protocol-config"
+          interface={@interface}
+        />
 
         <div class="rounded-sm border border-base-300 bg-base-100">
           <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
@@ -308,7 +303,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
           patch={~p"/missions/#{@mission}/interfaces/#{@interface}"}
         />
       </.modal>
-    </Layouts.app>
     """
   end
 

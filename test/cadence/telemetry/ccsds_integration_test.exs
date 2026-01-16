@@ -4,18 +4,16 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
   Tests the complete realistic spacecraft telemetry flow:
   1. PacketSimulator generates CCSDS binary packets
-  2. Protocol framing extracts packets using template (sync pattern)
-  3. PacketIdentifier identifies packets by APID
-  4. Decommutation extracts binary telemetry fields
-  5. CVT stores values
-  6. PubSub broadcasts updates
+  2. PacketIdentifier identifies packets by APID
+  3. Decommutation extracts binary telemetry fields
+  4. CVT stores values
+  5. PubSub broadcasts updates
 
   This validates that we can process real spacecraft telemetry.
   """
 
   use Cadence.IntegrationCase
 
-  import Bitwise
   import Cadence.MissionDatabaseFixtures
   import Cadence.TargetsFixtures
 
@@ -25,9 +23,6 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Simulator.PacketSimulator
   alias Cadence.Telemetry.PipelineMetrics
-  alias Cadence.Telemetry.Protocols.TemplateProtocol
-
-  @ccsds_sync <<0x1A, 0xCF, 0xFC, 0x1D>>
 
   defp wait_for(fun, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 5_000)
@@ -326,128 +321,6 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
       assert is_number(temp_a.value)
       assert is_number(temp_b.value)
       assert is_number(temp_c.value)
-    end
-
-    test "CCSDS protocol framing works correctly" do
-      # Test the protocol layer directly with CCSDS packets
-      state =
-        TemplateProtocol.new(
-          sync_pattern: @ccsds_sync,
-          header_length: 6
-        )
-
-      # Build a CCSDS packet manually
-      _apid = 100
-      seq_count = 42
-      payload_data = :crypto.strong_rand_bytes(27)
-      # 8 byte secondary header + 19 byte user data
-
-      # CCSDS primary header
-      packet_id = 0x0864
-      # version=0, type=0, sec_hdr=1, apid=100
-      seq_control = 0xC000 + seq_count
-      data_length = byte_size(payload_data) - 1
-
-      header = <<packet_id::16, seq_control::16, data_length::16>>
-      complete_packet = @ccsds_sync <> header <> payload_data
-
-      # Process the packet
-      {:ok, [extracted], _new_state} = TemplateProtocol.read_data(complete_packet, state)
-
-      # Should extract the complete packet including sync
-      assert extracted == complete_packet
-      assert byte_size(extracted) == 4 + 6 + 27
-    end
-
-    test "handles fragmented CCSDS packets over TCP stream" do
-      state =
-        TemplateProtocol.new(
-          sync_pattern: @ccsds_sync,
-          header_length: 6
-        )
-
-      # Build a CCSDS packet
-      payload = :crypto.strong_rand_bytes(20)
-      header = <<0x0864::16, 0xC000::16, 19::16>>
-      complete_packet = @ccsds_sync <> header <> payload
-
-      # Split into random chunks to simulate TCP stream
-      total_size = byte_size(complete_packet)
-      chunk1_size = div(total_size, 3)
-      chunk2_size = div(total_size, 2)
-
-      chunk1 = binary_part(complete_packet, 0, chunk1_size)
-      chunk2 = binary_part(complete_packet, chunk1_size, chunk2_size - chunk1_size)
-      chunk3 = binary_part(complete_packet, chunk2_size, total_size - chunk2_size)
-
-      # Process chunks sequentially
-      {[], state1} = read_packets(chunk1, state)
-      assert byte_size(state1.buffer) > 0
-
-      {[], state2} = read_packets(chunk2, state1)
-      # May still be buffering
-
-      {packets, state3} = read_packets(chunk3, state2)
-
-      # Should have extracted the complete packet
-      assert length(packets) == 1
-      assert hd(packets) == complete_packet
-      assert state3.buffer == <<>>
-    end
-
-    test "validates CCSDS packet structure after deframing" do
-      # Ensure extracted packets have correct CCSDS structure
-      state =
-        TemplateProtocol.new(
-          sync_pattern: @ccsds_sync,
-          header_length: 6
-        )
-
-      # Create packet with known values
-      apid = 101
-      # ATTITUDE
-      seq_count = 123
-      payload = :crypto.strong_rand_bytes(32)
-
-      version = 0
-      type = 0
-      sec_hdr = 1
-      packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr <<< 11 ||| apid
-
-      seq_flags = 3
-      seq_control = seq_flags <<< 14 ||| seq_count
-
-      data_length = byte_size(payload) - 1
-      header = <<packet_id::16, seq_control::16, data_length::16>>
-
-      complete_packet = @ccsds_sync <> header <> payload
-
-      {:ok, [extracted], _state} = TemplateProtocol.read_data(complete_packet, state)
-
-      # Parse the extracted packet
-      <<sync::binary-size(4), pkt_id::16, seq_ctrl::16, data_len::16, rest::binary>> = extracted
-
-      # Verify sync pattern
-      assert sync == @ccsds_sync
-
-      # Verify APID
-      extracted_apid = pkt_id &&& 0x07FF
-      assert extracted_apid == apid
-
-      # Verify sequence count
-      extracted_seq = seq_ctrl &&& 0x3FFF
-      assert extracted_seq == seq_count
-
-      # Verify data length
-      assert data_len == byte_size(payload) - 1
-      assert byte_size(rest) == byte_size(payload)
-    end
-  end
-
-  defp read_packets(chunk, state) do
-    case TemplateProtocol.read_data(chunk, state) do
-      {:ok, packets, new_state} -> {packets, new_state}
-      {:stop, new_state} -> {[], new_state}
     end
   end
 

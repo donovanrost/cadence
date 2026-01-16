@@ -42,7 +42,7 @@ defmodule Cadence.Runtime.Interfaces.Factory do
   @doc """
   Builds a child specification for the given interface domain entity.
 
-  The interface entity should be fully loaded with protocols and target_ids.
+  The interface entity should be fully loaded with target_ids.
   No database queries are made - all data comes from the entity.
 
   Returns a child_spec suitable for starting under a DynamicSupervisor.

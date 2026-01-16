@@ -20,7 +20,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   ## Downlink Pipeline Architecture
 
   Downlink processing is handled outside this GenServer to keep transport
-  concerns separate from protocol decoding.
+  concerns separate from packet framing and decoding.
   """
 
   use GenServer

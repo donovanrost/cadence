@@ -23,7 +23,6 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
   @behaviour Cadence.Ports.Repository.Interfaces.InterfaceRepository
 
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Domain.Interfaces.Entities.InterfaceProtocol
 
   # ============================================================================
   # Agent Lifecycle
@@ -35,8 +34,7 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
     Agent.start_link(
       fn ->
         %{
-          interfaces: %{},
-          protocols: %{}
+          interfaces: %{}
         }
       end,
       name: name
@@ -62,21 +60,6 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
     case Agent.get(__MODULE__, fn state -> Map.get(state.interfaces, id) end) do
       nil -> {:error, :not_found}
       interface -> {:ok, interface}
-    end
-  end
-
-  @impl true
-  def find_with_protocols(id) do
-    case Agent.get(__MODULE__, fn state ->
-           interface = Map.get(state.interfaces, id)
-           protocols = Map.get(state.protocols, id, [])
-           {interface, protocols}
-         end) do
-      {nil, _} ->
-        {:error, :not_found}
-
-      {interface, protocols} ->
-        {:ok, %{interface | protocols: Enum.sort_by(protocols, & &1.order)}}
     end
   end
 
@@ -109,17 +92,14 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
     # Check for name uniqueness within mission
     case check_name_uniqueness(interface) do
       :ok ->
-        protocols = prepare_protocols(interface.protocols, interface.id)
-
         Agent.update(__MODULE__, fn state ->
           %{
             state
-            | interfaces: Map.put(state.interfaces, interface.id, %{interface | protocols: []}),
-              protocols: Map.put(state.protocols, interface.id, protocols)
+            | interfaces: Map.put(state.interfaces, interface.id, interface)
           }
         end)
 
-        {:ok, %{interface | protocols: protocols}}
+        {:ok, interface}
 
       {:error, _} = error ->
         error
@@ -134,11 +114,7 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
           {{:error, :not_found}, state}
 
         {interface, new_interfaces} ->
-          new_state = %{
-            state
-            | interfaces: new_interfaces,
-              protocols: Map.delete(state.protocols, id)
-          }
+          new_state = %{state | interfaces: new_interfaces}
 
           {{:ok, interface}, new_state}
       end
@@ -151,7 +127,6 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
 
   @impl true
   def list_for_mission(mission_id, opts \\ []) do
-    preload_protocols = Keyword.get(opts, :preload_protocols, false)
     connection_type = Keyword.get(opts, :connection_type)
     limit = Keyword.get(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
@@ -166,14 +141,13 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
         |> Enum.drop(offset)
         |> maybe_limit(limit)
 
-      attach_protocols_if_needed(interfaces, state, preload_protocols)
+      interfaces
     end)
   end
 
   @impl true
   def list(opts \\ []) do
     mission_id = Keyword.get(opts, :mission_id)
-    preload_protocols = Keyword.get(opts, :preload_protocols, false)
     connection_type = Keyword.get(opts, :connection_type)
     limit = Keyword.get(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
@@ -188,32 +162,8 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
         |> Enum.drop(offset)
         |> maybe_limit(limit)
 
-      attach_protocols_if_needed(interfaces, state, preload_protocols)
+      interfaces
     end)
-  end
-
-  # ============================================================================
-  # Protocol Operations
-  # ============================================================================
-
-  @impl true
-  def save_protocols(interface_id, protocol_attrs_list) do
-    protocols = prepare_protocols_from_attrs(protocol_attrs_list, interface_id)
-
-    Agent.update(__MODULE__, fn state ->
-      %{state | protocols: Map.put(state.protocols, interface_id, protocols)}
-    end)
-
-    find_with_protocols(interface_id)
-  end
-
-  @impl true
-  def delete_protocols(interface_id) do
-    Agent.update(__MODULE__, fn state ->
-      %{state | protocols: Map.put(state.protocols, interface_id, [])}
-    end)
-
-    :ok
   end
 
   # ============================================================================
@@ -253,8 +203,7 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
   def clear do
     Agent.update(__MODULE__, fn _ ->
       %{
-        interfaces: %{},
-        protocols: %{}
+        interfaces: %{}
       }
     end)
   end
@@ -278,51 +227,6 @@ defmodule Cadence.Test.Adapters.InMemoryInterfaceRepository do
       end
     end)
   end
-
-  defp prepare_protocols(protocols, interface_id) do
-    protocols
-    |> Enum.with_index()
-    |> Enum.map(fn {protocol, idx} ->
-      protocol =
-        if protocol.id do
-          protocol
-        else
-          %{protocol | id: Ecto.UUID.generate()}
-        end
-
-      %{protocol | interface_id: interface_id, order: idx}
-    end)
-  end
-
-  defp prepare_protocols_from_attrs(attrs_list, interface_id) do
-    attrs_list
-    |> Enum.with_index()
-    |> Enum.map(fn {attrs, idx} ->
-      attrs
-      |> Map.merge(%{interface_id: interface_id, order: idx})
-      |> build_protocol()
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp attach_protocols_if_needed(interfaces, _state, false), do: interfaces
-
-  defp attach_protocols_if_needed(interfaces, state, true) do
-    Enum.map(interfaces, fn interface ->
-      protocols = Map.get(state.protocols, interface.id, [])
-      %{interface | protocols: Enum.sort_by(protocols, & &1.order)}
-    end)
-  end
-
-  defp build_protocol(attrs) do
-    case InterfaceProtocol.new(attrs) do
-      {:ok, protocol} -> ensure_protocol_id(protocol)
-      {:error, _} -> nil
-    end
-  end
-
-  defp ensure_protocol_id(%{id: nil} = protocol), do: %{protocol | id: Ecto.UUID.generate()}
-  defp ensure_protocol_id(protocol), do: protocol
 
   defp filter_by_mission(interfaces, nil), do: interfaces
 

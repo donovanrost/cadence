@@ -6,7 +6,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   Following the OpenC3 COSMOS architecture, each interface:
   - Belongs to exactly one mission
   - Has a connection type (tcp_client, tcp_server, udp, serial, etc.)
-  - Has zero or more protocols in a protocol chain
   - Can handle bidirectional communication
 
   **IMPORTANT**: This entity represents configuration only, NOT runtime state.
@@ -19,7 +18,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   This entity is designed to be serializable and ETS-friendly for future
   Data Plane / Control Plane architecture:
   - Simple struct with no Ecto associations
-  - Protocols are embedded as a list (not lazy-loaded)
   - target_ids are denormalized (no joins needed at runtime)
 
   ## Usage
@@ -33,7 +31,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
       })
   """
 
-  alias Cadence.Domain.Interfaces.Entities.InterfaceProtocol
   alias Cadence.Domain.Interfaces.ValueObjects.ConnectionType
 
   @type t :: %__MODULE__{
@@ -49,7 +46,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
           reconnect_delay_ms: non_neg_integer(),
           config: map(),
           metadata: map(),
-          protocols: [InterfaceProtocol.t()],
           target_ids: [String.t()],
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
@@ -71,7 +67,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
     reconnect_delay_ms: 5000,
     config: %{},
     metadata: %{},
-    protocols: [],
     target_ids: []
   ]
 
@@ -101,7 +96,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   - `:reconnect_delay_ms` - Delay between reconnect attempts (default: 5000)
   - `:config` - Additional configuration map
   - `:metadata` - Metadata map
-  - `:protocols` - List of InterfaceProtocol entities
   - `:target_ids` - List of target IDs this interface routes to
   """
   @spec new(map()) :: {:ok, t()} | {:error, term()}
@@ -109,8 +103,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
     with :ok <- validate_required(attrs),
          {:ok, connection_type} <- parse_connection_type(attrs[:connection_type]),
          :ok <- validate_connection_params(connection_type, attrs),
-         :ok <- validate_name(attrs[:name]),
-         {:ok, protocols} <- build_protocols(attrs[:protocols]) do
+         :ok <- validate_name(attrs[:name]) do
       {:ok,
        %__MODULE__{
          id: attrs[:id],
@@ -125,7 +118,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
          reconnect_delay_ms: Map.get(attrs, :reconnect_delay_ms, @default_reconnect_delay_ms),
          config: attrs[:config] || %{},
          metadata: attrs[:metadata] || %{},
-         protocols: protocols,
          target_ids: attrs[:target_ids] || [],
          created_at: attrs[:created_at],
          updated_at: attrs[:updated_at]
@@ -141,8 +133,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   @spec update(t(), map()) :: {:ok, t()} | {:error, term()}
   def update(%__MODULE__{connection_type: conn_type} = interface, attrs) do
     with :ok <- validate_name(attrs[:name] || interface.name),
-         :ok <- validate_connection_params(conn_type, Map.merge(to_map(interface), attrs)),
-         {:ok, protocols} <- maybe_build_protocols(attrs[:protocols], interface.protocols) do
+         :ok <- validate_connection_params(conn_type, Map.merge(to_map(interface), attrs)) do
       {:ok,
        %{
          interface
@@ -155,7 +146,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
            reconnect_delay_ms: Map.get(attrs, :reconnect_delay_ms, interface.reconnect_delay_ms),
            config: Map.merge(interface.config, attrs[:config] || %{}),
            metadata: Map.merge(interface.metadata, attrs[:metadata] || %{}),
-           protocols: protocols,
            target_ids: attrs[:target_ids] || interface.target_ids,
            updated_at: DateTime.utc_now()
        }}
@@ -170,11 +160,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   """
   @spec from_persistence(map()) :: t()
   def from_persistence(attrs) do
-    protocols =
-      (attrs[:protocols] || [])
-      |> Enum.map(&InterfaceProtocol.from_persistence/1)
-      |> Enum.sort_by(& &1.order)
-
     %__MODULE__{
       id: attrs[:id],
       mission_id: attrs[:mission_id],
@@ -188,76 +173,10 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
       reconnect_delay_ms: Map.get(attrs, :reconnect_delay_ms, @default_reconnect_delay_ms),
       config: attrs[:config] || %{},
       metadata: attrs[:metadata] || %{},
-      protocols: protocols,
       target_ids: attrs[:target_ids] || [],
       created_at: attrs[:created_at] || attrs[:inserted_at],
       updated_at: attrs[:updated_at]
     }
-  end
-
-  # ===========================================================================
-  # Protocol Management
-  # ===========================================================================
-
-  @doc """
-  Adds a protocol to the interface's protocol chain.
-
-  The protocol is added at the end of the chain by default.
-  """
-  @spec add_protocol(t(), map()) :: {:ok, t()} | {:error, term()}
-  def add_protocol(%__MODULE__{protocols: protocols} = interface, protocol_attrs) do
-    next_order = if Enum.empty?(protocols), do: 0, else: length(protocols)
-
-    attrs =
-      protocol_attrs
-      |> Map.put(:interface_id, interface.id)
-      |> Map.put_new(:order, next_order)
-
-    case InterfaceProtocol.new(attrs) do
-      {:ok, protocol} ->
-        new_protocols = protocols ++ [protocol]
-        {:ok, %{interface | protocols: new_protocols, updated_at: DateTime.utc_now()}}
-
-      error ->
-        error
-    end
-  end
-
-  @doc """
-  Removes a protocol from the chain by its order.
-  """
-  @spec remove_protocol(t(), non_neg_integer()) :: {:ok, t()} | {:error, :protocol_not_found}
-  def remove_protocol(%__MODULE__{protocols: protocols} = interface, order) do
-    case Enum.find_index(protocols, &(&1.order == order)) do
-      nil ->
-        {:error, :protocol_not_found}
-
-      index ->
-        {_removed, remaining} = List.pop_at(protocols, index)
-        reordered = reorder_protocols(remaining)
-        {:ok, %{interface | protocols: reordered, updated_at: DateTime.utc_now()}}
-    end
-  end
-
-  @doc """
-  Reorders protocols in the chain.
-  """
-  @spec reorder_protocols(t(), [non_neg_integer()]) :: {:ok, t()} | {:error, :invalid_order}
-  def reorder_protocols(%__MODULE__{protocols: protocols} = interface, new_order) do
-    if length(new_order) != length(protocols) do
-      {:error, :invalid_order}
-    else
-      reordered =
-        new_order
-        |> Enum.with_index()
-        |> Enum.map(fn {old_order, new_order_index} ->
-          protocol = Enum.find(protocols, &(&1.order == old_order))
-          %{protocol | order: new_order_index}
-        end)
-        |> Enum.sort_by(& &1.order)
-
-      {:ok, %{interface | protocols: reordered, updated_at: DateTime.utc_now()}}
-    end
   end
 
   # ===========================================================================
@@ -378,37 +297,6 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
       true ->
         :ok
     end
-  end
-
-  defp build_protocols(nil), do: {:ok, []}
-  defp build_protocols([]), do: {:ok, []}
-
-  defp build_protocols(protocol_list) when is_list(protocol_list) do
-    results = Enum.map(protocol_list, &build_single_protocol/1)
-    errors = Enum.filter(results, &match?({:error, _}, &1))
-
-    if Enum.empty?(errors) do
-      protocols =
-        results
-        |> Enum.map(fn {:ok, p} -> p end)
-        |> Enum.sort_by(& &1.order)
-
-      {:ok, protocols}
-    else
-      List.first(errors)
-    end
-  end
-
-  defp build_single_protocol(%InterfaceProtocol{} = p), do: {:ok, p}
-  defp build_single_protocol(attrs) when is_map(attrs), do: InterfaceProtocol.new(attrs)
-
-  defp maybe_build_protocols(nil, current), do: {:ok, current}
-  defp maybe_build_protocols(protocols, _current), do: build_protocols(protocols)
-
-  defp reorder_protocols(protocols) do
-    protocols
-    |> Enum.with_index()
-    |> Enum.map(fn {p, idx} -> %{p | order: idx} end)
   end
 
   defp parse_connection_type_from_persistence(type) when is_atom(type), do: type

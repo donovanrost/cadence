@@ -20,7 +20,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
     mission = setup_result.mission
     target = hd(setup_result.targets)
 
-    # Start the mission supervision tree (required for protocol chain supervisor)
+    # Start the mission supervision tree
     {:ok, config} = MissionConfig.load(mission.id)
     {:ok, _pid} = MissionSupervisor.start_mission(config)
 
@@ -46,8 +46,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       bind_address: "127.0.0.1",
       bind_port: port,
       target_ids: target_ids,
-      config: %{max_clients: max_clients},
-      protocols: []
+      config: %{max_clients: max_clients}
     }
   end
 

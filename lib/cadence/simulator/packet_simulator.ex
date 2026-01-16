@@ -76,7 +76,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   ## Options
 
   - `:mission_id` - Mission ID for scoping (required)
-  - `:interface_id` - Interface ID to look up write protocols from (optional)
+  - `:interface_id` - Interface ID to look up framing config from (optional)
   - `:targets` - List of target IDs to simulate (default: ["sim-target-1"])
   - `:packet_types` - List of packet types to generate (default: [:health, :attitude, :power])
   - `:rate_hz` - Packet generation rate in Hz (default: 1.0)
@@ -94,7 +94,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     - `nil` - No network output (PubSub only)
 
   When `:interface_id` is provided, the simulator uses the interface's SDLP
-  configuration to frame outgoing packets via the uplink pipeline.
+  framing configuration to frame outgoing packets via the uplink pipeline.
   """
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
@@ -287,17 +287,14 @@ defmodule Cadence.Simulator.PacketSimulator do
   end
 
   defp init_uplink_pipeline(interface_id, frame) do
-    protocols = Interfaces.list_protocols(interface_id)
-
-    case SDLPConfig.fetch(protocols) do
-      {:ok, %{opts: opts}} ->
-        case UplinkPipeline.init(opts) do
-          {:ok, pipeline} -> {pipeline, opts}
-          {:error, _} -> init_uplink_from_frame(frame)
-        end
-
-      :error ->
-        init_uplink_from_frame(frame)
+    with interface when not is_nil(interface) <- Interfaces.get_interface(interface_id),
+         {:ok, %{opts: opts}} <- SDLPConfig.fetch(interface) do
+      case UplinkPipeline.init(opts) do
+        {:ok, pipeline} -> {pipeline, opts}
+        {:error, _} -> init_uplink_from_frame(frame)
+      end
+    else
+      _ -> init_uplink_from_frame(frame)
     end
   rescue
     error ->

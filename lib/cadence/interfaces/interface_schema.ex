@@ -6,26 +6,12 @@ defmodule Cadence.Interfaces.InterfaceSchema do
   architecture, each interface:
   - Belongs to exactly one mission
   - Has a connection type (tcp_client, tcp_server, udp, serial, etc.)
-  - Has zero or more protocols in a protocol chain
   - Manages its own connection state
   - Can handle bidirectional communication (read/write)
 
-  ## Protocol Chains
-
-  Interfaces support **protocol chains** where multiple protocols process data sequentially.
-  Protocols are stored in the `interface_protocols` table with an `order` field:
-
-  - **READ protocols** execute in order (protocol 0 → 1 → 2 ...)
-  - **WRITE protocols** execute in reverse order (... 2 → 1 → 0)
-
-  This matches OpenC3 COSMOS behavior where protocols unwrap incoming data layer-by-layer,
-  and wrap outgoing data in reverse order.
-
-  See `Cadence.Interfaces.InterfaceProtocol` for protocol configuration details.
-
   ## Examples
 
-      # TCP client interface (connection only, protocols defined separately)
+      # TCP client interface (connection only)
       %InterfaceSchema{
         name: "SPACECRAFT_TLM",
         connection_type: "tcp_client",
@@ -90,7 +76,6 @@ defmodule Cadence.Interfaces.InterfaceSchema do
 
     # Associations
     belongs_to :mission, Cadence.Missions.Mission
-    has_many :protocols, Cadence.Interfaces.InterfaceProtocol, foreign_key: :interface_id
     has_many :vcids, Cadence.Interfaces.InterfaceVcid, foreign_key: :interface_id
 
     timestamps(type: :utc_datetime)

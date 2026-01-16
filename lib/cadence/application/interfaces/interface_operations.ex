@@ -10,7 +10,6 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   - `:interface_created` - When a new interface is created
   - `:interface_updated` - When interface configuration changes
   - `:interface_deleted` - When an interface is deleted
-  - `:interface_protocols_updated` - When protocol chain changes
 
   These events enable future push-based Data Plane updates without requiring
   the Data Plane to poll the database for configuration changes.
@@ -29,11 +28,6 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
       # Update an interface
       {:ok, interface} = InterfaceOperations.update(interface_id, %{port: 9090})
 
-      # Add a protocol to the chain
-      {:ok, interface} = InterfaceOperations.add_protocol(interface_id, %{
-        protocol_type: :template,
-        config: %{"sync_pattern_hex" => "1ACFFC1D"}
-      })
   """
 
   alias Cadence.Application.Interfaces.InterfaceQueries
@@ -72,7 +66,6 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   - `:auto_reconnect` - Whether to auto-reconnect (default: true)
   - `:reconnect_delay_ms` - Delay between reconnect attempts (default: 5000)
   - `:config` - Additional configuration map
-  - `:protocols` - List of protocol configurations
   """
   @spec create(attrs()) :: {:ok, Interface.t()} | {:error, term()}
   def create(attrs) do
@@ -90,7 +83,7 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   """
   @spec update(interface_id(), attrs()) :: {:ok, Interface.t()} | {:error, term()}
   def update(interface_id, attrs) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
+    with {:ok, interface} <- InterfaceQueries.find(interface_id),
          {:ok, updated} <- Interface.update(interface, attrs),
          {:ok, saved} <- repo().save(updated) do
       broadcast_config_change(:interface_updated, saved)
@@ -113,76 +106,6 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   end
 
   # ===========================================================================
-  # Protocol Chain Operations
-  # ===========================================================================
-
-  @doc """
-  Adds a protocol to the interface's protocol chain.
-
-  Emits `:interface_protocols_updated` event on success.
-  """
-  @spec add_protocol(interface_id(), map()) :: {:ok, Interface.t()} | {:error, term()}
-  def add_protocol(interface_id, protocol_attrs) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
-         {:ok, updated} <- Interface.add_protocol(interface, protocol_attrs),
-         {:ok, saved} <- repo().save(updated) do
-      broadcast_config_change(:interface_protocols_updated, saved)
-      {:ok, saved}
-    end
-  end
-
-  @doc """
-  Removes a protocol from the chain by its order.
-
-  Emits `:interface_protocols_updated` event on success.
-  """
-  @spec remove_protocol(interface_id(), non_neg_integer()) ::
-          {:ok, Interface.t()} | {:error, term()}
-  def remove_protocol(interface_id, order) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
-         {:ok, updated} <- Interface.remove_protocol(interface, order),
-         {:ok, saved} <- repo().save(updated) do
-      broadcast_config_change(:interface_protocols_updated, saved)
-      {:ok, saved}
-    end
-  end
-
-  @doc """
-  Reorders protocols in the chain.
-
-  ## Parameters
-
-  - `interface_id` - ID of the interface
-  - `new_order` - List of current order values in the new desired order
-
-  Emits `:interface_protocols_updated` event on success.
-  """
-  @spec reorder_protocols(interface_id(), [non_neg_integer()]) ::
-          {:ok, Interface.t()} | {:error, term()}
-  def reorder_protocols(interface_id, new_order) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
-         {:ok, updated} <- Interface.reorder_protocols(interface, new_order),
-         {:ok, saved} <- repo().save(updated) do
-      broadcast_config_change(:interface_protocols_updated, saved)
-      {:ok, saved}
-    end
-  end
-
-  @doc """
-  Replaces all protocols for an interface with a new set.
-
-  Emits `:interface_protocols_updated` event on success.
-  """
-  @spec set_protocols(interface_id(), [map()]) :: {:ok, Interface.t()} | {:error, term()}
-  def set_protocols(interface_id, protocol_attrs_list) do
-    with {:ok, _interface} <- InterfaceQueries.find(interface_id),
-         {:ok, saved} <- repo().save_protocols(interface_id, protocol_attrs_list) do
-      broadcast_config_change(:interface_protocols_updated, saved)
-      {:ok, saved}
-    end
-  end
-
-  # ===========================================================================
   # Target Routing Operations
   # ===========================================================================
 
@@ -193,7 +116,7 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   """
   @spec add_target(interface_id(), String.t()) :: {:ok, Interface.t()} | {:error, term()}
   def add_target(interface_id, target_id) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
+    with {:ok, interface} <- InterfaceQueries.find(interface_id),
          {:ok, updated} <- Interface.add_target(interface, target_id),
          {:ok, saved} <- repo().save(updated) do
       broadcast_config_change(:interface_updated, saved)
@@ -208,7 +131,7 @@ defmodule Cadence.Application.Interfaces.InterfaceOperations do
   """
   @spec remove_target(interface_id(), String.t()) :: {:ok, Interface.t()} | {:error, term()}
   def remove_target(interface_id, target_id) do
-    with {:ok, interface} <- InterfaceQueries.find_with_protocols(interface_id),
+    with {:ok, interface} <- InterfaceQueries.find(interface_id),
          {:ok, updated} <- Interface.remove_target(interface, target_id),
          {:ok, saved} <- repo().save(updated) do
       broadcast_config_change(:interface_updated, saved)

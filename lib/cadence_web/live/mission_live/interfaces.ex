@@ -9,7 +9,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket}
+    {:ok, assign(socket, :interface_connection_status, %{})}
   end
 
   @impl true
@@ -38,7 +38,6 @@ defmodule CadenceWeb.MissionLive.Interfaces do
 
     interfaces = Interfaces.list_interfaces(mission)
     targets = Targets.list_targets(mission)
-    interface_protocol_counts = build_protocol_counts(interfaces)
     interface_targets = build_interface_targets(interfaces)
 
     # Build a map of interface_id -> connection status for runtime state
@@ -48,7 +47,6 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     |> assign(:page_title, "Interfaces")
     |> assign(:interfaces, interfaces)
     |> assign(:targets, targets)
-    |> assign(:interface_protocol_counts, interface_protocol_counts)
     |> assign(:interface_targets, interface_targets)
     |> assign(:interface_connection_status, interface_connection_status)
     |> assign(:interface, nil)
@@ -58,15 +56,16 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     mission = socket.assigns.mission
     interfaces = Interfaces.list_interfaces(mission)
     targets = Targets.list_targets(mission)
-    interface_protocol_counts = build_protocol_counts(interfaces)
     interface_targets = build_interface_targets(interfaces)
+
+    interface_connection_status = build_connection_status(interfaces, mission.id)
 
     socket
     |> assign(:page_title, "New Interface")
     |> assign(:interfaces, interfaces)
     |> assign(:targets, targets)
-    |> assign(:interface_protocol_counts, interface_protocol_counts)
     |> assign(:interface_targets, interface_targets)
+    |> assign(:interface_connection_status, interface_connection_status)
     |> assign(:interface, %Interfaces.InterfaceSchema{})
   end
 
@@ -75,16 +74,17 @@ defmodule CadenceWeb.MissionLive.Interfaces do
     interface = Interfaces.get_interface!(interface_id)
     interfaces = Interfaces.list_interfaces(mission)
     targets = Targets.list_targets(mission)
-    interface_protocol_counts = build_protocol_counts(interfaces)
     interface_targets = build_interface_targets(interfaces)
 
     if interface.mission_id == mission.id do
+      interface_connection_status = build_connection_status(interfaces, mission.id)
+
       socket
       |> assign(:page_title, "Edit Interface")
       |> assign(:interfaces, interfaces)
       |> assign(:targets, targets)
-      |> assign(:interface_protocol_counts, interface_protocol_counts)
       |> assign(:interface_targets, interface_targets)
+      |> assign(:interface_connection_status, interface_connection_status)
       |> assign(:interface, interface)
     else
       socket
@@ -96,14 +96,15 @@ defmodule CadenceWeb.MissionLive.Interfaces do
   @impl true
   def handle_info({CadenceWeb.InterfaceLive.FormComponent, {:saved, _interface}}, socket) do
     interfaces = Interfaces.list_interfaces(socket.assigns.mission)
-    interface_protocol_counts = build_protocol_counts(interfaces)
     interface_targets = build_interface_targets(interfaces)
+    interface_connection_status =
+      build_connection_status(interfaces, socket.assigns.mission.id)
 
     {:noreply,
      socket
      |> assign(:interfaces, interfaces)
-     |> assign(:interface_protocol_counts, interface_protocol_counts)
-     |> assign(:interface_targets, interface_targets)}
+     |> assign(:interface_targets, interface_targets)
+     |> assign(:interface_connection_status, interface_connection_status)}
   end
 
   # Real-time interface connection status updates via PubSub
@@ -128,14 +129,12 @@ defmodule CadenceWeb.MissionLive.Interfaces do
          :ok <- authorize_manage_interfaces(socket),
          {:ok, _} <- Interfaces.delete_interface(interface) do
       interfaces = list_interfaces(socket)
-      interface_protocol_counts = build_protocol_counts(interfaces)
       interface_targets = build_interface_targets(interfaces)
 
       {:noreply,
        socket
        |> put_flash(:info, "Interface deleted successfully")
        |> assign(:interfaces, interfaces)
-       |> assign(:interface_protocol_counts, interface_protocol_counts)
        |> assign(:interface_targets, interface_targets)}
     else
       {:error, :not_found} ->
@@ -147,19 +146,6 @@ defmodule CadenceWeb.MissionLive.Interfaces do
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to delete interface")}
     end
-  end
-
-  defp build_protocol_counts(interfaces) do
-    interfaces
-    |> Enum.map(fn interface ->
-      protocol_count =
-        interface.id
-        |> Interfaces.list_protocols()
-        |> length()
-
-      {interface.id, protocol_count}
-    end)
-    |> Map.new()
   end
 
   defp build_interface_targets(interfaces) do
@@ -247,26 +233,6 @@ defmodule CadenceWeb.MissionLive.Interfaces do
             </div>
           <% end %>
         </:col>
-        <:col :let={interface} label="Protocols">
-          <%= case Map.get(@interface_protocol_counts, interface.id, 0) do %>
-            <% 0 -> %>
-              <span class="text-gray-500">No protocols</span>
-            <% 1 -> %>
-              <.link
-                navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
-                class="text-blue-600 hover:underline"
-              >
-                1 protocol
-              </.link>
-            <% count -> %>
-              <.link
-                navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}
-                class="text-blue-600 hover:underline"
-              >
-                {count} protocols
-              </.link>
-          <% end %>
-        </:col>
         <:col :let={interface} label="Status">
           <.status_badge status={interface.status} />
         </:col>
@@ -301,9 +267,6 @@ defmodule CadenceWeb.MissionLive.Interfaces do
         </:col>
         <:action :let={interface}>
           <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}"}>Details</.link>
-          <.link navigate={~p"/missions/#{@mission}/interfaces/#{interface}/protocols"}>
-            Protocols
-          </.link>
           <.link patch={~p"/missions/#{@mission}/interfaces/#{interface}/edit"}>Edit</.link>
           <.link
             phx-click={JS.push("delete", value: %{id: interface.id})}

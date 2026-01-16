@@ -16,8 +16,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
         connection_type: :tcp_client,
         host: "192.168.1.100",
         port: 8080,
-        target_ids: ["SAT-1"],
-        protocols: []
+        target_ids: ["SAT-1"]
       }
 
       # Build child spec using Factory
@@ -42,8 +41,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
         bind_address: "0.0.0.0",
         bind_port: 9000,
         target_ids: ["SAT-1", "SAT-2", "SAT-3"],
-        config: %{max_clients: 50},
-        protocols: []
+        config: %{max_clients: 50}
       }
 
       # Build child spec using Factory
@@ -87,8 +85,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
         id: Ecto.UUID.generate(),
         mission_id: Ecto.UUID.generate(),
         name: "test-unknown",
-        connection_type: :unknown_type,
-        protocols: []
+        connection_type: :unknown_type
       }
 
       assert_raise ArgumentError, ~r/Unknown connection_type/, fn ->
@@ -101,8 +98,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
         id: Ecto.UUID.generate(),
         mission_id: Ecto.UUID.generate(),
         name: "test-udp",
-        connection_type: :udp_client,
-        protocols: []
+        connection_type: :udp_client
       }
 
       assert_raise RuntimeError, ~r/not yet implemented/, fn ->

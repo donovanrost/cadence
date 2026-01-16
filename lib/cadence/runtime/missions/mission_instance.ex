@@ -115,9 +115,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
-          # Protocol Chain Supervisor - manages protocol chains (isolated from interfaces)
-          {Cadence.Telemetry.ProtocolChainSupervisor, mission_id: mission_id},
-
           # Interface Supervisor - manages TCP/UDP/Serial connections
           {Cadence.Runtime.Interfaces.InterfaceSupervisor, mission_id: mission_id},
 

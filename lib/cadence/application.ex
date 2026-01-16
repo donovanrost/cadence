@@ -22,9 +22,6 @@ defmodule Cadence.Application do
       # Mission Registry - registers all mission processes
       {Registry, keys: :unique, name: Cadence.MissionRegistry},
 
-      # Protocol Chain Registry - registers protocol chains by interface_id
-      {Registry, keys: :unique, name: Cadence.ProtocolChainRegistry},
-
       # V2 Execution Registry - registers V2 procedure execution processes by execution_id
       {Registry, keys: :unique, name: Cadence.Procedures.V2.ExecutionRegistry},
 

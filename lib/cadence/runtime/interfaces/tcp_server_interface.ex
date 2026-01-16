@@ -28,7 +28,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   ## Downlink Pipeline Architecture
 
   Downlink processing is handled outside this GenServer to keep transport
-  concerns separate from protocol decoding.
+  concerns separate from packet framing and decoding.
   """
 
   use GenServer
@@ -435,10 +435,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
 
-    # Logger.debug(
-    #   "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
-    #   mission_id: state.interface.mission_id
-    # )
+    Logger.debug(
+      "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
+      mission_id: state.interface.mission_id
+    )
 
     DownlinkPipeline.ingest(
       state.interface.mission_id,

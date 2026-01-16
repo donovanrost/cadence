@@ -8,7 +8,7 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   them into GenServers. No database calls happen during runtime operation.
 
   When a mission starts, this supervisor:
-  1. Loads all interface entities with protocols preloaded
+  1. Loads all interface entities
   2. Starts the appropriate interface GenServer for each (TcpClientInterface, etc.)
   3. Monitors interface health and handles crashes
   4. Subscribes to config change events for hot reload
@@ -23,7 +23,6 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   - `:interface_created` - Start a new interface GenServer
   - `:interface_updated` - Restart interface with new config
   - `:interface_deleted` - Stop the interface GenServer
-  - `:interface_protocols_updated` - Restart interface with new protocols
 
   ## Example
 
@@ -66,8 +65,8 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   @doc """
   Starts a specific interface using its domain entity.
 
-  The entity should be fully loaded with protocols. No database lookups
-  are performed - the entity IS the configuration.
+  The entity should be fully loaded. No database lookups are performed - the
+  entity IS the configuration.
 
   Returns `{:ok, pid}` or `{:error, reason}`.
   """
@@ -85,7 +84,7 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   Returns `{:ok, pid}` or `{:error, reason}`.
   """
   def start_interface_by_id(mission_id, interface_id) do
-    case InterfaceQueries.find_with_protocols(interface_id) do
+    case InterfaceQueries.find(interface_id) do
       {:ok, interface} ->
         start_interface(mission_id, interface)
 
@@ -125,7 +124,7 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   Convenience function for manual restarts.
   """
   def restart_interface_by_id(mission_id, interface_id) do
-    case InterfaceQueries.find_with_protocols(interface_id) do
+    case InterfaceQueries.find(interface_id) do
       {:ok, interface} ->
         restart_interface(mission_id, interface)
 
@@ -207,11 +206,10 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
     {:noreply, state}
   end
 
-  # Hot reload: Interface updated or protocols updated
-  def handle_info({event, %Interface{} = interface}, state)
-      when event in [:interface_updated, :interface_protocols_updated] do
+  # Hot reload: Interface updated
+  def handle_info({:interface_updated, %Interface{} = interface}, state) do
     Logger.info(
-      "Hot reload: Restarting interface #{interface.name} (#{interface.id}) due to #{event}"
+      "Hot reload: Restarting interface #{interface.name} (#{interface.id}) due to :interface_updated"
     )
 
     case do_restart_interface(interface, state) do
@@ -311,8 +309,8 @@ defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   defp load_and_start_interfaces(state) do
     Logger.info("Loading interfaces for mission #{state.mission_id}")
 
-    # Load all interfaces with protocols preloaded - this is the ONLY DB call
-    interfaces = InterfaceQueries.list_for_mission(state.mission_id, preload_protocols: true)
+    # Load all interfaces - this is the ONLY DB call
+    interfaces = InterfaceQueries.list_for_mission(state.mission_id)
 
     Logger.info("Found #{length(interfaces)} interface(s) for mission #{state.mission_id}")
 

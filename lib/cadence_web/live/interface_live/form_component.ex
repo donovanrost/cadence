@@ -10,7 +10,7 @@ defmodule CadenceWeb.InterfaceLive.FormComponent do
     <div>
       <.header>
         {@title}
-        <:subtitle>Configure interface connection and protocol settings.</:subtitle>
+        <:subtitle>Configure interface connection and routing settings.</:subtitle>
       </.header>
 
       <.simple_form

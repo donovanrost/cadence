@@ -2,7 +2,6 @@ defmodule Cadence.TestLogFilter do
   @moduledoc false
 
   @noisy_patterns [
-    "CRC protocol received packet smaller than CRC size",
     "CRC mismatch",
     "CCSDS CRC mismatch",
     "Failed to parse JSON packet",
