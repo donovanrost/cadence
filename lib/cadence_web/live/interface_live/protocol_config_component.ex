@@ -89,7 +89,9 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
                 <div class="fieldset">
                   <label class="hud-label block mb-1.5">Default SDU Type</label>
                   <select name="default_sdu_type" class="w-full select select-sm">
-                    <option value="" selected={is_nil(@default_sdu_type)}>None (require mapping)</option>
+                    <option value="" selected={is_nil(@default_sdu_type)}>
+                      None (require mapping)
+                    </option>
                     <%= for {label, value} <- @sdu_type_options do %>
                       <option value={value} selected={@default_sdu_type == value}>{label}</option>
                     <% end %>
@@ -413,8 +415,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
                 disabled={!@has_changes}
               >
                 <%= if @saving do %>
-                  <span class="loading loading-spinner loading-sm"></span>
-                  Saving...
+                  <span class="loading loading-spinner loading-sm"></span> Saving...
                 <% else %>
                   Save Protocol Configuration
                 <% end %>
@@ -511,7 +512,11 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     {:noreply, assign(socket, :editing_index, nil)}
   end
 
-  def handle_event("update_mapping_field", %{"index" => index, "field" => field, "value" => value}, socket) do
+  def handle_event(
+        "update_mapping_field",
+        %{"index" => index, "field" => field, "value" => value},
+        socket
+      ) do
     index = String.to_integer(index)
     mappings = socket.assigns.sdu_mappings
 
@@ -536,9 +541,14 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
 
     editing_index =
       cond do
-        socket.assigns.editing_index == index -> nil
-        socket.assigns.editing_index && socket.assigns.editing_index > index -> socket.assigns.editing_index - 1
-        true -> socket.assigns.editing_index
+        socket.assigns.editing_index == index ->
+          nil
+
+        socket.assigns.editing_index && socket.assigns.editing_index > index ->
+          socket.assigns.editing_index - 1
+
+        true ->
+          socket.assigns.editing_index
       end
 
     {:noreply,

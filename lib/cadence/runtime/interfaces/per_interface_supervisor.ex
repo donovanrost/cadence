@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.Interfaces.PerInterfaceSupervisor do
 
   use Supervisor
 
+  alias Cadence.CCSDS.PDUDispatcher
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.Factory
   alias Cadence.Runtime.Telemetry.{DeframeSupervisor, DownlinkPipeline, UplinkPipeline}
@@ -19,6 +20,7 @@ defmodule Cadence.Runtime.Interfaces.PerInterfaceSupervisor do
 
     children = [
       {DeframeSupervisor, mission_id: interface.mission_id, interface_id: interface.id},
+      {PDUDispatcher, mission_id: interface.mission_id, interface_id: interface.id},
       {DownlinkPipeline, interface: interface},
       {UplinkPipeline, interface: interface},
       {interface_module, interface}

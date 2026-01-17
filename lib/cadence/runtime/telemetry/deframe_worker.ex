@@ -7,10 +7,9 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
   require Logger
 
   alias Cadence.CCSDS.Core.{PDU, SDUOctets}
-  alias Cadence.CCSDS.Downlink.PacketAdapter
   alias Cadence.CCSDS.Metrics
+  alias Cadence.CCSDS.PDUDispatcher
   alias Cadence.CCSDS.SDU.{Mapping, Registry}
-  alias Cadence.Telemetry.Packet
 
   defmodule State do
     @moduledoc false
@@ -65,8 +64,8 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
 
     case state.reassembly_mod.ingest(frame, ctx, state.reassembly_state) do
       {:ok, sdu_octets, new_state} ->
-        {packets, failures, idle_count} =
-          decode_sdu_octets(sdu_octets, state.mapping, state.opts)
+        {packet_count, failures, idle_count} =
+          process_sdu_octets(sdu_octets, base_meta, state)
 
         Metrics.inc(
           state.mission_id,
@@ -81,7 +80,7 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
           state.interface_id,
           state.profile,
           :packets_emitted,
-          length(packets)
+          packet_count
         )
 
         Metrics.inc(
@@ -100,8 +99,7 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
           idle_count
         )
 
-        broadcast_packets(packets, base_meta, state)
-        notify_interface(length(packets), state)
+        notify_interface(packet_count, state)
         {:noreply, %{state | reassembly_state: new_state}}
 
       {:error, reason, new_state} ->
@@ -128,52 +126,51 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
   defp reassembly_module(:aos), do: Cadence.CCSDS.SDLP.AOS.Reassembly
   defp reassembly_module(:uslp), do: Cadence.CCSDS.SDLP.USLP.Reassembly
 
-  defp decode_sdu_octets(sdu_octets_list, %Mapping{} = mapping, opts) do
-    {packets, failures, idle_count} =
-      Enum.reduce(sdu_octets_list, {[], 0, 0}, fn %SDUOctets{} = sdu,
-                                                  {acc, failures, idle_count} ->
-        case decode_sdu_to_packet(sdu, mapping, opts) do
-          {:ok, %Packet{} = packet} -> {[packet | acc], failures, idle_count}
-          {:skip, :idle} -> {acc, failures, idle_count + 1}
-          {:error, _} -> {acc, failures + 1, idle_count}
-        end
-      end)
+  defp process_sdu_octets(sdu_octets_list, base_meta, state) do
+    Enum.reduce(sdu_octets_list, {0, 0, 0}, fn %SDUOctets{} = sdu,
+                                               {packets, failures, idle_count} ->
+      case decode_sdu_to_pdu(sdu, state.mapping, state.opts) do
+        {:ok, %PDU{} = pdu} ->
+          dispatch_pdu(pdu, sdu, base_meta, state)
+          {packets + 1, failures, idle_count}
 
-    {Enum.reverse(packets), failures, idle_count}
+        {:skip, :idle} ->
+          {packets, failures, idle_count + 1}
+
+        {:error, _} ->
+          {packets, failures + 1, idle_count}
+      end
+    end)
   end
 
-  defp decode_sdu_to_packet(%SDUOctets{} = sdu, %Mapping{} = mapping, opts) do
+  defp decode_sdu_to_pdu(%SDUOctets{} = sdu, %Mapping{} = mapping, opts) do
     with {:ok, sdu_type} <-
            Mapping.fetch(mapping, sdu.scid, sdu.vcid, sdu.map_id, sdu.direction),
          {:ok, codec} <- Registry.fetch(sdu_type) do
       case codec.decode(sdu, opts) do
-        {:ok, %PDU{value: :idle}} ->
-          {:skip, :idle}
-
-        {:ok, %PDU{} = pdu} ->
-          case PacketAdapter.to_packet(pdu, sdu, opts) do
-            {:ok, %Packet{} = packet} -> {:ok, packet}
-            {:error, reason} -> {:error, reason}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
+        {:ok, %PDU{value: :idle}} -> {:skip, :idle}
+        {:ok, %PDU{} = pdu} -> {:ok, pdu}
+        {:error, reason} -> {:error, reason}
       end
     else
       _ -> {:error, :decode_failed}
     end
   end
 
-  defp broadcast_packets(packets, base_meta, state) do
-    Enum.each(packets, fn %Packet{} = packet ->
-      metadata = Map.merge(base_meta, packet.source || %{})
+  defp dispatch_pdu(%PDU{} = pdu, %SDUOctets{} = sdu, base_meta, state) do
+    ctx = %{
+      mission_id: state.mission_id,
+      interface_id: state.interface_id,
+      connection_id: state.connection_id,
+      profile: state.profile,
+      scid: state.scid,
+      vcid: state.vcid,
+      base_meta: base_meta,
+      sdu: sdu,
+      opts: state.opts
+    }
 
-      Phoenix.PubSub.broadcast(
-        Cadence.PubSub,
-        "mission:#{state.mission_id}:telemetry:raw",
-        {:telemetry_packet, packet, metadata}
-      )
-    end)
+    PDUDispatcher.ingest(dispatcher_name(state), pdu, ctx)
   end
 
   defp notify_interface(0, _state), do: :ok
@@ -185,5 +182,9 @@ defmodule Cadence.Runtime.Telemetry.DeframeWorker do
   defp interface_name(state) do
     {:via, Registry,
      {Cadence.MissionRegistry, {:interface, state.mission_id, state.interface_id}}}
+  end
+
+  defp dispatcher_name(state) do
+    PDUDispatcher.via_tuple(state.mission_id, state.interface_id)
   end
 end

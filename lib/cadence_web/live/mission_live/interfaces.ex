@@ -97,6 +97,7 @@ defmodule CadenceWeb.MissionLive.Interfaces do
   def handle_info({CadenceWeb.InterfaceLive.FormComponent, {:saved, _interface}}, socket) do
     interfaces = Interfaces.list_interfaces(socket.assigns.mission)
     interface_targets = build_interface_targets(interfaces)
+
     interface_connection_status =
       build_connection_status(interfaces, socket.assigns.mission.id)
 
