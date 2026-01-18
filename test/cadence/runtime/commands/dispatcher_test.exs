@@ -6,11 +6,12 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
   import Cadence.MissionDatabaseFixtures
   import Cadence.TargetsFixtures
 
-  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Missions.{MissionConfig, MissionQueries}
   alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Commands
   alias Cadence.MissionDatabase.{Argument, MetaCommand}
-  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue, VerificationManager}
+  alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
   # Setup creates an org, mission, target, and commands for testing
   setup do
@@ -37,7 +38,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
         definition_set: definition_set,
         name: "SC1",
         identifier: "SC1-#{System.unique_integer([:positive])}",
-        status: "online"
+        status: "online",
+        config: %{"command_apid" => 100}
       )
 
     # Create a simple command (linked to definition_set so dispatcher can find it)
@@ -98,6 +100,19 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
     mission_entity = MissionQueries.find!(mission.id)
 
     target_entity = TargetQueries.find_with_definition_set!(target.id)
+
+    config = %MissionConfig{
+      mission_id: mission.id,
+      organization_id: org.id,
+      mission: mission_entity,
+      target_interface_routings: []
+    }
+
+    {:ok, _uplink_pid} =
+      start_supervised({UplinkDispatcher, config: config}, id: :uplink_dispatcher)
+
+    {:ok, _verification_pid} =
+      start_supervised({VerificationManager, mission_id: mission.id}, id: :verification_manager)
 
     # Start the target queue and dispatcher for this target
     {:ok, _queue_pid} =

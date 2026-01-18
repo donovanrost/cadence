@@ -39,6 +39,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Alarms.AlarmManager
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
+  alias Cadence.Runtime.Commands.VerificationManager
   alias Cadence.Runtime.Missions.CacheWarmer
   alias Cadence.Runtime.Missions.ConfigManager
   alias Cadence.Runtime.Missions.MissionStatus
@@ -46,6 +47,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
   @default_lane_shards 8
 
@@ -115,8 +117,14 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
+          # Uplink Dispatcher - routes command PDUs to interfaces
+          {UplinkDispatcher, config: config},
+
           # Interface Supervisor - manages TCP/UDP/Serial connections
           {Cadence.Runtime.Interfaces.InterfaceSupervisor, mission_id: mission_id},
+
+          # Command Verification Manager - tracks verification runners per mission
+          {VerificationManager, mission_id: mission_id},
 
           # Target Pipeline Supervisor - manages per-target command queues and dispatchers
           {TargetPipelineSupervisor, config: config},

@@ -7,8 +7,10 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
   use Cadence.UseCaseCase
 
   alias Cadence.Application.Commanding.EnqueueCommand
+  alias Cadence.Domain.Targeting.Entities.Target, as: TargetEntity
   alias Cadence.Test.Adapters.FakeEventPublisher
   alias Cadence.Test.Adapters.InMemoryEventRecorder
+  alias Cadence.Test.Adapters.InMemoryTargetRepository
 
   describe "enqueue/2" do
     test "enqueues a command with default priority" do
@@ -169,15 +171,31 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
   # ============================================================================
 
   defp valid_enqueue_attrs(overrides \\ []) do
+    target = build_target()
+
     defaults = %{
       organization_id: random_id(),
-      mission_id: random_id(),
-      target_id: random_id(),
+      mission_id: target.mission_id,
+      target_id: target.id,
       command_name: Keyword.get(overrides, :command_name, "TEST_CMD"),
       user_id: random_id(),
       parameters: %{"param1" => "value1"}
     }
 
     Map.merge(defaults, Map.new(overrides))
+  end
+
+  defp build_target do
+    {:ok, target} =
+      TargetEntity.new(%{
+        mission_id: random_id(),
+        definition_set_id: random_id(),
+        name: "Test Target",
+        identifier: "SAT_#{System.unique_integer([:positive])}",
+        type: :spacecraft
+      })
+
+    {:ok, saved} = InMemoryTargetRepository.save(target)
+    saved
   end
 end

@@ -27,8 +27,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   require Logger
 
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Runtime.Telemetry.DownlinkPipeline
-  alias Cadence.Runtime.Telemetry.UplinkPipeline
+  alias Cadence.Runtime.Telemetry.{DownlinkPipeline, UplinkPipeline}
 
   defmodule State do
     @moduledoc false
@@ -105,22 +104,19 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   def handle_call({:send_data, data}, _from, %State{socket: socket} = state) do
-    case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
-      {:ok, encoded} ->
-        case :gen_tcp.send(socket, encoded) do
-          :ok ->
-            updated = %{state | bytes_sent: state.bytes_sent + byte_size(encoded)}
-            {:reply, :ok, updated}
+    case :gen_tcp.send(socket, data) do
+      :ok ->
+        updated = %{state | bytes_sent: state.bytes_sent + byte_size(data)}
+        {:reply, :ok, updated}
 
-          {:error, reason} = error ->
-            Logger.error("Failed to send data to #{state.target_id}: #{inspect(reason)}")
-            {:reply, error, handle_disconnect(state)}
-        end
-
-      {:error, reason} ->
-        Logger.error("Uplink pipeline error for target=#{state.target_id}: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
+      {:error, reason} = error ->
+        Logger.error("Failed to send data to #{state.target_id}: #{inspect(reason)}")
+        {:reply, error, handle_disconnect(state)}
     end
+  end
+
+  def handle_call(:connected?, _from, %State{} = state) do
+    {:reply, state.connected, state}
   end
 
   def handle_call(:stats, _from, state) do

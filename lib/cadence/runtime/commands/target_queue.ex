@@ -99,11 +99,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @doc """
-  Enqueues a command for execution (in-memory). Control plane persistence is
-  notified asynchronously.
+  Enqueue is intentionally unsupported here. Use the control-plane enqueue flow
+  (`Cadence.Commands.enqueue/4` or `Cadence.Application.Commanding.EnqueueCommand.enqueue/2`)
+  so entries are persisted and broadcasted before reaching the data plane.
   """
-  def enqueue(mission_id, target_id, command_name, params, opts \\ []) do
-    GenServer.call(via_tuple(mission_id, target_id), {:enqueue, command_name, params, opts})
+  def enqueue(_mission_id, _target_id, _command_name, _params, _opts \\ []) do
+    {:error, :use_control_plane_enqueue}
   end
 
   @doc """
@@ -192,16 +193,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   @impl true
-  def handle_call({:enqueue, command_name, params, opts}, _from, state) do
-    case do_enqueue(command_name, params, opts, state) do
-      {:ok, entry, new_state} ->
-        notify_dispatcher(state.mission_id, state.target_id)
-        QueuePersistence.notify({:enqueue, entry})
-        {:reply, {:ok, entry}, new_state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+  def handle_call({:enqueue, _command_name, _params, _opts}, _from, state) do
+    {:reply, {:error, :use_control_plane_enqueue}, state}
   end
 
   def handle_call(:next, _from, state) do
@@ -392,7 +385,12 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   end
 
   def handle_info({:command_retried, %QueuedCommand{} = entry}, state) do
-    {:noreply, add_entry_local(state, %{entry | status: :pending})}
+    new_state =
+      state
+      |> remove_entry_local(entry.id)
+      |> add_entry_local(%{entry | status: :pending})
+
+    {:noreply, new_state}
   end
 
   def handle_info({:command_reordered, %QueuedCommand{} = entry}, state) do
@@ -446,58 +444,6 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
       organization_id: mission.organization_id,
       target: target
     }
-  end
-
-  defp do_enqueue(command_name, params, opts, state) do
-    sequence = state.sequence_counter + 1
-    user_id = Keyword.get(opts, :user_id)
-    priority = Keyword.get(opts, :priority, 3)
-    scheduled_at = Keyword.get(opts, :scheduled_at)
-    expires_at = Keyword.get(opts, :expires_at)
-    max_attempts = Keyword.get(opts, :max_attempts, 3)
-    dispatch_opts = opts_to_map(opts)
-
-    entry_attrs = %{
-      id: Ecto.UUID.generate(),
-      organization_id: state.organization_id,
-      mission_id: state.mission_id,
-      target_id: state.target_id,
-      user_id: user_id,
-      command_name: command_name,
-      parameters: params,
-      priority: priority,
-      sequence_number: sequence,
-      scheduled_at: scheduled_at,
-      expires_at: expires_at,
-      max_attempts: max_attempts,
-      dispatch_opts: dispatch_opts
-    }
-
-    case QueuedCommand.new(entry_attrs) do
-      {:ok, entry} ->
-        new_pending = insert_sorted(state.pending_entries, entry)
-        new_entries_by_id = Map.put(state.entries_by_id, entry.id, entry)
-        new_counts = %{state.counts | pending: state.counts.pending + 1}
-
-        new_state = %{
-          state
-          | sequence_counter: sequence,
-            pending_entries: new_pending,
-            entries_by_id: new_entries_by_id,
-            counts: new_counts
-        }
-
-        {:ok, entry, new_state}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp opts_to_map(opts) do
-    opts
-    |> Keyword.take([:interface_id, :skip_verification, :skip_hazardous_check])
-    |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
   end
 
   defp do_cancel(entry_id, state) do

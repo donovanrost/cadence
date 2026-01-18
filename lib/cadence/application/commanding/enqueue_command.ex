@@ -200,10 +200,19 @@ defmodule Cadence.Application.Commanding.EnqueueCommand do
   defp resolve_target_id(target_id, mission_id) when is_binary(target_id) do
     case Ecto.UUID.cast(target_id) do
       {:ok, uuid} ->
-        {:ok, uuid}
+        ensure_target_in_mission(uuid, mission_id)
 
       :error ->
         resolve_target_identifier(mission_id, target_id)
+    end
+  end
+
+  defp ensure_target_in_mission(target_id, nil), do: {:ok, target_id}
+
+  defp ensure_target_in_mission(target_id, mission_id) do
+    case Targets.get_target(target_id, mission_id) do
+      {:ok, target} -> {:ok, target.id}
+      {:error, :not_found} -> {:error, {:target_not_found, target_id}}
     end
   end
 

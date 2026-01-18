@@ -1,13 +1,14 @@
 defmodule Cadence.Commands.FleetTest do
   use Cadence.IntegrationCase
 
-  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Application.Missions.{MissionConfig, MissionQueries}
   alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Commands
   alias Cadence.MissionDatabase.{Argument, Database, DefinitionSet, MetaCommand}
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
+  alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue, VerificationManager}
+  alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
   alias Cadence.Targets.Target
 
   defp base_fleet_setup do
@@ -68,7 +69,8 @@ defmodule Cadence.Commands.FleetTest do
             name: "SAT#{i}",
             type: "spacecraft",
             identifier: "SAT#{i}_#{System.unique_integer([:positive])}",
-            status: "online"
+            status: "online",
+            config: %{"command_apid" => 100 + i}
           })
           |> Repo.insert!()
 
@@ -121,7 +123,20 @@ defmodule Cadence.Commands.FleetTest do
     }
   end
 
-  defp start_target_pipelines(mission_entity, targets) do
+  defp start_target_pipelines(mission, mission_entity, org, targets) do
+    config = %MissionConfig{
+      mission_id: mission.id,
+      organization_id: org.id,
+      mission: mission_entity,
+      target_interface_routings: []
+    }
+
+    {:ok, _uplink_pid} =
+      start_supervised({UplinkDispatcher, config: config}, id: :uplink_dispatcher)
+
+    {:ok, _verification_pid} =
+      start_supervised({VerificationManager, mission_id: mission.id}, id: :verification_manager)
+
     targets
     |> Enum.with_index(1)
     |> Enum.each(fn {target, i} ->
@@ -144,7 +159,7 @@ defmodule Cadence.Commands.FleetTest do
   describe "fleet_dispatch_parameterized/4" do
     setup do
       setup = base_fleet_setup()
-      start_target_pipelines(setup.mission_entity, setup.targets)
+      start_target_pipelines(setup.mission, setup.mission_entity, setup.org, setup.targets)
       setup
     end
 

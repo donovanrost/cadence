@@ -37,7 +37,6 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Runtime.Telemetry.DownlinkPipeline
-  alias Cadence.Runtime.Telemetry.UplinkPipeline
 
   @registry Cadence.MissionRegistry
 
@@ -307,33 +306,21 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       count ->
         warn_if_broadcasting(count)
 
-        case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
-          {:ok, encoded} ->
-            {successful, failed} = send_to_all_clients(state.clients, encoded)
-            updated = update_bytes_sent(state, encoded, successful)
-            reply_for_broadcast(successful, failed, updated, state)
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        {successful, failed} = send_to_all_clients(state.clients, data)
+        updated = update_bytes_sent(state, data, successful)
+        reply_for_broadcast(successful, failed, updated, state)
     end
   end
 
   @impl true
   def handle_call({:send_data, data, :all}, _from, state) do
-    case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
-      {:ok, encoded} ->
-        results =
-          Enum.map(state.clients, fn {socket, _client_state} ->
-            :gen_tcp.send(socket, encoded)
-          end)
+    results =
+      Enum.map(state.clients, fn {socket, _client_state} ->
+        :gen_tcp.send(socket, data)
+      end)
 
-        successful = Enum.count(results, fn result -> result == :ok end)
-        {:reply, {:ok, successful}, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+    successful = Enum.count(results, fn result -> result == :ok end)
+    {:reply, {:ok, successful}, state}
   end
 
   @impl true
@@ -343,15 +330,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
         {:reply, {:error, :client_not_found}, state}
 
       _client_state ->
-        case UplinkPipeline.encode(state.interface.mission_id, state.interface.id, data) do
-          {:ok, encoded} ->
-            result = :gen_tcp.send(socket, encoded)
-            {:reply, result, state}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        result = :gen_tcp.send(socket, data)
+        {:reply, result, state}
     end
+  end
+
+  def handle_call(:connected?, _from, state) do
+    {:reply, map_size(state.clients) > 0, state}
   end
 
   @impl true

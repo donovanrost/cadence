@@ -22,6 +22,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
   alias Cadence.Application.Interfaces.InterfaceQueries
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
+  alias Cadence.Domain.Interfaces.Entities.TargetInterface, as: TargetInterfaceEntity
+  alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
   alias Cadence.Repo
   alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.Packet.PacketDefinition
@@ -37,6 +39,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
           mission: map(),
           interfaces: list(),
           targets: list(),
+          target_interface_routings: list(),
           queue_snapshots: map(),
           packet_defs: list(),
           packet_catalog_defs: list(),
@@ -54,6 +57,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     :mission,
     interfaces: [],
     targets: [],
+    target_interface_routings: [],
     queue_snapshots: %{},
     packet_defs: [],
     packet_catalog_defs: [],
@@ -75,6 +79,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     with {:ok, mission} <- load_mission(mission_id),
          {:ok, interfaces} <- load_interfaces(mission_id),
          {:ok, targets} <- load_targets(mission_id),
+         {:ok, target_interface_routings} <- load_target_interface_routings(mission_id),
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
@@ -91,6 +96,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          mission: mission,
          interfaces: interfaces,
          targets: targets,
+         target_interface_routings: target_interface_routings,
          queue_snapshots: queue_snapshots,
          packet_defs: packet_defs,
          packet_catalog_defs: packet_catalog_defs,
@@ -163,6 +169,26 @@ defmodule Cadence.Application.Missions.MissionConfig do
 
       {:ok, containers}
     end
+  end
+
+  defp load_target_interface_routings(mission_id) do
+    routings =
+      from(ti in TargetInterfaceSchema,
+        join: t in Cadence.Targets.Target,
+        on: ti.target_id == t.id,
+        where: t.mission_id == ^mission_id
+      )
+      |> Repo.all()
+      |> Enum.map(&TargetInterfaceEntity.from_persistence/1)
+
+    {:ok, routings}
+  rescue
+    e ->
+      Logger.warning(
+        "Failed to load target-interface routings for mission #{mission_id}: #{inspect(e)}"
+      )
+
+      {:ok, []}
   end
 
   defp load_queue_snapshots(mission_id, targets) do

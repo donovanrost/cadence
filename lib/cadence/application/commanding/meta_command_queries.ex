@@ -102,7 +102,7 @@ defmodule Cadence.Application.Commanding.MetaCommandQueries do
   def list_hazardous(definition_set_id) do
     from(c in MetaCommand,
       where: c.definition_set_id == ^definition_set_id,
-      where: c.hazardous == true,
+      where: c.is_hazardous == true,
       order_by: [asc: c.name],
       preload: [:arguments, :verifiers]
     )

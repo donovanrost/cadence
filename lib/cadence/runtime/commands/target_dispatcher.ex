@@ -1,9 +1,9 @@
 defmodule Cadence.Runtime.Commands.TargetDispatcher do
   @moduledoc """
-  Target-scoped GenServer for command dispatch and verification.
+  Target-scoped GenServer for command dispatch.
 
   One TargetDispatcher per target, managed by TargetPipeline supervisor.
-  Handles command validation, encoding, routing, and verification for a single target.
+  Handles command validation, encoding, and uplink dispatch for a single target.
 
   ## Command Lookup
 
@@ -16,11 +16,10 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   2. **Phase Checking** - Ensure command is allowed in current mission phase
   3. **Hazard Handling** - Require confirmation for hazardous commands
   4. **Encoding** - Encode command to binary format
-  5. **Routing** - Find appropriate interface for target
-  6. **Transmission** - Send through interface framing and transport
-  7. **Verification** - Monitor CVT for verification (if configured)
-  8. **Logging** - Record all activity to command_logs table
-  9. **Pause/Resume** - Control whether commands are sent to this target
+  5. **PDU Build** - Wrap encoded command in a CCSDS PDU
+  6. **Uplink Dispatch** - Emit the PDU to the uplink dispatcher
+  7. **Logging** - Record all activity to command_logs table
+  8. **Pause/Resume** - Control whether commands are sent to this target
 
   ## Example
 
@@ -38,10 +37,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   require Logger
 
   alias Cadence.Commands
-  alias Cadence.Commands.{Encoder, VerificationRunner}
+  alias Cadence.Commands.{Encoder, PDUBuilder}
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.Interfaces
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Recordings
@@ -50,13 +48,12 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     CommandDispatched,
     CommandErrored,
     CommandRejected,
-    CommandSent,
-    CommandVerificationFailed,
-    CommandVerified
+    CommandSent
   }
 
   alias Cadence.Repo
-  alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue}
+  alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue, VerificationManager}
+  alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
   @confirmation_timeout_ms 60_000
   @default_dispatch_timeout_ms 30_000
@@ -78,15 +75,10 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       :dispatch_task,
       :dispatch_timeout_ref,
       :executing_entry_id,
-      # Interface tracking
-      :write_interface_id,
       # State flags
       paused: false,
       executing: false,
-      interface_connected: true,
-      pending_confirmations: %{},
-      pending_verifications: %{},
-      command_counter: 0
+      pending_confirmations: %{}
     ]
   end
 
@@ -175,10 +167,12 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   - `{:error, :validation_failed, errors}` - Argument validation failed
   - `{:error, :not_allowed_in_phase, current_phase}` - Phase restriction
   - `{:error, :unknown_command}` - Command not found
-  - `{:error, :no_interface}` - No write interface for target
-  - `{:error, :interface_disconnected}` - Interface not connected
   - `{:error, :encoding_failed, reason}` - Binary encoding failed
-  - `{:error, :send_failed, reason}` - Transmission failed
+  - `{:error, :missing_command_apid}` - No command APID configured for target
+  - `{:error, :invalid_command_apid, apid}` - Invalid command APID value
+  - `{:error, :no_interface}` - No uplink interface route for target
+  - `{:error, :uplink_not_running}` - Uplink dispatcher not available
+  - `{:error, :send_failed, reason}` - Uplink transmission failed
   """
   def dispatch(mission_id, target_id, command_name, params, opts \\ []) do
     GenServer.call(via_tuple(mission_id, target_id), {:dispatch, command_name, params, opts})
@@ -195,14 +189,14 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   Cancels a pending verification.
   """
   def cancel_verification(mission_id, target_id, command_aggregate_id) do
-    GenServer.cast(via_tuple(mission_id, target_id), {:cancel_verification, command_aggregate_id})
+    VerificationManager.cancel_verification(mission_id, target_id, command_aggregate_id)
   end
 
   @doc """
   Gets the status of a pending verification.
   """
   def verification_status(mission_id, target_id, command_aggregate_id) do
-    GenServer.call(via_tuple(mission_id, target_id), {:verification_status, command_aggregate_id})
+    VerificationManager.verification_status(mission_id, target_id, command_aggregate_id)
   end
 
   @doc """
@@ -223,21 +217,12 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     # Subscribe to interface connection events for this mission
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:events")
 
-    # Look up the write interface for this target (if any)
-    # Check the interface's connection status rather than assuming connected
-    {write_interface_id, interface_connected} =
-      case Interfaces.list_interfaces_for_target(target, direction: "write") do
-        [interface | _] -> {interface.id, interface.status == "connected"}
-        [] -> {nil, false}
-      end
-
     state = %State{
       mission_id: mission.id,
       target_id: target.id,
       target: target,
       mission: mission,
-      write_interface_id: write_interface_id,
-      interface_connected: interface_connected
+      pending_confirmations: %{}
     }
 
     {:ok, state}
@@ -302,125 +287,32 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  def handle_call({:verification_status, command_aggregate_id}, _from, state) do
-    status =
-      case Map.get(state.pending_verifications, command_aggregate_id) do
-        nil -> :not_found
-        verification -> {:pending, verification}
+  def handle_call(:status, _from, state) do
+    uplink_connected = uplink_connected?(state)
+
+    pending_verifications =
+      if Code.ensure_loaded?(VerificationManager) do
+        VerificationManager.pending_count(state.mission_id, state.target_id)
+      else
+        0
       end
 
-    {:reply, status, state}
-  end
-
-  def handle_call(:status, _from, state) do
     status = %{
       mission_id: state.mission_id,
       target_id: state.target_id,
       paused: state.paused,
       executing: state.executing,
-      interface_connected: state.interface_connected,
-      write_interface_id: state.write_interface_id,
+      uplink_connected: uplink_connected,
       pending_confirmations: map_size(state.pending_confirmations),
-      pending_verifications: map_size(state.pending_verifications),
-      command_counter: state.command_counter
+      pending_verifications: pending_verifications
     }
 
     {:reply, status, state}
   end
 
   @impl true
-  def handle_cast({:cancel_verification, command_aggregate_id}, state) do
-    case Map.get(state.pending_verifications, command_aggregate_id) do
-      nil ->
-        {:noreply, state}
-
-      %{timeout_ref: ref} ->
-        Process.cancel_timer(ref)
-
-        new_state = %{
-          state
-          | pending_verifications: Map.delete(state.pending_verifications, command_aggregate_id)
-        }
-
-        {:noreply, new_state}
-    end
-  end
-
-  @impl true
-  def handle_info({:verification_timeout, aggregate_id}, state) do
-    # Simple verification timeout
-    case Map.get(state.pending_verifications, aggregate_id) do
-      nil ->
-        {:noreply, state}
-
-      %{type: :multi_stage} ->
-        # Multi-stage uses its own timeout message
-        {:noreply, state}
-
-      verification ->
-        Logger.warning("Simple command verification timeout for aggregate_id=#{aggregate_id}")
-
-        # Record verification failed event
-        record_command_verification_failed(state, aggregate_id, verification.recording_id, %{
-          error_reason: "Verification timeout"
-        })
-
-        new_state = %{
-          state
-          | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)
-        }
-
-        {:noreply, new_state}
-    end
-  end
-
-  def handle_info({:verification_stage_timeout, aggregate_id, stage}, state) do
-    # Multi-stage verification timeout
-    case Map.get(state.pending_verifications, aggregate_id) do
-      nil ->
-        {:noreply, state}
-
-      %{type: :multi_stage, runner: runner} = verification ->
-        handle_stage_timeout(aggregate_id, stage, verification, runner, state)
-
-      _other ->
-        {:noreply, state}
-    end
-  end
-
-  def handle_info(
-        {:telemetry_update, target_id, packet_name, item_name, telemetry_value},
-        %{target_id: target_id} = state
-      ) do
-    new_state =
-      Enum.reduce(state.pending_verifications, state, fn {aggregate_id, verification}, acc ->
-        apply_verification_update(
-          acc,
-          aggregate_id,
-          verification,
-          packet_name,
-          item_name,
-          telemetry_value.value
-        )
-      end)
-
-    {:noreply, new_state}
-  end
-
-  def handle_info(
-        {:telemetry_update, _target_id, _packet_name, _item_name, _telemetry_value},
-        state
-      ) do
-    {:noreply, state}
-  end
-
   # Queue processing - triggered by TargetQueue when commands are available
   def handle_info(:check_queue, %{paused: true} = state) do
-    {:noreply, state}
-  end
-
-  def handle_info(:check_queue, %{interface_connected: false} = state) do
-    # Interface has no clients - wait for connection before processing
     {:noreply, state}
   end
 
@@ -430,15 +322,20 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   def handle_info(:check_queue, state) do
-    case TargetQueue.next(state.mission_id, state.target_id) do
-      nil ->
-        # No commands ready
-        {:noreply, state}
+    if uplink_connected?(state) do
+      case TargetQueue.next(state.mission_id, state.target_id) do
+        nil ->
+          # No commands ready
+          {:noreply, state}
 
-      entry ->
-        # Got a command - execute it
-        new_state = process_queue_entry(entry, state)
-        {:noreply, new_state}
+        entry ->
+          # Got a command - execute it
+          new_state = process_queue_entry(entry, state)
+          {:noreply, new_state}
+      end
+    else
+      # No uplink route connected - wait for a connection event
+      {:noreply, state}
     end
   end
 
@@ -455,16 +352,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     # Report result back to queue
     TargetQueue.complete(state.mission_id, state.target_id, state.executing_entry_id, result)
 
-    # Check if we lost connection - don't immediately retry
-    interface_connected =
-      case result do
-        {:error, :send_failed, :no_clients_connected} -> false
-        {:error, :interface_not_running} -> false
-        _ -> state.interface_connected
-      end
-
-    # Only check for more work if interface is still connected
-    if interface_connected do
+    # Only check for more work if uplink is connected
+    if uplink_connected?(state) do
       Process.send_after(self(), :check_queue, @queue_check_interval_ms)
     end
 
@@ -474,8 +363,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
        | executing: false,
          dispatch_task: nil,
          dispatch_timeout_ref: nil,
-         executing_entry_id: nil,
-         interface_connected: interface_connected
+         executing_entry_id: nil
      }}
   end
 
@@ -547,33 +435,21 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     {:noreply, state}
   end
 
-  # Interface connection events - update connection state
+  # Interface connection events - resume if a route becomes available
   def handle_info(
         {:interface_connection_event, %InterfaceConnectionEvent{} = event},
         state
       ) do
-    # Only handle events for our write interface
-    if event.interface_id == state.write_interface_id do
-      case event.new_state do
-        :connected ->
-          Logger.info(
-            "Interface #{event.interface_id} connected - resuming command dispatch for target #{state.target_id}"
-          )
+    if event.new_state == :connected and uplink_connected?(state) do
+      Logger.info(
+        "Interface #{event.interface_id} connected - resuming command dispatch for target #{state.target_id}"
+      )
 
-          # Trigger queue check now that we're connected
-          send(self(), :check_queue)
-          {:noreply, %{state | interface_connected: true}}
-
-        :disconnected ->
-          Logger.info(
-            "Interface #{event.interface_id} disconnected - pausing command dispatch for target #{state.target_id}"
-          )
-
-          {:noreply, %{state | interface_connected: false}}
-      end
-    else
-      {:noreply, state}
+      # Trigger queue check now that we're connected
+      send(self(), :check_queue)
     end
+
+    {:noreply, state}
   end
 
   def handle_info(_msg, state) do
@@ -618,162 +494,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
       {:error, _, _} = error ->
         {:reply, error, state_without_confirmation}
-    end
-  end
-
-  defp handle_stage_timeout(aggregate_id, stage, verification, runner, state) do
-    if VerificationRunner.current_stage(runner) == stage do
-      handle_timeout_action(
-        VerificationRunner.handle_timeout(runner),
-        aggregate_id,
-        stage,
-        verification,
-        state
-      )
-    else
-      {:noreply, state}
-    end
-  end
-
-  defp handle_timeout_action(
-         {:continue, updated_runner},
-         aggregate_id,
-         _stage,
-         verification,
-         state
-       ) do
-    advance_multi_stage(
-      VerificationRunner.start_current_stage(updated_runner),
-      aggregate_id,
-      verification,
-      state
-    )
-  end
-
-  defp handle_timeout_action(
-         {:retry, updated_runner},
-         aggregate_id,
-         _stage,
-         verification,
-         state
-       ) do
-    runner_with_timeout = VerificationRunner.start_timeout(updated_runner, self())
-    updated_verification = %{verification | runner: runner_with_timeout}
-
-    new_state = %{
-      state
-      | pending_verifications:
-          Map.put(state.pending_verifications, aggregate_id, updated_verification)
-    }
-
-    {:noreply, new_state}
-  end
-
-  defp handle_timeout_action(
-         {:abort, _runner},
-         aggregate_id,
-         stage,
-         verification,
-         state
-       ) do
-    Logger.warning(
-      "Multi-stage verification aborted for aggregate_id=#{aggregate_id}, stage=#{stage}"
-    )
-
-    record_command_verification_failed(
-      state,
-      aggregate_id,
-      verification.recording_id,
-      %{
-        error_reason: "Verification stage #{stage} timeout"
-      }
-    )
-
-    new_state = %{
-      state
-      | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)
-    }
-
-    {:noreply, new_state}
-  end
-
-  defp advance_multi_stage({:ok, runner_with_stage}, aggregate_id, verification, state) do
-    runner_with_timeout = VerificationRunner.start_timeout(runner_with_stage, self())
-
-    Logger.info(
-      "Advancing to verification stage #{VerificationRunner.current_stage(runner_with_timeout)} " <>
-        "for aggregate_id=#{aggregate_id}"
-    )
-
-    updated_verification = %{verification | runner: runner_with_timeout}
-
-    new_state = %{
-      state
-      | pending_verifications:
-          Map.put(state.pending_verifications, aggregate_id, updated_verification)
-    }
-
-    {:noreply, new_state}
-  end
-
-  defp advance_multi_stage({:complete, final_runner}, aggregate_id, verification, state) do
-    new_state =
-      complete_multi_stage_verification(
-        state,
-        aggregate_id,
-        verification,
-        final_runner
-      )
-
-    {:noreply, new_state}
-  end
-
-  defp apply_verification_update(
-         acc,
-         aggregate_id,
-         %{type: :simple, item: item} = verification,
-         packet_name,
-         item_name,
-         value
-       ) do
-    if item == "#{packet_name}.#{item_name}" do
-      check_simple_verification(acc, aggregate_id, verification, value)
-    else
-      acc
-    end
-  end
-
-  defp apply_verification_update(
-         acc,
-         aggregate_id,
-         %{type: :multi_stage, runner: runner} = verification,
-         packet_name,
-         item_name,
-         value
-       ) do
-    handle_multi_stage_update(
-      acc,
-      aggregate_id,
-      verification,
-      runner,
-      packet_name,
-      item_name,
-      value
-    )
-  end
-
-  defp apply_verification_update(
-         acc,
-         aggregate_id,
-         %{item: item} = legacy_verification,
-         packet_name,
-         item_name,
-         value
-       ) do
-    if item == "#{packet_name}.#{item_name}" do
-      check_simple_verification(acc, aggregate_id, legacy_verification, value)
-    else
-      acc
     end
   end
 
@@ -840,7 +560,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   defp do_dispatch(entry, opts, state) do
     # Use target from state - already loaded with definition_set
     target = state.target
-    interface_id = Keyword.get(opts, :interface_id)
 
     # Get aggregate_id from entry (generated at enqueue time) or generate for direct dispatch
     aggregate_id = Map.get(entry, :command_aggregate_id) || Ecto.UUID.generate()
@@ -856,8 +575,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
          :ok <- check_hazardous(command, entry.parameters, opts, state),
          :ok <- validate_args(command, entry.parameters),
          {:ok, encoded} <- encode_command(command, entry.parameters),
-         {:ok, interface} <- get_interface(target, opts),
-         {:ok, framed} <- apply_interface_framing(interface, encoded),
+         {:ok, pdu} <- build_pdu(encoded, target, aggregate_id, command.name),
          {:ok, cmd_info} <-
            create_command_recording(
              state,
@@ -868,13 +586,13 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
              opts,
              aggregate_id
            ),
-         :ok <- send_to_interface(interface, framed) do
+         {:ok, interface_id} <- dispatch_pdu(state, target, pdu, opts) do
       # Record command sent event
       record_command_sent(
         state,
         cmd_info.aggregate_id,
         cmd_info.recording_id,
-        interface_id || interface.id
+        interface_id
       )
 
       # Start verification if configured (using verifiers association)
@@ -924,10 +642,42 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
         error
 
+      {:error, :missing_command_apid} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "missing_command_apid",
+          error_reason: "No command APID configured for target"
+        })
+
+        error
+
+      {:error, {:invalid_command_apid, apid}} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "invalid_command_apid",
+          error_reason: "Invalid command APID: #{inspect(apid)}"
+        })
+
+        error
+
+      {:error, :missing_apid} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "missing_apid",
+          error_reason: "Missing APID on PDU"
+        })
+
+        error
+
       {:error, :no_interface} = error ->
         record_command_errored(state, aggregate_id, entry.command_name, %{
           error_type: "no_interface",
           error_reason: "No interface available for target"
+        })
+
+        error
+
+      {:error, :uplink_not_running} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "uplink_not_running",
+          error_reason: "Uplink dispatcher not running"
         })
 
         error
@@ -1030,41 +780,23 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp get_interface(target, opts) do
-    interface_id = Keyword.get(opts, :interface_id)
+  defp build_pdu(encoded, target, aggregate_id, command_name) do
+    meta = %{
+      command_aggregate_id: aggregate_id,
+      command_name: command_name,
+      target_id: target.id
+    }
 
-    if interface_id do
-      case Interfaces.get_interface(interface_id) do
-        nil -> {:error, :unknown_interface}
-        interface -> {:ok, interface}
-      end
-    else
-      # Find a write interface for this target
-      case Interfaces.list_interfaces_for_target(target, direction: "write") do
-        [] -> {:error, :no_interface}
-        [interface | _] -> {:ok, interface}
-      end
-    end
+    PDUBuilder.build(encoded, target, meta)
   end
 
-  defp apply_interface_framing(_interface, command_binary) do
-    {:ok, command_binary}
-  end
+  defp dispatch_pdu(state, target, pdu, opts) do
+    case uplink_dispatcher_pid(state.mission_id) do
+      nil ->
+        {:error, :uplink_not_running}
 
-  defp send_to_interface(interface, data) do
-    # Look up the interface process
-    case Registry.lookup(
-           Cadence.MissionRegistry,
-           {:interface, interface.mission_id, interface.id}
-         ) do
-      [{pid, _}] ->
-        case GenServer.call(pid, {:send_data, data}) do
-          :ok -> :ok
-          {:error, reason} -> {:error, :send_failed, reason}
-        end
-
-      [] ->
-        {:error, :interface_not_running}
+      _pid ->
+        UplinkDispatcher.dispatch_pdu(state.mission_id, target.id, pdu, opts)
     end
   end
 
@@ -1119,52 +851,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     }
 
     Recordings.create(CommandSent, recordable_attrs, recording_attrs)
-  end
-
-  defp record_command_verified(state, aggregate_id, parent_recording_id, verification_result) do
-    now = DateTime.utc_now()
-
-    recordable_attrs = %{
-      verification_item: verification_result[:item],
-      verification_expected: verification_result[:expected],
-      verification_actual: verification_result[:actual],
-      verification_result: verification_result[:result],
-      stages_completed: verification_result[:stages_completed] || []
-    }
-
-    recording_attrs = %{
-      organization_id: state.mission.organization_id,
-      bucket_id: state.target.bucket_id,
-      aggregate_id: aggregate_id,
-      parent_id: parent_recording_id,
-      root_id: aggregate_id,
-      actor_type: "system",
-      timestamp: now
-    }
-
-    Recordings.create(CommandVerified, recordable_attrs, recording_attrs)
-  end
-
-  defp record_command_verification_failed(state, aggregate_id, parent_recording_id, error_info) do
-    now = DateTime.utc_now()
-
-    recordable_attrs = %{
-      error_reason: error_info[:error_reason],
-      verification_actual: error_info[:actual],
-      verification_expected: error_info[:expected]
-    }
-
-    recording_attrs = %{
-      organization_id: state.mission.organization_id,
-      bucket_id: state.target.bucket_id,
-      aggregate_id: aggregate_id,
-      parent_id: parent_recording_id,
-      root_id: aggregate_id,
-      actor_type: "system",
-      timestamp: now
-    }
-
-    Recordings.create(CommandVerificationFailed, recordable_attrs, recording_attrs)
   end
 
   defp record_command_rejected(state, aggregate_id, command_name, error_info) do
@@ -1278,157 +964,59 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp start_verification(state, cmd_info, command, target) do
-    # Verifiers are preloaded by MetaCommandCache, but fallback to DB lookup
-    # may return command without verifiers preloaded
-    verifiers =
-      case command.verifiers do
-        %Ecto.Association.NotLoaded{} ->
-          Repo.preload(command, :verifiers).verifiers
+    verifiers = load_verifiers(command)
 
-        verifiers ->
-          verifiers
-      end
-
-    # Use CommandVerifiers if defined, otherwise no verification
     if verifiers != nil and verifiers != [] do
-      start_multi_stage_verification(state, cmd_info, verifiers, target)
-    else
-      # No verification configured
-      state
+      case VerificationManager.start_verification(state.mission_id, %{
+             aggregate_id: cmd_info.aggregate_id,
+             recording_id: cmd_info.recording_id,
+             target_id: target.id,
+             organization_id: state.mission.organization_id,
+             bucket_id: target.bucket_id,
+             verifiers: verifiers
+           }) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to start verification for aggregate_id=#{cmd_info.aggregate_id}: #{inspect(reason)}"
+          )
+      end
+    end
+
+    state
+  end
+
+  defp load_verifiers(command) do
+    case command.verifiers do
+      %Ecto.Association.NotLoaded{} ->
+        Repo.preload(command, :verifiers).verifiers
+
+      verifiers ->
+        verifiers
     end
   end
 
-  defp start_multi_stage_verification(state, cmd_info, verifiers, target) do
-    case VerificationRunner.new(cmd_info.aggregate_id, state.mission_id, target.id, verifiers) do
-      {:ok, runner} ->
-        # Subscribe to telemetry updates (if not already subscribed)
-        Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{state.mission_id}:telemetry")
+  defp uplink_connected?(%State{} = state) do
+    case uplink_dispatcher_pid(state.mission_id) do
+      nil ->
+        false
 
-        # Start the first stage
-        case VerificationRunner.start_current_stage(runner) do
-          {:ok, runner} ->
-            # Start timeout for the current stage
-            runner = VerificationRunner.start_timeout(runner, self())
-
-            Logger.info(
-              "Starting verification for aggregate_id=#{cmd_info.aggregate_id}, " <>
-                "stage=#{VerificationRunner.current_stage(runner)}"
-            )
-
-            verification = %{
-              type: :multi_stage,
-              runner: runner,
-              target_id: target.id,
-              aggregate_id: cmd_info.aggregate_id,
-              recording_id: cmd_info.recording_id
-            }
-
-            %{
-              state
-              | pending_verifications:
-                  Map.put(state.pending_verifications, cmd_info.aggregate_id, verification)
-            }
-
-          {:complete, _runner} ->
-            # No stages to verify (shouldn't happen with non-empty verifiers)
-            Logger.warning("Multi-stage verification completed immediately with no stages")
-            state
+      pid ->
+        try do
+          GenServer.call(pid, {:connected?, state.target_id})
+        catch
+          :exit, _ -> false
         end
-
-      {:error, :no_verifiers} ->
-        # Shouldn't happen since we checked for non-empty verifiers
-        state
     end
   end
 
-  defp check_simple_verification(state, aggregate_id, verification, actual_value) do
-    # For simple verification, we just check that the item was updated (any value)
-    Logger.info(
-      "Simple command verification succeeded for aggregate_id=#{aggregate_id}, " <>
-        "item=#{verification.item}, value=#{inspect(actual_value)}"
-    )
-
-    # Cancel timeout
-    Process.cancel_timer(verification.timeout_ref)
-
-    # Record verified event
-    record_command_verified(state, aggregate_id, verification.recording_id, %{
-      item: verification.item,
-      actual: to_string(actual_value)
-    })
-
-    # Remove from pending
-    %{state | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)}
-  end
-
-  defp handle_multi_stage_update(
-         state,
-         aggregate_id,
-         verification,
-         runner,
-         packet_name,
-         item_name,
-         value
-       ) do
-    case VerificationRunner.check_update(runner, packet_name, item_name, value) do
-      {:stage_complete, updated_runner} ->
-        Logger.info(
-          "Verification stage #{VerificationRunner.current_stage(runner)} complete for " <>
-            "aggregate_id=#{aggregate_id}, advancing to next stage"
-        )
-
-        # Start next stage
-        case VerificationRunner.start_current_stage(updated_runner) do
-          {:ok, runner_with_stage} ->
-            # Start timeout for the new stage
-            runner_with_timeout = VerificationRunner.start_timeout(runner_with_stage, self())
-
-            updated_verification = %{verification | runner: runner_with_timeout}
-
-            %{
-              state
-              | pending_verifications:
-                  Map.put(state.pending_verifications, aggregate_id, updated_verification)
-            }
-
-          {:complete, final_runner} ->
-            complete_multi_stage_verification(state, aggregate_id, verification, final_runner)
-        end
-
-      {:all_complete, final_runner} ->
-        complete_multi_stage_verification(state, aggregate_id, verification, final_runner)
-
-      {:failed, _runner, reason} ->
-        Logger.warning("Verification failed for aggregate_id=#{aggregate_id}: #{inspect(reason)}")
-
-        record_command_verification_failed(state, aggregate_id, verification.recording_id, %{
-          error_reason: inspect(reason)
-        })
-
-        %{state | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)}
-
-      {:pending, updated_runner} ->
-        updated_verification = %{verification | runner: updated_runner}
-
-        %{
-          state
-          | pending_verifications:
-              Map.put(state.pending_verifications, aggregate_id, updated_verification)
-        }
+  defp uplink_dispatcher_pid(mission_id) do
+    case Registry.lookup(Cadence.MissionRegistry, {:uplink_dispatcher, mission_id}) do
+      [{pid, _}] -> pid
+      [] -> nil
     end
-  end
-
-  defp complete_multi_stage_verification(state, aggregate_id, verification, runner) do
-    Logger.info(
-      "All verification stages complete for aggregate_id=#{aggregate_id}, " <>
-        "stages: #{inspect(VerificationRunner.completed_stages(runner))}"
-    )
-
-    record_command_verified(state, aggregate_id, verification.recording_id, %{
-      stages_completed: Enum.map(VerificationRunner.completed_stages(runner), &to_string/1)
-    })
-
-    %{state | pending_verifications: Map.delete(state.pending_verifications, aggregate_id)}
   end
 
   defp generate_token do
