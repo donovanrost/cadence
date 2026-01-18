@@ -24,6 +24,7 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
   alias Cadence.Alarms.AlarmRule
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Runtime.Telemetry.PacketIdentifier
+  alias Cadence.Time.Timer, as: TimeTimer
 
   # Event publisher accessor
   defp event_publisher, do: EventPublisher.impl()
@@ -236,6 +237,6 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
   end
 
   defp schedule_refresh do
-    Process.send_after(self(), :refresh, @refresh_interval)
+    TimeTimer.send_after(self(), :refresh, @refresh_interval)
   end
 end

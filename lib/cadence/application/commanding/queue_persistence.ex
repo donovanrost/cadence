@@ -15,6 +15,7 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
   alias Cadence.Commands.QueueEntry
   alias Cadence.Ports.Repository.Commanding.QueueRepository
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   @topic "queue:persistence"
 
@@ -147,7 +148,7 @@ defmodule Cadence.Application.Commanding.QueuePersistence do
   defp apply_event({:expire_entries, []}), do: :ok
 
   defp apply_event({:expire_entries, entry_ids}) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     from(e in QueueEntry, where: e.id in ^entry_ids)
     |> Repo.update_all(set: [status: :expired, updated_at: now])

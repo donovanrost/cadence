@@ -27,6 +27,7 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   alias Cadence.Application.Commanding.CommandQueries
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.Ports.Recordings.EventRecorder
+  alias Cadence.Time, as: CadenceTime
 
   @type target_id :: String.t()
   @type entry_id :: String.t()
@@ -266,7 +267,7 @@ defmodule Cadence.Application.Commanding.ManageQueue do
   """
   @spec expire_old_entries() :: {:ok, non_neg_integer()}
   def expire_old_entries do
-    repo().expire_old_entries(DateTime.utc_now())
+    repo().expire_old_entries(CadenceTime.now())
   end
 
   @doc """

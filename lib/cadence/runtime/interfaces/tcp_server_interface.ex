@@ -37,6 +37,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Runtime.Telemetry.DownlinkPipeline
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @registry Cadence.MissionRegistry
 
@@ -192,7 +194,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
       {:error, reason} ->
         Logger.error("Accept error: #{inspect(reason)}")
-        Process.send_after(self(), :accept, 1000)
+        TimeTimer.send_after(self(), :accept, 1000)
         {:noreply, state}
     end
   end
@@ -379,7 +381,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       socket: client_socket,
       remote_address: address_str,
       remote_port: port,
-      connected_at: DateTime.utc_now()
+      connected_at: CadenceTime.now()
     }
 
     :inet.setopts(client_socket, active: true)
@@ -548,7 +550,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       mission_id: state.interface.mission_id,
       stored: false,
       target_id: List.first(state.target_ids) || "unknown",
-      received_at: DateTime.utc_now(),
+      received_at: CadenceTime.now(),
       interface_id: state.interface.id,
       client_address: client_state.remote_address,
       client_port: client_state.remote_port

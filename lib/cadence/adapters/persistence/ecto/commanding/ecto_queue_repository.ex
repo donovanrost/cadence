@@ -24,6 +24,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
   alias Cadence.Commands.QueueEntry, as: QueueEntrySchema
   alias Cadence.Domain.Commanding.Entities.QueuedCommand, as: QueuedCommandEntity
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # QueueRepository Implementation
@@ -87,7 +88,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
       if include_scheduled do
         query
       else
-        now = DateTime.utc_now()
+        now = CadenceTime.now()
 
         from q in query,
           where: is_nil(q.scheduled_at) or q.scheduled_at <= ^now
@@ -102,7 +103,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
   def claim_next(target_id) do
     Repo.transaction(fn ->
       target_id
-      |> fetch_claimable_entry(DateTime.utc_now())
+      |> fetch_claimable_entry(CadenceTime.now())
       |> update_to_executing()
     end)
     |> handle_transaction_result()
@@ -174,7 +175,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
 
   @impl true
   def cancel_all_pending(target_id) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     query =
       from q in QueueEntrySchema,
@@ -197,7 +198,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
         where: not is_nil(q.expires_at),
         where: q.expires_at < ^before_time
 
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     {count, _} =
       Repo.update_all(query,
@@ -251,7 +252,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
     Repo.transaction(fn ->
       Enum.each(id_sequence_pairs, fn {id, new_seq} ->
         from(q in QueueEntrySchema, where: q.id == ^id)
-        |> Repo.update_all(set: [sequence_number: new_seq, updated_at: DateTime.utc_now()])
+        |> Repo.update_all(set: [sequence_number: new_seq, updated_at: CadenceTime.now()])
       end)
     end)
     |> case do
@@ -262,7 +263,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Commanding.EctoQueueRepository do
 
   @impl true
   def list_expired do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     from(q in QueueEntrySchema,
       where: q.status == :pending,

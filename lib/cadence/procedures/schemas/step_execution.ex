@@ -36,6 +36,7 @@ defmodule Cadence.Procedures.StepExecution do
   import Ecto.Changeset
 
   alias Cadence.Accounts.User
+  alias Cadence.Time, as: CadenceTime
 
   alias Cadence.Procedures.{
     BlockExecution,
@@ -111,7 +112,7 @@ defmodule Cadence.Procedures.StepExecution do
   Changeset for activating a step.
   """
   def activate_changeset(step_execution) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     step_execution
     |> change()
@@ -134,7 +135,7 @@ defmodule Cadence.Procedures.StepExecution do
   Changeset for completing a step.
   """
   def complete_changeset(step_execution, result \\ :pass) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     step_execution
     |> change()
@@ -148,7 +149,7 @@ defmodule Cadence.Procedures.StepExecution do
   Changeset for skipping a step.
   """
   def skip_changeset(step_execution, attrs) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     step_execution
     |> cast(attrs, [:skipped_reason, :skipped_by_id])
@@ -163,7 +164,7 @@ defmodule Cadence.Procedures.StepExecution do
   Changeset for failing a step.
   """
   def fail_changeset(step_execution, error_message) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     step_execution
     |> change()

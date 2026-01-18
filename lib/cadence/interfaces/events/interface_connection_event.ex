@@ -43,6 +43,8 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
       end
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @type connection_state :: :connected | :disconnected
 
   @type t :: %__MODULE__{
@@ -84,7 +86,7 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
       new_state: attrs[:new_state],
       client_count: attrs[:client_count] || 0,
       client_info: attrs[:client_info],
-      timestamp: attrs[:timestamp] || DateTime.utc_now()
+      timestamp: attrs[:timestamp] || CadenceTime.now()
     }
   end
 

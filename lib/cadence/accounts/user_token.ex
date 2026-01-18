@@ -4,6 +4,7 @@ defmodule Cadence.Accounts.UserToken do
   use Ecto.Schema
   import Ecto.Query
   alias Cadence.Accounts.UserToken
+  alias Cadence.Time, as: CadenceTime
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -48,7 +49,7 @@ defmodule Cadence.Accounts.UserToken do
   """
   def build_session_token(user) do
     token = :crypto.strong_rand_bytes(@rand_size)
-    dt = user.authenticated_at || DateTime.utc_now(:second)
+    dt = user.authenticated_at || CadenceTime.now() |> DateTime.truncate(:second)
     {token, %UserToken{token: token, context: "session", user_id: user.id, authenticated_at: dt}}
   end
 

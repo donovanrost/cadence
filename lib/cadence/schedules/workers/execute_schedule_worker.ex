@@ -14,6 +14,7 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
 
   alias Cadence.Procedures
   alias Cadence.Schedules
+  alias Cadence.Time, as: CadenceTime
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"schedule_id" => schedule_id}}) do
@@ -83,7 +84,7 @@ defmodule Cadence.Schedules.Workers.ExecuteScheduleWorker do
     # Oban's cron plugin handles the actual scheduling.
     # For display purposes, we estimate next run as now + 1 minute minimum.
     # A proper implementation would use the crontab library for accurate calculation.
-    DateTime.utc_now() |> DateTime.add(60, :second)
+    CadenceTime.now() |> DateTime.add(60, :second)
   end
 
   defp calculate_next_run(_), do: nil

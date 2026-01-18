@@ -19,6 +19,7 @@ defmodule Cadence.Domain.Missions.Entities.MissionMembership do
   """
 
   alias Cadence.Domain.Missions.ValueObjects.MembershipRole
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -70,7 +71,7 @@ defmodule Cadence.Domain.Missions.Entities.MissionMembership do
   def update_role(%__MODULE__{} = membership, new_role) do
     case MembershipRole.parse(new_role) do
       {:ok, role} ->
-        {:ok, %{membership | role: role, updated_at: DateTime.utc_now()}}
+        {:ok, %{membership | role: role, updated_at: CadenceTime.now()}}
 
       error ->
         error

@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
 
   alias Cadence.{Alarms, Commands, Targets}
   alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand}
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @impl true
   def mount(_params, _session, socket) do
@@ -41,7 +42,7 @@ defmodule CadenceWeb.OpsConsoleLive.Commands do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
       Commands.subscribe_staging(mission_id)
-      :timer.send_interval(1000, self(), :tick)
+      TimeTimer.send_interval(1000, self(), :tick)
     end
 
     socket =

@@ -37,6 +37,8 @@ defmodule Cadence.Runtime.Missions.MissionStatus do
       status = MissionStatus.compute_status(status)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @type condition_type ::
           :cvt
           | :interfaces
@@ -82,7 +84,7 @@ defmodule Cadence.Runtime.Missions.MissionStatus do
       mission_id: mission_id,
       config_generation: config_generation,
       observed_generation: config_generation,
-      started_at: DateTime.utc_now(),
+      started_at: CadenceTime.now(),
       status: :starting,
       conditions: initial_conditions(),
       node: node()

@@ -14,6 +14,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
 
   alias Cadence.{Alarms, Commands, Outbox, Targets, Timeline}
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
+  alias Cadence.Time.Timer, as: TimeTimer
   alias Cadence.Timeline.Event, as: TimelineEvent
   import CadenceWeb.OpsConsoleLive.Components
 
@@ -51,7 +52,7 @@ defmodule CadenceWeb.OpsConsoleLive.Timeline do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:automations")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
       Outbox.subscribe_mission(mission_id)
-      :timer.send_interval(1000, self(), :tick)
+      TimeTimer.send_interval(1000, self(), :tick)
     end
 
     # Default all event type filters to active

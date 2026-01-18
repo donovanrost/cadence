@@ -63,6 +63,7 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
   alias Cadence.Config.VersionRegistry
   alias Cadence.MissionDatabase.Database
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -228,7 +229,7 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
   Invalidates the definition_set config version to trigger cache reloads.
   """
   def publish(%__MODULE__{} = definition_set) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     with {:ok, updated} <-
            definition_set
@@ -246,7 +247,7 @@ defmodule Cadence.MissionDatabase.DefinitionSet do
   Invalidates the definition_set config version to trigger cache reloads.
   """
   def deprecate(%__MODULE__{} = definition_set) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     with {:ok, updated} <-
            definition_set

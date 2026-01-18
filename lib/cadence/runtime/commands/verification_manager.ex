@@ -11,6 +11,7 @@ defmodule Cadence.Runtime.Commands.VerificationManager do
   alias Cadence.Commands.VerificationRunner
   alias Cadence.Recordings
   alias Cadence.Recordings.Recordables.{CommandVerificationFailed, CommandVerified}
+  alias Cadence.Time, as: CadenceTime
 
   defmodule PendingVerification do
     @moduledoc false
@@ -341,7 +342,7 @@ defmodule Cadence.Runtime.Commands.VerificationManager do
   # ---------------------------------------------------------------------------
 
   defp record_verified(pending, aggregate_id, verification_result) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{
       verification_item: verification_result[:item],
@@ -365,7 +366,7 @@ defmodule Cadence.Runtime.Commands.VerificationManager do
   end
 
   defp record_verification_failed(pending, aggregate_id, error_info) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{
       error_reason: error_info[:error_reason],

@@ -106,6 +106,53 @@ defmodule Cadence.PureCase do
     :ok
   end
 
+  alias Cadence.TestSupport.VirtualTime
+
+  @doc """
+  Adds a setup block that switches Cadence time to virtual for the test.
+  """
+  defmacro setup_virtual_time(opts \\ []) do
+    quote do
+      setup do
+        %{cleanup: cleanup} = VirtualTime.setup(unquote(opts))
+        on_exit(cleanup)
+        :ok
+      end
+    end
+  end
+
+  @doc """
+  Adds a setup block that ensures the MissionRegistry is running.
+  """
+  defmacro setup_mission_registry do
+    quote do
+      setup do
+        case Process.whereis(Cadence.MissionRegistry) do
+          nil -> start_supervised!({Registry, keys: :unique, name: Cadence.MissionRegistry})
+          _pid -> :ok
+        end
+
+        :ok
+      end
+    end
+  end
+
+  @doc """
+  Adds a setup block that ensures the telemetry limits cache is running.
+  """
+  defmacro setup_limits_cache do
+    quote do
+      setup do
+        case Process.whereis(Cadence.Runtime.Telemetry.Limits.Cache) do
+          nil -> start_supervised!({Cadence.Runtime.Telemetry.Limits.Cache, []})
+          _pid -> :ok
+        end
+
+        :ok
+      end
+    end
+  end
+
   defp use_in_memory_adapters?(tags) do
     if tags[:no_in_memory_adapters] do
       false

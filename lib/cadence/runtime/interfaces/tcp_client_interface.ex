@@ -28,6 +28,8 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
 
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Telemetry.{DownlinkPipeline, UplinkPipeline}
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   defmodule State do
     @moduledoc false
@@ -234,7 +236,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   defp schedule_reconnect(interval) do
-    Process.send_after(self(), :connect, interval)
+    TimeTimer.send_after(self(), :connect, interval)
   end
 
   defp downlink_metadata(state) do
@@ -242,7 +244,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
       mission_id: state.interface.mission_id,
       stored: false,
       target_id: state.target_id,
-      received_at: DateTime.utc_now(),
+      received_at: CadenceTime.now(),
       interface_id: state.interface.id
     }
   end

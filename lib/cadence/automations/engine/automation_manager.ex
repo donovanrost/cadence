@@ -18,6 +18,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
   alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Ports.Recordings.EventRecorder
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
+  alias Cadence.Time, as: CadenceTime
 
   @ets_table :automations_cache
 
@@ -332,7 +333,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
            mission_id: state.mission_id,
            trigger_event: event,
            idempotency_key: idempotency_key,
-           started_at: DateTime.utc_now()
+           started_at: CadenceTime.now()
          }) do
       {:ok, execution} ->
         # Record that automation was triggered
@@ -348,7 +349,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
             Automations.update_execution_status(execution, %{
               status: :completed,
               action_result: action_result,
-              completed_at: DateTime.utc_now()
+              completed_at: CadenceTime.now()
             })
 
             Automations.record_trigger(automation)
@@ -359,7 +360,7 @@ defmodule Cadence.Automations.Engine.AutomationManager do
             Automations.update_execution_status(execution, %{
               status: :failed,
               error_message: inspect(reason),
-              completed_at: DateTime.utc_now()
+              completed_at: CadenceTime.now()
             })
 
             record_failed(automation, reason, state)

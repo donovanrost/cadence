@@ -45,6 +45,9 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   use GenServer
   require Logger
 
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
+
   alias Cadence.Repo
   alias Cadence.Targets.Target
   alias Cadence.Telemetry.Packet.PacketDefinition
@@ -254,7 +257,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
       when is_list(targets) and is_list(packet_defs) do
     if :ets.whereis(@table) != :undefined do
       item_limits_map = build_item_limits_map(packet_defs)
-      cached_at = System.monotonic_time(:millisecond)
+      cached_at = CadenceTime.monotonic(:millisecond)
 
       Enum.each(targets, fn target ->
         target_id = target.identifier
@@ -347,7 +350,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   defp lookup(mission_id, target_id) do
     case :ets.lookup(@table, {mission_id, target_id}) do
       [{{^mission_id, ^target_id}, item_limits_map, active_limit_set, cached_at}] ->
-        if System.monotonic_time(:millisecond) - cached_at < @cache_ttl_ms do
+        if CadenceTime.monotonic(:millisecond) - cached_at < @cache_ttl_ms do
           {:ok, item_limits_map, active_limit_set}
         else
           :miss
@@ -361,7 +364,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   defp load_and_cache(mission_id, target_id) do
     case load_limits_data(mission_id, target_id) do
       {:ok, item_limits_map, active_limit_set} ->
-        cached_at = System.monotonic_time(:millisecond)
+        cached_at = CadenceTime.monotonic(:millisecond)
 
         :ets.insert(
           @table,
@@ -507,11 +510,11 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   defp get_stale_timeout(_), do: @default_stale_timeout_ms
 
   defp schedule_cleanup do
-    Process.send_after(self(), :cleanup, :timer.minutes(1))
+    TimeTimer.send_after(self(), :cleanup, :timer.minutes(1))
   end
 
   defp cleanup_stale_entries do
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
 
     stale_keys =
       :ets.foldl(

@@ -12,6 +12,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   alias Cadence.Runtime.Telemetry.DeframeSupervisor
   alias Cadence.Runtime.Telemetry.SpacePacketFramer
   alias Cadence.Telemetry.Packet
+  alias Cadence.Time, as: CadenceTime
 
   defmodule ConnectionState do
     @moduledoc false
@@ -256,7 +257,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     metadata
     |> Map.put_new(:mission_id, state.mission_id)
     |> Map.put_new(:interface_id, state.interface_id)
-    |> Map.put_new(:received_at, DateTime.utc_now())
+    |> Map.put_new(:received_at, CadenceTime.now())
     |> Map.put_new(:stored, false)
   end
 end

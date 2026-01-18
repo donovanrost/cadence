@@ -27,6 +27,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
 
   alias Cadence.Domain.Missions.ValueObjects.MissionPhase
   alias Cadence.Domain.Missions.ValueObjects.MissionStatus
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -135,7 +136,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
            metadata: Map.merge(mission.metadata, attrs[:metadata] || %{}),
            start_date: attrs[:start_date] || mission.start_date,
            end_date: attrs[:end_date] || mission.end_date,
-           updated_at: DateTime.utc_now()
+           updated_at: CadenceTime.now()
        }}
     end
   end
@@ -146,7 +147,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   @spec start(t()) :: {:ok, t()} | {:error, term()}
   def start(%__MODULE__{status: status} = mission) do
     with :ok <- MissionStatus.validate_transition(status, :active) do
-      {:ok, %{mission | status: :active, updated_at: DateTime.utc_now()}}
+      {:ok, %{mission | status: :active, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -156,7 +157,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   @spec stop(t()) :: {:ok, t()} | {:error, term()}
   def stop(%__MODULE__{status: status} = mission) do
     with :ok <- MissionStatus.validate_transition(status, :inactive) do
-      {:ok, %{mission | status: :inactive, updated_at: DateTime.utc_now()}}
+      {:ok, %{mission | status: :inactive, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -166,7 +167,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   @spec suspend(t()) :: {:ok, t()} | {:error, term()}
   def suspend(%__MODULE__{status: status} = mission) do
     with :ok <- MissionStatus.validate_transition(status, :suspended) do
-      {:ok, %{mission | status: :suspended, updated_at: DateTime.utc_now()}}
+      {:ok, %{mission | status: :suspended, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -176,7 +177,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   @spec resume(t()) :: {:ok, t()} | {:error, term()}
   def resume(%__MODULE__{status: status} = mission) do
     with :ok <- MissionStatus.validate_transition(status, :active) do
-      {:ok, %{mission | status: :active, updated_at: DateTime.utc_now()}}
+      {:ok, %{mission | status: :active, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -186,7 +187,7 @@ defmodule Cadence.Domain.Missions.Entities.Mission do
   @spec advance_phase(t(), MissionPhase.t()) :: {:ok, t()} | {:error, term()}
   def advance_phase(%__MODULE__{phase: current} = mission, new_phase) do
     with :ok <- MissionPhase.validate_transition(current, new_phase) do
-      {:ok, %{mission | phase: new_phase, updated_at: DateTime.utc_now()}}
+      {:ok, %{mission | phase: new_phase, updated_at: CadenceTime.now()}}
     end
   end
 

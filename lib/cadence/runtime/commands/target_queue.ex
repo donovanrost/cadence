@@ -31,6 +31,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
   alias Cadence.Runtime.Commands.TargetDispatcher
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   # Fallback poll interval - used as safety net for scheduled commands and missed events
   @fallback_poll_interval_ms 10_000
@@ -216,7 +218,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
         {:reply, {:error, :not_found}, state}
 
       entry ->
-        now = DateTime.utc_now()
+        now = CadenceTime.now()
 
         updated_entry = %{
           entry
@@ -584,7 +586,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     if QueuedCommand.retriable?(failed_entry) do
       new_entries_by_id = Map.put(state.entries_by_id, entry_id, failed_entry)
       QueuePersistence.notify({:failed, entry_id, error_msg})
-      Process.send_after(self(), {:retry_command, entry_id}, @retry_delay_ms)
+      TimeTimer.send_after(self(), {:retry_command, entry_id}, @retry_delay_ms)
 
       %{state | entries_by_id: new_entries_by_id, executing: nil}
       |> refresh_counts()
@@ -606,7 +608,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   defp expire_old_entries_local(%{pending_entries: []} = state), do: state
 
   defp expire_old_entries_local(state) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     {expired, remaining} =
       Enum.split_with(state.pending_entries, fn entry ->
@@ -632,7 +634,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   defp fetch_next_ready_local(%{pending_entries: []}), do: nil
 
   defp fetch_next_ready_local(%{pending_entries: entries}) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Enum.find(entries, fn entry ->
       is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
@@ -642,7 +644,7 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
   defp has_ready_entries_local?(%{pending_entries: []}), do: false
 
   defp has_ready_entries_local?(%{pending_entries: entries}) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Enum.any?(entries, fn entry ->
       is_nil(entry.scheduled_at) or DateTime.compare(entry.scheduled_at, now) != :gt
@@ -762,10 +764,10 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   defp schedule_process(state) do
     if state.process_timer do
-      Process.cancel_timer(state.process_timer)
+      TimeTimer.cancel(state.process_timer)
     end
 
-    timer = Process.send_after(self(), :process_queue, @fallback_poll_interval_ms)
+    timer = TimeTimer.send_after(self(), :process_queue, @fallback_poll_interval_ms)
     %{state | process_timer: timer}
   end
 

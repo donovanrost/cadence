@@ -36,6 +36,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   alias Cadence.Procedures.ProcedureExecution, as: ProcedureExecutionSchema
   alias Cadence.Procedures.ProcedureVersion, as: ProcedureVersionSchema
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # Procedure Operations
@@ -224,7 +225,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Procedures.EctoProcedureRepository d
   This is a convenience function, not part of the behaviour contract.
   """
   def deprecate_other_versions(procedure_id, except_version_id) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     query =
       from v in ProcedureVersionSchema,

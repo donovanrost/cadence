@@ -42,6 +42,7 @@ defmodule Cadence.Procedures.Primitives do
   alias Cadence.Procedures.DataSources.TelemetryResolver
   alias Cadence.Procedures.InputReferences
   alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVT
+  alias Cadence.Time, as: CadenceTime
 
   @typedoc """
   Execution context containing mission, target, and runtime data.
@@ -304,7 +305,7 @@ defmodule Cadence.Procedures.Primitives do
     poll_interval = opts[:poll_interval] || 100
     progress_interval = opts[:progress_interval] || 500
 
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    deadline = CadenceTime.monotonic(:millisecond) + timeout_ms
 
     do_wait_for(%{
       name: name,
@@ -533,14 +534,14 @@ defmodule Cadence.Procedures.Primitives do
   # ============================================================================
 
   defp wait_with_progress(name, duration, progress_callback, update_interval) do
-    start_time = System.monotonic_time(:millisecond)
+    start_time = CadenceTime.monotonic(:millisecond)
     end_time = start_time + duration
 
     do_wait_with_progress(name, end_time, update_interval, progress_callback, duration)
   end
 
   defp do_wait_with_progress(name, end_time, update_interval, progress_callback, total_duration) do
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
     remaining = max(0, end_time - now)
 
     if remaining <= 0 do
@@ -563,7 +564,7 @@ defmodule Cadence.Procedures.Primitives do
   end
 
   defp do_wait_for(state) do
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
 
     if now >= state.deadline do
       {:error, :timeout}

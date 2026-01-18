@@ -26,6 +26,7 @@ defmodule Cadence.Procedures do
   alias Cadence.Repo
   alias Cadence.Settings
   alias Cadence.Targets
+  alias Cadence.Time, as: CadenceTime
 
   alias Cadence.Recordings.Recordables.{
     ProcedureChangesRequested,
@@ -399,7 +400,7 @@ defmodule Cadence.Procedures do
       aggregate_id: version_id,
       actor_id: user_id,
       actor_type: if(user_id, do: "user", else: "system"),
-      timestamp: DateTime.utc_now()
+      timestamp: CadenceTime.now()
     }
   end
 
@@ -417,7 +418,7 @@ defmodule Cadence.Procedures do
         version
         |> ProcedureVersion.approval_changeset(%{
           status: :approved,
-          approved_at: DateTime.utc_now(),
+          approved_at: CadenceTime.now(),
           approved_by_id: user_id
         })
         |> Repo.update!()
@@ -568,7 +569,7 @@ defmodule Cadence.Procedures do
           :version,
           ProcedureVersion.submit_changeset(version, %{
             status: :in_review,
-            submitted_at: DateTime.utc_now(),
+            submitted_at: CadenceTime.now(),
             submitted_by_id: user_id
           })
         )
@@ -731,7 +732,7 @@ defmodule Cadence.Procedures do
               rr.reviewer_id == ^user_id and
               rr.status == :pending
         )
-        |> Repo.update_all(set: [status: :completed, completed_at: DateTime.utc_now()])
+        |> Repo.update_all(set: [status: :completed, completed_at: CadenceTime.now()])
 
         # Handle the decision
         {updated_version, thread} = handle_review_decision(version, review, user_id, body)
@@ -1087,7 +1088,7 @@ defmodule Cadence.Procedures do
         updated =
           version
           |> ProcedureVersion.resubmit_changeset(%{
-            submitted_at: DateTime.utc_now(),
+            submitted_at: CadenceTime.now(),
             submitted_by_id: user_id
           })
           |> Repo.update!()
@@ -1429,7 +1430,7 @@ defmodule Cadence.Procedures do
         version
         |> ProcedureVersion.approval_changeset(%{
           status: :approved,
-          approved_at: DateTime.utc_now(),
+          approved_at: CadenceTime.now(),
           approved_by_id: user_id
         })
         |> Repo.update!()
@@ -1525,7 +1526,7 @@ defmodule Cadence.Procedures do
       aggregate_id: version.id,
       actor_id: user_id,
       actor_type: if(user_id, do: "user", else: "system"),
-      timestamp: DateTime.utc_now()
+      timestamp: CadenceTime.now()
     }
 
     case Recordings.create(recordable_module, recordable_attrs, recording_attrs) do
@@ -1715,7 +1716,7 @@ defmodule Cadence.Procedures do
 
     %{
       "export_version" => "1.0.0",
-      "exported_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "exported_at" => CadenceTime.now() |> DateTime.to_iso8601(),
       "source_procedure_id" => procedure.id,
       "source_mission_id" => procedure.mission_id,
       "procedure" => %{

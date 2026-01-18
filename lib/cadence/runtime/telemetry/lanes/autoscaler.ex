@@ -7,6 +7,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Autoscaler do
   require Logger
 
   alias Cadence.Runtime.Telemetry.Lanes.Router
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @default_interval_ms 2_000
   @default_scale_step 500
@@ -101,6 +102,6 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Autoscaler do
   end
 
   defp schedule_tick(interval_ms) do
-    Process.send_after(self(), :tick, interval_ms)
+    TimeTimer.send_after(self(), :tick, interval_ms)
   end
 end

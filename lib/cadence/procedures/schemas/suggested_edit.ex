@@ -57,6 +57,7 @@ defmodule Cadence.Procedures.SuggestedEdit do
 
   alias Cadence.Accounts.User
   alias Cadence.Procedures.{ProcedureExecution, StepExecution}
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{}
 
@@ -130,7 +131,7 @@ defmodule Cadence.Procedures.SuggestedEdit do
   Changeset for accepting a suggested edit.
   """
   def accept_changeset(edit, user_id, note \\ nil) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = CadenceTime.now() |> DateTime.truncate(:microsecond)
 
     edit
     |> change()
@@ -144,7 +145,7 @@ defmodule Cadence.Procedures.SuggestedEdit do
   Changeset for rejecting a suggested edit.
   """
   def reject_changeset(edit, user_id, note) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    now = CadenceTime.now() |> DateTime.truncate(:microsecond)
 
     edit
     |> change()

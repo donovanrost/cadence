@@ -38,6 +38,7 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
   alias Cadence.Runtime.Missions.{ConfigManager, MissionInstance}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @reconcile_interval :timer.seconds(10)
   @max_concurrent_reconciles 5
@@ -295,6 +296,6 @@ defmodule Cadence.Runtime.Reconciliation.OrgReconciler do
   end
 
   defp schedule_reconcile do
-    Process.send_after(self(), :reconcile, @reconcile_interval)
+    TimeTimer.send_after(self(), :reconcile, @reconcile_interval)
   end
 end

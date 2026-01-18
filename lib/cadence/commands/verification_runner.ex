@@ -42,6 +42,8 @@ defmodule Cadence.Commands.VerificationRunner do
   alias Cadence.Commands.Verification
   alias Cadence.MissionDatabase.CommandVerifier
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @stage_order [
     :transferred_to_range,
@@ -157,7 +159,7 @@ defmodule Cadence.Commands.VerificationRunner do
 
     updated_runner = %{
       runner
-      | started_at: DateTime.utc_now(),
+      | started_at: CadenceTime.now(),
         initial_value: initial_value,
         timeout_ref: nil
     }
@@ -177,7 +179,7 @@ defmodule Cadence.Commands.VerificationRunner do
 
     if verifier && verifier.timeout_ms do
       timeout_ref =
-        Process.send_after(
+        TimeTimer.send_after(
           dispatcher_pid,
           {:verification_stage_timeout, runner.command_log_id, verifier.stage},
           verifier.timeout_ms
@@ -196,7 +198,7 @@ defmodule Cadence.Commands.VerificationRunner do
   def cancel_timeout(%__MODULE__{timeout_ref: nil} = runner), do: runner
 
   def cancel_timeout(%__MODULE__{timeout_ref: ref} = runner) do
-    Process.cancel_timer(ref)
+    TimeTimer.cancel(ref)
     %{runner | timeout_ref: nil}
   end
 
@@ -258,7 +260,7 @@ defmodule Cadence.Commands.VerificationRunner do
         )
 
         # Reset started_at for fresh timeout
-        {:retry, %{runner | started_at: DateTime.utc_now(), timeout_ref: nil}}
+        {:retry, %{runner | started_at: CadenceTime.now(), timeout_ref: nil}}
 
       _ ->
         # Default: abort

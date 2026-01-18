@@ -50,7 +50,7 @@ defmodule Cadence.Alarms.CoverageReport do
          {:ok, analysis} <- CoverageAnalyzer.analyze(definition_set_id, mission_id),
          {:ok, summary} <- CoverageAnalyzer.summary(definition_set_id, mission_id) do
       report = %{
-        generated_at: DateTime.utc_now(),
+        generated_at: Cadence.Time.now(),
         definition_set_id: definition_set.id,
         definition_set_version: definition_set.version,
         summary: summary,
@@ -119,7 +119,7 @@ defmodule Cadence.Alarms.CoverageReport do
         end)
 
       diff = %{
-        generated_at: DateTime.utc_now(),
+        generated_at: Cadence.Time.now(),
         old_version: old_version,
         new_version: new_version,
         summary: %{

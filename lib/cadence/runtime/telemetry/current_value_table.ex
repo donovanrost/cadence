@@ -26,6 +26,8 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
 
   require Logger
 
+  alias Cadence.Time, as: CadenceTime
+
   @type telemetry_key ::
           {target_id :: binary(), packet_name :: String.t(), item_name :: String.t()}
   @type telemetry_value :: %{
@@ -56,7 +58,7 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
 
     telemetry_value = %{
       value: value,
-      received_time: Keyword.get(opts, :received_time, DateTime.utc_now()),
+      received_time: Keyword.get(opts, :received_time, CadenceTime.now()),
       packet_time: Keyword.get(opts, :packet_time),
       limits_state: Keyword.get(opts, :limits_state, :green),
       metadata: Keyword.get(opts, :metadata, %{})
@@ -65,15 +67,15 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
     table_name = table_name(mission_id)
 
     # Time ETS write
-    ets_start = System.monotonic_time(:microsecond)
+    ets_start = CadenceTime.monotonic(:microsecond)
     :ets.insert(table_name, {key, telemetry_value})
-    ets_duration = System.monotonic_time(:microsecond) - ets_start
+    ets_duration = CadenceTime.monotonic(:microsecond) - ets_start
     Stats.record_timing(mission_id, :ets_write, ets_duration)
 
     # Time PubSub broadcast
-    pubsub_start = System.monotonic_time(:microsecond)
+    pubsub_start = CadenceTime.monotonic(:microsecond)
     broadcast_update(mission_id, target_id, packet_name, item_name, telemetry_value)
-    pubsub_duration = System.monotonic_time(:microsecond) - pubsub_start
+    pubsub_duration = CadenceTime.monotonic(:microsecond) - pubsub_start
     Stats.record_timing(mission_id, :pubsub_broadcast, pubsub_duration)
 
     :ok
@@ -88,7 +90,7 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
   def set_batch(mission_id, items, opts \\ []) do
     alias Cadence.Telemetry.Stats
 
-    received_time = Keyword.get(opts, :received_time, DateTime.utc_now())
+    received_time = Keyword.get(opts, :received_time, CadenceTime.now())
     packet_time = Keyword.get(opts, :packet_time)
     table_name = table_name(mission_id)
 
@@ -112,11 +114,11 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
     # Sample timing at 1% to avoid overhead in hot path
     should_time = :rand.uniform(100) == 1
 
-    ets_start = if should_time, do: System.monotonic_time(:microsecond)
+    ets_start = if should_time, do: CadenceTime.monotonic(:microsecond)
     :ets.insert(table_name, ets_entries)
 
     if should_time do
-      ets_duration = System.monotonic_time(:microsecond) - ets_start
+      ets_duration = CadenceTime.monotonic(:microsecond) - ets_start
       Stats.record_timing(mission_id, :ets_write, ets_duration)
     end
 
@@ -132,7 +134,7 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
 
     topic = "mission:#{mission_id}:telemetry"
 
-    pubsub_start = System.monotonic_time(:microsecond)
+    pubsub_start = CadenceTime.monotonic(:microsecond)
 
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
@@ -140,7 +142,7 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
       {:telemetry_packet_update, target_id, packet_name, items}
     )
 
-    pubsub_duration = System.monotonic_time(:microsecond) - pubsub_start
+    pubsub_duration = CadenceTime.monotonic(:microsecond) - pubsub_start
     Stats.record_timing(mission_id, :pubsub_broadcast, pubsub_duration)
   end
 

@@ -58,6 +58,7 @@ defmodule Cadence.Procedures.BlockExecution do
 
   alias Cadence.Accounts.User
   alias Cadence.Procedures.{ProcedureBlock, StepExecution}
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{}
 
@@ -127,7 +128,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for starting block execution.
   """
   def start_changeset(block_execution) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     block_execution
     |> change()
@@ -139,7 +140,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for entering a value into an input block.
   """
   def enter_value_changeset(block_execution, value, user_id) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     block_execution
     |> change()
@@ -153,7 +154,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for recording a telemetry reading.
   """
   def telemetry_reading_changeset(block_execution, reading, passed \\ nil) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     block_execution
     |> change()
@@ -167,7 +168,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for recording a telemetry check result.
   """
   def telemetry_check_changeset(block_execution, reading, passed, validation_message \\ nil) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
     validation_message = truncate_message(validation_message)
 
     block_execution
@@ -183,7 +184,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for recording a command result.
   """
   def command_result_changeset(block_execution, result) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     block_execution
     |> change()
@@ -196,7 +197,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for marking block as failed.
   """
   def fail_changeset(block_execution, message) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
     message = truncate_message(message)
 
     block_execution
@@ -210,7 +211,7 @@ defmodule Cadence.Procedures.BlockExecution do
   Changeset for skipping a block.
   """
   def skip_changeset(block_execution) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     block_execution
     |> change()

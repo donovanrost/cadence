@@ -156,7 +156,7 @@ defmodule Cadence.Runtime.Alarms.Handlers.TelemetryLimitHandler do
       limit_state: event.new_state,
       current_value: event.value,
       message: message,
-      triggered_at: event.timestamp || DateTime.utc_now(),
+      triggered_at: event.timestamp || Cadence.Time.now(),
       metadata: %{
         "limit_set" => event.limit_set,
         "previous_state" => to_string(event.previous_state),

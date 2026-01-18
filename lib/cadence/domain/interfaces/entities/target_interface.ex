@@ -17,6 +17,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   """
 
   alias Cadence.Domain.Interfaces.ValueObjects.DataDirection
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -74,7 +75,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   def update_direction(%__MODULE__{} = routing, new_direction) do
     case parse_direction(new_direction) do
       {:ok, direction} ->
-        {:ok, %{routing | direction: direction, updated_at: DateTime.utc_now()}}
+        {:ok, %{routing | direction: direction, updated_at: CadenceTime.now()}}
 
       error ->
         error

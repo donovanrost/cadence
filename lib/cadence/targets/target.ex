@@ -12,6 +12,8 @@ defmodule Cadence.Targets.Target do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Cadence.Time, as: CadenceTime
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -128,7 +130,7 @@ defmodule Cadence.Targets.Target do
   def open_circuit_breaker(target) do
     circuit_breaker_changeset(target, %{
       circuit_breaker_status: "open",
-      circuit_breaker_opened_at: DateTime.utc_now()
+      circuit_breaker_opened_at: CadenceTime.now()
     })
   end
 

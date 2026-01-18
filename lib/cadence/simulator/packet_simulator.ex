@@ -38,6 +38,8 @@ defmodule Cadence.Simulator.PacketSimulator do
   alias Cadence.Interfaces
   alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Telemetry.Packet
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
   alias Phoenix.PubSub
 
   @default_rate_hz 1.0
@@ -190,7 +192,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       end
 
     # Start generation timer
-    timer_ref = Process.send_after(self(), :generate, interval_ms)
+    timer_ref = TimeTimer.send_after(self(), :generate, interval_ms)
 
     {:ok, %{state | timer_ref: timer_ref}}
   end
@@ -220,7 +222,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   @impl true
   def handle_info(:generate, state) do
     new_state = run_generation_cycles(state)
-    timer_ref = Process.send_after(self(), :generate, state.interval_ms)
+    timer_ref = TimeTimer.send_after(self(), :generate, state.interval_ms)
     {:noreply, %{new_state | timer_ref: timer_ref}}
   end
 
@@ -271,7 +273,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   @impl true
   def terminate(_reason, state) do
-    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+    if state.timer_ref, do: TimeTimer.cancel(state.timer_ref)
     if state.socket, do: :gen_tcp.close(state.socket)
     :ok
   end
@@ -406,7 +408,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       battery_percentage: min(100.0, 75.0 + :math.sin(cycle / 50.0) * 20.0),
       uptime_seconds: cycle * 10,
       memory_used_mb: 512 + :rand.uniform(100),
-      received_time: DateTime.utc_now()
+      received_time: CadenceTime.now()
     }
   end
 
@@ -419,7 +421,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       roll_rate: :math.cos(cycle / 15.0) * 0.1 + random_noise(0.01),
       pitch_rate: :math.sin(cycle / 20.0) * 0.1 + random_noise(0.01),
       yaw_rate: :math.cos(cycle / 18.0) * 0.1 + random_noise(0.01),
-      received_time: DateTime.utc_now()
+      received_time: CadenceTime.now()
     }
   end
 
@@ -434,7 +436,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       bus_voltage: 27.5 + random_noise(0.3),
       bus_current: 3.2 + random_noise(0.5),
       power_mode: Enum.random(["nominal", "battery", "charging"]),
-      received_time: DateTime.utc_now()
+      received_time: CadenceTime.now()
     }
   end
 
@@ -610,7 +612,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       mission_id: mission_id,
       stored: false,
       target_id: target_id,
-      received_at: DateTime.utc_now(),
+      received_at: CadenceTime.now(),
       interface_id: nil,
       source: %{simulator: true, packet_type: packet_type}
     }

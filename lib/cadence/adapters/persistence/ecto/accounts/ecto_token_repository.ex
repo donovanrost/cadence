@@ -25,6 +25,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoTokenRepository do
   alias Cadence.Adapters.Persistence.Ecto.Accounts.EctoUserRepository
   alias Cadence.Domain.Accounts.Entities.UserToken, as: TokenEntity
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # Token validity periods (matching domain entity)
   @session_validity_days 14
@@ -240,7 +241,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Accounts.EctoTokenRepository do
 
   @impl true
   def delete_expired_tokens do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
     session_cutoff = DateTime.add(now, -@session_validity_days, :day)
     login_cutoff = DateTime.add(now, -@magic_link_validity_minutes, :minute)
     change_email_cutoff = DateTime.add(now, -@change_email_validity_days, :day)

@@ -141,10 +141,10 @@ defmodule Cadence.Application.Alerting.AlarmQueries do
   end
 
   defp time_range_to_datetime(:all), do: nil
-  defp time_range_to_datetime(:"1h"), do: DateTime.add(DateTime.utc_now(), -1, :hour)
-  defp time_range_to_datetime(:"6h"), do: DateTime.add(DateTime.utc_now(), -6, :hour)
-  defp time_range_to_datetime(:"24h"), do: DateTime.add(DateTime.utc_now(), -24, :hour)
-  defp time_range_to_datetime(:"7d"), do: DateTime.add(DateTime.utc_now(), -7, :day)
+  defp time_range_to_datetime(:"1h"), do: DateTime.add(Cadence.Time.now(), -1, :hour)
+  defp time_range_to_datetime(:"6h"), do: DateTime.add(Cadence.Time.now(), -6, :hour)
+  defp time_range_to_datetime(:"24h"), do: DateTime.add(Cadence.Time.now(), -24, :hour)
+  defp time_range_to_datetime(:"7d"), do: DateTime.add(Cadence.Time.now(), -7, :day)
   defp time_range_to_datetime(_), do: nil
 
   @doc """

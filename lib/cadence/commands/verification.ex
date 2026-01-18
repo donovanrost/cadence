@@ -35,6 +35,7 @@ defmodule Cadence.Commands.Verification do
   require Logger
 
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Time, as: CadenceTime
 
   @doc """
   Verification configuration struct.
@@ -108,7 +109,7 @@ defmodule Cadence.Commands.Verification do
       expected_value: expected_value,
       mode: mode,
       timeout_ms: timeout_ms,
-      started_at: DateTime.utc_now(),
+      started_at: CadenceTime.now(),
       initial_value: initial_value,
       callback: callback
     }
@@ -167,7 +168,7 @@ defmodule Cadence.Commands.Verification do
   """
   @spec timed_out?(t()) :: boolean()
   def timed_out?(%__MODULE__{started_at: started_at, timeout_ms: timeout_ms}) do
-    elapsed_ms = DateTime.diff(DateTime.utc_now(), started_at, :millisecond)
+    elapsed_ms = DateTime.diff(CadenceTime.now(), started_at, :millisecond)
     elapsed_ms >= timeout_ms
   end
 

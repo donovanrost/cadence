@@ -32,6 +32,8 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
   alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.DerivedItems
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @table :derived_items_cache
   @cache_ttl_ms :timer.minutes(5)
@@ -137,7 +139,7 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
     if :ets.whereis(@table) != :undefined do
       case build_enriched_defs(derived_defs) do
         {:ok, {enriched_defs, packet_index}} ->
-          cached_at = System.monotonic_time(:millisecond)
+          cached_at = CadenceTime.monotonic(:millisecond)
           :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
 
         {:error, reason} ->
@@ -211,7 +213,7 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
     case :ets.lookup(@table, mission_id) do
       [{^mission_id, {_defs, _index} = cached_data, cached_at}] ->
         # Check if cache is still valid
-        if System.monotonic_time(:millisecond) - cached_at < @cache_ttl_ms do
+        if CadenceTime.monotonic(:millisecond) - cached_at < @cache_ttl_ms do
           {:ok, cached_data}
         else
           :miss
@@ -219,7 +221,7 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
       # Handle legacy format (defs only, no index) - will be replaced on next cache miss
       [{^mission_id, sorted_defs, cached_at}] when is_list(sorted_defs) ->
-        if System.monotonic_time(:millisecond) - cached_at < @cache_ttl_ms do
+        if CadenceTime.monotonic(:millisecond) - cached_at < @cache_ttl_ms do
           {:ok, {sorted_defs, %{}}}
         else
           :miss
@@ -237,7 +239,7 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
     case build_enriched_defs(derived_defs) do
       {:ok, {enriched_defs, packet_index}} ->
-        cached_at = System.monotonic_time(:millisecond)
+        cached_at = CadenceTime.monotonic(:millisecond)
         :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
 
         Logger.debug(
@@ -381,11 +383,11 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
   defp schedule_cleanup do
     # Run cleanup every minute
-    Process.send_after(self(), :cleanup, :timer.minutes(1))
+    TimeTimer.send_after(self(), :cleanup, :timer.minutes(1))
   end
 
   defp cleanup_stale_entries do
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
 
     # Find and delete stale entries
     stale_keys =

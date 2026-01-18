@@ -11,6 +11,7 @@ defmodule CadenceWeb.TelemetryLive.Index do
   alias Cadence.{Missions, Targets}
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @impl true
   def mount(%{"mission_id" => mission_id}, _session, socket) do
@@ -20,7 +21,7 @@ defmodule CadenceWeb.TelemetryLive.Index do
     if connected?(socket) do
       # Poll CVT at ~120 Hz (8ms interval) instead of PubSub subscription
       # This decouples UI updates from telemetry ingestion rate
-      :timer.send_interval(8, self(), :poll_cvt)
+      TimeTimer.send_interval(8, self(), :poll_cvt)
     end
 
     # Check if mission is running using Registry lookup

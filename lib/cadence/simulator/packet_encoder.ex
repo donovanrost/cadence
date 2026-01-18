@@ -34,6 +34,8 @@ defmodule Cadence.Simulator.PacketEncoder do
 
   import Bitwise
 
+  alias Cadence.Time, as: CadenceTime
+
   defstruct [
     :packets,
     :items_by_qualified_name,
@@ -563,7 +565,7 @@ defmodule Cadence.Simulator.PacketEncoder do
   # Build a CCSDS packet (no sync pattern - TM frames provide framing)
   defp build_ccsds_packet(apid, sequence, target_id, payload) do
     # Secondary header (8 bytes): timestamp + target hash
-    timestamp = System.system_time(:second)
+    timestamp = CadenceTime.system_time(:second)
     target_hash = :erlang.phash2(target_id, 65_536)
     secondary_header = <<timestamp::48, target_hash::16>>
 

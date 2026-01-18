@@ -23,6 +23,7 @@ defmodule Cadence.Timeline do
   alias Cadence.Recordings.Recording
   alias Cadence.Repo
   alias Cadence.Targets.Target
+  alias Cadence.Time, as: CadenceTime
   alias Cadence.Timeline.Event
 
   # Event publisher accessor
@@ -130,7 +131,7 @@ defmodule Cadence.Timeline do
   """
   @spec list_recent_events(binary(), pos_integer(), list_opts()) :: [Event.t()]
   def list_recent_events(mission_id, minutes \\ 60, opts \\ []) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
     start_time = DateTime.add(now, -minutes, :minute)
     # Include future events up to 24 hours ahead
     end_time = DateTime.add(now, 24, :hour)
@@ -220,7 +221,7 @@ defmodule Cadence.Timeline do
   # Private functions
 
   defp list_scheduled_commands(mission_id, after_time, target_ids, limit) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     query =
       from(qe in QueueEntry,

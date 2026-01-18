@@ -33,6 +33,7 @@ defmodule Cadence.Commands.QueueEntry do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.Targets.Target
+  alias Cadence.Time, as: CadenceTime
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -151,7 +152,7 @@ defmodule Cadence.Commands.QueueEntry do
   def ready?(%__MODULE__{status: :pending, scheduled_at: nil}), do: true
 
   def ready?(%__MODULE__{status: :pending, scheduled_at: scheduled_at}) do
-    DateTime.compare(DateTime.utc_now(), scheduled_at) != :lt
+    DateTime.compare(CadenceTime.now(), scheduled_at) != :lt
   end
 
   def ready?(_), do: false
@@ -162,7 +163,7 @@ defmodule Cadence.Commands.QueueEntry do
   def expired?(%__MODULE__{expires_at: nil}), do: false
 
   def expired?(%__MODULE__{expires_at: expires_at}) do
-    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+    DateTime.compare(CadenceTime.now(), expires_at) == :gt
   end
 
   @doc """

@@ -21,6 +21,7 @@ defmodule Cadence.Application.Accounts.SessionOperations do
   alias Cadence.Domain.Accounts.Entities.UserToken
   alias Cadence.Ports.Repository.Accounts.TokenRepository
   alias Cadence.Ports.Security.PasswordHasher
+  alias Cadence.Time, as: CadenceTime
 
   @type user_id :: String.t()
   @type token :: binary()
@@ -76,7 +77,7 @@ defmodule Cadence.Application.Accounts.SessionOperations do
   @spec create_session(user_id()) :: {:ok, token(), User.t()} | {:error, term()}
   def create_session(user_id) do
     with {:ok, user} <- UserQueries.find(user_id) do
-      authenticated_at = DateTime.utc_now() |> DateTime.truncate(:second)
+      authenticated_at = CadenceTime.now() |> DateTime.truncate(:second)
       {raw_token, token_entity} = UserToken.build_session_token(user_id, authenticated_at)
 
       case token_repo().save(token_entity) do

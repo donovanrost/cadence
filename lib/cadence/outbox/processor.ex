@@ -42,6 +42,7 @@ defmodule Cadence.Outbox.Processor do
 
   alias Cadence.Outbox
   alias Cadence.Outbox.Event
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @default_poll_interval_ms 1000
   @default_batch_size 100
@@ -225,10 +226,10 @@ defmodule Cadence.Outbox.Processor do
 
   defp schedule_next_poll(state) do
     if state.poll_timer do
-      Process.cancel_timer(state.poll_timer)
+      TimeTimer.cancel(state.poll_timer)
     end
 
-    timer = Process.send_after(self(), :process, state.poll_interval_ms)
+    timer = TimeTimer.send_after(self(), :process, state.poll_interval_ms)
     %{state | poll_timer: timer}
   end
 end

@@ -23,6 +23,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
   alias Cadence.Notifications.Notification
   alias Cadence.Notifications.NotificationPreference
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # NotificationRepository Implementation
@@ -138,7 +139,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Notifications.EctoNotificationReposi
   @impl true
   def mark_all_read(user_id, opts \\ []) do
     mission_id = Keyword.get(opts, :mission_id)
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     query =
       from n in Notification,

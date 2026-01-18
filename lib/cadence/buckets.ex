@@ -32,6 +32,7 @@ defmodule Cadence.Buckets do
 
   alias Cadence.Buckets.{Bucket, Bucketable, BucketMembership}
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ============================================================================
   # Bucket CRUD
@@ -155,7 +156,7 @@ defmodule Cadence.Buckets do
   """
   @spec list_active_buckets(String.t()) :: [Bucket.t()]
   def list_active_buckets(mission_id) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Bucket
     |> where([b], b.mission_id == ^mission_id)
@@ -204,7 +205,7 @@ defmodule Cadence.Buckets do
       role: role,
       can_command: Keyword.get(opts, :can_command, false),
       max_hazard_level: Keyword.get(opts, :max_hazard_level),
-      started_at: Keyword.get(opts, :started_at, DateTime.utc_now())
+      started_at: Keyword.get(opts, :started_at, CadenceTime.now())
     }
 
     %BucketMembership{}
@@ -297,7 +298,7 @@ defmodule Cadence.Buckets do
   @spec end_membership(BucketMembership.t()) ::
           {:ok, BucketMembership.t()} | {:error, Ecto.Changeset.t()}
   def end_membership(%BucketMembership{} = membership) do
-    update_membership(membership, %{ended_at: DateTime.utc_now()})
+    update_membership(membership, %{ended_at: CadenceTime.now()})
   end
 
   @doc """

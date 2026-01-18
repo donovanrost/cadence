@@ -31,6 +31,7 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
 
   alias Cadence.Runtime.Commands.TargetDispatcher
   alias Cadence.Runtime.Telemetry.CurrentValueTable
+  alias Cadence.Time, as: CadenceTime
 
   @type context :: %{
           mission_id: String.t(),
@@ -117,13 +118,13 @@ defmodule Cadence.Procedures.Runtime.CadenceApi do
     # Notify execution process we're waiting
     send(context.execution_pid, {:waiting_for_telemetry, item_name, operator, expected_value})
 
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    deadline = CadenceTime.monotonic(:millisecond) + timeout_ms
 
     wait_loop(context, item_name, operator, expected_value, deadline)
   end
 
   defp wait_loop(context, item_name, operator, expected_value, deadline) do
-    remaining = deadline - System.monotonic_time(:millisecond)
+    remaining = deadline - CadenceTime.monotonic(:millisecond)
 
     if remaining <= 0 do
       false

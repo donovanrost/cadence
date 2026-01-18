@@ -16,6 +16,7 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
 
   alias Cadence.Recordings
   alias Cadence.Recordings.Recordables
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # EventRecorder Implementation
@@ -220,7 +221,7 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
       actor_type: if(actor_id, do: "user", else: "system"),
       parent_id: Map.get(context, :parent_id),
       root_id: Map.get(context, :root_id),
-      timestamp: DateTime.utc_now()
+      timestamp: CadenceTime.now()
     }
   end
 

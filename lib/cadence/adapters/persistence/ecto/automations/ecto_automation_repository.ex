@@ -13,6 +13,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Automations.EctoAutomationRepository
   alias Cadence.Automations.Automation, as: AutomationSchema
   alias Cadence.Domain.Automations.Entities.Automation, as: AutomationEntity
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # AutomationRepository Implementation
@@ -131,7 +132,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Automations.EctoAutomationRepository
       schema ->
         schema
         |> AutomationSchema.trigger_changeset(%{
-          last_triggered_at: DateTime.utc_now(),
+          last_triggered_at: CadenceTime.now(),
           trigger_count: entity.trigger_count + 1
         })
         |> Repo.update()

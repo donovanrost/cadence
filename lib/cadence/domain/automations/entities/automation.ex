@@ -8,6 +8,8 @@ defmodule Cadence.Domain.Automations.Entities.Automation do
   This is a pure domain entity with no Ecto dependencies.
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @type trigger_type ::
           :alarm_fired
           | :alarm_cleared
@@ -139,7 +141,7 @@ defmodule Cadence.Domain.Automations.Entities.Automation do
     {:ok,
      %{
        automation
-       | last_triggered_at: DateTime.utc_now(),
+       | last_triggered_at: CadenceTime.now(),
          trigger_count: automation.trigger_count + 1
      }}
   end
@@ -173,7 +175,7 @@ defmodule Cadence.Domain.Automations.Entities.Automation do
 
   def in_cooldown?(%__MODULE__{cooldown_seconds: seconds, last_triggered_at: last}) do
     cooldown_end = DateTime.add(last, seconds, :second)
-    DateTime.compare(DateTime.utc_now(), cooldown_end) == :lt
+    DateTime.compare(CadenceTime.now(), cooldown_end) == :lt
   end
 
   @doc """

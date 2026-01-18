@@ -24,6 +24,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   """
 
   alias Cadence.Domain.Accounts.ValueObjects.UserRole
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -96,8 +97,8 @@ defmodule Cadence.Domain.Accounts.Entities.User do
         role: role,
         system_admin: system_admin,
         organization_id: attrs[:organization_id],
-        created_at: attrs[:created_at] || DateTime.utc_now(),
-        updated_at: attrs[:updated_at] || DateTime.utc_now()
+        created_at: attrs[:created_at] || CadenceTime.now(),
+        updated_at: attrs[:updated_at] || CadenceTime.now()
       }
 
       {:ok, user}
@@ -138,7 +139,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   def update_email(%__MODULE__{email: current} = user, new_email) do
     with {:ok, validated_email} <- validate_email(new_email),
          :ok <- ensure_email_changed(current, validated_email) do
-      {:ok, %{user | email: validated_email, updated_at: DateTime.utc_now()}}
+      {:ok, %{user | email: validated_email, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -147,7 +148,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   """
   @spec confirm(t()) :: {:ok, t()}
   def confirm(%__MODULE__{} = user) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
     {:ok, %{user | confirmed_at: now, updated_at: now}}
   end
 
@@ -184,7 +185,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   """
   @spec set_hashed_password(t(), String.t()) :: {:ok, t()}
   def set_hashed_password(%__MODULE__{} = user, hashed_password) do
-    {:ok, %{user | hashed_password: hashed_password, updated_at: DateTime.utc_now()}}
+    {:ok, %{user | hashed_password: hashed_password, updated_at: CadenceTime.now()}}
   end
 
   # ===========================================================================
@@ -198,7 +199,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   def update_role(%__MODULE__{} = user, new_role) do
     case UserRole.validate(new_role) do
       {:ok, validated_role} ->
-        {:ok, %{user | role: validated_role, updated_at: DateTime.utc_now()}}
+        {:ok, %{user | role: validated_role, updated_at: CadenceTime.now()}}
 
       error ->
         error
@@ -210,7 +211,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   """
   @spec make_system_admin(t()) :: {:ok, t()}
   def make_system_admin(%__MODULE__{} = user) do
-    {:ok, %{user | system_admin: true, updated_at: DateTime.utc_now()}}
+    {:ok, %{user | system_admin: true, updated_at: CadenceTime.now()}}
   end
 
   @doc """
@@ -218,7 +219,7 @@ defmodule Cadence.Domain.Accounts.Entities.User do
   """
   @spec revoke_system_admin(t()) :: {:ok, t()}
   def revoke_system_admin(%__MODULE__{} = user) do
-    {:ok, %{user | system_admin: false, updated_at: DateTime.utc_now()}}
+    {:ok, %{user | system_admin: false, updated_at: CadenceTime.now()}}
   end
 
   # ===========================================================================

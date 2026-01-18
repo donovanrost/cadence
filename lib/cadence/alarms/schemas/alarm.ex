@@ -294,7 +294,7 @@ defmodule Cadence.Alarms.Alarm do
   """
   @spec shelve_expired?(t()) :: boolean()
   def shelve_expired?(%__MODULE__{status: :shelved, shelved_until: shelved_until}) do
-    DateTime.compare(DateTime.utc_now(), shelved_until) == :gt
+    DateTime.compare(Cadence.Time.now(), shelved_until) == :gt
   end
 
   def shelve_expired?(_), do: false

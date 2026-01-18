@@ -31,6 +31,7 @@ defmodule Cadence.Telemetry.Profiler do
   alias Cadence.Runtime.Telemetry.Limits.{Cache, StateTracker}
   alias Cadence.Telemetry.PipelineMetrics
   alias Cadence.Telemetry.Stats
+  alias Cadence.Time, as: CadenceTime
 
   @doc """
   Analyzes timing data to detect warmup effects and GC spikes.
@@ -243,7 +244,7 @@ defmodule Cadence.Telemetry.Profiler do
     stats = safe_call(fn -> PipelineMetrics.get_stats(mission_id) end)
 
     %{
-      timestamp: DateTime.utc_now(),
+      timestamp: CadenceTime.now(),
       stats: stats,
       percentiles: nil,
       stage_errors: Map.get(stats, :errors, %{}),

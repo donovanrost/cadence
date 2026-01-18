@@ -24,6 +24,7 @@ defmodule Cadence.Domain.Notifications.Entities.Notification do
 
   alias Cadence.Domain.Notifications.ValueObjects.NotificationSeverity
   alias Cadence.Domain.Notifications.ValueObjects.NotificationType
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -180,7 +181,7 @@ defmodule Cadence.Domain.Notifications.Entities.Notification do
   """
   @spec mark_read(t()) :: {:ok, t()}
   def mark_read(%__MODULE__{} = notification) do
-    {:ok, %{notification | read_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}}
+    {:ok, %{notification | read_at: CadenceTime.now(), updated_at: CadenceTime.now()}}
   end
 
   @doc """
@@ -188,7 +189,7 @@ defmodule Cadence.Domain.Notifications.Entities.Notification do
   """
   @spec archive(t()) :: {:ok, t()}
   def archive(%__MODULE__{} = notification) do
-    {:ok, %{notification | archived_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}}
+    {:ok, %{notification | archived_at: CadenceTime.now(), updated_at: CadenceTime.now()}}
   end
 
   @doc """
@@ -196,7 +197,7 @@ defmodule Cadence.Domain.Notifications.Entities.Notification do
   """
   @spec mark_email_sent(t()) :: {:ok, t()}
   def mark_email_sent(%__MODULE__{} = notification) do
-    {:ok, %{notification | email_sent_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}}
+    {:ok, %{notification | email_sent_at: CadenceTime.now(), updated_at: CadenceTime.now()}}
   end
 
   @doc """

@@ -24,6 +24,7 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Runtime.Telemetry.DerivedItems.Cache, as: DerivedItemsCache
   alias Cadence.Runtime.Telemetry.Limits.Cache, as: LimitsCache
+  alias Cadence.Time, as: CadenceTime
 
   def start_link(opts) do
     if enabled?() do
@@ -63,7 +64,7 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
   end
 
   defp warm_all_caches(%{mission_id: mission_id, config: %MissionConfig{} = config}) do
-    start_time = System.monotonic_time(:millisecond)
+    start_time = CadenceTime.monotonic(:millisecond)
 
     # Warm derived items cache (mission-wide)
     DerivedItemsCache.warm_from_defs(mission_id, config.derived_item_defs)
@@ -71,7 +72,7 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
     # Warm limits cache for each target using config snapshot
     LimitsCache.warm_from_packet_defs(mission_id, config.targets, config.packet_defs)
 
-    elapsed = System.monotonic_time(:millisecond) - start_time
+    elapsed = CadenceTime.monotonic(:millisecond) - start_time
 
     Logger.info(
       "Cache warming complete for mission_id=#{mission_id}: " <>

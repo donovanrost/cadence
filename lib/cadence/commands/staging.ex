@@ -33,6 +33,7 @@ defmodule Cadence.Commands.Staging do
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Outbox
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
   alias Ecto.Multi
 
   @pubsub Cadence.PubSub
@@ -163,7 +164,7 @@ defmodule Cadence.Commands.Staging do
     Multi.new()
     |> Multi.insert(:staged_command, StagedCommand.changeset(%StagedCommand{}, staged_attrs))
     |> Multi.insert_all(:targets, StagedCommandTarget, fn %{staged_command: sc} ->
-      now = DateTime.utc_now()
+      now = CadenceTime.now()
 
       targets
       |> Enum.with_index()

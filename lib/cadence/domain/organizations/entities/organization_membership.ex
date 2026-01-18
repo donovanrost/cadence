@@ -18,6 +18,7 @@ defmodule Cadence.Domain.Organizations.Entities.OrganizationMembership do
   """
 
   alias Cadence.Domain.Organizations.ValueObjects.MembershipRole
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -71,7 +72,7 @@ defmodule Cadence.Domain.Organizations.Entities.OrganizationMembership do
   @spec change_role(t(), MembershipRole.t()) :: {:ok, t()} | {:error, term()}
   def change_role(%__MODULE__{} = membership, new_role) do
     with {:ok, role} <- parse_role(new_role) do
-      {:ok, %{membership | role: role, updated_at: DateTime.utc_now()}}
+      {:ok, %{membership | role: role, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -82,7 +83,7 @@ defmodule Cadence.Domain.Organizations.Entities.OrganizationMembership do
   def promote(%__MODULE__{role: current} = membership, new_role) do
     with {:ok, role} <- parse_role(new_role) do
       if MembershipRole.level(role) > MembershipRole.level(current) do
-        {:ok, %{membership | role: role, updated_at: DateTime.utc_now()}}
+        {:ok, %{membership | role: role, updated_at: CadenceTime.now()}}
       else
         {:error, :cannot_promote_to_lower_role}
       end
@@ -96,7 +97,7 @@ defmodule Cadence.Domain.Organizations.Entities.OrganizationMembership do
   def demote(%__MODULE__{role: current} = membership, new_role) do
     with {:ok, role} <- parse_role(new_role) do
       if MembershipRole.level(role) < MembershipRole.level(current) do
-        {:ok, %{membership | role: role, updated_at: DateTime.utc_now()}}
+        {:ok, %{membership | role: role, updated_at: CadenceTime.now()}}
       else
         {:error, :cannot_demote_to_higher_role}
       end

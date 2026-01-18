@@ -212,7 +212,7 @@ defmodule Cadence.Application.Alerting.ManageAlarmRules do
       rule
       |> AlarmRule.enable_changeset(%{
         enabled: false,
-        disabled_at: DateTime.utc_now(),
+        disabled_at: Cadence.Time.now(),
         disabled_by_id: user_id,
         disabled_reason: reason
       })

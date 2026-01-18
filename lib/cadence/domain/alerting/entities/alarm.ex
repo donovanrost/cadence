@@ -29,7 +29,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
         severity: :critical,
         source_type: "telemetry_item",
         source_id: "HEALTH.cpu_temp",
-        triggered_at: DateTime.utc_now()
+        triggered_at: Cadence.Time.now()
       })
 
       # Acknowledge the alarm
@@ -197,7 +197,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
        %{
          alarm
          | status: :acknowledged,
-           acknowledged_at: DateTime.utc_now(),
+           acknowledged_at: Cadence.Time.now(),
            acknowledged_by_id: user_id,
            acknowledgment_note: note
        }}
@@ -228,7 +228,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
   def shelve(%__MODULE__{status: status} = alarm, user_id, duration_minutes, reason \\ nil) do
     with :ok <- validate_duration(duration_minutes),
          :ok <- AlarmStatus.validate_transition(status, :shelved) do
-      now = DateTime.utc_now()
+      now = Cadence.Time.now()
       shelved_until = DateTime.add(now, duration_minutes * 60, :second)
 
       {:ok,
@@ -301,7 +301,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
        %{
          alarm
          | status: :cleared,
-           cleared_at: DateTime.utc_now()
+           cleared_at: Cadence.Time.now()
        }}
     end
   end
@@ -320,7 +320,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
   """
   @spec update_value(t(), float(), keyword()) :: {:ok, t()}
   def update_value(%__MODULE__{} = alarm, value, opts \\ []) do
-    now = DateTime.utc_now()
+    now = Cadence.Time.now()
     new_severity = Keyword.get(opts, :severity)
     new_limit_state = Keyword.get(opts, :limit_state)
     new_message = Keyword.get(opts, :message)
@@ -375,7 +375,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
   @spec shelve_expired?(t()) :: boolean()
   def shelve_expired?(%__MODULE__{status: :shelved, shelved_until: shelved_until})
       when not is_nil(shelved_until) do
-    DateTime.compare(DateTime.utc_now(), shelved_until) == :gt
+    DateTime.compare(Cadence.Time.now(), shelved_until) == :gt
   end
 
   def shelve_expired?(_), do: false
@@ -400,7 +400,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
   """
   @spec duration(t()) :: integer()
   def duration(%__MODULE__{triggered_at: triggered_at}) do
-    DateTime.diff(DateTime.utc_now(), triggered_at, :second)
+    DateTime.diff(Cadence.Time.now(), triggered_at, :second)
   end
 
   @doc """
@@ -412,7 +412,7 @@ defmodule Cadence.Domain.Alerting.Entities.Alarm do
   @spec shelve_remaining_seconds(t()) :: integer() | nil
   def shelve_remaining_seconds(%__MODULE__{status: :shelved, shelved_until: shelved_until})
       when not is_nil(shelved_until) do
-    DateTime.diff(shelved_until, DateTime.utc_now(), :second)
+    DateTime.diff(shelved_until, Cadence.Time.now(), :second)
   end
 
   def shelve_remaining_seconds(_), do: nil

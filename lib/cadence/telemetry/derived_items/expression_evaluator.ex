@@ -64,6 +64,7 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluator do
 
   alias Cadence.Telemetry.DerivedItems.ExpressionParser
   alias Cadence.Telemetry.DerivedItems.ProcessorState
+  alias Cadence.Time, as: CadenceTime
 
   @type bindings :: %{String.t() => number()}
   @type eval_result :: {:ok, number()} | {:error, term()}
@@ -574,7 +575,7 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluator do
   defp apply_stateful_function(:rate, [expr], ctx) do
     with {:ok, value} <- eval_ast_stateful(expr, ctx) do
       key = state_key(ctx.item_name, :rate, [expr])
-      now = System.monotonic_time(:millisecond)
+      now = CadenceTime.monotonic(:millisecond)
 
       state = ProcessorState.get(ctx.mission_id, key)
 
@@ -650,7 +651,7 @@ defmodule Cadence.Telemetry.DerivedItems.ExpressionEvaluator do
   # elapsed() - Seconds since first evaluation
   defp apply_stateful_function(:elapsed, [], ctx) do
     key = state_key(ctx.item_name, :elapsed, [])
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
 
     state = ProcessorState.get(ctx.mission_id, key)
 

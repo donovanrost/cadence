@@ -27,6 +27,8 @@ defmodule Cadence.Simulator.SimulatorMetrics do
       SimulatorMetrics.get_stats(coordinator_id)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @table_name :cadence_simulator_metrics
 
   # Counter slot indices
@@ -82,7 +84,7 @@ defmodule Cadence.Simulator.SimulatorMetrics do
 
     counter_ref = :counters.new(@slot_count, [:write_concurrency])
     :ets.insert(@table_name, {{coordinator_id, :counters}, counter_ref})
-    :ets.insert(@table_name, {{coordinator_id, :started_at}, System.monotonic_time(:millisecond)})
+    :ets.insert(@table_name, {{coordinator_id, :started_at}, CadenceTime.monotonic(:millisecond)})
 
     :ok
   end
@@ -141,7 +143,7 @@ defmodule Cadence.Simulator.SimulatorMetrics do
 
   defp build_stats(ref, coordinator_id) do
     started_at = get_started_at(coordinator_id)
-    duration_ms = System.monotonic_time(:millisecond) - started_at
+    duration_ms = CadenceTime.monotonic(:millisecond) - started_at
     duration_sec = max(duration_ms / 1000, 0.001)
 
     %{
@@ -202,7 +204,7 @@ defmodule Cadence.Simulator.SimulatorMetrics do
 
         :ets.insert(
           @table_name,
-          {{coordinator_id, :started_at}, System.monotonic_time(:millisecond)}
+          {{coordinator_id, :started_at}, CadenceTime.monotonic(:millisecond)}
         )
     end
 
@@ -233,7 +235,7 @@ defmodule Cadence.Simulator.SimulatorMetrics do
   defp get_started_at(coordinator_id) do
     case :ets.lookup(@table_name, {coordinator_id, :started_at}) do
       [{_, time}] -> time
-      [] -> System.monotonic_time(:millisecond)
+      [] -> CadenceTime.monotonic(:millisecond)
     end
   end
 

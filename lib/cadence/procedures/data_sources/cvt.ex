@@ -35,6 +35,7 @@ defmodule Cadence.Procedures.DataSources.CVT do
 
   alias Cadence.Procedures.DataSources.DataSource
   alias Cadence.Runtime.Telemetry.CurrentValueTable, as: CVTStore
+  alias Cadence.Time, as: CadenceTime
 
   # Default stale threshold: 30 seconds
   @default_stale_threshold_ms 30_000
@@ -204,7 +205,7 @@ defmodule Cadence.Procedures.DataSources.CVT do
         {:ok,
          %{
            value: default_value,
-           timestamp: DateTime.utc_now(),
+           timestamp: CadenceTime.now(),
            quality: :unknown,
            source: %{
              source_type: :cvt,
@@ -222,7 +223,7 @@ defmodule Cadence.Procedures.DataSources.CVT do
   end
 
   defp determine_quality(timestamp, limits_state, stale_threshold) do
-    age_ms = DateTime.diff(DateTime.utc_now(), timestamp, :millisecond)
+    age_ms = DateTime.diff(CadenceTime.now(), timestamp, :millisecond)
 
     cond do
       limits_state == :red -> :bad
@@ -365,7 +366,7 @@ defmodule Cadence.Procedures.DataSources.CVT do
         {:ok,
          %{
            result: result,
-           evaluated_at: DateTime.utc_now(),
+           evaluated_at: CadenceTime.now(),
            bindings: bindings
          }}
 

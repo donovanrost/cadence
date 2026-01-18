@@ -27,6 +27,14 @@ defmodule Cadence.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import Cadence.DataCase
+
+      import Cadence.PureCase,
+        only: [
+          setup_limits_cache: 0,
+          setup_mission_registry: 0,
+          setup_virtual_time: 0,
+          setup_virtual_time: 1
+        ]
     end
   end
 

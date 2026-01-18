@@ -8,6 +8,7 @@ defmodule Cadence.CCSDS.Downlink.PacketAdapter do
   alias Cadence.CCSDS.Core.{PDU, SDUOctets}
   alias Cadence.CCSDS.SDU.SpacePacket
   alias Cadence.Telemetry.Packet
+  alias Cadence.Time, as: CadenceTime
 
   @spec to_packet(PDU.t(), SDUOctets.t(), keyword()) :: {:ok, Packet.t()} | {:error, term()}
   def to_packet(%PDU{type: :space_packet, value: %SpacePacket{} = sp}, sdu, _opts) do
@@ -28,7 +29,7 @@ defmodule Cadence.CCSDS.Downlink.PacketAdapter do
   defp build_metadata(%SDUOctets{} = sdu) do
     %{
       target_id: sdu.meta[:target_id] || "default",
-      received_at: sdu.timestamp || DateTime.utc_now(),
+      received_at: sdu.timestamp || CadenceTime.now(),
       stored: false
     }
     |> Map.merge(sdu.meta || %{})

@@ -13,6 +13,7 @@ defmodule Cadence.Notifications.Notification do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.Outbox.Event
+  alias Cadence.Time, as: CadenceTime
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -89,21 +90,21 @@ defmodule Cadence.Notifications.Notification do
   Changeset for marking a notification as read.
   """
   def mark_read_changeset(notification) do
-    change(notification, %{read_at: DateTime.utc_now()})
+    change(notification, %{read_at: CadenceTime.now()})
   end
 
   @doc """
   Changeset for marking a notification as archived.
   """
   def mark_archived_changeset(notification) do
-    change(notification, %{archived_at: DateTime.utc_now()})
+    change(notification, %{archived_at: CadenceTime.now()})
   end
 
   @doc """
   Changeset for marking a notification email as sent.
   """
   def mark_email_sent_changeset(notification) do
-    change(notification, %{email_sent_at: DateTime.utc_now()})
+    change(notification, %{email_sent_at: CadenceTime.now()})
   end
 
   @doc """

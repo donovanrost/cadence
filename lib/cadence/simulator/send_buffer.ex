@@ -34,6 +34,8 @@ defmodule Cadence.Simulator.SendBuffer do
   use GenServer
   require Logger
 
+  alias Cadence.Time.Timer, as: TimeTimer
+
   @default_batch_timeout 10
   @default_batch_size 32_768
 
@@ -312,10 +314,10 @@ defmodule Cadence.Simulator.SendBuffer do
   defp schedule_flush(state) do
     # Cancel existing timer if any
     if state.timer_ref do
-      Process.cancel_timer(state.timer_ref)
+      TimeTimer.cancel(state.timer_ref)
     end
 
-    timer_ref = Process.send_after(self(), :flush, state.batch_timeout)
+    timer_ref = TimeTimer.send_after(self(), :flush, state.batch_timeout)
     %{state | timer_ref: timer_ref}
   end
 

@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Event do
 
   alias Cadence.Runtime.Telemetry.Lanes.LaneSelector
   alias Cadence.Telemetry.Packet
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -87,8 +88,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Event do
       config_version: config_version,
       packet: packet,
       metadata: metadata,
-      received_at: System.monotonic_time(:microsecond),
-      ingest_monotonic_ns: System.monotonic_time(:nanosecond)
+      received_at: CadenceTime.monotonic(:microsecond),
+      ingest_monotonic_ns: CadenceTime.monotonic(:nanosecond)
     }
   end
 

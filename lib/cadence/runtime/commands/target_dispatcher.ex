@@ -54,6 +54,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   alias Cadence.Repo
   alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue, VerificationManager}
   alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @confirmation_timeout_ms 60_000
   @default_dispatch_timeout_ms 30_000
@@ -346,7 +348,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
     # Cancel the timeout timer
     if state.dispatch_timeout_ref do
-      Process.cancel_timer(state.dispatch_timeout_ref)
+      TimeTimer.cancel(state.dispatch_timeout_ref)
     end
 
     # Report result back to queue
@@ -354,7 +356,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
     # Only check for more work if uplink is connected
     if uplink_connected?(state) do
-      Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+      TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
     end
 
     {:noreply,
@@ -375,7 +377,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
     # Cancel the timeout timer
     if state.dispatch_timeout_ref do
-      Process.cancel_timer(state.dispatch_timeout_ref)
+      TimeTimer.cancel(state.dispatch_timeout_ref)
     end
 
     # Report failure to queue
@@ -387,7 +389,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     )
 
     # Check for more work after a brief delay
-    Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+    TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
 
     {:noreply,
      %{
@@ -418,7 +420,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     )
 
     # Check for more work after a brief delay
-    Process.send_after(self(), :check_queue, @queue_check_interval_ms)
+    TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
 
     {:noreply,
      %{
@@ -468,7 +470,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp confirmation_expired?(%ConfirmationRequest{expires_at: expires_at}) do
-    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+    DateTime.compare(CadenceTime.now(), expires_at) == :gt
   end
 
   defp drop_confirmation(state, token) do
@@ -522,7 +524,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
     # Start dispatch timeout timer
     dispatch_timeout = get_dispatch_timeout(state.target)
-    timeout_ref = Process.send_after(self(), :dispatch_timeout, dispatch_timeout)
+    timeout_ref = TimeTimer.send_after(self(), :dispatch_timeout, dispatch_timeout)
 
     %{
       state
@@ -806,7 +808,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   defp create_command_recording(state, command, target, params, encoded, opts, aggregate_id) do
     user_id = Keyword.get(opts, :user_id)
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{
       command_name: command.name,
@@ -836,7 +838,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp record_command_sent(state, aggregate_id, parent_recording_id, interface_id) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{interface_id: interface_id}
 
@@ -854,7 +856,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp record_command_rejected(state, aggregate_id, command_name, error_info) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{
       error_reason: error_info[:error_reason],
@@ -884,7 +886,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   end
 
   defp record_command_errored(state, aggregate_id, command_name, error_info) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     recordable_attrs = %{
       error_reason: error_info[:error_reason],
@@ -931,7 +933,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     case command_result do
       {:ok, command} ->
         token = generate_token()
-        expires_at = DateTime.add(DateTime.utc_now(), @confirmation_timeout_ms, :millisecond)
+        expires_at = DateTime.add(CadenceTime.now(), @confirmation_timeout_ms, :millisecond)
 
         request = %ConfirmationRequest{
           token: token,

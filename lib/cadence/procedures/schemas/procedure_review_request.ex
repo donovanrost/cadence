@@ -18,6 +18,7 @@ defmodule Cadence.Procedures.ProcedureReviewRequest do
 
   alias Cadence.Accounts.User
   alias Cadence.Procedures.ProcedureVersion
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{}
 
@@ -58,7 +59,7 @@ defmodule Cadence.Procedures.ProcedureReviewRequest do
     request
     |> change()
     |> put_change(:status, :completed)
-    |> put_change(:completed_at, DateTime.utc_now())
+    |> put_change(:completed_at, CadenceTime.now())
   end
 
   @doc """

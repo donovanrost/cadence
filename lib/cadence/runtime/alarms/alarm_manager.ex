@@ -48,6 +48,7 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
   alias Cadence.Ports.Messaging.EventPublisher
   alias Cadence.Runtime.Alarms.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @shelve_check_interval :timer.seconds(30)
 
@@ -369,7 +370,7 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
   # ============================================================================
 
   defp check_shelve_expiration(state) do
-    now = DateTime.utc_now()
+    now = Cadence.Time.now()
 
     # Check ETS cache for expired shelved alarms
     :ets.foldl(
@@ -399,7 +400,7 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
   end
 
   defp schedule_shelve_check do
-    Process.send_after(self(), :check_shelve_expiration, @shelve_check_interval)
+    TimeTimer.send_after(self(), :check_shelve_expiration, @shelve_check_interval)
   end
 
   # ============================================================================

@@ -24,6 +24,7 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   """
 
   alias Cadence.Domain.Accounts.ValueObjects.TokenType
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -85,14 +86,14 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
           {binary(), t()}
   def build_session_token_with_bytes(user_id, authenticated_at, random_bytes) do
     token = random_bytes
-    dt = authenticated_at || DateTime.utc_now() |> DateTime.truncate(:second)
+    dt = authenticated_at || CadenceTime.now() |> DateTime.truncate(:second)
 
     token_entity = %__MODULE__{
       token: token,
       context: "session",
       user_id: user_id,
       authenticated_at: dt,
-      created_at: DateTime.utc_now()
+      created_at: CadenceTime.now()
     }
 
     {token, token_entity}
@@ -297,7 +298,7 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
       context: context,
       user_id: user_id,
       sent_to: sent_to,
-      created_at: DateTime.utc_now()
+      created_at: CadenceTime.now()
     }
 
     {url_token, token_entity}
@@ -310,12 +311,12 @@ defmodule Cadence.Domain.Accounts.Entities.UserToken do
   defp expired?(nil, _amount, _unit), do: true
 
   defp expired?(created_at, amount, :day) do
-    cutoff = DateTime.add(DateTime.utc_now(), -amount, :day)
+    cutoff = DateTime.add(CadenceTime.now(), -amount, :day)
     DateTime.compare(created_at, cutoff) == :lt
   end
 
   defp expired?(created_at, amount, :minute) do
-    cutoff = DateTime.add(DateTime.utc_now(), -amount, :minute)
+    cutoff = DateTime.add(CadenceTime.now(), -amount, :minute)
     DateTime.compare(created_at, cutoff) == :lt
   end
 end

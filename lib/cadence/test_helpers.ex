@@ -10,6 +10,7 @@ defmodule Cadence.TestHelpers do
   alias Cadence.MissionDatabase.{Database, DefinitionSet}
   alias Cadence.{Missions, Targets}
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   @doc """
   Creates a test database and definition set for a mission.
@@ -39,7 +40,7 @@ defmodule Cadence.TestHelpers do
         database_id: database.id,
         version: "1.0.0",
         source_format: :yaml,
-        published_at: DateTime.utc_now()
+        published_at: CadenceTime.now()
       })
       |> Repo.insert()
 
@@ -74,7 +75,7 @@ defmodule Cadence.TestHelpers do
         database_id: database.id,
         version: "1.0.0",
         source_format: :yaml,
-        published_at: DateTime.utc_now()
+        published_at: CadenceTime.now()
       })
       |> Repo.insert()
 

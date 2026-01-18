@@ -11,9 +11,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   alias Cadence.Runtime.Telemetry.Lanes.Event
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
   alias Cadence.Telemetry.{Convert, Decom, Derive, Identify}
-
   alias Cadence.Telemetry.LogEnvelope
   alias Cadence.Telemetry.PipelineMetrics
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @timing_sample_rate 100
   @default_max_batch_size 200
@@ -115,7 +116,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
 
   defp ensure_flush_timer(%{flush_timer: nil} = state) do
     timer =
-      Process.send_after(self(), :flush_batch, state.max_batch_delay_ms)
+      TimeTimer.send_after(self(), :flush_batch, state.max_batch_delay_ms)
 
     %{state | flush_timer: timer}
   end
@@ -126,7 +127,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
 
   defp flush_batch(state) do
     if state.flush_timer do
-      Process.cancel_timer(state.flush_timer)
+      TimeTimer.cancel(state.flush_timer)
     end
 
     events = Enum.reverse(state.buffer)
@@ -280,9 +281,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   end
 
   defp maybe_time(true, fun) do
-    start = System.monotonic_time(:microsecond)
+    start = CadenceTime.monotonic(:microsecond)
     result = fun.()
-    duration = System.monotonic_time(:microsecond) - start
+    duration = CadenceTime.monotonic(:microsecond) - start
     {result, duration}
   end
 
@@ -320,7 +321,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   defp apply_stateless_limits(event, _state, _sample?), do: {event, nil}
 
   defp record_end_to_end(%Event{} = event, true, state) do
-    now_us = System.monotonic_time(:microsecond)
+    now_us = CadenceTime.monotonic(:microsecond)
     ingest_us = div(event.ingest_monotonic_ns, 1_000)
     duration_us = max(now_us - ingest_us, 0)
 

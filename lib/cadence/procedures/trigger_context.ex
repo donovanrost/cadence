@@ -49,6 +49,8 @@ defmodule Cadence.Procedures.TriggerContext do
           data: map()
         }
 
+  alias Cadence.Time, as: CadenceTime
+
   @doc """
   Builds trigger context for different trigger types.
 
@@ -84,11 +86,11 @@ defmodule Cadence.Procedures.TriggerContext do
   def build(type, arg)
 
   def build(:manual, nil) do
-    build_context(:manual, nil, "system", DateTime.utc_now(), %{})
+    build_context(:manual, nil, "system", CadenceTime.now(), %{})
   end
 
   def build(:manual, user) do
-    build_context(:manual, user.id, user.email || "unknown", DateTime.utc_now(), %{
+    build_context(:manual, user.id, user.email || "unknown", CadenceTime.now(), %{
       user_id: user.id,
       user_email: user.email
     })
@@ -99,7 +101,7 @@ defmodule Cadence.Procedures.TriggerContext do
       :schedule,
       schedule.id,
       schedule.name || "Scheduled Execution",
-      DateTime.utc_now(),
+      CadenceTime.now(),
       %{
         schedule_id: schedule.id,
         schedule_name: schedule.name,
@@ -116,7 +118,7 @@ defmodule Cadence.Procedures.TriggerContext do
       :alarm,
       alarm_source_id(alarm_event),
       alarm_source_name(alarm_event, alarm),
-      alarm_event[:timestamp] || DateTime.utc_now(),
+      alarm_event[:timestamp] || CadenceTime.now(),
       %{
         alarm_id: alarm_source_id(alarm_event),
         alarm_name: alarm_source_name(alarm_event, alarm),
@@ -136,7 +138,7 @@ defmodule Cadence.Procedures.TriggerContext do
       :telemetry_event,
       event[:id] || Ecto.UUID.generate(),
       event[:item_name] || "Telemetry Event",
-      event[:timestamp] || DateTime.utc_now(),
+      event[:timestamp] || CadenceTime.now(),
       %{
         item_name: event[:item_name],
         packet_name: event[:packet_name],
@@ -161,7 +163,7 @@ defmodule Cadence.Procedures.TriggerContext do
       type,
       context[:source_id],
       context[:source_name] || to_string(type),
-      context[:triggered_at] || DateTime.utc_now(),
+      context[:triggered_at] || CadenceTime.now(),
       context[:data] || %{}
     )
   end
@@ -231,17 +233,17 @@ defmodule Cadence.Procedures.TriggerContext do
   defp normalize_type("telemetry_event"), do: :telemetry_event
   defp normalize_type(_), do: :manual
 
-  defp normalize_timestamp(nil), do: DateTime.utc_now()
+  defp normalize_timestamp(nil), do: CadenceTime.now()
   defp normalize_timestamp(%DateTime{} = dt), do: dt
 
   defp normalize_timestamp(str) when is_binary(str) do
     case DateTime.from_iso8601(str) do
       {:ok, dt, _} -> dt
-      _ -> DateTime.utc_now()
+      _ -> CadenceTime.now()
     end
   end
 
-  defp normalize_timestamp(_), do: DateTime.utc_now()
+  defp normalize_timestamp(_), do: CadenceTime.now()
 
   defp stringify_keys(map) when is_map(map) do
     Map.new(map, fn {k, v} -> {to_string(k), stringify_value(v)} end)

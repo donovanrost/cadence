@@ -77,7 +77,7 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
       Map.merge(attrs, %{
         alarm_type: attrs[:alarm_type] || "telemetry_limit",
         source_type: attrs[:source_type] || "telemetry_item",
-        triggered_at: DateTime.utc_now()
+        triggered_at: Cadence.Time.now()
       })
 
     find_or_create(attrs)
@@ -98,7 +98,7 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
       Map.merge(attrs, %{
         alarm_type: attrs[:alarm_type] || "interface_connection",
         source_type: "interface",
-        triggered_at: DateTime.utc_now()
+        triggered_at: Cadence.Time.now()
       })
 
     find_or_create(attrs)
@@ -117,7 +117,7 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
     attrs =
       Map.merge(attrs, %{
         source_origin: :manual,
-        triggered_at: DateTime.utc_now(),
+        triggered_at: Cadence.Time.now(),
         metadata: Map.merge(attrs[:metadata] || %{}, %{"created_by" => user_id})
       })
 
@@ -135,7 +135,7 @@ defmodule Cadence.Application.Alerting.TriggerAlarm do
     attrs =
       Map.merge(attrs, %{
         source_origin: :mission_db,
-        triggered_at: DateTime.utc_now(),
+        triggered_at: Cadence.Time.now(),
         metadata:
           Map.merge(attrs[:metadata] || %{}, %{
             "source_definition_set_id" => definition_set_id

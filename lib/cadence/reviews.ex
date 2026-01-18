@@ -22,6 +22,7 @@ defmodule Cadence.Reviews do
   }
 
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ============================================================================
   # Approval Progress
@@ -113,7 +114,7 @@ defmodule Cadence.Reviews do
       %{
         request: request,
         version: %{version | procedure: procedure},
-        wait_time: DateTime.diff(DateTime.utc_now(), request.inserted_at, :second)
+        wait_time: DateTime.diff(CadenceTime.now(), request.inserted_at, :second)
       }
     end)
   end

@@ -14,6 +14,7 @@ defmodule Cadence.Automations do
   alias Cadence.Application.Automations.AutomationQueries
   alias Cadence.Domain.Automations.Entities.Automation
   alias Cadence.Domain.Automations.Entities.AutomationExecution
+  alias Cadence.Time, as: CadenceTime
 
   # ============================================================================
   # Automation Queries
@@ -215,7 +216,7 @@ defmodule Cadence.Automations do
   """
   @spec count_recent_executions(String.t()) :: non_neg_integer()
   def count_recent_executions(automation_id) do
-    one_hour_ago = DateTime.add(DateTime.utc_now(), -1, :hour)
+    one_hour_ago = DateTime.add(CadenceTime.now(), -1, :hour)
     execution_repo().count_recent(automation_id, one_hour_ago)
   end
 

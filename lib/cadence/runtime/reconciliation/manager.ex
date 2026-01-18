@@ -24,6 +24,7 @@ defmodule Cadence.Runtime.Reconciliation.Manager do
   require Logger
 
   alias Cadence.Runtime.Reconciliation.OrgReconciler
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @reconcile_interval :timer.seconds(30)
 
@@ -148,6 +149,6 @@ defmodule Cadence.Runtime.Reconciliation.Manager do
   end
 
   defp schedule_reconcile do
-    Process.send_after(self(), :reconcile, @reconcile_interval)
+    TimeTimer.send_after(self(), :reconcile, @reconcile_interval)
   end
 end

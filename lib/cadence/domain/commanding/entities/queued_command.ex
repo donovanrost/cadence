@@ -51,6 +51,8 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
       {:ok, pending} = QueuedCommand.retry(failed)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   alias Cadence.Domain.Commanding.ValueObjects.{Priority, QueueStatus}
 
   @type t :: %__MODULE__{
@@ -150,7 +152,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
         command_aggregate_id: Map.get(attrs, :command_aggregate_id) || Ecto.UUID.generate(),
         dispatch_opts: Map.get(attrs, :dispatch_opts, %{}),
         metadata: Map.get(attrs, :metadata, %{}),
-        created_at: DateTime.utc_now()
+        created_at: CadenceTime.now()
       }
 
       {:ok, cmd}
@@ -175,7 +177,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
          cmd
          | status: :executing,
            attempts: cmd.attempts + 1,
-           last_attempt_at: DateTime.utc_now()
+           last_attempt_at: CadenceTime.now()
        }}
     end
   end
@@ -307,7 +309,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
   def expired?(%__MODULE__{expires_at: nil}), do: false
 
   def expired?(%__MODULE__{expires_at: expires_at}) do
-    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+    DateTime.compare(CadenceTime.now(), expires_at) == :gt
   end
 
   @doc """
@@ -317,7 +319,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
   def schedule_due?(%__MODULE__{scheduled_at: nil}), do: true
 
   def schedule_due?(%__MODULE__{scheduled_at: scheduled_at}) do
-    DateTime.compare(DateTime.utc_now(), scheduled_at) != :lt
+    DateTime.compare(CadenceTime.now(), scheduled_at) != :lt
   end
 
   @doc """
@@ -361,7 +363,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
   def seconds_until_scheduled(%__MODULE__{scheduled_at: nil}), do: nil
 
   def seconds_until_scheduled(%__MODULE__{scheduled_at: scheduled_at}) do
-    DateTime.diff(scheduled_at, DateTime.utc_now(), :second)
+    DateTime.diff(scheduled_at, CadenceTime.now(), :second)
   end
 
   @doc """
@@ -371,7 +373,7 @@ defmodule Cadence.Domain.Commanding.Entities.QueuedCommand do
   def seconds_until_expiration(%__MODULE__{expires_at: nil}), do: nil
 
   def seconds_until_expiration(%__MODULE__{expires_at: expires_at}) do
-    DateTime.diff(expires_at, DateTime.utc_now(), :second)
+    DateTime.diff(expires_at, CadenceTime.now(), :second)
   end
 
   # ===========================================================================

@@ -24,7 +24,7 @@ defmodule Cadence.Recordings do
           mission_id: mission_id,
           aggregate_id: Ecto.UUID.generate(),
           actor_id: user_id,
-          timestamp: DateTime.utc_now()
+          timestamp: Cadence.Time.now()
         }
       )
   """

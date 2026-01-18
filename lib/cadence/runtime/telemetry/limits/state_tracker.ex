@@ -37,6 +37,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   alias Cadence.Runtime.Telemetry.Limits.Cache
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
   alias Cadence.Telemetry.Limits.Evaluator
+  alias Cadence.Time, as: CadenceTime
 
   @type state_entry :: %{
           current_state: Evaluator.limit_state(),
@@ -132,7 +133,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
     # Get cache data once for all items
     cache_data = Cache.get_cached_data(mission_id, target_id)
     table_name = table_name(mission_id)
-    now = System.monotonic_time(:millisecond)
+    now = CadenceTime.monotonic(:millisecond)
 
     # Check if table exists once
     table_exists? = :ets.whereis(table_name) != :undefined
@@ -383,7 +384,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   @spec get_stale_items(String.t()) :: [{String.t(), String.t(), state_entry()}]
   def get_stale_items(mission_id) do
     table_name = table_name(mission_id)
-    now_mono = System.monotonic_time(:millisecond)
+    now_mono = CadenceTime.monotonic(:millisecond)
 
     fetch_stale_items(table_name, now_mono)
   end
@@ -420,7 +421,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   defp legacy_time_since_update_ms(entry) do
     case Map.get(entry, :last_update) do
       nil -> 0
-      dt -> DateTime.diff(DateTime.utc_now(), dt, :millisecond)
+      dt -> DateTime.diff(CadenceTime.now(), dt, :millisecond)
     end
   end
 
@@ -572,7 +573,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
        ) do
     table_name = table_name(mission_id)
     key = {target_id, qualified_item_name}
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
     normalized_state = Evaluator.normalize_state(raw_state)
 
     ctx = %{
@@ -750,7 +751,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
       new_state: new_state,
       value: value,
       limit_set: active_limit_set,
-      timestamp: DateTime.utc_now()
+      timestamp: CadenceTime.now()
     }
 
     # Broadcast event via EventPublisher port

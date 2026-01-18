@@ -76,6 +76,7 @@ defmodule Cadence.Simulator.Coordinator do
   }
 
   alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @default_rate_hz 1.0
   @default_target_id "SIM-1"
@@ -187,7 +188,7 @@ defmodule Cadence.Simulator.Coordinator do
       """)
 
       interval_ms = max(trunc(1000 / rate_hz), 1)
-      timer_ref = Process.send_after(self(), :generate, interval_ms)
+      timer_ref = TimeTimer.send_after(self(), :generate, interval_ms)
       {:ok, %{state | timer_ref: timer_ref}}
     else
       {:error, :missing_definitions} ->
@@ -327,7 +328,7 @@ defmodule Cadence.Simulator.Coordinator do
       end)
 
     # Schedule next tick
-    timer_ref = Process.send_after(self(), :generate, interval_ms)
+    timer_ref = TimeTimer.send_after(self(), :generate, interval_ms)
 
     new_state = %{
       state
@@ -355,7 +356,7 @@ defmodule Cadence.Simulator.Coordinator do
 
     # Schedule next generation
     interval_ms = max(trunc(1000 / state.rate_hz), 1)
-    timer_ref = Process.send_after(self(), :generate, interval_ms)
+    timer_ref = TimeTimer.send_after(self(), :generate, interval_ms)
 
     new_state = %{
       state
@@ -416,7 +417,7 @@ defmodule Cadence.Simulator.Coordinator do
 
   @impl true
   def terminate(_reason, state) do
-    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+    if state.timer_ref, do: TimeTimer.cancel(state.timer_ref)
 
     # Clean up based on mode
     case state.parallel_mode do

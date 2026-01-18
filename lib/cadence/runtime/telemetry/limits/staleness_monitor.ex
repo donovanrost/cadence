@@ -40,6 +40,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
 
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @default_check_interval_ms 5_000
   # Note: stale_timeout_ms is passed via opts, default value for reference only
@@ -128,7 +129,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
 
     new_state = %{
       state
-      | last_check: DateTime.utc_now(),
+      | last_check: Cadence.Time.now(),
         items_marked_stale: state.items_marked_stale + count
     }
 
@@ -177,7 +178,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
 
     new_state = %{
       state
-      | last_check: DateTime.utc_now(),
+      | last_check: Cadence.Time.now(),
         items_marked_stale: state.items_marked_stale + count,
         total_checks: state.total_checks + 1
     }
@@ -245,7 +246,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
   end
 
   defp schedule_check(interval) do
-    Process.send_after(self(), :check_staleness, interval)
+    TimeTimer.send_after(self(), :check_staleness, interval)
   end
 
   defp via_tuple(mission_id) when is_binary(mission_id) do

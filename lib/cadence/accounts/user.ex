@@ -4,6 +4,8 @@ defmodule Cadence.Accounts.User do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Cadence.Time, as: CadenceTime
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -124,7 +126,7 @@ defmodule Cadence.Accounts.User do
   Confirms the account by setting `confirmed_at`.
   """
   def confirm_changeset(user) do
-    now = DateTime.utc_now(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
     change(user, confirmed_at: now)
   end
 

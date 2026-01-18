@@ -42,6 +42,7 @@ defmodule Cadence.Shifts do
   alias Cadence.Buckets
   alias Cadence.Repo
   alias Cadence.Shifts.Shift
+  alias Cadence.Time, as: CadenceTime
 
   # ============================================================================
   # Shift CRUD
@@ -124,7 +125,7 @@ defmodule Cadence.Shifts do
   @spec list_upcoming_shifts(String.t(), keyword()) :: [Shift.t()]
   def list_upcoming_shifts(mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 10)
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Shift
     |> where([s], s.mission_id == ^mission_id)
@@ -188,7 +189,7 @@ defmodule Cadence.Shifts do
   """
   @spec start_shift(Shift.t()) :: {:ok, Shift.t()} | {:error, Ecto.Changeset.t()}
   def start_shift(%Shift{status: "scheduled"} = shift) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Repo.transaction(fn ->
       with {:ok, updated} <- update_shift(shift, %{status: "active", actual_start: now}),
@@ -211,7 +212,7 @@ defmodule Cadence.Shifts do
   """
   @spec end_shift(Shift.t()) :: {:ok, Shift.t()} | {:error, Ecto.Changeset.t()}
   def end_shift(%Shift{status: "active"} = shift) do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     Repo.transaction(fn ->
       with {:ok, updated} <- update_shift(shift, %{status: "completed", actual_end: now}),

@@ -70,6 +70,8 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
 
   @type trigger_type :: :manual | :schedule | :event
 
+  alias Cadence.Time, as: CadenceTime
+
   @type t :: %__MODULE__{
           id: String.t(),
           event_type: event_type(),
@@ -139,7 +141,7 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
       step_info: attrs[:step_info],
       started_at: attrs[:started_at],
       completed_at: attrs[:completed_at],
-      timestamp: attrs[:timestamp] || DateTime.utc_now()
+      timestamp: attrs[:timestamp] || CadenceTime.now()
     }
   end
 
@@ -183,7 +185,7 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
       triggered_by_user_id: execution.triggered_by_user_id,
       parameters: execution.parameters,
       started_at: execution.started_at,
-      completed_at: DateTime.utc_now()
+      completed_at: CadenceTime.now()
     })
   end
 
@@ -208,7 +210,7 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
       error_message: error_message || execution.error_message,
       step_index: execution.error_step_index,
       started_at: execution.started_at,
-      completed_at: DateTime.utc_now()
+      completed_at: CadenceTime.now()
     })
   end
 
@@ -272,7 +274,7 @@ defmodule Cadence.Procedures.Events.ProcedureExecutionEvent do
       triggered_by: execution.triggered_by,
       step_index: execution.current_step_index,
       started_at: execution.started_at,
-      completed_at: DateTime.utc_now()
+      completed_at: CadenceTime.now()
     })
   end
 

@@ -21,6 +21,8 @@ defmodule Cadence.Telemetry.Packet do
       {:ok, payload} = Packet.get_payload(packet)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   defstruct [
     # Core Identity
     :mission_id,
@@ -104,7 +106,7 @@ defmodule Cadence.Telemetry.Packet do
       metadata = %{
         mission_id: "abc-123",
         target_id: "SAT-1",
-        received_at: DateTime.utc_now(),
+        received_at: Cadence.Time.now(),
         interface_id: "if-1"
       }
 
@@ -119,7 +121,7 @@ defmodule Cadence.Telemetry.Packet do
          %__MODULE__{
            mission_id: metadata[:mission_id],
            target_id: metadata[:target_id],
-           received_time: metadata[:received_at] || DateTime.utc_now(),
+           received_time: metadata[:received_at] || CadenceTime.now(),
            raw: binary,
            ccsds_header: ccsds_header,
            packet_time: ccsds_header.timestamp,

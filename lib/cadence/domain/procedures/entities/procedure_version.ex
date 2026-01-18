@@ -35,6 +35,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
   """
 
   alias Cadence.Domain.Procedures.ValueObjects.VersionStatus
+  alias Cadence.Time, as: CadenceTime
 
   @type approval :: %{
           user_id: String.t(),
@@ -125,7 +126,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
         change_summary: Map.get(attrs, :change_summary),
         required_approvals: Map.get(attrs, :required_approvals, 1),
         approvals: [],
-        created_at: DateTime.utc_now()
+        created_at: CadenceTime.now()
       }
 
       {:ok, version}
@@ -148,7 +149,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
        %{
          version
          | status: :submitted,
-           submitted_at: DateTime.utc_now()
+           submitted_at: CadenceTime.now()
        }}
     end
   end
@@ -167,7 +168,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
     else
       approval = %{
         user_id: user_id,
-        approved_at: DateTime.utc_now(),
+        approved_at: CadenceTime.now(),
         comment: comment
       }
 
@@ -175,7 +176,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
 
       # Check if we have enough approvals
       if length(version.approvals) >= version.required_approvals do
-        {:ok, %{version | status: :approved, approved_at: DateTime.utc_now()}}
+        {:ok, %{version | status: :approved, approved_at: CadenceTime.now()}}
       else
         {:ok, version}
       end
@@ -198,7 +199,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
        %{
          version
          | status: :approved,
-           approved_at: DateTime.utc_now()
+           approved_at: CadenceTime.now()
        }}
     end
   end
@@ -215,7 +216,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
        %{
          version
          | status: :rejected,
-           rejected_at: DateTime.utc_now(),
+           rejected_at: CadenceTime.now(),
            rejected_by_id: user_id,
            rejection_reason: reason
        }}
@@ -242,7 +243,7 @@ defmodule Cadence.Domain.Procedures.Entities.ProcedureVersion do
        %{
          version
          | status: :deprecated,
-           deprecated_at: DateTime.utc_now()
+           deprecated_at: CadenceTime.now()
        }}
     end
   end

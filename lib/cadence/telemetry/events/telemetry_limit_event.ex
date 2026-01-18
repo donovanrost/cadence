@@ -54,6 +54,8 @@ defmodule Cadence.Telemetry.Events.TelemetryLimitEvent do
           timestamp: DateTime.t()
         }
 
+  alias Cadence.Time, as: CadenceTime
+
   @derive Jason.Encoder
   defstruct [
     :id,
@@ -97,7 +99,7 @@ defmodule Cadence.Telemetry.Events.TelemetryLimitEvent do
       new_state: attrs[:new_state],
       value: attrs[:value],
       limit_set: attrs[:limit_set] || "UNKNOWN",
-      timestamp: attrs[:timestamp] || DateTime.utc_now()
+      timestamp: attrs[:timestamp] || CadenceTime.now()
     }
   end
 

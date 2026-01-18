@@ -23,6 +23,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Schedules.EctoScheduleRepository do
   alias Cadence.Domain.Schedules.Entities.Schedule, as: ScheduleEntity
   alias Cadence.Repo
   alias Cadence.Schedules.Schedule, as: ScheduleSchema
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # ScheduleRepository Implementation
@@ -87,7 +88,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Schedules.EctoScheduleRepository do
 
   @impl true
   def list_due_once do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     ScheduleSchema
     |> where([s], s.enabled == true)
@@ -152,7 +153,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Schedules.EctoScheduleRepository do
       schema ->
         schema
         |> ScheduleSchema.run_changeset(%{
-          last_run_at: DateTime.utc_now(),
+          last_run_at: CadenceTime.now(),
           next_run_at: next_run_at,
           run_count: (schema.run_count || 0) + 1
         })

@@ -19,6 +19,7 @@ defmodule Cadence.Procedures.ProcedureReviewThread do
 
   alias Cadence.Accounts.User
   alias Cadence.Procedures.{ProcedureReview, ProcedureReviewComment, ProcedureVersion}
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{}
 
@@ -95,7 +96,7 @@ defmodule Cadence.Procedures.ProcedureReviewThread do
     |> change()
     |> put_change(:status, :resolved)
     |> put_change(:resolved_by_id, user_id)
-    |> put_change(:resolved_at, DateTime.utc_now())
+    |> put_change(:resolved_at, CadenceTime.now())
   end
 
   @doc """

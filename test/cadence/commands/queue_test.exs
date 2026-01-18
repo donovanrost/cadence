@@ -12,16 +12,9 @@ defmodule Cadence.Commands.QueueTest do
   alias Cadence.Domain.Commanding.Entities.QueuedCommand
   alias Cadence.Runtime.Commands.{TargetDispatcher, TargetQueue}
 
+  setup_mission_registry()
+
   setup do
-    case Process.whereis(Cadence.MissionRegistry) do
-      nil ->
-        {:ok, _pid} =
-          start_supervised({Registry, keys: :unique, name: Cadence.MissionRegistry})
-
-      _pid ->
-        :ok
-    end
-
     # Create organization and mission using fixtures
     org = organization_fixture()
 

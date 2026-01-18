@@ -7,13 +7,14 @@ defmodule Cadence.Commands.PDUBuilder do
 
   alias Cadence.CCSDS.Core.PDU
   alias Cadence.CCSDS.SDU.SpacePacket
+  alias Cadence.Time, as: CadenceTime
 
   @max_apid 2047
 
   @spec build(binary(), map(), map()) :: {:ok, PDU.t()} | {:error, term()}
   def build(encoded, target, meta \\ %{}) when is_binary(encoded) and is_map(target) do
     with {:ok, apid} <- command_apid(target) do
-      timestamp = DateTime.utc_now()
+      timestamp = CadenceTime.now()
 
       packet = %SpacePacket{
         apid: apid,

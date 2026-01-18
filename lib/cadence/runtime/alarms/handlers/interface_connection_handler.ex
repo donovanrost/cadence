@@ -176,7 +176,7 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
       source_type: "interface",
       source_id: event.interface_id,
       message: message,
-      triggered_at: event.timestamp || DateTime.utc_now(),
+      triggered_at: event.timestamp || Cadence.Time.now(),
       metadata: %{
         "interface_name" => event.interface_name,
         "previous_state" => to_string(event.previous_state),

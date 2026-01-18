@@ -13,6 +13,7 @@ defmodule Cadence.Notifications.DigestWorker do
   alias Cadence.Accounts.UserNotifier
   alias Cadence.Notifications.{Notification, NotificationPreference}
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"period" => period}}) do
@@ -56,7 +57,7 @@ defmodule Cadence.Notifications.DigestWorker do
         {:ok, _email} ->
           # Mark all as sent
           ids = Enum.map(notifications, & &1.id)
-          now = DateTime.utc_now()
+          now = CadenceTime.now()
 
           from(n in Notification, where: n.id in ^ids)
           |> Repo.update_all(set: [email_sent_at: now])
@@ -67,6 +68,6 @@ defmodule Cadence.Notifications.DigestWorker do
     end
   end
 
-  defp digest_cutoff(:daily), do: DateTime.add(DateTime.utc_now(), -1, :day)
-  defp digest_cutoff(:weekly), do: DateTime.add(DateTime.utc_now(), -7, :day)
+  defp digest_cutoff(:daily), do: DateTime.add(CadenceTime.now(), -1, :day)
+  defp digest_cutoff(:weekly), do: DateTime.add(CadenceTime.now(), -7, :day)
 end

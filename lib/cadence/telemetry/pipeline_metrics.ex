@@ -32,6 +32,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       PipelineMetrics.get_stats(mission_id)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @table_name :cadence_pipeline_metrics
 
   # Counter slot indices (per partition)
@@ -202,7 +204,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     # Store metadata
     :ets.insert(@table_name, {{mission_id, :partition_keys}, partitions})
     :ets.insert(@table_name, {{mission_id, :partition_count}, length(partitions)})
-    :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
+    :ets.insert(@table_name, {{mission_id, :started_at}, CadenceTime.monotonic(:millisecond)})
 
     :ok
   end
@@ -314,9 +316,9 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   Returns the result of the function.
   """
   def time(mission_id, partition, stage, fun) when is_function(fun, 0) do
-    start = System.monotonic_time(:microsecond)
+    start = CadenceTime.monotonic(:microsecond)
     result = fun.()
-    duration = System.monotonic_time(:microsecond) - start
+    duration = CadenceTime.monotonic(:microsecond) - start
     record_timing(mission_id, partition, stage, duration)
     result
   end
@@ -423,7 +425,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
 
   defp get_duration(mission_id) do
     started_at = get_started_at(mission_id)
-    duration_ms = System.monotonic_time(:millisecond) - started_at
+    duration_ms = CadenceTime.monotonic(:millisecond) - started_at
     duration_sec = max(duration_ms / 1000, 0.001)
     {duration_ms, duration_sec}
   end
@@ -490,7 +492,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   end
 
   defp build_rolling_stats(mission_id, summary) do
-    now_ms = System.monotonic_time(:millisecond)
+    now_ms = CadenceTime.monotonic(:millisecond)
 
     {packets_processed, items_processed, bytes_received} =
       {summary.packets_processed, summary.items_processed, summary.bytes_received}
@@ -563,7 +565,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
 
     # Reset start time
-    :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
+    :ets.insert(@table_name, {{mission_id, :started_at}, CadenceTime.monotonic(:millisecond)})
 
     :ok
   end
@@ -641,7 +643,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   defp get_started_at(mission_id) do
     case :ets.lookup(@table_name, {mission_id, :started_at}) do
       [{_, time}] -> time
-      [] -> System.monotonic_time(:millisecond)
+      [] -> CadenceTime.monotonic(:millisecond)
     end
   end
 

@@ -23,6 +23,7 @@ defmodule Cadence.Application.Automations.AutomationOperations do
   """
 
   alias Cadence.Domain.Automations.Entities.Automation
+  alias Cadence.Time, as: CadenceTime
 
   @type automation_id :: String.t()
   @type organization_id :: String.t()
@@ -219,7 +220,7 @@ defmodule Cadence.Application.Automations.AutomationOperations do
   defp rate_limited?(%Automation{max_executions_per_hour: nil}), do: false
 
   defp rate_limited?(%Automation{id: id, max_executions_per_hour: max}) do
-    one_hour_ago = DateTime.add(DateTime.utc_now(), -1, :hour)
+    one_hour_ago = DateTime.add(CadenceTime.now(), -1, :hour)
     execution_repo().count_recent(id, one_hour_ago) >= max
   end
 

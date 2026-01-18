@@ -25,6 +25,7 @@ defmodule Cadence.Application.Accounts.UserOperations do
   alias Cadence.Domain.Accounts.Entities.User
   alias Cadence.Ports.Repository.Accounts.UserRepository
   alias Cadence.Ports.Security.PasswordHasher
+  alias Cadence.Time, as: CadenceTime
 
   @type user_id :: String.t()
   @type attrs :: map()
@@ -229,7 +230,7 @@ defmodule Cadence.Application.Accounts.UserOperations do
   end
 
   defp create_system_admin(email, password) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = CadenceTime.now() |> DateTime.truncate(:second)
 
     with {:ok, hashed_password} <- maybe_hash_password(password),
          {:ok, user} <-

@@ -50,6 +50,7 @@ defmodule Cadence.Outbox.Event do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.Recordings.Recording
+  alias Cadence.Time, as: CadenceTime
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -193,7 +194,7 @@ defmodule Cadence.Outbox.Event do
   def processed_changeset(event) do
     event
     |> change()
-    |> put_change(:processed_at, DateTime.utc_now())
+    |> put_change(:processed_at, CadenceTime.now())
   end
 
   @doc """
@@ -211,7 +212,7 @@ defmodule Cadence.Outbox.Event do
     |> change()
     |> put_change(:attempts, event.attempts + 1)
     |> put_change(:last_error, error_string)
-    |> put_change(:last_attempted_at, DateTime.utc_now())
+    |> put_change(:last_attempted_at, CadenceTime.now())
   end
 
   @doc """
@@ -220,7 +221,7 @@ defmodule Cadence.Outbox.Event do
   def dead_letter_changeset(event, error) do
     event
     |> failure_changeset(error)
-    |> put_change(:dead_lettered_at, DateTime.utc_now())
+    |> put_change(:dead_lettered_at, CadenceTime.now())
   end
 
   @doc """

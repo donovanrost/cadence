@@ -44,6 +44,8 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
       {:ok, target} = Target.close_circuit_breaker(target)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @type target_type :: :spacecraft | :ground_station | :simulator | :relay
   @type target_status :: :offline | :online | :standby | :fault
   @type circuit_breaker_status :: :closed | :open | :half_open
@@ -179,7 +181,7 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
      %{
        target
        | circuit_breaker_status: :open,
-         circuit_breaker_opened_at: DateTime.utc_now()
+         circuit_breaker_opened_at: CadenceTime.now()
      }}
   end
 

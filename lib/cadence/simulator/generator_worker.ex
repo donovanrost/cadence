@@ -35,6 +35,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
+  alias Cadence.Time, as: CadenceTime
 
   defstruct [
     :worker_id,
@@ -198,7 +199,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
     # Sample timing
     should_time = rem(step, sample_rate) == 0
-    start_time = if should_time, do: System.monotonic_time(:microsecond)
+    start_time = if should_time, do: CadenceTime.monotonic(:microsecond)
 
     # Generate values from provider
     case provider_module.generate_values(provider_state, step) do
@@ -206,7 +207,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
         maybe_record_generation(coordinator_id, should_time, start_time)
         SimulatorMetrics.inc(coordinator_id, :packets_generated)
 
-        encode_start = if should_time, do: System.monotonic_time(:microsecond)
+        encode_start = if should_time, do: CadenceTime.monotonic(:microsecond)
 
         {result, updated_state} =
           encode_and_send_values(state, values, sequence_allocator, send_buffer)
@@ -227,14 +228,14 @@ defmodule Cadence.Simulator.GeneratorWorker do
   defp maybe_record_generation(_coordinator_id, false, _start_time), do: :ok
 
   defp maybe_record_generation(coordinator_id, true, start_time) do
-    gen_time = System.monotonic_time(:microsecond) - start_time
+    gen_time = CadenceTime.monotonic(:microsecond) - start_time
     SimulatorMetrics.record_timing(coordinator_id, :generation, gen_time)
   end
 
   defp maybe_record_encoding(_coordinator_id, false, _start_time), do: :ok
 
   defp maybe_record_encoding(coordinator_id, true, start_time) do
-    encode_time = System.monotonic_time(:microsecond) - start_time
+    encode_time = CadenceTime.monotonic(:microsecond) - start_time
     SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
   end
 

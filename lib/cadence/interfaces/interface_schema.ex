@@ -32,6 +32,8 @@ defmodule Cadence.Interfaces.InterfaceSchema do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Cadence.Time, as: CadenceTime
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -184,7 +186,7 @@ defmodule Cadence.Interfaces.InterfaceSchema do
   def mark_connected(interface) do
     status_changeset(interface, %{
       status: "connected",
-      metadata: Map.put(interface.metadata || %{}, "last_connected_at", DateTime.utc_now())
+      metadata: Map.put(interface.metadata || %{}, "last_connected_at", CadenceTime.now())
     })
   end
 
@@ -194,7 +196,7 @@ defmodule Cadence.Interfaces.InterfaceSchema do
   def mark_disconnected(interface, reason \\ nil) do
     metadata =
       (interface.metadata || %{})
-      |> Map.put("last_disconnected_at", DateTime.utc_now())
+      |> Map.put("last_disconnected_at", CadenceTime.now())
 
     metadata =
       if reason do
@@ -218,7 +220,7 @@ defmodule Cadence.Interfaces.InterfaceSchema do
       metadata:
         Map.merge(interface.metadata || %{}, %{
           "last_error" => error,
-          "last_error_at" => DateTime.utc_now()
+          "last_error_at" => CadenceTime.now()
         })
     })
   end

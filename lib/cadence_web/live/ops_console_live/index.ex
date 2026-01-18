@@ -27,6 +27,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
   alias Cadence.Application.Alerting.ManageAlarmRules
   alias Cadence.DashboardLayouts.DashboardLayout
   alias Cadence.MissionDatabase.{Database, DefinitionSet, MetaCommand}
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @impl true
   def mount(_params, _session, socket) do
@@ -111,7 +112,7 @@ defmodule CadenceWeb.OpsConsoleLive.Index do
       # Subscribe to staging changes
       Commands.subscribe_staging(mission_id)
       # Start clock ticker
-      :timer.send_interval(1000, self(), :tick)
+      TimeTimer.send_interval(1000, self(), :tick)
     end
 
     socket =

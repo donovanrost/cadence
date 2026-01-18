@@ -32,6 +32,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   """
 
   alias Cadence.Domain.Interfaces.ValueObjects.ConnectionType
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -147,7 +148,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
            config: Map.merge(interface.config, attrs[:config] || %{}),
            metadata: Map.merge(interface.metadata, attrs[:metadata] || %{}),
            target_ids: attrs[:target_ids] || interface.target_ids,
-           updated_at: DateTime.utc_now()
+           updated_at: CadenceTime.now()
        }}
     end
   end
@@ -191,7 +192,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
     if target_id in ids do
       {:ok, interface}
     else
-      {:ok, %{interface | target_ids: ids ++ [target_id], updated_at: DateTime.utc_now()}}
+      {:ok, %{interface | target_ids: ids ++ [target_id], updated_at: CadenceTime.now()}}
     end
   end
 
@@ -200,7 +201,7 @@ defmodule Cadence.Domain.Interfaces.Entities.Interface do
   """
   @spec remove_target(t(), String.t()) :: {:ok, t()}
   def remove_target(%__MODULE__{target_ids: ids} = interface, target_id) do
-    {:ok, %{interface | target_ids: List.delete(ids, target_id), updated_at: DateTime.utc_now()}}
+    {:ok, %{interface | target_ids: List.delete(ids, target_id), updated_at: CadenceTime.now()}}
   end
 
   # ===========================================================================

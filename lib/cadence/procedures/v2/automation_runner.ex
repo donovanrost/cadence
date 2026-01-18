@@ -38,6 +38,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
   alias Cadence.Procedures.ProcedureBlock
   alias Cadence.Procedures.Runtime.CadenceApi
   alias Cadence.Targets
+  alias Cadence.Time, as: CadenceTime
 
   @type block :: ProcedureBlock.t() | map()
   @type context :: Primitives.context()
@@ -199,7 +200,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
       command_id: command_id,
       priority: priority,
       status: :enqueued,
-      enqueued_at: DateTime.utc_now()
+      enqueued_at: CadenceTime.now()
     }
   end
 
@@ -366,7 +367,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
 
     case Primitives.get_telemetry(item, context) do
       {:ok, value} ->
-        {:ok, %{item: item, value: value, read_at: DateTime.utc_now()}}
+        {:ok, %{item: item, value: value, read_at: CadenceTime.now()}}
 
       {:error, reason} ->
         {:error, reason}
@@ -389,7 +390,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
 
     case Task.yield(task, timeout_seconds * 1000) || Task.shutdown(task) do
       {:ok, {:ok, result}} ->
-        {:ok, %{script_result: result, completed_at: DateTime.utc_now()}}
+        {:ok, %{script_result: result, completed_at: CadenceTime.now()}}
 
       {:ok, {:error, reason}} ->
         {:error, reason}
@@ -515,7 +516,7 @@ defmodule Cadence.Procedures.V2.AutomationRunner do
              item: item,
              expected: expected,
              actual: actual,
-             verified_at: DateTime.utc_now()
+             verified_at: CadenceTime.now()
            }
          })}
 

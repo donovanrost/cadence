@@ -44,6 +44,7 @@ defmodule Cadence.Commands do
   alias Cadence.Runtime.Commands.{TargetDispatcher, TargetPipelineSupervisor, TargetQueue}
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Targets
+  alias Cadence.Time, as: CadenceTime
 
   # Repository accessor for MetaCommand lookups
   defp commands_repo, do: CommandsRepository.impl()
@@ -373,7 +374,7 @@ defmodule Cadence.Commands do
     # Parse item into packet_name and item_name
     [packet_name, item_name] = String.split(item, ".", parts: 2)
 
-    deadline = System.monotonic_time(:millisecond) + timeout
+    deadline = CadenceTime.monotonic(:millisecond) + timeout
 
     poll_cvt(%{
       mission_id: mission_id,
@@ -432,7 +433,7 @@ defmodule Cadence.Commands do
   end
 
   defp timed_out?(deadline) do
-    System.monotonic_time(:millisecond) >= deadline
+    CadenceTime.monotonic(:millisecond) >= deadline
   end
 
   defp compare_value(actual, expected, :eq), do: actual == expected

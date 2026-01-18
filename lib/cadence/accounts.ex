@@ -43,6 +43,7 @@ defmodule Cadence.Accounts do
   # Ecto schemas needed for form helpers and email delivery
   alias Cadence.Accounts.User, as: UserSchema
   alias Cadence.Accounts.UserNotifier
+  alias Cadence.Time, as: CadenceTime
 
   # ============================================================================
   # User Queries
@@ -163,7 +164,7 @@ defmodule Cadence.Accounts do
 
   # Handle Ecto schema with authenticated_at
   def sudo_mode?(%UserSchema{authenticated_at: ts}, minutes) when is_struct(ts, DateTime) do
-    DateTime.after?(ts, DateTime.utc_now() |> DateTime.add(minutes, :minute))
+    DateTime.after?(ts, CadenceTime.now() |> DateTime.add(minutes, :minute))
   end
 
   # Domain entities don't have authenticated_at - this needs session context

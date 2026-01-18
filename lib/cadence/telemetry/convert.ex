@@ -6,6 +6,7 @@ defmodule Cadence.Telemetry.Convert do
   require Logger
 
   alias Cadence.Telemetry.Conversions
+  alias Cadence.Time, as: CadenceTime
 
   @parallel_threshold 500
 
@@ -85,7 +86,7 @@ defmodule Cadence.Telemetry.Convert do
   end
 
   defp inject_timestamp_items(qualified_items, packet_name, packet) do
-    received_time = packet.received_time || DateTime.utc_now()
+    received_time = packet.received_time || CadenceTime.now()
     packet_time = packet.packet_time || received_time
 
     timestamp_items = %{

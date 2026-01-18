@@ -24,6 +24,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository do
   alias Cadence.Alarms.Alarm, as: AlarmSchema
   alias Cadence.Domain.Alerting.Entities.Alarm, as: AlarmEntity
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
 
   # ===========================================================================
   # AlarmRepository Implementation
@@ -131,7 +132,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Alerting.EctoAlarmRepository do
 
   @impl true
   def list_expired_shelved do
-    now = DateTime.utc_now()
+    now = CadenceTime.now()
 
     from(a in AlarmSchema,
       where: a.status == :shelved,

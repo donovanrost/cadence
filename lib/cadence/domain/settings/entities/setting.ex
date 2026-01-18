@@ -28,6 +28,7 @@ defmodule Cadence.Domain.Settings.Entities.Setting do
   """
 
   alias Cadence.Domain.Settings.ValueObjects.SettingType
+  alias Cadence.Time, as: CadenceTime
 
   @type scope_type :: :organization | :mission
 
@@ -110,7 +111,7 @@ defmodule Cadence.Domain.Settings.Entities.Setting do
   @spec update_value(t(), any()) :: {:ok, t()} | {:error, term()}
   def update_value(%__MODULE__{value_type: value_type} = setting, new_value) do
     with :ok <- SettingType.validate_value(value_type, new_value) do
-      {:ok, %{setting | value: new_value, updated_at: DateTime.utc_now()}}
+      {:ok, %{setting | value: new_value, updated_at: CadenceTime.now()}}
     end
   end
 

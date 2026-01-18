@@ -13,6 +13,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
   use CadenceWeb, :live_view
 
   alias Cadence.{Alarms, Commands, Targets}
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @impl true
   def mount(_params, _session, socket) do
@@ -40,7 +41,7 @@ defmodule CadenceWeb.OpsConsoleLive.Alarms do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:alarms")
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:queue")
-      :timer.send_interval(1000, self(), :tick)
+      TimeTimer.send_interval(1000, self(), :tick)
     end
 
     socket =

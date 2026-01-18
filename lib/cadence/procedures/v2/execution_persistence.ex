@@ -35,6 +35,7 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
   alias Cadence.Procedures.Events.ProcedureExecutionEvent
 
   alias Cadence.Repo
+  alias Cadence.Time, as: CadenceTime
   alias Ecto.Multi
 
   import Ecto.Query
@@ -656,6 +657,6 @@ defmodule Cadence.Procedures.V2.ExecutionPersistence do
 
   # Helper to get current UTC time without microseconds (for Ecto :utc_datetime fields)
   defp utc_now do
-    DateTime.utc_now() |> DateTime.truncate(:second)
+    CadenceTime.now() |> DateTime.truncate(:second)
   end
 end

@@ -9,6 +9,7 @@ defmodule Cadence.Domain.Schedules.Entities.Schedule do
   This is a pure domain entity with no Ecto dependencies.
   """
 
+  alias Cadence.Time, as: CadenceTime
   alias Oban.Plugins.Cron
 
   @type schedule_type :: :cron | :once
@@ -128,7 +129,7 @@ defmodule Cadence.Domain.Schedules.Entities.Schedule do
     {:ok,
      %{
        schedule
-       | last_run_at: DateTime.utc_now(),
+       | last_run_at: CadenceTime.now(),
          next_run_at: next_run_at,
          run_count: schedule.run_count + 1
      }}
@@ -169,7 +170,7 @@ defmodule Cadence.Domain.Schedules.Entities.Schedule do
   def due?(%__MODULE__{next_run_at: nil}), do: false
 
   def due?(%__MODULE__{next_run_at: next_run_at}) do
-    DateTime.compare(DateTime.utc_now(), next_run_at) != :lt
+    DateTime.compare(CadenceTime.now(), next_run_at) != :lt
   end
 
   @doc """

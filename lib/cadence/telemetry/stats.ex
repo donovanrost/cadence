@@ -21,6 +21,8 @@ defmodule Cadence.Telemetry.Stats do
       Cadence.Telemetry.Stats.reset(mission_id)
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @table_name :cadence_telemetry_stats
 
   @counters [
@@ -132,7 +134,7 @@ defmodule Cadence.Telemetry.Stats do
     end)
 
     # Store start time
-    :ets.insert(@table_name, {{mission_id, :started_at}, System.monotonic_time(:millisecond)})
+    :ets.insert(@table_name, {{mission_id, :started_at}, CadenceTime.monotonic(:millisecond)})
 
     :ok
   end
@@ -187,9 +189,9 @@ defmodule Cadence.Telemetry.Stats do
   Returns the result of the block.
   """
   def time(mission_id, stage, fun) when is_function(fun, 0) do
-    start = System.monotonic_time(:microsecond)
+    start = CadenceTime.monotonic(:microsecond)
     result = fun.()
-    duration = System.monotonic_time(:microsecond) - start
+    duration = CadenceTime.monotonic(:microsecond) - start
     record_timing(mission_id, stage, duration)
     result
   end
@@ -542,10 +544,10 @@ defmodule Cadence.Telemetry.Stats do
     started_at =
       case :ets.lookup(@table_name, {mission_id, :started_at}) do
         [{_, t}] -> t
-        [] -> System.monotonic_time(:millisecond)
+        [] -> CadenceTime.monotonic(:millisecond)
       end
 
-    duration_ms = System.monotonic_time(:millisecond) - started_at
+    duration_ms = CadenceTime.monotonic(:millisecond) - started_at
 
     # Add timing stats
     timing = get_timing(mission_id)
@@ -619,7 +621,7 @@ defmodule Cadence.Telemetry.Stats do
       safe_ets_insert({mission_id, :stage_error, stage}, 0)
     end)
 
-    safe_ets_insert({mission_id, :started_at}, System.monotonic_time(:millisecond))
+    safe_ets_insert({mission_id, :started_at}, CadenceTime.monotonic(:millisecond))
     :ok
   end
 

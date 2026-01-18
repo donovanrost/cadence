@@ -142,6 +142,11 @@ config :cadence,
 
 config :cadence, :pipeline_version, :lanes
 
+# Time configuration
+config :cadence, Cadence.Time, impl: Cadence.Time.Real
+config :cadence, Cadence.Time.Timer, impl: Cadence.Time.Timer.Real
+config :cadence, Cadence.Harness.Time, authority_name: {:global, Cadence.Harness.Time.Authority}
+
 # Messaging adapters
 config :cadence, :email_sender, Cadence.Adapters.Messaging.SwooshEmailSender
 config :cadence, :event_publisher, Cadence.Adapters.Messaging.PhoenixEventPublisher

@@ -8,6 +8,8 @@ defmodule Cadence.Domain.Automations.Entities.AutomationExecution do
   This is a pure domain entity with no Ecto dependencies.
   """
 
+  alias Cadence.Time, as: CadenceTime
+
   @type status :: :pending | :running | :completed | :failed | :skipped
 
   @type t :: %__MODULE__{
@@ -87,7 +89,7 @@ defmodule Cadence.Domain.Automations.Entities.AutomationExecution do
   """
   @spec start(t()) :: {:ok, t()}
   def start(%__MODULE__{} = execution) do
-    {:ok, %{execution | status: :running, started_at: DateTime.utc_now()}}
+    {:ok, %{execution | status: :running, started_at: CadenceTime.now()}}
   end
 
   @doc """
@@ -100,7 +102,7 @@ defmodule Cadence.Domain.Automations.Entities.AutomationExecution do
        execution
        | status: :completed,
          action_result: result,
-         completed_at: DateTime.utc_now()
+         completed_at: CadenceTime.now()
      }}
   end
 
@@ -114,7 +116,7 @@ defmodule Cadence.Domain.Automations.Entities.AutomationExecution do
        execution
        | status: :failed,
          error_message: error_message,
-         completed_at: DateTime.utc_now()
+         completed_at: CadenceTime.now()
      }}
   end
 
@@ -128,7 +130,7 @@ defmodule Cadence.Domain.Automations.Entities.AutomationExecution do
        execution
        | status: :skipped,
          error_message: reason,
-         completed_at: DateTime.utc_now()
+         completed_at: CadenceTime.now()
      }}
   end
 

@@ -22,6 +22,7 @@ defmodule Cadence.Domain.Organizations.Entities.Organization do
   alias Cadence.Domain.Organizations.ValueObjects.OrganizationStatus
   alias Cadence.Domain.Organizations.ValueObjects.Quotas
   alias Cadence.Domain.Organizations.ValueObjects.SubscriptionTier
+  alias Cadence.Time, as: CadenceTime
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -109,7 +110,7 @@ defmodule Cadence.Domain.Organizations.Entities.Organization do
            quotas: quotas,
            settings: Map.merge(org.settings, attrs[:settings] || %{}),
            metadata: Map.merge(org.metadata, attrs[:metadata] || %{}),
-           updated_at: DateTime.utc_now()
+           updated_at: CadenceTime.now()
        }}
     end
   end
@@ -120,7 +121,7 @@ defmodule Cadence.Domain.Organizations.Entities.Organization do
   @spec transition_status(t(), OrganizationStatus.t()) :: {:ok, t()} | {:error, term()}
   def transition_status(%__MODULE__{status: current} = org, new_status) do
     with :ok <- OrganizationStatus.validate_transition(current, new_status) do
-      {:ok, %{org | status: new_status, updated_at: DateTime.utc_now()}}
+      {:ok, %{org | status: new_status, updated_at: CadenceTime.now()}}
     end
   end
 
@@ -184,7 +185,7 @@ defmodule Cadence.Domain.Organizations.Entities.Organization do
   @spec update_quotas(t(), map()) :: {:ok, t()} | {:error, term()}
   def update_quotas(%__MODULE__{quotas: quotas} = org, attrs) do
     case Quotas.update(quotas, attrs) do
-      {:ok, new_quotas} -> {:ok, %{org | quotas: new_quotas, updated_at: DateTime.utc_now()}}
+      {:ok, new_quotas} -> {:ok, %{org | quotas: new_quotas, updated_at: CadenceTime.now()}}
       error -> error
     end
   end
