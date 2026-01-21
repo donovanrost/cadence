@@ -1,6 +1,6 @@
 defmodule Cadence.CCSDS.SDLP.FrameCodec do
   @moduledoc """
-  Behaviour for SDLP profile frame codecs (TM/AOS/USLP).
+  Behaviour for SDLP profile frame codecs (TM/AOS/USLP/TC).
   """
 
   alias Cadence.CCSDS.Core.LinkFrame

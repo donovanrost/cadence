@@ -44,6 +44,7 @@ defmodule Cadence.Interfaces.TargetInterface do
 
     field :direction, :string
     field :scid, :integer
+    field :tc_stream_id, :string
 
     timestamps()
   end
@@ -53,12 +54,14 @@ defmodule Cadence.Interfaces.TargetInterface do
   """
   def changeset(target_interface, attrs) do
     target_interface
-    |> cast(attrs, [:target_id, :interface_id, :direction, :scid])
+    |> cast(attrs, [:target_id, :interface_id, :direction, :scid, :tc_stream_id])
+    |> normalize_tc_stream_id()
     |> validate_required([:target_id, :interface_id, :direction])
     |> validate_inclusion(:direction, @directions,
       message: "must be one of: #{Enum.join(@directions, ", ")}"
     )
     |> validate_number(:scid, greater_than_or_equal_to: 0, less_than: 1024)
+    |> validate_length(:tc_stream_id, min: 1)
     |> foreign_key_constraint(:target_id)
     |> foreign_key_constraint(:interface_id)
     |> unique_constraint([:target_id, :interface_id],
@@ -86,4 +89,30 @@ defmodule Cadence.Interfaces.TargetInterface do
   """
   def allows_write?(%__MODULE__{direction: direction}),
     do: direction in ["write", "read_write"]
+
+  defp normalize_tc_stream_id(%Ecto.Changeset{} = changeset) do
+    stream_id = normalize_blank(get_field(changeset, :tc_stream_id))
+
+    changeset =
+      if stream_id != get_field(changeset, :tc_stream_id) do
+        put_change(changeset, :tc_stream_id, stream_id)
+      else
+        changeset
+      end
+
+    if is_nil(stream_id) do
+      target_id = get_field(changeset, :target_id)
+
+      if is_binary(target_id) do
+        put_change(changeset, :tc_stream_id, target_id)
+      else
+        changeset
+      end
+    else
+      changeset
+    end
+  end
+
+  defp normalize_blank(""), do: nil
+  defp normalize_blank(value), do: value
 end

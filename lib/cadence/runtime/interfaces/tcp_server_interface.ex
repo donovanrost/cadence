@@ -34,8 +34,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   use GenServer
   require Logger
 
+  alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
+  alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
+  alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Telemetry.DownlinkPipeline
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
@@ -52,6 +55,9 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       :bind_port,
       :max_clients,
       :client_timeout,
+      :routing_mode,
+      :routing_static,
+      :sdlp_config,
       clients: %{},
       listening: false,
       total_clients_connected: 0,
@@ -68,6 +74,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       :remote_address,
       :remote_port,
       :connected_at,
+      :client_id,
+      :scid,
+      :vcid,
+      :frame_buffer,
+      :route_source,
       bytes_received: 0,
       bytes_sent: 0,
       packets_received: 0
@@ -118,26 +129,17 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
   @impl true
   def init(%Interface{} = interface) do
-    # Use target_ids from entity, or fallback to ["unknown"]
-    target_ids =
-      if Enum.empty?(interface.target_ids), do: ["unknown"], else: interface.target_ids
-
-    # Extract max_clients and client_timeout from config map
-    max_clients =
-      get_in(interface.config, ["max_clients"]) ||
-        get_in(interface.config, [:max_clients]) ||
-        100
-
-    client_timeout =
-      get_in(interface.config, ["client_timeout"]) ||
-        get_in(interface.config, [:client_timeout]) ||
-        300_000
+    config = interface_config(interface)
+    target_ids = target_ids_for_interface(interface)
+    bind_address = bind_address_for_interface(interface)
+    max_clients = config_value(config, "max_clients", :max_clients, 100)
+    client_timeout = config_value(config, "client_timeout", :client_timeout, 300_000)
 
     Logger.info("""
     Starting TCP Server Interface #{interface.name}:
       mission_id: #{interface.mission_id}
       interface_id: #{interface.id}
-      bind_address: #{interface.bind_address || "0.0.0.0"}
+      bind_address: #{bind_address}
       bind_port: #{interface.bind_port}
       target_ids: #{inspect(target_ids)}
     """)
@@ -145,10 +147,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     state = %State{
       interface: interface,
       target_ids: target_ids,
-      bind_address: interface.bind_address || "0.0.0.0",
+      bind_address: bind_address,
       bind_port: interface.bind_port,
       max_clients: max_clients,
       client_timeout: client_timeout,
+      routing_mode: parse_routing_mode(config),
+      routing_static: parse_routing_static(config),
+      sdlp_config: SDLPConfig.fetch(interface),
       clients: %{}
     }
 
@@ -266,7 +271,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       total_clients_connected: state.total_clients_connected,
       bytes_received: state.bytes_received,
       bytes_sent: state.bytes_sent,
-      packets_received: state.packets_received
+      packets_received: state.packets_received,
+      routing_mode: state.routing_mode
     }
 
     {:reply, stats, state}
@@ -280,6 +286,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
           remote_address: client_state.remote_address,
           remote_port: client_state.remote_port,
           connected_at: client_state.connected_at,
+          client_id: client_state.client_id,
+          scid: client_state.scid,
+          vcid: client_state.vcid,
+          route_source: client_state.route_source,
           bytes_received: client_state.bytes_received,
           bytes_sent: client_state.bytes_sent,
           packets_received: client_state.packets_received
@@ -289,29 +299,16 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     {:reply, clients, state}
   end
 
-  # Command dispatch from TargetDispatcher - broadcasts to all connected clients
+  # Command dispatch from TargetDispatcher.
   #
-  # LIMITATION: Currently broadcasts to ALL connected clients regardless of target.
-  # This works when each target has its own interface, or when only one client is connected.
+  # By default this broadcasts to all clients. If `config.routing` is set to
+  # `scid_vcid`, uplink frames are decoded and routed to the matching client.
   #
-  # TODO: When CCSDS framing is implemented, extract the APID from the command packet
-  # and route to the specific client associated with that APID. This requires:
-  # 1. Add `target_id` or `apids` field to ClientState
-  # 2. Build APID→socket mapping from incoming telemetry packets
-  # 3. Look up the correct socket based on command APID before sending
+  # TODO: When command packets include routing hints, prefer APID-based routing.
   @impl true
   def handle_call({:send_data, data}, _from, state) do
-    case map_size(state.clients) do
-      0 ->
-        {:reply, {:error, :no_clients_connected}, state}
-
-      count ->
-        warn_if_broadcasting(count)
-
-        {successful, failed} = send_to_all_clients(state.clients, data)
-        updated = update_bytes_sent(state, data, successful)
-        reply_for_broadcast(successful, failed, updated, state)
-    end
+    {reply, next_state} = dispatch_uplink(state, data)
+    {:reply, reply, next_state}
   end
 
   @impl true
@@ -377,14 +374,20 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp accept_client(client_socket, address_str, port, state) do
+    client_id = state.total_clients_connected + 1
+
     client_state = %ClientState{
       socket: client_socket,
       remote_address: address_str,
       remote_port: port,
-      connected_at: CadenceTime.now()
+      connected_at: CadenceTime.now(),
+      client_id: client_id,
+      frame_buffer: <<>>
     }
 
     :inet.setopts(client_socket, active: true)
+
+    client_state = apply_static_route(client_state, state.routing_static)
 
     new_clients = Map.put(state.clients, client_socket, client_state)
     send(self(), :accept)
@@ -422,6 +425,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
 
+    updated_client_state = maybe_update_route(updated_client_state, data, state)
+
     Logger.debug(
       "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
       mission_id: state.interface.mission_id
@@ -446,12 +451,159 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp warn_if_broadcasting(count) when count > 1 do
-    Logger.warning(
-      "Broadcasting command to #{count} clients - target-specific routing not yet implemented"
-    )
+    Logger.warning("Broadcasting command to #{count} clients - routing mode is broadcast")
   end
 
   defp warn_if_broadcasting(_count), do: :ok
+
+  defp dispatch_uplink(state, data) do
+    case map_size(state.clients) do
+      0 ->
+        {{:error, :no_clients_connected}, state}
+
+      count ->
+        dispatch_uplink_with_clients(state, data, count)
+    end
+  end
+
+  defp dispatch_uplink_with_clients(state, data, count) do
+    case route_uplink(state, data) do
+      {:client, socket} ->
+        send_to_client_socket(socket, data, state)
+
+      :broadcast ->
+        warn_if_broadcasting(count)
+
+        {successful, failed} = send_to_all_clients(state.clients, data)
+        updated = update_bytes_sent(state, data, successful)
+        reply_for_broadcast(successful, failed, updated, state)
+
+      {:error, reason} ->
+        {{:error, :routing_failed, reason}, state}
+    end
+  end
+
+  defp send_to_client_socket(socket, data, state) do
+    case :gen_tcp.send(socket, data) do
+      :ok -> {:ok, update_bytes_sent(state, data, 1)}
+      {:error, reason} -> {{:error, :send_failed, reason}, state}
+    end
+  end
+
+  defp route_uplink(%{routing_mode: :broadcast}, _data), do: :broadcast
+
+  defp route_uplink(%{routing_mode: :scid_vcid} = state, data) do
+    with {:ok, {scid, vcid}} <- extract_uplink_route(state, data),
+         {:ok, socket} <- lookup_client_socket(state.clients, scid, vcid) do
+      {:client, socket}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp route_uplink(_state, _data), do: :broadcast
+
+  defp extract_uplink_route(%{sdlp_config: {:ok, %{opts: opts}}}, data) do
+    profile = opts[:uplink_profile] || opts[:profile]
+    frame_size = opts[:uplink_frame_size] || opts[:frame_size]
+
+    cond do
+      is_nil(frame_size) ->
+        {:error, :missing_frame_size}
+
+      profile == :tm ->
+        decode_tm_route(data, frame_size)
+
+      profile == :tc ->
+        decode_tc_route(data, frame_size)
+
+      true ->
+        {:error, :unsupported_profile}
+    end
+  end
+
+  defp extract_uplink_route(_state, _data), do: {:error, :routing_unavailable}
+
+  defp decode_tm_route(data, frame_size) do
+    {:ok, frames, _rest} = TMFrameCodec.decode(data, frame_size: frame_size)
+
+    case frames do
+      [frame | _] -> {:ok, {frame.scid, frame.vcid}}
+      [] -> {:error, :no_frames}
+    end
+  end
+
+  defp decode_tc_route(data, frame_size) do
+    case TransferFrame.decode(data, frame_size: frame_size) do
+      {:ok, [frame | _], _rest} -> {:ok, {frame.scid, frame.vcid}}
+      {:ok, [], _rest} -> {:error, :no_frames}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp lookup_client_socket(clients, scid, vcid) do
+    matches =
+      clients
+      |> Enum.filter(fn {_socket, client_state} ->
+        client_state.scid == scid and client_state.vcid == vcid
+      end)
+
+    case matches do
+      [{socket, _client}] -> {:ok, socket}
+      [] -> {:error, :route_not_found}
+      _ -> {:error, :ambiguous_route}
+    end
+  end
+
+  defp maybe_update_route(%{route_source: :static} = client_state, _data, _state),
+    do: client_state
+
+  defp maybe_update_route(client_state, data, %{routing_mode: :scid_vcid} = state) do
+    case state.sdlp_config do
+      {:ok, %{opts: opts}} ->
+        update_route_from_tm(client_state, data, opts)
+
+      _ ->
+        client_state
+    end
+  end
+
+  defp maybe_update_route(client_state, _data, _state), do: client_state
+
+  defp update_route_from_tm(client_state, data, opts) do
+    frame_size = opts[:frame_size]
+    profile = opts[:profile]
+
+    cond do
+      profile != :tm ->
+        client_state
+
+      not is_integer(frame_size) ->
+        client_state
+
+      true ->
+        do_update_route_from_tm(client_state, data, frame_size)
+    end
+  end
+
+  defp do_update_route_from_tm(client_state, data, frame_size) do
+    buffer = (client_state.frame_buffer || <<>>) <> data
+    {:ok, frames, rest} = TMFrameCodec.decode(buffer, frame_size: frame_size)
+
+    case List.last(frames) do
+      nil ->
+        %{client_state | frame_buffer: rest}
+
+      frame ->
+        %{
+          client_state
+          | frame_buffer: rest,
+            scid: frame.scid,
+            vcid: frame.vcid,
+            route_source: :learned
+        }
+    end
+  end
 
   defp send_to_all_clients(clients, data) do
     Enum.reduce(clients, {0, 0}, fn {socket, client_state}, {ok, err} ->
@@ -478,11 +630,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp reply_for_broadcast(successful, _failed, new_state, _state) when successful > 0 do
-    {:reply, :ok, new_state}
+    {:ok, new_state}
   end
 
   defp reply_for_broadcast(_successful, failed, _new_state, state) do
-    {:reply, {:error, :all_sends_failed, failed}, state}
+    {{:error, :all_sends_failed, failed}, state}
   end
 
   defp handle_client_disconnect(client_socket, state) do
@@ -529,6 +681,27 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     InterfaceConnectionEvent.broadcast(event)
   end
 
+  defp interface_config(%Interface{config: config}) when is_map(config), do: config
+  defp interface_config(_), do: %{}
+
+  defp target_ids_for_interface(%Interface{target_ids: target_ids})
+       when is_list(target_ids) and target_ids != [],
+       do: target_ids
+
+  defp target_ids_for_interface(_), do: ["unknown"]
+
+  defp bind_address_for_interface(%Interface{bind_address: address})
+       when is_binary(address) and address != "",
+       do: address
+
+  defp bind_address_for_interface(_), do: "0.0.0.0"
+
+  defp config_value(config, string_key, atom_key, default) when is_map(config) do
+    Map.get(config, string_key) || Map.get(config, atom_key) || default
+  end
+
+  defp config_value(_config, _string_key, _atom_key, default), do: default
+
   defp parse_bind_address(address) when is_binary(address) do
     case :inet.parse_address(String.to_charlist(address)) do
       {:ok, ip_tuple} -> ip_tuple
@@ -544,6 +717,124 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   defp parse_bind_address(_), do: {0, 0, 0, 0}
+
+  defp parse_routing_mode(config) when is_map(config) do
+    case Map.get(config, "routing") || Map.get(config, :routing) do
+      "scid_vcid" -> :scid_vcid
+      :scid_vcid -> :scid_vcid
+      "broadcast" -> :broadcast
+      :broadcast -> :broadcast
+      _ -> :broadcast
+    end
+  end
+
+  defp parse_routing_static(config) when is_map(config) do
+    routes = Map.get(config, "routing_static") || Map.get(config, :routing_static) || []
+
+    Enum.reduce(List.wrap(routes), [], fn entry, acc ->
+      case normalize_route_entry(entry) do
+        {:ok, route} -> [route | acc]
+        :error -> acc
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  defp parse_routing_static(_), do: []
+
+  defp normalize_route_entry(entry) when is_map(entry) do
+    with {:ok, scid} <- fetch_required_integer(entry, ["scid", :scid]),
+         {:ok, vcid} <- fetch_required_integer(entry, ["vcid", :vcid]) do
+      {:ok,
+       %{
+         scid: scid,
+         vcid: vcid,
+         client_id:
+           fetch_optional_integer(entry, ["client_id", :client_id, "client_index", :client_index]),
+         remote_address:
+           fetch_optional_value(entry, [
+             "remote_address",
+             :remote_address,
+             "client_address",
+             :client_address
+           ]),
+         remote_port: fetch_optional_integer(entry, ["remote_port", :remote_port])
+       }}
+    else
+      _ -> :error
+    end
+  end
+
+  defp normalize_route_entry(_), do: :error
+
+  defp apply_static_route(client_state, []), do: client_state
+
+  defp apply_static_route(client_state, routes) do
+    case find_static_route(routes, client_state) do
+      nil ->
+        client_state
+
+      route ->
+        %{
+          client_state
+          | scid: route.scid,
+            vcid: route.vcid,
+            route_source: :static
+        }
+    end
+  end
+
+  defp find_static_route(routes, client_state) do
+    Enum.find(routes, fn route ->
+      matches_client_id?(route, client_state) or matches_remote?(route, client_state)
+    end)
+  end
+
+  defp matches_client_id?(%{client_id: nil}, _client_state), do: false
+
+  defp matches_client_id?(%{client_id: client_id}, client_state) do
+    client_state.client_id == client_id
+  end
+
+  defp matches_remote?(%{remote_address: nil}, _client_state), do: false
+
+  defp matches_remote?(route, client_state) do
+    same_address = client_state.remote_address == route.remote_address
+
+    case route.remote_port do
+      nil -> same_address
+      port -> same_address and client_state.remote_port == port
+    end
+  end
+
+  defp parse_integer(nil), do: nil
+  defp parse_integer(value) when is_integer(value), do: value
+
+  defp parse_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_integer(_), do: nil
+
+  defp fetch_optional_value(entry, keys) do
+    Enum.find_value(keys, fn key -> Map.get(entry, key) end)
+  end
+
+  defp fetch_optional_integer(entry, keys) do
+    entry
+    |> fetch_optional_value(keys)
+    |> parse_integer()
+  end
+
+  defp fetch_required_integer(entry, keys) do
+    case fetch_optional_integer(entry, keys) do
+      nil -> :error
+      value -> {:ok, value}
+    end
+  end
 
   defp downlink_metadata(state, client_state) do
     %{

@@ -25,6 +25,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
           interface_id: String.t(),
           direction: DataDirection.t(),
           scid: non_neg_integer() | nil,
+          tc_stream_id: String.t() | nil,
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -36,6 +37,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
     :interface_id,
     :direction,
     :scid,
+    :tc_stream_id,
     :created_at,
     :updated_at
   ]
@@ -54,7 +56,8 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   def new(attrs) when is_map(attrs) do
     with :ok <- validate_required(attrs),
          {:ok, direction} <- parse_direction(attrs[:direction]),
-         :ok <- validate_scid(attrs) do
+         :ok <- validate_scid(attrs),
+         {:ok, tc_stream_id} <- parse_tc_stream_id(attrs) do
       {:ok,
        %__MODULE__{
          id: attrs[:id],
@@ -62,6 +65,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
          interface_id: attrs[:interface_id],
          direction: direction,
          scid: Map.get(attrs, :scid),
+         tc_stream_id: tc_stream_id,
          created_at: attrs[:created_at],
          updated_at: attrs[:updated_at]
        }}
@@ -93,6 +97,7 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
       interface_id: attrs[:interface_id],
       direction: parse_direction_from_persistence(attrs[:direction]),
       scid: attrs[:scid],
+      tc_stream_id: normalize_tc_stream_id(attrs[:tc_stream_id], attrs[:target_id]),
       created_at: attrs[:created_at] || attrs[:inserted_at],
       updated_at: attrs[:updated_at]
     }
@@ -170,4 +175,34 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
       scid -> {:error, {:invalid, :scid, scid}}
     end
   end
+
+  defp parse_tc_stream_id(attrs) when is_map(attrs) do
+    stream_id = Map.get(attrs, :tc_stream_id)
+
+    stream_id =
+      case normalize_blank(stream_id) do
+        nil -> Map.get(attrs, :target_id)
+        value when is_integer(value) -> Integer.to_string(value)
+        value -> value
+      end
+
+    cond do
+      is_nil(stream_id) -> {:ok, nil}
+      is_binary(stream_id) -> {:ok, stream_id}
+      true -> {:error, {:invalid, :tc_stream_id, stream_id}}
+    end
+  end
+
+  defp normalize_tc_stream_id(nil, target_id), do: target_id
+  defp normalize_tc_stream_id("", target_id), do: target_id
+
+  defp normalize_tc_stream_id(value, _target_id) when is_integer(value) do
+    Integer.to_string(value)
+  end
+
+  defp normalize_tc_stream_id(value, _target_id) when is_binary(value), do: value
+  defp normalize_tc_stream_id(_value, _target_id), do: nil
+
+  defp normalize_blank(""), do: nil
+  defp normalize_blank(value), do: value
 end

@@ -33,6 +33,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--rate` - Packet generation rate in Hz (default: 1.0)
     * `--duration` - Duration in seconds, 0 for infinite (default: 0)
     * `--output` - Output mode: tcp:host:port, udp:host:port (required for network output)
+    * `--mode` - Connection mode: connect (default) or listen (TCP only)
+    * `--mode` - Connection mode: connect (default) or listen (TCP only)
     * `--scenario` - Path to YAML scenario file for deterministic testing
     * `--definitions` - Path to YAML packet definitions for proper encoding (required)
     * `--provider` - Provider: basic (default) or scenario
@@ -40,6 +42,13 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--scid` - Spacecraft ID for frames (tm only)
     * `--vcid` - Virtual channel ID for frames (tm only)
     * `--frame-size` - Frame size in bytes (tm only)
+    * `--uplink-frame` - Frame format for uplink decoding (tc or tm)
+    * `--uplink-frame-size` - Frame size for uplink decoding (defaults to frame-size)
+    * `--clcw` - Emit CLCW in TM OCF (tm only)
+    * `--clcw-flags` - Comma-separated CLCW flags to set (lockout, wait, retransmit, etc.)
+    * `--clcw-overrides` - CLCW overrides as key=value pairs (comma-separated)
+    * `--clcw-schedule` - YAML file defining CLCW override schedule
+    * `--uplink-drop-every` - Drop every Nth uplink frame (simulated loss)
     * `--parallel` - Enable parallel mode for high throughput
     * `--generators` - Number of generator workers (default: CPU cores)
     * `--batch-timeout` - Send buffer flush interval in ms (default: 10)
@@ -109,6 +118,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
           rate: :float,
           duration: :integer,
           output: :string,
+          mode: :string,
           scenario: :string,
           definitions: :string,
           provider: :string,
@@ -116,6 +126,13 @@ defmodule Mix.Tasks.Cadence.Simulate do
           scid: :integer,
           vcid: :integer,
           frame_size: :integer,
+          uplink_frame: :string,
+          uplink_frame_size: :integer,
+          clcw: :boolean,
+          clcw_flags: :string,
+          clcw_overrides: :string,
+          clcw_schedule: :string,
+          uplink_drop_every: :integer,
           parallel: :boolean,
           generators: :integer,
           batch_timeout: :integer,
@@ -153,15 +170,23 @@ defmodule Mix.Tasks.Cadence.Simulate do
       rate_hz: parse_rate(opts[:rate]),
       duration: parse_duration(opts[:duration]),
       output: parse_output(opts[:output]),
+      mode: parse_mode(opts[:mode]),
       scenario_path: opts[:scenario],
       definitions_path: opts[:definitions] || missing_definitions!(),
       provider: parse_provider(opts[:provider]),
       frame: parse_frame(opts),
+      uplink_frame: parse_uplink_frame(opts),
+      clcw_enabled: opts[:clcw] || false,
+      clcw_overrides: parse_clcw_overrides(opts),
+      clcw_schedule: parse_clcw_schedule(opts),
+      uplink_drop_every: opts[:uplink_drop_every],
       parallel_mode: if(opts[:parallel], do: :parallel, else: :sequential),
       generator_count: opts[:generators],
       send_batch_timeout: opts[:batch_timeout],
       send_batch_size: opts[:batch_size]
     }
+    |> validate_clcw!()
+    |> validate_mode!()
   end
 
   defp build_coordinator_opts(config) do
@@ -170,7 +195,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
       target_id: config.target_id,
       rate_hz: config.rate_hz,
       output: config.output,
-      parallel_mode: config.parallel_mode
+      parallel_mode: config.parallel_mode,
+      mode: config.mode
     ]
 
     # Add scenario if provided
@@ -196,6 +222,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
       |> maybe_add_opt(:send_batch_timeout, config.send_batch_timeout)
       |> maybe_add_opt(:send_batch_size, config.send_batch_size)
       |> maybe_add_opt(:frame, config.frame)
+      |> maybe_add_opt(:uplink_frame, config.uplink_frame)
+      |> maybe_add_opt(:clcw_enabled, config.clcw_enabled)
+      |> maybe_add_opt(:clcw_overrides, config.clcw_overrides)
+      |> maybe_add_opt(:clcw_schedule, config.clcw_schedule)
+      |> maybe_add_opt(:uplink_drop_every, config.uplink_drop_every)
 
     opts
   end
@@ -207,6 +238,11 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp parse_provider("basic"), do: :basic
   defp parse_provider("scenario"), do: :scenario
   defp parse_provider(other), do: Mix.raise("Invalid provider: #{other}. Valid: basic, scenario")
+
+  defp parse_mode(nil), do: :connect
+  defp parse_mode("connect"), do: :connect
+  defp parse_mode("listen"), do: :listen
+  defp parse_mode(other), do: Mix.raise("Invalid mode: #{other}. Valid: connect, listen")
 
   defp start_runtime(_config), do: start_standalone_runtime()
 
@@ -319,6 +355,157 @@ defmodule Mix.Tasks.Cadence.Simulate do
     end
   end
 
+  defp parse_uplink_frame(opts) do
+    case opts[:uplink_frame] do
+      nil ->
+        nil
+
+      "tc" ->
+        frame_size = opts[:uplink_frame_size] || opts[:frame_size]
+
+        if frame_size do
+          %{format: :tc, frame_size: frame_size}
+        else
+          Mix.raise("--uplink-frame-size is required for uplink decoding")
+        end
+
+      "tm" ->
+        frame_size = opts[:uplink_frame_size] || opts[:frame_size]
+
+        if frame_size do
+          %{format: :tm, frame_size: frame_size}
+        else
+          Mix.raise("--uplink-frame-size is required for uplink decoding")
+        end
+
+      other ->
+        Mix.raise("Invalid uplink frame format: #{other}. Valid: tc, tm")
+    end
+  end
+
+  defp parse_clcw_overrides(opts) do
+    overrides = parse_override_pairs(opts[:clcw_overrides])
+    flags = parse_flag_list(opts[:clcw_flags])
+    merged = Map.merge(overrides, flags)
+    if merged == %{}, do: nil, else: merged
+  end
+
+  defp parse_clcw_schedule(opts) do
+    case opts[:clcw_schedule] do
+      nil ->
+        nil
+
+      path ->
+        parse_clcw_schedule_file(path)
+    end
+  end
+
+  defp parse_clcw_schedule_file(path) do
+    case File.read(path) do
+      {:ok, content} ->
+        parse_clcw_schedule_content(content)
+
+      {:error, reason} ->
+        Mix.raise("Failed to read --clcw-schedule file: #{inspect(reason)}")
+    end
+  end
+
+  defp parse_clcw_schedule_content(content) do
+    case YamlElixir.read_from_string(content) do
+      {:ok, []} ->
+        nil
+
+      {:ok, schedule} when is_list(schedule) ->
+        schedule
+
+      {:ok, _} ->
+        Mix.raise("--clcw-schedule must be a YAML list of entries")
+
+      {:error, reason} ->
+        Mix.raise("Failed to parse --clcw-schedule: #{inspect(reason)}")
+    end
+  end
+
+  defp parse_override_pairs(nil), do: %{}
+
+  defp parse_override_pairs(pairs) when is_binary(pairs) do
+    pairs
+    |> String.split(",", trim: true)
+    |> Enum.reduce(%{}, fn pair, acc ->
+      {key, value} = parse_override_pair(pair)
+      Map.put(acc, key, value)
+    end)
+  end
+
+  defp parse_override_pairs(_), do: %{}
+
+  defp parse_override_pair(pair) do
+    case String.split(pair, "=", parts: 2) do
+      [key, value] ->
+        key = String.trim(key)
+
+        if key == "" do
+          Mix.raise("Invalid --clcw-overrides entry: #{pair}")
+        else
+          {key, parse_override_value(String.trim(value))}
+        end
+
+      _ ->
+        Mix.raise("Invalid --clcw-overrides entry: #{pair}. Expected key=value")
+    end
+  end
+
+  defp parse_flag_list(nil), do: %{}
+
+  defp parse_flag_list(flags) when is_binary(flags) do
+    flags
+    |> String.split(",", trim: true)
+    |> Enum.reduce(%{}, fn flag, acc ->
+      flag = String.trim(flag)
+      if flag == "", do: acc, else: Map.put(acc, flag, 1)
+    end)
+  end
+
+  defp parse_flag_list(_), do: %{}
+
+  defp parse_override_value("true"), do: true
+  defp parse_override_value("false"), do: false
+
+  defp parse_override_value(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> value
+    end
+  end
+
+  defp validate_clcw!(
+         %{clcw_enabled: false, clcw_overrides: overrides, clcw_schedule: schedule} = config
+       ) do
+    if overrides != nil or schedule != nil do
+      Mix.raise("--clcw-flags/--clcw-overrides/--clcw-schedule require --clcw")
+    end
+
+    config
+  end
+
+  defp validate_clcw!(%{clcw_enabled: true, frame: %{format: :tm}} = config), do: config
+
+  defp validate_clcw!(%{clcw_enabled: true, frame: nil}) do
+    Mix.raise("--clcw requires --frame tm with --frame-size")
+  end
+
+  defp validate_clcw!(%{clcw_enabled: true}) do
+    Mix.raise("--clcw is only supported for TM frames")
+  end
+
+  defp validate_mode!(%{mode: :listen, output: {:tcp, _, _}} = config), do: config
+
+  defp validate_mode!(%{mode: :listen}) do
+    Mix.raise("--mode listen requires --output tcp:host:port")
+  end
+
+  defp validate_mode!(config), do: config
+
   defp print_banner(config) do
     # Calculate rate mode info
     {mode, mode_detail} =
@@ -359,9 +546,12 @@ defmodule Mix.Tasks.Cadence.Simulate do
       Provider:      #{provider_info}
       Definitions:   #{definitions_info}
       Rate:          #{config.rate_hz} Hz (#{mode} mode: #{mode_detail})
-      Mode:          #{parallel_info}
+      Run Mode:      #{parallel_info}
+      Connection:    #{format_connection_mode(config.mode)}
       Output:        #{format_output(config.output)}
       Frame:         #{format_frame(config.frame)}
+      Uplink Frame:  #{format_frame(config.uplink_frame)}
+      CLCW:          #{format_clcw(config.clcw_enabled)}
       Duration:      #{format_duration(config.duration)}
 
     ───────────────────────────────────────────────────────────────
@@ -375,6 +565,10 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp format_output({:udp, host, port}), do: "UDP #{host}:#{port}"
   defp format_output(other), do: inspect(other)
 
+  defp format_connection_mode(:connect), do: "connect (client)"
+  defp format_connection_mode(:listen), do: "listen (server)"
+  defp format_connection_mode(other), do: inspect(other)
+
   defp format_duration(0), do: "Infinite (until Ctrl+C)"
   defp format_duration(seconds), do: "#{seconds} seconds"
 
@@ -385,6 +579,9 @@ defmodule Mix.Tasks.Cadence.Simulate do
   end
 
   defp format_frame(other), do: inspect(other)
+
+  defp format_clcw(true), do: "enabled"
+  defp format_clcw(false), do: "disabled"
 
   defp missing_definitions! do
     Mix.raise("--definitions is required for simulator output")
@@ -545,6 +742,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --rate, -r <float>         Packet rate in Hz (default: 1.0, max: 15000)
       --duration, -d <seconds>   Duration in seconds, 0=infinite (default: 0)
       --output <mode>            Output: tcp:host:port, udp:host:port
+      --mode <mode>              Connection mode: connect (default) or listen (TCP only)
       --scenario, -s <path>      Path to YAML scenario file for deterministic testing
       --definitions <path>       Path to YAML packet definitions for encoding
       --provider <type>          Provider: basic (default) or scenario
@@ -552,6 +750,13 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --scid <id>                Spacecraft ID for frames (tm only)
       --vcid <id>                Virtual channel ID for frames (tm only)
       --frame-size <bytes>       Frame size in bytes (tm only)
+      --uplink-frame <format>    Frame format for uplink decoding: tc or tm
+      --uplink-frame-size <bytes>Frame size for uplink decoding (defaults to frame-size)
+      --clcw                     Emit CLCW in TM OCF (tm only)
+      --clcw-flags <list>        Comma-separated CLCW flags to set (lockout, wait, etc.)
+      --clcw-overrides <pairs>   CLCW overrides as key=value pairs
+      --clcw-schedule <path>     YAML file with CLCW override schedule
+      --uplink-drop-every <n>    Drop every Nth uplink frame (simulated loss)
       --help, -h                 Show this help
 
     Parallel Mode (for high-throughput testing):
@@ -574,6 +779,23 @@ defmodule Mix.Tasks.Cadence.Simulate do
       mix cadence.simulate -m <uuid> \\
         --frame tm --frame-size 1115 --scid 42 --vcid 0 \\
         --output tcp:localhost:9999
+
+      # Decode TC uplink frames for FARM
+      mix cadence.simulate -m <uuid> \\
+        --frame tm --frame-size 1115 --scid 42 --vcid 0 \\
+        --uplink-frame tc --uplink-frame-size 1024 \\
+        --output tcp:localhost:9999 --clcw
+
+      # Inject lockout/wait flags in CLCW
+      mix cadence.simulate -m <uuid> \\
+        --frame tm --frame-size 1115 --scid 42 --vcid 0 \\
+        --uplink-frame tc --uplink-frame-size 1024 \\
+        --output tcp:localhost:9999 --clcw --clcw-flags lockout,wait
+
+      # Listen for a TcpClientInterface connection
+      mix cadence.simulate -m <uuid> \\
+        --frame tm --frame-size 1115 --scid 42 --vcid 0 \\
+        --output tcp:0.0.0.0:9999 --mode listen
 
       # Run alarm test scenario
       mix cadence.simulate -m <uuid> \\

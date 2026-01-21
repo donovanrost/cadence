@@ -38,6 +38,9 @@ defmodule Cadence.CCSDS.Uplink.Pipeline do
   defp profile_modules(:uslp),
     do: {:ok, Cadence.CCSDS.SDLP.USLP.FrameCodec, Cadence.CCSDS.SDLP.USLP.Segmentation}
 
+  defp profile_modules(:tc),
+    do: {:ok, Cadence.CCSDS.TC.FrameCodec, Cadence.CCSDS.TC.Segmentation}
+
   defp profile_modules(_profile), do: {:error, :invalid_profile}
 
   defp init_segmentation(segmentation_mod, opts) do
@@ -102,7 +105,10 @@ defmodule Cadence.CCSDS.Uplink.Pipeline do
   defp frame_codec_for(%LinkFrame{profile: :tm}), do: Cadence.CCSDS.SDLP.TM.FrameCodec
   defp frame_codec_for(%LinkFrame{profile: :aos}), do: Cadence.CCSDS.SDLP.AOS.FrameCodec
   defp frame_codec_for(%LinkFrame{profile: :uslp}), do: Cadence.CCSDS.SDLP.USLP.FrameCodec
+  defp frame_codec_for(%LinkFrame{profile: :tc}), do: Cadence.CCSDS.TC.FrameCodec
 
-  defp ensure_profile(%LinkFrame{profile: profile}) when profile in [:tm, :aos, :uslp], do: :ok
+  defp ensure_profile(%LinkFrame{profile: profile}) when profile in [:tm, :aos, :uslp, :tc],
+    do: :ok
+
   defp ensure_profile(_), do: {:error, :invalid_profile}
 end

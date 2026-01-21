@@ -23,8 +23,11 @@ defmodule Cadence.Application.Missions.MissionConfig do
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Domain.Interfaces.Entities.TargetInterface, as: TargetInterfaceEntity
+  alias Cadence.Interfaces.InterfaceSchema
+  alias Cadence.Interfaces.InterfaceVcid
   alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
   alias Cadence.Repo
+  alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
   alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.Packet.PacketDefinition
 
@@ -40,6 +43,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
           interfaces: list(),
           targets: list(),
           target_interface_routings: list(),
+          interface_vcids: list(),
           queue_snapshots: map(),
           packet_defs: list(),
           packet_catalog_defs: list(),
@@ -58,6 +62,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     interfaces: [],
     targets: [],
     target_interface_routings: [],
+    interface_vcids: [],
     queue_snapshots: %{},
     packet_defs: [],
     packet_catalog_defs: [],
@@ -80,6 +85,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, interfaces} <- load_interfaces(mission_id),
          {:ok, targets} <- load_targets(mission_id),
          {:ok, target_interface_routings} <- load_target_interface_routings(mission_id),
+         {:ok, interface_vcids} <- load_interface_vcids(mission_id),
+         :ok <- validate_tc_stream_ids(target_interface_routings, interfaces),
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
@@ -97,6 +104,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          interfaces: interfaces,
          targets: targets,
          target_interface_routings: target_interface_routings,
+         interface_vcids: interface_vcids,
          queue_snapshots: queue_snapshots,
          packet_defs: packet_defs,
          packet_catalog_defs: packet_catalog_defs,
@@ -191,6 +199,22 @@ defmodule Cadence.Application.Missions.MissionConfig do
       {:ok, []}
   end
 
+  defp load_interface_vcids(mission_id) do
+    vcids =
+      from(v in InterfaceVcid,
+        join: i in InterfaceSchema,
+        on: v.interface_id == i.id,
+        where: i.mission_id == ^mission_id
+      )
+      |> Repo.all()
+
+    {:ok, vcids}
+  rescue
+    e ->
+      Logger.warning("Failed to load interface vcids for mission #{mission_id}: #{inspect(e)}")
+      {:ok, []}
+  end
+
   defp load_queue_snapshots(mission_id, targets) do
     QueueSnapshotLoader.load_for_mission(mission_id, targets)
   rescue
@@ -227,5 +251,82 @@ defmodule Cadence.Application.Missions.MissionConfig do
     # TODO: Load automation definitions
     # For now, return empty list - AutomationManager loads from DB
     {:ok, []}
+  end
+
+  defp validate_tc_stream_ids(routings, interfaces) do
+    interfaces_by_id = Map.new(interfaces, fn interface -> {interface.id, interface} end)
+
+    cop1_routes =
+      Enum.filter(routings, fn route ->
+        TargetInterfaceEntity.allows_write?(route) and
+          cop1_enabled_interface?(interfaces_by_id, route.interface_id)
+      end)
+
+    errors =
+      cop1_routes
+      |> Enum.group_by(& &1.interface_id)
+      |> Enum.flat_map(fn {interface_id, routes} ->
+        {missing_errors, entries} = collect_stream_ids(routes)
+        conflict_errors = conflicting_stream_ids(entries, interface_id)
+        missing_errors ++ conflict_errors
+      end)
+
+    if errors == [] do
+      :ok
+    else
+      {:error, {:invalid_tc_stream_ids, errors}}
+    end
+  end
+
+  defp collect_stream_ids(routes) do
+    Enum.reduce(routes, {[], []}, fn route, {errors, entries} ->
+      stream_id = normalize_stream_id(route.tc_stream_id)
+
+      if is_nil(stream_id) do
+        error = %{
+          target_id: route.target_id,
+          interface_id: route.interface_id,
+          reason: :missing_tc_stream_id
+        }
+
+        {errors ++ [error], entries}
+      else
+        {errors, entries ++ [%{stream_id: stream_id, target_id: route.target_id}]}
+      end
+    end)
+  end
+
+  defp conflicting_stream_ids(entries, interface_id) do
+    entries
+    |> Enum.group_by(& &1.stream_id)
+    |> Enum.flat_map(fn {stream_id, grouped} ->
+      target_ids = grouped |> Enum.map(& &1.target_id) |> Enum.uniq()
+
+      if length(target_ids) > 1 do
+        [
+          %{
+            interface_id: interface_id,
+            tc_stream_id: stream_id,
+            target_ids: target_ids,
+            reason: :conflicting_tc_stream_ids
+          }
+        ]
+      else
+        []
+      end
+    end)
+  end
+
+  defp normalize_stream_id(nil), do: nil
+  defp normalize_stream_id(""), do: nil
+  defp normalize_stream_id(value) when is_integer(value), do: Integer.to_string(value)
+  defp normalize_stream_id(value) when is_binary(value), do: value
+  defp normalize_stream_id(_value), do: nil
+
+  defp cop1_enabled_interface?(interfaces_by_id, interface_id) do
+    case Map.get(interfaces_by_id, interface_id) do
+      nil -> false
+      interface -> COP1Application.enabled?(interface)
+    end
   end
 end

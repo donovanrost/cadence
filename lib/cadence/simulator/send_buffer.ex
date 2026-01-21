@@ -45,6 +45,8 @@ defmodule Cadence.Simulator.SendBuffer do
     :batch_timeout,
     :batch_size,
     :timer_ref,
+    :mode,
+    :socket_owner,
     buffer: [],
     buffer_bytes: 0,
     packets_buffered: 0,
@@ -86,6 +88,22 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   @doc """
+  Attaches an externally-managed socket (listen mode).
+  """
+  @spec attach_socket(GenServer.server(), port()) :: :ok
+  def attach_socket(pid, socket) do
+    GenServer.cast(pid, {:attach_socket, socket})
+  end
+
+  @doc """
+  Detaches the externally-managed socket (listen mode).
+  """
+  @spec detach_socket(GenServer.server()) :: :ok
+  def detach_socket(pid) do
+    GenServer.cast(pid, :detach_socket)
+  end
+
+  @doc """
   Forces an immediate flush of the buffer.
   """
   @spec flush(GenServer.server()) :: :ok
@@ -118,11 +136,14 @@ defmodule Cadence.Simulator.SendBuffer do
     output = Keyword.get(opts, :output)
     batch_timeout = Keyword.get(opts, :batch_timeout, @default_batch_timeout)
     batch_size = Keyword.get(opts, :batch_size, @default_batch_size)
+    mode = Keyword.get(opts, :mode, :connect)
 
     state = %__MODULE__{
       output: output,
       batch_timeout: batch_timeout,
-      batch_size: batch_size
+      batch_size: batch_size,
+      mode: mode,
+      socket_owner: nil
     }
 
     # Connect to output
@@ -156,6 +177,16 @@ defmodule Cadence.Simulator.SendBuffer do
       end
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:attach_socket, socket}, state) do
+    {:noreply, %{state | socket: socket, socket_owner: :external}}
+  end
+
+  @impl true
+  def handle_cast(:detach_socket, state) do
+    {:noreply, %{state | socket: nil, socket_owner: nil}}
   end
 
   @impl true
@@ -236,7 +267,7 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   defp do_send(%{socket: nil} = state, _iolist) do
-    {:error, missing_socket_reason(state.output)}
+    {:error, missing_socket_reason(state)}
   end
 
   defp do_send(%{output: {:tcp, _, _}, socket: socket}, iolist) do
@@ -251,12 +282,15 @@ defmodule Cadence.Simulator.SendBuffer do
 
   defp do_send(_, _), do: {:error, :invalid_output}
 
-  defp missing_socket_reason(nil), do: :no_output_configured
-  defp missing_socket_reason({:tcp, _, _}), do: :not_connected
-  defp missing_socket_reason({:udp, _, _}), do: :not_connected
+  defp missing_socket_reason(%{output: nil}), do: :no_output_configured
+  defp missing_socket_reason(%{mode: :listen}), do: :no_client_connected
+  defp missing_socket_reason(%{output: {:tcp, _, _}}), do: :not_connected
+  defp missing_socket_reason(%{output: {:udp, _, _}}), do: :not_connected
   defp missing_socket_reason(_), do: :not_connected
 
   defp connect_output(%{output: nil} = state), do: state
+
+  defp connect_output(%{mode: :listen, output: {:tcp, _host, _port}} = state), do: state
 
   defp connect_output(%{output: {:tcp, host, port}} = state) do
     opts = [
@@ -270,7 +304,7 @@ defmodule Cadence.Simulator.SendBuffer do
     case :gen_tcp.connect(String.to_charlist(host), port, opts) do
       {:ok, socket} ->
         Logger.info("SendBuffer connected to TCP #{host}:#{port}")
-        %{state | socket: socket}
+        %{state | socket: socket, socket_owner: :internal}
 
       {:error, reason} ->
         Logger.warning("SendBuffer failed to connect to TCP #{host}:#{port}: #{inspect(reason)}")
@@ -282,7 +316,7 @@ defmodule Cadence.Simulator.SendBuffer do
     case :gen_udp.open(0, [:binary, sndbuf: 131_072]) do
       {:ok, socket} ->
         Logger.debug("SendBuffer opened UDP socket")
-        %{state | socket: socket}
+        %{state | socket: socket, socket_owner: :internal}
 
       {:error, reason} ->
         Logger.warning("SendBuffer failed to open UDP socket: #{inspect(reason)}")
@@ -291,6 +325,9 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   defp connect_output(state), do: state
+
+  defp reconnect_output(%{mode: :listen} = state), do: %{state | socket: nil}
+  defp reconnect_output(%{socket_owner: :external} = state), do: %{state | socket: nil}
 
   defp reconnect_output(%{output: {:tcp, _host, _port}} = state) do
     %{state | socket: nil} |> connect_output()
@@ -307,6 +344,7 @@ defmodule Cadence.Simulator.SendBuffer do
   defp reconnect_output(state), do: %{state | socket: nil}
 
   defp close_socket(%{socket: nil}), do: :ok
+  defp close_socket(%{socket_owner: :external}), do: :ok
   defp close_socket(%{output: {:tcp, _, _}, socket: socket}), do: :gen_tcp.close(socket)
   defp close_socket(%{output: {:udp, _, _}, socket: socket}), do: :gen_udp.close(socket)
   defp close_socket(_), do: :ok

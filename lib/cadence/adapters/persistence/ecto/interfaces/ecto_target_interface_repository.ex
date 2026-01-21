@@ -207,6 +207,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Interfaces.EctoTargetInterfaceReposi
       interface_id: schema.interface_id,
       direction: schema.direction,
       scid: schema.scid,
+      tc_stream_id: schema.tc_stream_id,
       created_at: schema.inserted_at,
       updated_at: schema.updated_at
     })
@@ -221,7 +222,8 @@ defmodule Cadence.Adapters.Persistence.Ecto.Interfaces.EctoTargetInterfaceReposi
       target_id: entity.target_id,
       interface_id: entity.interface_id,
       direction: Atom.to_string(entity.direction),
-      scid: entity.scid
+      scid: entity.scid,
+      tc_stream_id: entity.tc_stream_id
     }
   end
 

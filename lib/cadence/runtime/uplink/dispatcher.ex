@@ -3,23 +3,28 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   Mission-scoped uplink dispatcher.
 
   Accepts PDUs, routes them to an interface, applies SDLP framing, and sends bytes.
+  Non-COP-1 sends are dispatched via UplinkPipeline.
   """
 
   use GenServer
 
   alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.CCSDS.Core.PDU
-  alias Cadence.CCSDS.SDU.SpacePacket
-  alias Cadence.Domain.Interfaces.Entities.TargetInterface
   alias Cadence.Runtime.Telemetry.UplinkPipeline
-
-  @sequence_mod 16_384
+  alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
+  alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
+  alias Cadence.Runtime.Uplink.FramingContext
+  alias Cadence.Runtime.Uplink.ReleasedUplinkFrame
+  alias Cadence.Runtime.Uplink.RouteDecision
+  alias Cadence.Runtime.Uplink.RoutingService
+  alias Cadence.Runtime.Uplink.SequenceManager
+  alias Cadence.Runtime.Uplink.TCFraming
+  alias Cadence.Runtime.Uplink.UplinkPDU
 
   defmodule State do
     @moduledoc false
     defstruct [
       :mission_id,
-      routes_by_target: %{},
+      :routing_service,
       sequence_counts: %{}
     ]
   end
@@ -34,10 +39,10 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     GenServer.start_link(__MODULE__, config, name: via_tuple(config.mission_id))
   end
 
-  @spec dispatch_pdu(String.t(), String.t(), PDU.t(), keyword()) ::
-          {:ok, String.t()} | {:error, term()}
-  def dispatch_pdu(mission_id, target_id, %PDU{} = pdu, opts \\ []) do
-    GenServer.call(via_tuple(mission_id), {:dispatch_pdu, target_id, pdu, opts})
+  @spec dispatch_pdu(String.t(), UplinkPDU.t(), keyword()) ::
+          {:ok, RouteDecision.t()} | {:error, term()}
+  def dispatch_pdu(mission_id, %UplinkPDU{} = uplink_pdu, opts \\ []) do
+    GenServer.call(via_tuple(mission_id), {:dispatch_pdu, uplink_pdu, opts})
   end
 
   @spec connected?(String.t(), String.t()) :: boolean()
@@ -55,14 +60,18 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
 
   @impl true
   def init(%MissionConfig{} = config) do
-    routes_by_target = build_routes(config.target_interface_routings)
+    routing_service = RoutingService.new(config)
 
-    {:ok, %State{mission_id: config.mission_id, routes_by_target: routes_by_target}}
+    {:ok,
+     %State{
+       mission_id: config.mission_id,
+       routing_service: routing_service
+     }}
   end
 
   @impl true
   def handle_call({:connected?, target_id}, _from, state) do
-    routes = Map.get(state.routes_by_target, target_id, [])
+    routes = RoutingService.routes_for_target(state.routing_service, target_id)
 
     connected =
       Enum.any?(routes, fn route ->
@@ -73,49 +82,84 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   end
 
   @impl true
-  def handle_call({:dispatch_pdu, target_id, pdu, opts}, _from, state) do
-    with {:ok, route} <- select_route(state, target_id, opts),
-         :ok <- ensure_connected(state.mission_id, route.interface_id),
-         {:ok, pdu, next_counts} <- prepare_pdu(pdu, state.sequence_counts),
-         {:ok, encoded} <- encode_pdu(state.mission_id, route, pdu, opts),
-         :ok <- send_bytes(state.mission_id, route.interface_id, encoded) do
-      {:reply, {:ok, route.interface_id}, %{state | sequence_counts: next_counts}}
-    else
+  def handle_call({:dispatch_pdu, uplink_pdu, opts}, _from, state) do
+    case do_dispatch_pdu(state, uplink_pdu, opts) do
+      {:ok, decision, next_counts} ->
+        {:reply, {:ok, decision}, %{state | sequence_counts: next_counts}}
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
+
+      {:error, reason, detail} ->
+        {:reply, {:error, reason, detail}, state}
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Routing / Selection
-  # ---------------------------------------------------------------------------
+  defp do_dispatch_pdu(state, %UplinkPDU{} = uplink_pdu, opts) do
+    routing_opts = Keyword.take(opts, [:interface_id])
 
-  defp build_routes(routings) do
-    routings
-    |> Enum.filter(&TargetInterface.allows_write?/1)
-    |> Enum.group_by(& &1.target_id)
-  end
-
-  defp select_route(state, target_id, opts) do
-    routes = Map.get(state.routes_by_target, target_id, [])
-
-    case Keyword.get(opts, :interface_id) do
-      nil ->
-        case Enum.find(routes, &interface_connected?(state.mission_id, &1.interface_id)) do
-          nil -> pick_route(routes)
-          route -> {:ok, route}
-        end
-
-      interface_id ->
-        case Enum.find(routes, &(&1.interface_id == interface_id)) do
-          nil -> {:error, :no_interface}
-          route -> {:ok, route}
-        end
+    with {:ok, decision} <-
+           RoutingService.route(state.routing_service, uplink_pdu, routing_opts),
+         :ok <- ensure_connected(state.mission_id, decision.interface_id),
+         {:ok, pdu, next_counts} <-
+           SequenceManager.prepare_pdu(uplink_pdu.pdu, state.sequence_counts),
+         :ok <-
+           dispatch_via_route(
+             state,
+             decision,
+             UplinkPDU.from_pdu(uplink_pdu.target_id, pdu),
+             opts
+           ) do
+      {:ok, decision, next_counts}
+    else
+      {:error, reason} -> {:error, reason}
+      {:error, reason, detail} -> {:error, reason, detail}
     end
   end
 
-  defp pick_route([]), do: {:error, :no_interface}
-  defp pick_route([route | _]), do: {:ok, route}
+  defp dispatch_via_route(state, %RouteDecision{} = decision, %UplinkPDU{} = uplink_pdu, opts) do
+    framing_override = Keyword.get(opts, :framing_context)
+    cop1_override = Keyword.get(opts, :cop1_context)
+    {framing_context, cop1_context} = build_contexts(decision, framing_override, cop1_override)
+
+    if decision.cop1_mode == :fop do
+      case TCFraming.build_frames(
+             state.mission_id,
+             decision.interface_id,
+             uplink_pdu.pdu,
+             framing_context
+           ) do
+        {:ok, frames} ->
+          COP1Application.propose_send_frames(state.mission_id, decision, frames, cop1_context)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      case encode_pdu(state.mission_id, decision, uplink_pdu.pdu, framing_context) do
+        {:ok, encoded} ->
+          send_release(state.mission_id, decision, encoded, nil)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp build_contexts(%RouteDecision{} = decision, framing_override, cop1_override) do
+    base_framing = FramingContext.from_route_decision(decision)
+    base_cop1 = COP1Context.from_route_decision(decision)
+
+    framing_context = FramingContext.merge(base_framing, framing_override)
+    cop1_context = COP1Context.merge(base_cop1, cop1_override)
+
+    framing_context =
+      framing_context
+      |> FramingContext.put_if_nil(:stream_id, cop1_context.stream_id)
+      |> FramingContext.put_if_nil(:initial_seq, cop1_context.initial_seq)
+
+    {framing_context, cop1_context}
+  end
 
   # ---------------------------------------------------------------------------
   # Encoding / Send
@@ -136,69 +180,24 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     end
   end
 
-  defp encode_pdu(mission_id, route, pdu, opts) do
-    ctx =
-      opts
-      |> Keyword.get(:ctx, %{})
-      |> Map.put_new(:scid, route.scid)
-
-    case UplinkPipeline.encode(mission_id, route.interface_id, pdu, ctx) do
+  defp encode_pdu(mission_id, %RouteDecision{} = decision, pdu, %FramingContext{} = context) do
+    case UplinkPipeline.encode(mission_id, decision.interface_id, pdu, context) do
       {:ok, encoded} -> {:ok, encoded}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp send_bytes(mission_id, interface_id, encoded) do
-    case Registry.lookup(Cadence.MissionRegistry, {:interface, mission_id, interface_id}) do
-      [{pid, _}] ->
-        case GenServer.call(pid, {:send_data, encoded}) do
-          :ok -> :ok
-          {:ok, _} -> :ok
-          {:error, :not_connected} -> {:error, :send_failed, :no_clients_connected}
-          {:error, :no_clients_connected} -> {:error, :send_failed, :no_clients_connected}
-          {:error, reason} -> {:error, :send_failed, reason}
-        end
+  defp send_release(mission_id, %RouteDecision{} = decision, encoded, correlation_id) do
+    release =
+      ReleasedUplinkFrame.from_bytes(
+        mission_id,
+        decision.interface_id,
+        decision.tc_stream_id,
+        encoded,
+        :direct,
+        correlation_id
+      )
 
-      [] ->
-        {:error, :interface_not_running}
-    end
+    UplinkPipeline.send_release(release)
   end
-
-  # ---------------------------------------------------------------------------
-  # Sequence Management
-  # ---------------------------------------------------------------------------
-
-  defp prepare_pdu(%PDU{type: :space_packet, value: %SpacePacket{} = packet} = pdu, counts) do
-    if is_nil(packet.apid) do
-      {:error, :missing_apid}
-    else
-      {sequence_count, next_counts} =
-        if is_nil(packet.sequence_count) do
-          next_sequence(counts, packet.apid)
-        else
-          {packet.sequence_count, counts}
-        end
-
-      updated_packet =
-        packet
-        |> ensure_sequence_flags()
-        |> Map.put(:sequence_count, sequence_count)
-
-      {:ok, %{pdu | value: updated_packet}, next_counts}
-    end
-  end
-
-  defp prepare_pdu(%PDU{} = pdu, counts), do: {:ok, pdu, counts}
-
-  defp next_sequence(counts, apid) do
-    current = Map.get(counts, apid, -1)
-    next = rem(current + 1, @sequence_mod)
-    {next, Map.put(counts, apid, next)}
-  end
-
-  defp ensure_sequence_flags(%SpacePacket{sequence_flags: nil} = packet) do
-    %{packet | sequence_flags: 3}
-  end
-
-  defp ensure_sequence_flags(packet), do: packet
 end

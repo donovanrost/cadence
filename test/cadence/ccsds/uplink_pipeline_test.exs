@@ -4,6 +4,7 @@ defmodule Cadence.CCSDS.Uplink.PipelineTest do
   alias Cadence.CCSDS.Core.{PDU, SDUOctets}
   alias Cadence.CCSDS.SDLP.TM.FrameCodec
   alias Cadence.CCSDS.SDU.SpacePacket
+  alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Uplink.Pipeline
 
   test "encodes SDU octets into TM frame bytes" do
@@ -63,5 +64,33 @@ defmodule Cadence.CCSDS.Uplink.PipelineTest do
     assert length(frames) >= 1
     assert Enum.all?(frames, fn frame -> byte_size(frame.payload_octets) == frame_size - 6 end)
     assert Enum.at(frames, 0).meta.fhp == 0
+  end
+
+  test "encodes SDU octets into TC frame bytes" do
+    payload = :binary.copy(<<0xAB>>, 7)
+    frame_size = 5 + byte_size(payload)
+
+    sdu = %SDUOctets{
+      profile: :tc,
+      scid: 1,
+      vcid: 2,
+      map_id: nil,
+      direction: :uplink,
+      sdu_kind_hint: :space_packet,
+      octets: payload,
+      quality: :good,
+      source_frames: [],
+      timestamp: nil,
+      meta: %{}
+    }
+
+    opts = [profile: :tc, frame_size: frame_size]
+    {:ok, state} = Pipeline.init(opts)
+
+    assert {:ok, encoded, _state} = Pipeline.encode(sdu, %{frame_size: frame_size}, state, opts)
+    assert {:ok, [frame], <<>>} = TransferFrame.decode(encoded, frame_size: frame_size)
+    assert frame.scid == 1
+    assert frame.vcid == 2
+    assert frame.payload == payload
   end
 end

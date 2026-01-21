@@ -51,6 +51,9 @@ defmodule Cadence.Simulator.Coordinator do
   - `:provider_config` - Config passed to provider init
   - `:definitions_path` - Path to YAML packet definitions (required)
   - `:scenario_path` - Path to scenario file (for ScenarioProvider)
+  - `:clcw_overrides` - Map of CLCW fields to override (requires `clcw_enabled`)
+  - `:clcw_schedule` - List of `%{at: step, overrides: %{...}}` entries
+  - `:uplink_drop_every` - Drop every Nth uplink frame (simulated loss)
 
   ## Parallel Mode Options
 
@@ -65,9 +68,13 @@ defmodule Cadence.Simulator.Coordinator do
   require Logger
 
   alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
+  alias Cadence.CCSDS.TC.TransferFrame
+  alias Cadence.CCSDS.Transport.COP1.{CLCW, FARM}
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
 
   alias Cadence.Simulator.{
+    COP1.CLCWInjector,
     GeneratorWorker,
     PacketEncoder,
     SendBuffer,
@@ -95,15 +102,24 @@ defmodule Cadence.Simulator.Coordinator do
     :rate_hz,
     :timer_ref,
     :frame,
+    :uplink_frame,
     :uplink_pipeline,
     :uplink_opts,
+    :clcw_enabled,
+    :clcw_injector,
+    :farm,
+    :uplink_buffer,
+    :mode,
+    :listener,
+    :uplink_drop_every,
     # Parallel mode fields
     :parallel_mode,
     :generator_pool,
     :sequence_allocator,
     :send_buffer,
     step: 0,
-    packet_count: 0
+    packet_count: 0,
+    uplink_seen: 0
   ]
 
   # ============================================================================
@@ -151,8 +167,17 @@ defmodule Cadence.Simulator.Coordinator do
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
     parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
+    mode = Keyword.get(opts, :mode, :connect)
     frame = Keyword.get(opts, :frame)
+    uplink_frame = Keyword.get(opts, :uplink_frame)
     {uplink_pipeline, uplink_opts} = init_uplink_pipeline(frame)
+    clcw_enabled = Keyword.get(opts, :clcw_enabled, false)
+    clcw_injector = build_clcw_injector(opts, clcw_enabled)
+
+    uplink_drop_value =
+      Keyword.get(opts, :uplink_drop_every) || Keyword.get(opts, :drop_uplink_every)
+
+    uplink_drop_every = parse_uplink_drop(uplink_drop_value)
 
     # Determine provider based on options
     {provider_module, provider_config} = determine_provider(opts)
@@ -169,9 +194,14 @@ defmodule Cadence.Simulator.Coordinator do
              output: output,
              rate_hz: rate_hz,
              frame: frame,
+             uplink_frame: uplink_frame,
              uplink_pipeline: uplink_pipeline,
              uplink_opts: uplink_opts,
+             clcw_enabled: clcw_enabled,
+             clcw_injector: clcw_injector,
              parallel_mode: parallel_mode,
+             mode: mode,
+             uplink_drop_every: uplink_drop_every,
              opts: opts
            }) do
       Logger.info("""
@@ -182,6 +212,7 @@ defmodule Cadence.Simulator.Coordinator do
         rate_hz: #{rate_hz}
         output: #{inspect(output)}
         parallel_mode: #{parallel_mode}
+        connection_mode: #{mode}
         encoder: loaded
         frame: #{inspect(frame)}
         uplink_pipeline: #{if uplink_pipeline, do: "initialized", else: "none (raw packets)"}
@@ -205,6 +236,13 @@ defmodule Cadence.Simulator.Coordinator do
     batch_timeout = Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout)
     batch_size = Keyword.get(opts, :send_batch_size, @default_send_batch_size)
 
+    state =
+      if state.mode == :listen do
+        connect_output(state)
+      else
+        state
+      end
+
     # Initialize metrics
     SimulatorMetrics.init(state.mission_id)
 
@@ -223,7 +261,8 @@ defmodule Cadence.Simulator.Coordinator do
       SendBuffer.start_link(
         output: state.output,
         batch_timeout: batch_timeout,
-        batch_size: batch_size
+        batch_size: batch_size,
+        mode: state.mode
       )
 
     # Start generator workers
@@ -240,6 +279,8 @@ defmodule Cadence.Simulator.Coordinator do
             uplink_opts: state.uplink_opts,
             sequence_allocator: sequence_allocator,
             send_buffer: send_buffer,
+            clcw_enabled: state.clcw_enabled,
+            clcw_injector: state.clcw_injector,
             name: nil
           )
 
@@ -272,9 +313,14 @@ defmodule Cadence.Simulator.Coordinator do
          output: output,
          rate_hz: rate_hz,
          frame: frame,
+         uplink_frame: uplink_frame,
          uplink_pipeline: uplink_pipeline,
          uplink_opts: uplink_opts,
+         clcw_enabled: clcw_enabled,
+         clcw_injector: clcw_injector,
          parallel_mode: parallel_mode,
+         mode: mode,
+         uplink_drop_every: uplink_drop_every,
          opts: opts
        }) do
     state = %__MODULE__{
@@ -286,9 +332,17 @@ defmodule Cadence.Simulator.Coordinator do
       output: output,
       rate_hz: rate_hz,
       frame: frame,
+      uplink_frame: uplink_frame,
       uplink_pipeline: uplink_pipeline,
       uplink_opts: uplink_opts,
+      clcw_enabled: clcw_enabled,
+      clcw_injector: clcw_injector,
+      farm: init_farm(clcw_enabled, frame),
+      uplink_buffer: <<>>,
       parallel_mode: parallel_mode,
+      mode: mode,
+      uplink_drop_every: uplink_drop_every,
+      listener: nil,
       socket: nil
     }
 
@@ -352,7 +406,7 @@ defmodule Cadence.Simulator.Coordinator do
           {%{}, next_state}
       end
 
-    state = send_telemetry(state, values)
+    state = send_telemetry(state, values, state.step)
 
     # Schedule next generation
     interval_ms = max(trunc(1000 / state.rate_hz), 1)
@@ -369,6 +423,44 @@ defmodule Cadence.Simulator.Coordinator do
     {:noreply, new_state}
   end
 
+  def handle_info({:tcp, socket, data}, %{socket: socket} = state) do
+    {frames, buffer} = decode_uplink_frames(state, data)
+    state = Enum.reduce(frames, state, &handle_uplink_frame/2)
+    maybe_set_active_once(state)
+    {:noreply, %{state | uplink_buffer: buffer}}
+  end
+
+  def handle_info({:tcp_closed, socket}, %{socket: socket} = state) do
+    Logger.warning("Simulator uplink socket closed")
+    state = maybe_detach_send_buffer(state)
+    {:noreply, %{state | socket: nil}}
+  end
+
+  def handle_info({:tcp_error, socket, reason}, %{socket: socket} = state) do
+    Logger.warning("Simulator uplink socket error: #{inspect(reason)}")
+    {:noreply, state}
+  end
+
+  def handle_info(:accept, %{listener: nil} = state), do: {:noreply, state}
+
+  def handle_info(:accept, %{listener: listener} = state) do
+    case :gen_tcp.accept(listener, 100) do
+      {:ok, socket} ->
+        state = handle_client_accept(state, socket)
+        send(self(), :accept)
+        {:noreply, state}
+
+      {:error, :timeout} ->
+        send(self(), :accept)
+        {:noreply, state}
+
+      {:error, reason} ->
+        Logger.warning("Simulator accept error: #{inspect(reason)}")
+        TimeTimer.send_after(self(), :accept, 1000)
+        {:noreply, state}
+    end
+  end
+
   @impl true
   def handle_call(:get_stats, _from, state) do
     base_stats = %{
@@ -381,7 +473,10 @@ defmodule Cadence.Simulator.Coordinator do
       uptime_seconds: state.step / max(state.rate_hz, 0.001),
       output: format_output(state.output),
       encoder_loaded: state.encoder != nil,
-      parallel_mode: state.parallel_mode
+      parallel_mode: state.parallel_mode,
+      connection_mode: state.mode,
+      uplink_frame: state.uplink_frame,
+      clcw_enabled: state.clcw_enabled
     }
 
     # Add parallel mode specific stats
@@ -458,6 +553,7 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp cleanup_sequential(state) do
     if state.socket, do: close_socket(state)
+    if state.listener, do: close_listener(state)
   end
 
   defp determine_provider(opts) do
@@ -511,13 +607,40 @@ defmodule Cadence.Simulator.Coordinator do
     end
   end
 
+  defp build_clcw_injector(_opts, false), do: nil
+
+  defp build_clcw_injector(opts, true) do
+    CLCWInjector.new(
+      overrides: Keyword.get(opts, :clcw_overrides, %{}),
+      schedule: Keyword.get(opts, :clcw_schedule, [])
+    )
+  end
+
+  defp parse_uplink_drop(value) do
+    case parse_integer(value) do
+      value when is_integer(value) and value > 0 -> value
+      _ -> nil
+    end
+  end
+
   defp connect_output(%{output: nil} = state), do: state
   defp connect_output(%{output: :pubsub} = state), do: state
 
+  defp connect_output(%{mode: :listen, output: {:tcp, host, port}} = state) do
+    listen_output(state, host, port)
+  end
+
+  defp connect_output(%{mode: :listen, output: {:udp, _, _}} = state) do
+    Logger.warning("Listen mode does not support UDP output")
+    state
+  end
+
   defp connect_output(%{output: {:tcp, host, port}} = state) do
+    active = if state.clcw_enabled, do: :once, else: false
+
     opts = [
       :binary,
-      active: false,
+      active: active,
       nodelay: true,
       sndbuf: 131_072,
       send_timeout: 5000
@@ -554,22 +677,25 @@ defmodule Cadence.Simulator.Coordinator do
   defp close_socket(%{output: {:udp, _, _}, socket: socket}), do: :gen_udp.close(socket)
   defp close_socket(_), do: :ok
 
-  defp send_telemetry(state, values) when map_size(values) == 0, do: state
+  defp close_listener(%{listener: nil}), do: :ok
+  defp close_listener(%{listener: listener}), do: :gen_tcp.close(listener)
 
-  defp send_telemetry(%{encoder: encoder} = state, values) do
+  defp send_telemetry(state, values, _step) when map_size(values) == 0, do: state
+
+  defp send_telemetry(%{encoder: encoder} = state, values, step) do
     # Use encoder for proper packet construction
     {:ok, packets, updated_encoder} = PacketEncoder.encode(encoder, state.target_id, values)
 
     state =
       Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
-        send_packet(acc_state, binary)
+        send_packet(acc_state, binary, step)
       end)
 
     %{state | encoder: updated_encoder}
   end
 
-  defp send_packet(state, binary) do
-    {processed_packet, state} = encode_uplink(state, binary)
+  defp send_packet(state, binary, step) do
+    {processed_packet, state} = encode_uplink(state, binary, step)
     send_frame(state, processed_packet)
     state
   end
@@ -578,12 +704,16 @@ defmodule Cadence.Simulator.Coordinator do
     SendBuffer.send_packet(send_buffer, frame_binary)
   end
 
+  defp send_frame(%{output: {:tcp, _, _}, socket: nil}, _frame_binary), do: :ok
+
   defp send_frame(%{output: {:tcp, _, _}, socket: socket}, frame_binary) do
     case :gen_tcp.send(socket, frame_binary) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("TCP send failed: #{inspect(reason)}")
     end
   end
+
+  defp send_frame(%{output: {:udp, _, _}, socket: nil}, _frame_binary), do: :ok
 
   defp send_frame(%{output: {:udp, host, port}, socket: socket}, frame_binary) do
     case :gen_udp.send(socket, String.to_charlist(host), port, frame_binary) do
@@ -594,15 +724,17 @@ defmodule Cadence.Simulator.Coordinator do
 
   defp send_frame(_, _frame_binary), do: :ok
 
-  defp encode_uplink(%{uplink_pipeline: nil} = state, packet), do: {packet, state}
+  defp encode_uplink(%{uplink_pipeline: nil} = state, packet, _step), do: {packet, state}
 
-  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet) do
-    ctx = %{
-      frame_size: opts[:frame_size],
-      scid: opts[:uplink_scid] || opts[:scid],
-      vcid: opts[:uplink_vcid] || opts[:vcid],
-      map_id: opts[:uplink_map_id]
-    }
+  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet, step) do
+    ctx =
+      %{
+        frame_size: opts[:frame_size],
+        scid: opts[:uplink_scid] || opts[:scid],
+        vcid: opts[:uplink_vcid] || opts[:vcid],
+        map_id: opts[:uplink_map_id]
+      }
+      |> maybe_put_ocf(state, step)
 
     sdu = %SDUOctets{
       profile: opts[:profile],
@@ -627,6 +759,147 @@ defmodule Cadence.Simulator.Coordinator do
         {packet, %{state | uplink_pipeline: new_pipeline}}
     end
   end
+
+  defp maybe_put_ocf(
+         ctx,
+         %{clcw_enabled: true, uplink_opts: opts, farm: %FARM{} = farm, clcw_injector: injector},
+         step
+       )
+       when is_map(ctx) do
+    put_ocf(ctx, clcw_binary_from_farm(opts, farm, injector, step))
+  end
+
+  defp maybe_put_ocf(ctx, %{clcw_enabled: true, uplink_opts: opts, clcw_injector: injector}, step)
+       when is_map(ctx) do
+    put_ocf(ctx, clcw_binary_from_step(opts, step, injector))
+  end
+
+  defp maybe_put_ocf(ctx, _state, _step), do: ctx
+
+  defp clcw_binary_from_farm(nil, _farm, _injector, _step), do: :skip
+
+  defp clcw_binary_from_farm(opts, farm, injector, step) do
+    if Keyword.get(opts, :profile) == :tm do
+      farm
+      |> FARM.clcw()
+      |> maybe_apply_injector(injector, step)
+      |> CLCW.encode()
+    else
+      :skip
+    end
+  end
+
+  defp clcw_binary_from_step(nil, _step, _injector), do: :skip
+
+  defp clcw_binary_from_step(opts, step, injector) do
+    if Keyword.get(opts, :profile) == :tm do
+      vcid = opts[:uplink_vcid] || opts[:vcid] || 0
+      report_value = rem(step, 256)
+
+      %CLCW{vcid: vcid, report_value: report_value}
+      |> maybe_apply_injector(injector, step)
+      |> CLCW.encode()
+    else
+      :skip
+    end
+  end
+
+  defp maybe_apply_injector(%CLCW{} = clcw, %CLCWInjector{} = injector, step) do
+    CLCWInjector.apply(injector, clcw, step)
+  end
+
+  defp maybe_apply_injector(clcw, _injector, _step), do: clcw
+
+  defp put_ocf(ctx, {:ok, ocf}) do
+    Map.merge(ctx, %{ocf: ocf, ocf_length: byte_size(ocf)})
+  end
+
+  defp put_ocf(ctx, {:error, reason}) do
+    Logger.warning("Failed to encode CLCW: #{inspect(reason)}")
+    ctx
+  end
+
+  defp put_ocf(ctx, :skip), do: ctx
+
+  defp decode_uplink_frames(state, data) do
+    case uplink_frame_config(state) do
+      %{format: :tm, frame_size: frame_size} ->
+        decode_tm_uplink(state, data, frame_size)
+
+      %{format: :tc, frame_size: frame_size} ->
+        decode_tc_uplink(state, data, frame_size)
+
+      _ ->
+        Logger.debug("Uplink frame decode skipped; frame config missing")
+        {[], state.uplink_buffer <> data}
+    end
+  end
+
+  defp decode_tm_uplink(state, data, frame_size) do
+    buffer = state.uplink_buffer <> data
+
+    case TMFrameCodec.decode(buffer, frame_size: frame_size) do
+      {:ok, frames, rest} ->
+        {frames, rest}
+
+      other ->
+        Logger.warning("Failed to decode TM uplink frames: #{inspect(other)}")
+        {[], <<>>}
+    end
+  end
+
+  defp decode_tc_uplink(state, data, frame_size) do
+    buffer = state.uplink_buffer <> data
+
+    case TransferFrame.decode(buffer, frame_size: frame_size) do
+      {:ok, frames, rest} ->
+        {frames, rest}
+
+      other ->
+        Logger.warning("Failed to decode TC uplink frames: #{inspect(other)}")
+        {[], <<>>}
+    end
+  end
+
+  defp uplink_frame_config(%{uplink_frame: nil, frame: frame}), do: frame
+  defp uplink_frame_config(%{uplink_frame: uplink_frame}), do: uplink_frame
+
+  defp handle_uplink_frame(%{frame_seq: seq, vcid: vcid}, %{farm: %FARM{} = farm} = state)
+       when is_integer(seq) do
+    {state, drop?} = maybe_drop_uplink(state)
+
+    if drop? do
+      state
+    else
+      case FARM.ingest(farm, %{frame_seq: seq, vcid: vcid}) do
+        {:ok, updated_farm} ->
+          %{state | farm: updated_farm}
+
+        _ ->
+          state
+      end
+    end
+  end
+
+  defp handle_uplink_frame(_frame, state), do: state
+
+  defp maybe_drop_uplink(%{uplink_drop_every: nil} = state), do: {state, false}
+
+  defp maybe_drop_uplink(%{uplink_drop_every: every, uplink_seen: seen} = state)
+       when is_integer(every) and every > 0 do
+    next_seen = seen + 1
+    drop? = rem(next_seen, every) == 0
+    {%{state | uplink_seen: next_seen}, drop?}
+  end
+
+  defp maybe_drop_uplink(state), do: {state, false}
+
+  defp maybe_set_active_once(%{clcw_enabled: true, socket: socket}) when not is_nil(socket) do
+    :inet.setopts(socket, active: :once)
+    :ok
+  end
+
+  defp maybe_set_active_once(_state), do: :ok
 
   defp init_uplink_pipeline(nil) do
     Logger.debug("init_uplink_pipeline: frame is nil, no TM framing")
@@ -656,6 +929,102 @@ defmodule Cadence.Simulator.Coordinator do
     Logger.debug("init_uplink_pipeline: unrecognized frame format: #{inspect(other)}")
     {nil, nil}
   end
+
+  defp init_farm(false, _frame), do: nil
+
+  defp init_farm(true, %{format: :tm, vcid: vcid}) do
+    case FARM.init(vcid: vcid) do
+      {:ok, farm} ->
+        farm
+
+      {:error, reason} ->
+        Logger.warning("Failed to initialize FARM: #{inspect(reason)}")
+        nil
+    end
+  end
+
+  defp init_farm(true, _frame), do: nil
+
+  defp listen_output(state, host, port) do
+    ip_tuple = parse_bind_address(host)
+
+    opts = [
+      :binary,
+      active: false,
+      reuseaddr: true,
+      packet: :raw,
+      ip: ip_tuple
+    ]
+
+    case :gen_tcp.listen(port, opts) do
+      {:ok, listener} ->
+        Logger.info("Listening on TCP #{host}:#{port} for simulator uplink")
+        send(self(), :accept)
+        %{state | listener: listener, socket: nil}
+
+      {:error, reason} ->
+        Logger.warning("Failed to listen on TCP #{host}:#{port}: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp handle_client_accept(%{socket: nil} = state, socket) do
+    Logger.info("Simulator accepted TCP client")
+    active = if state.clcw_enabled, do: :once, else: false
+    :inet.setopts(socket, active: active)
+
+    state
+    |> maybe_attach_send_buffer(socket)
+    |> Map.put(:socket, socket)
+  end
+
+  defp handle_client_accept(state, socket) do
+    Logger.warning("Simulator already has a TCP client; closing new connection")
+    :gen_tcp.close(socket)
+    state
+  end
+
+  defp maybe_attach_send_buffer(%{send_buffer: nil} = state, _socket), do: state
+
+  defp maybe_attach_send_buffer(%{send_buffer: send_buffer} = state, socket) do
+    SendBuffer.attach_socket(send_buffer, socket)
+    state
+  end
+
+  defp maybe_detach_send_buffer(%{send_buffer: nil} = state), do: state
+
+  defp maybe_detach_send_buffer(%{send_buffer: send_buffer} = state) do
+    SendBuffer.detach_socket(send_buffer)
+    state
+  end
+
+  defp parse_integer(nil), do: nil
+  defp parse_integer(value) when is_integer(value), do: value
+
+  defp parse_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_integer(_), do: nil
+
+  defp parse_bind_address(address) when is_binary(address) do
+    case :inet.parse_address(String.to_charlist(address)) do
+      {:ok, ip_tuple} -> ip_tuple
+      {:error, _} -> {0, 0, 0, 0}
+    end
+  end
+
+  defp parse_bind_address(address) when is_list(address) do
+    case :inet.parse_address(address) do
+      {:ok, ip_tuple} -> ip_tuple
+      {:error, _} -> {0, 0, 0, 0}
+    end
+  end
+
+  defp parse_bind_address(_), do: {0, 0, 0, 0}
 
   defp format_output(nil), do: "none"
   defp format_output({:tcp, host, port}), do: "tcp:#{host}:#{port}"

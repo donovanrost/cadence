@@ -70,6 +70,19 @@ Examples:
 - EncapsulationPacket struct
 - Custom{name, version} map/struct from schema
 
+ReleasedUplinkFrame
+Uplink bytes released for transport with link metadata.
+
+Required fields:
+- mission_id
+- interface_id
+- bytes
+- kind (direct | initial | retransmit | bypass)
+- stream_id (optional)
+- seq (optional)
+- retries (optional)
+- correlation_id (optional, aggregate_id/recording_id)
+
 TransportUnit (optional)
 PDU augmented with transport state and context (e.g., CFDP).
 
@@ -92,7 +105,8 @@ Uplink (Write Path)
 Command / PDU
   -> SDUEncode -> SDUOctets
   -> Segmentation (profile-specific, stateful) -> LinkFrame
-  -> FrameEncode (TM/AOS/USLP) -> RF / Modem Bytes
+  -> FrameEncode (TM/AOS/USLP) -> ReleasedUplinkFrame
+  -> LinkAdapter -> RF / Modem Bytes
 
 ---
 
@@ -160,6 +174,10 @@ SDUDecode / SDUEncode (stateless)
 Transport (stateful)
 - Consumes PDUs and manages reliability state and higher-level events.
 
+Uplink Release (stateless)
+- Emits ReleasedUplinkFrame for link adapters.
+- Avoid direct byte sends outside this contract.
+
 ---
 
 Custom PDU Schemas (Versioned)
@@ -193,4 +211,3 @@ Glossary (Artifacts and Ownership)
 - PDU: decoded payload, emitted by SDUDecode.
 - TransportUnit: transport-managed artifact, emitted by transport handlers.
 - Reassembly: stateful service owned by SDLP profile modules only.
-

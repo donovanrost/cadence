@@ -3,7 +3,7 @@ defmodule Cadence.CCSDS.Core.Types do
   Shared CCSDS types for core artifacts.
   """
 
-  @type profile :: :tm | :aos | :uslp
+  @type profile :: :tm | :aos | :uslp | :tc
   @type direction :: :uplink | :downlink
   @type quality :: :good | :suspect | :invalid
   @type map_id :: non_neg_integer() | nil

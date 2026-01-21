@@ -1,6 +1,6 @@
 defmodule Cadence.CCSDS.Core.LinkFrame do
   @moduledoc """
-  Semantic representation of a TM/AOS/USLP transfer frame.
+  Semantic representation of a TM/AOS/USLP/TC transfer frame.
   """
 
   alias Cadence.CCSDS.Core.Types

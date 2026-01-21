@@ -124,12 +124,13 @@ defmodule CadenceWeb.UserAuthTest do
   describe "fetch_current_scope_for_user/2" do
     test "authenticates user from session", %{conn: conn, user: user} do
       user_token = Accounts.generate_user_session_token(user)
+      assert {_, token_authenticated_at} = Accounts.get_user_by_session_token(user_token)
 
       conn =
         conn |> put_session(:user_token, user_token) |> UserAuth.fetch_current_scope_for_user([])
 
       assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user.authenticated_at == token_authenticated_at
       assert get_session(conn, :user_token) == user_token
     end
 
@@ -138,6 +139,7 @@ defmodule CadenceWeb.UserAuthTest do
         conn |> fetch_cookies() |> UserAuth.log_in_user(user, %{"remember_me" => "true"})
 
       user_token = logged_in_conn.cookies[@remember_me_cookie]
+      assert {_, token_authenticated_at} = Accounts.get_user_by_session_token(user_token)
       %{value: signed_token} = logged_in_conn.resp_cookies[@remember_me_cookie]
 
       conn =
@@ -146,7 +148,7 @@ defmodule CadenceWeb.UserAuthTest do
         |> UserAuth.fetch_current_scope_for_user([])
 
       assert conn.assigns.current_scope.user.id == user.id
-      assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
+      assert conn.assigns.current_scope.user.authenticated_at == token_authenticated_at
       assert get_session(conn, :user_token) == user_token
       assert get_session(conn, :user_remember_me)
     end

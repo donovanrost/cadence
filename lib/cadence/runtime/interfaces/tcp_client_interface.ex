@@ -28,6 +28,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
 
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Telemetry.{DownlinkPipeline, UplinkPipeline}
+  alias Cadence.Runtime.Uplink.TCFraming
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
@@ -227,6 +228,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
     )
 
     _ = UplinkPipeline.reset(state.interface.mission_id, state.interface.id)
+    _ = TCFraming.reset(state.interface.mission_id, state.interface.id)
 
     %{
       state

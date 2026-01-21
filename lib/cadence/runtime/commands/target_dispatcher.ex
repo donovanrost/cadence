@@ -36,8 +36,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   use GenServer
   require Logger
 
-  alias Cadence.Commands
-  alias Cadence.Commands.{Encoder, PDUBuilder}
+  alias Cadence.Commands.CommandCompiler
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
   alias Cadence.Interfaces.Events.InterfaceConnectionEvent
@@ -52,8 +51,11 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   }
 
   alias Cadence.Repo
-  alias Cadence.Runtime.Commands.{MetaCommandCache, TargetQueue, VerificationManager}
+  alias Cadence.Runtime.Commands.{TargetQueue, VerificationManager}
+  alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
+  alias Cadence.Runtime.Transport.ProtocolEvent
   alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
+  alias Cadence.Runtime.Uplink.UplinkPDU
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
@@ -80,7 +82,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       # State flags
       paused: false,
       executing: false,
-      pending_confirmations: %{}
+      pending_confirmations: %{},
+      pending_cop1: %{}
     ]
   end
 
@@ -163,7 +166,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   ## Returns
 
-  - `{:ok, command_aggregate_id}` - Command sent successfully
+  - `{:ok, command_recording_id}` - Command dispatched successfully
   - `{:error, :paused}` - Dispatcher is paused
   - `{:error, :requires_confirmation, %{token: ..., hazard_description: ...}}` - Hazardous command
   - `{:error, :validation_failed, errors}` - Argument validation failed
@@ -224,7 +227,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       target_id: target.id,
       target: target,
       mission: mission,
-      pending_confirmations: %{}
+      pending_confirmations: %{},
+      pending_cop1: %{}
     }
 
     {:ok, state}
@@ -265,8 +269,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     entry = %{id: nil, command_name: command_name, parameters: params}
 
     case do_dispatch(entry, opts, state) do
-      {:ok, command_log_id, new_state} ->
-        {:reply, {:ok, command_log_id}, new_state}
+      {:ok, info, new_state} ->
+        new_state = register_cop1_pending(new_state, info, nil)
+        {:reply, {:ok, info.recording_id}, new_state}
 
       {:requires_confirmation, confirmation_info, new_state} ->
         {:reply, {:error, :requires_confirmation, confirmation_info}, new_state}
@@ -351,22 +356,35 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       TimeTimer.cancel(state.dispatch_timeout_ref)
     end
 
-    # Report result back to queue
-    TargetQueue.complete(state.mission_id, state.target_id, state.executing_entry_id, result)
+    case result do
+      {:ok, %{cop1_pending: true} = info} ->
+        new_state = register_cop1_pending(state, info, state.executing_entry_id)
 
-    # Only check for more work if uplink is connected
-    if uplink_connected?(state) do
-      TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
+        {:noreply,
+         %{
+           new_state
+           | dispatch_task: nil,
+             dispatch_timeout_ref: nil
+         }}
+
+      _ ->
+        # Report result back to queue
+        TargetQueue.complete(state.mission_id, state.target_id, state.executing_entry_id, result)
+
+        # Only check for more work if uplink is connected
+        if uplink_connected?(state) do
+          TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
+        end
+
+        {:noreply,
+         %{
+           state
+           | executing: false,
+             dispatch_task: nil,
+             dispatch_timeout_ref: nil,
+             executing_entry_id: nil
+         }}
     end
-
-    {:noreply,
-     %{
-       state
-       | executing: false,
-         dispatch_task: nil,
-         dispatch_timeout_ref: nil,
-         executing_entry_id: nil
-     }}
   end
 
   # Task.async crash - the task process died
@@ -437,6 +455,23 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     {:noreply, state}
   end
 
+  def handle_info({:protocol_event, %ProtocolEvent{protocol: :cop1} = event}, state) do
+    {pending, remaining} = Map.pop(state.pending_cop1, event.correlation_id)
+
+    case pending do
+      nil ->
+        {:noreply, state}
+
+      _ ->
+        state =
+          state
+          |> Map.put(:pending_cop1, remaining)
+          |> handle_cop1_event(pending, event)
+
+        {:noreply, state}
+    end
+  end
+
   # Interface connection events - resume if a route becomes available
   def handle_info(
         {:interface_connection_event, %InterfaceConnectionEvent{} = event},
@@ -488,8 +523,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     }
 
     case do_dispatch(entry, opts, state_without_confirmation) do
-      {:ok, command_log_id, new_state} ->
-        {:reply, {:ok, command_log_id}, new_state}
+      {:ok, info, new_state} ->
+        new_state = register_cop1_pending(new_state, info, nil)
+        {:reply, {:ok, info.recording_id}, new_state}
 
       {:error, _} = error ->
         {:reply, error, state_without_confirmation}
@@ -535,6 +571,79 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     }
   end
 
+  defp register_cop1_pending(%State{} = state, %{cop1_pending: true} = info, entry_id) do
+    pending =
+      Map.put(state.pending_cop1, info.correlation_id, %{
+        aggregate_id: info.aggregate_id,
+        recording_id: info.recording_id,
+        entry_id: entry_id,
+        command_name: Map.get(info, :command_name)
+      })
+
+    %{state | pending_cop1: pending}
+  end
+
+  defp register_cop1_pending(%State{} = state, _info, _entry_id), do: state
+
+  defp handle_cop1_event(%State{} = state, pending, %ProtocolEvent{} = event) do
+    case event.status do
+      :accepted ->
+        record_command_sent(state, pending.aggregate_id, pending.recording_id, event.interface_id)
+
+        maybe_complete_queue_entry(
+          state,
+          pending.entry_id,
+          {:ok, %{aggregate_id: pending.aggregate_id}}
+        )
+
+      :rejected ->
+        record_command_errored(state, pending.aggregate_id, pending.command_name, %{
+          error_type: "cop1_rejected",
+          error_reason: cop1_error_reason(event)
+        })
+
+        maybe_complete_queue_entry(
+          state,
+          pending.entry_id,
+          {:error, :cop1_rejected, event.reason}
+        )
+
+      :timeout ->
+        record_command_errored(state, pending.aggregate_id, pending.command_name, %{
+          error_type: "cop1_timeout",
+          error_reason: cop1_error_reason(event)
+        })
+
+        maybe_complete_queue_entry(state, pending.entry_id, {:error, :cop1_timeout, event.reason})
+    end
+  end
+
+  defp maybe_complete_queue_entry(%State{} = state, nil, _result), do: state
+
+  defp maybe_complete_queue_entry(%State{} = state, entry_id, result) do
+    TargetQueue.complete(state.mission_id, state.target_id, entry_id, result)
+
+    state =
+      if state.executing_entry_id == entry_id do
+        %{state | executing: false, executing_entry_id: nil}
+      else
+        state
+      end
+
+    if uplink_connected?(state) do
+      TimeTimer.send_after(self(), :check_queue, @queue_check_interval_ms)
+    end
+
+    state
+  end
+
+  defp cop1_error_reason(%ProtocolEvent{} = event) do
+    case event.reason do
+      nil -> "COP-1 #{event.status}"
+      reason -> "COP-1 #{event.status}: #{inspect(reason)}"
+    end
+  end
+
   defp dispatch_opts_to_keyword_list(dispatch_opts) when is_map(dispatch_opts) do
     Enum.flat_map(dispatch_opts, fn {key, value} ->
       case Map.get(@dispatch_opts_key_map, normalize_dispatch_opt_key(key)) do
@@ -572,30 +681,58 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         "definition_set_id=#{inspect(target.definition_set_id)}"
     )
 
-    with {:ok, command} <- get_command(state, target, entry.command_name),
+    with {:ok, command} <-
+           CommandCompiler.fetch_command(
+             state.mission_id,
+             target.definition_set_id,
+             entry.command_name
+           ),
          :ok <- check_phase_restriction(command, state.mission),
          :ok <- check_hazardous(command, entry.parameters, opts, state),
-         :ok <- validate_args(command, entry.parameters),
-         {:ok, encoded} <- encode_command(command, entry.parameters),
-         {:ok, pdu} <- build_pdu(encoded, target, aggregate_id, command.name),
+         {:ok, compiled} <-
+           CommandCompiler.compile(command, entry.parameters, target, aggregate_id),
          {:ok, cmd_info} <-
            create_command_recording(
              state,
              command,
              target,
              entry.parameters,
-             encoded,
+             compiled.encoded,
              opts,
              aggregate_id
            ),
-         {:ok, interface_id} <- dispatch_pdu(state, target, pdu, opts) do
-      # Record command sent event
-      record_command_sent(
-        state,
-        cmd_info.aggregate_id,
-        cmd_info.recording_id,
-        interface_id
-      )
+         correlation_id = %{
+           aggregate_id: cmd_info.aggregate_id,
+           recording_id: cmd_info.recording_id,
+           target_id: target.id
+         },
+         {:ok, decision} <-
+           dispatch_pdu(
+             state,
+             target,
+             compiled.pdu,
+             put_cop1_context(opts, correlation_id)
+           ) do
+      info = %{
+        aggregate_id: cmd_info.aggregate_id,
+        correlation_id: correlation_id,
+        recording_id: cmd_info.recording_id,
+        command_name: command.name
+      }
+
+      info =
+        if decision.cop1_mode == :fop do
+          Map.put(info, :cop1_pending, true)
+        else
+          record_command_sent(
+            state,
+            cmd_info.aggregate_id,
+            cmd_info.recording_id,
+            decision.interface_id
+          )
+
+          info
+        end
 
       # Start verification if configured (using verifiers association)
       new_state =
@@ -605,8 +742,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
           start_verification(state, cmd_info, command, target)
         end
 
-      {:ok, %{aggregate_id: cmd_info.aggregate_id, recording_id: cmd_info.recording_id},
-       new_state}
+      {:ok, info, new_state}
     else
       {:error, :requires_confirmation, _} ->
         # Handle hazardous command - store confirmation request and return info
@@ -708,48 +844,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  # Look up command using the MetaCommandCache for O(1) lookup.
-  # Falls back to database query if cache is not available (e.g., during startup race).
-  defp get_command(state, target, command_name) do
-    definition_set_id = target.definition_set_id
-
-    Logger.debug(
-      "[GET_COMMAND] Looking up command_name=#{inspect(command_name)} " <>
-        "for definition_set_id=#{inspect(definition_set_id)}"
-    )
-
-    # Try cache first (O(1) ETS lookup)
-    case MetaCommandCache.get_by_name(state.mission_id, definition_set_id, command_name) do
-      {:ok, command} ->
-        Logger.debug("[GET_COMMAND] FOUND in cache - command id=#{command.id}")
-        {:ok, command}
-
-      {:error, reason} when reason in [:not_found, :cache_not_available] ->
-        # Cache miss or not running - fall back to DB query
-        if reason == :cache_not_available do
-          Logger.debug("[GET_COMMAND] Cache not available, falling back to database")
-        else
-          Logger.debug("[GET_COMMAND] Cache miss, falling back to database")
-        end
-
-        case Commands.get_meta_command(definition_set_id, command_name) do
-          nil ->
-            Logger.warning(
-              "[GET_COMMAND] NOT FOUND - definition_set_id=#{inspect(definition_set_id)}, " <>
-                "command_name=#{inspect(command_name)}"
-            )
-
-            {:error, :unknown_command}
-
-          command ->
-            Logger.debug("[GET_COMMAND] FOUND in database - command id=#{command.id}")
-            # Preload associations since they're not in cache
-            command = Repo.preload(command, [:arguments, :verifiers, :transmission_constraints])
-            {:ok, command}
-        end
-    end
-  end
-
   defp check_phase_restriction(%MetaCommand{} = command, mission) do
     if MetaCommand.allowed_in_phase?(command, mission.phase) do
       :ok
@@ -768,29 +862,22 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp validate_args(command, params) do
-    case Commands.validate_arguments(command, params) do
-      :ok -> :ok
-      {:error, errors} -> {:error, :validation_failed, errors}
+  defp put_cop1_context(opts, correlation_id) when not is_nil(correlation_id) do
+    base_context = COP1Context.new(%{correlation_id: correlation_id})
+
+    case Keyword.get(opts, :cop1_context) do
+      nil ->
+        Keyword.put(opts, :cop1_context, base_context)
+
+      %COP1Context{} = context ->
+        Keyword.put(opts, :cop1_context, COP1Context.merge(base_context, context))
+
+      _ ->
+        opts
     end
   end
 
-  defp encode_command(command, params) do
-    case Encoder.encode(command, params) do
-      {:ok, binary} -> {:ok, binary}
-      {:error, reason} -> {:error, :encoding_failed, reason}
-    end
-  end
-
-  defp build_pdu(encoded, target, aggregate_id, command_name) do
-    meta = %{
-      command_aggregate_id: aggregate_id,
-      command_name: command_name,
-      target_id: target.id
-    }
-
-    PDUBuilder.build(encoded, target, meta)
-  end
+  defp put_cop1_context(opts, _correlation_id), do: opts
 
   defp dispatch_pdu(state, target, pdu, opts) do
     case uplink_dispatcher_pid(state.mission_id) do
@@ -798,7 +885,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         {:error, :uplink_not_running}
 
       _pid ->
-        UplinkDispatcher.dispatch_pdu(state.mission_id, target.id, pdu, opts)
+        UplinkDispatcher.dispatch_pdu(state.mission_id, UplinkPDU.from_pdu(target.id, pdu), opts)
     end
   end
 
@@ -916,21 +1003,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   defp create_hazardous_confirmation(command_name, params, opts, state) do
     target = state.target
 
-    # Use cache for command lookup (command should already be found since we got here)
-    # Fall back to DB if cache not available
-    command_result =
-      case MetaCommandCache.get_by_name(state.mission_id, target.definition_set_id, command_name) do
-        {:ok, command} ->
-          {:ok, command}
-
-        {:error, reason} when reason in [:not_found, :cache_not_available] ->
-          case Commands.get_meta_command(target.definition_set_id, command_name) do
-            nil -> {:error, :not_found}
-            command -> {:ok, command}
-          end
-      end
-
-    case command_result do
+    case CommandCompiler.fetch_command(state.mission_id, target.definition_set_id, command_name) do
       {:ok, command} ->
         token = generate_token()
         expires_at = DateTime.add(CadenceTime.now(), @confirmation_timeout_ms, :millisecond)
@@ -960,7 +1033,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
         {:requires_confirmation, confirmation_info, new_state}
 
-      {:error, :not_found} ->
+      {:error, :unknown_command} ->
         {:error, :unknown_command}
     end
   end

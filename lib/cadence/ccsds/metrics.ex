@@ -1,6 +1,6 @@
 defmodule Cadence.CCSDS.Metrics do
   @moduledoc """
-  Lightweight counters for CCSDS downlink processing steps.
+  Lightweight counters for CCSDS uplink/downlink processing steps.
   """
 
   @table_name :cadence_ccsds_metrics

@@ -33,7 +33,9 @@ defmodule Cadence.Simulator.GeneratorWorker do
   require Logger
 
   alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
+  alias Cadence.Simulator.COP1.CLCWInjector
   alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
   alias Cadence.Time, as: CadenceTime
 
@@ -48,6 +50,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
     :uplink_opts,
     :sequence_allocator,
     :send_buffer,
+    :clcw_enabled,
+    :clcw_injector,
     :sample_rate
   ]
 
@@ -71,6 +75,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
   - `:sequence_allocator` - SequenceAllocator struct
   - `:send_buffer` - SendBuffer PID
   - `:sample_rate` - Timing sample rate (default: 100)
+  - `:clcw_injector` - Optional CLCW override config for error injection
   """
   def start_link(opts) do
     worker_id = Keyword.fetch!(opts, :worker_id)
@@ -136,6 +141,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
     uplink_pipeline = init_uplink_pipeline(uplink_opts)
     sequence_allocator = Keyword.fetch!(opts, :sequence_allocator)
     send_buffer = Keyword.fetch!(opts, :send_buffer)
+    clcw_enabled = Keyword.get(opts, :clcw_enabled, false)
+    clcw_injector = Keyword.get(opts, :clcw_injector)
     sample_rate = Keyword.get(opts, :sample_rate, @default_sample_rate)
 
     state = %__MODULE__{
@@ -149,6 +156,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
       uplink_opts: uplink_opts,
       sequence_allocator: sequence_allocator,
       send_buffer: send_buffer,
+      clcw_enabled: clcw_enabled,
+      clcw_injector: clcw_injector,
       sample_rate: sample_rate
     }
 
@@ -210,7 +219,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
         encode_start = if should_time, do: CadenceTime.monotonic(:microsecond)
 
         {result, updated_state} =
-          encode_and_send_values(state, values, sequence_allocator, send_buffer)
+          encode_and_send_values(state, values, sequence_allocator, send_buffer, step)
 
         maybe_record_encoding(coordinator_id, should_time, encode_start)
 
@@ -239,7 +248,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
     SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
   end
 
-  defp encode_and_send_values(state, values, sequence_allocator, send_buffer) do
+  defp encode_and_send_values(state, values, sequence_allocator, send_buffer, step) do
     case state.encoder do
       nil ->
         Logger.error(
@@ -256,7 +265,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
             values,
             sequence_allocator,
             send_buffer,
-            state
+            state,
+            step
           )
 
         {:ok, updated_state}
@@ -269,7 +279,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
          values,
          sequence_allocator,
          send_buffer,
-         state
+         state,
+         step
        ) do
     # Use encoder with external sequence allocation
     sequence_fn = fn apid ->
@@ -280,7 +291,7 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
     updated_state =
       Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
-        {processed, next_state} = encode_uplink(acc_state, binary)
+        {processed, next_state} = encode_uplink(acc_state, binary, step)
         SendBuffer.send_packet(send_buffer, processed)
         next_state
       end)
@@ -288,15 +299,17 @@ defmodule Cadence.Simulator.GeneratorWorker do
     {:ok, updated_state}
   end
 
-  defp encode_uplink(%{uplink_pipeline: nil} = state, packet), do: {packet, state}
+  defp encode_uplink(%{uplink_pipeline: nil} = state, packet, _step), do: {packet, state}
 
-  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet) do
-    ctx = %{
-      frame_size: opts[:frame_size],
-      scid: opts[:uplink_scid] || opts[:scid],
-      vcid: opts[:uplink_vcid] || opts[:vcid],
-      map_id: opts[:uplink_map_id]
-    }
+  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet, step) do
+    ctx =
+      %{
+        frame_size: opts[:frame_size],
+        scid: opts[:uplink_scid] || opts[:scid],
+        vcid: opts[:uplink_vcid] || opts[:vcid],
+        map_id: opts[:uplink_map_id]
+      }
+      |> maybe_put_ocf(state, step)
 
     sdu = %SDUOctets{
       profile: opts[:profile],
@@ -321,6 +334,45 @@ defmodule Cadence.Simulator.GeneratorWorker do
         {packet, %{state | uplink_pipeline: new_pipeline}}
     end
   end
+
+  defp maybe_put_ocf(ctx, %{clcw_enabled: true, uplink_opts: nil}, _step) when is_map(ctx) do
+    ctx
+  end
+
+  defp maybe_put_ocf(
+         ctx,
+         %{clcw_enabled: true, uplink_opts: opts, clcw_injector: injector},
+         step
+       )
+       when is_map(ctx) do
+    if opts[:profile] == :tm do
+      vcid = opts[:uplink_vcid] || opts[:vcid] || 0
+      report_value = rem(step, 256)
+
+      clcw =
+        %CLCW{vcid: vcid, report_value: report_value}
+        |> maybe_apply_injector(injector, step)
+
+      case CLCW.encode(clcw) do
+        {:ok, ocf} ->
+          Map.merge(ctx, %{ocf: ocf, ocf_length: byte_size(ocf)})
+
+        {:error, reason} ->
+          Logger.warning("Failed to encode CLCW: #{inspect(reason)}")
+          ctx
+      end
+    else
+      ctx
+    end
+  end
+
+  defp maybe_put_ocf(ctx, _state, _step), do: ctx
+
+  defp maybe_apply_injector(%CLCW{} = clcw, %CLCWInjector{} = injector, step) do
+    CLCWInjector.apply(injector, clcw, step)
+  end
+
+  defp maybe_apply_injector(clcw, _injector, _step), do: clcw
 
   defp init_uplink_pipeline(nil) do
     Logger.debug("GeneratorWorker init_uplink_pipeline: opts is nil")

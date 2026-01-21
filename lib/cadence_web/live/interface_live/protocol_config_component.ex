@@ -8,6 +8,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
   - Frame settings (frame_size, secondary_header_length, ocf_length)
   - SDU mappings (SCID/VCID routing)
   - Uplink defaults
+  - COP-1 (FOP) settings
   """
 
   use CadenceWeb, :live_component
@@ -28,6 +29,42 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
   @directions [
     {"Downlink", "downlink"},
     {"Uplink", "uplink"}
+  ]
+
+  @cop1_modes [
+    {"Disabled", "disabled"},
+    {"FOP (Enabled)", "fop"}
+  ]
+
+  @cop1_config_drop_keys [
+    "mode",
+    :mode,
+    "enabled",
+    :enabled,
+    "window_size",
+    :window_size,
+    "timeout_ms",
+    :timeout_ms,
+    "max_retransmit",
+    :max_retransmit,
+    "initial_seq",
+    :initial_seq,
+    "apids",
+    :apids,
+    "report_apids",
+    :report_apids,
+    "report_apid",
+    :report_apid,
+    "bypass_flag",
+    :bypass_flag,
+    "bypass",
+    :bypass,
+    "control_command_flag",
+    :control_command_flag,
+    "control_command",
+    :control_command,
+    "segment_header_flag",
+    :segment_header_flag
   ]
 
   @impl true
@@ -75,66 +112,59 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
 
           <%= if @sdlp_enabled do %>
             <%!-- SDLP Settings Form --%>
-            <form phx-change="update_sdlp" phx-target={@myself} class="space-y-4">
+            <.form
+              for={@protocol_form}
+              id="protocol-config-form"
+              phx-change="update_sdlp"
+              phx-target={@myself}
+              class="space-y-4"
+            >
               <div class="grid grid-cols-2 gap-4">
-                <div class="fieldset">
-                  <label class="hud-label block mb-1.5">Profile</label>
-                  <select name="profile" class="w-full select select-sm" value={@profile}>
-                    <%= for {label, value} <- @profile_options do %>
-                      <option value={value} selected={@profile == value}>{label}</option>
-                    <% end %>
-                  </select>
-                </div>
+                <.input
+                  field={@protocol_form[:profile]}
+                  type="select"
+                  label="Profile"
+                  options={@profile_options}
+                  class="w-full select select-sm"
+                />
 
-                <div class="fieldset">
-                  <label class="hud-label block mb-1.5">Default SDU Type</label>
-                  <select name="default_sdu_type" class="w-full select select-sm">
-                    <option value="" selected={is_nil(@default_sdu_type)}>
-                      None (require mapping)
-                    </option>
-                    <%= for {label, value} <- @sdu_type_options do %>
-                      <option value={value} selected={@default_sdu_type == value}>{label}</option>
-                    <% end %>
-                  </select>
-                </div>
+                <.input
+                  field={@protocol_form[:default_sdu_type]}
+                  type="select"
+                  label="Default SDU Type"
+                  prompt="None (require mapping)"
+                  options={@sdu_type_options}
+                  class="w-full select select-sm"
+                />
               </div>
 
               <div class="grid grid-cols-3 gap-4">
-                <div class="fieldset">
-                  <label class="hud-label block mb-1.5">Frame Size (bytes)</label>
-                  <input
-                    type="number"
-                    name="frame_size"
-                    value={@frame_size}
-                    placeholder="e.g., 1115"
-                    class="w-full input input-sm"
-                    min="0"
-                  />
-                </div>
+                <.input
+                  field={@protocol_form[:frame_size]}
+                  type="number"
+                  label="Frame Size (bytes)"
+                  placeholder="e.g., 1115"
+                  class="w-full input input-sm"
+                  min="0"
+                />
 
-                <div class="fieldset">
-                  <label class="hud-label block mb-1.5">Secondary Header Length</label>
-                  <input
-                    type="number"
-                    name="secondary_header_length"
-                    value={@secondary_header_length}
-                    placeholder="0"
-                    class="w-full input input-sm"
-                    min="0"
-                  />
-                </div>
+                <.input
+                  field={@protocol_form[:secondary_header_length]}
+                  type="number"
+                  label="Secondary Header Length"
+                  placeholder="0"
+                  class="w-full input input-sm"
+                  min="0"
+                />
 
-                <div class="fieldset">
-                  <label class="hud-label block mb-1.5">OCF Length</label>
-                  <input
-                    type="number"
-                    name="ocf_length"
-                    value={@ocf_length}
-                    placeholder="0"
-                    class="w-full input input-sm"
-                    min="0"
-                  />
-                </div>
+                <.input
+                  field={@protocol_form[:ocf_length]}
+                  type="number"
+                  label="OCF Length"
+                  placeholder="0"
+                  class="w-full input input-sm"
+                  min="0"
+                />
               </div>
 
               <%!-- OID Validation (collapsible) --%>
@@ -143,28 +173,21 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
                   OID Validation
                 </summary>
                 <div class="collapse-content">
-                  <div class="flex items-center gap-4 pt-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="oid_validation"
-                        checked={@oid_validation}
-                        class="checkbox checkbox-sm checkbox-primary"
-                      />
-                      <span class="text-sm">Enable OID Validation</span>
-                    </label>
+                  <div class="flex flex-wrap items-center gap-4 pt-2">
+                    <.input
+                      field={@protocol_form[:oid_validation]}
+                      type="checkbox"
+                      label="Enable OID Validation"
+                    />
                     <%= if @oid_validation do %>
-                      <div class="fieldset flex-1">
-                        <label class="hud-label block mb-1">Prefix Bytes</label>
-                        <input
-                          type="number"
-                          name="oid_validation_prefix_bytes"
-                          value={@oid_validation_prefix_bytes}
-                          placeholder="0"
-                          class="w-24 input input-sm"
-                          min="0"
-                        />
-                      </div>
+                      <.input
+                        field={@protocol_form[:oid_validation_prefix_bytes]}
+                        type="number"
+                        label="Prefix Bytes"
+                        placeholder="0"
+                        class="input input-sm w-24"
+                        min="0"
+                      />
                     <% end %>
                   </div>
                 </div>
@@ -180,47 +203,143 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
                     Default routing for uplink (command) frames when no mapping matches.
                   </p>
                   <div class="grid grid-cols-3 gap-4">
-                    <div class="fieldset">
-                      <label class="hud-label block mb-1.5">Uplink SCID</label>
-                      <input
-                        type="number"
-                        name="uplink_scid"
-                        value={@uplink_scid}
-                        placeholder="e.g., 42"
-                        class="w-full input input-sm"
-                        min="0"
-                      />
-                    </div>
+                    <.input
+                      field={@protocol_form[:uplink_scid]}
+                      type="number"
+                      label="Uplink SCID"
+                      placeholder="e.g., 42"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
 
-                    <div class="fieldset">
-                      <label class="hud-label block mb-1.5">Uplink VCID</label>
-                      <input
-                        type="number"
-                        name="uplink_vcid"
-                        value={@uplink_vcid}
-                        placeholder="e.g., 0"
-                        class="w-full input input-sm"
-                        min="0"
-                      />
-                    </div>
+                    <.input
+                      field={@protocol_form[:uplink_vcid]}
+                      type="number"
+                      label="Uplink VCID"
+                      placeholder="e.g., 0"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
 
                     <%= if @profile in ["aos", "uslp"] do %>
-                      <div class="fieldset">
-                        <label class="hud-label block mb-1.5">Uplink MAP ID</label>
-                        <input
-                          type="number"
-                          name="uplink_map_id"
-                          value={@uplink_map_id}
-                          placeholder="Optional"
-                          class="w-full input input-sm"
-                          min="0"
-                        />
-                      </div>
+                      <.input
+                        field={@protocol_form[:uplink_map_id]}
+                        type="number"
+                        label="Uplink MAP ID"
+                        placeholder="Optional"
+                        class="w-full input input-sm"
+                        min="0"
+                      />
                     <% end %>
                   </div>
                 </div>
               </details>
-            </form>
+
+              <%!-- COP-1 (collapsible) --%>
+              <details
+                id="cop1-config"
+                class="collapse collapse-arrow border border-base-300 bg-base-200/30"
+              >
+                <summary class="collapse-title text-sm font-medium py-2 min-h-0">
+                  COP-1 (FOP)
+                </summary>
+                <div class="collapse-content space-y-4">
+                  <p class="text-xs text-base-content/60 pt-2">
+                    COP-1 requires SDLP uplink (TC framing) with `frame_size` or
+                    `uplink_frame_size` plus `uplink_vcid`.
+                  </p>
+                  <div class="grid grid-cols-2 gap-4">
+                    <.input
+                      field={@protocol_form[:cop1_mode]}
+                      type="select"
+                      label="Mode"
+                      options={@cop1_mode_options}
+                      class="w-full select select-sm"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_window_size]}
+                      type="number"
+                      label="Window Size"
+                      placeholder="4"
+                      class="w-full input input-sm"
+                      min="1"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_timeout_ms]}
+                      type="number"
+                      label="Timeout (ms)"
+                      placeholder="5000"
+                      class="w-full input input-sm"
+                      min="1"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_max_retransmit]}
+                      type="number"
+                      label="Max Retransmit"
+                      placeholder="3"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_initial_seq]}
+                      type="number"
+                      label="Initial Seq"
+                      placeholder="0"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <.input
+                      field={@protocol_form[:cop1_apids]}
+                      type="text"
+                      label="Protected APIDs"
+                      placeholder="e.g., 1, 2, 42"
+                      class="w-full input input-sm"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_report_apids]}
+                      type="text"
+                      label="Report APIDs"
+                      placeholder="e.g., 2047"
+                      class="w-full input input-sm"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-4">
+                    <.input
+                      field={@protocol_form[:cop1_bypass_flag]}
+                      type="checkbox"
+                      label="Bypass Flag"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_control_command_flag]}
+                      type="checkbox"
+                      label="Control Command Flag"
+                    />
+
+                    <.input
+                      field={@protocol_form[:cop1_segment_header_flag]}
+                      type="checkbox"
+                      label="Segment Header Flag"
+                    />
+                  </div>
+
+                  <p class="text-xs text-base-content/60">
+                    APIDs accept comma-separated lists; leave blank to apply COP-1 to all
+                    command APIDs. Report APIDs route downlink CLCW packets into the COP-1
+                    handler.
+                  </p>
+                </div>
+              </details>
+            </.form>
 
             <%!-- SDU Mappings Section --%>
             <div class="border-t border-base-300 pt-4">
@@ -408,6 +527,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
             <%!-- Save Button --%>
             <div class="flex justify-end pt-2 border-t border-base-300">
               <button
+                id="protocol-config-save"
                 type="button"
                 phx-click="save_config"
                 phx-target={@myself}
@@ -431,9 +551,13 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
   @impl true
   def update(%{interface: interface} = assigns, socket) do
     config = interface.config || %{}
-    sdlp_config = config["sdlp"] || %{}
+    sdlp_config = fetch_config_map(config, ["sdlp", :sdlp])
+    cop1_value = fetch_config_value(config, ["cop1", :cop1])
+    cop1_config = if is_map(cop1_value), do: cop1_value, else: %{}
 
-    sdlp_enabled = config["framing"] == "sdlp"
+    framing = fetch_config_value(config, ["framing", :framing])
+    sdlp_enabled = framing in ["sdlp", :sdlp]
+    cop1_mode = cop1_mode_from_config(cop1_value)
 
     {:ok,
      socket
@@ -441,22 +565,113 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
      |> assign(:profile_options, @profiles)
      |> assign(:sdu_type_options, @sdu_types)
      |> assign(:direction_options, @directions)
+     |> assign(:cop1_mode_options, @cop1_modes)
      |> assign(:sdlp_enabled, sdlp_enabled)
-     |> assign(:profile, sdlp_config["profile"] || "tm")
-     |> assign(:default_sdu_type, sdlp_config["default_sdu_type"])
-     |> assign(:frame_size, sdlp_config["frame_size"])
-     |> assign(:secondary_header_length, sdlp_config["secondary_header_length"])
-     |> assign(:ocf_length, sdlp_config["ocf_length"])
-     |> assign(:oid_validation, sdlp_config["oid_validation"] || false)
-     |> assign(:oid_validation_prefix_bytes, sdlp_config["oid_validation_prefix_bytes"])
-     |> assign(:uplink_scid, sdlp_config["uplink_scid"])
-     |> assign(:uplink_vcid, sdlp_config["uplink_vcid"])
-     |> assign(:uplink_map_id, sdlp_config["uplink_map_id"])
-     |> assign(:sdu_mappings, sdlp_config["sdu_mapping"] || [])
+     |> assign(:profile, fetch_config_value(sdlp_config, ["profile", :profile]) || "tm")
+     |> assign(
+       :default_sdu_type,
+       fetch_config_value(sdlp_config, ["default_sdu_type", :default_sdu_type])
+     )
+     |> assign(
+       :frame_size,
+       parse_int(fetch_config_value(sdlp_config, ["frame_size", :frame_size]))
+     )
+     |> assign(
+       :secondary_header_length,
+       parse_int(
+         fetch_config_value(sdlp_config, ["secondary_header_length", :secondary_header_length])
+       )
+     )
+     |> assign(
+       :ocf_length,
+       parse_int(fetch_config_value(sdlp_config, ["ocf_length", :ocf_length]))
+     )
+     |> assign(
+       :oid_validation,
+       parse_bool(fetch_config_value(sdlp_config, ["oid_validation", :oid_validation]))
+     )
+     |> assign(
+       :oid_validation_prefix_bytes,
+       parse_int(
+         fetch_config_value(sdlp_config, [
+           "oid_validation_prefix_bytes",
+           :oid_validation_prefix_bytes
+         ])
+       )
+     )
+     |> assign(
+       :uplink_scid,
+       parse_int(fetch_config_value(sdlp_config, ["uplink_scid", :uplink_scid]))
+     )
+     |> assign(
+       :uplink_vcid,
+       parse_int(fetch_config_value(sdlp_config, ["uplink_vcid", :uplink_vcid]))
+     )
+     |> assign(
+       :uplink_map_id,
+       parse_int(fetch_config_value(sdlp_config, ["uplink_map_id", :uplink_map_id]))
+     )
+     |> assign(
+       :sdu_mappings,
+       fetch_config_value(sdlp_config, ["sdu_mapping", :sdu_mapping]) || []
+     )
+     |> assign(:cop1_mode, cop1_mode)
+     |> assign(
+       :cop1_window_size,
+       parse_int(fetch_config_value(cop1_config, ["window_size", :window_size]))
+     )
+     |> assign(
+       :cop1_timeout_ms,
+       parse_int(fetch_config_value(cop1_config, ["timeout_ms", :timeout_ms]))
+     )
+     |> assign(
+       :cop1_max_retransmit,
+       parse_int(fetch_config_value(cop1_config, ["max_retransmit", :max_retransmit]))
+     )
+     |> assign(
+       :cop1_initial_seq,
+       parse_int(fetch_config_value(cop1_config, ["initial_seq", :initial_seq]))
+     )
+     |> assign(:cop1_apids, apids_to_string(fetch_config_value(cop1_config, ["apids", :apids])))
+     |> assign(
+       :cop1_report_apids,
+       apids_to_string(
+         fetch_config_value(cop1_config, [
+           "report_apids",
+           :report_apids,
+           "report_apid",
+           :report_apid
+         ])
+       )
+     )
+     |> assign(
+       :cop1_bypass_flag,
+       flag_enabled?(
+         fetch_config_value(cop1_config, ["bypass_flag", :bypass_flag, "bypass", :bypass])
+       )
+     )
+     |> assign(
+       :cop1_control_command_flag,
+       flag_enabled?(
+         fetch_config_value(cop1_config, [
+           "control_command_flag",
+           :control_command_flag,
+           "control_command",
+           :control_command
+         ])
+       )
+     )
+     |> assign(
+       :cop1_segment_header_flag,
+       flag_enabled?(
+         fetch_config_value(cop1_config, ["segment_header_flag", :segment_header_flag])
+       )
+     )
      |> assign(:editing_index, nil)
      |> assign(:has_changes, false)
      |> assign(:saving, false)
-     |> assign(:original_config, config)}
+     |> assign(:original_config, config)
+     |> assign_form()}
   end
 
   @impl true
@@ -469,20 +684,12 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
      |> assign(:has_changes, true)}
   end
 
+  def handle_event("update_sdlp", %{"protocol" => params}, socket) do
+    {:noreply, update_protocol_assigns(socket, params)}
+  end
+
   def handle_event("update_sdlp", params, socket) do
-    {:noreply,
-     socket
-     |> assign(:profile, params["profile"] || socket.assigns.profile)
-     |> assign(:default_sdu_type, empty_to_nil(params["default_sdu_type"]))
-     |> assign(:frame_size, parse_int(params["frame_size"]))
-     |> assign(:secondary_header_length, parse_int(params["secondary_header_length"]))
-     |> assign(:ocf_length, parse_int(params["ocf_length"]))
-     |> assign(:oid_validation, params["oid_validation"] == "true")
-     |> assign(:oid_validation_prefix_bytes, parse_int(params["oid_validation_prefix_bytes"]))
-     |> assign(:uplink_scid, parse_int(params["uplink_scid"]))
-     |> assign(:uplink_vcid, parse_int(params["uplink_vcid"]))
-     |> assign(:uplink_map_id, parse_int(params["uplink_map_id"]))
-     |> assign(:has_changes, true)}
+    {:noreply, update_protocol_assigns(socket, params)}
   end
 
   def handle_event("add_sdu_mapping", _params, socket) do
@@ -582,36 +789,221 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     end
   end
 
+  defp update_protocol_assigns(socket, params) do
+    socket
+    |> assign(:profile, params["profile"] || socket.assigns.profile)
+    |> assign(:default_sdu_type, empty_to_nil(params["default_sdu_type"]))
+    |> assign(:frame_size, parse_int(params["frame_size"]))
+    |> assign(:secondary_header_length, parse_int(params["secondary_header_length"]))
+    |> assign(:ocf_length, parse_int(params["ocf_length"]))
+    |> assign(:oid_validation, parse_bool(params["oid_validation"]))
+    |> assign(:oid_validation_prefix_bytes, parse_int(params["oid_validation_prefix_bytes"]))
+    |> assign(:uplink_scid, parse_int(params["uplink_scid"]))
+    |> assign(:uplink_vcid, parse_int(params["uplink_vcid"]))
+    |> assign(:uplink_map_id, parse_int(params["uplink_map_id"]))
+    |> assign(:cop1_mode, params["cop1_mode"] || socket.assigns.cop1_mode || "disabled")
+    |> assign(:cop1_window_size, parse_int(params["cop1_window_size"]))
+    |> assign(:cop1_timeout_ms, parse_int(params["cop1_timeout_ms"]))
+    |> assign(:cop1_max_retransmit, parse_int(params["cop1_max_retransmit"]))
+    |> assign(:cop1_initial_seq, parse_int(params["cop1_initial_seq"]))
+    |> assign(:cop1_apids, normalize_apids_input(params["cop1_apids"]))
+    |> assign(:cop1_report_apids, normalize_apids_input(params["cop1_report_apids"]))
+    |> assign(:cop1_bypass_flag, parse_bool(params["cop1_bypass_flag"]))
+    |> assign(:cop1_control_command_flag, parse_bool(params["cop1_control_command_flag"]))
+    |> assign(:cop1_segment_header_flag, parse_bool(params["cop1_segment_header_flag"]))
+    |> assign(:has_changes, true)
+    |> assign_form()
+  end
+
   defp build_config(assigns) do
     base_config = assigns.original_config || %{}
 
-    if assigns.sdlp_enabled do
-      sdlp_config =
-        %{
-          "profile" => assigns.profile,
-          "default_sdu_type" => assigns.default_sdu_type,
-          "frame_size" => assigns.frame_size,
-          "secondary_header_length" => assigns.secondary_header_length,
-          "ocf_length" => assigns.ocf_length,
-          "oid_validation" => assigns.oid_validation,
-          "oid_validation_prefix_bytes" => assigns.oid_validation_prefix_bytes,
-          "uplink_scid" => assigns.uplink_scid,
-          "uplink_vcid" => assigns.uplink_vcid,
-          "uplink_map_id" => assigns.uplink_map_id,
-          "sdu_mapping" => filter_valid_mappings(assigns.sdu_mappings)
-        }
-        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-        |> Map.new()
+    base_config =
+      if assigns.sdlp_enabled do
+        sdlp_config =
+          %{
+            "profile" => assigns.profile,
+            "default_sdu_type" => assigns.default_sdu_type,
+            "frame_size" => assigns.frame_size,
+            "secondary_header_length" => assigns.secondary_header_length,
+            "ocf_length" => assigns.ocf_length,
+            "oid_validation" => assigns.oid_validation,
+            "oid_validation_prefix_bytes" => assigns.oid_validation_prefix_bytes,
+            "uplink_scid" => assigns.uplink_scid,
+            "uplink_vcid" => assigns.uplink_vcid,
+            "uplink_map_id" => assigns.uplink_map_id,
+            "sdu_mapping" => filter_valid_mappings(assigns.sdu_mappings)
+          }
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          |> Map.new()
 
+        base_config
+        |> Map.put("framing", "sdlp")
+        |> Map.delete(:framing)
+        |> Map.put("sdlp", sdlp_config)
+        |> Map.delete(:sdlp)
+      else
+        base_config
+        |> Map.delete("framing")
+        |> Map.delete(:framing)
+        |> Map.delete("sdlp")
+        |> Map.delete(:sdlp)
+      end
+
+    put_cop1_config(base_config, assigns)
+  end
+
+  defp put_cop1_config(base_config, assigns) do
+    cop1_existing =
+      case fetch_config_value(base_config, ["cop1", :cop1]) do
+        value when is_map(value) -> value
+        _ -> %{}
+      end
+
+    cop1_updates =
+      %{
+        "mode" => if(assigns.cop1_mode == "fop", do: "fop", else: nil),
+        "window_size" => assigns.cop1_window_size,
+        "timeout_ms" => assigns.cop1_timeout_ms,
+        "max_retransmit" => assigns.cop1_max_retransmit,
+        "initial_seq" => assigns.cop1_initial_seq,
+        "apids" => parse_apids_input(assigns.cop1_apids),
+        "report_apids" => parse_apids_input(assigns.cop1_report_apids),
+        "bypass_flag" => bool_to_flag(assigns.cop1_bypass_flag),
+        "control_command_flag" => bool_to_flag(assigns.cop1_control_command_flag),
+        "segment_header_flag" => bool_to_flag(assigns.cop1_segment_header_flag)
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+
+    cop1_config =
+      cop1_existing
+      |> drop_config_keys(@cop1_config_drop_keys)
+      |> Map.merge(cop1_updates)
+
+    if map_size(cop1_config) == 0 do
       base_config
-      |> Map.put("framing", "sdlp")
-      |> Map.put("sdlp", sdlp_config)
+      |> Map.delete("cop1")
+      |> Map.delete(:cop1)
     else
       base_config
-      |> Map.delete("framing")
-      |> Map.delete("sdlp")
+      |> Map.delete(:cop1)
+      |> Map.put("cop1", cop1_config)
     end
   end
+
+  defp assign_form(socket) do
+    assign(socket, :protocol_form, to_form(protocol_form_data(socket.assigns), as: :protocol))
+  end
+
+  defp protocol_form_data(assigns) do
+    %{
+      "profile" => Map.get(assigns, :profile),
+      "default_sdu_type" => Map.get(assigns, :default_sdu_type),
+      "frame_size" => Map.get(assigns, :frame_size),
+      "secondary_header_length" => Map.get(assigns, :secondary_header_length),
+      "ocf_length" => Map.get(assigns, :ocf_length),
+      "oid_validation" => Map.get(assigns, :oid_validation),
+      "oid_validation_prefix_bytes" => Map.get(assigns, :oid_validation_prefix_bytes),
+      "uplink_scid" => Map.get(assigns, :uplink_scid),
+      "uplink_vcid" => Map.get(assigns, :uplink_vcid),
+      "uplink_map_id" => Map.get(assigns, :uplink_map_id),
+      "cop1_mode" => Map.get(assigns, :cop1_mode),
+      "cop1_window_size" => Map.get(assigns, :cop1_window_size),
+      "cop1_timeout_ms" => Map.get(assigns, :cop1_timeout_ms),
+      "cop1_max_retransmit" => Map.get(assigns, :cop1_max_retransmit),
+      "cop1_initial_seq" => Map.get(assigns, :cop1_initial_seq),
+      "cop1_apids" => Map.get(assigns, :cop1_apids),
+      "cop1_report_apids" => Map.get(assigns, :cop1_report_apids),
+      "cop1_bypass_flag" => Map.get(assigns, :cop1_bypass_flag),
+      "cop1_control_command_flag" => Map.get(assigns, :cop1_control_command_flag),
+      "cop1_segment_header_flag" => Map.get(assigns, :cop1_segment_header_flag)
+    }
+  end
+
+  defp fetch_config_value(config, keys) when is_map(config) and is_list(keys) do
+    Enum.find_value(keys, fn key -> Map.get(config, key) end)
+  end
+
+  defp fetch_config_value(_config, _keys), do: nil
+
+  defp fetch_config_map(config, keys) do
+    case fetch_config_value(config, keys) do
+      value when is_map(value) -> value
+      _ -> %{}
+    end
+  end
+
+  defp cop1_mode_from_config(config) when is_map(config) do
+    case fetch_config_value(config, ["mode", :mode]) do
+      "fop" ->
+        "fop"
+
+      :fop ->
+        "fop"
+
+      _ ->
+        if(fetch_config_value(config, ["enabled", :enabled]) == true, do: "fop", else: "disabled")
+    end
+  end
+
+  defp cop1_mode_from_config(config) when config in ["fop", :fop], do: "fop"
+  defp cop1_mode_from_config(_config), do: "disabled"
+
+  defp drop_config_keys(config, keys) when is_map(config), do: Map.drop(config, keys)
+  defp drop_config_keys(config, _keys), do: config
+
+  defp flag_enabled?(value) when value in [1, "1", true, "true"], do: true
+  defp flag_enabled?(_value), do: false
+
+  defp normalize_apids_input(nil), do: nil
+
+  defp normalize_apids_input(value) when is_binary(value) do
+    trimmed = String.trim(value)
+    if trimmed == "", do: nil, else: trimmed
+  end
+
+  defp normalize_apids_input(value), do: value
+
+  defp parse_apids_input(nil), do: nil
+  defp parse_apids_input(""), do: nil
+
+  defp parse_apids_input(value) when is_binary(value) do
+    value
+    |> String.split([",", " ", "\n", "\t"], trim: true)
+    |> Enum.map(&parse_int/1)
+    |> Enum.filter(&is_integer/1)
+    |> case do
+      [] -> nil
+      apids -> apids
+    end
+  end
+
+  defp parse_apids_input(value) when is_list(value) do
+    value
+    |> Enum.map(&parse_int/1)
+    |> Enum.filter(&is_integer/1)
+    |> case do
+      [] -> nil
+      apids -> apids
+    end
+  end
+
+  defp parse_apids_input(_value), do: nil
+
+  defp apids_to_string(nil), do: nil
+
+  defp apids_to_string(apids) when is_list(apids) do
+    Enum.map_join(apids, ", ", &to_string/1)
+  end
+
+  defp apids_to_string(value), do: to_string(value)
+
+  defp parse_bool(value) when value in [true, "true", 1, "1"], do: true
+  defp parse_bool(_value), do: false
+
+  defp bool_to_flag(true), do: 1
+  defp bool_to_flag(_value), do: nil
 
   defp filter_valid_mappings(mappings) do
     mappings

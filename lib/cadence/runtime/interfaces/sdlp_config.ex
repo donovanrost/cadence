@@ -30,6 +30,8 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
 
   defp build_from_config(config) do
     with {:ok, profile} <- normalize_profile(fetch_value(config, "profile")),
+         {:ok, uplink_profile} <-
+           normalize_uplink_profile(fetch_value(config, "uplink_profile"), profile),
          {:ok, mapping} <- build_mapping(fetch_value(config, "sdu_mapping")),
          {:ok, default_sdu_type} <-
            normalize_optional_sdu_type(fetch_value(config, "default_sdu_type")) do
@@ -38,7 +40,9 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
       opts =
         [
           profile: profile,
+          uplink_profile: uplink_profile,
           frame_size: fetch_value(config, "frame_size"),
+          uplink_frame_size: fetch_value(config, "uplink_frame_size"),
           secondary_header_length: fetch_value(config, "secondary_header_length"),
           ocf_length: fetch_value(config, "ocf_length"),
           oid_validation: fetch_value(config, "oid_validation"),
@@ -71,6 +75,17 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   defp normalize_profile("aos"), do: {:ok, :aos}
   defp normalize_profile("uslp"), do: {:ok, :uslp}
   defp normalize_profile(_), do: {:error, :invalid_profile}
+
+  defp normalize_uplink_profile(nil, profile), do: {:ok, profile}
+
+  defp normalize_uplink_profile(profile, _default) when profile in [:tm, :aos, :uslp, :tc],
+    do: {:ok, profile}
+
+  defp normalize_uplink_profile("tm", _default), do: {:ok, :tm}
+  defp normalize_uplink_profile("aos", _default), do: {:ok, :aos}
+  defp normalize_uplink_profile("uslp", _default), do: {:ok, :uslp}
+  defp normalize_uplink_profile("tc", _default), do: {:ok, :tc}
+  defp normalize_uplink_profile(_profile, _default), do: {:error, :invalid_uplink_profile}
 
   defp build_mapping(mapping) when is_list(mapping) do
     entries =

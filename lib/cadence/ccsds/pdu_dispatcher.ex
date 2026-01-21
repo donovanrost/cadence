@@ -7,8 +7,9 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   require Logger
 
   alias Cadence.Events.TelemetryPacket
+  alias Cadence.Runtime.Transport.COP1.ReportHandler
 
-  @default_handlers [Cadence.Telemetry.PDUHandler]
+  @default_handlers [ReportHandler, Cadence.Telemetry.PDUHandler]
 
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
@@ -27,6 +28,7 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   @impl true
   def init(opts) do
     handlers = load_handlers(opts)
+    cop1_report_apids = cop1_report_apids(opts)
 
     handler_states =
       Enum.reduce(handlers, %{}, fn handler, acc ->
@@ -42,7 +44,8 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
     state = %{
       handlers: handlers,
-      handler_states: handler_states
+      handler_states: handler_states,
+      cop1_report_apids: cop1_report_apids
     }
 
     {:ok, state}
@@ -50,6 +53,7 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
   @impl true
   def handle_cast({:pdu, pdu, ctx}, state) do
+    ctx = Map.put_new(ctx, :cop1_report_apids, state.cop1_report_apids)
     {events, new_state} = dispatch_to_handlers(pdu, ctx, state)
     emit_events(events)
     {:noreply, new_state}
@@ -57,6 +61,64 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
   defp load_handlers(opts) do
     Keyword.get(opts, :handlers, Application.get_env(:cadence, :pdu_handlers, @default_handlers))
+  end
+
+  defp cop1_report_apids(opts) do
+    opts
+    |> Keyword.get(:interface)
+    |> report_apids_from_interface()
+    |> MapSet.new()
+  end
+
+  defp report_apids_from_interface(%{config: config}) when is_map(config) do
+    report_apids_from_config(config)
+  end
+
+  defp report_apids_from_interface(_interface), do: []
+
+  defp report_apids_from_config(config) when is_map(config) do
+    cop1 = fetch_value(config, "cop1") || %{}
+
+    apids =
+      fetch_value(cop1, "report_apids") ||
+        fetch_value(cop1, "report_apid")
+
+    normalize_apids(apids)
+  end
+
+  defp report_apids_from_config(_config), do: []
+
+  defp normalize_apids(nil), do: []
+
+  defp normalize_apids(apids) when is_list(apids) do
+    apids
+    |> Enum.map(&parse_integer/1)
+    |> Enum.filter(&is_integer/1)
+  end
+
+  defp normalize_apids(value) do
+    case parse_integer(value) do
+      nil -> []
+      apid -> [apid]
+    end
+  end
+
+  defp parse_integer(nil), do: nil
+  defp parse_integer(value) when is_integer(value), do: value
+
+  defp parse_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_integer(_value), do: nil
+
+  defp fetch_value(config, key) when is_map(config) do
+    Map.get(config, key) || Map.get(config, String.to_atom(key))
+  rescue
+    _ -> Map.get(config, key)
   end
 
   defp dispatch_to_handlers(pdu, ctx, state) do

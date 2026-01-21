@@ -11,6 +11,8 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Telemetry.DeframeSupervisor
   alias Cadence.Runtime.Telemetry.SpacePacketFramer
+  alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
+  alias Cadence.Runtime.Transport.COP1.DownlinkHandler
   alias Cadence.Telemetry.Packet
   alias Cadence.Time, as: CadenceTime
 
@@ -47,12 +49,14 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
   @impl true
   def init(%Interface{} = interface) do
     sdlp_config = SDLPConfig.fetch(interface)
+    cop1_enabled = COP1Application.enabled?(interface)
 
     state = %{
       interface: interface,
       mission_id: interface.mission_id,
       interface_id: interface.id,
       sdlp_config: sdlp_config,
+      cop1_enabled: cop1_enabled,
       connections: %{}
     }
 
@@ -117,6 +121,7 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
         )
 
         Enum.each(frames, fn frame ->
+          maybe_ingest_clcw(state, frame)
           dispatch_frame(state, connection_id, frame, ctx, base_meta, mapping, opts)
         end)
 
@@ -260,4 +265,11 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     |> Map.put_new(:received_at, CadenceTime.now())
     |> Map.put_new(:stored, false)
   end
+
+  defp maybe_ingest_clcw(%{cop1_enabled: true} = state, %{profile: :tm, ocf: ocf})
+       when is_binary(ocf) and byte_size(ocf) == 4 do
+    DownlinkHandler.ingest_tm_ocf(state.mission_id, state.interface_id, ocf)
+  end
+
+  defp maybe_ingest_clcw(_state, _frame), do: :ok
 end
