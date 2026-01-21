@@ -6,7 +6,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   use GenServer
   require Logger
 
-  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Telemetry.UplinkPipeline
@@ -14,8 +13,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
   alias Cadence.Runtime.Transport.COP1.Config
   alias Cadence.Runtime.Transport.COP1.Context
+  alias Cadence.Runtime.Transport.COP1.Report
   alias Cadence.Runtime.Transport.COP1.StreamServer
   alias Cadence.Runtime.Transport.COP1.StreamSupervisor
+  alias Cadence.Transport.TCStreamId
 
   @registry Cadence.MissionRegistry
   @default_window_size 4
@@ -38,20 +39,31 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     Config.enabled?(interface)
   end
 
-  @spec mode_for(Interface.t(), atom() | nil, non_neg_integer() | nil) :: :fop | :disabled
+  @spec mode_for(Interface.t(), atom() | nil, non_neg_integer() | nil) :: :fop | :bypass
   def mode_for(%Interface{} = interface, pdu_type \\ nil, apid \\ nil) do
     Config.mode_for(interface, pdu_type, apid)
   end
 
   @spec send_frames(String.t(), String.t(), [map()], Context.t() | nil) ::
-          :ok | {:error, term()}
+          :ok | {:error, term()} | {:defer, term()}
   def send_frames(mission_id, interface_id, frames, context \\ nil) when is_list(frames) do
     GenServer.call(via_tuple(mission_id, interface_id), {:send_frames, frames, context})
   end
 
-  @spec ingest_clcw(String.t(), String.t(), CLCW.t()) :: :ok
-  def ingest_clcw(mission_id, interface_id, %CLCW{} = clcw) do
-    GenServer.cast(via_tuple(mission_id, interface_id), {:clcw, clcw})
+  @spec ingest_report(Report.t()) :: :ok
+  def ingest_report(%Report{tc_stream_id: %TCStreamId{} = tc_stream_id} = report) do
+    GenServer.cast(
+      via_tuple(tc_stream_id.mission_id, tc_stream_id.interface_id),
+      {:report, report}
+    )
+  end
+
+  @spec ingest_clcw(String.t(), String.t(), term()) :: :ok
+  def ingest_clcw(mission_id, interface_id, _clcw) do
+    COP1Application.report_decode_failed(:missing_scid, %{
+      mission_id: mission_id,
+      interface_id: interface_id
+    })
   end
 
   @spec stats(pid()) :: map()
@@ -107,7 +119,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
       interface_id: interface.id,
       enabled: enabled,
       base_stream: base_stream,
-      clcw_by_vcid: %{}
+      reports_by_stream: %{}
     }
 
     {:ok, state}
@@ -120,7 +132,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
 
   def handle_call({:send_frames, frames, context}, _from, state) when is_list(frames) do
     with {:ok, context} <- normalize_context(context),
-         {:ok, stream_id} <- resolve_stream_id(context, state.interface_id),
+         {:ok, stream_id} <- resolve_stream_id(context, state),
          {:ok, vcid} <- resolve_stream_vcid(context, stream_id, state.base_stream),
          {:ok, pid, status} <-
            StreamSupervisor.ensure_stream(
@@ -130,10 +142,13 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
              state.base_stream,
              vcid: vcid
            ),
-         :ok <- maybe_apply_cached_clcw(status, pid, state, vcid) do
+         :ok <- maybe_apply_cached_report(status, pid, state, stream_id) do
       case StreamServer.send_frames(pid, frames, context) do
         :ok ->
           {:reply, :ok, state}
+
+        {:defer, reason} ->
+          {:reply, {:defer, reason}, state}
 
         {:error, {:send_failed, reason}} ->
           {:reply, {:error, :send_failed, reason}, state}
@@ -157,13 +172,27 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   end
 
   @impl true
-  def handle_cast({:clcw, %CLCW{} = clcw}, %{enabled: true} = state) do
-    state = cache_clcw(state, clcw)
-    StreamSupervisor.broadcast_clcw(state.mission_id, state.interface_id, clcw)
+  def handle_cast({:report, %Report{} = report}, %{enabled: true} = state) do
+    state = cache_report(state, report)
+
+    case StreamSupervisor.deliver_report(state.mission_id, state.interface_id, report) do
+      :ok ->
+        :ok
+
+      :unknown_stream ->
+        COP1Application.emit_protocol_event(%{
+          mission_id: state.mission_id,
+          interface_id: state.interface_id,
+          protocol: :cop1,
+          status: :cop1_report_for_unknown_stream,
+          stream_id: report.tc_stream_id
+        })
+    end
+
     {:noreply, state}
   end
 
-  def handle_cast({:clcw, %CLCW{}}, state), do: {:noreply, state}
+  def handle_cast({:report, %Report{}}, state), do: {:noreply, state}
 
   @impl true
   def handle_info({:fop_timeout, seq}, state) do
@@ -259,16 +288,19 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
 
   defp parse_integer(_), do: nil
 
-  defp resolve_stream_id(%Context{} = context, interface_id) do
+  defp resolve_stream_id(%Context{} = context, state) do
     case context.stream_id do
-      {target_id, ^interface_id, vcid} when is_binary(target_id) ->
-        {:ok, {target_id, interface_id, vcid}}
+      %TCStreamId{interface_id: interface_id, mission_id: mission_id} = stream_id ->
+        cond do
+          interface_id != state.interface_id ->
+            {:error, {:tc_stream_interface_mismatch, interface_id}}
 
-      {target_id, other_interface_id, _vcid} when is_binary(target_id) ->
-        {:error, {:tc_stream_interface_mismatch, other_interface_id}}
+          mission_id != state.mission_id ->
+            {:error, {:tc_stream_mission_mismatch, mission_id}}
 
-      stream_id when is_binary(stream_id) or is_integer(stream_id) ->
-        {:ok, stream_id}
+          true ->
+            {:ok, stream_id}
+        end
 
       nil ->
         {:error, :missing_tc_stream_id}
@@ -278,7 +310,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     end
   end
 
-  defp resolve_stream_id(_ctx, _interface_id), do: {:error, :missing_tc_stream_id}
+  defp resolve_stream_id(_ctx, _state), do: {:error, :missing_tc_stream_id}
 
   defp normalize_context(nil), do: {:ok, Context.new()}
   defp normalize_context(%Context{} = context), do: {:ok, context}
@@ -296,7 +328,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     end
   end
 
-  defp stream_vcid_from_id({_target_id, _interface_id, vcid}) when is_integer(vcid), do: vcid
+  defp stream_vcid_from_id(%TCStreamId{vcid: vcid}) when is_integer(vcid), do: vcid
   defp stream_vcid_from_id(_), do: nil
 
   defp aggregate_stats(streams, enabled) do
@@ -326,19 +358,19 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   defp last_report_value([stats]), do: Map.get(stats, :last_report_value)
   defp last_report_value(_), do: nil
 
-  defp cache_clcw(%{clcw_by_vcid: clcw_by_vcid} = state, %CLCW{vcid: vcid} = clcw)
-       when is_integer(vcid) do
-    %{state | clcw_by_vcid: Map.put(clcw_by_vcid, vcid, clcw)}
+  defp cache_report(%{reports_by_stream: reports_by_stream} = state, %Report{} = report) do
+    key = TCStreamId.to_key(report.tc_stream_id)
+    %{state | reports_by_stream: Map.put(reports_by_stream, key, report)}
   end
 
-  defp cache_clcw(state, _clcw), do: state
+  defp maybe_apply_cached_report(:started, pid, state, %TCStreamId{} = stream_id) do
+    key = TCStreamId.to_key(stream_id)
 
-  defp maybe_apply_cached_clcw(:started, pid, state, vcid) do
-    case Map.get(state.clcw_by_vcid, vcid) do
+    case Map.get(state.reports_by_stream, key) do
       nil -> :ok
-      clcw -> StreamServer.apply_clcw(pid, clcw)
+      report -> StreamServer.apply_report(pid, report)
     end
   end
 
-  defp maybe_apply_cached_clcw(:existing, _pid, _state, _vcid), do: :ok
+  defp maybe_apply_cached_report(:existing, _pid, _state, _stream_id), do: :ok
 end

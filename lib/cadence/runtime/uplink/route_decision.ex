@@ -4,8 +4,9 @@ defmodule Cadence.Runtime.Uplink.RouteDecision do
   """
 
   alias Cadence.CCSDS.Core.PDU
+  alias Cadence.Transport.TCStreamId
 
-  @type cop1_mode :: :fop | :disabled
+  @type cop1_mode :: :fop | :bypass
 
   @type t :: %__MODULE__{
           target_id: String.t(),
@@ -15,7 +16,8 @@ defmodule Cadence.Runtime.Uplink.RouteDecision do
           scid: non_neg_integer() | nil,
           vcid: non_neg_integer() | nil,
           cop1_mode: cop1_mode(),
-          tc_stream_id: term() | nil
+          tc_stream_id: TCStreamId.t() | nil,
+          tc_stream_id_raw: term() | nil
         }
 
   defstruct [
@@ -26,6 +28,7 @@ defmodule Cadence.Runtime.Uplink.RouteDecision do
     :scid,
     :vcid,
     :cop1_mode,
-    :tc_stream_id
+    :tc_stream_id,
+    :tc_stream_id_raw
   ]
 end

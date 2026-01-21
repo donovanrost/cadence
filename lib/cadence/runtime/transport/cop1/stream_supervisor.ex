@@ -3,7 +3,9 @@ defmodule Cadence.Runtime.Transport.COP1.StreamSupervisor do
   Dynamic supervisor for per-stream COP-1 processes.
   """
 
+  alias Cadence.Runtime.Transport.COP1.Report
   alias Cadence.Runtime.Transport.COP1.StreamServer
+  alias Cadence.Transport.TCStreamId
 
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts) do
@@ -84,11 +86,22 @@ defmodule Cadence.Runtime.Transport.COP1.StreamSupervisor do
   end
 
   @spec broadcast_clcw(String.t(), String.t(), term()) :: :ok
-  def broadcast_clcw(mission_id, interface_id, clcw) do
-    stream_pids(mission_id, interface_id)
-    |> Enum.each(fn pid -> StreamServer.ingest_clcw(pid, clcw) end)
+  def broadcast_clcw(_mission_id, _interface_id, _clcw), do: :ok
 
-    :ok
+  @spec deliver_report(String.t(), String.t(), Report.t()) :: :ok | :unknown_stream
+  def deliver_report(
+        mission_id,
+        interface_id,
+        %Report{tc_stream_id: %TCStreamId{} = stream_id} = report
+      ) do
+    case lookup_stream(mission_id, interface_id, stream_id) do
+      {:ok, pid} ->
+        StreamServer.apply_report(pid, report)
+        :ok
+
+      :error ->
+        :unknown_stream
+    end
   end
 
   @spec broadcast_timeout(String.t(), String.t(), non_neg_integer()) :: :ok
@@ -125,8 +138,11 @@ defmodule Cadence.Runtime.Transport.COP1.StreamSupervisor do
   end
 
   defp stream_key(mission_id, interface_id, stream_id) do
-    {:cop1_stream, mission_id, interface_id, stream_id}
+    {:cop1_stream, mission_id, interface_id, stream_key_value(stream_id)}
   end
+
+  defp stream_key_value(%TCStreamId{} = stream_id), do: TCStreamId.to_key(stream_id)
+  defp stream_key_value(stream_id), do: stream_id
 
   defp supervisor_pid(mission_id, interface_id) do
     case Registry.lookup(Cadence.MissionRegistry, supervisor_key(mission_id, interface_id)) do

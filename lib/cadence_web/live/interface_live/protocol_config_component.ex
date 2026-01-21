@@ -32,7 +32,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
   ]
 
   @cop1_modes [
-    {"Disabled", "disabled"},
+    {"Bypass", "bypass"},
     {"FOP (Enabled)", "fop"}
   ]
 
@@ -801,7 +801,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     |> assign(:uplink_scid, parse_int(params["uplink_scid"]))
     |> assign(:uplink_vcid, parse_int(params["uplink_vcid"]))
     |> assign(:uplink_map_id, parse_int(params["uplink_map_id"]))
-    |> assign(:cop1_mode, params["cop1_mode"] || socket.assigns.cop1_mode || "disabled")
+    |> assign(:cop1_mode, params["cop1_mode"] || socket.assigns.cop1_mode || "bypass")
     |> assign(:cop1_window_size, parse_int(params["cop1_window_size"]))
     |> assign(:cop1_timeout_ms, parse_int(params["cop1_timeout_ms"]))
     |> assign(:cop1_max_retransmit, parse_int(params["cop1_max_retransmit"]))
@@ -862,7 +862,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
 
     cop1_updates =
       %{
-        "mode" => if(assigns.cop1_mode == "fop", do: "fop", else: nil),
+        "mode" => assigns.cop1_mode,
         "window_size" => assigns.cop1_window_size,
         "timeout_ms" => assigns.cop1_timeout_ms,
         "max_retransmit" => assigns.cop1_max_retransmit,
@@ -942,13 +942,29 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
       :fop ->
         "fop"
 
+      "bypass" ->
+        "bypass"
+
+      :bypass ->
+        "bypass"
+
+      "disabled" ->
+        "bypass"
+
+      :disabled ->
+        "bypass"
+
       _ ->
-        if(fetch_config_value(config, ["enabled", :enabled]) == true, do: "fop", else: "disabled")
+        if(fetch_config_value(config, ["enabled", :enabled]) == true, do: "fop", else: "bypass")
     end
   end
 
   defp cop1_mode_from_config(config) when config in ["fop", :fop], do: "fop"
-  defp cop1_mode_from_config(_config), do: "disabled"
+
+  defp cop1_mode_from_config(config) when config in ["bypass", :bypass, "disabled", :disabled],
+    do: "bypass"
+
+  defp cop1_mode_from_config(_config), do: "bypass"
 
   defp drop_config_keys(config, keys) when is_map(config), do: Map.drop(config, keys)
   defp drop_config_keys(config, _keys), do: config

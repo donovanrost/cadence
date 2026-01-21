@@ -12,6 +12,7 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   alias Cadence.Runtime.Telemetry.UplinkPipeline
   alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
   alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
+  alias Cadence.Runtime.Transport.ProtocolEvent
   alias Cadence.Runtime.Uplink.FramingContext
   alias Cadence.Runtime.Uplink.ReleasedUplinkFrame
   alias Cadence.Runtime.Uplink.RouteDecision
@@ -40,7 +41,7 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   end
 
   @spec dispatch_pdu(String.t(), UplinkPDU.t(), keyword()) ::
-          {:ok, RouteDecision.t()} | {:error, term()}
+          {:ok, RouteDecision.t()} | {:error, term()} | {:defer, term()}
   def dispatch_pdu(mission_id, %UplinkPDU{} = uplink_pdu, opts \\ []) do
     GenServer.call(via_tuple(mission_id), {:dispatch_pdu, uplink_pdu, opts})
   end
@@ -87,6 +88,9 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
       {:ok, decision, next_counts} ->
         {:reply, {:ok, decision}, %{state | sequence_counts: next_counts}}
 
+      {:defer, reason} ->
+        {:reply, {:defer, reason}, state}
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
 
@@ -103,6 +107,7 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
          :ok <- ensure_connected(state.mission_id, decision.interface_id),
          {:ok, pdu, next_counts} <-
            SequenceManager.prepare_pdu(uplink_pdu.pdu, state.sequence_counts),
+         :ok <- emit_route_used(state, decision, uplink_pdu, opts),
          :ok <-
            dispatch_via_route(
              state,
@@ -112,8 +117,18 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
            ) do
       {:ok, decision, next_counts}
     else
-      {:error, reason} -> {:error, reason}
-      {:error, reason, detail} -> {:error, reason, detail}
+      {:error, :routing_ambiguous, candidates} ->
+        emit_routing_ambiguous(state, uplink_pdu, candidates, opts)
+        {:error, :routing_ambiguous, candidates}
+
+      {:defer, reason} ->
+        {:defer, reason}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      {:error, reason, detail} ->
+        {:error, reason, detail}
     end
   end
 
@@ -159,6 +174,54 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
       |> FramingContext.put_if_nil(:initial_seq, cop1_context.initial_seq)
 
     {framing_context, cop1_context}
+  end
+
+  defp emit_route_used(state, %RouteDecision{} = decision, %UplinkPDU{} = uplink_pdu, opts) do
+    payload = %{
+      tc_stream_id: decision.tc_stream_id,
+      interface_id: decision.interface_id,
+      scid: decision.scid,
+      vcid: decision.vcid,
+      cop1_mode: decision.cop1_mode,
+      apid: uplink_pdu.apid,
+      command_id: Keyword.get(opts, :command_id)
+    }
+
+    event =
+      ProtocolEvent.new(%{
+        mission_id: state.mission_id,
+        interface_id: decision.interface_id,
+        protocol: :routing,
+        status: :tc_route_used,
+        stream_id: decision.tc_stream_id,
+        reason: payload
+      })
+
+    ProtocolEvent.broadcast(event)
+    :ok
+  end
+
+  defp emit_routing_ambiguous(state, %UplinkPDU{} = uplink_pdu, candidates, opts) do
+    interface_ids = Enum.map(candidates, & &1.interface_id)
+
+    payload = %{
+      target_id: uplink_pdu.target_id,
+      apid: uplink_pdu.apid,
+      pdu_type: uplink_pdu.pdu_type,
+      interface_ids: interface_ids,
+      command_id: Keyword.get(opts, :command_id)
+    }
+
+    event =
+      ProtocolEvent.new(%{
+        mission_id: state.mission_id,
+        interface_id: List.first(interface_ids),
+        protocol: :routing,
+        status: :routing_ambiguous,
+        reason: payload
+      })
+
+    ProtocolEvent.broadcast(event)
   end
 
   # ---------------------------------------------------------------------------

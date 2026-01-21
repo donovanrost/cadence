@@ -37,9 +37,11 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
     assert decision.scid == 12
     assert decision.vcid == 3
     assert decision.cop1_mode == :fop
+    assert decision.tc_stream_id.scid == 12
+    assert decision.tc_stream_id.vcid == 3
   end
 
-  test "uses tc stream id from routing" do
+  test "captures raw tc stream id from routing" do
     target_id = "target-1"
     interface = build_interface("interface-1")
 
@@ -48,15 +50,24 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
         target_id: target_id,
         interface_id: interface.id,
         direction: :write,
-        tc_stream_id: "stream-1"
+        tc_stream_id: "stream-1",
+        scid: 3
       })
 
-    resolver = build_resolver([interface], [routing], [])
+    default_mapping = %InterfaceVcid{
+      interface_id: interface.id,
+      target_id: nil,
+      vcid: 2
+    }
+
+    resolver = build_resolver([interface], [routing], [default_mapping])
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, 10, [])
 
-    assert decision.tc_stream_id == "stream-1"
+    assert decision.tc_stream_id_raw == "stream-1"
+    assert decision.tc_stream_id.scid == 3
+    assert decision.tc_stream_id.vcid == 2
   end
 
   test "disables cop1 when apid is not allowlisted" do
@@ -80,7 +91,7 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, 12, [])
 
-    assert decision.cop1_mode == :disabled
+    assert decision.cop1_mode == :bypass
   end
 
   test "enables cop1 when apid is allowlisted" do
@@ -194,6 +205,34 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
 
     assert {:error, :no_interface} =
              RoutingService.route(resolver, "target-1", :space_packet, nil, [])
+  end
+
+  test "returns routing_ambiguous when multiple routes match" do
+    target_id = "target-1"
+    interface_a = build_interface("interface-a")
+    interface_b = build_interface("interface-b")
+
+    {:ok, route_a} =
+      TargetInterface.new(%{
+        target_id: target_id,
+        interface_id: interface_a.id,
+        direction: :write
+      })
+
+    {:ok, route_b} =
+      TargetInterface.new(%{
+        target_id: target_id,
+        interface_id: interface_b.id,
+        direction: :write
+      })
+
+    resolver = build_resolver([interface_a, interface_b], [route_a, route_b], [])
+
+    assert {:error, :routing_ambiguous, candidates} =
+             RoutingService.route(resolver, target_id, :space_packet, nil, [])
+
+    interface_ids = Enum.map(candidates, & &1.interface_id)
+    assert Enum.sort(interface_ids) == Enum.sort([interface_a.id, interface_b.id])
   end
 
   defp build_resolver(interfaces, routes, vcids) do

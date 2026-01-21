@@ -4,9 +4,10 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
   """
 
   use GenServer
-  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Runtime.Transport.COP1.Context
+  alias Cadence.Runtime.Transport.COP1.Report
   alias Cadence.Runtime.Transport.COP1.Stream
+  alias Cadence.Transport.TCStreamId
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -24,7 +25,7 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
     stream_id = Keyword.fetch!(opts, :stream_id)
 
     %{
-      id: {:cop1_stream, mission_id, interface_id, stream_id},
+      id: {:cop1_stream, mission_id, interface_id, stream_key_value(stream_id)},
       start: {__MODULE__, :start_link, [opts]},
       type: :worker
     }
@@ -32,7 +33,8 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
 
   def via_tuple(mission_id, interface_id, stream_id) do
     {:via, Registry,
-     {Cadence.MissionRegistry, {:cop1_stream, mission_id, interface_id, stream_id}}}
+     {Cadence.MissionRegistry,
+      {:cop1_stream, mission_id, interface_id, stream_key_value(stream_id)}}}
   end
 
   @spec send_frames(pid(), [map()], Context.t()) :: :ok | {:error, term()}
@@ -40,14 +42,21 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
     GenServer.call(pid, {:send_frames, frames, context})
   end
 
-  @spec ingest_clcw(pid(), CLCW.t()) :: :ok
-  def ingest_clcw(pid, %CLCW{} = clcw) do
-    GenServer.cast(pid, {:clcw, clcw})
+  @spec resync(TCStreamId.t()) :: :ok | {:error, :stream_not_found}
+  def resync(%TCStreamId{} = tc_stream_id) do
+    case Registry.lookup(
+           Cadence.MissionRegistry,
+           {:cop1_stream, tc_stream_id.mission_id, tc_stream_id.interface_id,
+            stream_key_value(tc_stream_id)}
+         ) do
+      [{pid, _}] -> GenServer.call(pid, :resync)
+      [] -> {:error, :stream_not_found}
+    end
   end
 
-  @spec apply_clcw(pid(), CLCW.t()) :: :ok
-  def apply_clcw(pid, %CLCW{} = clcw) do
-    GenServer.call(pid, {:apply_clcw, clcw})
+  @spec apply_report(pid(), Report.t()) :: :ok
+  def apply_report(pid, %Report{} = report) do
+    GenServer.call(pid, {:apply_report, report})
   end
 
   @spec stats(pid()) :: map()
@@ -66,7 +75,9 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
       |> Map.put(:default_vcid, stream_vcid || Map.get(base, :default_vcid))
       |> Map.put(:stream_id, stream_id)
       |> Map.put(:initial_seq, Map.get(base, :initial_seq, 0))
+      |> Map.put(:held, true)
       |> Stream.new()
+      |> Stream.on_restart()
 
     {:ok, %{stream_id: stream_id, stream: stream}}
   end
@@ -77,15 +88,18 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
       {:ok, next_stream} ->
         {:reply, :ok, %{state | stream: next_stream}}
 
+      {:defer, reason, next_stream} ->
+        {:reply, {:defer, reason}, %{state | stream: next_stream}}
+
       {:error, reason, next_stream} ->
         {:reply, {:error, reason}, %{state | stream: next_stream}}
     end
   end
 
-  def handle_call({:apply_clcw, %CLCW{} = clcw}, _from, state) do
+  def handle_call({:apply_report, %Report{} = report}, _from, state) do
     next_stream =
       state.stream
-      |> Stream.apply_clcw(clcw)
+      |> Stream.apply_report(report)
       |> Stream.maybe_send_pending()
       |> elem(0)
 
@@ -96,16 +110,13 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
     {:reply, %{stream_id: state.stream_id, stats: Stream.stats(state.stream)}, state}
   end
 
-  @impl true
-  def handle_cast({:clcw, %CLCW{} = clcw}, state) do
-    next_stream =
-      state.stream
-      |> Stream.apply_clcw(clcw)
-      |> Stream.maybe_send_pending()
-      |> elem(0)
-
-    {:noreply, %{state | stream: next_stream}}
+  def handle_call(:resync, _from, state) do
+    next_stream = Stream.resync_state(state.stream, :manual)
+    {:reply, :ok, %{state | stream: next_stream}}
   end
+
+  defp stream_key_value(%TCStreamId{} = stream_id), do: TCStreamId.to_key(stream_id)
+  defp stream_key_value(stream_id), do: stream_id
 
   @impl true
   def handle_info({:fop_timeout, seq}, state) do

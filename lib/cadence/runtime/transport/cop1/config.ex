@@ -5,7 +5,7 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
 
   alias Cadence.Domain.Interfaces.Entities.Interface
 
-  @type cop1_mode :: :fop | :disabled
+  @type cop1_mode :: :fop | :bypass
 
   @spec enabled?(Interface.t()) :: boolean()
   def enabled?(%Interface{} = interface) do
@@ -20,7 +20,7 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
     cop1 = config(interface.config || %{})
 
     case mode(cop1) do
-      :disabled -> :disabled
+      :bypass -> :bypass
       :fop -> apply_apid_filter(cop1, pdu_type, apid)
     end
   end
@@ -42,11 +42,15 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
     case fetch_value(config, ["mode", :mode]) do
       "fop" -> :fop
       :fop -> :fop
-      _ -> if(fetch_value(config, ["enabled", :enabled]) == true, do: :fop, else: :disabled)
+      "bypass" -> :bypass
+      :bypass -> :bypass
+      "disabled" -> :bypass
+      :disabled -> :bypass
+      _ -> if(fetch_value(config, ["enabled", :enabled]) == true, do: :fop, else: :bypass)
     end
   end
 
-  def mode(_), do: :disabled
+  def mode(_), do: :bypass
 
   defp apply_apid_filter(config, pdu_type, apid) do
     case apid_allowlist(config) do
@@ -54,13 +58,13 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
         :fop
 
       [] ->
-        :disabled
+        :bypass
 
       apids ->
         if pdu_type == :space_packet and is_integer(apid) and Enum.member?(apids, apid) do
           :fop
         else
-          :disabled
+          :bypass
         end
     end
   end

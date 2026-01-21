@@ -9,9 +9,11 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
   alias Cadence.Runtime.Interfaces.TcpServerInterface
   alias Cadence.Runtime.Missions.MissionSupervisor
   alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
+  alias Cadence.Runtime.Transport.COP1.Stream
   alias Cadence.Runtime.Uplink.{Dispatcher, FramingContext, UplinkPDU}
   alias Cadence.Simulator.Coordinator
   alias Cadence.TestHelpers
+  alias Cadence.Transport.TCStreamId
   alias Ecto.Adapters.SQL.Sandbox
 
   @tm_frame_size 256
@@ -130,8 +132,20 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
 
     framing_context = FramingContext.new(%{scid: @scid})
 
-    assert {:ok, decision} =
-             Dispatcher.dispatch_pdu(mission.id, uplink_pdu, framing_context: framing_context)
+    decision =
+      case Dispatcher.dispatch_pdu(mission.id, uplink_pdu, framing_context: framing_context) do
+        {:ok, decision} ->
+          decision
+
+        {:defer, :hold_pending_resync} ->
+          tc_stream_id = TCStreamId.new!(mission.id, interface_id, @scid, @vcid)
+          :ok = Stream.resync(tc_stream_id)
+
+          {:ok, decision} =
+            Dispatcher.dispatch_pdu(mission.id, uplink_pdu, framing_context: framing_context)
+
+          decision
+      end
 
     assert decision.interface_id == interface_id
 

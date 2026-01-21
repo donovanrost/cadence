@@ -27,6 +27,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
   alias Cadence.Interfaces.InterfaceVcid
   alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
   alias Cadence.Repo
+  alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
   alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.Packet.PacketDefinition
@@ -86,7 +87,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, targets} <- load_targets(mission_id),
          {:ok, target_interface_routings} <- load_target_interface_routings(mission_id),
          {:ok, interface_vcids} <- load_interface_vcids(mission_id),
-         :ok <- validate_tc_stream_ids(target_interface_routings, interfaces),
+         :ok <- validate_tc_stream_ids(target_interface_routings, interfaces, interface_vcids),
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
@@ -253,8 +254,10 @@ defmodule Cadence.Application.Missions.MissionConfig do
     {:ok, []}
   end
 
-  defp validate_tc_stream_ids(routings, interfaces) do
+  defp validate_tc_stream_ids(routings, interfaces, interface_vcids) do
     interfaces_by_id = Map.new(interfaces, fn interface -> {interface.id, interface} end)
+    interface_defaults = build_interface_defaults(interfaces)
+    {vcid_by_target, vcid_defaults} = index_vcids(interface_vcids)
 
     cop1_routes =
       Enum.filter(routings, fn route ->
@@ -262,14 +265,29 @@ defmodule Cadence.Application.Missions.MissionConfig do
           cop1_enabled_interface?(interfaces_by_id, route.interface_id)
       end)
 
-    errors =
-      cop1_routes
-      |> Enum.group_by(& &1.interface_id)
-      |> Enum.flat_map(fn {interface_id, routes} ->
-        {missing_errors, entries} = collect_stream_ids(routes)
-        conflict_errors = conflicting_stream_ids(entries, interface_id)
-        missing_errors ++ conflict_errors
+    missing_errors =
+      Enum.flat_map(cop1_routes, fn route ->
+        defaults = Map.get(interface_defaults, route.interface_id, %{})
+
+        scid =
+          case route.scid do
+            scid when is_integer(scid) -> scid
+            _ -> Map.get(defaults, :scid)
+          end
+
+        vcid =
+          Map.get(vcid_by_target, {route.interface_id, route.target_id}) ||
+            Map.get(vcid_defaults, route.interface_id) ||
+            Map.get(defaults, :vcid)
+
+        []
+        |> maybe_add_missing(route, :scid, scid)
+        |> maybe_add_missing(route, :vcid, vcid)
       end)
+
+    ambiguity_errors = ambiguous_route_errors(routings)
+
+    errors = missing_errors ++ ambiguity_errors
 
     if errors == [] do
       :ok
@@ -278,37 +296,37 @@ defmodule Cadence.Application.Missions.MissionConfig do
     end
   end
 
-  defp collect_stream_ids(routes) do
-    Enum.reduce(routes, {[], []}, fn route, {errors, entries} ->
-      stream_id = normalize_stream_id(route.tc_stream_id)
-
-      if is_nil(stream_id) do
-        error = %{
-          target_id: route.target_id,
-          interface_id: route.interface_id,
-          reason: :missing_tc_stream_id
-        }
-
-        {errors ++ [error], entries}
-      else
-        {errors, entries ++ [%{stream_id: stream_id, target_id: route.target_id}]}
-      end
-    end)
-  end
-
-  defp conflicting_stream_ids(entries, interface_id) do
-    entries
-    |> Enum.group_by(& &1.stream_id)
-    |> Enum.flat_map(fn {stream_id, grouped} ->
-      target_ids = grouped |> Enum.map(& &1.target_id) |> Enum.uniq()
-
-      if length(target_ids) > 1 do
+  defp maybe_add_missing(errors, route, key, value) do
+    if is_nil(value) do
+      errors ++
         [
           %{
-            interface_id: interface_id,
-            tc_stream_id: stream_id,
-            target_ids: target_ids,
-            reason: :conflicting_tc_stream_ids
+            target_id: route.target_id,
+            interface_id: route.interface_id,
+            reason: :"missing_#{key}"
+          }
+        ]
+    else
+      errors
+    end
+  end
+
+  defp ambiguous_route_errors(routings) do
+    routings
+    |> Enum.filter(&TargetInterfaceEntity.allows_write?/1)
+    |> Enum.group_by(& &1.target_id)
+    |> Enum.flat_map(fn {target_id, routes} ->
+      interface_ids =
+        routes
+        |> Enum.map(& &1.interface_id)
+        |> Enum.uniq()
+
+      if length(interface_ids) > 1 do
+        [
+          %{
+            target_id: target_id,
+            interface_ids: interface_ids,
+            reason: :ambiguous_routes
           }
         ]
       else
@@ -317,11 +335,41 @@ defmodule Cadence.Application.Missions.MissionConfig do
     end)
   end
 
-  defp normalize_stream_id(nil), do: nil
-  defp normalize_stream_id(""), do: nil
-  defp normalize_stream_id(value) when is_integer(value), do: Integer.to_string(value)
-  defp normalize_stream_id(value) when is_binary(value), do: value
-  defp normalize_stream_id(_value), do: nil
+  defp build_interface_defaults(interfaces) do
+    Enum.reduce(interfaces, %{}, fn interface, acc ->
+      defaults =
+        case SDLPConfig.fetch(interface) do
+          {:ok, %{opts: opts}} ->
+            %{
+              scid: opts[:uplink_scid],
+              vcid: opts[:uplink_vcid],
+              map_id: opts[:uplink_map_id]
+            }
+
+          :error ->
+            %{}
+        end
+
+      Map.put(acc, interface.id, defaults)
+    end)
+  end
+
+  defp index_vcids(nil), do: {%{}, %{}}
+  defp index_vcids([]), do: {%{}, %{}}
+
+  defp index_vcids(vcid_mappings) when is_list(vcid_mappings) do
+    Enum.reduce(vcid_mappings, {%{}, %{}}, fn mapping, {by_target, defaults} ->
+      interface_id = mapping.interface_id
+      vcid = mapping.vcid
+      target_id = mapping.target_id
+
+      if is_binary(target_id) do
+        {Map.put(by_target, {interface_id, target_id}, vcid), defaults}
+      else
+        {by_target, Map.put(defaults, interface_id, vcid)}
+      end
+    end)
+  end
 
   defp cop1_enabled_interface?(interfaces_by_id, interface_id) do
     case Map.get(interfaces_by_id, interface_id) do

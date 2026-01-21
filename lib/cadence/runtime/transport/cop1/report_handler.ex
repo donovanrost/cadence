@@ -7,13 +7,14 @@ defmodule Cadence.Runtime.Transport.COP1.ReportHandler do
 
   alias Cadence.CCSDS.Core.PDU
   alias Cadence.CCSDS.SDU.SpacePacket
-  alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
+  alias Cadence.Runtime.Transport.COP1.CLCWReportDecoder
 
   @impl true
   def init(opts) do
-    ingest_fun = Keyword.get(opts, :cop1_ingest_fun, &COP1Application.ingest_clcw/3)
-    {:ok, %{ingest_fun: ingest_fun}}
+    ingest_fun = Keyword.get(opts, :cop1_ingest_fun, &COP1Application.ingest_report/1)
+    decoder = Keyword.get(opts, :cop1_report_decoder, CLCWReportDecoder)
+    {:ok, %{ingest_fun: ingest_fun, decoder: decoder}}
   end
 
   @impl true
@@ -25,25 +26,22 @@ defmodule Cadence.Runtime.Transport.COP1.ReportHandler do
   def accepts?(_pdu, _ctx), do: false
 
   @impl true
-  def handle_pdu(%PDU{value: %SpacePacket{user_data: user_data}}, ctx, state) do
-    mission_id = Map.get(ctx, :mission_id)
-    interface_id = Map.get(ctx, :interface_id)
+  def handle_pdu(%PDU{value: %SpacePacket{} = packet}, ctx, state) do
+    decoder = state.decoder
 
-    with {:ok, clcw} <- decode_clcw(user_data),
-         true <- is_binary(mission_id) and is_binary(interface_id) do
-      state.ingest_fun.(mission_id, interface_id, clcw)
-      {:ok, [], state}
-    else
-      false -> {:skip, :missing_context, state}
-      {:error, reason} -> {:skip, reason, state}
+    case decoder.decode(%PDU{type: :space_packet, value: packet}, ctx) do
+      {:ok, report} ->
+        state.ingest_fun.(report)
+        {:ok, [], state}
+
+      :not_a_report ->
+        {:skip, :not_a_report, state}
+
+      {:error, reason} ->
+        COP1Application.report_decode_failed(reason, ctx)
+        {:skip, reason, state}
     end
   end
-
-  defp decode_clcw(data) when is_binary(data) and byte_size(data) == 4 do
-    CLCW.decode(data)
-  end
-
-  defp decode_clcw(_data), do: {:error, :invalid_cop1_report}
 
   defp report_apid?(ctx, apid) do
     case Map.get(ctx, :cop1_report_apids) do

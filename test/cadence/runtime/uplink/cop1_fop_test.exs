@@ -6,16 +6,18 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Domain.Interfaces.Entities.Interface
+  alias Cadence.Harness.Time
   alias Cadence.Runtime.Telemetry.UplinkPipeline
-  alias Cadence.Runtime.Transport.COP1.{Context, FOP, StreamSupervisor}
+  alias Cadence.Runtime.Transport.COP1.{Context, FOP, Report, Stream, StreamSupervisor}
   alias Cadence.Runtime.Uplink.{FramingContext, TCFraming}
+  alias Cadence.Transport.TCStreamId
 
   setup_mission_registry()
+  setup_virtual_time()
 
   test "acks frames when CLCW report value advances" do
     mission_id = Cadence.PureCase.random_id()
     interface_id = Cadence.PureCase.random_id()
-    target_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     interface = build_interface(mission_id, interface_id, frame_size)
@@ -27,11 +29,15 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, fop_pid} = start_fop(mission_id, interface, send_fun)
 
     pdu = build_pdu()
 
-    {framing_context, cop1_context} = cop1_contexts(target_id, interface_id, 10)
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(fop_pid)
 
     assert :ok ==
              send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
@@ -41,21 +47,19 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
     assert frame.frame_seq == 0
 
-    stats = FOP.stats(pid)
+    stats = FOP.stats(fop_pid)
     assert stats.in_flight_count == 1
 
-    clcw = %CLCW{report_value: frame.frame_seq, vcid: frame.vcid}
-    :ok = FOP.ingest_clcw(mission_id, interface_id, clcw)
-    Process.sleep(10)
+    ingest_report(tc_stream_id, frame.frame_seq)
+    _ = FOP.stats(fop_pid)
 
-    stats = FOP.stats(pid)
+    stats = FOP.stats(fop_pid)
     assert stats.in_flight_count == 0
   end
 
   test "retransmits on timeout" do
     mission_id = Cadence.PureCase.random_id()
     interface_id = Cadence.PureCase.random_id()
-    target_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     interface = build_interface(mission_id, interface_id, frame_size)
@@ -71,16 +75,21 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
     pdu = build_pdu()
 
-    {framing_context, cop1_context} = cop1_contexts(target_id, interface_id, 11)
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 11)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
 
     assert :ok ==
              send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, bytes}
 
-    {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
+    {:ok, [_frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
 
-    send(pid, {:fop_timeout, frame.frame_seq})
+    :ok = Time.advance(50)
+    _ = FOP.stats(pid)
     assert_receive {:sent, ^bytes}
 
     stats = FOP.stats(pid)
@@ -90,7 +99,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   test "bypass frames are sent without COP-1 tracking" do
     mission_id = Cadence.PureCase.random_id()
     interface_id = Cadence.PureCase.random_id()
-    target_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     interface = build_interface(mission_id, interface_id, frame_size)
@@ -105,7 +113,11 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
     pdu = build_pdu()
 
-    {framing_context, cop1_context} = cop1_contexts(target_id, interface_id, 12, bypass_flag: 1)
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 12, bypass_flag: 1)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
 
     assert :ok ==
              send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
@@ -120,7 +132,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   test "unlock control command is allowed during lockout" do
     mission_id = Cadence.PureCase.random_id()
     interface_id = Cadence.PureCase.random_id()
-    target_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     interface = build_interface(mission_id, interface_id, frame_size)
@@ -133,18 +144,20 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
     {:ok, pid} = start_fop(mission_id, interface, send_fun)
 
-    lockout = %CLCW{lockout: 1, vcid: 0, report_value: 0}
-    :ok = FOP.ingest_clcw(mission_id, interface_id, lockout)
-
     pdu = build_pdu()
 
-    {framing_context, cop1_context} = cop1_contexts(target_id, interface_id, 10)
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    lockout = %CLCW{lockout: 1, vcid: 0, report_value: 0}
+    ingest_report(tc_stream_id, 0, clcw: lockout)
+    _ = FOP.stats(pid)
 
     assert {:error, :lockout} ==
              send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
 
-    framing_context = FramingContext.new(%{scid: 10, vcid: 0, stream_id: target_id})
-    cop1_context = Context.new(%{vcid: 0, cop1_control: :unlock, stream_id: target_id})
+    framing_context = FramingContext.new(%{scid: 10, vcid: 0, stream_id: tc_stream_id})
+    cop1_context = Context.new(%{vcid: 0, cop1_control: :unlock, stream_id: tc_stream_id})
 
     assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
 
@@ -159,7 +172,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   test "rejects out-of-window report values" do
     mission_id = Cadence.PureCase.random_id()
     interface_id = Cadence.PureCase.random_id()
-    target_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     interface = build_interface(mission_id, interface_id, frame_size)
@@ -174,23 +186,212 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
     pdu = build_pdu()
 
-    {framing_context, cop1_context} = cop1_contexts(target_id, interface_id, 10)
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
 
     assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, bytes}
     {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
 
-    bad_clcw = %CLCW{report_value: rem(frame.frame_seq + 1, 256), vcid: frame.vcid}
-    :ok = FOP.ingest_clcw(mission_id, interface_id, bad_clcw)
-    Process.sleep(10)
+    bad_report_value = rem(frame.frame_seq + 1, 256)
+    ingest_report(tc_stream_id, bad_report_value)
+    _ = FOP.stats(pid)
 
     stats = FOP.stats(pid)
     assert stats.in_flight_count == 1
-    assert stats.last_report_value == nil
+    assert stats.last_report_value == 0
   end
 
-  defp build_interface(mission_id, interface_id, frame_size) do
+  test "window full defers pending frames until report advances" do
+    mission_id = Cadence.PureCase.random_id()
+    interface_id = Cadence.PureCase.random_id()
+    frame_size = 32
+
+    interface = build_interface(mission_id, interface_id, frame_size, cop1: %{"window_size" => 1})
+
+    test_pid = self()
+
+    send_fun = fn bytes ->
+      send(test_pid, {:sent, bytes})
+      :ok
+    end
+
+    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    pdu = build_pdu()
+
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert_receive {:sent, first_bytes}
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    refute_receive {:sent, _bytes}, 0
+
+    {:ok, [frame], _rest} = TransferFrame.decode(first_bytes, frame_size: frame_size)
+    ingest_report(tc_stream_id, frame.frame_seq)
+    _ = FOP.stats(pid)
+
+    assert_receive {:sent, _second_bytes}
+  end
+
+  test "timeout retransmits and locks out after max retransmit" do
+    mission_id = Cadence.PureCase.random_id()
+    interface_id = Cadence.PureCase.random_id()
+    frame_size = 32
+
+    interface =
+      build_interface(mission_id, interface_id, frame_size,
+        cop1: %{"timeout_ms" => 10, "max_retransmit" => 1, "window_size" => 1}
+      )
+
+    test_pid = self()
+
+    send_fun = fn bytes ->
+      send(test_pid, {:sent, bytes})
+      :ok
+    end
+
+    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    pdu = build_pdu()
+
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert_receive {:sent, bytes}
+
+    :ok = Time.advance(10)
+    _ = FOP.stats(pid)
+    assert_receive {:sent, ^bytes}
+
+    :ok = Time.advance(10)
+    _ = FOP.stats(pid)
+    stats = FOP.stats(pid)
+    assert stats.lockout == true
+    assert stats.in_flight_count == 0
+  end
+
+  test "reject report removes command from in-flight and emits rejection" do
+    mission_id = Cadence.PureCase.random_id()
+    interface_id = Cadence.PureCase.random_id()
+    frame_size = 32
+
+    interface = build_interface(mission_id, interface_id, frame_size)
+    test_pid = self()
+
+    send_fun = fn bytes ->
+      send(test_pid, {:sent, bytes})
+      :ok
+    end
+
+    event_fun = fn event ->
+      send(test_pid, {:cop1_event, event})
+      :ok
+    end
+
+    {:ok, pid} = start_fop(mission_id, interface, send_fun, event_fun: event_fun)
+    pdu = build_pdu()
+
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10, correlation_id: :corr)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert_receive {:sent, bytes}
+
+    {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
+
+    ingest_report(tc_stream_id, frame.frame_seq, status: :reject)
+    _ = FOP.stats(pid)
+
+    stats = FOP.stats(pid)
+    assert stats.in_flight_count == 0
+
+    assert_receive {:cop1_event, %{status: :rejected, seq: seq}}
+    assert seq == frame.frame_seq
+  end
+
+  test "stream restart holds until resynced" do
+    mission_id = Cadence.PureCase.random_id()
+    interface_id = Cadence.PureCase.random_id()
+    frame_size = 32
+
+    interface = build_interface(mission_id, interface_id, frame_size)
+    test_pid = self()
+
+    send_fun = fn bytes ->
+      send(test_pid, {:sent, bytes})
+      :ok
+    end
+
+    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    pdu = build_pdu()
+
+    {framing_context, cop1_context, tc_stream_id} =
+      cop1_contexts(mission_id, interface_id, 10)
+
+    assert {:defer, :hold_pending_resync} ==
+             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+
+    ingest_report(tc_stream_id, 0)
+    _ = FOP.stats(pid)
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+
+    {:ok, stream_pid} =
+      StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_id)
+
+    :ok = GenServer.stop(stream_pid)
+
+    assert {:defer, :hold_pending_resync} ==
+             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+
+    :ok = Stream.resync(tc_stream_id)
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+  end
+
+  test "distinct tc stream ids create distinct stream processes" do
+    mission_id = Cadence.PureCase.random_id()
+    interface_id = Cadence.PureCase.random_id()
+    frame_size = 32
+
+    interface = build_interface(mission_id, interface_id, frame_size)
+    send_fun = fn _bytes -> :ok end
+
+    {:ok, _pid} = start_fop(mission_id, interface, send_fun)
+    pdu = build_pdu()
+
+    {framing_a, cop1_a, tc_stream_a} = cop1_contexts(mission_id, interface_id, 10, vcid: 0)
+    {framing_b, cop1_b, tc_stream_b} = cop1_contexts(mission_id, interface_id, 11, vcid: 0)
+
+    ingest_report(tc_stream_a, 0)
+    ingest_report(tc_stream_b, 0)
+
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_a, cop1_a)
+    assert :ok == send_frames(mission_id, interface_id, pdu, framing_b, cop1_b)
+
+    {:ok, pid_a} = StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_a)
+    {:ok, pid_b} = StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_b)
+
+    assert pid_a != pid_b
+  end
+
+  defp build_interface(mission_id, interface_id, frame_size, opts \\ []) do
+    cop1_overrides = Keyword.get(opts, :cop1, %{})
+
     %Interface{
       id: interface_id,
       mission_id: mission_id,
@@ -216,12 +417,16 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
           ],
           "default_sdu_type" => "space_packet"
         },
-        "cop1" => %{
-          "mode" => "fop",
-          "window_size" => 1,
-          "timeout_ms" => 50,
-          "max_retransmit" => 2
-        }
+        "cop1" =>
+          Map.merge(
+            %{
+              "mode" => "fop",
+              "window_size" => 1,
+              "timeout_ms" => 50,
+              "max_retransmit" => 2
+            },
+            cop1_overrides
+          )
       }
     }
   end
@@ -249,13 +454,34 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     FOP.send_frames(mission_id, interface_id, frames, cop1_context)
   end
 
-  defp cop1_contexts(target_id, _interface_id, scid, opts \\ []) do
+  defp ingest_report(%TCStreamId{} = tc_stream_id, report_value, opts \\ []) do
+    status = Keyword.get(opts, :status, :accept)
+
+    clcw =
+      case Keyword.get(opts, :clcw) do
+        %CLCW{} = clcw -> clcw
+        _ -> %CLCW{vcid: tc_stream_id.vcid, report_value: report_value}
+      end
+
+    report = %Report{
+      tc_stream_id: tc_stream_id,
+      seq: report_value,
+      status: status,
+      raw: clcw
+    }
+
+    FOP.ingest_report(report)
+    report
+  end
+
+  defp cop1_contexts(mission_id, interface_id, scid, opts \\ []) do
     vcid = Keyword.get(opts, :vcid, 0)
+    tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
 
     framing_attrs = %{
       scid: scid,
       vcid: vcid,
-      stream_id: target_id,
+      stream_id: tc_stream_id,
       bypass_flag: Keyword.get(opts, :bypass_flag),
       control_command_flag: Keyword.get(opts, :control_command_flag),
       segment_header_flag: Keyword.get(opts, :segment_header_flag),
@@ -263,7 +489,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     }
 
     cop1_attrs = %{
-      stream_id: target_id,
+      stream_id: tc_stream_id,
       vcid: vcid,
       bypass_flag: Keyword.get(opts, :bypass_flag),
       control_command_flag: Keyword.get(opts, :control_command_flag),
@@ -274,10 +500,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       initial_seq: Keyword.get(opts, :initial_seq)
     }
 
-    {FramingContext.new(framing_attrs), Context.new(cop1_attrs)}
+    {FramingContext.new(framing_attrs), Context.new(cop1_attrs), tc_stream_id}
   end
 
-  defp start_fop(mission_id, interface, send_fun) do
+  defp start_fop(mission_id, interface, send_fun, opts \\ []) do
     {:ok, _sup} =
       start_supervised({StreamSupervisor, mission_id: mission_id, interface_id: interface.id})
 
@@ -287,6 +513,12 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     {:ok, _framing} =
       start_supervised({TCFraming, interface: interface})
 
-    start_supervised({FOP, interface: interface})
+    fop_opts =
+      case Keyword.get(opts, :event_fun) do
+        nil -> [interface: interface]
+        event_fun -> [interface: interface, event_fun: event_fun]
+      end
+
+    start_supervised({FOP, fop_opts})
   end
 end

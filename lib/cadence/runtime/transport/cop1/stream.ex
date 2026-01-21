@@ -7,8 +7,12 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Runtime.Transport.COP1.Context
+  alias Cadence.Runtime.Transport.COP1.Metrics
+  alias Cadence.Runtime.Transport.COP1.Report
+  alias Cadence.Runtime.Transport.COP1.StreamServer
   alias Cadence.Runtime.Uplink.ReleasedUplinkFrame
   alias Cadence.Time.Timer, as: TimeTimer
+  alias Cadence.Transport.TCStreamId
 
   @type release_fun :: (ReleasedUplinkFrame.t() -> :ok | {:error, term()})
   @type event_fun :: (map() -> any())
@@ -38,7 +42,9 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
           bypass_flag: 0 | 1,
           control_command_flag: 0 | 1,
           segment_header_flag: 0 | 1,
-          correlation_tracker: map()
+          correlation_tracker: map(),
+          held: boolean(),
+          hold_emitted: boolean()
         }
 
   defstruct [
@@ -66,12 +72,36 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     bypass_flag: 0,
     control_command_flag: 0,
     segment_header_flag: 0,
-    correlation_tracker: %{}
+    correlation_tracker: %{},
+    held: true,
+    hold_emitted: false
   ]
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     struct(__MODULE__, attrs)
+  end
+
+  @spec resync(TCStreamId.t()) :: :ok | {:error, :stream_not_found}
+  def resync(%TCStreamId{} = tc_stream_id) do
+    StreamServer.resync(tc_stream_id)
+  end
+
+  @spec on_restart(t()) :: t()
+  def on_restart(%__MODULE__{} = state) do
+    state
+    |> emit_stream_event(:cop1_stream_restarted, reason: %{policy: :hold_on_restart})
+    |> set_held_gauge(1)
+    |> set_in_flight_gauge()
+  end
+
+  @spec resync_state(t(), term()) :: t()
+  def resync_state(%__MODULE__{} = state, reason \\ :manual) do
+    state
+    |> Map.put(:held, false)
+    |> Map.put(:hold_emitted, false)
+    |> emit_stream_event(:cop1_stream_resynced, reason: reason)
+    |> set_held_gauge(0)
   end
 
   @spec stats(t()) :: map()
@@ -81,6 +111,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
       pending_count: :queue.len(state.pending),
       in_flight_count: length(state.in_flight),
       lockout: state.lockout,
+      held: state.held,
       wait: state.wait,
       retransmit: state.retransmit,
       unlock_pending: state.unlock_pending,
@@ -88,14 +119,15 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     }
   end
 
-  @spec send_frames(t(), [map()], Context.t()) :: {:ok, t()} | {:error, term(), t()}
+  @spec send_frames(t(), [map()], Context.t()) ::
+          {:ok, t()} | {:error, term(), t()} | {:defer, term(), t()}
   def send_frames(%__MODULE__{enabled: false} = state, _frames, _context),
     do: {:error, :cop1_disabled, state}
 
   def send_frames(%__MODULE__{} = state, frames, %Context{} = context)
       when is_list(frames) do
     with {:ok, context} <- prepare_context(state, context),
-         :ok <- ensure_send_allowed(state, context),
+         {:ok, state} <- ensure_send_allowed(state, context),
          frames = attach_correlation_id(frames, context),
          {:ok, final_state} <- dispatch_frames(state, frames, context) do
       final_state =
@@ -107,6 +139,9 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
       {:ok, final_state}
     else
+      {:defer, reason, next_state} ->
+        {:defer, reason, next_state}
+
       {:error, reason} ->
         {:error, reason, state}
 
@@ -117,6 +152,21 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   def send_frames(%__MODULE__{} = state, _frames, _context),
     do: {:error, :invalid_payload, state}
+
+  @spec apply_report(t(), Report.t()) :: t()
+  def apply_report(%__MODULE__{} = state, %Report{raw: %CLCW{} = clcw} = report) do
+    state
+    |> maybe_resync(report)
+    |> apply_report_with_status(report, clcw)
+  end
+
+  defp apply_report_with_status(state, %Report{status: :reject, seq: seq}, _clcw) do
+    handle_reject(state, seq, :reject)
+  end
+
+  defp apply_report_with_status(state, _report, clcw) do
+    apply_clcw(state, clcw)
+  end
 
   @spec apply_clcw(t(), CLCW.t()) :: t()
   def apply_clcw(%__MODULE__{enabled: false} = state, _clcw), do: state
@@ -156,13 +206,18 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
           state =
             state
             |> Map.put(:lockout, true)
+            |> emit_stream_event(:cop1_stream_lockout, reason: :max_retransmit)
+            |> emit_metric(:cop1_timeouts_total, 1)
             |> emit_command_failures(:timeout, reason: :max_retransmit)
             |> cancel_all_timers()
             |> clear_queues()
 
           state
         else
-          retransmit_frame(state, frame)
+          state
+          |> emit_metric(:cop1_timeouts_total, 1)
+          |> emit_stream_event(:cop1_timeout, seq: seq)
+          |> retransmit_frame(frame)
         end
     end
   end
@@ -176,6 +231,8 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     available = state.window_size - length(state.in_flight)
 
     if available <= 0 do
+      state = emit_stream_event(state, :cop1_window_full, reason: length(state.in_flight))
+      state = emit_metric(state, :cop1_window_full_deferrals_total, 1)
       {state, :ok}
     else
       {frames, pending} = take_pending(state.pending, available)
@@ -184,15 +241,20 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     end
   end
 
+  defp ensure_send_allowed(%__MODULE__{held: true} = state, _context) do
+    state = emit_hold_event(state, :hold_pending_resync)
+    {:defer, :hold_pending_resync, state}
+  end
+
   defp ensure_send_allowed(%__MODULE__{lockout: true} = state, %Context{} = context) do
     if bypass_mode?(context, state) do
-      :ok
+      {:ok, state}
     else
       {:error, :lockout}
     end
   end
 
-  defp ensure_send_allowed(_state, _context), do: :ok
+  defp ensure_send_allowed(%__MODULE__{} = state, _context), do: {:ok, state}
 
   defp dispatch_frames(state, frames, %Context{} = context) do
     if bypass_mode?(context, state) do
@@ -268,6 +330,38 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     end)
 
     %{state | correlation_tracker: tracker}
+  end
+
+  defp handle_reject(%__MODULE__{} = state, nil, _reason), do: state
+
+  defp handle_reject(%__MODULE__{} = state, seq, reason) do
+    {rejected, remaining} = Enum.split_with(state.in_flight, &(&1.seq == seq))
+
+    state =
+      state
+      |> cancel_timers(rejected)
+      |> Map.put(:in_flight, remaining)
+      |> set_in_flight_gauge()
+
+    Enum.reduce(rejected, state, fn frame, acc ->
+      reject_correlation(acc, frame, reason)
+    end)
+  end
+
+  defp reject_correlation(state, frame, reason) do
+    correlation_id = Map.get(frame, :correlation_id)
+
+    cond do
+      is_nil(correlation_id) ->
+        state
+
+      Map.has_key?(state.correlation_tracker, correlation_id) ->
+        emit_protocol_event(state, :rejected, correlation_id, reason: reason, seq: frame.seq)
+        %{state | correlation_tracker: Map.delete(state.correlation_tracker, correlation_id)}
+
+      true ->
+        state
+    end
   end
 
   defp apply_ack(frame, {tracker, accepted}) do
@@ -413,7 +507,9 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     timer_ref = TimeTimer.send_after(self(), {:fop_timeout, frame.seq}, state.timeout_ms)
     timers = Map.put(state.timers, frame.seq, timer_ref)
     in_flight = state.in_flight ++ [frame]
+
     %{state | in_flight: in_flight, timers: timers}
+    |> set_in_flight_gauge()
   end
 
   defp bypass_mode?(%Context{} = context, state) do
@@ -450,6 +546,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   defp maybe_handle_lockout(%{lockout: true} = state, false, _clcw) do
     state
+    |> emit_stream_event(:cop1_stream_lockout, reason: :clcw_lockout)
     |> emit_command_failures(:rejected, reason: :lockout)
     |> cancel_all_timers()
     |> clear_queues()
@@ -477,6 +574,11 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     case emit_release(state, frame, :retransmit) do
       :ok ->
         state
+        |> emit_metric(:cop1_retransmits_total, 1)
+        |> emit_stream_event(:cop1_retransmit,
+          seq: frame.seq,
+          reason: %{retry_count: frame.retries + 1}
+        )
         |> cancel_timer(frame.seq)
         |> update_retry(frame.seq)
         |> add_timer(frame.seq)
@@ -527,7 +629,8 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
         else
           {acked, remaining} = Enum.split(state.in_flight, ack_distance + 1)
           state = cancel_timers(state, acked)
-          {%{state | in_flight: remaining}, acked}
+          state = %{state | in_flight: remaining} |> set_in_flight_gauge()
+          {state, acked}
         end
     end
   end
@@ -556,6 +659,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   defp clear_queues(state) do
     %{state | pending: :queue.new(), in_flight: []}
+    |> set_in_flight_gauge()
   end
 
   defp take_pending(queue, limit) do
@@ -627,6 +731,83 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
   end
 
   defp maybe_clear_unlock_pending(state), do: state
+
+  defp maybe_resync(%__MODULE__{held: true} = state, _report) do
+    resync_state(state, :report)
+  end
+
+  defp maybe_resync(state, _report), do: state
+
+  defp emit_hold_event(%__MODULE__{hold_emitted: true} = state, _reason), do: state
+
+  defp emit_hold_event(state, reason) do
+    state
+    |> emit_stream_event(:cop1_stream_hold, reason: reason)
+    |> set_held_gauge(1)
+    |> Map.put(:hold_emitted, true)
+  end
+
+  defp emit_metric(state, metric, amount) do
+    case state.stream_id do
+      %TCStreamId{} = tc_stream_id ->
+        Metrics.inc(
+          tc_stream_id.mission_id,
+          tc_stream_id.interface_id,
+          tc_stream_id.scid,
+          tc_stream_id.vcid,
+          metric,
+          amount
+        )
+
+      _ ->
+        :ok
+    end
+
+    state
+  end
+
+  defp set_in_flight_gauge(state) do
+    set_gauge(state, :cop1_in_flight, length(state.in_flight))
+  end
+
+  defp set_held_gauge(state, value) do
+    set_gauge(state, :cop1_held, value)
+  end
+
+  defp set_gauge(state, metric, value) do
+    case state.stream_id do
+      %TCStreamId{} = tc_stream_id ->
+        Metrics.set_gauge(
+          tc_stream_id.mission_id,
+          tc_stream_id.interface_id,
+          tc_stream_id.scid,
+          tc_stream_id.vcid,
+          metric,
+          value
+        )
+
+      _ ->
+        :ok
+    end
+
+    state
+  end
+
+  defp emit_stream_event(%__MODULE__{event_fun: event_fun} = state, status, opts) do
+    if is_function(event_fun, 1) do
+      event_fun.(%{
+        mission_id: state.mission_id,
+        interface_id: state.interface_id,
+        stream_id: state.stream_id,
+        protocol: :cop1,
+        status: status,
+        reason: Keyword.get(opts, :reason),
+        seq: Keyword.get(opts, :seq)
+      })
+    end
+
+    state
+  end
 
   defp seq_distance(base, seq) do
     rem(seq - base + 256, 256)

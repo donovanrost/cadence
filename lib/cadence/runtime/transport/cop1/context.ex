@@ -4,11 +4,12 @@ defmodule Cadence.Runtime.Transport.COP1.Context do
   """
 
   alias Cadence.Runtime.Uplink.RouteDecision
+  alias Cadence.Transport.TCStreamId
 
   @type flag_value :: 0 | 1 | boolean()
 
   @type t :: %__MODULE__{
-          stream_id: term() | nil,
+          stream_id: TCStreamId.t() | nil,
           initial_seq: non_neg_integer() | nil,
           vcid: non_neg_integer() | nil,
           bypass_flag: flag_value() | nil,

@@ -615,6 +615,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         })
 
         maybe_complete_queue_entry(state, pending.entry_id, {:error, :cop1_timeout, event.reason})
+
+      _ ->
+        state
     end
   end
 
@@ -701,6 +704,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
              opts,
              aggregate_id
            ),
+         opts = Keyword.put(opts, :command_id, command.id),
          correlation_id = %{
            aggregate_id: cmd_info.aggregate_id,
            recording_id: cmd_info.recording_id,
@@ -835,6 +839,9 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         })
 
         error
+
+      {:defer, reason} ->
+        {:defer, reason}
 
       {:error, _} = error ->
         error

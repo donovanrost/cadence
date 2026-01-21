@@ -4,6 +4,7 @@ defmodule Cadence.Runtime.Uplink.FramingContext do
   """
 
   alias Cadence.Runtime.Uplink.RouteDecision
+  alias Cadence.Transport.TCStreamId
 
   @type flag_value :: 0 | 1 | boolean()
 
@@ -17,7 +18,7 @@ defmodule Cadence.Runtime.Uplink.FramingContext do
           bypass_flag: flag_value() | nil,
           control_command_flag: flag_value() | nil,
           segment_header_flag: flag_value() | nil,
-          stream_id: term() | nil,
+          stream_id: TCStreamId.t() | nil,
           initial_seq: non_neg_integer() | nil
         }
 

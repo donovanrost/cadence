@@ -5,7 +5,21 @@ defmodule Cadence.Runtime.Transport.ProtocolEvent do
 
   alias Cadence.Time, as: CadenceTime
 
-  @type status :: :accepted | :rejected | :timeout
+  @type status ::
+          :accepted
+          | :rejected
+          | :timeout
+          | :cop1_retransmit
+          | :cop1_timeout
+          | :cop1_window_full
+          | :cop1_stream_lockout
+          | :cop1_report_decode_failed
+          | :cop1_stream_hold
+          | :cop1_stream_resynced
+          | :cop1_stream_restarted
+          | :cop1_report_for_unknown_stream
+          | :tc_route_used
+          | :routing_ambiguous
 
   @type t :: %__MODULE__{
           id: String.t(),

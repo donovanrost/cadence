@@ -266,9 +266,15 @@ defmodule Cadence.Runtime.Telemetry.DownlinkPipeline do
     |> Map.put_new(:stored, false)
   end
 
-  defp maybe_ingest_clcw(%{cop1_enabled: true} = state, %{profile: :tm, ocf: ocf})
+  defp maybe_ingest_clcw(
+         %{cop1_enabled: true} = state,
+         %{profile: :tm, ocf: ocf, scid: scid, vcid: vcid}
+       )
        when is_binary(ocf) and byte_size(ocf) == 4 do
-    DownlinkHandler.ingest_tm_ocf(state.mission_id, state.interface_id, ocf)
+    DownlinkHandler.ingest_tm_ocf(state.mission_id, state.interface_id, ocf, %{
+      scid: scid,
+      vcid: vcid
+    })
   end
 
   defp maybe_ingest_clcw(_state, _frame), do: :ok
