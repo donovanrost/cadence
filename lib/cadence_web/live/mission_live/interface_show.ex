@@ -6,7 +6,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
   use CadenceWeb, :live_view
 
   alias Cadence.{Interfaces, Missions}
-  alias Cadence.Interfaces.InterfaceVcid
 
   @impl true
   def mount(_params, _session, socket) do
@@ -31,14 +30,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
       targets = Enum.map(target_interfaces, & &1.target)
       vcids = Interfaces.list_vcids_for_interface(interface)
 
-      vcid =
-        case action do
-          :new_vcid -> %InterfaceVcid{}
-          :edit_vcid -> fetch_vcid!(params["vcid_id"], interface)
-          :edit_scid -> nil
-          _ -> nil
-        end
-
       target_interface =
         case action do
           :edit_scid -> fetch_target_interface!(params["target_interface_id"], interface)
@@ -53,7 +44,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
        |> assign(:targets, targets)
        |> assign(:target_interfaces, target_interfaces)
        |> assign(:vcids, vcids)
-       |> assign(:vcid, vcid)
        |> assign(:target_interface, target_interface)}
     else
       {:error, :unauthorized} ->
@@ -71,11 +61,6 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
   end
 
   @impl true
-  def handle_info({CadenceWeb.InterfaceVcidLive.FormComponent, {:saved, _vcid}}, socket) do
-    vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
-    {:noreply, assign(socket, :vcids, vcids)}
-  end
-
   def handle_info({CadenceWeb.InterfaceTargetScidLive.FormComponent, {:saved, _mapping}}, socket) do
     target_interfaces = Interfaces.list_target_interfaces_for_interface(socket.assigns.interface)
     targets = Enum.map(target_interfaces, & &1.target)
@@ -93,36 +78,20 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
     {:noreply, assign(socket, :interface, interface)}
   end
 
-  @impl true
-  def handle_event("delete_vcid", %{"id" => vcid_id}, socket) do
-    vcid = Interfaces.get_interface_vcid!(vcid_id)
-
-    if vcid.interface_id == socket.assigns.interface.id do
-      case Interfaces.delete_interface_vcid(vcid) do
-        {:ok, _} ->
-          vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
-
-          {:noreply,
-           socket
-           |> put_flash(:info, "VCID mapping deleted")
-           |> assign(:vcids, vcids)}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to delete VCID mapping")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "VCID mapping not found")}
-    end
+  def handle_info(
+        {CadenceWeb.InterfaceLive.ProtocolConfigComponent, {:vcid_saved, _vcid}},
+        socket
+      ) do
+    vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
+    {:noreply, assign(socket, :vcids, vcids)}
   end
 
-  defp fetch_vcid!(vcid_id, interface) do
-    vcid = Interfaces.get_interface_vcid!(vcid_id)
-
-    if vcid.interface_id == interface.id do
-      vcid
-    else
-      raise ArgumentError, "VCID mapping not found"
-    end
+  def handle_info(
+        {CadenceWeb.InterfaceLive.ProtocolConfigComponent, {:vcid_deleted, _vcid}},
+        socket
+      ) do
+    vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
+    {:noreply, assign(socket, :vcids, vcids)}
   end
 
   defp fetch_target_interface!(mapping_id, interface) do
@@ -221,75 +190,10 @@ defmodule CadenceWeb.MissionLive.InterfaceShow do
         module={CadenceWeb.InterfaceLive.ProtocolConfigComponent}
         id="protocol-config"
         interface={@interface}
-      />
-
-      <div class="rounded-sm border border-base-300 bg-base-100">
-        <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-          <h3 class="text-sm font-semibold text-base-content">Virtual Channels (VCID)</h3>
-          <.link patch={~p"/missions/#{@mission}/interfaces/#{@interface}/vcids/new"}>
-            <.button id="new-interface-vcid">
-              <.icon name="hero-plus" class="-ml-0.5 mr-1.5 h-4 w-4" /> Add VCID
-            </.button>
-          </.link>
-        </div>
-        <div class="p-4">
-          <.table id="interface-vcids" rows={@vcids}>
-            <:col :let={vcid} label="VCID">{vcid.vcid}</:col>
-            <:col :let={vcid} label="Target">
-              <%= if vcid.target do %>
-                {vcid.target.identifier}
-              <% else %>
-                <span class="text-xs text-base-content/50">Default</span>
-              <% end %>
-            </:col>
-            <:col :let={vcid} label="Lane">
-              <span class="text-xs text-base-content/70">{vcid.lane || "-"}</span>
-            </:col>
-            <:col :let={vcid} label="QoS">
-              <span class="text-xs text-base-content/70">{vcid.qos || "-"}</span>
-            </:col>
-            <:col :let={vcid} label="Notes">
-              <span class="text-xs text-base-content/70">{vcid.notes || "-"}</span>
-            </:col>
-            <:action :let={vcid}>
-              <.link patch={~p"/missions/#{@mission}/interfaces/#{@interface}/vcids/#{vcid}/edit"}>
-                Edit
-              </.link>
-              <.link
-                phx-click={JS.push("delete_vcid", value: %{id: vcid.id})}
-                data-confirm="Delete this VCID mapping?"
-              >
-                Delete
-              </.link>
-            </:action>
-          </.table>
-
-          <%= if Enum.empty?(@vcids) do %>
-            <div class="text-sm text-base-content/50 pt-4">
-              No VCID mappings yet. Add one to route frames by VCID.
-            </div>
-          <% end %>
-        </div>
-      </div>
-    </div>
-
-    <.modal
-      :if={@live_action in [:new_vcid, :edit_vcid]}
-      id="interface-vcid-modal"
-      show
-      on_cancel={JS.patch(~p"/missions/#{@mission}/interfaces/#{@interface}")}
-    >
-      <.live_component
-        module={CadenceWeb.InterfaceVcidLive.FormComponent}
-        id={@vcid.id || :new}
-        title={(@live_action == :new_vcid && "New VCID Mapping") || "Edit VCID Mapping"}
-        action={if @live_action == :new_vcid, do: :new, else: :edit}
-        vcid={@vcid}
-        interface={@interface}
+        interface_vcids={@vcids}
         targets={@targets}
-        patch={~p"/missions/#{@mission}/interfaces/#{@interface}"}
       />
-    </.modal>
+    </div>
 
     <.modal
       :if={@live_action == :edit_scid}

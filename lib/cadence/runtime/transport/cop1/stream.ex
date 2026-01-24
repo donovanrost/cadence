@@ -39,9 +39,6 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
           retransmit: boolean(),
           unlock_pending: boolean(),
           last_report_value: non_neg_integer() | nil,
-          bypass_flag: 0 | 1,
-          control_command_flag: 0 | 1,
-          segment_header_flag: 0 | 1,
           correlation_tracker: map(),
           held: boolean(),
           hold_emitted: boolean()
@@ -69,9 +66,6 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     retransmit: false,
     unlock_pending: false,
     last_report_value: nil,
-    bypass_flag: 0,
-    control_command_flag: 0,
-    segment_header_flag: 0,
     correlation_tracker: %{},
     held: true,
     hold_emitted: false
@@ -512,27 +506,18 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     |> set_in_flight_gauge()
   end
 
-  defp bypass_mode?(%Context{} = context, state) do
-    bypass_flag = Context.normalize_flag(context.bypass_flag, state.bypass_flag)
-
-    control_flag =
-      Context.normalize_flag(context.control_command_flag, state.control_command_flag)
-
-    bypass = context.bypass == true
-
-    bypass_flag == 1 or control_flag == 1 or bypass
+  defp bypass_mode?(%Context{} = context, _state) do
+    # Bypass mode if:
+    # 1. context.bypass is explicitly true (per-issuance emergency bypass)
+    # 2. This is a COP-1 control command (e.g., unlock)
+    context.bypass == true or Context.control_command?(context)
   end
 
   defp prepare_context(state, %Context{} = context) do
-    context = Context.normalize_control(context)
-
+    # Set stream identity on the context
     context =
       context
       |> Context.put_if_nil(:stream_id, state.stream_id)
-      |> Context.put_if_nil(:initial_seq, state.initial_seq || 0)
-      |> Context.put_if_nil(:bypass_flag, state.bypass_flag)
-      |> Context.put_if_nil(:control_command_flag, state.control_command_flag)
-      |> Context.put_if_nil(:segment_header_flag, state.segment_header_flag)
 
     {:ok, context}
   end

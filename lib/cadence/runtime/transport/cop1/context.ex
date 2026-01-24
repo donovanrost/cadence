@@ -1,20 +1,19 @@
 defmodule Cadence.Runtime.Transport.COP1.Context do
   @moduledoc """
   COP-1 control and correlation context.
+
+  This context carries stream identity and COP-1 control information.
+  Flag fields (bypass_flag, control_command_flag, segment_header_flag) are
+  intentionally NOT included here - they are derived from segmentation config
+  at the interface level in TCFraming.
   """
 
   alias Cadence.Runtime.Uplink.RouteDecision
   alias Cadence.Transport.TCStreamId
 
-  @type flag_value :: 0 | 1 | boolean()
-
   @type t :: %__MODULE__{
           stream_id: TCStreamId.t() | nil,
-          initial_seq: non_neg_integer() | nil,
           vcid: non_neg_integer() | nil,
-          bypass_flag: flag_value() | nil,
-          control_command_flag: flag_value() | nil,
-          segment_header_flag: flag_value() | nil,
           cop1_control: :unlock | nil,
           bypass: boolean() | nil,
           correlation_id: term() | nil
@@ -22,11 +21,7 @@ defmodule Cadence.Runtime.Transport.COP1.Context do
 
   defstruct [
     :stream_id,
-    :initial_seq,
     :vcid,
-    :bypass_flag,
-    :control_command_flag,
-    :segment_header_flag,
     :cop1_control,
     :bypass,
     :correlation_id
@@ -65,26 +60,26 @@ defmodule Cadence.Runtime.Transport.COP1.Context do
     end
   end
 
-  @spec normalize_control(t()) :: t()
-  def normalize_control(%__MODULE__{} = context) do
+  @doc """
+  Returns the TC frame flags required for a COP-1 control command.
+  For :unlock, returns flags with control_command_flag=1 and bypass_flag=1.
+  For normal commands, returns nil.
+  """
+  @spec control_flags(t()) :: %{bypass_flag: 0 | 1, control_command_flag: 0 | 1} | nil
+  def control_flags(%__MODULE__{} = context) do
     case normalize_control_value(context.cop1_control) do
-      nil ->
-        context
-
-      :unlock ->
-        context
-        |> Map.put(:control_command_flag, 1)
-        |> Map.put(:bypass_flag, 1)
+      nil -> nil
+      :unlock -> %{bypass_flag: 1, control_command_flag: 1}
     end
   end
 
-  @spec normalize_flag(flag_value() | nil, non_neg_integer()) :: non_neg_integer()
-  def normalize_flag(nil, default), do: default
-  def normalize_flag(true, _default), do: 1
-  def normalize_flag(false, _default), do: 0
-  def normalize_flag(1, _default), do: 1
-  def normalize_flag(0, _default), do: 0
-  def normalize_flag(_value, default), do: default
+  @doc """
+  Returns true if this context represents a COP-1 control command (e.g., unlock).
+  """
+  @spec control_command?(t()) :: boolean()
+  def control_command?(%__MODULE__{} = context) do
+    normalize_control_value(context.cop1_control) != nil
+  end
 
   @spec normalize_control_value(term()) :: :unlock | nil
   def normalize_control_value(nil), do: nil

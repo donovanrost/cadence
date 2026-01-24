@@ -478,6 +478,9 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     vcid = Keyword.get(opts, :vcid, 0)
     tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
 
+    # Note: bypass_flag/control_command_flag/segment_header_flag are TC frame header bits
+    # and are now derived from segmentation config in TCFraming, not set on Context.
+    # Use :bypass option for per-issuance emergency bypass mode.
     framing_attrs = %{
       scid: scid,
       vcid: vcid,
@@ -488,16 +491,23 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       initial_seq: Keyword.get(opts, :initial_seq)
     }
 
+    # Convert bypass_flag to bypass boolean for COP1.Context
+    bypass =
+      case Keyword.get(opts, :bypass) do
+        nil ->
+          # Backward compat: if bypass_flag was set, treat as bypass mode
+          Keyword.get(opts, :bypass_flag) == 1
+
+        value ->
+          value
+      end
+
     cop1_attrs = %{
       stream_id: tc_stream_id,
       vcid: vcid,
-      bypass_flag: Keyword.get(opts, :bypass_flag),
-      control_command_flag: Keyword.get(opts, :control_command_flag),
-      segment_header_flag: Keyword.get(opts, :segment_header_flag),
       cop1_control: Keyword.get(opts, :cop1_control),
-      bypass: Keyword.get(opts, :bypass),
-      correlation_id: Keyword.get(opts, :correlation_id),
-      initial_seq: Keyword.get(opts, :initial_seq)
+      bypass: bypass,
+      correlation_id: Keyword.get(opts, :correlation_id)
     }
 
     {FramingContext.new(framing_attrs), Context.new(cop1_attrs), tc_stream_id}

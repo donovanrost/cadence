@@ -102,14 +102,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
       window_size: parse_window_size(cop1),
       timeout_ms: parse_timeout_ms(cop1),
       max_retransmit: parse_max_retransmit(cop1),
-      bypass_flag: parse_flag(cop1, ["bypass_flag", :bypass_flag, "bypass", :bypass], 0),
-      control_command_flag:
-        parse_flag(
-          cop1,
-          ["control_command_flag", :control_command_flag, "control_command", :control_command],
-          0
-        ),
-      segment_header_flag: parse_flag(cop1, ["segment_header_flag", :segment_header_flag], 0),
       initial_seq: parse_initial_seq(cop1),
       event_fun: event_fun
     }
@@ -261,15 +253,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
 
   defp parse_initial_seq(cop1) do
     parse_integer(fetch_value(cop1, ["initial_seq", :initial_seq])) || 0
-  end
-
-  defp parse_flag(cop1, keys, default) do
-    case fetch_value(cop1, keys) do
-      value when value in [0, 1] -> value
-      true -> 1
-      false -> 0
-      _ -> default
-    end
   end
 
   defp fetch_value(config, keys) do

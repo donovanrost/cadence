@@ -17,6 +17,7 @@ defmodule Cadence.Runtime.Uplink.TCFraming do
       :mission_id,
       :interface_id,
       :uplink_opts,
+      :segmentation_config,
       sdlp?: false,
       segmentations: %{}
     ]
@@ -47,14 +48,15 @@ defmodule Cadence.Runtime.Uplink.TCFraming do
   @impl true
   def init(opts) do
     interface = Keyword.fetch!(opts, :interface)
-    {sdlp?, uplink_opts} = init_uplink_opts(interface)
+    {sdlp?, uplink_opts, segmentation_config} = init_uplink_opts(interface)
 
     {:ok,
      %State{
        mission_id: interface.mission_id,
        interface_id: interface.id,
        sdlp?: sdlp?,
-       uplink_opts: uplink_opts
+       uplink_opts: uplink_opts,
+       segmentation_config: segmentation_config
      }}
   end
 
@@ -90,10 +92,11 @@ defmodule Cadence.Runtime.Uplink.TCFraming do
   defp init_uplink_opts(%Interface{} = interface) do
     case SDLPConfig.fetch(interface) do
       {:ok, %{opts: opts}} ->
-        {true, build_uplink_opts(opts)}
+        segmentation_config = Keyword.get(opts, :segmentation, %{})
+        {true, build_uplink_opts(opts), segmentation_config}
 
       :error ->
-        {false, nil}
+        {false, nil, %{}}
     end
   end
 
@@ -115,17 +118,41 @@ defmodule Cadence.Runtime.Uplink.TCFraming do
         {:error, :missing_vcid}
 
       true ->
+        # Derive segment_header_flag from segmentation config, with context override for
+        # emergency bypass scenarios
+        segment_header_flag = derive_segment_header_flag(context, state.segmentation_config)
+
+        # bypass_flag can be overridden per-issuance for emergency scenarios
+        bypass_flag = FramingContext.normalize_flag(context.bypass_flag, 0)
+
+        # control_command_flag is typically 0 for normal commands
+        control_command_flag = FramingContext.normalize_flag(context.control_command_flag, 0)
+
         builder_ctx = %{
           frame_size: frame_size,
           scid: scid,
           vcid: vcid,
           map_id: context.map_id,
-          bypass_flag: FramingContext.normalize_flag(context.bypass_flag, 0),
-          control_command_flag: FramingContext.normalize_flag(context.control_command_flag, 0),
-          segment_header_flag: FramingContext.normalize_flag(context.segment_header_flag, 0)
+          bypass_flag: bypass_flag,
+          control_command_flag: control_command_flag,
+          segment_header_flag: segment_header_flag
         }
 
         FrameBuilder.build_frames(pdu, builder_ctx, seg_state)
+    end
+  end
+
+  # Derives segment_header_flag from segmentation config.
+  # Context can override for emergency scenarios, but normally we derive from config.
+  defp derive_segment_header_flag(%FramingContext{} = context, segmentation_config) do
+    # If context explicitly sets segment_header_flag, use it (emergency override)
+    case context.segment_header_flag do
+      flag when flag in [0, 1] ->
+        flag
+
+      _ ->
+        # Otherwise derive from segmentation config
+        Map.get(segmentation_config, :segment_header_flag, 1)
     end
   end
 

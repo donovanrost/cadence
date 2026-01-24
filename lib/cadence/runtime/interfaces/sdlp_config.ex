@@ -6,6 +6,32 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   alias Cadence.CCSDS.SDU.Mapping
   alias Cadence.Domain.Interfaces.Entities.Interface
 
+  @type segmentation_mode :: :standard | :legacy_no_segment_header | :legacy_always_segment_header
+  @type segmentation_strategy :: :auto | :disabled
+
+  @type segmentation_config :: %{
+          optional(:strategy) => segmentation_strategy(),
+          optional(:mode) => segmentation_mode(),
+          optional(:max_segments_per_command) => pos_integer(),
+          optional(:max_command_bytes) => pos_integer()
+        }
+
+  @type tc_config :: %{
+          optional(:default_scid) => non_neg_integer(),
+          optional(:default_vcid) => non_neg_integer(),
+          optional(:max_frame_bytes) => pos_integer(),
+          optional(:segmentation) => segmentation_config()
+        }
+
+  @type uslp_config :: %{
+          optional(:default_scid) => non_neg_integer(),
+          optional(:default_vcid) => non_neg_integer(),
+          optional(:default_map_id) => non_neg_integer(),
+          optional(:max_frame_bytes) => pos_integer(),
+          optional(:map) => map(),
+          optional(:segmentation) => segmentation_config()
+        }
+
   @spec fetch(Interface.t() | map()) :: {:ok, %{mapping: Mapping.t(), opts: keyword()}} | :error
   def fetch(%Interface{} = interface), do: fetch(interface.config || %{})
 
@@ -13,12 +39,53 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
     case framing_mode(config) do
       :sdlp ->
         sdlp_config = fetch_value(config, "sdlp") || %{}
-        build_from_config(sdlp_config)
+        tc_config = fetch_value(config, "tc") || %{}
+        uslp_config = fetch_value(config, "uslp") || %{}
+        cop1_config = fetch_value(config, "cop1") || %{}
+        build_from_config(sdlp_config, tc_config, uslp_config, cop1_config)
 
       _ ->
         :error
     end
   end
+
+  @doc """
+  Extracts TC-specific configuration including segmentation settings.
+  Returns tc_config with derived segment_header_flag based on segmentation mode.
+  """
+  @spec fetch_tc_config(Interface.t() | map()) :: {:ok, tc_config()} | :error
+  def fetch_tc_config(%Interface{} = interface), do: fetch_tc_config(interface.config || %{})
+
+  def fetch_tc_config(config) when is_map(config) do
+    tc_config = fetch_value(config, "tc") || %{}
+    cop1_config = fetch_value(config, "cop1") || %{}
+    sdlp_config = fetch_value(config, "sdlp") || %{}
+
+    {:ok, build_tc_config(tc_config, cop1_config, sdlp_config)}
+  end
+
+  @doc """
+  Extracts USLP-specific configuration including MAP settings.
+  """
+  @spec fetch_uslp_config(Interface.t() | map()) :: {:ok, uslp_config()} | :error
+  def fetch_uslp_config(%Interface{} = interface), do: fetch_uslp_config(interface.config || %{})
+
+  def fetch_uslp_config(config) when is_map(config) do
+    uslp_config = fetch_value(config, "uslp") || %{}
+    {:ok, build_uslp_config(uslp_config)}
+  end
+
+  @doc """
+  Derives the segment_header_flag from segmentation mode.
+  - :standard → 1 (segment header present)
+  - :legacy_no_segment_header → 0 (no segment header)
+  - :legacy_always_segment_header → 1 (segment header present)
+  """
+  @spec segment_header_flag_from_mode(segmentation_mode()) :: 0 | 1
+  def segment_header_flag_from_mode(:standard), do: 1
+  def segment_header_flag_from_mode(:legacy_no_segment_header), do: 0
+  def segment_header_flag_from_mode(:legacy_always_segment_header), do: 1
+  def segment_header_flag_from_mode(_), do: 1
 
   defp framing_mode(config) do
     case fetch_value(config, "framing") do
@@ -28,33 +95,57 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
     end
   end
 
-  defp build_from_config(config) do
-    with {:ok, profile} <- normalize_profile(fetch_value(config, "profile")),
+  defp build_from_config(sdlp_config, tc_config, uslp_config, cop1_config) do
+    with {:ok, profile} <- normalize_profile(fetch_value(sdlp_config, "profile")),
          {:ok, uplink_profile} <-
-           normalize_uplink_profile(fetch_value(config, "uplink_profile"), profile),
-         {:ok, mapping} <- build_mapping(fetch_value(config, "sdu_mapping")),
+           normalize_uplink_profile(fetch_value(sdlp_config, "uplink_profile"), profile),
+         {:ok, mapping} <- build_mapping(fetch_value(sdlp_config, "sdu_mapping")),
          {:ok, default_sdu_type} <-
-           normalize_optional_sdu_type(fetch_value(config, "default_sdu_type")) do
+           normalize_optional_sdu_type(fetch_value(sdlp_config, "default_sdu_type")) do
       mapping = %Mapping{mapping | default: default_sdu_type}
+
+      # Build segmentation config from tc/uslp config, with cop1 backward compat
+      segmentation = build_segmentation_config(tc_config, uslp_config, cop1_config, uplink_profile)
+
+      # Get defaults from new tc/uslp config, falling back to sdlp_config for backward compat
+      uplink_scid =
+        fetch_value(tc_config, "default_scid") ||
+          fetch_value(uslp_config, "default_scid") ||
+          fetch_value(sdlp_config, "uplink_scid")
+
+      uplink_vcid =
+        fetch_value(tc_config, "default_vcid") ||
+          fetch_value(uslp_config, "default_vcid") ||
+          fetch_value(sdlp_config, "uplink_vcid")
+
+      uplink_map_id =
+        fetch_value(uslp_config, "default_map_id") ||
+          fetch_value(sdlp_config, "uplink_map_id")
+
+      max_frame_bytes =
+        fetch_value(tc_config, "max_frame_bytes") ||
+          fetch_value(uslp_config, "max_frame_bytes") ||
+          fetch_value(sdlp_config, "uplink_frame_size")
 
       opts =
         [
           profile: profile,
           uplink_profile: uplink_profile,
-          frame_size: fetch_value(config, "frame_size"),
-          uplink_frame_size: fetch_value(config, "uplink_frame_size"),
-          secondary_header_length: fetch_value(config, "secondary_header_length"),
-          ocf_length: fetch_value(config, "ocf_length"),
-          oid_validation: fetch_value(config, "oid_validation"),
-          oid_validation_prefix_bytes: fetch_value(config, "oid_validation_prefix_bytes"),
-          scid_target_map: normalize_scid_target_map(fetch_value(config, "scid_target_map")),
-          default_target_id: fetch_value(config, "default_target_id"),
-          vcid_target_map: normalize_vcid_target_map(fetch_value(config, "vcid_target_map")),
-          default_vcid_map: normalize_vcid_map(fetch_value(config, "default_vcid_map")),
-          uplink_scid: fetch_value(config, "uplink_scid"),
-          uplink_vcid: fetch_value(config, "uplink_vcid"),
-          uplink_map_id: fetch_value(config, "uplink_map_id"),
-          default_sdu_type: default_sdu_type
+          frame_size: fetch_value(sdlp_config, "frame_size"),
+          uplink_frame_size: max_frame_bytes,
+          secondary_header_length: fetch_value(sdlp_config, "secondary_header_length"),
+          ocf_length: fetch_value(sdlp_config, "ocf_length"),
+          oid_validation: fetch_value(sdlp_config, "oid_validation"),
+          oid_validation_prefix_bytes: fetch_value(sdlp_config, "oid_validation_prefix_bytes"),
+          scid_target_map: normalize_scid_target_map(fetch_value(sdlp_config, "scid_target_map")),
+          default_target_id: fetch_value(sdlp_config, "default_target_id"),
+          vcid_target_map: normalize_vcid_target_map(fetch_value(sdlp_config, "vcid_target_map")),
+          default_vcid_map: normalize_vcid_map(fetch_value(sdlp_config, "default_vcid_map")),
+          uplink_scid: uplink_scid,
+          uplink_vcid: uplink_vcid,
+          uplink_map_id: uplink_map_id,
+          default_sdu_type: default_sdu_type,
+          segmentation: segmentation
         ]
         |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
@@ -63,6 +154,104 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
       _ -> :error
     end
   end
+
+  defp build_tc_config(tc_config, cop1_config, sdlp_config) do
+    segmentation_config = fetch_value(tc_config, "segmentation") || %{}
+    mode = normalize_segmentation_mode(fetch_value(segmentation_config, "mode"), cop1_config)
+
+    %{
+      default_scid:
+        fetch_value(tc_config, "default_scid") ||
+          fetch_value(sdlp_config, "uplink_scid"),
+      default_vcid:
+        fetch_value(tc_config, "default_vcid") ||
+          fetch_value(sdlp_config, "uplink_vcid"),
+      max_frame_bytes:
+        fetch_value(tc_config, "max_frame_bytes") ||
+          fetch_value(sdlp_config, "uplink_frame_size"),
+      segmentation: %{
+        strategy: normalize_segmentation_strategy(fetch_value(segmentation_config, "strategy")),
+        mode: mode,
+        max_segments_per_command: fetch_value(segmentation_config, "max_segments_per_command"),
+        max_command_bytes: fetch_value(segmentation_config, "max_command_bytes")
+      },
+      # Derived flag based on segmentation mode
+      segment_header_flag: segment_header_flag_from_mode(mode)
+    }
+  end
+
+  defp build_uslp_config(uslp_config) do
+    segmentation_config = fetch_value(uslp_config, "segmentation") || %{}
+    map_config = fetch_value(uslp_config, "map") || %{}
+    mode = normalize_segmentation_mode(fetch_value(segmentation_config, "mode"), %{})
+
+    %{
+      default_scid: fetch_value(uslp_config, "default_scid"),
+      default_vcid: fetch_value(uslp_config, "default_vcid"),
+      default_map_id: fetch_value(uslp_config, "default_map_id"),
+      max_frame_bytes: fetch_value(uslp_config, "max_frame_bytes"),
+      map: %{
+        enabled: fetch_value(map_config, "enabled") == true,
+        allowed_map_ids: fetch_value(map_config, "allowed_map_ids") || [0]
+      },
+      segmentation: %{
+        strategy: normalize_segmentation_strategy(fetch_value(segmentation_config, "strategy")),
+        mode: mode
+      },
+      segment_header_flag: segment_header_flag_from_mode(mode)
+    }
+  end
+
+  defp build_segmentation_config(tc_config, uslp_config, cop1_config, uplink_profile) do
+    # Try tc_config first, then uslp_config based on uplink profile
+    config =
+      case uplink_profile do
+        :uslp -> fetch_value(uslp_config, "segmentation") || fetch_value(tc_config, "segmentation")
+        _ -> fetch_value(tc_config, "segmentation") || fetch_value(uslp_config, "segmentation")
+      end
+
+    config = config || %{}
+
+    mode = normalize_segmentation_mode(fetch_value(config, "mode"), cop1_config)
+
+    %{
+      strategy: normalize_segmentation_strategy(fetch_value(config, "strategy")),
+      mode: mode,
+      max_segments_per_command: fetch_value(config, "max_segments_per_command"),
+      max_command_bytes: fetch_value(config, "max_command_bytes"),
+      # Derived flag
+      segment_header_flag: segment_header_flag_from_mode(mode)
+    }
+  end
+
+  defp normalize_segmentation_strategy(nil), do: :auto
+  defp normalize_segmentation_strategy("auto"), do: :auto
+  defp normalize_segmentation_strategy(:auto), do: :auto
+  defp normalize_segmentation_strategy("disabled"), do: :disabled
+  defp normalize_segmentation_strategy(:disabled), do: :disabled
+  defp normalize_segmentation_strategy(_), do: :auto
+
+  defp normalize_segmentation_mode(nil, cop1_config) do
+    # Backward compatibility: derive from cop1 segment_header_flag if present
+    case fetch_value(cop1_config, "segment_header_flag") do
+      flag when flag in [0, "0", false, "false"] -> :legacy_no_segment_header
+      flag when flag in [1, "1", true, "true"] -> :standard
+      _ -> :standard
+    end
+  end
+
+  defp normalize_segmentation_mode("standard", _cop1), do: :standard
+  defp normalize_segmentation_mode(:standard, _cop1), do: :standard
+  defp normalize_segmentation_mode("legacy_no_segment_header", _cop1), do: :legacy_no_segment_header
+  defp normalize_segmentation_mode(:legacy_no_segment_header, _cop1), do: :legacy_no_segment_header
+
+  defp normalize_segmentation_mode("legacy_always_segment_header", _cop1),
+    do: :legacy_always_segment_header
+
+  defp normalize_segmentation_mode(:legacy_always_segment_header, _cop1),
+    do: :legacy_always_segment_header
+
+  defp normalize_segmentation_mode(_, _cop1), do: :standard
 
   defp fetch_value(config, key) when is_map(config) do
     Map.get(config, key) || Map.get(config, String.to_atom(key))

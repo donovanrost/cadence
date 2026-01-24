@@ -21,6 +21,11 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     {"USLP (Unified Space Link Protocol)", "uslp"}
   ]
 
+  @uplink_profiles [
+    {"TC (Telecommand)", "tc"},
+    {"USLP (Unified Space Link Protocol)", "uslp"}
+  ]
+
   @sdu_types [
     {"Space Packet", "space_packet"},
     {"Encapsulation Packet", "encap"}
@@ -31,44 +36,57 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     {"Uplink", "uplink"}
   ]
 
-  @cop1_modes [
-    {"Bypass", "bypass"},
-    {"FOP (Enabled)", "fop"}
+  @segmentation_strategies [
+    {"Auto (segment when needed)", "auto"},
+    {"Disabled", "disabled"}
+  ]
+
+  @segmentation_modes [
+    {"Standard (with segment header)", "standard"},
+    {"Legacy - No Segment Header", "legacy_no_segment_header"},
+    {"Legacy - Always Segment Header", "legacy_always_segment_header"}
+  ]
+
+  @cop1_restart_policies [
+    {"Hold (wait for operator)", "hold"},
+    {"Resync (automatic recovery)", "resync"}
   ]
 
   @cop1_config_drop_keys [
-    "mode",
-    :mode,
-    "enabled",
-    :enabled,
     "window_size",
     :window_size,
     "timeout_ms",
     :timeout_ms,
     "max_retransmit",
     :max_retransmit,
-    "initial_seq",
-    :initial_seq,
+    "restart_policy",
+    :restart_policy,
     "apids",
     :apids,
     "report_apids",
     :report_apids,
     "report_apid",
-    :report_apid,
-    "bypass_flag",
-    :bypass_flag,
-    "bypass",
-    :bypass,
-    "control_command_flag",
-    :control_command_flag,
-    "control_command",
-    :control_command,
-    "segment_header_flag",
-    :segment_header_flag
+    :report_apid
   ]
 
   @impl true
   def render(assigns) do
+    # Filter mappings by direction for display in separate sections
+    assigns =
+      assigns
+      |> Map.put(
+        :downlink_mappings,
+        assigns.sdu_mappings
+        |> Enum.with_index()
+        |> Enum.filter(fn {m, _idx} -> m["direction"] == "downlink" end)
+      )
+      |> Map.put(
+        :uplink_mappings,
+        assigns.sdu_mappings
+        |> Enum.with_index()
+        |> Enum.filter(fn {m, _idx} -> m["direction"] == "uplink" end)
+      )
+
     ~H"""
     <div class="space-y-6">
       <div class="rounded-sm border border-base-300 bg-base-100">
@@ -119,61 +137,79 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
               phx-target={@myself}
               class="space-y-4"
             >
-              <div class="grid grid-cols-2 gap-4">
-                <.input
-                  field={@protocol_form[:profile]}
-                  type="select"
-                  label="Profile"
-                  options={@profile_options}
-                  class="w-full select select-sm"
-                />
-
-                <.input
-                  field={@protocol_form[:default_sdu_type]}
-                  type="select"
-                  label="Default SDU Type"
-                  prompt="None (require mapping)"
-                  options={@sdu_type_options}
-                  class="w-full select select-sm"
-                />
-              </div>
-
-              <div class="grid grid-cols-3 gap-4">
-                <.input
-                  field={@protocol_form[:frame_size]}
-                  type="number"
-                  label="Frame Size (bytes)"
-                  placeholder="e.g., 1115"
-                  class="w-full input input-sm"
-                  min="0"
-                />
-
-                <.input
-                  field={@protocol_form[:secondary_header_length]}
-                  type="number"
-                  label="Secondary Header Length"
-                  placeholder="0"
-                  class="w-full input input-sm"
-                  min="0"
-                />
-
-                <.input
-                  field={@protocol_form[:ocf_length]}
-                  type="number"
-                  label="OCF Length"
-                  placeholder="0"
-                  class="w-full input input-sm"
-                  min="0"
-                />
-              </div>
-
-              <%!-- OID Validation (collapsible) --%>
-              <details class="collapse collapse-arrow border border-base-300 bg-base-200/30">
-                <summary class="collapse-title text-sm font-medium py-2 min-h-0">
-                  OID Validation
+              <%!-- Global Defaults Section --%>
+              <details open class="border border-base-300 rounded-sm bg-base-200/30">
+                <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-base-content hover:bg-base-200/50">
+                  <.icon name="hero-cog-6-tooth" class="h-4 w-4" />
+                  Global Defaults
                 </summary>
-                <div class="collapse-content">
-                  <div class="flex flex-wrap items-center gap-4 pt-2">
+                <div class="px-4 pb-4">
+                  <div class="max-w-xs">
+                    <.input
+                      field={@protocol_form[:default_sdu_type]}
+                      type="select"
+                      label="Default SDU Type"
+                      prompt="None (require mapping)"
+                      options={@sdu_type_options}
+                      class="w-full select select-sm"
+                    />
+                  </div>
+                  <p class="text-xs text-base-content/60 mt-2">
+                    Fallback SDU type when no SCID/VCID mapping matches (applies to both directions).
+                  </p>
+                </div>
+              </details>
+
+              <%!-- Downlink (Telemetry) Section --%>
+              <details open class="border border-info/30 rounded-sm bg-info/5">
+                <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-info hover:bg-info/10">
+                  <.icon name="hero-arrow-down" class="h-4 w-4" />
+                  Downlink (Telemetry)
+                </summary>
+                <div class="px-4 pb-4 space-y-4">
+                  <%!-- Profile Selection --%>
+                  <div class="max-w-xs">
+                    <.input
+                      field={@protocol_form[:profile]}
+                      type="select"
+                      label="Profile"
+                      options={@profile_options}
+                      class="w-full select select-sm"
+                    />
+                  </div>
+
+                  <%!-- Frame Settings --%>
+                  <div class="grid grid-cols-3 gap-4">
+                    <.input
+                      field={@protocol_form[:frame_size]}
+                      type="number"
+                      label="Frame Size (bytes)"
+                      placeholder="e.g., 1115"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
+
+                    <.input
+                      field={@protocol_form[:secondary_header_length]}
+                      type="number"
+                      label="Secondary Header Length"
+                      placeholder="0"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
+
+                    <.input
+                      field={@protocol_form[:ocf_length]}
+                      type="number"
+                      label="OCF Length"
+                      placeholder="0"
+                      class="w-full input input-sm"
+                      min="0"
+                    />
+                  </div>
+
+                  <%!-- OID Validation --%>
+                  <div class="flex flex-wrap items-center gap-4 pt-2 border-t border-info/20">
                     <.input
                       field={@protocol_form[:oid_validation]}
                       type="checkbox"
@@ -190,339 +226,270 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
                       />
                     <% end %>
                   </div>
+
+                  <%!-- Virtual Channels (VCID Metadata) --%>
+                  <div class="pt-2 border-t border-info/20">
+                    <div class="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 class="text-sm font-medium text-base-content">Virtual Channels</h4>
+                        <p class="text-xs text-base-content/60">
+                          Configure lane routing and QoS for each VCID (0-7).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        phx-click="add_vcid"
+                        phx-target={@myself}
+                        class="btn btn-sm btn-info btn-soft"
+                      >
+                        <.icon name="hero-plus" class="-ml-0.5 mr-1 h-4 w-4" /> Add VCID
+                      </button>
+                    </div>
+
+                    <.render_vcid_table
+                      vcids={@interface_vcids}
+                      editing_vcid_id={@editing_vcid_id}
+                      targets={@targets}
+                      myself={@myself}
+                    />
+                  </div>
+
+                  <%!-- Downlink Mappings --%>
+                  <div class="pt-2 border-t border-info/20">
+                    <div class="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 class="text-sm font-medium text-base-content">Downlink Mappings</h4>
+                        <p class="text-xs text-base-content/60">
+                          Route received frames by SCID/VCID to SDU processors.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        phx-click="add_sdu_mapping"
+                        phx-value-direction="downlink"
+                        phx-target={@myself}
+                        class="btn btn-sm btn-info btn-soft"
+                      >
+                        <.icon name="hero-plus" class="-ml-0.5 mr-1 h-4 w-4" /> Add Mapping
+                      </button>
+                    </div>
+
+                    <.render_mappings_table
+                      mappings={@downlink_mappings}
+                      show_map_id={@profile in ["aos", "uslp"]}
+                      editing_index={@editing_index}
+                      sdu_type_options={@sdu_type_options}
+                      myself={@myself}
+                      empty_message="No downlink mappings. Received frames use default SDU type."
+                    />
+                  </div>
                 </div>
               </details>
 
-              <%!-- Uplink Defaults (collapsible) --%>
-              <details class="collapse collapse-arrow border border-base-300 bg-base-200/30">
-                <summary class="collapse-title text-sm font-medium py-2 min-h-0">
-                  Uplink Defaults
+              <%!-- Uplink (Commanding) Section --%>
+              <details open class="border border-accent/30 rounded-sm bg-accent/5">
+                <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-accent hover:bg-accent/10">
+                  <.icon name="hero-arrow-up" class="h-4 w-4" />
+                  Uplink (Commanding)
                 </summary>
-                <div class="collapse-content">
-                  <p class="text-xs text-base-content/60 mb-3 pt-2">
-                    Default routing for uplink (command) frames when no mapping matches.
-                  </p>
-                  <div class="grid grid-cols-3 gap-4">
+                <div class="px-4 pb-4 space-y-4">
+                  <%!-- Profile Selection --%>
+                  <div class="max-w-xs">
                     <.input
-                      field={@protocol_form[:uplink_scid]}
-                      type="number"
-                      label="Uplink SCID"
-                      placeholder="e.g., 42"
-                      class="w-full input input-sm"
-                      min="0"
+                      field={@protocol_form[:uplink_profile]}
+                      type="select"
+                      label="Profile"
+                      options={@uplink_profile_options}
+                      class="w-full select select-sm"
                     />
+                  </div>
 
-                    <.input
-                      field={@protocol_form[:uplink_vcid]}
-                      type="number"
-                      label="Uplink VCID"
-                      placeholder="e.g., 0"
-                      class="w-full input input-sm"
-                      min="0"
-                    />
-
-                    <%= if @profile in ["aos", "uslp"] do %>
+                  <%!-- Default Addressing --%>
+                  <div>
+                    <h4 class="text-sm font-medium text-base-content mb-2">Default Addressing</h4>
+                    <p class="text-xs text-base-content/60 mb-3">
+                      Default routing for uplink (command) frames when no mapping matches.
+                    </p>
+                    <div class="grid grid-cols-3 gap-4">
                       <.input
-                        field={@protocol_form[:uplink_map_id]}
+                        field={@protocol_form[:uplink_scid]}
                         type="number"
-                        label="Uplink MAP ID"
-                        placeholder="Optional"
+                        label="SCID"
+                        placeholder="e.g., 42"
                         class="w-full input input-sm"
                         min="0"
                       />
-                    <% end %>
-                  </div>
-                </div>
-              </details>
 
-              <%!-- COP-1 (collapsible) --%>
-              <details
-                id="cop1-config"
-                class="collapse collapse-arrow border border-base-300 bg-base-200/30"
-              >
-                <summary class="collapse-title text-sm font-medium py-2 min-h-0">
-                  COP-1 (FOP)
-                </summary>
-                <div class="collapse-content space-y-4">
-                  <p class="text-xs text-base-content/60 pt-2">
-                    COP-1 requires SDLP uplink (TC framing) with `frame_size` or
-                    `uplink_frame_size` plus `uplink_vcid`.
-                  </p>
-                  <div class="grid grid-cols-2 gap-4">
-                    <.input
-                      field={@protocol_form[:cop1_mode]}
-                      type="select"
-                      label="Mode"
-                      options={@cop1_mode_options}
-                      class="w-full select select-sm"
-                    />
+                      <.input
+                        field={@protocol_form[:uplink_vcid]}
+                        type="number"
+                        label="VCID"
+                        placeholder="e.g., 0"
+                        class="w-full input input-sm"
+                        min="0"
+                      />
 
-                    <.input
-                      field={@protocol_form[:cop1_window_size]}
-                      type="number"
-                      label="Window Size"
-                      placeholder="4"
-                      class="w-full input input-sm"
-                      min="1"
-                    />
-
-                    <.input
-                      field={@protocol_form[:cop1_timeout_ms]}
-                      type="number"
-                      label="Timeout (ms)"
-                      placeholder="5000"
-                      class="w-full input input-sm"
-                      min="1"
-                    />
-
-                    <.input
-                      field={@protocol_form[:cop1_max_retransmit]}
-                      type="number"
-                      label="Max Retransmit"
-                      placeholder="3"
-                      class="w-full input input-sm"
-                      min="0"
-                    />
-
-                    <.input
-                      field={@protocol_form[:cop1_initial_seq]}
-                      type="number"
-                      label="Initial Seq"
-                      placeholder="0"
-                      class="w-full input input-sm"
-                      min="0"
-                    />
+                      <%= if @uplink_profile == "uslp" do %>
+                        <.input
+                          field={@protocol_form[:uplink_map_id]}
+                          type="number"
+                          label="MAP ID"
+                          placeholder="Optional"
+                          class="w-full input input-sm"
+                          min="0"
+                        />
+                      <% end %>
+                    </div>
                   </div>
 
-                  <div class="grid grid-cols-2 gap-4">
-                    <.input
-                      field={@protocol_form[:cop1_apids]}
-                      type="text"
-                      label="Protected APIDs"
-                      placeholder="e.g., 1, 2, 42"
-                      class="w-full input input-sm"
-                    />
+                  <%!-- Segmentation Settings --%>
+                  <div class="pt-4 border-t border-accent/20">
+                    <h4 class="text-sm font-medium text-base-content mb-2">Segmentation</h4>
+                    <p class="text-xs text-base-content/60 mb-3">
+                      Configure how commands are segmented into TC transfer frames.
+                    </p>
+                    <div class="grid grid-cols-2 gap-4">
+                      <.input
+                        field={@protocol_form[:segmentation_strategy]}
+                        type="select"
+                        label="Strategy"
+                        options={@segmentation_strategy_options}
+                        class="w-full select select-sm"
+                      />
 
-                    <.input
-                      field={@protocol_form[:cop1_report_apids]}
-                      type="text"
-                      label="Report APIDs"
-                      placeholder="e.g., 2047"
-                      class="w-full input input-sm"
-                    />
+                      <.input
+                        field={@protocol_form[:segmentation_mode]}
+                        type="select"
+                        label="Mode"
+                        options={@segmentation_mode_options}
+                        class="w-full select select-sm"
+                      />
+
+                      <.input
+                        field={@protocol_form[:max_segments_per_command]}
+                        type="number"
+                        label="Max Segments Per Command"
+                        placeholder="10"
+                        class="w-full input input-sm"
+                        min="1"
+                      />
+
+                      <.input
+                        field={@protocol_form[:max_command_bytes]}
+                        type="number"
+                        label="Max Command Bytes"
+                        placeholder="4096"
+                        class="w-full input input-sm"
+                        min="1"
+                      />
+                    </div>
+                    <p class="text-xs text-base-content/60 mt-2">
+                      Mode determines the segment header flag: "Standard" and "Legacy Always"
+                      set flag=1; "Legacy No Segment Header" sets flag=0.
+                    </p>
                   </div>
 
-                  <div class="grid grid-cols-3 gap-4">
-                    <.input
-                      field={@protocol_form[:cop1_bypass_flag]}
-                      type="checkbox"
-                      label="Bypass Flag"
-                    />
+                  <%!-- COP-1 Reliability Settings --%>
+                  <div class="pt-4 border-t border-accent/20">
+                    <h4 class="text-sm font-medium text-base-content mb-2">COP-1 Reliability</h4>
+                    <p class="text-xs text-base-content/60 mb-3">
+                      Default COP-1 (FOP) settings for command delivery reliability.
+                      Route-level cop1_mode (fop/bypass) is configured per route.
+                    </p>
+                    <div class="grid grid-cols-2 gap-4">
+                      <.input
+                        field={@protocol_form[:cop1_window_size]}
+                        type="number"
+                        label="Window Size"
+                        placeholder="4"
+                        class="w-full input input-sm"
+                        min="1"
+                      />
 
-                    <.input
-                      field={@protocol_form[:cop1_control_command_flag]}
-                      type="checkbox"
-                      label="Control Command Flag"
-                    />
+                      <.input
+                        field={@protocol_form[:cop1_timeout_ms]}
+                        type="number"
+                        label="Timeout (ms)"
+                        placeholder="5000"
+                        class="w-full input input-sm"
+                        min="1"
+                      />
 
-                    <.input
-                      field={@protocol_form[:cop1_segment_header_flag]}
-                      type="checkbox"
-                      label="Segment Header Flag"
-                    />
+                      <.input
+                        field={@protocol_form[:cop1_max_retransmit]}
+                        type="number"
+                        label="Max Retransmit"
+                        placeholder="3"
+                        class="w-full input input-sm"
+                        min="0"
+                      />
+
+                      <.input
+                        field={@protocol_form[:cop1_restart_policy]}
+                        type="select"
+                        label="Restart Policy"
+                        options={@cop1_restart_policy_options}
+                        class="w-full select select-sm"
+                      />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mt-4">
+                      <.input
+                        field={@protocol_form[:cop1_apids]}
+                        type="text"
+                        label="Protected APIDs"
+                        placeholder="e.g., 1, 2, 42"
+                        class="w-full input input-sm"
+                      />
+
+                      <.input
+                        field={@protocol_form[:cop1_report_apids]}
+                        type="text"
+                        label="Report APIDs"
+                        placeholder="e.g., 2047"
+                        class="w-full input input-sm"
+                      />
+                    </div>
+
+                    <p class="text-xs text-base-content/60 mt-2">
+                      APIDs accept comma-separated lists; leave blank to apply COP-1 to all
+                      command APIDs. Report APIDs route downlink CLCW packets into the COP-1
+                      handler.
+                    </p>
                   </div>
 
-                  <p class="text-xs text-base-content/60">
-                    APIDs accept comma-separated lists; leave blank to apply COP-1 to all
-                    command APIDs. Report APIDs route downlink CLCW packets into the COP-1
-                    handler.
-                  </p>
+                  <%!-- Uplink Mappings --%>
+                  <div class="pt-4 border-t border-accent/20">
+                    <div class="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 class="text-sm font-medium text-base-content">Uplink Mappings</h4>
+                        <p class="text-xs text-base-content/60">
+                          Route commands by SCID/VCID to SDU processors.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        phx-click="add_sdu_mapping"
+                        phx-value-direction="uplink"
+                        phx-target={@myself}
+                        class="btn btn-sm btn-accent btn-soft"
+                      >
+                        <.icon name="hero-plus" class="-ml-0.5 mr-1 h-4 w-4" /> Add Mapping
+                      </button>
+                    </div>
+
+                    <.render_mappings_table
+                      mappings={@uplink_mappings}
+                      show_map_id={@uplink_profile == "uslp"}
+                      editing_index={@editing_index}
+                      sdu_type_options={@sdu_type_options}
+                      myself={@myself}
+                      empty_message="No uplink mappings. Commands use default addressing."
+                    />
+                  </div>
                 </div>
               </details>
             </.form>
-
-            <%!-- SDU Mappings Section --%>
-            <div class="border-t border-base-300 pt-4">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <h4 class="text-sm font-semibold text-base-content">SDU Mappings</h4>
-                  <p class="text-xs text-base-content/60">
-                    Route frames by SCID/VCID to specific SDU processors.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  phx-click="add_sdu_mapping"
-                  phx-target={@myself}
-                  class="btn btn-sm btn-primary btn-soft"
-                >
-                  <.icon name="hero-plus" class="-ml-0.5 mr-1 h-4 w-4" /> Add Mapping
-                </button>
-              </div>
-
-              <%= if Enum.empty?(@sdu_mappings) do %>
-                <div class="text-sm text-base-content/50 italic py-4 text-center border border-dashed border-base-300 rounded-sm">
-                  No SDU mappings defined. Frames will use the default SDU type.
-                </div>
-              <% else %>
-                <div class="overflow-x-auto">
-                  <table class="table table-sm">
-                    <thead>
-                      <tr class="text-xs">
-                        <th>SCID</th>
-                        <th>VCID</th>
-                        <%= if @profile in ["aos", "uslp"] do %>
-                          <th>MAP ID</th>
-                        <% end %>
-                        <th>Direction</th>
-                        <th>SDU Type</th>
-                        <th class="w-20"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <%= for {mapping, index} <- Enum.with_index(@sdu_mappings) do %>
-                        <tr class="hover:bg-base-200/50">
-                          <%= if @editing_index == index do %>
-                            <%!-- Inline edit mode --%>
-                            <td>
-                              <input
-                                type="number"
-                                name="edit_scid"
-                                value={mapping["scid"]}
-                                phx-blur="update_mapping_field"
-                                phx-value-index={index}
-                                phx-value-field="scid"
-                                phx-target={@myself}
-                                class="input input-sm w-20"
-                                min="0"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                name="edit_vcid"
-                                value={mapping["vcid"]}
-                                phx-blur="update_mapping_field"
-                                phx-value-index={index}
-                                phx-value-field="vcid"
-                                phx-target={@myself}
-                                class="input input-sm w-20"
-                                min="0"
-                              />
-                            </td>
-                            <%= if @profile in ["aos", "uslp"] do %>
-                              <td>
-                                <input
-                                  type="number"
-                                  name="edit_map_id"
-                                  value={mapping["map_id"]}
-                                  phx-blur="update_mapping_field"
-                                  phx-value-index={index}
-                                  phx-value-field="map_id"
-                                  phx-target={@myself}
-                                  class="input input-sm w-20"
-                                  placeholder="-"
-                                />
-                              </td>
-                            <% end %>
-                            <td>
-                              <select
-                                name="edit_direction"
-                                phx-change="update_mapping_field"
-                                phx-value-index={index}
-                                phx-value-field="direction"
-                                phx-target={@myself}
-                                class="select select-sm w-28"
-                              >
-                                <%= for {label, value} <- @direction_options do %>
-                                  <option value={value} selected={mapping["direction"] == value}>
-                                    {label}
-                                  </option>
-                                <% end %>
-                              </select>
-                            </td>
-                            <td>
-                              <select
-                                name="edit_type"
-                                phx-change="update_mapping_field"
-                                phx-value-index={index}
-                                phx-value-field="type"
-                                phx-target={@myself}
-                                class="select select-sm w-32"
-                              >
-                                <%= for {label, value} <- @sdu_type_options do %>
-                                  <option value={value} selected={mapping["type"] == value}>
-                                    {label}
-                                  </option>
-                                <% end %>
-                              </select>
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                phx-click="finish_editing"
-                                phx-target={@myself}
-                                class="btn btn-ghost btn-sm btn-square"
-                                title="Done editing"
-                              >
-                                <.icon name="hero-check" class="h-4 w-4 text-success" />
-                              </button>
-                            </td>
-                          <% else %>
-                            <%!-- Read mode --%>
-                            <td class="font-mono text-sm">{mapping["scid"]}</td>
-                            <td class="font-mono text-sm">{mapping["vcid"]}</td>
-                            <%= if @profile in ["aos", "uslp"] do %>
-                              <td class="font-mono text-sm text-base-content/60">
-                                {mapping["map_id"] || "-"}
-                              </td>
-                            <% end %>
-                            <td>
-                              <span class={[
-                                "text-xs",
-                                mapping["direction"] == "uplink" && "text-accent",
-                                mapping["direction"] == "downlink" && "text-info"
-                              ]}>
-                                <%= if mapping["direction"] == "uplink" do %>
-                                  <.icon name="hero-arrow-up" class="h-3 w-3 inline" /> Up
-                                <% else %>
-                                  <.icon name="hero-arrow-down" class="h-3 w-3 inline" /> Down
-                                <% end %>
-                              </span>
-                            </td>
-                            <td class="text-sm">{format_sdu_type(mapping["type"])}</td>
-                            <td>
-                              <div class="flex gap-1">
-                                <button
-                                  type="button"
-                                  phx-click="edit_mapping"
-                                  phx-value-index={index}
-                                  phx-target={@myself}
-                                  class="btn btn-ghost btn-sm btn-square"
-                                  title="Edit"
-                                >
-                                  <.icon name="hero-pencil" class="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  phx-click="delete_mapping"
-                                  phx-value-index={index}
-                                  phx-target={@myself}
-                                  class="btn btn-ghost btn-sm btn-square text-error"
-                                  title="Delete"
-                                >
-                                  <.icon name="hero-trash" class="h-4 w-4" />
-                                </button>
-                              </div>
-                            </td>
-                          <% end %>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                </div>
-              <% end %>
-            </div>
 
             <%!-- Save Button --%>
             <div class="flex justify-end pt-2 border-t border-base-300">
@@ -548,130 +515,474 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     """
   end
 
+  defp render_mappings_table(assigns) do
+    ~H"""
+    <%= if Enum.empty?(@mappings) do %>
+      <div class="text-sm text-base-content/50 italic py-4 text-center border border-dashed border-base-300 rounded-sm">
+        {@empty_message}
+      </div>
+    <% else %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr class="text-xs">
+              <th>SCID</th>
+              <th>VCID</th>
+              <%= if @show_map_id do %>
+                <th>MAP ID</th>
+              <% end %>
+              <th>SDU Type</th>
+              <th class="w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <%= for {mapping, original_index} <- @mappings do %>
+              <tr class="hover:bg-base-200/50">
+                <%= if @editing_index == original_index do %>
+                  <%!-- Inline edit mode --%>
+                  <td>
+                    <input
+                      type="number"
+                      name="edit_scid"
+                      value={mapping["scid"]}
+                      phx-blur="update_mapping_field"
+                      phx-value-index={original_index}
+                      phx-value-field="scid"
+                      phx-target={@myself}
+                      class="input input-sm w-20"
+                      min="0"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      name="edit_vcid"
+                      value={mapping["vcid"]}
+                      phx-blur="update_mapping_field"
+                      phx-value-index={original_index}
+                      phx-value-field="vcid"
+                      phx-target={@myself}
+                      class="input input-sm w-20"
+                      min="0"
+                    />
+                  </td>
+                  <%= if @show_map_id do %>
+                    <td>
+                      <input
+                        type="number"
+                        name="edit_map_id"
+                        value={mapping["map_id"]}
+                        phx-blur="update_mapping_field"
+                        phx-value-index={original_index}
+                        phx-value-field="map_id"
+                        phx-target={@myself}
+                        class="input input-sm w-20"
+                        placeholder="-"
+                      />
+                    </td>
+                  <% end %>
+                  <td>
+                    <select
+                      name="edit_type"
+                      phx-change="update_mapping_field"
+                      phx-value-index={original_index}
+                      phx-value-field="type"
+                      phx-target={@myself}
+                      class="select select-sm w-32"
+                    >
+                      <%= for {label, value} <- @sdu_type_options do %>
+                        <option value={value} selected={mapping["type"] == value}>
+                          {label}
+                        </option>
+                      <% end %>
+                    </select>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      phx-click="finish_editing"
+                      phx-target={@myself}
+                      class="btn btn-ghost btn-sm btn-square"
+                      title="Done editing"
+                    >
+                      <.icon name="hero-check" class="h-4 w-4 text-success" />
+                    </button>
+                  </td>
+                <% else %>
+                  <%!-- Read mode --%>
+                  <td class="font-mono text-sm">{mapping["scid"]}</td>
+                  <td class="font-mono text-sm">{mapping["vcid"]}</td>
+                  <%= if @show_map_id do %>
+                    <td class="font-mono text-sm text-base-content/60">
+                      {mapping["map_id"] || "-"}
+                    </td>
+                  <% end %>
+                  <td class="text-sm">{format_sdu_type(mapping["type"])}</td>
+                  <td>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        phx-click="edit_mapping"
+                        phx-value-index={original_index}
+                        phx-target={@myself}
+                        class="btn btn-ghost btn-sm btn-square"
+                        title="Edit"
+                      >
+                        <.icon name="hero-pencil" class="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="delete_mapping"
+                        phx-value-index={original_index}
+                        phx-target={@myself}
+                        class="btn btn-ghost btn-sm btn-square text-error"
+                        title="Delete"
+                      >
+                        <.icon name="hero-trash" class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                <% end %>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+    """
+  end
+
+  defp render_vcid_table(assigns) do
+    ~H"""
+    <%= if Enum.empty?(@vcids) do %>
+      <div class="text-sm text-base-content/50 italic py-4 text-center border border-dashed border-base-300 rounded-sm">
+        No virtual channel mappings. Add one to configure lane routing by VCID.
+      </div>
+    <% else %>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead>
+            <tr class="text-xs">
+              <th>VCID</th>
+              <th>Target</th>
+              <th>Lane</th>
+              <th>QoS</th>
+              <th>Notes</th>
+              <th class="w-20"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <%= for vcid <- @vcids do %>
+              <tr class="hover:bg-base-200/50">
+                <%= if @editing_vcid_id == vcid.id do %>
+                  <%!-- Inline edit mode --%>
+                  <td>
+                    <input
+                      type="number"
+                      name="edit_vcid_number"
+                      value={vcid.vcid}
+                      phx-blur="update_vcid_field"
+                      phx-value-id={vcid.id}
+                      phx-value-field="vcid"
+                      phx-target={@myself}
+                      class="input input-sm w-16"
+                      min="0"
+                      max="7"
+                    />
+                  </td>
+                  <td>
+                    <select
+                      name={"edit_vcid_target_#{vcid.id}"}
+                      phx-change="update_vcid_field"
+                      phx-target={@myself}
+                      class="select select-sm w-32"
+                    >
+                      <option value="">Default</option>
+                      <%= for target <- @targets do %>
+                        <option value={target.id} selected={vcid.target_id == target.id}>
+                          {target.identifier}
+                        </option>
+                      <% end %>
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="edit_vcid_lane"
+                      value={vcid.lane}
+                      phx-blur="update_vcid_field"
+                      phx-value-id={vcid.id}
+                      phx-value-field="lane"
+                      phx-target={@myself}
+                      class="input input-sm w-24"
+                      placeholder="e.g., realtime"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="edit_vcid_qos"
+                      value={vcid.qos}
+                      phx-blur="update_vcid_field"
+                      phx-value-id={vcid.id}
+                      phx-value-field="qos"
+                      phx-target={@myself}
+                      class="input input-sm w-20"
+                      placeholder="e.g., high"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      name="edit_vcid_notes"
+                      value={vcid.notes}
+                      phx-blur="update_vcid_field"
+                      phx-value-id={vcid.id}
+                      phx-value-field="notes"
+                      phx-target={@myself}
+                      class="input input-sm w-32"
+                      placeholder="Notes..."
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      phx-click="finish_editing_vcid"
+                      phx-target={@myself}
+                      class="btn btn-ghost btn-sm btn-square"
+                      title="Done editing"
+                    >
+                      <.icon name="hero-check" class="h-4 w-4 text-success" />
+                    </button>
+                  </td>
+                <% else %>
+                  <%!-- Read mode --%>
+                  <td class="font-mono text-sm">{vcid.vcid}</td>
+                  <td class="text-sm">
+                    <%= if vcid.target do %>
+                      {vcid.target.identifier}
+                    <% else %>
+                      <span class="text-base-content/50">Default</span>
+                    <% end %>
+                  </td>
+                  <td class="text-sm text-base-content/70">{vcid.lane || "-"}</td>
+                  <td class="text-sm text-base-content/70">{vcid.qos || "-"}</td>
+                  <td class="text-sm text-base-content/70 truncate max-w-[120px]">
+                    {vcid.notes || "-"}
+                  </td>
+                  <td>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        phx-click="edit_vcid"
+                        phx-value-id={vcid.id}
+                        phx-target={@myself}
+                        class="btn btn-ghost btn-sm btn-square"
+                        title="Edit"
+                      >
+                        <.icon name="hero-pencil" class="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="delete_vcid"
+                        phx-value-id={vcid.id}
+                        phx-target={@myself}
+                        class="btn btn-ghost btn-sm btn-square text-error"
+                        title="Delete"
+                        data-confirm="Delete this VCID mapping?"
+                      >
+                        <.icon name="hero-trash" class="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                <% end %>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+    """
+  end
+
   @impl true
   def update(%{interface: interface} = assigns, socket) do
     config = interface.config || %{}
+    parsed = parse_interface_config(config)
+
+    # Check if this is initial mount or a subsequent update
+    is_initial = not Map.has_key?(socket.assigns, :original_config)
+
+    socket =
+      socket
+      |> assign(assigns)
+      |> assign_new(:interface_vcids, fn -> [] end)
+      |> assign_new(:targets, fn -> [] end)
+      |> assign_options()
+
+    socket =
+      if is_initial do
+        # Full initialization on first mount
+        socket
+        |> assign_sdlp_config(parsed)
+        |> assign_segmentation_config(parsed)
+        |> assign_cop1_config(parsed)
+        |> assign(:editing_index, nil)
+        |> assign(:editing_vcid_id, nil)
+        |> assign(:has_changes, false)
+        |> assign(:saving, false)
+        |> assign(:original_config, config)
+        |> assign_form()
+      else
+        # Preserve UI state on subsequent updates (e.g., when vcids change)
+        socket
+      end
+
+    {:ok, socket}
+  end
+
+  defp parse_interface_config(config) do
     sdlp_config = fetch_config_map(config, ["sdlp", :sdlp])
+    tc_config = fetch_config_map(config, ["tc", :tc])
+    uslp_config = fetch_config_map(config, ["uslp", :uslp])
     cop1_value = fetch_config_value(config, ["cop1", :cop1])
     cop1_config = if is_map(cop1_value), do: cop1_value, else: %{}
 
     framing = fetch_config_value(config, ["framing", :framing])
     sdlp_enabled = framing in ["sdlp", :sdlp]
-    cop1_mode = cop1_mode_from_config(cop1_value)
 
-    {:ok,
-     socket
-     |> assign(assigns)
-     |> assign(:profile_options, @profiles)
-     |> assign(:sdu_type_options, @sdu_types)
-     |> assign(:direction_options, @directions)
-     |> assign(:cop1_mode_options, @cop1_modes)
-     |> assign(:sdlp_enabled, sdlp_enabled)
-     |> assign(:profile, fetch_config_value(sdlp_config, ["profile", :profile]) || "tm")
-     |> assign(
-       :default_sdu_type,
-       fetch_config_value(sdlp_config, ["default_sdu_type", :default_sdu_type])
-     )
-     |> assign(
-       :frame_size,
-       parse_int(fetch_config_value(sdlp_config, ["frame_size", :frame_size]))
-     )
-     |> assign(
-       :secondary_header_length,
-       parse_int(
-         fetch_config_value(sdlp_config, ["secondary_header_length", :secondary_header_length])
-       )
-     )
-     |> assign(
-       :ocf_length,
-       parse_int(fetch_config_value(sdlp_config, ["ocf_length", :ocf_length]))
-     )
-     |> assign(
-       :oid_validation,
-       parse_bool(fetch_config_value(sdlp_config, ["oid_validation", :oid_validation]))
-     )
-     |> assign(
-       :oid_validation_prefix_bytes,
-       parse_int(
-         fetch_config_value(sdlp_config, [
-           "oid_validation_prefix_bytes",
-           :oid_validation_prefix_bytes
-         ])
-       )
-     )
-     |> assign(
-       :uplink_scid,
-       parse_int(fetch_config_value(sdlp_config, ["uplink_scid", :uplink_scid]))
-     )
-     |> assign(
-       :uplink_vcid,
-       parse_int(fetch_config_value(sdlp_config, ["uplink_vcid", :uplink_vcid]))
-     )
-     |> assign(
-       :uplink_map_id,
-       parse_int(fetch_config_value(sdlp_config, ["uplink_map_id", :uplink_map_id]))
-     )
-     |> assign(
-       :sdu_mappings,
-       fetch_config_value(sdlp_config, ["sdu_mapping", :sdu_mapping]) || []
-     )
-     |> assign(:cop1_mode, cop1_mode)
-     |> assign(
-       :cop1_window_size,
-       parse_int(fetch_config_value(cop1_config, ["window_size", :window_size]))
-     )
-     |> assign(
-       :cop1_timeout_ms,
-       parse_int(fetch_config_value(cop1_config, ["timeout_ms", :timeout_ms]))
-     )
-     |> assign(
-       :cop1_max_retransmit,
-       parse_int(fetch_config_value(cop1_config, ["max_retransmit", :max_retransmit]))
-     )
-     |> assign(
-       :cop1_initial_seq,
-       parse_int(fetch_config_value(cop1_config, ["initial_seq", :initial_seq]))
-     )
-     |> assign(:cop1_apids, apids_to_string(fetch_config_value(cop1_config, ["apids", :apids])))
-     |> assign(
-       :cop1_report_apids,
-       apids_to_string(
-         fetch_config_value(cop1_config, [
-           "report_apids",
-           :report_apids,
-           "report_apid",
-           :report_apid
-         ])
-       )
-     )
-     |> assign(
-       :cop1_bypass_flag,
-       flag_enabled?(
-         fetch_config_value(cop1_config, ["bypass_flag", :bypass_flag, "bypass", :bypass])
-       )
-     )
-     |> assign(
-       :cop1_control_command_flag,
-       flag_enabled?(
-         fetch_config_value(cop1_config, [
-           "control_command_flag",
-           :control_command_flag,
-           "control_command",
-           :control_command
-         ])
-       )
-     )
-     |> assign(
-       :cop1_segment_header_flag,
-       flag_enabled?(
-         fetch_config_value(cop1_config, ["segment_header_flag", :segment_header_flag])
-       )
-     )
-     |> assign(:editing_index, nil)
-     |> assign(:has_changes, false)
-     |> assign(:saving, false)
-     |> assign(:original_config, config)
-     |> assign_form()}
+    tc_segmentation = fetch_config_map(tc_config, ["segmentation", :segmentation])
+    uslp_segmentation = fetch_config_map(uslp_config, ["segmentation", :segmentation])
+
+    segmentation_config =
+      if map_size(tc_segmentation) > 0, do: tc_segmentation, else: uslp_segmentation
+
+    %{
+      sdlp_config: sdlp_config,
+      tc_config: tc_config,
+      uslp_config: uslp_config,
+      cop1_config: cop1_config,
+      segmentation_config: segmentation_config,
+      sdlp_enabled: sdlp_enabled
+    }
+  end
+
+  defp assign_options(socket) do
+    socket
+    |> assign(:profile_options, @profiles)
+    |> assign(:uplink_profile_options, @uplink_profiles)
+    |> assign(:sdu_type_options, @sdu_types)
+    |> assign(:direction_options, @directions)
+    |> assign(:segmentation_strategy_options, @segmentation_strategies)
+    |> assign(:segmentation_mode_options, @segmentation_modes)
+    |> assign(:cop1_restart_policy_options, @cop1_restart_policies)
+  end
+
+  defp assign_sdlp_config(socket, parsed) do
+    %{sdlp_config: sdlp, tc_config: tc, uslp_config: uslp, sdlp_enabled: sdlp_enabled} = parsed
+
+    socket
+    |> assign(:sdlp_enabled, sdlp_enabled)
+    |> assign(:profile, fetch_config_value(sdlp, ["profile", :profile]) || "tm")
+    |> assign(:default_sdu_type, fetch_config_value(sdlp, ["default_sdu_type", :default_sdu_type]))
+    |> assign(:frame_size, parse_int(fetch_config_value(sdlp, ["frame_size", :frame_size])))
+    |> assign(
+      :secondary_header_length,
+      parse_int(fetch_config_value(sdlp, ["secondary_header_length", :secondary_header_length]))
+    )
+    |> assign(:ocf_length, parse_int(fetch_config_value(sdlp, ["ocf_length", :ocf_length])))
+    |> assign(
+      :oid_validation,
+      parse_bool(fetch_config_value(sdlp, ["oid_validation", :oid_validation]))
+    )
+    |> assign(
+      :oid_validation_prefix_bytes,
+      parse_int(fetch_config_value(sdlp, ["oid_validation_prefix_bytes", :oid_validation_prefix_bytes]))
+    )
+    |> assign(
+      :uplink_scid,
+      parse_int(
+        fetch_config_value(tc, ["default_scid", :default_scid]) ||
+          fetch_config_value(sdlp, ["uplink_scid", :uplink_scid])
+      )
+    )
+    |> assign(
+      :uplink_vcid,
+      parse_int(
+        fetch_config_value(tc, ["default_vcid", :default_vcid]) ||
+          fetch_config_value(sdlp, ["uplink_vcid", :uplink_vcid])
+      )
+    )
+    |> assign(
+      :uplink_map_id,
+      parse_int(
+        fetch_config_value(uslp, ["default_map_id", :default_map_id]) ||
+          fetch_config_value(sdlp, ["uplink_map_id", :uplink_map_id])
+      )
+    )
+    |> assign(:sdu_mappings, fetch_config_value(sdlp, ["sdu_mapping", :sdu_mapping]) || [])
+    |> assign(
+      :uplink_profile,
+      fetch_config_value(sdlp, ["uplink_profile", :uplink_profile]) || "tc"
+    )
+  end
+
+  defp assign_segmentation_config(socket, parsed) do
+    %{segmentation_config: seg, cop1_config: cop1} = parsed
+    segmentation_mode = derive_segmentation_mode(seg, cop1)
+
+    socket
+    |> assign(:segmentation_strategy, fetch_config_value(seg, ["strategy", :strategy]) || "auto")
+    |> assign(:segmentation_mode, segmentation_mode)
+    |> assign(
+      :max_segments_per_command,
+      parse_int(fetch_config_value(seg, ["max_segments_per_command", :max_segments_per_command]))
+    )
+    |> assign(
+      :max_command_bytes,
+      parse_int(fetch_config_value(seg, ["max_command_bytes", :max_command_bytes]))
+    )
+  end
+
+  defp assign_cop1_config(socket, parsed) do
+    %{cop1_config: cop1} = parsed
+
+    socket
+    |> assign(:cop1_window_size, parse_int(fetch_config_value(cop1, ["window_size", :window_size])))
+    |> assign(:cop1_timeout_ms, parse_int(fetch_config_value(cop1, ["timeout_ms", :timeout_ms])))
+    |> assign(
+      :cop1_max_retransmit,
+      parse_int(fetch_config_value(cop1, ["max_retransmit", :max_retransmit]))
+    )
+    |> assign(
+      :cop1_restart_policy,
+      fetch_config_value(cop1, ["restart_policy", :restart_policy]) || "hold"
+    )
+    |> assign(:cop1_apids, apids_to_string(fetch_config_value(cop1, ["apids", :apids])))
+    |> assign(
+      :cop1_report_apids,
+      apids_to_string(
+        fetch_config_value(cop1, ["report_apids", :report_apids, "report_apid", :report_apid])
+      )
+    )
+  end
+
+  # Derive segmentation mode from config with backward compatibility for old cop1 flags
+  defp derive_segmentation_mode(segmentation_config, cop1_config) do
+    case fetch_config_value(segmentation_config, ["mode", :mode]) do
+      nil ->
+        # Backward compatibility: derive from cop1 segment_header_flag
+        case fetch_config_value(cop1_config, ["segment_header_flag", :segment_header_flag]) do
+          flag when flag in [0, "0", false, "false"] -> "legacy_no_segment_header"
+          _ -> "standard"
+        end
+
+      mode when is_binary(mode) ->
+        mode
+
+      mode when is_atom(mode) ->
+        Atom.to_string(mode)
+    end
   end
 
   @impl true
@@ -692,12 +1003,14 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     {:noreply, update_protocol_assigns(socket, params)}
   end
 
-  def handle_event("add_sdu_mapping", _params, socket) do
+  def handle_event("add_sdu_mapping", params, socket) do
+    direction = params["direction"] || "downlink"
+
     new_mapping = %{
       "scid" => nil,
       "vcid" => nil,
       "map_id" => nil,
-      "direction" => "downlink",
+      "direction" => direction,
       "type" => "space_packet"
     }
 
@@ -765,6 +1078,84 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
      |> assign(:has_changes, true)}
   end
 
+  # VCID Event Handlers
+
+  def handle_event("add_vcid", _params, socket) do
+    interface = socket.assigns.interface
+
+    attrs = %{
+      "vcid" => next_available_vcid(socket.assigns.interface_vcids)
+    }
+
+    case Interfaces.create_interface_vcid(interface, attrs) do
+      {:ok, vcid} ->
+        vcids = Interfaces.list_vcids_for_interface(interface)
+        notify_parent({:vcid_saved, vcid})
+
+        {:noreply,
+         socket
+         |> assign(:interface_vcids, vcids)
+         |> assign(:editing_vcid_id, vcid.id)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to add VCID")}
+    end
+  end
+
+  def handle_event("edit_vcid", %{"id" => id}, socket) do
+    {:noreply, assign(socket, :editing_vcid_id, id)}
+  end
+
+  def handle_event("finish_editing_vcid", _params, socket) do
+    {:noreply, assign(socket, :editing_vcid_id, nil)}
+  end
+
+  # Handle phx-blur events (input fields) with explicit id/field/value params
+  def handle_event("update_vcid_field", %{"id" => id, "field" => field, "value" => value}, socket) do
+    do_update_vcid_field(socket, id, field, value)
+  end
+
+  # Handle phx-change events (select fields) where value comes from form params
+  def handle_event("update_vcid_field", params, socket) do
+    # Extract field name from _target (e.g., ["edit_vcid_target"] -> "target_id")
+    [target_name] = params["_target"]
+
+    {id, field} =
+      case target_name do
+        "edit_vcid_target_" <> id -> {id, "target_id"}
+        _ -> {nil, nil}
+      end
+
+    if id do
+      value = params[target_name]
+      do_update_vcid_field(socket, id, field, value)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("delete_vcid", %{"id" => id}, socket) do
+    vcid = Interfaces.get_interface_vcid!(id)
+
+    if vcid.interface_id == socket.assigns.interface.id do
+      case Interfaces.delete_interface_vcid(vcid) do
+        {:ok, _} ->
+          vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
+          notify_parent({:vcid_deleted, vcid})
+
+          {:noreply,
+           socket
+           |> assign(:interface_vcids, vcids)
+           |> assign(:editing_vcid_id, nil)}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to delete VCID")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "VCID not found")}
+    end
+  end
+
   def handle_event("save_config", _params, socket) do
     socket = assign(socket, :saving, true)
 
@@ -792,6 +1183,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
   defp update_protocol_assigns(socket, params) do
     socket
     |> assign(:profile, params["profile"] || socket.assigns.profile)
+    |> assign(:uplink_profile, params["uplink_profile"] || socket.assigns.uplink_profile)
     |> assign(:default_sdu_type, empty_to_nil(params["default_sdu_type"]))
     |> assign(:frame_size, parse_int(params["frame_size"]))
     |> assign(:secondary_header_length, parse_int(params["secondary_header_length"]))
@@ -801,16 +1193,27 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     |> assign(:uplink_scid, parse_int(params["uplink_scid"]))
     |> assign(:uplink_vcid, parse_int(params["uplink_vcid"]))
     |> assign(:uplink_map_id, parse_int(params["uplink_map_id"]))
-    |> assign(:cop1_mode, params["cop1_mode"] || socket.assigns.cop1_mode || "bypass")
+    # Segmentation settings
+    |> assign(
+      :segmentation_strategy,
+      params["segmentation_strategy"] || socket.assigns.segmentation_strategy || "auto"
+    )
+    |> assign(
+      :segmentation_mode,
+      params["segmentation_mode"] || socket.assigns.segmentation_mode || "standard"
+    )
+    |> assign(:max_segments_per_command, parse_int(params["max_segments_per_command"]))
+    |> assign(:max_command_bytes, parse_int(params["max_command_bytes"]))
+    # COP-1 reliability settings
     |> assign(:cop1_window_size, parse_int(params["cop1_window_size"]))
     |> assign(:cop1_timeout_ms, parse_int(params["cop1_timeout_ms"]))
     |> assign(:cop1_max_retransmit, parse_int(params["cop1_max_retransmit"]))
-    |> assign(:cop1_initial_seq, parse_int(params["cop1_initial_seq"]))
+    |> assign(
+      :cop1_restart_policy,
+      params["cop1_restart_policy"] || socket.assigns.cop1_restart_policy || "hold"
+    )
     |> assign(:cop1_apids, normalize_apids_input(params["cop1_apids"]))
     |> assign(:cop1_report_apids, normalize_apids_input(params["cop1_report_apids"]))
-    |> assign(:cop1_bypass_flag, parse_bool(params["cop1_bypass_flag"]))
-    |> assign(:cop1_control_command_flag, parse_bool(params["cop1_control_command_flag"]))
-    |> assign(:cop1_segment_header_flag, parse_bool(params["cop1_segment_header_flag"]))
     |> assign(:has_changes, true)
     |> assign_form()
   end
@@ -823,35 +1226,100 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
         sdlp_config =
           %{
             "profile" => assigns.profile,
+            "uplink_profile" => assigns.uplink_profile,
             "default_sdu_type" => assigns.default_sdu_type,
             "frame_size" => assigns.frame_size,
             "secondary_header_length" => assigns.secondary_header_length,
             "ocf_length" => assigns.ocf_length,
             "oid_validation" => assigns.oid_validation,
             "oid_validation_prefix_bytes" => assigns.oid_validation_prefix_bytes,
-            "uplink_scid" => assigns.uplink_scid,
-            "uplink_vcid" => assigns.uplink_vcid,
-            "uplink_map_id" => assigns.uplink_map_id,
             "sdu_mapping" => filter_valid_mappings(assigns.sdu_mappings)
           }
           |> Enum.reject(fn {_k, v} -> is_nil(v) end)
           |> Map.new()
+
+        # Build TC config with segmentation
+        tc_config = build_tc_section_config(assigns)
+
+        # Build USLP config if profile is uslp or aos
+        uslp_config =
+          if assigns.profile in ["uslp", "aos"] do
+            build_uslp_section_config(assigns)
+          else
+            nil
+          end
 
         base_config
         |> Map.put("framing", "sdlp")
         |> Map.delete(:framing)
         |> Map.put("sdlp", sdlp_config)
         |> Map.delete(:sdlp)
+        |> put_non_nil("tc", tc_config)
+        |> Map.delete(:tc)
+        |> put_non_nil("uslp", uslp_config)
+        |> Map.delete(:uslp)
       else
         base_config
         |> Map.delete("framing")
         |> Map.delete(:framing)
         |> Map.delete("sdlp")
         |> Map.delete(:sdlp)
+        |> Map.delete("tc")
+        |> Map.delete(:tc)
+        |> Map.delete("uslp")
+        |> Map.delete(:uslp)
       end
 
     put_cop1_config(base_config, assigns)
   end
+
+  defp build_tc_section_config(assigns) do
+    segmentation =
+      %{
+        "strategy" => assigns.segmentation_strategy,
+        "mode" => assigns.segmentation_mode,
+        "max_segments_per_command" => assigns.max_segments_per_command,
+        "max_command_bytes" => assigns.max_command_bytes
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+
+    config =
+      %{
+        "default_scid" => assigns.uplink_scid,
+        "default_vcid" => assigns.uplink_vcid,
+        "segmentation" => if(map_size(segmentation) > 0, do: segmentation, else: nil)
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+
+    if map_size(config) > 0, do: config, else: nil
+  end
+
+  defp build_uslp_section_config(assigns) do
+    segmentation =
+      %{
+        "strategy" => assigns.segmentation_strategy,
+        "mode" => assigns.segmentation_mode
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+
+    config =
+      %{
+        "default_scid" => assigns.uplink_scid,
+        "default_vcid" => assigns.uplink_vcid,
+        "default_map_id" => assigns.uplink_map_id,
+        "segmentation" => if(map_size(segmentation) > 0, do: segmentation, else: nil)
+      }
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
+
+    if map_size(config) > 0, do: config, else: nil
+  end
+
+  defp put_non_nil(map, _key, nil), do: map
+  defp put_non_nil(map, key, value), do: Map.put(map, key, value)
 
   defp put_cop1_config(base_config, assigns) do
     cop1_existing =
@@ -860,25 +1328,43 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
         _ -> %{}
       end
 
+    # Build new COP-1 config with only reliability settings
     cop1_updates =
       %{
-        "mode" => assigns.cop1_mode,
         "window_size" => assigns.cop1_window_size,
         "timeout_ms" => assigns.cop1_timeout_ms,
         "max_retransmit" => assigns.cop1_max_retransmit,
-        "initial_seq" => assigns.cop1_initial_seq,
+        "restart_policy" => assigns.cop1_restart_policy,
         "apids" => parse_apids_input(assigns.cop1_apids),
-        "report_apids" => parse_apids_input(assigns.cop1_report_apids),
-        "bypass_flag" => bool_to_flag(assigns.cop1_bypass_flag),
-        "control_command_flag" => bool_to_flag(assigns.cop1_control_command_flag),
-        "segment_header_flag" => bool_to_flag(assigns.cop1_segment_header_flag)
+        "report_apids" => parse_apids_input(assigns.cop1_report_apids)
       }
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
       |> Map.new()
 
+    # Remove old flag fields and other deprecated keys from existing config
+    deprecated_keys = [
+      "mode",
+      :mode,
+      "enabled",
+      :enabled,
+      "initial_seq",
+      :initial_seq,
+      "bypass_flag",
+      :bypass_flag,
+      "bypass",
+      :bypass,
+      "control_command_flag",
+      :control_command_flag,
+      "control_command",
+      :control_command,
+      "segment_header_flag",
+      :segment_header_flag
+    ]
+
     cop1_config =
       cop1_existing
       |> drop_config_keys(@cop1_config_drop_keys)
+      |> drop_config_keys(deprecated_keys)
       |> Map.merge(cop1_updates)
 
     if map_size(cop1_config) == 0 do
@@ -896,9 +1382,34 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     assign(socket, :protocol_form, to_form(protocol_form_data(socket.assigns), as: :protocol))
   end
 
+  defp do_update_vcid_field(socket, id, field, value) do
+    vcid = Interfaces.get_interface_vcid!(id)
+
+    updated_value =
+      case field do
+        "vcid" -> parse_int(value)
+        "target_id" -> empty_to_nil(value)
+        _ -> empty_to_nil(value)
+      end
+
+    attrs = Map.put(%{}, field, updated_value)
+
+    case Interfaces.update_interface_vcid(vcid, attrs) do
+      {:ok, updated_vcid} ->
+        vcids = Interfaces.list_vcids_for_interface(socket.assigns.interface)
+        notify_parent({:vcid_saved, updated_vcid})
+
+        {:noreply, assign(socket, :interface_vcids, vcids)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update VCID")}
+    end
+  end
+
   defp protocol_form_data(assigns) do
     %{
       "profile" => Map.get(assigns, :profile),
+      "uplink_profile" => Map.get(assigns, :uplink_profile),
       "default_sdu_type" => Map.get(assigns, :default_sdu_type),
       "frame_size" => Map.get(assigns, :frame_size),
       "secondary_header_length" => Map.get(assigns, :secondary_header_length),
@@ -908,16 +1419,18 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
       "uplink_scid" => Map.get(assigns, :uplink_scid),
       "uplink_vcid" => Map.get(assigns, :uplink_vcid),
       "uplink_map_id" => Map.get(assigns, :uplink_map_id),
-      "cop1_mode" => Map.get(assigns, :cop1_mode),
+      # Segmentation settings
+      "segmentation_strategy" => Map.get(assigns, :segmentation_strategy),
+      "segmentation_mode" => Map.get(assigns, :segmentation_mode),
+      "max_segments_per_command" => Map.get(assigns, :max_segments_per_command),
+      "max_command_bytes" => Map.get(assigns, :max_command_bytes),
+      # COP-1 reliability settings
       "cop1_window_size" => Map.get(assigns, :cop1_window_size),
       "cop1_timeout_ms" => Map.get(assigns, :cop1_timeout_ms),
       "cop1_max_retransmit" => Map.get(assigns, :cop1_max_retransmit),
-      "cop1_initial_seq" => Map.get(assigns, :cop1_initial_seq),
+      "cop1_restart_policy" => Map.get(assigns, :cop1_restart_policy),
       "cop1_apids" => Map.get(assigns, :cop1_apids),
-      "cop1_report_apids" => Map.get(assigns, :cop1_report_apids),
-      "cop1_bypass_flag" => Map.get(assigns, :cop1_bypass_flag),
-      "cop1_control_command_flag" => Map.get(assigns, :cop1_control_command_flag),
-      "cop1_segment_header_flag" => Map.get(assigns, :cop1_segment_header_flag)
+      "cop1_report_apids" => Map.get(assigns, :cop1_report_apids)
     }
   end
 
@@ -934,43 +1447,13 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     end
   end
 
-  defp cop1_mode_from_config(config) when is_map(config) do
-    case fetch_config_value(config, ["mode", :mode]) do
-      "fop" ->
-        "fop"
-
-      :fop ->
-        "fop"
-
-      "bypass" ->
-        "bypass"
-
-      :bypass ->
-        "bypass"
-
-      "disabled" ->
-        "bypass"
-
-      :disabled ->
-        "bypass"
-
-      _ ->
-        if(fetch_config_value(config, ["enabled", :enabled]) == true, do: "fop", else: "bypass")
-    end
-  end
-
-  defp cop1_mode_from_config(config) when config in ["fop", :fop], do: "fop"
-
-  defp cop1_mode_from_config(config) when config in ["bypass", :bypass, "disabled", :disabled],
-    do: "bypass"
-
-  defp cop1_mode_from_config(_config), do: "bypass"
-
   defp drop_config_keys(config, keys) when is_map(config), do: Map.drop(config, keys)
   defp drop_config_keys(config, _keys), do: config
 
-  defp flag_enabled?(value) when value in [1, "1", true, "true"], do: true
-  defp flag_enabled?(_value), do: false
+  defp next_available_vcid(vcids) do
+    used = Enum.map(vcids, & &1.vcid) |> MapSet.new()
+    Enum.find(0..7, fn v -> v not in used end) || 0
+  end
 
   defp normalize_apids_input(nil), do: nil
 
@@ -1017,9 +1500,6 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
 
   defp parse_bool(value) when value in [true, "true", 1, "1"], do: true
   defp parse_bool(_value), do: false
-
-  defp bool_to_flag(true), do: 1
-  defp bool_to_flag(_value), do: nil
 
   defp filter_valid_mappings(mappings) do
     mappings
