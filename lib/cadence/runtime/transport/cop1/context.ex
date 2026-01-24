@@ -5,7 +5,7 @@ defmodule Cadence.Runtime.Transport.COP1.Context do
   This context carries stream identity and COP-1 control information.
   Flag fields (bypass_flag, control_command_flag, segment_header_flag) are
   intentionally NOT included here - they are derived from segmentation config
-  at the interface level in TCFraming.
+  during channel-level TC framing.
   """
 
   alias Cadence.Runtime.Uplink.RouteDecision

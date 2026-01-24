@@ -176,6 +176,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   - `{:error, :missing_command_apid}` - No command APID configured for target
   - `{:error, :invalid_command_apid, apid}` - Invalid command APID value
   - `{:error, :no_interface}` - No uplink interface route for target
+  - `{:error, :routing_ambiguous}` - Multiple active bindings with no routing hint
   - `{:error, :uplink_not_running}` - Uplink dispatcher not available
   - `{:error, :send_failed, reason}` - Uplink transmission failed
   """
@@ -812,6 +813,14 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
         record_command_errored(state, aggregate_id, entry.command_name, %{
           error_type: "no_interface",
           error_reason: "No interface available for target"
+        })
+
+        error
+
+      {:error, :routing_ambiguous} = error ->
+        record_command_errored(state, aggregate_id, entry.command_name, %{
+          error_type: "routing_ambiguous",
+          error_reason: "Multiple active uplink bindings; specify an interface or channel"
         })
 
         error

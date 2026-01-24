@@ -101,7 +101,13 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         )
 
       on_exit(fn ->
-        if Process.alive?(sim_pid), do: PacketSimulator.stop(sim_pid)
+        if Process.alive?(sim_pid) do
+          try do
+            PacketSimulator.stop(sim_pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       # Verify we received telemetry updates via PubSub

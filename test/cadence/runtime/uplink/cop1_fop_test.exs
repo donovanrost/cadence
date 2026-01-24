@@ -7,9 +7,12 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Harness.Time
-  alias Cadence.Runtime.Telemetry.UplinkPipeline
+  alias Cadence.Runtime.ChannelId
+  alias Cadence.Runtime.Interfaces.SDLPConfig
+  alias Cadence.Runtime.Links.ProtocolConfig
   alias Cadence.Runtime.Transport.COP1.{Context, FOP, Report, Stream, StreamSupervisor}
-  alias Cadence.Runtime.Uplink.{FramingContext, TCFraming}
+  alias Cadence.Runtime.Uplink.FrameBuilder
+  alias Cadence.Runtime.Uplink.FramingContext
   alias Cadence.Transport.TCStreamId
 
   setup_mission_registry()
@@ -29,7 +32,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, fop_pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, fop_pid} = start_fop(mission_id, interface, 10, send_fun)
 
     pdu = build_pdu()
 
@@ -40,7 +43,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     _ = FOP.stats(fop_pid)
 
     assert :ok ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, bytes}
 
@@ -71,7 +74,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 11, send_fun)
 
     pdu = build_pdu()
 
@@ -82,7 +85,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     _ = FOP.stats(pid)
 
     assert :ok ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, bytes}
 
@@ -109,7 +112,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 12, send_fun)
 
     pdu = build_pdu()
 
@@ -120,7 +123,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     _ = FOP.stats(pid)
 
     assert :ok ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, _bytes}
 
@@ -142,7 +145,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun)
 
     pdu = build_pdu()
 
@@ -154,12 +157,12 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     _ = FOP.stats(pid)
 
     assert {:error, :lockout} ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     framing_context = FramingContext.new(%{scid: 10, vcid: 0, stream_id: tc_stream_id})
     cop1_context = Context.new(%{vcid: 0, cop1_control: :unlock, stream_id: tc_stream_id})
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, _bytes}
 
@@ -182,7 +185,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun)
 
     pdu = build_pdu()
 
@@ -192,7 +195,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     assert_receive {:sent, bytes}
     {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
@@ -220,7 +223,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun)
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
@@ -229,10 +232,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
     assert_receive {:sent, first_bytes}
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
     refute_receive {:sent, _bytes}, 0
 
     {:ok, [frame], _rest} = TransferFrame.decode(first_bytes, frame_size: frame_size)
@@ -259,7 +262,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun)
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
@@ -268,7 +271,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
     assert_receive {:sent, bytes}
 
     :ok = Time.advance(10)
@@ -300,7 +303,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun, event_fun: event_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun, event_fun: event_fun)
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
@@ -309,7 +312,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
     assert_receive {:sent, bytes}
 
     {:ok, [frame], _rest} = TransferFrame.decode(bytes, frame_size: frame_size)
@@ -337,30 +340,30 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       :ok
     end
 
-    {:ok, pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, pid} = start_fop(mission_id, interface, 10, send_fun)
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
       cop1_contexts(mission_id, interface_id, 10)
 
     assert {:defer, :hold_pending_resync} ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     {:ok, stream_pid} =
-      StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_id)
+      StreamSupervisor.lookup_stream(mission_id, tc_stream_id)
 
     :ok = GenServer.stop(stream_pid)
 
     assert {:defer, :hold_pending_resync} ==
-             send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+             send_frames(mission_id, interface, pdu, framing_context, cop1_context)
 
     :ok = Stream.resync(tc_stream_id)
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_context, cop1_context)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_context, cop1_context)
   end
 
   test "distinct tc stream ids create distinct stream processes" do
@@ -371,7 +374,8 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     interface = build_interface(mission_id, interface_id, frame_size)
     send_fun = fn _bytes -> :ok end
 
-    {:ok, _pid} = start_fop(mission_id, interface, send_fun)
+    {:ok, _pid} = start_fop(mission_id, interface, 10, send_fun)
+    {:ok, _pid} = start_fop(mission_id, interface, 11, send_fun)
     pdu = build_pdu()
 
     {framing_a, cop1_a, tc_stream_a} = cop1_contexts(mission_id, interface_id, 10, vcid: 0)
@@ -380,11 +384,11 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     ingest_report(tc_stream_a, 0)
     ingest_report(tc_stream_b, 0)
 
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_a, cop1_a)
-    assert :ok == send_frames(mission_id, interface_id, pdu, framing_b, cop1_b)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_a, cop1_a)
+    assert :ok == send_frames(mission_id, interface, pdu, framing_b, cop1_b)
 
-    {:ok, pid_a} = StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_a)
-    {:ok, pid_b} = StreamSupervisor.lookup_stream(mission_id, interface_id, tc_stream_b)
+    {:ok, pid_a} = StreamSupervisor.lookup_stream(mission_id, tc_stream_a)
+    {:ok, pid_b} = StreamSupervisor.lookup_stream(mission_id, tc_stream_b)
 
     assert pid_a != pid_b
   end
@@ -449,9 +453,17 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     }
   end
 
-  defp send_frames(mission_id, interface_id, pdu, framing_context, cop1_context) do
-    {:ok, frames} = TCFraming.build_frames(mission_id, interface_id, pdu, framing_context)
-    FOP.send_frames(mission_id, interface_id, frames, cop1_context)
+  defp send_frames(mission_id, interface, pdu, framing_context, cop1_context) do
+    {:ok, frames} = build_frames(pdu, framing_context, interface)
+
+    channel_id =
+      ChannelId.new(
+        cop1_context.stream_id.scid,
+        cop1_context.stream_id.vcid,
+        cop1_context.stream_id.map_id
+      )
+
+    FOP.send_frames(mission_id, channel_id, frames, cop1_context)
   end
 
   defp ingest_report(%TCStreamId{} = tc_stream_id, report_value, opts \\ []) do
@@ -479,7 +491,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
 
     # Note: bypass_flag/control_command_flag/segment_header_flag are TC frame header bits
-    # and are now derived from segmentation config in TCFraming, not set on Context.
+    # and are derived from segmentation config, not set on Context.
     # Use :bypass option for per-issuance emergency bypass mode.
     framing_attrs = %{
       scid: scid,
@@ -513,22 +525,108 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     {FramingContext.new(framing_attrs), Context.new(cop1_attrs), tc_stream_id}
   end
 
-  defp start_fop(mission_id, interface, send_fun, opts \\ []) do
-    {:ok, _sup} =
-      start_supervised({StreamSupervisor, mission_id: mission_id, interface_id: interface.id})
+  defp start_fop(mission_id, interface, scid, send_fun, opts \\ []) do
+    _ = ensure_started({StreamSupervisor, mission_id: mission_id})
 
-    {:ok, _uplink} =
-      start_supervised({UplinkPipeline, interface: interface, send_fun: send_fun})
+    channel_id = ChannelId.new(scid, Keyword.get(opts, :vcid, 0))
+    protocol_config = ProtocolConfig.from_interface(interface)
 
-    {:ok, _framing} =
-      start_supervised({TCFraming, interface: interface})
+    release_fun = fn release -> send_fun.(release.bytes) end
 
     fop_opts =
       case Keyword.get(opts, :event_fun) do
-        nil -> [interface: interface]
-        event_fun -> [interface: interface, event_fun: event_fun]
+        nil ->
+          [
+            mission_id: mission_id,
+            channel_id: channel_id,
+            protocol_config: protocol_config,
+            release_fun: release_fun
+          ]
+
+        event_fun ->
+          [
+            mission_id: mission_id,
+            channel_id: channel_id,
+            protocol_config: protocol_config,
+            release_fun: release_fun,
+            event_fun: event_fun
+          ]
       end
 
-    start_supervised({FOP, fop_opts})
+    ensure_started(
+      Supervisor.child_spec(
+        {FOP, fop_opts},
+        id: {:cop1_fop, mission_id, ChannelId.key(channel_id)}
+      )
+    )
+  end
+
+  defp build_frames(%PDU{} = pdu, %FramingContext{} = context, interface) do
+    {:ok, %{opts: opts}} = SDLPConfig.fetch(interface)
+    context = FramingContext.with_defaults(context, opts)
+    {ctx, stream_id} = build_frame_context(context, opts)
+    seg_state = get_seg_state(stream_id, context)
+
+    case FrameBuilder.build_frames(pdu, ctx, seg_state) do
+      {:ok, frames, next_seg} ->
+        put_seg_state(stream_id, next_seg)
+        {:ok, frames}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp build_frame_context(%FramingContext{} = context, opts) do
+    segmentation = opts[:segmentation] || %{}
+
+    ctx =
+      context
+      |> framing_defaults(opts)
+      |> Map.merge(framing_flags(context, segmentation))
+
+    {ctx, context.stream_id || :default}
+  end
+
+  defp framing_defaults(%FramingContext{} = context, opts) do
+    %{
+      frame_size: context.frame_size || opts[:uplink_frame_size] || opts[:frame_size],
+      scid: context.scid || opts[:uplink_scid],
+      vcid: context.vcid || opts[:uplink_vcid],
+      map_id: context.map_id || opts[:uplink_map_id]
+    }
+  end
+
+  defp framing_flags(%FramingContext{} = context, segmentation) do
+    %{
+      bypass_flag: FramingContext.normalize_flag(context.bypass_flag, 0),
+      control_command_flag: FramingContext.normalize_flag(context.control_command_flag, 0),
+      segment_header_flag: context.segment_header_flag || segmentation[:segment_header_flag] || 1
+    }
+  end
+
+  defp get_seg_state(stream_id, %FramingContext{} = context) do
+    key = {:seg_state, stream_id}
+
+    case Process.get(key) do
+      nil ->
+        {:ok, seg_state} = FrameBuilder.init_segmentation(frame_seq: context.initial_seq || 0)
+        Process.put(key, seg_state)
+        seg_state
+
+      seg_state ->
+        seg_state
+    end
+  end
+
+  defp put_seg_state(stream_id, seg_state) do
+    Process.put({:seg_state, stream_id}, seg_state)
+  end
+
+  defp ensure_started(child) do
+    case start_supervised(child) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+    end
   end
 end

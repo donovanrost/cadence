@@ -105,7 +105,8 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
       mapping = %Mapping{mapping | default: default_sdu_type}
 
       # Build segmentation config from tc/uslp config, with cop1 backward compat
-      segmentation = build_segmentation_config(tc_config, uslp_config, cop1_config, uplink_profile)
+      segmentation =
+        build_segmentation_config(tc_config, uslp_config, cop1_config, uplink_profile)
 
       # Get defaults from new tc/uslp config, falling back to sdlp_config for backward compat
       uplink_scid =
@@ -206,8 +207,11 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
     # Try tc_config first, then uslp_config based on uplink profile
     config =
       case uplink_profile do
-        :uslp -> fetch_value(uslp_config, "segmentation") || fetch_value(tc_config, "segmentation")
-        _ -> fetch_value(tc_config, "segmentation") || fetch_value(uslp_config, "segmentation")
+        :uslp ->
+          fetch_value(uslp_config, "segmentation") || fetch_value(tc_config, "segmentation")
+
+        _ ->
+          fetch_value(tc_config, "segmentation") || fetch_value(uslp_config, "segmentation")
       end
 
     config = config || %{}
@@ -242,8 +246,12 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
 
   defp normalize_segmentation_mode("standard", _cop1), do: :standard
   defp normalize_segmentation_mode(:standard, _cop1), do: :standard
-  defp normalize_segmentation_mode("legacy_no_segment_header", _cop1), do: :legacy_no_segment_header
-  defp normalize_segmentation_mode(:legacy_no_segment_header, _cop1), do: :legacy_no_segment_header
+
+  defp normalize_segmentation_mode("legacy_no_segment_header", _cop1),
+    do: :legacy_no_segment_header
+
+  defp normalize_segmentation_mode(:legacy_no_segment_header, _cop1),
+    do: :legacy_no_segment_header
 
   defp normalize_segmentation_mode("legacy_always_segment_header", _cop1),
     do: :legacy_always_segment_header

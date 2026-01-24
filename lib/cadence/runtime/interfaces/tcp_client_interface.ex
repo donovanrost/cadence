@@ -1,34 +1,16 @@
 defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   @moduledoc """
-  TCP Client interface for connecting to spacecraft simulators or ground stations.
+  TCP Client interface for connecting to remote endpoints.
 
-  Downlink processing is delegated to Cadence.Runtime.Telemetry.DownlinkPipeline.
-  Uplink encoding is delegated to Cadence.Runtime.Telemetry.UplinkPipeline.
-
-  ## Data Plane Architecture
-
-  This GenServer receives a domain entity at startup - no database calls are made
-  during runtime. Configuration changes are handled via PubSub events.
-
-  ## Configuration (via Interface Entity)
-
-  - host: Remote hostname or IP address
-  - port: Remote port number
-  - target_ids: List of target identifiers for telemetry routing
-  - reconnect_delay_ms: Milliseconds between reconnection attempts (default: 5000)
-
-  ## Downlink Pipeline Architecture
-
-  Downlink processing is handled outside this GenServer to keep transport
-  concerns separate from packet framing and decoding.
+  This GenServer owns socket lifecycle and byte I/O only. It emits raw bytes
+  to the runtime router and does not perform protocol framing or routing.
   """
 
   use GenServer
   require Logger
 
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Runtime.Telemetry.{DownlinkPipeline, UplinkPipeline}
-  alias Cadence.Runtime.Uplink.TCFraming
+  alias Cadence.Runtime.Router
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
@@ -43,8 +25,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
       :reconnect_interval,
       connected: false,
       bytes_received: 0,
-      bytes_sent: 0,
-      packets_received: 0
+      bytes_sent: 0
     ]
   end
 
@@ -54,8 +35,6 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
 
   @doc """
   Starts the TCP client interface with the given Interface entity.
-
-  The entity contains all configuration - no database lookups are performed.
   """
   def start_link(%Interface{} = interface) do
     name = {:via, Registry, {@registry, {:interface, interface.mission_id, interface.id}}}
@@ -80,7 +59,6 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
 
   @impl true
   def init(%Interface{} = interface) do
-    # TCP clients connect to a single target - use first or "unknown"
     target_id = List.first(interface.target_ids) || "unknown"
 
     state = %State{
@@ -95,9 +73,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
       "Starting TCP client interface #{interface.name} for target=#{target_id}, host=#{interface.host}, port=#{interface.port}"
     )
 
-    # Attempt initial connection asynchronously
     send(self(), :connect)
-
     {:ok, state}
   end
 
@@ -129,8 +105,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
       host: to_string(state.host),
       port: state.port,
       bytes_received: state.bytes_received,
-      bytes_sent: state.bytes_sent,
-      packets_received: state.packets_received
+      bytes_sent: state.bytes_sent
     }
 
     {:reply, stats, state}
@@ -144,18 +119,13 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
           "TCP client connected to #{state.host}:#{state.port} for target=#{state.target_id}"
         )
 
-        DownlinkPipeline.reset_connection(
-          state.interface.mission_id,
-          state.interface.id,
-          connection_id(state)
-        )
+        Router.interface_connected(state.interface.mission_id, state.interface.id)
 
         {:noreply,
          %{
            state
            | socket: socket,
-             connected: true,
-             packets_received: 0
+             connected: true
          }}
 
       {:error, reason} ->
@@ -169,14 +139,11 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   def handle_info({:tcp, socket, data}, %State{socket: socket} = state) do
-    # Logger.debug("Received #{byte_size(data)} bytes from #{state.target_id}")
-
     new_state = %{state | bytes_received: state.bytes_received + byte_size(data)}
 
-    DownlinkPipeline.ingest(
+    Router.ingest(
       state.interface.mission_id,
       state.interface.id,
-      connection_id(state),
       data,
       downlink_metadata(state)
     )
@@ -208,12 +175,8 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   @impl true
-  def handle_cast({:downlink_packets, connection_id, count}, state) do
-    if connection_id == connection_id(state) do
-      {:noreply, %{state | packets_received: state.packets_received + count}}
-    else
-      {:noreply, state}
-    end
+  def handle_cast({:downlink_packets, _connection_id, _count}, state) do
+    {:noreply, state}
   end
 
   ## Private Functions
@@ -221,14 +184,7 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   defp handle_disconnect(state) do
     if state.socket, do: :gen_tcp.close(state.socket)
 
-    DownlinkPipeline.drop_connection(
-      state.interface.mission_id,
-      state.interface.id,
-      connection_id(state)
-    )
-
-    _ = UplinkPipeline.reset(state.interface.mission_id, state.interface.id)
-    _ = TCFraming.reset(state.interface.mission_id, state.interface.id)
+    Router.interface_disconnected(state.interface.mission_id, state.interface.id)
 
     %{
       state
@@ -244,12 +200,9 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   defp downlink_metadata(state) do
     %{
       mission_id: state.interface.mission_id,
-      stored: false,
       target_id: state.target_id,
       received_at: CadenceTime.now(),
       interface_id: state.interface.id
     }
   end
-
-  defp connection_id(state), do: state.interface.id
 end

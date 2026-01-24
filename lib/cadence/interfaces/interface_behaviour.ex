@@ -12,7 +12,7 @@ defmodule Cadence.Interfaces.Interface do
   Each interface implementation must:
   - Handle connection lifecycle (connect, disconnect, reconnect)
   - Send raw data to the target
-  - Receive raw data and forward to telemetry pipeline
+  - Receive raw data and emit bytes to the runtime router
   - Report connection status
   """
 

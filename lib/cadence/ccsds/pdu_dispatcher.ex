@@ -7,18 +7,20 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   require Logger
 
   alias Cadence.Events.TelemetryPacket
+  alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Transport.COP1.ReportHandler
 
   @default_handlers [ReportHandler, Cadence.Telemetry.PDUHandler]
 
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
-    interface_id = Keyword.fetch!(opts, :interface_id)
-    GenServer.start_link(__MODULE__, opts, name: via_tuple(mission_id, interface_id))
+    channel_id = Keyword.fetch!(opts, :channel_id)
+    GenServer.start_link(__MODULE__, opts, name: via_tuple(mission_id, channel_id))
   end
 
-  def via_tuple(mission_id, interface_id) do
-    {:via, Registry, {Cadence.MissionRegistry, {:pdu_dispatcher, mission_id, interface_id}}}
+  def via_tuple(mission_id, channel_id) do
+    {:via, Registry,
+     {Cadence.MissionRegistry, {:pdu_dispatcher, mission_id, channel_id_key(channel_id)}}}
   end
 
   def ingest(dispatcher, pdu, ctx) do
@@ -65,20 +67,16 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
   defp cop1_report_apids(opts) do
     opts
-    |> Keyword.get(:interface)
-    |> report_apids_from_interface()
+    |> Keyword.get(:protocol_config, %{})
+    |> report_apids_from_protocol()
     |> MapSet.new()
   end
 
-  defp report_apids_from_interface(%{config: config}) when is_map(config) do
-    report_apids_from_config(config)
+  defp report_apids_from_protocol(%{cop1_report_apids: apids}) do
+    normalize_apids(apids)
   end
 
-  defp report_apids_from_interface(_interface), do: []
-
-  defp report_apids_from_config(config) when is_map(config) do
-    cop1 = fetch_value(config, "cop1") || %{}
-
+  defp report_apids_from_protocol(%{cop1: cop1}) when is_map(cop1) do
     apids =
       fetch_value(cop1, "report_apids") ||
         fetch_value(cop1, "report_apid")
@@ -86,7 +84,7 @@ defmodule Cadence.CCSDS.PDUDispatcher do
     normalize_apids(apids)
   end
 
-  defp report_apids_from_config(_config), do: []
+  defp report_apids_from_protocol(_protocol_config), do: []
 
   defp normalize_apids(nil), do: []
 
@@ -120,6 +118,12 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   rescue
     _ -> Map.get(config, key)
   end
+
+  defp channel_id_key(%ChannelId{} = channel_id) do
+    ChannelId.key(channel_id)
+  end
+
+  defp channel_id_key(channel_id), do: channel_id
 
   defp dispatch_to_handlers(pdu, ctx, state) do
     Enum.reduce(state.handlers, {[], state}, fn handler, {events, acc_state} ->

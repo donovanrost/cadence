@@ -34,9 +34,9 @@ defmodule Cadence.Runtime.Transport.COP1.CLCWReportDecoder do
 
   defp report_from_clcw(%CLCW{} = clcw, ctx) do
     with {:ok, mission_id} <- fetch_context(ctx, :mission_id),
-         {:ok, interface_id} <- fetch_context(ctx, :interface_id),
          {:ok, scid} <- fetch_context(ctx, :scid),
          {:ok, vcid} <- fetch_vcid(ctx, clcw) do
+      interface_id = Map.get(ctx, :interface_id)
       tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
 
       {:ok,
@@ -51,7 +51,7 @@ defmodule Cadence.Runtime.Transport.COP1.CLCWReportDecoder do
 
   defp fetch_context(ctx, key) do
     case Map.get(ctx, key) do
-      value when is_binary(value) and key in [:mission_id, :interface_id] -> {:ok, value}
+      value when is_binary(value) and key in [:mission_id] -> {:ok, value}
       value when is_integer(value) and key in [:scid] -> {:ok, value}
       _ -> {:error, :"missing_#{key}"}
     end

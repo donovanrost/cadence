@@ -3,7 +3,6 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
 
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.Factory
-  alias Cadence.Runtime.Interfaces.PerInterfaceSupervisor
   alias Cadence.Runtime.Interfaces.TcpClientInterface
   alias Cadence.Runtime.Interfaces.TcpServerInterface
 
@@ -23,7 +22,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
       {module, entity} = Factory.child_spec_for(interface)
 
       # Verify module is correct
-      assert module == PerInterfaceSupervisor
+      assert module == TcpClientInterface
 
       # Verify entity is passed directly (no more config map)
       assert entity == interface
@@ -48,7 +47,7 @@ defmodule Cadence.Runtime.Interfaces.FactoryTest do
       {module, entity} = Factory.child_spec_for(interface)
 
       # Verify module is correct
-      assert module == PerInterfaceSupervisor
+      assert module == TcpServerInterface
 
       # Verify entity is passed directly
       assert entity == interface

@@ -25,6 +25,14 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
     end
   end
 
+  @spec mode_for_config(map(), atom() | nil, non_neg_integer() | nil) :: cop1_mode()
+  def mode_for_config(cop1, pdu_type \\ nil, apid \\ nil) when is_map(cop1) do
+    case mode(cop1) do
+      :bypass -> :bypass
+      :fop -> apply_apid_filter(cop1, pdu_type, apid)
+    end
+  end
+
   @spec config(map() | nil) :: map()
   def config(config) when is_map(config) do
     case fetch_value(config, ["cop1", :cop1]) do

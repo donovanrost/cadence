@@ -28,16 +28,12 @@ defmodule Cadence.Runtime.Interfaces.Factory do
       }
 
       child_spec = Factory.child_spec_for(interface)
-      # Returns a child_spec for a per-interface supervisor
+      # Returns a child_spec for the interface GenServer
   """
 
   alias Cadence.Domain.Interfaces.Entities.Interface
 
-  alias Cadence.Runtime.Interfaces.{
-    PerInterfaceSupervisor,
-    TcpClientInterface,
-    TcpServerInterface
-  }
+  alias Cadence.Runtime.Interfaces.{TcpClientInterface, TcpServerInterface}
 
   @doc """
   Builds a child specification for the given interface domain entity.
@@ -49,8 +45,8 @@ defmodule Cadence.Runtime.Interfaces.Factory do
   Raises if the connection_type is not implemented yet.
   """
   def child_spec_for(%Interface{} = interface) do
-    _ = module_for_connection_type(interface.connection_type)
-    {PerInterfaceSupervisor, interface}
+    module = module_for_connection_type(interface.connection_type)
+    {module, interface}
   end
 
   @doc """

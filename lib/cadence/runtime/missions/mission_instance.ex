@@ -4,7 +4,9 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
   This supervisor manages all processes for a specific mission:
   - Current Value Table (CVT)
-  - Interface supervisor (for hardware connections)
+  - Transport supervisor (for hardware connections)
+  - Link controllers (per SCID)
+  - Channel services (per ChannelId)
   - Telemetry pipeline
   - Command queue
   - Limits monitor
@@ -40,13 +42,18 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
   alias Cadence.Runtime.Commands.VerificationManager
+  alias Cadence.Runtime.Links.Supervisor, as: LinksSupervisor
   alias Cadence.Runtime.Missions.CacheWarmer
   alias Cadence.Runtime.Missions.ConfigManager
   alias Cadence.Runtime.Missions.MissionStatus
   alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Runtime.Missions.RuntimeBootstrapper
+  alias Cadence.Runtime.Protocol.Supervisor, as: ProtocolSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
+  alias Cadence.Runtime.Transport.COP1.StreamSupervisor, as: COP1StreamSupervisor
+  alias Cadence.Runtime.Transport.Supervisor, as: TransportSupervisor
   alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
   @default_lane_shards 8
@@ -117,11 +124,23 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
-          # Uplink Dispatcher - routes command PDUs to interfaces
-          {UplinkDispatcher, config: config},
+          # Transport Supervisor - manages TCP/UDP/Serial connections
+          {TransportSupervisor, mission_id: mission_id},
 
-          # Interface Supervisor - manages TCP/UDP/Serial connections
-          {Cadence.Runtime.Interfaces.InterfaceSupervisor, mission_id: mission_id},
+          # Links Supervisor - manages per-SCID link controllers
+          {LinksSupervisor, mission_id: mission_id},
+
+          # Protocol Supervisor - manages per-channel protocol services
+          {ProtocolSupervisor, mission_id: mission_id},
+
+          # Runtime Bootstrapper - builds bindings and channel registry entries
+          {RuntimeBootstrapper, config: config},
+
+          # COP-1 Stream Supervisor - mission-scoped COP-1 stream state
+          {COP1StreamSupervisor, mission_id: mission_id},
+
+          # Uplink Dispatcher - routes command PDUs to channel services
+          {UplinkDispatcher, config: config},
 
           # Command Verification Manager - tracks verification runners per mission
           {VerificationManager, mission_id: mission_id},

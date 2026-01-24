@@ -96,7 +96,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     - `nil` - No network output (PubSub only)
 
   When `:interface_id` is provided, the simulator uses the interface's SDLP
-  framing configuration to frame outgoing packets via the uplink pipeline.
+  framing configuration to frame outgoing packets via the CCSDS uplink pipeline
+  (this is simulator-only; runtime uplink framing lives in ChannelService).
   """
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
@@ -300,7 +301,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     end
   rescue
     error ->
-      Logger.warning("Failed to initialize uplink pipeline: #{inspect(error)}")
+      Logger.warning("Failed to initialize CCSDS uplink pipeline: #{inspect(error)}")
       init_uplink_from_frame(frame)
   end
 

@@ -140,8 +140,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
               <%!-- Global Defaults Section --%>
               <details open class="border border-base-300 rounded-sm bg-base-200/30">
                 <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-base-content hover:bg-base-200/50">
-                  <.icon name="hero-cog-6-tooth" class="h-4 w-4" />
-                  Global Defaults
+                  <.icon name="hero-cog-6-tooth" class="h-4 w-4" /> Global Defaults
                 </summary>
                 <div class="px-4 pb-4">
                   <div class="max-w-xs">
@@ -163,8 +162,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
               <%!-- Downlink (Telemetry) Section --%>
               <details open class="border border-info/30 rounded-sm bg-info/5">
                 <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-info hover:bg-info/10">
-                  <.icon name="hero-arrow-down" class="h-4 w-4" />
-                  Downlink (Telemetry)
+                  <.icon name="hero-arrow-down" class="h-4 w-4" /> Downlink (Telemetry)
                 </summary>
                 <div class="px-4 pb-4 space-y-4">
                   <%!-- Profile Selection --%>
@@ -289,8 +287,7 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
               <%!-- Uplink (Commanding) Section --%>
               <details open class="border border-accent/30 rounded-sm bg-accent/5">
                 <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer text-sm font-semibold text-accent hover:bg-accent/10">
-                  <.icon name="hero-arrow-up" class="h-4 w-4" />
-                  Uplink (Commanding)
+                  <.icon name="hero-arrow-up" class="h-4 w-4" /> Uplink (Commanding)
                 </summary>
                 <div class="px-4 pb-4 space-y-4">
                   <%!-- Profile Selection --%>
@@ -884,7 +881,10 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     socket
     |> assign(:sdlp_enabled, sdlp_enabled)
     |> assign(:profile, fetch_config_value(sdlp, ["profile", :profile]) || "tm")
-    |> assign(:default_sdu_type, fetch_config_value(sdlp, ["default_sdu_type", :default_sdu_type]))
+    |> assign(
+      :default_sdu_type,
+      fetch_config_value(sdlp, ["default_sdu_type", :default_sdu_type])
+    )
     |> assign(:frame_size, parse_int(fetch_config_value(sdlp, ["frame_size", :frame_size])))
     |> assign(
       :secondary_header_length,
@@ -897,7 +897,9 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     )
     |> assign(
       :oid_validation_prefix_bytes,
-      parse_int(fetch_config_value(sdlp, ["oid_validation_prefix_bytes", :oid_validation_prefix_bytes]))
+      parse_int(
+        fetch_config_value(sdlp, ["oid_validation_prefix_bytes", :oid_validation_prefix_bytes])
+      )
     )
     |> assign(
       :uplink_scid,
@@ -948,7 +950,10 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
     %{cop1_config: cop1} = parsed
 
     socket
-    |> assign(:cop1_window_size, parse_int(fetch_config_value(cop1, ["window_size", :window_size])))
+    |> assign(
+      :cop1_window_size,
+      parse_int(fetch_config_value(cop1, ["window_size", :window_size]))
+    )
     |> assign(:cop1_timeout_ms, parse_int(fetch_config_value(cop1, ["timeout_ms", :timeout_ms])))
     |> assign(
       :cop1_max_retransmit,

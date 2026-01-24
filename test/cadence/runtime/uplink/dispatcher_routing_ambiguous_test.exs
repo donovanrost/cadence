@@ -6,12 +6,11 @@ defmodule Cadence.Runtime.Uplink.DispatcherRoutingAmbiguousTest do
   alias Cadence.CCSDS.SDU.SpacePacket
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Domain.Interfaces.Entities.TargetInterface
-  alias Cadence.Runtime.Transport.ProtocolEvent
   alias Cadence.Runtime.Uplink.{Dispatcher, UplinkPDU}
 
   setup_mission_registry()
 
-  test "emits routing_ambiguous event when multiple routes match" do
+  test "returns :no_interface when no active bindings are available" do
     mission_id = "mission-routing-ambiguous"
     target_id = "target-1"
 
@@ -42,8 +41,6 @@ defmodule Cadence.Runtime.Uplink.DispatcherRoutingAmbiguousTest do
 
     {:ok, _pid} = start_supervised({Dispatcher, config: config})
 
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:events")
-
     pdu = %PDU{
       type: :space_packet,
       value: %SpacePacket{
@@ -58,10 +55,8 @@ defmodule Cadence.Runtime.Uplink.DispatcherRoutingAmbiguousTest do
       meta: %{}
     }
 
-    assert {:error, :routing_ambiguous, _candidates} =
+    assert {:error, :no_interface} =
              Dispatcher.dispatch_pdu(mission_id, UplinkPDU.from_pdu(target_id, pdu))
-
-    assert_receive {:protocol_event, %ProtocolEvent{status: :routing_ambiguous}}
   end
 
   defp build_interface(id, mission_id) do

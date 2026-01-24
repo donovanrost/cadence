@@ -2,12 +2,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
   use Cadence.IntegrationCase
 
   alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.CCSDS.Core.LinkFrame
-  alias Cadence.CCSDS.SDLP.TM.FrameCodec
   alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Runtime.Interfaces.InterfaceSupervisor
   alias Cadence.Runtime.Interfaces.TcpServerInterface
   alias Cadence.Runtime.Missions.MissionSupervisor
+  alias Cadence.Runtime.Transport.Supervisor, as: TransportSupervisor
   alias Cadence.TestHelpers
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -58,7 +56,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
     test "starts and listens on configured port", %{mission: mission, target: target, port: port} do
       interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       pid = interface_pid!(mission.id, interface.id)
 
       # Give it a moment to start listening
@@ -70,13 +68,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       assert stats.bind_port == port
       assert stats.connected_clients == 0
 
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
 
     test "accepts client connections", %{mission: mission, target: target, port: port} do
       interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -94,13 +92,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client_socket)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
 
     test "accepts multiple client connections", %{mission: mission, target: target, port: port} do
       interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -132,13 +130,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       :gen_tcp.close(client1)
       :gen_tcp.close(client2)
       :gen_tcp.close(client3)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
 
     test "handles client disconnections", %{mission: mission, target: target, port: port} do
       interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -163,13 +161,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client2)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
 
     test "receives and tracks data from clients", %{mission: mission, target: target, port: port} do
       interface = build_interface(mission.id, port, [target.identifier])
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -191,14 +189,14 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client_socket)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
 
     test "enforces max_clients limit", %{mission: mission, target: target, port: port} do
       # Set max clients to 2
       interface = build_interface(mission.id, port, [target.identifier], max_clients: 2)
 
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       Process.sleep(100)
@@ -225,130 +223,8 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       # Clean up
       :gen_tcp.close(client1)
       :gen_tcp.close(client2)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
+      TransportSupervisor.stop_interface(mission.id, interface.id)
     end
-
-    test "routes uplink to matching client when routing enabled", %{
-      mission: mission,
-      target: target,
-      port: port
-    } do
-      frame_size = 32
-
-      interface =
-        build_interface(mission.id, port, [target.identifier],
-          config: %{
-            routing: "scid_vcid",
-            framing: "sdlp",
-            sdlp: %{
-              profile: "tm",
-              frame_size: frame_size,
-              default_sdu_type: "space_packet",
-              sdu_mapping: [
-                %{"scid" => 1, "vcid" => 1, "direction" => "downlink", "type" => "space_packet"},
-                %{"scid" => 2, "vcid" => 2, "direction" => "downlink", "type" => "space_packet"}
-              ]
-            }
-          }
-        )
-
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
-      server_pid = interface_pid!(mission.id, interface.id)
-
-      Process.sleep(100)
-
-      {:ok, client1} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
-      {:ok, client2} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
-      Process.sleep(100)
-
-      :ok = :gen_tcp.send(client1, build_tm_frame(1, 1, frame_size))
-      :ok = :gen_tcp.send(client2, build_tm_frame(2, 2, frame_size))
-      Process.sleep(100)
-
-      uplink = build_tm_frame(2, 2, frame_size)
-      assert :ok == GenServer.call(server_pid, {:send_data, uplink})
-
-      assert {:error, :timeout} == :gen_tcp.recv(client1, 0, 200)
-      assert {:ok, ^uplink} = :gen_tcp.recv(client2, 0, 500)
-
-      :gen_tcp.close(client1)
-      :gen_tcp.close(client2)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
-    end
-
-    test "routes uplink using static routing when no downlink frames yet", %{
-      mission: mission,
-      target: target,
-      port: port
-    } do
-      frame_size = 32
-
-      interface =
-        build_interface(mission.id, port, [target.identifier],
-          config: %{
-            routing: "scid_vcid",
-            routing_static: [
-              %{"client_index" => 1, "scid" => 10, "vcid" => 0},
-              %{"client_index" => 2, "scid" => 20, "vcid" => 1}
-            ],
-            framing: "sdlp",
-            sdlp: %{
-              profile: "tm",
-              frame_size: frame_size,
-              default_sdu_type: "space_packet",
-              sdu_mapping: [
-                %{"scid" => 10, "vcid" => 0, "direction" => "downlink", "type" => "space_packet"},
-                %{"scid" => 20, "vcid" => 1, "direction" => "downlink", "type" => "space_packet"}
-              ]
-            }
-          }
-        )
-
-      {:ok, _pid} = InterfaceSupervisor.start_interface(mission.id, interface)
-      server_pid = interface_pid!(mission.id, interface.id)
-
-      Process.sleep(100)
-
-      {:ok, client1} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
-      {:ok, client2} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
-      Process.sleep(100)
-
-      uplink1 = build_tm_frame(10, 0, frame_size)
-      assert :ok == GenServer.call(server_pid, {:send_data, uplink1})
-
-      assert {:ok, ^uplink1} = :gen_tcp.recv(client1, 0, 500)
-      assert {:error, :timeout} == :gen_tcp.recv(client2, 0, 200)
-
-      uplink2 = build_tm_frame(20, 1, frame_size)
-      assert :ok == GenServer.call(server_pid, {:send_data, uplink2})
-
-      assert {:error, :timeout} == :gen_tcp.recv(client1, 0, 200)
-      assert {:ok, ^uplink2} = :gen_tcp.recv(client2, 0, 500)
-
-      :gen_tcp.close(client1)
-      :gen_tcp.close(client2)
-      InterfaceSupervisor.stop_interface(mission.id, interface.id)
-    end
-  end
-
-  defp build_tm_frame(scid, vcid, frame_size) do
-    payload = :binary.copy(<<0>>, frame_size - 6)
-
-    frame = %LinkFrame{
-      profile: :tm,
-      scid: scid,
-      vcid: vcid,
-      map_id: nil,
-      frame_seq: 0,
-      payload_octets: payload,
-      quality: :good,
-      ocf: nil,
-      timestamp: nil,
-      meta: %{fhp: 0}
-    }
-
-    {:ok, bytes} = FrameCodec.encode(frame, frame_size: frame_size)
-    bytes
   end
 
   defp interface_pid!(mission_id, interface_id) do
