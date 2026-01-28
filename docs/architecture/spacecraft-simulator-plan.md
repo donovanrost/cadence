@@ -1,3 +1,15 @@
+---
+title: Spacecraft Simulator Plan
+tags: [architecture, implementation-plan, simulator, cop-1]
+related:
+  - "[[cop-1]]"
+  - "[[target]]"
+  - "[[interface]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Spacecraft Simulator Plan (COP-1 + CFDP)
 
 ## Goals and Constraints

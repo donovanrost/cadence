@@ -1,3 +1,14 @@
+---
+title: DAG Procedure Editor Design
+tags: [design, procedures, dag, ui]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # DAG Procedure Editor Design
 
 ## Overview

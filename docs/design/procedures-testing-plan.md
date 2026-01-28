@@ -1,3 +1,14 @@
+---
+title: Procedures Testing Plan
+tags: [design, procedures, testing]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Procedures Feature Testing Plan
 
 ## Overview

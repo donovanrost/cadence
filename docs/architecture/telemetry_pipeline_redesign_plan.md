@@ -1,4 +1,20 @@
+---
+title: Telemetry Pipeline Redesign Plan
+aliases: [telemetry pipeline, lanes and shards]
+tags: [architecture, telemetry, pipeline, implementation-plan]
+related:
+  - "[[telemetry-point]]"
+  - "[[cvt]]"
+  - "[[data-plane]]"
+  - "[[mission]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Telemetry Pipeline Redesign Plan (Lanes + Shards + Durable Log)
+
+> **Glossary:** [Telemetry Point](../glossary/telemetry-point.md) | [CVT](../glossary/cvt.md) | [Data Plane](../glossary/data-plane.md)
 
 ## Goals & Constraints
 - Smooth lumpy, high-rate telemetry by fanning out hot keys and batching without breaking per-key ordering guarantees.

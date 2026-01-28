@@ -1,4 +1,20 @@
+---
+title: Recordables Implementation Plan
+aliases: [recordings implementation, event sourcing plan]
+tags: [architecture, implementation-plan, recordings, event-sourcing]
+related:
+  - "[[adding-recordable]]"
+  - "[[recording]]"
+  - "[[recordable]]"
+  - "[[aggregate]]"
+created: 2024-12-01
+updated: 2025-01-27
+status: active
+---
+
 # Recordables/Buckets Architecture Implementation Plan
+
+> **Developer Guide:** For a practical guide on working with recordings, see [Adding a Recordable](../patterns/adding-recordable.md).
 
 ## Quick Start for Implementation
 

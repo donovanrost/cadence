@@ -1,3 +1,14 @@
+---
+title: Epsilon3-Like Procedures Data Model
+tags: [design, procedures, data-model, research]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Epsilon3-Like Procedures Data Model
 
 > Clean-slate design for Cadence procedures with Epsilon3-inspired UX

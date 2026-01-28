@@ -1,3 +1,11 @@
+---
+title: Component Library
+tags: [reference, design, components, liveview]
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Component Library
 
 Cadence provides a comprehensive set of reusable UI components built on Phoenix LiveView, Tailwind CSS, and daisyUI.

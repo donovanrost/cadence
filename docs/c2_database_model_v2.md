@@ -1,3 +1,15 @@
+---
+title: Cadence Mission Database Model v2
+tags: [architecture, database, data-model]
+related:
+  - "[[mission]]"
+  - "[[target]]"
+  - "[[command]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Cadence Mission Database Model v2
 
 ## Overview

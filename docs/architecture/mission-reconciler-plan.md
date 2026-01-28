@@ -1,3 +1,15 @@
+---
+title: Mission Reconciler Architecture Plan
+tags: [architecture, implementation-plan, missions, runtime]
+related:
+  - "[[mission]]"
+  - "[[data-plane]]"
+  - "[[control-plane]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Mission Reconciler Architecture Plan
 
 ## Overview

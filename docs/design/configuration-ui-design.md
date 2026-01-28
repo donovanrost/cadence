@@ -1,3 +1,15 @@
+---
+title: Configuration UI Design
+tags: [design, ui, configuration]
+related:
+  - "[[mission]]"
+  - "[[target]]"
+  - "[[interface]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Cadence Configuration UI Design
 
 ## Executive Summary

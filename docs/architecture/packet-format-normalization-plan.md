@@ -1,3 +1,14 @@
+---
+title: Packet Format Normalization Plan
+tags: [architecture, implementation-plan, telemetry, packets]
+related:
+  - "[[telemetry-point]]"
+  - "[[interface]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Packet Format Normalization + Deframing Plan
 
 ## Goal

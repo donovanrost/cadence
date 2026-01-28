@@ -1,6 +1,21 @@
+---
+title: Runtime Uplink Flow
+aliases: [uplink flow, command uplink]
+tags: [architecture, uplink, cop-1, runtime]
+related:
+  - "[[cop-1]]"
+  - "[[interface]]"
+  - "[[target]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Runtime Uplink Flow
 
 This document captures the stable release contract for the runtime uplink path.
+
+> **Glossary:** [COP-1](../glossary/cop-1.md) | [Interface](../glossary/interface.md) | [Target](../glossary/target.md)
 
 ## COP-1 Protected Uplink
 

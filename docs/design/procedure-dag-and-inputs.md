@@ -1,3 +1,14 @@
+---
+title: DAG-based Procedure Execution and Inputs
+tags: [design, procedures, dag, inputs]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Design: DAG-based Procedure Execution & Procedure Inputs
 
 ## Overview

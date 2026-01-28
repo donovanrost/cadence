@@ -1,3 +1,14 @@
+---
+title: Procedures UI/UX Design
+tags: [design, procedures, ui, ux]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Procedures UI/UX Design
 
 > Designing an Epsilon3-caliber experience with Cadence's HUD aesthetic

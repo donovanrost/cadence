@@ -1,17 +1,32 @@
+---
+title: Procedures Design Document
+aliases: [procedures design, procedure system]
+tags: [design, procedures, sequences, automations]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+  - "[[automation]]"
+  - "[[002-luerl-for-procedures]]"
+  - "[[recording]]"
+created: 2024-12-01
+updated: 2025-01-27
+status: active
+---
+
 # Procedures Design Document
 
 ## Overview
 
-"Procedures" is decomposed into four distinct features with different complexity levels and user needs:
+"[Procedures](../glossary/procedure.md)" is decomposed into four distinct features with different complexity levels and user needs:
 
 | Feature | Description | Complexity |
 |---------|-------------|------------|
-| **Sequences** | Ordered steps with checks, approval-focused | Medium |
-| **Automations** | Trigger → Action rules | Low |
+| **[Sequences](../glossary/sequence.md)** | Ordered steps with checks, approval-focused | Medium |
+| **[Automations](../glossary/automation.md)** | Trigger → Action rules | Low |
 | **Scripts** | Sandboxed Lua for complex/custom operations | Medium-High |
 | **Campaigns** | Orchestration across targets/time | High (deferred) |
 
-All features share a common execution runtime built on Luerl (Lua in Erlang).
+All features share a common execution runtime built on Luerl (Lua in Erlang). See [ADR-002: Luerl for Procedure Execution](../decisions/002-luerl-for-procedures.md) for rationale.
 
 ## Architecture
 

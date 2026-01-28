@@ -1,3 +1,11 @@
+---
+title: Layout Patterns
+tags: [reference, design, layouts, liveview]
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Layout Patterns
 
 Cadence uses a sidebar-based layout system optimized for desktop and mobile spacecraft operation workflows.

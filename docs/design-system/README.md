@@ -1,3 +1,12 @@
+---
+title: Cadence Design System
+aliases: [design system, UI guidelines, component library]
+tags: [reference, design, ui, tailwind]
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Cadence Design System
 
 A vaporwave/Tokyo Night inspired design system for the Cadence spacecraft operations platform.

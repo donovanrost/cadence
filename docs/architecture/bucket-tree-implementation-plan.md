@@ -1,3 +1,14 @@
+---
+title: Bucket Tree Implementation Plan
+tags: [architecture, implementation-plan, access-control, data-model]
+related:
+  - "[[mission]]"
+  - "[[target]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Plan: Hierarchical Buckets for Access Control and Fast Queries
 
 ## Goal

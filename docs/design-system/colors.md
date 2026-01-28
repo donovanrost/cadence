@@ -1,3 +1,11 @@
+---
+title: Color Palette
+tags: [reference, design, colors, tailwind]
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Color Palette
 
 Cadence uses a dual-theme color system inspired by vaporwave aesthetics and Tokyo Night, optimized for both light and dark modes.

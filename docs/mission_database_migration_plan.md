@@ -1,3 +1,13 @@
+---
+title: Mission Database Migration Plan
+tags: [architecture, migration, database, missions]
+related:
+  - "[[mission]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Mission Database Migration Plan
 
 ## Overview

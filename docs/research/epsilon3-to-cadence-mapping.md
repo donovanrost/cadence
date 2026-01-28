@@ -1,3 +1,14 @@
+---
+title: Epsilon3 to Cadence Feature Mapping
+tags: [research, epsilon3, feature-mapping]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Epsilon3 to Cadence Feature Mapping
 
 > Analysis of how Epsilon3's procedure features map to Cadence's current implementation

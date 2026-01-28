@@ -1,3 +1,15 @@
+---
+title: Procedures Refactoring Plan
+tags: [design, procedures, refactor, implementation-plan]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+  - "[[automation]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Procedures Feature Refactoring Plan
 
 This document outlines the plan to address architectural issues identified in the Procedures feature review.

@@ -1,8 +1,26 @@
+---
+title: Timeline Mode Design Document
+aliases: [timeline mode, timeline view, activity timeline]
+tags: [design, ui, timeline, ops-console]
+related:
+  - "[[command]]"
+  - "[[procedure]]"
+  - "[[automation]]"
+  - "[[recording]]"
+  - "[[target]]"
+  - "[[mission]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Timeline Mode Design Document
 
 ## Overview
 
-Timeline Mode is a new ops-v2 mode that provides a unified chronological view of all mission activity—past, present, and future. Unlike other modes that are action-oriented (Commands, Procedures), Timeline Mode is observation-oriented, designed for situational awareness, pattern recognition, and forensic investigation.
+Timeline Mode is a new ops-v2 mode that provides a unified chronological view of all [Mission](../glossary/mission.md) activity—past, present, and future. Unlike other modes that are action-oriented ([Commands](../glossary/command.md), [Procedures](../glossary/procedure.md)), Timeline Mode is observation-oriented, designed for situational awareness, pattern recognition, and forensic investigation.
+
+> **Data Source:** Timeline events are persisted as [Recordings](../glossary/recording.md), enabling historical queries and audit trails.
 
 ### Design Goals
 

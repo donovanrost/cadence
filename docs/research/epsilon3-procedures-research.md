@@ -1,3 +1,14 @@
+---
+title: Epsilon3 Procedures Research
+tags: [research, epsilon3, procedures]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Epsilon3 Procedures - Deep Research Summary
 
 > Research conducted December 2025 to inform Cadence procedures redesign

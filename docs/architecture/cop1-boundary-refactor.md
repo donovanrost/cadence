@@ -1,4 +1,19 @@
+---
+title: COP-1 Boundary Refactor Spec
+aliases: [cop1 refactor, protocol boundaries]
+tags: [architecture, cop-1, ccsds, protocols, refactor]
+related:
+  - "[[cop-1]]"
+  - "[[interface]]"
+  - "[[target]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # COP-1 Boundary Refactor Spec (Greenfield-First)
+
+> **Glossary:** [COP-1](../glossary/cop-1.md) | [Interface](../glossary/interface.md) | [Target](../glossary/target.md)
 
 This project is greenfield and under active development. The priority is
 end-state architectural correctness over minimizing intermediate breakage.

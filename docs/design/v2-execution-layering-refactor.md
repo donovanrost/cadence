@@ -1,3 +1,15 @@
+---
+title: V2 Procedure Execution Layering Refactor
+tags: [design, procedures, refactor, implementation-plan]
+related:
+  - "[[procedure]]"
+  - "[[sequence]]"
+  - "[[002-luerl-for-procedures]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # V2 Procedure Execution - Layering Refactor Plan
 
 ## Problem Statement

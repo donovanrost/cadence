@@ -1,3 +1,15 @@
+---
+title: Data Plane / Control Plane Migration Plan
+tags: [architecture, implementation-plan, migration, data-plane, control-plane]
+related:
+  - "[[data-plane]]"
+  - "[[control-plane]]"
+  - "[[001-no-db-in-data-plane]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Data Plane / Control Plane Migration Plan
 
 ## Executive Summary

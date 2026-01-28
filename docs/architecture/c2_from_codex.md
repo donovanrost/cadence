@@ -1,6 +1,18 @@
-CCSDS-Based C2 System Architecture (Elixir)
+---
+title: CCSDS-Based C2 System Architecture
+tags: [architecture, reference, ccsds, commanding]
+related:
+  - "[[command]]"
+  - "[[cop-1]]"
+  - "[[interface]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
 
-Purpose
+# CCSDS-Based C2 System Architecture (Elixir)
+
+## Purpose
 
 This document defines a long-term CCSDS C2 stack for Cadence with strict layer
 boundaries, explicit state ownership, and first-class support for TM, AOS, and

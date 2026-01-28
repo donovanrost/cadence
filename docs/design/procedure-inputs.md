@@ -1,3 +1,14 @@
+---
+title: Procedure Inputs and Trigger Bindings
+tags: [design, procedures, inputs, triggers]
+related:
+  - "[[procedure]]"
+  - "[[automation]]"
+created: 2025-01-01
+updated: 2025-01-27
+status: active
+---
+
 # Procedure Inputs and Trigger Bindings
 
 ## Overview

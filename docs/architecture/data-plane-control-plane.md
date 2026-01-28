@@ -1,10 +1,26 @@
+---
+title: Data Plane / Control Plane Architecture
+aliases: [DP/CP, data plane control plane]
+tags: [architecture, data-plane, control-plane, runtime]
+related:
+  - "[[data-plane]]"
+  - "[[control-plane]]"
+  - "[[domain-entity]]"
+  - "[[001-no-db-in-data-plane]]"
+created: 2024-12-21
+updated: 2025-01-27
+status: active
+---
+
 # Data Plane / Control Plane Architecture
 
 ## Overview
 
-This document tracks the evolution toward a Data Plane / Control Plane separation for Cadence's telemetry processing pipeline. The goal is to eliminate database calls from the hot path of telemetry processing while maintaining a clean separation between configuration management and runtime data flow.
+This document tracks the evolution toward a [Data Plane](../glossary/data-plane.md) / [Control Plane](../glossary/control-plane.md) separation for Cadence's telemetry processing pipeline. The goal is to eliminate database calls from the hot path of telemetry processing while maintaining a clean separation between configuration management and runtime data flow.
 
 **Status:** Living document - updated as work progresses
+
+> **Key Decision:** [ADR-001: No Database Calls in Data Plane](../decisions/001-no-db-in-data-plane.md)
 
 ---
 
@@ -22,9 +38,9 @@ While some of these are already cached (PacketIdentifier, Limits), the Interface
 ### Goals
 
 1. **No DB calls in hot path** - Telemetry processing should use only in-memory state
-2. **Push-based config updates** - Control Plane pushes changes, Data Plane reacts
+2. **Push-based config updates** - [Control Plane](../glossary/control-plane.md) pushes changes, [Data Plane](../glossary/data-plane.md) reacts
 3. **Runtime state is ephemeral** - Status (connected/disconnected) is not persisted during operation
-4. **ETS-friendly entities** - Domain objects can be serialized to ETS for O(1) lookup
+4. **ETS-friendly entities** - [Domain Entities](../glossary/domain-entity.md) can be serialized to ETS for O(1) lookup
 
 ---
 
