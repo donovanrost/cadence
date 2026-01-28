@@ -81,6 +81,14 @@ defmodule Cadence.CCSDS.Uplink.Pipeline do
 
   defp encode_frames(frames, opts) do
     frame_opts = Keyword.take(opts, [:frame_size, :secondary_header_length, :ocf_length])
+    metrics_scope = Keyword.get(opts, :metrics_scope) || Keyword.get(opts, :mission_id)
+
+    frame_opts =
+      if metrics_scope do
+        Keyword.put(frame_opts, :metrics_scope, metrics_scope)
+      else
+        frame_opts
+      end
 
     frames
     |> Enum.reduce({:ok, []}, fn %LinkFrame{} = frame, {:ok, acc} ->

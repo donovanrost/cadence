@@ -5,7 +5,6 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
   use Cadence.IntegrationCase
 
   alias Cadence.Runtime.Alarms.RuleCache
-  alias Cadence.Runtime.Telemetry.PacketIdentifier
   alias Ecto.Adapters.SQL.Sandbox
 
   import Cadence.OrganizationsFixtures
@@ -23,8 +22,6 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
 
     # Clear any cached rules for this mission
     RuleCache.invalidate_mission(mission.id)
-
-    start_supervised!({PacketIdentifier, mission_id: mission.id})
 
     %{org: org, mission: mission, target: target}
   end
@@ -262,6 +259,7 @@ defmodule Cadence.Runtime.Alarms.RuleCacheTest do
 
       # Create an org-wide rule (no mission_id)
       org_rule = alarm_rule_fixture(organization: org, enabled: true)
+      _ = Cadence.TestSupport.refresh_config_bundle(mission.id)
 
       # Broadcast org-wide rule change
       Phoenix.PubSub.broadcast(

@@ -8,9 +8,9 @@ defmodule Cadence.Runtime.Transport.Supervisor do
   use GenServer
   require Logger
 
-  alias Cadence.Application.Interfaces.InterfaceQueries
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.Factory
+  alias Cadence.Runtime.Telemetry.ConfigBundle
 
   @registry Cadence.MissionRegistry
 
@@ -42,32 +42,24 @@ defmodule Cadence.Runtime.Transport.Supervisor do
 
   @impl true
   def init(mission_id) do
+    Logger.debug("Starting Transport.Supervisor for mission_id=#{mission_id}")
+
     {:ok, dynamic_sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     state = %State{mission_id: mission_id, dynamic_sup: dynamic_sup}
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:config")
     send(self(), :load_interfaces)
     {:ok, state}
   end
 
   @impl true
   def handle_info(:load_interfaces, state) do
-    interfaces = InterfaceQueries.list_for_mission(state.mission_id)
+    {:noreply, load_interfaces(state)}
+  end
 
-    Enum.each(interfaces, fn interface ->
-      case do_start_interface(interface, state) do
-        {:ok, _pid} ->
-          :ok
-
-        {:error, {:already_started, _pid}} ->
-          :ok
-
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to start interface #{interface.name} (#{interface.id}): #{inspect(reason)}"
-          )
-      end
-    end)
-
+  @impl true
+  def handle_info({:config_updated, _version}, state) do
+    send(self(), :load_interfaces)
     {:noreply, state}
   end
 
@@ -90,6 +82,8 @@ defmodule Cadence.Runtime.Transport.Supervisor do
 
   @impl true
   def terminate(_reason, state) do
+    Logger.debug("Stopping Transport.Supervisor for mission_id=#{state.mission_id}")
+
     if state.dynamic_sup && Process.alive?(state.dynamic_sup) do
       Supervisor.stop(state.dynamic_sup, :shutdown, 5_000)
     end
@@ -107,6 +101,46 @@ defmodule Cadence.Runtime.Transport.Supervisor do
     else
       child_spec = Factory.child_spec_for(interface)
       DynamicSupervisor.start_child(state.dynamic_sup, child_spec)
+    end
+  end
+
+  defp load_interfaces(state) do
+    case ConfigBundle.fetch(state.mission_id) do
+      {:ok, bundle} ->
+        apply_interface_config(state, bundle)
+
+      {:error, _} ->
+        Logger.debug(
+          "Config bundle missing for mission_id=#{state.mission_id}; skipping interface load"
+        )
+
+        state
+    end
+  end
+
+  defp apply_interface_config(state, bundle) do
+    Logger.debug(
+      "Applying interface config for mission_id=#{state.mission_id} generation=#{bundle.config_version}"
+    )
+
+    (bundle.interfaces || [])
+    |> Enum.each(&start_interface_safe(&1, state))
+
+    state
+  end
+
+  defp start_interface_safe(interface, state) do
+    case do_start_interface(interface, state) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to start interface #{interface.name} (#{interface.id}): #{inspect(reason)}"
+        )
     end
   end
 

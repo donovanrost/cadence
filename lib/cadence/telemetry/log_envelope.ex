@@ -8,7 +8,7 @@ defmodule Cadence.Telemetry.LogEnvelope do
 
   @type t :: %__MODULE__{
           mission_id: String.t(),
-          target_id: String.t(),
+          target_id: String.t() | nil,
           apid: non_neg_integer() | nil,
           lane: atom(),
           shard_id: non_neg_integer(),

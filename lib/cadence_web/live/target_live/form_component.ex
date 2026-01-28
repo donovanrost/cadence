@@ -49,6 +49,16 @@ defmodule CadenceWeb.TargetLive.FormComponent do
         />
 
         <.input
+          field={@form[:scid]}
+          type="number"
+          label="SCID (Spacecraft ID)"
+          placeholder="0"
+        />
+        <p class="mt-2 text-sm text-base-content/60">
+          Required for spacecraft targets. Valid range: 0-1023.
+        </p>
+
+        <.input
           field={@form[:status]}
           type="select"
           label="Status"

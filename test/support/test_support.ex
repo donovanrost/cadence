@@ -3,11 +3,28 @@ defmodule Cadence.TestSupport do
   Helpers for bootstrapping test runtime.
   """
 
+  alias Cadence.Application.Missions.MissionConfig
+  alias Cadence.Runtime.Telemetry.ConfigBundle
+
   def start_full_app do
     case Application.ensure_all_started(:cadence) do
       {:ok, _} -> :ok
       {:error, {:already_started, _app}} -> :ok
       {:error, _} = error -> error
+    end
+  end
+
+  def refresh_config_bundle(mission_id) when is_binary(mission_id) do
+    case MissionConfig.load(mission_id) do
+      {:ok, config} ->
+        config
+        |> ConfigBundle.from_config()
+        |> ConfigBundle.store()
+
+        :ok
+
+      {:error, _} ->
+        :error
     end
   end
 

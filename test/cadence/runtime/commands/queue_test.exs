@@ -65,6 +65,7 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
         name: "SC1",
         type: "spacecraft",
         identifier: "SC1_#{System.unique_integer([:positive])}",
+        scid: 1,
         status: "online"
       })
       |> Repo.insert!()
@@ -225,6 +226,7 @@ defmodule Cadence.Runtime.Commands.TargetQueueTest do
           name: "SC2",
           type: "spacecraft",
           identifier: "SC2_#{System.unique_integer([:positive])}",
+          scid: 2,
           status: "online"
         })
         |> Repo.insert!()

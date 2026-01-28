@@ -84,8 +84,18 @@ defmodule Cadence.Runtime.Commands.VerificationManager do
 
   @impl true
   def init(mission_id) when is_binary(mission_id) do
+    Logger.debug("Starting VerificationManager for mission_id=#{mission_id}")
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:telemetry")
     {:ok, %State{mission_id: mission_id}}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping VerificationManager for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true

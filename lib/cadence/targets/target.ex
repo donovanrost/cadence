@@ -22,6 +22,7 @@ defmodule Cadence.Targets.Target do
           mission_id: Ecto.UUID.t(),
           name: String.t(),
           identifier: String.t(),
+          scid: integer() | nil,
           type: String.t(),
           status: String.t(),
           config: map(),
@@ -37,6 +38,7 @@ defmodule Cadence.Targets.Target do
   schema "targets" do
     field :name, :string
     field :identifier, :string
+    field :scid, :integer
     field :type, :string
     field :status, :string, default: "offline"
 
@@ -74,6 +76,7 @@ defmodule Cadence.Targets.Target do
       :definition_set_id,
       :name,
       :identifier,
+      :scid,
       :type,
       :status,
       :config,
@@ -84,11 +87,13 @@ defmodule Cadence.Targets.Target do
     |> validate_format(:identifier, ~r/^[A-Z0-9_-]+$/,
       message: "must be uppercase alphanumeric with underscores/hyphens"
     )
+    |> validate_scid()
     |> validate_inclusion(:type, ["spacecraft", "ground_station", "simulator", "relay"])
     |> validate_inclusion(:status, ["offline", "online", "standby", "fault"])
     |> foreign_key_constraint(:mission_id)
     |> foreign_key_constraint(:definition_set_id)
     |> unique_constraint([:mission_id, :identifier])
+    |> unique_constraint([:mission_id, :scid], name: :targets_mission_scid_index)
   end
 
   @doc """
@@ -102,11 +107,31 @@ defmodule Cadence.Targets.Target do
       :config,
       :metadata,
       :active_limit_set,
-      :definition_set_id
+      :definition_set_id,
+      :scid
     ])
     |> validate_required([:name])
+    |> validate_scid()
     |> validate_inclusion(:status, ["offline", "online", "standby", "fault"])
     |> foreign_key_constraint(:definition_set_id)
+  end
+
+  defp validate_scid(changeset) do
+    type = get_field(changeset, :type)
+    scid = get_field(changeset, :scid)
+
+    changeset =
+      if type == "spacecraft" do
+        validate_required(changeset, [:scid])
+      else
+        changeset
+      end
+
+    if is_nil(scid) do
+      changeset
+    else
+      validate_number(changeset, :scid, greater_than_or_equal_to: 0, less_than: 1024)
+    end
   end
 
   @doc """

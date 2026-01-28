@@ -640,29 +640,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
 
     # Calculate actual rate
     actual_rate = if elapsed > 0, do: stats.packet_count / elapsed, else: 0.0
-
-    base_info =
-      "[#{format_elapsed(elapsed)}] " <>
-        "Packets: #{format_number(stats.packet_count)} | " <>
-        "Rate: #{format_rate(actual_rate)} pkt/s | " <>
-        "Steps: #{format_number(stats.step)}"
-
-    # Add parallel mode metrics if available
-    output =
-      case stats[:send_buffer_stats] do
-        nil ->
-          base_info
-
-        buffer_stats ->
-          sent = buffer_stats[:packets_sent] || 0
-          bytes = buffer_stats[:bytes_sent] || 0
-          sent_rate = if elapsed > 0, do: sent / elapsed, else: 0.0
-          mbps = if elapsed > 0, do: bytes * 8 / elapsed / 1_000_000, else: 0.0
-
-          base_info <>
-            " | Sent: #{format_number(sent)} (#{format_rate(sent_rate)} pkt/s, #{Float.round(mbps, 2)} Mbps)"
-      end
-
+    output = build_stats_line(stats, elapsed, actual_rate)
     Mix.shell().info(output)
   end
 
@@ -693,6 +671,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
     Average Rate:    #{format_rate(avg_rate)} packets/sec
     Target:          #{stats.target_id}
     Provider:        #{inspect(stats.provider)}
+    SDLP Metrics:    #{format_sdlp_summary(stats)}
 
     Simulation complete.
     """)
@@ -723,6 +702,82 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp format_rate(rate) do
     Float.round(rate, 2)
   end
+
+  defp build_stats_line(stats, elapsed, actual_rate) do
+    base_info =
+      "[#{format_elapsed(elapsed)}] " <>
+        "Packets: #{format_number(stats.packet_count)} | " <>
+        "Rate: #{format_rate(actual_rate)} pkt/s | " <>
+        "Steps: #{format_number(stats.step)}"
+
+    base_info
+    |> maybe_add_send_buffer(stats, elapsed)
+    |> maybe_add_sdlp(stats)
+  end
+
+  defp maybe_add_send_buffer(output, stats, elapsed) do
+    case stats[:send_buffer_stats] do
+      nil ->
+        output
+
+      buffer_stats ->
+        sent = buffer_stats[:packets_sent] || 0
+        bytes = buffer_stats[:bytes_sent] || 0
+        sent_rate = if elapsed > 0, do: sent / elapsed, else: 0.0
+        mbps = if elapsed > 0, do: bytes * 8 / elapsed / 1_000_000, else: 0.0
+
+        output <>
+          " | Sent: #{format_number(sent)} (#{format_rate(sent_rate)} pkt/s, #{Float.round(mbps, 2)} Mbps)"
+    end
+  end
+
+  defp maybe_add_sdlp(output, stats) do
+    case format_sdlp_metrics(stats) do
+      nil -> output
+      sdlp_line -> output <> " | " <> sdlp_line
+    end
+  end
+
+  defp format_sdlp_metrics(stats) do
+    case stats[:sdlp_metrics] do
+      nil ->
+        nil
+
+      metrics when map_size(metrics) == 0 ->
+        nil
+
+      metrics ->
+        metrics
+        |> Enum.sort_by(fn {profile, _} -> profile end)
+        |> Enum.map_join(" | ", fn {profile, data} ->
+          decode = data.frame_decode
+          encode = data.frame_encode
+          seg = data.segmentation
+          reasm = data.reassembly
+
+          "SDLP #{profile}: dec #{decode.ok}/#{decode.total} drop #{decode.drop} " <>
+            "enc #{encode.ok}/#{encode.total} seg #{seg.segments_emitted} " <>
+            "reasm #{reasm.sdu_emitted} in #{format_bytes(decode.bytes_in)} out #{format_bytes(encode.bytes_out)}"
+        end)
+    end
+  end
+
+  defp format_sdlp_summary(stats) do
+    case format_sdlp_metrics(stats) do
+      nil -> "none"
+      line -> line
+    end
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000_000 do
+    "#{Float.round(bytes / 1_000_000, 2)}MB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000 do
+    "#{Float.round(bytes / 1_000, 2)}KB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes), do: "#{bytes}B"
 
   defp print_help do
     Mix.shell().info("""

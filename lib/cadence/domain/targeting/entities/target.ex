@@ -57,6 +57,7 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
           bucket_id: String.t() | nil,
           name: String.t(),
           identifier: String.t(),
+          scid: non_neg_integer() | nil,
           type: target_type(),
           status: target_status(),
           config: map(),
@@ -78,6 +79,7 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
     :bucket_id,
     :name,
     :identifier,
+    :scid,
     :type,
     :circuit_breaker_opened_at,
     :inserted_at,
@@ -125,7 +127,8 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
          {:ok, definition_set_id} <- validate_required(attrs, :definition_set_id),
          {:ok, name} <- validate_required(attrs, :name),
          {:ok, identifier} <- validate_identifier(attrs),
-         {:ok, type} <- validate_type(attrs) do
+         {:ok, type} <- validate_type(attrs),
+         {:ok, scid} <- validate_scid(attrs, type) do
       target = %__MODULE__{
         id: Map.get(attrs, :id),
         mission_id: mission_id,
@@ -133,6 +136,7 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
         bucket_id: Map.get(attrs, :bucket_id),
         name: name,
         identifier: identifier,
+        scid: scid,
         type: type,
         status: Map.get(attrs, :status, :offline) |> normalize_status(),
         config: Map.get(attrs, :config, %{}),
@@ -164,6 +168,7 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
     |> maybe_update_active_limit_set(attrs)
     |> maybe_update_bucket_id(attrs)
     |> maybe_update_definition_set_id(attrs)
+    |> maybe_update_scid(attrs)
   end
 
   # ===========================================================================
@@ -333,6 +338,23 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
     end
   end
 
+  defp validate_scid(attrs, type) when is_map(attrs) do
+    scid = Map.get(attrs, :scid)
+
+    case validate_scid_value(scid, type) do
+      :ok -> {:ok, scid}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp validate_scid_value(nil, :spacecraft), do: {:error, {:missing, :scid}}
+  defp validate_scid_value(nil, _type), do: :ok
+
+  defp validate_scid_value(scid, _type) when is_integer(scid) and scid >= 0 and scid < 1024,
+    do: :ok
+
+  defp validate_scid_value(scid, _type), do: {:error, {:invalid, :scid, scid}}
+
   defp normalize_type(type) when is_atom(type), do: type
   defp normalize_type("spacecraft"), do: :spacecraft
   defp normalize_type("ground_station"), do: :ground_station
@@ -413,6 +435,21 @@ defmodule Cadence.Domain.Targeting.Entities.Target do
   end
 
   defp maybe_update_definition_set_id(error, _), do: error
+
+  defp maybe_update_scid({:ok, target}, attrs) do
+    case Map.fetch(attrs, :scid) do
+      :error ->
+        {:ok, target}
+
+      {:ok, scid} ->
+        case validate_scid_value(scid, target.type) do
+          :ok -> {:ok, %{target | scid: scid}}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp maybe_update_scid(error, _), do: error
 end
 
 # Bucketable protocol implementation for hierarchical organization

@@ -7,7 +7,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
   use GenServer
   require Logger
 
-  alias Cadence.Runtime.Telemetry.Lanes.{Event, LaneConfig}
+  alias Cadence.Runtime.Telemetry.Lanes.{LaneConfig, LaneSelector}
+  alias Cadence.Runtime.Telemetry.PipelineEvent
+  alias Cadence.Telemetry.{PacketEnvelope, Parse, SpacePacket}
   alias Cadence.Telemetry.PipelineMetrics
 
   @default_max_queue_depth 100_000
@@ -48,6 +50,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
         "#{lane.name}=#{lane.shard_count}"
       end)
 
+    Logger.debug("Starting Lanes.Router for mission_id=#{mission_id}")
     Logger.info("Telemetry router starting for mission_id=#{mission_id}, lanes=#{lane_summary}")
 
     PipelineMetrics.init_lanes(mission_id, lanes)
@@ -87,31 +90,59 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
   end
 
   @impl true
-  def handle_info({:telemetry_packet, packet, metadata}, state) do
-    event =
-      Event.new(packet, metadata, %{
-        mission_id: state.mission_id,
-        lanes: state.lanes,
-        router_version: state.router_version,
-        config_version: state.config_version
-      })
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.Router for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
 
-    partition_key = {event.lane, event.shard_id}
-    PipelineMetrics.inc(state.mission_id, partition_key, :packets_received)
-    PipelineMetrics.inc(state.mission_id, partition_key, :bytes_received, byte_size(packet.raw))
+    :ok
+  end
 
-    state =
-      state
-      |> enqueue_event(event)
-      |> then(fn updated -> maybe_toggle_backpressure(updated, event.lane) end)
-      |> dispatch_events()
-
-    {:noreply, state}
+  @impl true
+  def handle_info({:packet_envelope, %PacketEnvelope{} = envelope}, state) do
+    {:noreply, handle_packet_envelope(envelope, state)}
   end
 
   @impl true
   def handle_info({:config_version, version}, state) when is_integer(version) do
     {:noreply, %{state | config_version: version}}
+  end
+
+  defp handle_packet_envelope(%PacketEnvelope{} = envelope, state) do
+    {result, envelope} =
+      case Parse.run(envelope) do
+        {:ok, parsed_unit, updated_envelope} ->
+          {{:ok, parsed_unit}, updated_envelope}
+
+        {:error, reason, updated_envelope} ->
+          {{:error, reason}, updated_envelope}
+      end
+
+    {lane, shard_id} = select_lane_and_shard(envelope, result, state)
+
+    event = %PipelineEvent{
+      packet_id: envelope.packet_id,
+      mission_id: state.mission_id,
+      lane: lane,
+      shard_id: shard_id,
+      router_version: state.router_version,
+      config_version: state.config_version,
+      envelope: envelope,
+      parsed_unit: if(match?({:ok, _}, result), do: elem(result, 1), else: nil),
+      parse_error: if(match?({:error, _}, result), do: elem(result, 1), else: nil),
+      resolved_unit: nil,
+      ingest_monotonic_ns: envelope.ingest_monotonic_ns
+    }
+
+    partition_key = {event.lane, event.shard_id}
+    PipelineMetrics.inc(state.mission_id, partition_key, :packets_received)
+    PipelineMetrics.inc(state.mission_id, partition_key, :bytes_received, byte_size(envelope.raw))
+    record_parse_metrics(state, partition_key, result)
+
+    state
+    |> enqueue_event_v2(event)
+    |> then(fn updated -> maybe_toggle_backpressure(updated, event.lane) end)
+    |> dispatch_events()
   end
 
   @impl true
@@ -169,18 +200,6 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     {:noreply, updated_state}
   end
 
-  defp enqueue_event(state, %Event{} = event) do
-    shard_id = event.shard_id
-    lane_state = Map.fetch!(state.lane_state, event.lane)
-    queue = Map.fetch!(lane_state.queues, shard_id)
-
-    if lane_state.queue_depth >= lane_state.max_queue_depth do
-      drop_oldest(state, event, queue, lane_state)
-    else
-      enqueue(state, event, queue, lane_state)
-    end
-  end
-
   defp enqueue(state, event, queue, lane_state) do
     new_queue = :queue.in(event, queue)
 
@@ -191,6 +210,18 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     }
 
     put_in(state.lane_state[event.lane], updated_lane_state)
+  end
+
+  defp enqueue_event_v2(state, %PipelineEvent{} = event) do
+    shard_id = event.shard_id
+    lane_state = Map.fetch!(state.lane_state, event.lane)
+    queue = Map.fetch!(lane_state.queues, shard_id)
+
+    if lane_state.queue_depth >= lane_state.max_queue_depth do
+      drop_oldest(state, event, queue, lane_state)
+    else
+      enqueue(state, event, queue, lane_state)
+    end
   end
 
   defp drop_oldest(state, event, queue, lane_state) do
@@ -318,5 +349,44 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
       end
 
     {queues, credits}
+  end
+
+  defp select_lane_and_shard(envelope, result, state) do
+    metadata = envelope.provenance || %{}
+    parsed_unit = if(match?({:ok, _}, result), do: elem(result, 1), else: nil)
+
+    lane = LaneSelector.select_lane_envelope(envelope, parsed_unit, metadata, state.lanes)
+
+    lane_config = Enum.find(state.lanes, &(&1.name == lane)) || List.first(state.lanes)
+    apid = apid_from_parsed(parsed_unit)
+
+    shard_id =
+      compute_shard_v2(
+        envelope.packet_id,
+        apid,
+        lane_config.shard_count,
+        lane_config.virtual_shards
+      )
+
+    {lane, shard_id}
+  end
+
+  defp apid_from_parsed({:space_packet, %SpacePacket{} = packet}) do
+    SpacePacket.get_apid(packet)
+  end
+
+  defp apid_from_parsed(_), do: nil
+
+  defp compute_shard_v2(packet_id, apid, shard_count, virtual_shards) do
+    vnode = :erlang.phash2({packet_id, apid}, virtual_shards)
+    rem(vnode, shard_count)
+  end
+
+  defp record_parse_metrics(state, partition_key, {:ok, _parsed_unit}) do
+    PipelineMetrics.inc(state.mission_id, partition_key, :packets_parsed_ok)
+  end
+
+  defp record_parse_metrics(state, partition_key, {:error, _reason}) do
+    PipelineMetrics.inc(state.mission_id, partition_key, :packets_malformed)
   end
 end

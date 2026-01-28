@@ -1032,6 +1032,8 @@ defmodule CadenceWeb.Layouts do
         :is_settings_procedures,
         assigns.current_path == "#{base_path}/settings/procedures"
       )
+      |> assign(:is_transports, String.contains?(assigns.current_path, "#{base_path}/transports"))
+      |> assign(:is_links, String.contains?(assigns.current_path, "#{base_path}/links"))
 
     ~H"""
     <%= if @mission do %>
@@ -1049,6 +1051,19 @@ defmodule CadenceWeb.Layouts do
         <:icon><.icon name="hero-signal" class="h-5 w-5" /></:icon>
         Interfaces
       </.sidebar_nav_item>
+
+      <.sidebar_nav_group
+        label="Config"
+        icon="hero-cog-8-tooth"
+        expanded={@is_transports or @is_links}
+      >
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/transports"} active={@is_transports}>
+          Transports
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/links"} active={@is_links}>
+          Links
+        </.sidebar_nav_child>
+      </.sidebar_nav_group>
 
       <.sidebar_nav_group
         label="Database"

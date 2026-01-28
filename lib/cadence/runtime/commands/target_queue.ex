@@ -183,6 +183,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
 
   @impl true
   def init({%Mission{} = mission, %Target{} = target, snapshot}) do
+    Logger.debug("Starting TargetQueue for mission_id=#{mission.id} target_id=#{target.id}")
+
     Logger.info(
       "Starting TargetQueue for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
@@ -192,6 +194,15 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     state = build_state_from_snapshot(mission, target, snapshot)
 
     {:ok, schedule_process(state)}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping TargetQueue for mission_id=#{state.mission_id} target_id=#{state.target_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true

@@ -183,6 +183,14 @@ defmodule Cadence.Missions do
     MissionOperations.advance_phase(mission_id, organization_id, new_phase)
   end
 
+  @doc """
+  Bumps the mission config_generation to trigger runtime reconciliation.
+  """
+  @spec bump_config_generation!(String.t()) :: non_neg_integer()
+  def bump_config_generation!(mission_id) do
+    MissionOperations.bump_config_generation!(mission_id)
+  end
+
   # ============================================================================
   # Mission Memberships
   # ============================================================================

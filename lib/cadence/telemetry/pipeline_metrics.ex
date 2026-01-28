@@ -73,10 +73,22 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     latency_count_end_to_end: 25,
 
     # Bitrate tracking
-    bytes_received: 26
+    bytes_received: 26,
+
+    # V2 pipeline counters
+    packets_parsed_ok: 29,
+    packets_malformed: 30,
+    packets_resolved_ok: 31,
+    packets_unresolved: 32,
+    packets_ambiguous: 33,
+    packets_schema_ok: 34,
+    packets_unknown_apid: 35,
+    packets_uncataloged_target: 36,
+    packets_unsupported_format: 37,
+    packets_decom_processed: 38
   }
 
-  @slot_count 28
+  @slot_count 38
 
   # Atomics slot indices for min/max (per partition)
   # Uses :atomics for compare-and-exchange operations

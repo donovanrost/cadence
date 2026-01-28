@@ -58,28 +58,6 @@ defmodule CadenceWeb.MissionLive.Targets do
     |> assign(:target, %Targets.Target{})
   end
 
-  defp apply_action(socket, :edit, %{"target_id" => target_id}) do
-    mission = socket.assigns.mission
-
-    # Use schema version for form compatibility
-    case Targets.get_target_schema_unscoped(target_id) do
-      nil ->
-        socket
-        |> put_flash(:error, "Target not found in this mission")
-        |> push_patch(to: ~p"/missions/#{mission}/targets")
-
-      target ->
-        targets = Targets.list_targets_with_preloads(mission)
-        interfaces = Interfaces.list_interfaces(mission)
-
-        socket
-        |> assign(:page_title, "Edit Target")
-        |> assign(:targets, targets)
-        |> assign(:interfaces, interfaces)
-        |> assign(:target, target)
-    end
-  end
-
   @impl true
   def handle_info({CadenceWeb.TargetLive.FormComponent, {:saved, _target}}, socket) do
     targets = Targets.list_targets_with_preloads(socket.assigns.mission)
@@ -150,6 +128,13 @@ defmodule CadenceWeb.MissionLive.Targets do
         <:col :let={target} label="Name">{target.name}</:col>
         <:col :let={target} label="Identifier">{target.identifier}</:col>
         <:col :let={target} label="Type">{target.type}</:col>
+        <:col :let={target} label="SCID">
+          <%= if target.scid do %>
+            <span class="font-mono text-sm">{target.scid}</span>
+          <% else %>
+            <span class="text-base-content/40 text-sm">-</span>
+          <% end %>
+        </:col>
         <:col :let={target} label="Database">
           <%= if target.definition_set do %>
             <span class="text-sm">
@@ -167,7 +152,7 @@ defmodule CadenceWeb.MissionLive.Targets do
           <.status_badge status={target.circuit_breaker_status} />
         </:col>
         <:action :let={target}>
-          <.link patch={~p"/missions/#{@mission}/targets/#{target}/edit"}>Edit</.link>
+          <.link navigate={~p"/missions/#{@mission}/targets/#{target}"}>View</.link>
           <.link
             phx-click={JS.push("delete", value: %{id: target.id})}
             data-confirm="Are you sure you want to delete this target?"
@@ -194,16 +179,16 @@ defmodule CadenceWeb.MissionLive.Targets do
     </div>
 
     <.modal
-      :if={@live_action in [:new, :edit]}
+      :if={@live_action == :new}
       id="target-modal"
       show
       on_cancel={JS.patch(~p"/missions/#{@mission}/targets")}
     >
       <.live_component
         module={CadenceWeb.TargetLive.FormComponent}
-        id={@target.id || :new}
+        id={:new}
         title={@page_title}
-        action={if @live_action == :new, do: :new, else: :edit}
+        action={:new}
         target={@target}
         mission={@mission}
         interfaces={@interfaces}

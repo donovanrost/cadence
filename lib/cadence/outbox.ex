@@ -144,7 +144,7 @@ defmodule Cadence.Outbox do
       order_by: [asc: e.inserted_at],
       limit: ^limit
     )
-    |> Repo.all()
+    |> Repo.all(log: false)
   end
 
   @doc """
@@ -161,7 +161,7 @@ defmodule Cadence.Outbox do
       order_by: [asc: e.inserted_at],
       limit: ^limit
     )
-    |> Repo.all()
+    |> Repo.all(log: false)
   end
 
   @doc """

@@ -192,7 +192,8 @@ defmodule Cadence.Application.Commanding.EnqueueCommandTest do
         definition_set_id: random_id(),
         name: "Test Target",
         identifier: "SAT_#{System.unique_integer([:positive])}",
-        type: :spacecraft
+        type: :spacecraft,
+        scid: 1
       })
 
     {:ok, saved} = InMemoryTargetRepository.save(target)

@@ -22,11 +22,8 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
   use GenServer
   require Logger
 
-  import Ecto.Query
-
-  alias Cadence.Config.VersionRegistry
   alias Cadence.MissionDatabase.MetaCommand
-  alias Cadence.Repo
+  alias Cadence.Runtime.Telemetry.ConfigBundle
 
   @table_name :meta_command_cache
 
@@ -36,9 +33,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
       :mission_id,
       :table_name,
       commands_loaded: 0,
-      definition_sets_loaded: [],
-      # Track version per definition_set for cache invalidation
-      definition_set_versions: %{}
+      definition_sets_loaded: []
     ]
   end
 
@@ -128,6 +123,8 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
   def init(mission_id) do
     table_name = table_name()
 
+    Logger.debug("Starting MetaCommandCache for mission_id=#{mission_id}")
+
     if :ets.whereis(table_name) == :undefined do
       Logger.info("Creating MetaCommand cache table: #{table_name}")
 
@@ -141,8 +138,8 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
         ])
     end
 
-    # Subscribe to definition_set and target changes
-    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:definition_set")
+    # Subscribe to config updates and target changes
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:config")
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:targets")
 
     state = %State{
@@ -150,16 +147,8 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
       table_name: table_name
     }
 
-    # Load commands for all definition_sets used by mission targets
+    # Load commands for all definition_sets provided by config bundle
     state = load_all_definition_sets(state)
-
-    # Subscribe to version invalidation for each loaded definition_set
-    Enum.each(state.definition_sets_loaded, fn ds_id ->
-      Phoenix.PubSub.subscribe(
-        Cadence.PubSub,
-        VersionRegistry.topic_for(:definition_set, ds_id)
-      )
-    end)
 
     {:ok, state}
   end
@@ -185,46 +174,9 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
   end
 
   @impl true
-  def handle_info({:definition_set_changed, definition_set_id, version}, state) do
-    Logger.info(
-      "DefinitionSet changed to #{version} (#{definition_set_id}) for mission_id=#{state.mission_id}, " <>
-        "reloading MetaCommand cache"
-    )
-
-    new_state = load_all_definition_sets(state)
-    {:noreply, new_state}
-  end
-
-  def handle_info({:target_definition_set_changed, target_id, definition_set_id}, state) do
-    Logger.info(
-      "Target #{target_id} changed to definition_set #{definition_set_id}, " <>
-        "ensuring commands are cached"
-    )
-
-    # Only load this specific definition_set if not already loaded
-    if definition_set_id in state.definition_sets_loaded do
-      {:noreply, state}
-    else
-      count = load_for_definition_set(state.table_name, state.mission_id, definition_set_id)
-      version = VersionRegistry.get_version(:definition_set, definition_set_id)
-
-      Phoenix.PubSub.subscribe(
-        Cadence.PubSub,
-        VersionRegistry.topic_for(:definition_set, definition_set_id)
-      )
-
-      Logger.info("Loaded #{count} commands for new definition_set=#{definition_set_id}")
-
-      new_state = %{
-        state
-        | commands_loaded: state.commands_loaded + count,
-          definition_sets_loaded: [definition_set_id | state.definition_sets_loaded],
-          definition_set_versions:
-            Map.put(state.definition_set_versions, definition_set_id, version)
-      }
-
-      {:noreply, new_state}
-    end
+  def handle_info({:config_updated, _version}, state) do
+    Logger.debug("Config updated for mission_id=#{state.mission_id}, reloading MetaCommand cache")
+    {:noreply, load_all_definition_sets(state)}
   end
 
   def handle_info({:target_created, target}, state) do
@@ -235,29 +187,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
       else
         Logger.debug("Target created with new definition_set, loading commands")
 
-        count =
-          load_for_definition_set(
-            state.table_name,
-            state.mission_id,
-            target.definition_set_id
-          )
-
-        version = VersionRegistry.get_version(:definition_set, target.definition_set_id)
-
-        Phoenix.PubSub.subscribe(
-          Cadence.PubSub,
-          VersionRegistry.topic_for(:definition_set, target.definition_set_id)
-        )
-
-        new_state = %{
-          state
-          | commands_loaded: state.commands_loaded + count,
-            definition_sets_loaded: [target.definition_set_id | state.definition_sets_loaded],
-            definition_set_versions:
-              Map.put(state.definition_set_versions, target.definition_set_id, version)
-        }
-
-        {:noreply, new_state}
+        {:noreply, load_all_definition_sets(state)}
       end
     else
       {:noreply, state}
@@ -273,37 +203,6 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
     {:noreply, state}
   end
 
-  # Handle version invalidation from VersionRegistry
-  def handle_info({:config_invalidated, :definition_set, definition_set_id, new_version}, state) do
-    current_version = Map.get(state.definition_set_versions, definition_set_id, 0)
-
-    if new_version > current_version do
-      Logger.info(
-        "Config version changed for definition_set=#{definition_set_id} " <>
-          "(#{current_version} -> #{new_version}), reloading MetaCommandCache"
-      )
-
-      old_count =
-        definition_set_entry_count(state.table_name, state.mission_id, definition_set_id)
-
-      # Reload just this definition_set
-      count = load_for_definition_set(state.table_name, state.mission_id, definition_set_id)
-
-      new_versions = Map.put(state.definition_set_versions, definition_set_id, new_version)
-
-      Logger.info("Reloaded #{count} commands for definition_set=#{definition_set_id}")
-
-      {:noreply,
-       %{
-         state
-         | definition_set_versions: new_versions,
-           commands_loaded: state.commands_loaded - old_count + count
-       }}
-    else
-      {:noreply, state}
-    end
-  end
-
   def handle_info(msg, state) do
     Logger.warning("MetaCommandCache received unexpected message: #{inspect(msg)}")
     {:noreply, state}
@@ -311,6 +210,7 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
 
   @impl true
   def terminate(_reason, state) do
+    Logger.debug("Stopping MetaCommandCache for mission_id=#{state.mission_id}")
     Logger.info("Terminating MetaCommand cache table: #{state.table_name}")
     :ets.delete(state.table_name)
     :ok
@@ -324,60 +224,55 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
 
   defp table_name, do: @table_name
 
-  # Load commands for all definition_sets used by mission targets
+  # Load commands for all definition_sets provided by config bundle
   defp load_all_definition_sets(state) do
-    # Clear existing entries for this mission
-    delete_mission_entries(state.table_name, state.mission_id)
+    case ConfigBundle.fetch(state.mission_id) do
+      {:ok, bundle} ->
+        delete_mission_entries(state.table_name, state.mission_id)
 
-    # Get all unique definition_set_ids used by targets in this mission
-    definition_set_ids = get_mission_definition_set_ids(state.mission_id)
+        command_defs = Map.get(bundle, :command_defs, %{})
+        definition_set_ids = Map.keys(command_defs)
 
-    Logger.info(
-      "Loading MetaCommands for #{length(definition_set_ids)} definition_sets " <>
-        "in mission_id=#{state.mission_id}"
-    )
+        Logger.info(
+          "Loading MetaCommands for #{length(definition_set_ids)} definition_sets " <>
+            "in mission_id=#{state.mission_id}"
+        )
 
-    # Load commands for each definition_set and track versions
-    {total_commands, versions} =
-      Enum.reduce(definition_set_ids, {0, %{}}, fn definition_set_id, {acc, vers} ->
-        count = load_for_definition_set(state.table_name, state.mission_id, definition_set_id)
-        version = VersionRegistry.get_version(:definition_set, definition_set_id)
-        {acc + count, Map.put(vers, definition_set_id, version)}
-      end)
+        total_commands =
+          Enum.reduce(definition_set_ids, 0, fn definition_set_id, acc ->
+            commands = Map.get(command_defs, definition_set_id, [])
 
-    Logger.info(
-      "MetaCommandCache loaded #{total_commands} commands from " <>
-        "#{length(definition_set_ids)} definition_sets for mission_id=#{state.mission_id}"
-    )
+            count =
+              load_for_definition_set(
+                state.table_name,
+                state.mission_id,
+                definition_set_id,
+                commands
+              )
 
-    %{
-      state
-      | commands_loaded: total_commands,
-        definition_sets_loaded: definition_set_ids,
-        definition_set_versions: versions
-    }
-  end
+            acc + count
+          end)
 
-  # Gets all unique definition_set_ids used by targets in this mission
-  defp get_mission_definition_set_ids(mission_id) do
-    Cadence.Targets.Target
-    |> where([t], t.mission_id == ^mission_id)
-    |> where([t], not is_nil(t.definition_set_id))
-    |> select([t], t.definition_set_id)
-    |> distinct(true)
-    |> Repo.all()
+        Logger.info(
+          "MetaCommandCache loaded #{total_commands} commands from " <>
+            "#{length(definition_set_ids)} definition_sets for mission_id=#{state.mission_id}"
+        )
+
+        %{
+          state
+          | commands_loaded: total_commands,
+            definition_sets_loaded: definition_set_ids
+        }
+
+      {:error, _} ->
+        state
+    end
   end
 
   # Load commands for a specific definition_set with all associations preloaded
-  defp load_for_definition_set(table_name, mission_id, definition_set_id) do
+  defp load_for_definition_set(table_name, mission_id, definition_set_id, commands)
+       when is_list(commands) do
     delete_definition_set_entries(table_name, mission_id, definition_set_id)
-
-    commands =
-      MetaCommand
-      |> where([mc], mc.definition_set_id == ^definition_set_id)
-      |> where([mc], mc.abstract == false or is_nil(mc.abstract))
-      |> preload([:arguments, :verifiers, :transmission_constraints, :command_container])
-      |> Repo.all()
 
     Enum.each(commands, fn cmd ->
       # Index by name
@@ -402,10 +297,6 @@ defmodule Cadence.Runtime.Commands.MetaCommandCache do
   defp delete_definition_set_entries(table_name, mission_id, definition_set_id) do
     :ets.match_delete(table_name, {{mission_id, definition_set_id, :_}, :_})
     :ets.match_delete(table_name, {{mission_id, definition_set_id, :_, :_}, :_})
-  end
-
-  defp definition_set_entry_count(table_name, mission_id, definition_set_id) do
-    :ets.select_count(table_name, [{{{mission_id, definition_set_id, :_}, :_}, [], [true]}])
   end
 
   defp mission_entry_count(table_name, mission_id) do

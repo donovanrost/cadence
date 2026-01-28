@@ -86,6 +86,7 @@ defmodule CadenceWeb do
       import Phoenix.HTML
       # Core UI components
       import CadenceWeb.CoreComponents
+      import CadenceWeb.LinkComponents
 
       # Common modules used in templates
       alias CadenceWeb.Layouts

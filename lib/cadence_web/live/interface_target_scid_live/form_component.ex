@@ -13,6 +13,12 @@ defmodule CadenceWeb.InterfaceTargetScidLive.FormComponent do
         <:subtitle>Assign a spacecraft ID for this target on the interface.</:subtitle>
       </.header>
 
+      <div class="mb-4 rounded-sm border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <span class="font-semibold">Deprecated:</span>
+        Interface SCID routing is no longer used for runtime decisions. Set SCID on the spacecraft
+        target instead.
+      </div>
+
       <.simple_form
         for={@form}
         id="interface-target-scid-form"

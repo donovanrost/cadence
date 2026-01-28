@@ -4,7 +4,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
 
   Tests the complete realistic spacecraft telemetry flow:
   1. PacketSimulator generates CCSDS binary packets
-  2. PacketIdentifier identifies packets by APID
+  2. Telemetry pipeline parses and resolves packets
   3. Decommutation extracts binary telemetry fields
   4. CVT stores values
   5. PubSub broadcasts updates
@@ -73,7 +73,7 @@ defmodule Cadence.Telemetry.CcsdsIntegrationTest do
         "SAT_C"
       ])
 
-      # Start the mission (starts CVT, PacketIdentifier, Pipeline)
+      # Start the mission (starts CVT and pipeline)
       {:ok, config} = MissionConfig.load(mission.id)
       {:ok, _pid} = MissionSupervisor.start_mission(config)
 

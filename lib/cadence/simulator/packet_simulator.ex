@@ -37,7 +37,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Interfaces
   alias Cadence.Runtime.Interfaces.SDLPConfig
-  alias Cadence.Telemetry.Packet
+  alias Cadence.Telemetry.{Evidence, PacketEnvelope}
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
   alias Phoenix.PubSub
@@ -611,27 +611,36 @@ defmodule Cadence.Simulator.PacketSimulator do
   defp publish_packet(mission_id, target_id, packet_type, binary_packet) do
     metadata = %{
       mission_id: mission_id,
-      stored: false,
       target_id: target_id,
       received_at: CadenceTime.now(),
       interface_id: nil,
-      source: %{simulator: true, packet_type: packet_type}
+      source: %{simulator: true, packet_type: packet_type},
+      mode: :sim
     }
 
-    packet =
-      case Packet.from_ccsds(binary_packet, metadata) do
-        {:ok, packet} -> packet
-        {:error, reason} -> log_failed_packet(mission_id, reason)
-      end
-
-    if packet do
-      PubSub.broadcast(
-        Cadence.PubSub,
-        "mission:#{mission_id}:telemetry:raw",
-        {:telemetry_packet, packet, metadata}
+    envelope =
+      PacketEnvelope.new(mission_id, binary_packet,
+        ingest_ts: metadata[:received_at],
+        provenance: build_provenance(metadata),
+        evidence: [Evidence.target_hint(target_id, :simulator, :low)],
+        mode: :sim
       )
-    end
+
+    PubSub.broadcast(
+      Cadence.PubSub,
+      "mission:#{mission_id}:telemetry:raw",
+      {:packet_envelope, envelope}
+    )
   end
+
+  defp build_provenance(metadata) do
+    %{}
+    |> maybe_put(:interface_id, metadata[:interface_id])
+    |> maybe_put(:source, metadata[:source])
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp parse_frame_opts(opts) do
     case Keyword.get(opts, :frame) do
@@ -688,13 +697,5 @@ defmodule Cadence.Simulator.PacketSimulator do
         Logger.warning("Uplink pipeline failed: #{inspect(reason)}, sending raw packet")
         {packet, %{state | uplink_pipeline: new_pipeline}}
     end
-  end
-
-  defp log_failed_packet(mission_id, reason) do
-    Logger.warning(
-      "Simulator failed to build CCSDS packet for mission #{mission_id}: #{inspect(reason)}"
-    )
-
-    nil
   end
 end

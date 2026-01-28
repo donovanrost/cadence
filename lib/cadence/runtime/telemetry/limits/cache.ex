@@ -48,10 +48,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
-  alias Cadence.Repo
-  alias Cadence.Targets.Target
-  alias Cadence.Telemetry.Packet.PacketDefinition
-  import Ecto.Query
+  alias Cadence.Runtime.Telemetry.ConfigBundle
 
   @table :limits_cache
   @cache_ttl_ms :timer.minutes(5)
@@ -392,36 +389,28 @@ defmodule Cadence.Runtime.Telemetry.Limits.Cache do
   end
 
   defp load_limits_data(mission_id, target_id) do
-    # Get target's active limit set (scoped to mission)
-    active_limit_set = get_target_active_limit_set(mission_id, target_id)
+    case ConfigBundle.fetch(mission_id) do
+      {:ok, bundle} ->
+        active_limit_set = get_target_active_limit_set(bundle, target_id)
+        item_limits_map = build_item_limits_map(bundle.packet_defs || [])
+        {:ok, item_limits_map, active_limit_set}
 
-    # Load all packet definitions with items for this mission
-    packet_defs =
-      from(pd in PacketDefinition,
-        where: pd.mission_id == ^mission_id,
-        preload: [:packet_items]
-      )
-      |> Repo.all()
-
-    item_limits_map = build_item_limits_map(packet_defs)
-
-    {:ok, item_limits_map, active_limit_set}
+      {:error, reason} ->
+        {:error, reason}
+    end
   rescue
     e ->
       {:error, Exception.message(e)}
   end
 
-  defp get_target_active_limit_set(mission_id, target_identifier) do
-    # target_identifier is the string identifier (e.g., "SAT-1"), not UUID
-    # Must scope by mission_id since identifiers are only unique within a mission
-    query =
-      from t in Target,
-        where: t.mission_id == ^mission_id and t.identifier == ^target_identifier,
-        select: t.active_limit_set
+  defp get_target_active_limit_set(bundle, target_identifier) do
+    target =
+      Map.get(bundle.targets_by_identifier, target_identifier) ||
+        Map.get(bundle.targets_by_identifier, to_string(target_identifier))
 
-    case Repo.one(query) do
+    case target do
       nil -> "NOMINAL"
-      active_limit_set -> active_limit_set || "NOMINAL"
+      _ -> Map.get(target, :active_limit_set) || "NOMINAL"
     end
   end
 

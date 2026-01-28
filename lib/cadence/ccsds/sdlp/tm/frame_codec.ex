@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   @behaviour Cadence.CCSDS.SDLP.FrameCodec
 
   alias Cadence.CCSDS.Core.LinkFrame
+  alias Cadence.CCSDS.SDLP.Metrics
 
   require Logger
 
@@ -22,17 +23,20 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     sec_hdr_len = Keyword.get(opts, :secondary_header_length, @default_secondary_header_length)
     ocf_len = Keyword.get(opts, :ocf_length, @default_ocf_length)
     timestamp = Keyword.get(opts, :timestamp)
+    scope = Metrics.scope_from_opts(opts)
+
+    Metrics.inc(scope, profile(), :bytes_in, byte_size(bin))
 
     case split_frames(bin, frame_size) do
       {:incomplete, rest} ->
         {:ok, [], rest}
 
       {frames, rest} ->
-        decoded =
-          frames
-          |> Enum.map(&decode_frame(&1, sec_hdr_len, ocf_len, timestamp))
-          |> Enum.filter(&match?({:ok, %LinkFrame{}}, &1))
-          |> Enum.map(fn {:ok, frame} -> frame end)
+        {decoded, decode_stats} = decode_frames(frames, sec_hdr_len, ocf_len, timestamp)
+
+        Metrics.inc(scope, profile(), :frame_decode_total, length(frames))
+        Metrics.inc(scope, profile(), :frame_decode_ok, decode_stats.ok)
+        Metrics.inc(scope, profile(), :frame_decode_drop, decode_stats.drop)
 
         {:ok, decoded, rest}
     end
@@ -43,6 +47,9 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     frame_size = Keyword.fetch!(opts, :frame_size)
     sec_hdr_len = Keyword.get(opts, :secondary_header_length, @default_secondary_header_length)
     ocf_len = Keyword.get(opts, :ocf_length, @default_ocf_length)
+    scope = Metrics.scope_from_opts(opts)
+
+    Metrics.inc(scope, profile(), :frame_encode_total)
 
     ocf_flag = Map.get(frame.meta, :ocf_flag, if(has_ocf?(frame), do: 1, else: 0))
     sec_hdr_flag = Map.get(frame.meta, :secondary_header_flag, 0)
@@ -54,6 +61,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     vcfc = Map.get(frame.meta, :vcfc, frame.frame_seq || 0)
 
     if sec_hdr_flag != 0 do
+      Metrics.inc(scope, profile(), :frame_encode_error)
       {:error, :secondary_header_not_supported}
     else
       expected_data_len =
@@ -61,6 +69,7 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
           secondary_header_bytes(sec_hdr_flag, sec_hdr_len)
 
       if byte_size(frame.payload_octets) != expected_data_len do
+        Metrics.inc(scope, profile(), :frame_encode_error)
         {:error, {:invalid_data_field_length, byte_size(frame.payload_octets), expected_data_len}}
       else
         header_opts = %{
@@ -75,13 +84,25 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
         with {:ok, ocf} <- maybe_extract_ocf(frame, ocf_flag, ocf_len),
              {:ok, header} <-
                build_primary_header(frame.scid, frame.vcid, mcfc, vcfc, header_opts) do
-          {:ok, header <> frame.payload_octets <> ocf}
+          encoded = header <> frame.payload_octets <> ocf
+          Metrics.inc(scope, profile(), :frame_encode_ok)
+          Metrics.inc(scope, profile(), :bytes_out, byte_size(encoded))
+          {:ok, encoded}
+        else
+          {:error, reason} ->
+            Metrics.inc(scope, profile(), :frame_encode_error)
+            {:error, reason}
         end
       end
     end
   end
 
-  def encode(_frame, _opts), do: {:error, :invalid_profile}
+  def encode(_frame, opts) do
+    scope = Metrics.scope_from_opts(opts)
+    Metrics.inc(scope, profile(), :frame_encode_total)
+    Metrics.inc(scope, profile(), :frame_encode_error)
+    {:error, :invalid_profile}
+  end
 
   defp has_ocf?(%LinkFrame{ocf: ocf}) when is_binary(ocf), do: byte_size(ocf) > 0
   defp has_ocf?(_), do: false
@@ -164,6 +185,21 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   defp decode_frame(_frame, _sec_hdr_len, _ocf_len, _timestamp) do
     Logger.warning("TM frame decode dropped frame: invalid frame")
     {:drop, :invalid_frame}
+  end
+
+  defp decode_frames(frames, sec_hdr_len, ocf_len, timestamp) do
+    {decoded, decode_stats} =
+      Enum.reduce(frames, {[], %{ok: 0, drop: 0}}, fn frame, {acc, stats} ->
+        case decode_frame(frame, sec_hdr_len, ocf_len, timestamp) do
+          {:ok, %LinkFrame{} = decoded_frame} ->
+            {[decoded_frame | acc], %{stats | ok: stats.ok + 1}}
+
+          {:drop, _reason} ->
+            {acc, %{stats | drop: stats.drop + 1}}
+        end
+      end)
+
+    {Enum.reverse(decoded), decode_stats}
   end
 
   defp validate_version(0), do: :ok

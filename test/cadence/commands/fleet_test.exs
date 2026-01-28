@@ -69,6 +69,7 @@ defmodule Cadence.Commands.FleetTest do
             name: "SAT#{i}",
             type: "spacecraft",
             identifier: "SAT#{i}_#{System.unique_integer([:positive])}",
+            scid: i,
             status: "online",
             config: %{"command_apid" => 100 + i}
           })

@@ -7,9 +7,9 @@ defmodule Cadence.Telemetry.PDUHandler do
 
   alias Cadence.CCSDS.Core.PDU
   alias Cadence.CCSDS.Core.SDUOctets
-  alias Cadence.CCSDS.Downlink.PacketAdapter
   alias Cadence.CCSDS.SDU.SpacePacket
-  alias Cadence.Events.TelemetryPacket
+  alias Cadence.Telemetry.{Evidence, PacketEnvelope}
+  alias Cadence.Time, as: CadenceTime
 
   @impl true
   def init(_opts), do: {:ok, %{}}
@@ -26,11 +26,10 @@ defmodule Cadence.Telemetry.PDUHandler do
   @impl true
   def handle_pdu(%PDU{} = pdu, ctx, state) do
     with %SDUOctets{} = sdu <- Map.get(ctx, :sdu),
-         {:ok, packet} <- PacketAdapter.to_packet(pdu, sdu, Map.get(ctx, :opts, [])) do
-      base_meta = Map.get(ctx, :base_meta, %{})
-      metadata = Map.merge(base_meta, packet.source || %{})
-      event = %TelemetryPacket{packet: packet, metadata: metadata}
-      {:ok, [event], state}
+         {:ok, raw} <- raw_from_pdu(pdu, sdu) do
+      metadata = Map.get(ctx, :base_meta, %{})
+      envelope = build_envelope(raw, pdu, sdu, ctx, metadata)
+      {:ok, [envelope], state}
     else
       nil -> {:error, :missing_sdu, state}
       {:error, reason} -> {:error, reason, state}
@@ -44,4 +43,52 @@ defmodule Cadence.Telemetry.PDUHandler do
       _ -> false
     end
   end
+
+  defp raw_from_pdu(%PDU{value: %SpacePacket{raw: raw}}, _sdu) when is_binary(raw) do
+    {:ok, raw}
+  end
+
+  defp raw_from_pdu(_pdu, %SDUOctets{octets: octets}) when is_binary(octets) do
+    {:ok, octets}
+  end
+
+  defp raw_from_pdu(_pdu, _sdu), do: {:error, :missing_raw}
+
+  defp build_envelope(raw, %PDU{} = pdu, %SDUOctets{} = sdu, ctx, metadata) do
+    provenance =
+      %{}
+      |> maybe_put(:interface_id, Map.get(ctx, :interface_id) || metadata[:interface_id])
+      |> maybe_put(:source, metadata[:source])
+      |> maybe_put(:link_key, metadata[:link_key])
+      |> maybe_put(:channel_key, metadata[:channel_key])
+      |> maybe_put(:source_frames, sdu.source_frames || metadata[:source_frames])
+
+    evidence =
+      []
+      |> maybe_add(Evidence.scid(sdu.scid, :link, :high))
+      |> maybe_add(Evidence.vcid(sdu.vcid, :link, :high))
+      |> maybe_add(Evidence.map_id(sdu.map_id, :link, :high))
+      |> maybe_add(Evidence.interface_id(Map.get(ctx, :interface_id), :ingest, :high))
+      |> maybe_add(Evidence.apid(pdu_apid(pdu), :space_packet_header, :high))
+      |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
+
+    PacketEnvelope.new(Map.get(ctx, :mission_id) || metadata[:mission_id], raw,
+      ingest_ts: metadata[:received_at] || CadenceTime.now(),
+      ingest_monotonic_ns: metadata[:ingest_monotonic_ns] || CadenceTime.monotonic(:nanosecond),
+      provenance: provenance,
+      evidence: evidence,
+      config_version_seen: Map.get(ctx, :config_version, 0),
+      mode: metadata[:mode] || :realtime,
+      quality: pdu.quality
+    )
+  end
+
+  defp pdu_apid(%PDU{value: %SpacePacket{apid: apid}}), do: apid
+  defp pdu_apid(_pdu), do: nil
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_add(list, %Evidence{value: nil}), do: list
+  defp maybe_add(list, %Evidence{} = evidence), do: list ++ [evidence]
 end

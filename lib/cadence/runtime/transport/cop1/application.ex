@@ -3,7 +3,6 @@ defmodule Cadence.Runtime.Transport.COP1.Application do
   COP-1 application boundary for proposing sends and ingesting reports.
   """
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Transport.COP1.Context
   alias Cadence.Runtime.Transport.COP1.FOP
@@ -64,11 +63,6 @@ defmodule Cadence.Runtime.Transport.COP1.Application do
     }
 
     emit_protocol_event(event)
-  end
-
-  @spec enabled?(Interface.t()) :: boolean()
-  def enabled?(%Interface{} = interface) do
-    FOP.enabled?(interface)
   end
 
   @spec stats(String.t(), ChannelId.t()) :: {:ok, map()} | {:error, :cop1_fop_not_running}

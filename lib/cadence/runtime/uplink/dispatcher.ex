@@ -8,13 +8,15 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.LinkController
-  alias Cadence.Runtime.Links.TargetDirectory
   alias Cadence.Runtime.Protocol.ChannelService
   alias Cadence.Runtime.Transport
   alias Cadence.Runtime.Transport.COP1.Config, as: COP1Config
+  alias Cadence.Runtime.Uplink.Resolver
   alias Cadence.Runtime.Uplink.RouteDecision
   alias Cadence.Runtime.Uplink.UplinkPDU
   alias Cadence.Transport.TCStreamId
@@ -22,7 +24,8 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   defmodule State do
     @moduledoc false
     defstruct [
-      :mission_id
+      :mission_id,
+      :organization_id
     ]
   end
 
@@ -57,14 +60,23 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
 
   @impl true
   def init(%MissionConfig{} = config) do
-    {:ok, %State{mission_id: config.mission_id}}
+    Logger.debug("Starting Uplink.Dispatcher for mission_id=#{config.mission_id}")
+    {:ok, %State{mission_id: config.mission_id, organization_id: config.organization_id}}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Uplink.Dispatcher for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true
   def handle_call({:connected?, target_id}, _from, state) do
     connected =
-      state.mission_id
-      |> TargetDirectory.list_channels(target_id)
+      Resolver.list_channels(state.organization_id, state.mission_id, target_id)
       |> Enum.any?(fn channel_id ->
         case active_interface_for_channel(state.mission_id, channel_id) do
           nil -> false
@@ -77,6 +89,8 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
 
   @impl true
   def handle_call({:dispatch_pdu, uplink_pdu, opts}, _from, state) do
+    opts = Keyword.put_new(opts, :organization_id, state.organization_id)
+
     case resolve_channel(state.mission_id, uplink_pdu.target_id, opts) do
       {:ok, channel_id} ->
         do_dispatch(state, channel_id, uplink_pdu, opts)
@@ -100,7 +114,7 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
         interface_id: interface_id,
         scid: channel_id.scid,
         vcid: channel_id.vcid,
-        cop1_mode: resolve_cop1_mode(state.mission_id, channel_id, interface_id, uplink_pdu),
+        cop1_mode: resolve_cop1_mode(state.mission_id, channel_id, uplink_pdu),
         tc_stream_id: build_tc_stream_id(state.mission_id, channel_id, interface_id),
         tc_stream_id_raw: nil
       }
@@ -116,7 +130,8 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   end
 
   defp resolve_channel(mission_id, target_id, opts) do
-    channels = TargetDirectory.list_channels(mission_id, target_id)
+    organization_id = Keyword.fetch!(opts, :organization_id)
+    channels = Resolver.list_channels(organization_id, mission_id, target_id)
     channel_override = Keyword.get(opts, :channel_id)
     interface_override = Keyword.get(opts, :interface_id)
 
@@ -203,8 +218,8 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     Registry.lookup(Cadence.MissionRegistry, {:link_controller, mission_id, scid}) != []
   end
 
-  defp resolve_cop1_mode(mission_id, %ChannelId{} = channel_id, interface_id, uplink_pdu) do
-    case protocol_config_for_interface(mission_id, channel_id.scid, interface_id) do
+  defp resolve_cop1_mode(mission_id, %ChannelId{} = channel_id, uplink_pdu) do
+    case protocol_config_for_channel(mission_id, channel_id) do
       {:ok, protocol_config} ->
         cop1 = Map.get(protocol_config, :cop1, %{})
         COP1Config.mode_for_config(cop1, uplink_pdu.pdu_type, uplink_pdu.apid)
@@ -218,9 +233,9 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     TCStreamId.new_from_channel!(mission_id, channel_id, interface_id: interface_id)
   end
 
-  defp protocol_config_for_interface(mission_id, scid, interface_id) do
-    if link_controller_running?(mission_id, scid) do
-      LinkController.protocol_config_for_interface(mission_id, scid, interface_id)
+  defp protocol_config_for_channel(mission_id, %ChannelId{} = channel_id) do
+    if link_controller_running?(mission_id, channel_id.scid) do
+      LinkController.effective_protocol_config(mission_id, channel_id)
     else
       :error
     end

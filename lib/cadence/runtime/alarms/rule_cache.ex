@@ -20,10 +20,9 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
   use GenServer
   require Logger
 
-  alias Cadence.Alarms
   alias Cadence.Alarms.AlarmRule
   alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Runtime.Telemetry.PacketIdentifier
+  alias Cadence.Runtime.Telemetry.ConfigBundle
   alias Cadence.Time.Timer, as: TimeTimer
 
   # Event publisher accessor
@@ -162,17 +161,16 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
   # ============================================================================
 
   defp fetch_and_cache_mission_rules(organization_id, mission_id) do
-    # Fetch rules that could apply to this mission:
-    # 1. Org-wide rules (no mission_id, no target_id)
-    # 2. Mission-wide rules (this mission_id, no target_id)
-    # 3. Target-specific rules (this mission_id, any target_id)
-    all_rules =
-      Alarms.list_rules(organization_id, mission_id: mission_id, enabled: true)
+    _organization_id = organization_id
 
-    # Pre-compile regex patterns for faster matching
-    rules_with_compiled_patterns = Enum.map(all_rules, &compile_patterns/1)
+    rules =
+      case ConfigBundle.fetch(mission_id) do
+        {:ok, bundle} -> Map.get(bundle, :alarm_rules, [])
+        {:error, _} -> []
+      end
 
-    # Cache the rules
+    rules_with_compiled_patterns = Enum.map(rules, &compile_patterns/1)
+
     :ets.insert(@table_name, {{:mission, mission_id}, rules_with_compiled_patterns})
 
     rules_with_compiled_patterns
@@ -219,7 +217,7 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
 
   # Resolves a target_id to a UUID.
   # If it's already a valid UUID, returns it as-is.
-  # If it's a string identifier, looks up the target UUID from ETS cache (O(1)).
+  # If it's a string identifier, looks up the target UUID from config bundle.
   defp resolve_target_id(_mission_id, nil), do: nil
 
   defp resolve_target_id(mission_id, target_id) when is_binary(target_id) do
@@ -228,10 +226,12 @@ defmodule Cadence.Runtime.Alarms.RuleCache do
         uuid
 
       :error ->
-        # Use cached lookup instead of DB query (O(1) ETS lookup)
-        case PacketIdentifier.get_target_id(mission_id, target_id) do
-          {:ok, uuid} -> uuid
-          {:error, :not_found} -> nil
+        case ConfigBundle.fetch(mission_id) do
+          {:ok, bundle} ->
+            Map.get(bundle.target_ids_by_identifier, target_id)
+
+          {:error, _} ->
+            nil
         end
     end
   end

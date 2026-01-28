@@ -23,10 +23,13 @@ defmodule Cadence.Application.Missions.MissionOperations do
       :ok = MissionOperations.delete(mission_id, org_id)
   """
 
+  import Ecto.Query, only: [from: 2]
+
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Buckets
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Missions.Entities.MissionMembership
+  alias Cadence.Missions.Mission, as: MissionSchema
   alias Cadence.Ports.Repository.Missions.MissionsRepository
   alias Cadence.Repo
 
@@ -216,6 +219,27 @@ defmodule Cadence.Application.Missions.MissionOperations do
     with {:ok, mission} <- MissionQueries.find_by_org(mission_id, org_id),
          {:ok, advanced} <- Mission.advance_phase(mission, new_phase) do
       repo().save(advanced)
+    end
+  end
+
+  @doc """
+  Bumps the mission config_generation to trigger runtime reconciliation.
+
+  Returns the new config_generation.
+  """
+  @spec bump_config_generation!(mission_id()) :: non_neg_integer()
+  def bump_config_generation!(mission_id) do
+    query = from(m in MissionSchema, where: m.id == ^mission_id)
+
+    case Repo.update_all(query, inc: [config_generation: 1]) do
+      {1, _} ->
+        Repo.get!(MissionSchema, mission_id).config_generation
+
+      {0, _} ->
+        raise "mission not found for config generation bump"
+
+      _ ->
+        raise "unexpected result while bumping config generation"
     end
   end
 

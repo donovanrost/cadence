@@ -33,7 +33,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository do
 
   @impl true
   def find(id) do
-    case Repo.get(MissionSchema, id) do
+    case Repo.get(MissionSchema, id, log: false) do
       nil -> {:error, :not_found}
       schema -> {:ok, schema_to_entity(schema)}
     end
@@ -69,7 +69,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Missions.EctoMissionsRepository do
       |> apply_limit(limit)
 
     query
-    |> Repo.all()
+    |> Repo.all(log: false)
     |> Enum.map(&schema_to_entity/1)
   end
 

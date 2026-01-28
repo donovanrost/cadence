@@ -50,7 +50,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     CommandSent
   }
 
-  alias Cadence.Repo
   alias Cadence.Runtime.Commands.{TargetQueue, VerificationManager}
   alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
   alias Cadence.Runtime.Transport.ProtocolEvent
@@ -216,6 +215,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   @impl true
   def init({%Mission{} = mission, %Target{} = target}) do
+    Logger.debug("Starting TargetDispatcher for mission_id=#{mission.id} target_id=#{target.id}")
+
     Logger.info(
       "Starting TargetDispatcher for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
@@ -233,6 +234,15 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     }
 
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping TargetDispatcher for mission_id=#{state.mission_id} target_id=#{state.target_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true
@@ -1082,7 +1092,8 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   defp load_verifiers(command) do
     case command.verifiers do
       %Ecto.Association.NotLoaded{} ->
-        Repo.preload(command, :verifiers).verifiers
+        Logger.warning("Command verifiers not preloaded; skipping verification for #{command.id}")
+        []
 
       verifiers ->
         verifiers

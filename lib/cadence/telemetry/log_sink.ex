@@ -2,8 +2,8 @@ defmodule Cadence.Telemetry.LogSink do
   @moduledoc """
   Behaviour for durable telemetry sinks (OTP append log, Kafka, Redpanda).
 
-  Implementations are responsible for persisting batches of `t:Cadence.Telemetry.LogEnvelope/0`
-  while retaining shard ordering.
+  Implementations are responsible for persisting batches of log records while
+  retaining shard ordering.
   """
 
   alias Cadence.Telemetry.LogEnvelope
@@ -16,7 +16,7 @@ defmodule Cadence.Telemetry.LogSink do
 
   @callback append(
               shard_id :: non_neg_integer(),
-              records :: [LogEnvelope.t()],
+              records :: [LogEnvelope.t() | struct()],
               opts :: keyword()
             ) ::
               {:ok, append_meta()} | {:error, term()}

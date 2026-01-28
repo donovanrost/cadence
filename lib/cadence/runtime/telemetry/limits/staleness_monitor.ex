@@ -104,6 +104,8 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
 
   @impl GenServer
   def init(%{mission_id: mission_id, check_interval: check_interval}) do
+    Logger.debug("Starting StalenessMonitor for mission_id=#{mission_id}")
+
     Logger.info(
       "Starting staleness monitor for mission=#{mission_id}, " <>
         "check_interval=#{check_interval}ms"
@@ -188,6 +190,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StalenessMonitor do
 
   @impl GenServer
   def terminate(_reason, state) do
+    Logger.debug("Stopping StalenessMonitor for mission_id=#{state.mission_id}")
     Logger.info("Staleness monitor stopping for mission=#{state.mission_id}")
     :ok
   end

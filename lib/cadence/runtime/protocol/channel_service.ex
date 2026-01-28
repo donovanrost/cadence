@@ -11,6 +11,8 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.CCSDS.Core.{PDU, SDUOctets}
   alias Cadence.CCSDS.PDUDispatcher
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
@@ -27,7 +29,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
   alias Cadence.Runtime.Transport.COP1.DownlinkHandler
   alias Cadence.Runtime.Uplink.FrameBuilder
-  alias Cadence.Telemetry.Packet
+  alias Cadence.Telemetry.{Evidence, PacketEnvelope}
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Transport.TCStreamId
 
@@ -36,6 +38,8 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     defstruct [
       :mission_id,
       :channel_id,
+      :config_version,
+      :protocol_config,
       :frame_buffer,
       :space_packet_framer,
       :reassembly_state,
@@ -72,16 +76,27 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     GenServer.call(via_tuple(mission_id, channel_id), {:uplink, payload, meta})
   end
 
+  @spec apply_config(String.t(), ChannelId.t(), map()) :: :ok
+  def apply_config(mission_id, %ChannelId{} = channel_id, snapshot) when is_map(snapshot) do
+    GenServer.cast(via_tuple(mission_id, channel_id), {:apply_config, snapshot})
+  end
+
   # ---------------------------------------------------------------------------
   # GenServer Callbacks
   # ---------------------------------------------------------------------------
 
   @impl true
   def init({mission_id, %ChannelId{} = channel_id}) do
+    Logger.debug(
+      "Starting ChannelService for mission_id=#{mission_id} channel_id=#{inspect(ChannelId.key(channel_id))}"
+    )
+
     {:ok,
      %State{
        mission_id: mission_id,
        channel_id: channel_id,
+       config_version: nil,
+       protocol_config: nil,
        frame_buffer: <<>>,
        space_packet_framer: SpacePacketFramer.new(),
        reassembly_state: nil
@@ -89,28 +104,63 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping ChannelService for mission_id=#{state.mission_id} channel_id=#{inspect(ChannelId.key(state.channel_id))} reason=#{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  @impl true
   def handle_cast({:downlink, bytes, meta}, state) do
     interface_id = meta[:interface_id]
 
+    # Logger.debug("[DEBUG] channel.downlink.received",
+    #   mission_id: state.mission_id,
+    #   channel_id: ChannelId.key(state.channel_id),
+    #   interface_id: interface_id,
+    #   bytes: byte_size(bytes)
+    # )
+
+    config_result = protocol_config(state)
+
     updated =
-      case protocol_config(state, interface_id) do
+      case config_result do
         {:ok, %{sdlp: {:ok, %{mapping: mapping, opts: opts}}} = protocol_config} ->
+          # Logger.debug("[DEBUG] channel.downlink.sdlp",
+          #   mission_id: state.mission_id,
+          #   channel_id: ChannelId.key(state.channel_id),
+          #   interface_id: interface_id
+          # )
+
           ensure_pdu_dispatcher(state, protocol_config)
           ensure_cop1_fop(state, protocol_config)
           handle_sdlp_downlink(state, bytes, meta, mapping, opts, interface_id)
 
-        _ ->
+        _other ->
+          # Logger.debug("[DEBUG] channel.downlink.raw",
+          #   mission_id: state.mission_id,
+          #   channel_id: ChannelId.key(state.channel_id),
+          #   interface_id: interface_id,
+          #   protocol_config_result: inspect(other)
+          # )
+
           handle_space_packet_downlink(state, bytes, meta)
       end
 
     {:noreply, updated}
   end
 
+  def handle_cast({:apply_config, snapshot}, state) do
+    {:noreply, apply_config_snapshot(state, snapshot)}
+  end
+
   @impl true
   def handle_call({:uplink, %PDU{} = pdu, meta}, _from, state) do
     case select_uplink_interface(state, meta) do
       {:ok, interface_id} ->
-        case protocol_config(state, interface_id) do
+        case protocol_config(state) do
           {:ok, %{sdlp: {:ok, %{opts: opts}}} = protocol_config} ->
             cop1_mode = resolve_cop1_mode(protocol_config, pdu)
 
@@ -154,15 +204,15 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {:via, Registry, {@registry, {:channel_service, mission_id, ChannelId.key(channel_id)}}}
   end
 
-  defp protocol_config(state, interface_id) when is_binary(interface_id) do
-    LinkController.protocol_config_for_interface(
-      state.mission_id,
-      state.channel_id.scid,
-      interface_id
-    )
-  end
+  defp protocol_config(state) do
+    case state.protocol_config do
+      %{} = protocol_config ->
+        {:ok, protocol_config}
 
-  defp protocol_config(_state, _interface_id), do: :error
+      _ ->
+        LinkController.effective_protocol_config(state.mission_id, state.channel_id)
+    end
+  end
 
   defp ensure_pdu_dispatcher(state, protocol_config) do
     ProtocolSupervisor.ensure_pdu_dispatcher(state.mission_id, state.channel_id, protocol_config)
@@ -446,6 +496,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   defp handle_sdlp_downlink(state, bytes, meta, %Mapping{} = mapping, opts, interface_id) do
     frame_opts =
       Keyword.take(opts, [:frame_size, :secondary_header_length, :ocf_length, :timestamp])
+      |> Keyword.put(:metrics_scope, state.mission_id)
 
     buffer = state.frame_buffer <> bytes
 
@@ -461,20 +512,25 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {packet_binaries, framer, _errors} =
       SpacePacketFramer.ingest(state.space_packet_framer, bytes)
 
-    packets =
-      packet_binaries
-      |> Enum.map(&build_ccsds_packet(&1, meta))
-      |> Enum.reject(&is_nil/1)
+    Enum.each(packet_binaries, fn binary ->
+      envelope = build_packet_envelope(binary, meta, state)
 
-    Enum.each(packets, fn %Packet{} = packet ->
       Phoenix.PubSub.broadcast(
         Cadence.PubSub,
         "mission:#{state.mission_id}:telemetry:raw",
-        {:telemetry_packet, packet, meta}
+        {:packet_envelope, envelope}
       )
     end)
 
     %{state | space_packet_framer: framer}
+  end
+
+  defp apply_config_snapshot(state, snapshot) do
+    %State{
+      state
+      | config_version: Map.get(snapshot, :config_version, state.config_version),
+        protocol_config: Map.get(snapshot, :protocol_config, state.protocol_config)
+    }
   end
 
   defp ensure_reassembly(state, opts) do
@@ -492,7 +548,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   defp deframe_frames(state, frames, meta, mapping, opts, interface_id) do
-    ctx = %{direction: :downlink}
+    ctx = %{direction: :downlink, metrics_scope: state.mission_id}
     {reassembly_state, cop1_state} = ensure_reassembly(state, opts)
 
     Enum.reduce(frames, {reassembly_state, cop1_state}, fn frame, {acc_state, acc_cop1} ->
@@ -543,7 +599,8 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
             interface_id: interface_id,
             scid: state.channel_id.scid,
             vcid: state.channel_id.vcid,
-            base_meta: meta,
+            config_version: state.config_version,
+            base_meta: Map.put(meta, :config_version, state.config_version),
             sdu: sdu
           }
 
@@ -573,15 +630,35 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     PDUDispatcher.via_tuple(mission_id, channel_id)
   end
 
-  defp build_ccsds_packet(binary, metadata) do
-    metadata =
-      metadata
-      |> Map.put_new(:mission_id, metadata[:mission_id] || metadata["mission_id"])
-      |> Map.put_new(:received_at, CadenceTime.now())
+  defp build_packet_envelope(binary, metadata, state) do
+    provenance =
+      %{}
+      |> maybe_put(:interface_id, metadata[:interface_id])
+      |> maybe_put(:source, metadata[:source])
+      |> maybe_put(:link_key, metadata[:link_key])
+      |> maybe_put(:channel_key, metadata[:channel_key])
+      |> maybe_put(:source_frames, metadata[:source_frames])
 
-    case Packet.from_ccsds(binary, metadata) do
-      {:ok, packet} -> packet
-      {:error, _reason} -> nil
-    end
+    evidence =
+      []
+      |> maybe_add(Evidence.scid(metadata[:scid], :link, :high))
+      |> maybe_add(Evidence.vcid(metadata[:vcid], :link, :high))
+      |> maybe_add(Evidence.map_id(metadata[:map_id], :link, :high))
+      |> maybe_add(Evidence.interface_id(metadata[:interface_id], :ingest, :high))
+      |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
+
+    PacketEnvelope.new(state.mission_id, binary,
+      ingest_ts: metadata[:received_at] || CadenceTime.now(),
+      provenance: provenance,
+      evidence: evidence,
+      config_version_seen: state.config_version,
+      mode: metadata[:mode] || :realtime
+    )
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp maybe_add(list, %Evidence{value: nil}), do: list
+  defp maybe_add(list, %Evidence{} = evidence), do: list ++ [evidence]
 end

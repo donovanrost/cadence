@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
   @behaviour Cadence.CCSDS.SDLP.Reassembly
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.SDLP.Metrics
 
   import Bitwise
   require Logger
@@ -42,25 +43,38 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
 
   @impl true
   def ingest(%LinkFrame{profile: :tm} = frame, ctx, state) do
+    scope = Metrics.scope_from_ctx(ctx)
+    Metrics.inc(scope, :tm, :reassembly_calls)
+
     vcid = frame.vcid
     fhp = Map.get(frame.meta, :fhp)
 
     case extract_segments(frame.payload_octets, vcid, fhp, state) do
       {:ok, segments, next_state} ->
         {packets, final_state} = reassemble_space_packets(segments, vcid, next_state)
-        {:ok, build_sdu_octets(packets, frame, ctx, final_state), final_state}
+        sdu_octets = build_sdu_octets(packets, frame, ctx, final_state)
+        Metrics.inc(scope, :tm, :reassembly_ok)
+        Metrics.inc(scope, :tm, :sdu_emitted, length(sdu_octets))
+        {:ok, sdu_octets, final_state}
 
       {:error, reason, next_state} ->
         Logger.warning("TM reassembly dropped frame: #{inspect(reason)}")
+        Metrics.inc(scope, :tm, :reassembly_error)
         {:error, reason, next_state}
 
       {:error, reason} ->
         Logger.warning("TM reassembly dropped frame: #{inspect(reason)}")
+        Metrics.inc(scope, :tm, :reassembly_error)
         {:error, reason, state}
     end
   end
 
-  def ingest(_frame, _ctx, state), do: {:error, :invalid_profile, state}
+  def ingest(_frame, ctx, state) do
+    scope = Metrics.scope_from_ctx(ctx)
+    Metrics.inc(scope, :tm, :reassembly_calls)
+    Metrics.inc(scope, :tm, :reassembly_error)
+    {:error, :invalid_profile, state}
+  end
 
   defp reassemble_space_packets(segments, _vcid, %{default_sdu_type: sdu_type} = state)
        when sdu_type != :space_packet do

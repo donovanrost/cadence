@@ -74,7 +74,28 @@ config :tailwind,
 # Configures Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id, :mission_id, :target_id, :command, :partition]
+  metadata: [
+    :request_id,
+    :mission_id,
+    :target_id,
+    :command,
+    :reason,
+    :lane,
+    :shard_id,
+    :partition,
+    :scid,
+    :vcid,
+    :channel_id,
+    :interface_id,
+    :bytes,
+    :meta,
+    :record_count,
+    :sink,
+    :apid,
+    :protocol_config_result,
+    :event_count,
+    :pdu_type
+  ]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
@@ -141,6 +162,7 @@ config :cadence,
        Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository
 
 config :cadence, :pipeline_version, :lanes
+config :cadence, :telemetry_pipeline_version, 2
 
 # Time configuration
 config :cadence, Cadence.Time, impl: Cadence.Time.Real

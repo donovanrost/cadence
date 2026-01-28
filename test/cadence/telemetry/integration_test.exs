@@ -4,11 +4,10 @@ defmodule Cadence.Telemetry.IntegrationTest do
 
   Tests the complete flow:
   1. Packet Simulator generates telemetry
-  2. Telemetry Pipeline processes packets
-  3. Packet Identifier identifies packet types
-  4. Decommutation extracts telemetry items
-  5. CVT stores current values
-  6. PubSub broadcasts updates
+  2. Telemetry Pipeline parses and resolves packets
+  3. Decommutation extracts telemetry items
+  4. CVT stores current values
+  5. PubSub broadcasts updates
   """
 
   use Cadence.IntegrationCase
@@ -71,7 +70,7 @@ defmodule Cadence.Telemetry.IntegrationTest do
         "SAT_3"
       ])
 
-      # Start the mission (starts CVT, PacketIdentifier, Pipeline)
+      # Start the mission (starts CVT and pipeline)
       {:ok, config} = MissionConfig.load(mission.id)
       {:ok, _pid} = MissionSupervisor.start_mission(config)
 

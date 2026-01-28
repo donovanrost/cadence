@@ -6,6 +6,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   @behaviour Cadence.CCSDS.SDLP.Segmentation
 
   alias Cadence.CCSDS.Core.{LinkFrame, SDUOctets}
+  alias Cadence.CCSDS.SDLP.Metrics
 
   @primary_header_size 6
   @min_idle_packet_size @primary_header_size + 1
@@ -22,6 +23,9 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
 
   @impl true
   def segment(%SDUOctets{profile: :tm} = sdu, ctx, state) do
+    scope = Metrics.scope_from_ctx(ctx)
+    Metrics.inc(scope, :tm, :segmentation_calls)
+
     frame_size = Map.fetch!(ctx, :frame_size)
     scid = sdu.scid || Map.get(ctx, :scid, 0)
     vcid = sdu.vcid || Map.get(ctx, :vcid, 0)
@@ -30,14 +34,26 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
          max_payload when max_payload > 0 <- frame_size - @primary_header_size - ocf_len do
       ocf_flag = if ocf_len > 0, do: 1, else: 0
       {frames, next_state} = build_frames(sdu, scid, vcid, max_payload, ocf, ocf_flag, state)
+      Metrics.inc(scope, :tm, :segmentation_ok)
+      Metrics.inc(scope, :tm, :segments_emitted, length(frames))
       {:ok, Enum.reverse(frames), next_state}
     else
-      {:error, reason} -> {:error, reason, state}
-      _ -> {:error, :frame_size_too_small, state}
+      {:error, reason} ->
+        Metrics.inc(scope, :tm, :segmentation_error)
+        {:error, reason, state}
+
+      _ ->
+        Metrics.inc(scope, :tm, :segmentation_error)
+        {:error, :frame_size_too_small, state}
     end
   end
 
-  def segment(_sdu, _ctx, state), do: {:error, :invalid_profile, state}
+  def segment(_sdu, ctx, state) do
+    scope = Metrics.scope_from_ctx(ctx)
+    Metrics.inc(scope, :tm, :segmentation_calls)
+    Metrics.inc(scope, :tm, :segmentation_error)
+    {:error, :invalid_profile, state}
+  end
 
   defp split_segments(packet, max_payload) do
     if byte_size(packet) <= max_payload do

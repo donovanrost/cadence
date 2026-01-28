@@ -9,6 +9,8 @@ defmodule Cadence.Runtime.Links.LinkController do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.Binding
   alias Cadence.Runtime.Protocol.ChannelService
@@ -19,9 +21,13 @@ defmodule Cadence.Runtime.Links.LinkController do
     defstruct [
       :mission_id,
       :scid,
+      config_version: nil,
+      link_defaults: %{},
+      channel_overrides: %{},
+      effective_protocols: %{},
       bindings: %{},
       interface_states: %{},
-      protocol_config: %{}
+      selections: %{}
     ]
   end
 
@@ -35,9 +41,9 @@ defmodule Cadence.Runtime.Links.LinkController do
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     scid = Keyword.fetch!(opts, :scid)
-    protocol_config = Keyword.get(opts, :protocol_config, %{})
+    config_snapshot = Keyword.get(opts, :config_snapshot, %{})
 
-    GenServer.start_link(__MODULE__, {mission_id, scid, protocol_config},
+    GenServer.start_link(__MODULE__, {mission_id, scid, config_snapshot},
       name: via_tuple(mission_id, scid)
     )
   end
@@ -55,11 +61,35 @@ defmodule Cadence.Runtime.Links.LinkController do
     )
   end
 
+  @spec apply_desired_bindings(String.t(), [Binding.t()]) :: :ok
+  def apply_desired_bindings(_mission_id, []), do: :ok
+
+  def apply_desired_bindings(mission_id, [%Binding{} = binding | _] = bindings) do
+    GenServer.call(
+      via_tuple(mission_id, binding.channel_id.scid),
+      {:apply_desired_bindings, bindings}
+    )
+  end
+
   @spec set_binding_state(String.t(), ChannelId.t(), String.t(), Binding.state()) :: :ok
   def set_binding_state(mission_id, %ChannelId{} = channel_id, interface_id, desired_state) do
     GenServer.call(
       via_tuple(mission_id, channel_id.scid),
       {:set_binding_state, channel_id, interface_id, desired_state}
+    )
+  end
+
+  @spec set_active_selection(
+          String.t(),
+          ChannelId.t(),
+          :uplink | :downlink,
+          String.t() | :auto | nil
+        ) ::
+          :ok
+  def set_active_selection(mission_id, %ChannelId{} = channel_id, direction, selection) do
+    GenServer.call(
+      via_tuple(mission_id, channel_id.scid),
+      {:set_active_selection, channel_id, direction, selection}
     )
   end
 
@@ -98,10 +128,15 @@ defmodule Cadence.Runtime.Links.LinkController do
     )
   end
 
-  @spec protocol_config_for_interface(String.t(), non_neg_integer(), String.t()) ::
+  @spec effective_protocol_config(String.t(), ChannelId.t()) ::
           {:ok, map()} | :error
-  def protocol_config_for_interface(mission_id, scid, interface_id) do
-    GenServer.call(via_tuple(mission_id, scid), {:protocol_config, interface_id})
+  def effective_protocol_config(mission_id, %ChannelId{} = channel_id) do
+    GenServer.call(via_tuple(mission_id, channel_id.scid), {:effective_protocol, channel_id})
+  end
+
+  @spec apply_config(String.t(), non_neg_integer(), map()) :: :ok
+  def apply_config(mission_id, scid, snapshot) when is_map(snapshot) do
+    GenServer.cast(via_tuple(mission_id, scid), {:apply_config, snapshot})
   end
 
   # ---------------------------------------------------------------------------
@@ -109,13 +144,19 @@ defmodule Cadence.Runtime.Links.LinkController do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def init({mission_id, scid, protocol_config}) do
-    {:ok,
-     %State{
-       mission_id: mission_id,
-       scid: scid,
-       protocol_config: protocol_config
-     }}
+  def init({mission_id, scid, config_snapshot}) do
+    Logger.debug("Starting LinkController for mission_id=#{mission_id} scid=#{scid}")
+
+    {:ok, apply_config_snapshot(%State{mission_id: mission_id, scid: scid}, config_snapshot)}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping LinkController for mission_id=#{state.mission_id} scid=#{state.scid} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true
@@ -128,8 +169,18 @@ defmodule Cadence.Runtime.Links.LinkController do
     {:reply, :ok, updated}
   end
 
+  def handle_call({:apply_desired_bindings, bindings}, _from, state) do
+    updated = replace_channel_bindings(state, bindings)
+    {:reply, :ok, updated}
+  end
+
   def handle_call({:set_binding_state, channel_id, interface_id, desired_state}, _from, state) do
     updated = update_binding_state(state, channel_id, interface_id, desired_state)
+    {:reply, :ok, updated}
+  end
+
+  def handle_call({:set_active_selection, channel_id, direction, selection}, _from, state) do
+    updated = put_selection(state, channel_id, direction, selection)
     {:reply, :ok, updated}
   end
 
@@ -145,8 +196,8 @@ defmodule Cadence.Runtime.Links.LinkController do
     {:reply, binding_active_in_state?(state, channel_id, interface_id, direction), state}
   end
 
-  def handle_call({:protocol_config, interface_id}, _from, state) do
-    {:reply, fetch_protocol_config(state, interface_id), state}
+  def handle_call({:effective_protocol, %ChannelId{} = channel_id}, _from, state) do
+    {:reply, fetch_effective_protocol(state, channel_id), state}
   end
 
   @impl true
@@ -159,12 +210,22 @@ defmodule Cadence.Runtime.Links.LinkController do
     {:noreply, refresh_observed_bindings(updated, interface_id)}
   end
 
+  def handle_cast({:apply_config, snapshot}, state) do
+    {:noreply, apply_config_snapshot(state, snapshot)}
+  end
+
   def handle_cast({:route_downlink, interface_id, bytes, meta}, state) do
     case classify_channel(state, interface_id, meta) do
       {:ok, channel_id} ->
         route_to_channel(state, channel_id, interface_id, bytes, meta)
 
       :ignore ->
+        Logger.debug("link.route_downlink.ignore",
+          mission_id: state.mission_id,
+          scid: state.scid,
+          interface_id: interface_id
+        )
+
         :ok
     end
 
@@ -179,6 +240,31 @@ defmodule Cadence.Runtime.Links.LinkController do
     _ = register_binding(binding)
     %{state | bindings: Map.put(state.bindings, Binding.key(binding), binding)}
   end
+
+  defp replace_channel_bindings(state, bindings) do
+    case bindings do
+      [%Binding{channel_id: channel_id} | _] ->
+        Enum.each(bindings, &register_binding/1)
+
+        updated =
+          state.bindings
+          |> Enum.reject(fn {binding_key, _binding} ->
+            channel_match?(binding_key, channel_id)
+          end)
+          |> Map.new()
+          |> Map.merge(
+            Map.new(Enum.map(bindings, fn binding -> {Binding.key(binding), binding} end))
+          )
+
+        %{state | bindings: updated}
+
+      [] ->
+        state
+    end
+  end
+
+  defp channel_match?({channel_id, _interface_id, _direction}, channel_id), do: true
+  defp channel_match?(_, _), do: false
 
   defp update_binding_state(state, %ChannelId{} = channel_id, interface_id, desired_state) do
     updated =
@@ -198,20 +284,55 @@ defmodule Cadence.Runtime.Links.LinkController do
   defp match_binding?({channel_id, interface_id, _direction}, channel_id, interface_id), do: true
   defp match_binding?(_, _, _), do: false
 
+  defp put_selection(state, %ChannelId{} = channel_id, direction, selection) do
+    key = {channel_id, direction}
+    %{state | selections: Map.put(state.selections, key, selection)}
+  end
+
   defp classify_channel(state, interface_id, meta) do
     case meta do
       %{channel_id: %ChannelId{} = channel_id} ->
+        # Logger.debug("[DEBUG] link.classify.meta_channel_id",
+        #   mission_id: state.mission_id,
+        #   scid: state.scid,
+        #   interface_id: interface_id,
+        #   channel_id: ChannelId.key(channel_id)
+        # )
+
         {:ok, channel_id}
 
       %{scid: scid, vcid: vcid} when is_integer(scid) and is_integer(vcid) ->
+        # Logger.debug("[DEBUG] link.classify.meta_scid_vcid",
+        #   mission_id: state.mission_id,
+        #   scid: scid,
+        #   interface_id: interface_id,
+        #   vcid: vcid
+        # )
+
         {:ok, ChannelId.new(scid, vcid)}
 
       _ ->
         bindings = bindings_for_interface(state, interface_id, :downlink)
 
         case Enum.map(bindings, & &1.channel_id) |> Enum.uniq() do
-          [channel_id] -> {:ok, channel_id}
-          _ -> :ignore
+          [channel_id] ->
+            # Logger.debug("[DEBUG] link.classify.binding_unambiguous",
+            #   mission_id: state.mission_id,
+            #   scid: state.scid,
+            #   interface_id: interface_id,
+            #   channel_id: ChannelId.key(channel_id)
+            # )
+
+            {:ok, channel_id}
+
+          _ ->
+            # Logger.debug("[DEBUG] link.classify.ambiguous",
+            #   mission_id: state.mission_id,
+            #   scid: state.scid,
+            #   interface_id: interface_id
+            # )
+
+            :ignore
         end
     end
   end
@@ -228,8 +349,23 @@ defmodule Cadence.Runtime.Links.LinkController do
     active? = binding_active_in_state?(state, channel_id, interface_id, :downlink)
 
     if active? do
+      # Logger.debug("[DEBUG] link.route_downlink.active",
+      #   mission_id: state.mission_id,
+      #   scid: state.scid,
+      #   interface_id: interface_id,
+      #   channel_id: ChannelId.key(channel_id),
+      #   bytes: byte_size(bytes)
+      # )
+
       ensure_channel(state.mission_id, channel_id)
       ChannelService.handle_downlink(state.mission_id, channel_id, bytes, meta)
+    else
+      Logger.debug("link.route_downlink.inactive",
+        mission_id: state.mission_id,
+        scid: state.scid,
+        interface_id: interface_id,
+        channel_id: ChannelId.key(channel_id)
+      )
     end
   end
 
@@ -246,20 +382,38 @@ defmodule Cadence.Runtime.Links.LinkController do
   end
 
   defp pick_active_uplink(state, %ChannelId{} = channel_id) do
-    state.bindings
-    |> Map.values()
-    |> Enum.filter(fn binding ->
-      binding.channel_id == channel_id and
-        Binding.allows_direction?(binding, :uplink) and
-        binding.desired_state == :active and
-        binding.observed_state == :active
-    end)
-    |> Enum.sort_by(& &1.priority)
-    |> case do
-      [] -> nil
-      [binding | _] -> binding.interface_id
+    selection = Map.get(state.selections, {channel_id, :uplink})
+
+    case selection do
+      interface_id when is_binary(interface_id) ->
+        if binding_active_in_state?(state, channel_id, interface_id, :uplink) do
+          interface_id
+        else
+          nil
+        end
+
+      _ ->
+        state.bindings
+        |> Map.values()
+        |> Enum.filter(fn binding ->
+          binding.channel_id == channel_id and
+            Binding.allows_direction?(binding, :uplink) and
+            binding.desired_state == :active and
+            binding.observed_state == :active
+        end)
+        |> Enum.sort_by(fn binding -> {role_rank(binding.role), binding.priority} end)
+        |> case do
+          [] -> nil
+          [binding | _] -> binding.interface_id
+        end
     end
   end
+
+  defp role_rank(:primary), do: 0
+  defp role_rank(:any), do: 1
+  defp role_rank(:backup), do: 2
+  defp role_rank(:replay), do: 3
+  defp role_rank(_), do: 4
 
   defp refresh_observed_bindings(state, interface_id) do
     observed_state = observed_state_for(state, interface_id)
@@ -288,11 +442,31 @@ defmodule Cadence.Runtime.Links.LinkController do
     ProtocolSupervisor.ensure_channel(mission_id, channel_id)
   end
 
-  defp fetch_protocol_config(state, interface_id) do
-    case get_in(state.protocol_config, [:protocols_by_interface, interface_id]) do
-      nil -> :error
-      protocol_config -> {:ok, protocol_config}
+  defp fetch_effective_protocol(state, %ChannelId{} = channel_id) do
+    key = ChannelId.key(channel_id)
+
+    case Map.get(state.effective_protocols, key) do
+      nil ->
+        if state.link_defaults == %{} do
+          :error
+        else
+          {:ok, state.link_defaults}
+        end
+
+      protocol_config ->
+        {:ok, protocol_config}
     end
+  end
+
+  defp apply_config_snapshot(state, snapshot) do
+    %State{
+      state
+      | config_version: Map.get(snapshot, :config_version, state.config_version),
+        link_defaults: Map.get(snapshot, :link_defaults, state.link_defaults) || %{},
+        channel_overrides: Map.get(snapshot, :channel_overrides, state.channel_overrides) || %{},
+        effective_protocols:
+          Map.get(snapshot, :effective_protocols, state.effective_protocols) || %{}
+    }
   end
 
   defp register_binding(%Binding{} = binding) do

@@ -28,8 +28,18 @@ defmodule Cadence.Runtime.Missions.ConfigManager do
 
   @impl true
   def init(state) do
+    Logger.debug("Starting ConfigManager for mission_id=#{state.mission_id}")
     broadcast_config(state.mission_id, state.config)
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping ConfigManager for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true
@@ -46,6 +56,16 @@ defmodule Cadence.Runtime.Missions.ConfigManager do
     config
     |> ConfigBundle.from_config()
     |> ConfigBundle.store()
+
+    Logger.debug(
+      "Stored config bundle for mission_id=#{mission_id} generation=#{config.config_generation}"
+    )
+
+    Phoenix.PubSub.broadcast(
+      Cadence.PubSub,
+      "mission:#{mission_id}:config",
+      {:config_updated, config.config_generation}
+    )
 
     warm_caches(mission_id, config)
     send_router_config(mission_id, config.config_generation)

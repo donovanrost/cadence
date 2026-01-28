@@ -109,16 +109,6 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
         build_segmentation_config(tc_config, uslp_config, cop1_config, uplink_profile)
 
       # Get defaults from new tc/uslp config, falling back to sdlp_config for backward compat
-      uplink_scid =
-        fetch_value(tc_config, "default_scid") ||
-          fetch_value(uslp_config, "default_scid") ||
-          fetch_value(sdlp_config, "uplink_scid")
-
-      uplink_vcid =
-        fetch_value(tc_config, "default_vcid") ||
-          fetch_value(uslp_config, "default_vcid") ||
-          fetch_value(sdlp_config, "uplink_vcid")
-
       uplink_map_id =
         fetch_value(uslp_config, "default_map_id") ||
           fetch_value(sdlp_config, "uplink_map_id")
@@ -142,8 +132,6 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
           default_target_id: fetch_value(sdlp_config, "default_target_id"),
           vcid_target_map: normalize_vcid_target_map(fetch_value(sdlp_config, "vcid_target_map")),
           default_vcid_map: normalize_vcid_map(fetch_value(sdlp_config, "default_vcid_map")),
-          uplink_scid: uplink_scid,
-          uplink_vcid: uplink_vcid,
           uplink_map_id: uplink_map_id,
           default_sdu_type: default_sdu_type,
           segmentation: segmentation
@@ -301,9 +289,11 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   defp build_mapping(mapping) when is_map(mapping) do
     entries =
       Enum.reduce(mapping, %{}, fn
-        {key, value}, acc when is_tuple(key) and tuple_size(key) == 4 ->
-          case normalize_sdu_type(value) do
-            {:ok, sdu_type} -> Map.put(acc, key, sdu_type)
+        {key, value}, acc when is_tuple(key) and tuple_size(key) in [3, 4] ->
+          with {:ok, normalized_key} <- normalize_mapping_key(key),
+               {:ok, sdu_type} <- normalize_sdu_type(value) do
+            Map.put(acc, normalized_key, sdu_type)
+          else
             _ -> acc
           end
 
@@ -316,6 +306,35 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
 
   defp build_mapping(_), do: {:error, :invalid_mapping}
 
+  defp normalize_mapping_key({scid, vcid, map_id, direction}) do
+    scid = parse_integer(scid)
+    vcid = parse_integer(vcid)
+    map_id = parse_integer(map_id)
+    direction = normalize_direction(direction)
+
+    with {:ok, vcid} <- require_integer(vcid),
+         {:ok, direction} <- require_direction(direction) do
+      {:ok, {scid, vcid, map_id, direction}}
+    else
+      _ -> :error
+    end
+  end
+
+  defp normalize_mapping_key({vcid, map_id, direction}) do
+    vcid = parse_integer(vcid)
+    map_id = parse_integer(map_id)
+    direction = normalize_direction(direction)
+
+    with {:ok, vcid} <- require_integer(vcid),
+         {:ok, direction} <- require_direction(direction) do
+      {:ok, {nil, vcid, map_id, direction}}
+    else
+      _ -> :error
+    end
+  end
+
+  defp normalize_mapping_key(_), do: :error
+
   defp normalize_mapping_entry(entry) when is_map(entry) do
     scid = parse_integer(Map.get(entry, "scid") || Map.get(entry, :scid))
     vcid = parse_integer(Map.get(entry, "vcid") || Map.get(entry, :vcid))
@@ -325,8 +344,7 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
     custom_name = Map.get(entry, "name") || Map.get(entry, :name)
     custom_version = Map.get(entry, "version") || Map.get(entry, :version)
 
-    with {:ok, scid} <- require_integer(scid),
-         {:ok, vcid} <- require_integer(vcid),
+    with {:ok, vcid} <- require_integer(vcid),
          {:ok, direction} <- require_direction(direction),
          {:ok, sdu_type} <- normalize_sdu_type(sdu_type_value, custom_name, custom_version) do
       {:ok, {scid, vcid, map_id, direction}, sdu_type}

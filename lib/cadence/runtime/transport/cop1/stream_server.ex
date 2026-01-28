@@ -5,6 +5,8 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Runtime.Transport.COP1.Context
   alias Cadence.Runtime.Transport.COP1.Report
   alias Cadence.Runtime.Transport.COP1.Stream
@@ -44,6 +46,8 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
     base_stream = Keyword.fetch!(opts, :base_stream)
     stream_id = Keyword.fetch!(opts, :stream_id)
 
+    Logger.debug("Starting COP1.StreamServer for stream_id=#{inspect(stream_id)}")
+
     state = %{
       stream_id: stream_id,
       stream:
@@ -54,6 +58,15 @@ defmodule Cadence.Runtime.Transport.COP1.StreamServer do
     }
 
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping COP1.StreamServer for stream_id=#{inspect(state.stream_id)} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true

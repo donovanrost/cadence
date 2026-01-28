@@ -89,17 +89,18 @@ defmodule Cadence.Domain.Interfaces.Entities.TargetInterface do
   @doc """
   Reconstructs a routing entity from persisted data.
   """
-  @spec from_persistence(map()) :: t()
+  @spec from_persistence(map() | struct()) :: t()
   def from_persistence(attrs) do
     %__MODULE__{
-      id: attrs[:id],
-      target_id: attrs[:target_id],
-      interface_id: attrs[:interface_id],
-      direction: parse_direction_from_persistence(attrs[:direction]),
-      scid: attrs[:scid],
-      tc_stream_id: normalize_tc_stream_id(attrs[:tc_stream_id], attrs[:target_id]),
-      created_at: attrs[:created_at] || attrs[:inserted_at],
-      updated_at: attrs[:updated_at]
+      id: Map.get(attrs, :id),
+      target_id: Map.get(attrs, :target_id),
+      interface_id: Map.get(attrs, :interface_id),
+      direction: parse_direction_from_persistence(Map.get(attrs, :direction)),
+      scid: Map.get(attrs, :scid),
+      tc_stream_id:
+        normalize_tc_stream_id(Map.get(attrs, :tc_stream_id), Map.get(attrs, :target_id)),
+      created_at: Map.get(attrs, :created_at) || Map.get(attrs, :inserted_at),
+      updated_at: Map.get(attrs, :updated_at)
     }
   end
 

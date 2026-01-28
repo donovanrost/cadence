@@ -162,7 +162,8 @@ defmodule Cadence.Runtime.Commands.TargetQueueTimerTest do
         definition_set_id: random_id(),
         name: "SAT-1",
         identifier: "SAT-1-#{unique_integer()}",
-        type: :spacecraft
+        type: :spacecraft,
+        scid: 1
       })
 
     {mission, target}

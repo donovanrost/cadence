@@ -41,6 +41,7 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Domain.Targeting.Entities.Target
   alias Cadence.Runtime.Commands.TargetPipeline
+  alias Cadence.Runtime.Telemetry.ConfigBundle
 
   @registry Cadence.MissionRegistry
 
@@ -112,6 +113,7 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
   @impl true
   def init(%MissionConfig{} = config) do
+    Logger.debug("Starting TargetPipelineSupervisor for mission_id=#{config.mission_id}")
     Logger.info("Starting TargetPipelineSupervisor for mission #{config.mission_id}")
 
     # Start a DynamicSupervisor for managing pipeline children
@@ -121,6 +123,9 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
     topic = "targets:#{config.mission_id}"
     Phoenix.PubSub.subscribe(Cadence.PubSub, topic)
     Logger.debug("Subscribed to #{topic} for pipeline hot reload")
+
+    # Subscribe to config updates for reconciliation fallback
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{config.mission_id}:config")
 
     # Load mission entity once
     state = %State{
@@ -178,14 +183,26 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
   @impl true
   def handle_info({:load_pipelines, targets}, state) do
+    Logger.debug(
+      "Loading target pipelines for mission_id=#{state.mission_id} targets=#{length(targets)}"
+    )
+
     new_state = load_and_start_pipelines(state, targets)
     {:noreply, new_state}
   end
 
   # Hot reload: Target changed (created, updated, deleted, etc.)
   def handle_info({:target_changed, event_type, %Target{} = target}, state) do
+    Logger.debug(
+      "Target change received for mission_id=#{state.mission_id} event=#{event_type} target_id=#{target.id}"
+    )
+
     new_state = handle_target_event(event_type, target, state)
     {:noreply, new_state}
+  end
+
+  def handle_info({:config_updated, _version}, state) do
+    {:noreply, reconcile_targets_from_bundle(state)}
   end
 
   # Ignore unhandled messages
@@ -196,6 +213,7 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
 
   @impl true
   def terminate(_reason, state) do
+    Logger.debug("Stopping TargetPipelineSupervisor for mission_id=#{state.mission_id}")
     Logger.info("Shutting down TargetPipelineSupervisor for mission #{state.mission_id}")
 
     # DynamicSupervisor traps exits and ignores EXIT signals from non-child processes.
@@ -288,6 +306,102 @@ defmodule Cadence.Runtime.Commands.TargetPipelineSupervisor do
         )
 
         state
+    end
+  end
+
+  defp reconcile_targets_from_bundle(state) do
+    case ConfigBundle.fetch(state.mission_id) do
+      {:ok, bundle} ->
+        targets = Map.get(bundle, :targets, [])
+
+        Logger.debug(
+          "Reconciling target pipelines from config bundle for mission_id=#{state.mission_id} targets=#{length(targets)} generation=#{bundle.config_version}"
+        )
+
+        reconcile_targets(state, targets)
+
+      {:error, _} ->
+        Logger.debug(
+          "Config bundle missing for mission_id=#{state.mission_id}; skipping target pipeline reconcile"
+        )
+
+        state
+    end
+  end
+
+  defp reconcile_targets(state, targets) do
+    new_targets = Map.new(targets, &{&1.id, &1})
+    old_targets = state.targets || %{}
+
+    state
+    |> reconcile_added_or_updated_targets(new_targets, old_targets)
+    |> reconcile_removed_targets(new_targets, old_targets)
+  end
+
+  defp reconcile_added_or_updated_targets(state, new_targets, old_targets) do
+    Enum.reduce(new_targets, state, fn {target_id, target}, acc ->
+      case Map.get(old_targets, target_id) do
+        nil -> start_pipeline_for_target(acc, target)
+        ^target -> acc
+        _existing -> restart_pipeline_for_target(acc, target)
+      end
+    end)
+  end
+
+  defp reconcile_removed_targets(state, new_targets, old_targets) do
+    Enum.reduce(old_targets, state, fn {target_id, target}, acc ->
+      if Map.has_key?(new_targets, target_id) do
+        acc
+      else
+        stop_pipeline_for_target(acc, target_id, target)
+      end
+    end)
+  end
+
+  defp start_pipeline_for_target(state, target) do
+    Logger.debug(
+      "Config reconcile: starting pipeline for target_id=#{target.id} identifier=#{target.identifier}"
+    )
+
+    case do_start_pipeline(target, state) do
+      {:ok, _pid} ->
+        %{state | targets: Map.put(state.targets, target.id, target)}
+
+      {:error, reason} ->
+        Logger.error(
+          "Config reconcile: failed to start pipeline for target_id=#{target.id}: #{inspect(reason)}"
+        )
+
+        state
+    end
+  end
+
+  defp restart_pipeline_for_target(state, target) do
+    Logger.debug(
+      "Config reconcile: restarting pipeline for target_id=#{target.id} identifier=#{target.identifier}"
+    )
+
+    case do_restart_pipeline(target, state) do
+      {:ok, _pid} ->
+        %{state | targets: Map.put(state.targets, target.id, target)}
+
+      {:error, reason} ->
+        Logger.error(
+          "Config reconcile: failed to restart pipeline for target_id=#{target.id}: #{inspect(reason)}"
+        )
+
+        state
+    end
+  end
+
+  defp stop_pipeline_for_target(state, target_id, target) do
+    Logger.debug(
+      "Config reconcile: stopping pipeline for target_id=#{target.id} identifier=#{target.identifier}"
+    )
+
+    case do_stop_pipeline(target_id, state) do
+      :ok -> %{state | targets: Map.delete(state.targets, target_id)}
+      {:error, :not_found} -> %{state | targets: Map.delete(state.targets, target_id)}
     end
   end
 

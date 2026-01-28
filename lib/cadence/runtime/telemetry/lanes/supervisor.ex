@@ -5,6 +5,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Supervisor do
 
   use Supervisor
 
+  require Logger
+
   alias Cadence.Runtime.Telemetry.Lanes.{
     Autoscaler,
     LaneConfig,
@@ -24,6 +26,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Supervisor do
   @impl true
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
+
+    Logger.debug("Starting Lanes.Supervisor for mission_id=#{mission_id}")
+    Process.put(:mission_id, mission_id)
+
     shard_count = Keyword.get(opts, :shard_count, @default_shard_count)
     lanes = LaneConfig.from_opts(Keyword.put_new(opts, :shard_count, shard_count))
     consumer_lanes = Keyword.get(opts, :consumer_lanes, [:payload])
@@ -135,6 +141,20 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Supervisor do
       ] ++ lane_children ++ consumer_children ++ stateful_children
 
     Supervisor.init(children, strategy: :rest_for_one)
+  end
+
+  def terminate(reason, _state) do
+    case Process.get(:mission_id) do
+      nil ->
+        :ok
+
+      mission_id ->
+        Logger.debug(
+          "Stopping Lanes.Supervisor for mission_id=#{mission_id} reason=#{inspect(reason)}"
+        )
+    end
+
+    :ok
   end
 
   defp lane_shard_count(lanes, lane) do

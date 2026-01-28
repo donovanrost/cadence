@@ -107,9 +107,9 @@ defmodule Cadence.TestHelpers do
     {:ok, definition_set} = create_test_definition_set(mission)
 
     target_configs = [
-      %{identifier: "SAT-1", name: "Satellite 1"},
-      %{identifier: "SAT-2", name: "Satellite 2"},
-      %{identifier: "SAT-3", name: "Satellite 3"}
+      %{identifier: "SAT-1", name: "Satellite 1", scid: 1},
+      %{identifier: "SAT-2", name: "Satellite 2", scid: 2},
+      %{identifier: "SAT-3", name: "Satellite 3", scid: 3}
     ]
 
     results =
@@ -119,6 +119,7 @@ defmodule Cadence.TestHelpers do
           definition_set_id: definition_set.id,
           name: config.name,
           identifier: config.identifier,
+          scid: config.scid,
           type: "spacecraft",
           status: "online"
         })
@@ -140,9 +141,9 @@ defmodule Cadence.TestHelpers do
     {:ok, definition_set} = create_test_definition_set(mission)
 
     target_configs = [
-      %{identifier: "SAT-1", name: "Satellite 1"},
-      %{identifier: "SAT-2", name: "Satellite 2"},
-      %{identifier: "SAT-3", name: "Satellite 3"}
+      %{identifier: "SAT-1", name: "Satellite 1", scid: 1},
+      %{identifier: "SAT-2", name: "Satellite 2", scid: 2},
+      %{identifier: "SAT-3", name: "Satellite 3", scid: 3}
     ]
 
     results =
@@ -152,6 +153,7 @@ defmodule Cadence.TestHelpers do
           definition_set_id: definition_set.id,
           name: config.name,
           identifier: config.identifier,
+          scid: config.scid,
           type: "spacecraft",
           status: "online"
         })

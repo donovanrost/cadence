@@ -229,6 +229,8 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
   def init(mission_id) do
     table_name = table_name(mission_id)
 
+    Logger.debug("Starting CurrentValueTable for mission_id=#{mission_id}")
+
     Logger.info("Creating CVT table: #{table_name} for mission_id=#{mission_id}")
 
     # Create ETS table with options:
@@ -262,6 +264,7 @@ defmodule Cadence.Runtime.Telemetry.CurrentValueTable do
 
   @impl true
   def terminate(_reason, state) do
+    Logger.debug("Stopping CurrentValueTable for mission_id=#{state.mission_id}")
     Logger.info("Terminating CVT table: #{state.table_name}")
     :ets.delete(state.table_name)
     :ok

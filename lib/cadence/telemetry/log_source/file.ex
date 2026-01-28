@@ -146,6 +146,7 @@ defmodule Cadence.Telemetry.LogSource.File do
   end
 
   defp normalize_envelope(%LogEnvelope{} = env), do: env
+  defp normalize_envelope(%{__struct__: _} = term), do: term
   defp normalize_envelope(term), do: struct(LogEnvelope, Map.from_struct(term))
 
   defp build_paths(base_dir, mission_id, lane, shard_id) do

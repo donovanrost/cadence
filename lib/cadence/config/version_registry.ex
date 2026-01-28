@@ -4,7 +4,7 @@ defmodule Cadence.Config.VersionRegistry do
 
   ## Problem
 
-  ETS caches (MetaCommandCache, PacketIdentifier, etc.) can become stale when:
+  ETS caches (MetaCommandCache, etc.) can become stale when:
   - Database is updated directly (migrations, manual fixes)
   - Config changes aren't propagated to all cache consumers
   - Multi-node deployments have different cache states

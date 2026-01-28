@@ -5,6 +5,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSupervisor do
 
   use Supervisor
 
+  require Logger
+
   alias Cadence.Runtime.Telemetry.Lanes.ShardWorker
 
   def start_link(opts) do
@@ -18,6 +20,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSupervisor do
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     lane = Keyword.fetch!(opts, :lane)
+
+    Logger.debug("Starting Lanes.LaneSupervisor for mission_id=#{mission_id} lane=#{lane}")
+
+    Process.put(:mission_id, mission_id)
+    Process.put(:lane, lane)
+
     shard_count = Keyword.fetch!(opts, :shard_count)
     router = Keyword.fetch!(opts, :router)
     sink = Keyword.get(opts, :sink, Cadence.Telemetry.LogSink.Noop)
@@ -54,6 +62,19 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSupervisor do
       end
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def terminate(reason, _state) do
+    mission_id = Process.get(:mission_id)
+    lane = Process.get(:lane)
+
+    if mission_id && lane do
+      Logger.debug(
+        "Stopping Lanes.LaneSupervisor for mission_id=#{mission_id} lane=#{lane} reason=#{inspect(reason)}"
+      )
+    end
+
+    :ok
   end
 
   defp shard_name(mission_id, lane, shard) do

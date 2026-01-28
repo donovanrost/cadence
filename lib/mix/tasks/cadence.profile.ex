@@ -427,6 +427,7 @@ defmodule Mix.Tasks.Cadence.Profile do
     print_cvt_stats(snapshot[:cvt])
     print_stats_snapshot(snapshot, prev)
     print_ccsds_snapshot(snapshot[:ccsds])
+    print_sdlp_snapshot(snapshot[:sdlp])
     print_lanes_snapshot(snapshot[:lanes])
     print_queue_warnings(snapshot[:process_queues] || [])
 
@@ -589,6 +590,27 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp print_ccsds_snapshot(_stats), do: :ok
+
+  defp print_sdlp_snapshot(stats) when is_map(stats) and map_size(stats) > 0 do
+    stats
+    |> Enum.sort_by(fn {profile, _} -> profile end)
+    |> Enum.each(&print_sdlp_totals/1)
+  end
+
+  defp print_sdlp_snapshot(_stats), do: :ok
+
+  defp print_sdlp_totals({profile, metrics}) do
+    decode = metrics.frame_decode
+    encode = metrics.frame_encode
+    seg = metrics.segmentation
+    reasm = metrics.reassembly
+
+    Mix.shell().info(
+      "SDLP #{profile}: dec #{decode.ok}/#{decode.total} drop #{decode.drop} " <>
+        "enc #{encode.ok}/#{encode.total} seg #{seg.segments_emitted} " <>
+        "reasm #{reasm.sdu_emitted} in #{format_bytes(decode.bytes_in)} out #{format_bytes(encode.bytes_out)}"
+    )
+  end
 
   defp build_ccsds_totals(stats) do
     Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
@@ -805,6 +827,16 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp format_number(n), do: to_string(n)
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000_000 do
+    "#{Float.round(bytes / 1_000_000, 2)}MB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000 do
+    "#{Float.round(bytes / 1_000, 2)}KB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes), do: "#{bytes}B"
 
   defp print_summary(initial, final, duration_ms) do
     print_summary_header()

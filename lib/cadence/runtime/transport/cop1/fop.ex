@@ -6,7 +6,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   use GenServer
   require Logger
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.LinkController
   alias Cadence.Runtime.Transport
@@ -34,16 +33,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     channel_id = Keyword.fetch!(opts, :channel_id)
     name = via_tuple(mission_id, channel_id)
     GenServer.start_link(__MODULE__, opts, name: name)
-  end
-
-  @spec enabled?(Interface.t()) :: boolean()
-  def enabled?(%Interface{} = interface) do
-    Config.enabled?(interface)
-  end
-
-  @spec mode_for(Interface.t(), atom() | nil, non_neg_integer() | nil) :: :fop | :bypass
-  def mode_for(%Interface{} = interface, pdu_type \\ nil, apid \\ nil) do
-    Config.mode_for(interface, pdu_type, apid)
   end
 
   @spec send_frames(String.t(), ChannelId.t(), [map()], Context.t() | nil) ::
@@ -91,7 +80,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     protocol_config = Keyword.get(opts, :protocol_config, %{})
     sdlp = Map.get(protocol_config, :sdlp, :error)
     cop1 = Map.get(protocol_config, :cop1, %{})
-    default_interface_id = Map.get(protocol_config, :interface_id)
     enabled = Config.mode(cop1) == :fop
     release_fun = Keyword.get(opts, :release_fun, &default_release_fun/1)
     event_fun = Keyword.get(opts, :event_fun, &COP1Application.emit_protocol_event/1)
@@ -117,7 +105,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
     state = %{
       mission_id: mission_id,
       channel_id: channel_id,
-      default_interface_id: default_interface_id,
       enabled: enabled,
       base_stream: base_stream,
       reports_by_stream: %{}
@@ -197,17 +184,9 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   defp active_interface(state) do
     if link_controller_running?(state) do
       case LinkController.active_uplink_interface(state.mission_id, state.channel_id) do
-        nil -> fallback_interface(state)
+        nil -> {:error, :no_active_interface}
         interface_id -> {:ok, interface_id}
       end
-    else
-      fallback_interface(state)
-    end
-  end
-
-  defp fallback_interface(state) do
-    if is_binary(state.default_interface_id) do
-      {:ok, state.default_interface_id}
     else
       {:error, :no_active_interface}
     end

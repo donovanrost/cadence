@@ -5,6 +5,8 @@ defmodule Cadence.Runtime.Links.Supervisor do
 
   use DynamicSupervisor
 
+  require Logger
+
   alias Cadence.Runtime.Links.LinkController
 
   def start_link(opts) do
@@ -13,19 +15,34 @@ defmodule Cadence.Runtime.Links.Supervisor do
   end
 
   @impl true
-  def init(_mission_id) do
+  def init(mission_id) do
+    Logger.debug("Starting Links.Supervisor for mission_id=#{mission_id}")
+    Process.put(:mission_id, mission_id)
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 
-  @spec ensure_link(String.t(), non_neg_integer(), map()) :: :ok
-  def ensure_link(mission_id, scid, protocol_config \\ %{}) do
+  def terminate(reason, _state) do
+    case Process.get(:mission_id) do
+      nil ->
+        :ok
+
+      mission_id ->
+        Logger.debug(
+          "Stopping Links.Supervisor for mission_id=#{mission_id} reason=#{inspect(reason)}"
+        )
+    end
+
+    :ok
+  end
+
+  @spec ensure_link(String.t(), non_neg_integer()) :: :ok
+  def ensure_link(mission_id, scid) do
     case lookup_link(mission_id, scid) do
       {:ok, _pid} ->
         :ok
 
       :error ->
-        child_spec =
-          {LinkController, mission_id: mission_id, scid: scid, protocol_config: protocol_config}
+        child_spec = {LinkController, mission_id: mission_id, scid: scid}
 
         case DynamicSupervisor.start_child(via_tuple(mission_id), child_spec) do
           {:ok, _pid} -> :ok

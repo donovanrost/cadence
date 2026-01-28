@@ -26,11 +26,12 @@ defmodule Cadence.Application.Missions.MissionConfig do
   alias Cadence.Interfaces.InterfaceSchema
   alias Cadence.Interfaces.InterfaceVcid
   alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
+  alias Cadence.Links
+  alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Repo
-  alias Cadence.Runtime.Interfaces.SDLPConfig
-  alias Cadence.Runtime.Transport.COP1.Application, as: COP1Application
   alias Cadence.Telemetry.Database.DerivedItem
   alias Cadence.Telemetry.Packet.PacketDefinition
+  alias Cadence.Transports
 
   import Ecto.Query
 
@@ -52,7 +53,12 @@ defmodule Cadence.Application.Missions.MissionConfig do
           limit_defs: map(),
           derived_item_defs: list(),
           alarm_rules: list(),
-          automations: list()
+          automations: list(),
+          transport_interfaces: list(),
+          links: list(),
+          bindings: list(),
+          active_selections: list(),
+          channel_targets: list()
         }
 
   defstruct [
@@ -71,7 +77,12 @@ defmodule Cadence.Application.Missions.MissionConfig do
     limit_defs: %{},
     derived_item_defs: [],
     alarm_rules: [],
-    automations: []
+    automations: [],
+    transport_interfaces: [],
+    links: [],
+    bindings: [],
+    active_selections: [],
+    channel_targets: []
   ]
 
   @doc """
@@ -91,11 +102,17 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
-         {:ok, command_defs} <- load_command_definitions(mission_id),
+         {:ok, command_defs} <- load_command_definitions(mission_id, targets),
          {:ok, limit_defs} <- load_limit_definitions(mission_id),
          {:ok, derived_item_defs} <- load_derived_items(mission_id),
-         {:ok, alarm_rules} <- load_alarm_rules(mission_id),
-         {:ok, automations} <- load_automations(mission_id) do
+         {:ok, alarm_rules} <- load_alarm_rules(mission.organization_id, mission_id),
+         {:ok, automations} <- load_automations(mission_id),
+         {:ok, transport_interfaces} <-
+           load_transport_interfaces(mission.organization_id, mission_id),
+         {:ok, links} <- load_links(mission.organization_id, mission_id),
+         {:ok, bindings} <- load_bindings(mission.organization_id, mission_id),
+         {:ok, active_selections} <- load_active_selections(mission.organization_id, mission_id),
+         {:ok, channel_targets} <- load_channel_targets(mission.organization_id, mission_id) do
       {:ok,
        %__MODULE__{
          mission_id: mission_id,
@@ -113,7 +130,12 @@ defmodule Cadence.Application.Missions.MissionConfig do
          limit_defs: limit_defs,
          derived_item_defs: derived_item_defs,
          alarm_rules: alarm_rules,
-         automations: automations
+         automations: automations,
+         transport_interfaces: transport_interfaces,
+         links: links,
+         bindings: bindings,
+         active_selections: active_selections,
+         channel_targets: channel_targets
        }}
     end
   end
@@ -224,10 +246,28 @@ defmodule Cadence.Application.Missions.MissionConfig do
       {:ok, %{}}
   end
 
-  defp load_command_definitions(_mission_id) do
-    # TODO: Load command definitions from definition sets
-    # For now, return empty map - MetaCommandCache ETS still works
-    {:ok, %{}}
+  defp load_command_definitions(_mission_id, targets) do
+    definition_set_ids =
+      targets
+      |> Enum.map(&Map.get(&1, :definition_set_id))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if definition_set_ids == [] do
+      {:ok, %{}}
+    else
+      commands =
+        MetaCommand
+        |> where([mc], mc.definition_set_id in ^definition_set_ids)
+        |> where([mc], mc.abstract == false or is_nil(mc.abstract))
+        |> preload([:arguments, :verifiers, :transmission_constraints, :command_container])
+        |> Repo.all()
+
+      by_definition_set =
+        Enum.group_by(commands, fn command -> command.definition_set_id end)
+
+      {:ok, by_definition_set}
+    end
   end
 
   defp load_limit_definitions(_mission_id) do
@@ -242,10 +282,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
     {:ok, derived_defs}
   end
 
-  defp load_alarm_rules(_mission_id) do
-    # TODO: Load alarm rules
-    # For now, return empty list - RuleCache ETS still works
-    {:ok, []}
+  defp load_alarm_rules(organization_id, mission_id) do
+    {:ok, Cadence.Alarms.list_rules(organization_id, mission_id: mission_id, enabled: true)}
   end
 
   defp load_automations(_mission_id) do
@@ -254,31 +292,71 @@ defmodule Cadence.Application.Missions.MissionConfig do
     {:ok, []}
   end
 
-  defp validate_tc_stream_ids(routings, interfaces, interface_vcids) do
-    interfaces_by_id = Map.new(interfaces, fn interface -> {interface.id, interface} end)
-    interface_defaults = build_interface_defaults(interfaces)
+  defp load_transport_interfaces(organization_id, mission_id) do
+    interfaces = Transports.list_interfaces(organization_id, mission_id)
+    {:ok, interfaces}
+  rescue
+    e ->
+      Logger.warning(
+        "Failed to load transport interfaces for mission #{mission_id}: #{inspect(e)}"
+      )
+
+      {:ok, []}
+  end
+
+  defp load_links(organization_id, mission_id) do
+    {:ok, Links.list_links_with_protocol_config(organization_id, mission_id)}
+  rescue
+    e ->
+      Logger.warning("Failed to load links for mission #{mission_id}: #{inspect(e)}")
+      {:ok, []}
+  end
+
+  defp load_bindings(organization_id, mission_id) do
+    {:ok, Links.list_bindings(organization_id, mission_id)}
+  rescue
+    e ->
+      Logger.warning("Failed to load bindings for mission #{mission_id}: #{inspect(e)}")
+      {:ok, []}
+  end
+
+  defp load_active_selections(organization_id, mission_id) do
+    {:ok, Links.list_active_selections(organization_id, mission_id)}
+  rescue
+    e ->
+      Logger.warning("Failed to load active selections for mission #{mission_id}: #{inspect(e)}")
+
+      {:ok, []}
+  end
+
+  defp load_channel_targets(organization_id, mission_id) do
+    {:ok, Links.list_channel_targets_for_mission(organization_id, mission_id)}
+  rescue
+    e ->
+      Logger.warning("Failed to load channel targets for mission #{mission_id}: #{inspect(e)}")
+
+      {:ok, []}
+  end
+
+  defp validate_tc_stream_ids(routings, _interfaces, interface_vcids) do
     {vcid_by_target, vcid_defaults} = index_vcids(interface_vcids)
 
     cop1_routes =
       Enum.filter(routings, fn route ->
-        TargetInterfaceEntity.allows_write?(route) and
-          cop1_enabled_interface?(interfaces_by_id, route.interface_id)
+        TargetInterfaceEntity.allows_write?(route)
       end)
 
     missing_errors =
       Enum.flat_map(cop1_routes, fn route ->
-        defaults = Map.get(interface_defaults, route.interface_id, %{})
-
         scid =
           case route.scid do
             scid when is_integer(scid) -> scid
-            _ -> Map.get(defaults, :scid)
+            _ -> nil
           end
 
         vcid =
           Map.get(vcid_by_target, {route.interface_id, route.target_id}) ||
-            Map.get(vcid_defaults, route.interface_id) ||
-            Map.get(defaults, :vcid)
+            Map.get(vcid_defaults, route.interface_id)
 
         []
         |> maybe_add_missing(route, :scid, scid)
@@ -335,25 +413,6 @@ defmodule Cadence.Application.Missions.MissionConfig do
     end)
   end
 
-  defp build_interface_defaults(interfaces) do
-    Enum.reduce(interfaces, %{}, fn interface, acc ->
-      defaults =
-        case SDLPConfig.fetch(interface) do
-          {:ok, %{opts: opts}} ->
-            %{
-              scid: opts[:uplink_scid],
-              vcid: opts[:uplink_vcid],
-              map_id: opts[:uplink_map_id]
-            }
-
-          :error ->
-            %{}
-        end
-
-      Map.put(acc, interface.id, defaults)
-    end)
-  end
-
   defp index_vcids(nil), do: {%{}, %{}}
   defp index_vcids([]), do: {%{}, %{}}
 
@@ -369,12 +428,5 @@ defmodule Cadence.Application.Missions.MissionConfig do
         {by_target, Map.put(defaults, interface_id, vcid)}
       end
     end)
-  end
-
-  defp cop1_enabled_interface?(interfaces_by_id, interface_id) do
-    case Map.get(interfaces_by_id, interface_id) do
-      nil -> false
-      interface -> COP1Application.enabled?(interface)
-    end
   end
 end

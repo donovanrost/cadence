@@ -28,6 +28,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulDerivedConsumer do
     lane = Keyword.get(opts, :lane, :payload)
     base_dir = Keyword.get(opts, :base_dir)
 
+    Logger.debug(
+      "Starting Lanes.StatefulDerivedConsumer for mission_id=#{mission_id} lane=#{lane}"
+    )
+
     Logger.info(
       "Starting stateful derived consumer for mission_id=#{mission_id}, lane=#{lane}, shards=#{shard_count}"
     )
@@ -60,6 +64,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulDerivedConsumer do
        subs: subs,
        base_dir: base_dir
      }}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.StatefulDerivedConsumer for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true

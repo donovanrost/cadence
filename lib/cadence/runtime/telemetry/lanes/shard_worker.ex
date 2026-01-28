@@ -8,15 +8,20 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   require Logger
 
   alias Cadence.Runtime.Telemetry.ConfigBundle
-  alias Cadence.Runtime.Telemetry.Lanes.Event
-  alias Cadence.Runtime.Telemetry.Limits.StateTracker
-  alias Cadence.Telemetry.{Convert, Decom, Derive, Identify}
-  alias Cadence.Telemetry.LogEnvelope
+  alias Cadence.Runtime.Telemetry.PipelineEvent
+
+  alias Cadence.Telemetry.{
+    Conversions,
+    Decommutation,
+    PipelineRouter,
+    Resolve,
+    SpacePacket
+  }
+
+  alias Cadence.Telemetry.PacketLogRecord
   alias Cadence.Telemetry.PipelineMetrics
-  alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
-  @timing_sample_rate 100
   @default_max_batch_size 200
   @default_max_batch_delay_ms 50
   @default_max_inflight 5_000
@@ -39,6 +44,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
     max_batch_size = Keyword.get(opts, :max_batch_size, @default_max_batch_size)
     max_batch_delay_ms = Keyword.get(opts, :max_batch_delay_ms, @default_max_batch_delay_ms)
     max_inflight = Keyword.get(opts, :max_inflight, @default_max_inflight)
+
+    Logger.debug(
+      "Starting Lanes.ShardWorker for mission_id=#{mission_id} lane=#{lane} shard_id=#{shard_id}"
+    )
 
     state = %{
       mission_id: mission_id,
@@ -66,7 +75,16 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   end
 
   @impl true
-  def handle_cast({:telemetry_event, event}, state) do
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.ShardWorker for mission_id=#{state.mission_id} lane=#{state.lane} shard_id=#{state.shard_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  @impl true
+  def handle_cast({:telemetry_event, %PipelineEvent{} = event}, state) do
     state =
       if event.config_version != state.config_version and
            event.config_version == state.pending_config_version do
@@ -135,28 +153,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
     {records, processed, items_processed} =
       events
       |> Enum.reduce({[], 0, 0}, fn event, {acc_records, processed_count, item_count} ->
-        case process_event(event, state) do
-          {:ok, envelope, items} ->
-            {[envelope | acc_records], processed_count + 1, item_count + items}
-
-          {:skip, reason} ->
-            Logger.debug(
-              "Shard #{state.shard_id} (lane=#{state.lane}) skipped event #{event.id}: #{inspect(reason)}",
-              mission_id: state.mission_id
-            )
-
-            PipelineMetrics.inc(state.mission_id, {state.lane, state.shard_id}, :packets_dropped)
-            {acc_records, processed_count, item_count}
-
-          {:error, reason} ->
-            Logger.error(
-              "Shard #{state.shard_id} (lane=#{state.lane}) failed event #{event.id}: #{inspect(reason)}",
-              mission_id: state.mission_id
-            )
-
-            PipelineMetrics.inc(state.mission_id, {state.lane, state.shard_id}, :packets_dropped)
-            {acc_records, processed_count, item_count}
-        end
+        {:ok, event_records, items} = process_event(event, state)
+        {event_records ++ acc_records, processed_count + 1, item_count + items}
       end)
 
     PipelineMetrics.inc(
@@ -183,61 +181,118 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
     |> apply_pending_bundle()
   end
 
-  defp process_event(%Event{} = event, state) do
-    stage_state = %{
-      mission_id: state.mission_id,
-      partition: {state.lane, state.shard_id},
-      config_bundle: state.config_bundle
-    }
+  defp process_event(%PipelineEvent{} = event, state) do
+    records = [PacketLogRecord.envelope_record(event.envelope, state.lane, state.shard_id)]
 
-    sample? = :rand.uniform(@timing_sample_rate) == 1
+    case event.parse_error do
+      nil ->
+        process_event_v2_with_parse(event, records, state)
 
-    case run_pipeline(event, stage_state, sample?, state) do
-      {:ok, event} ->
-        {event, limits_us} = apply_stateless_limits(event, state, sample?)
-        _ = timed_stage(:limits, limits_us, sample?, state)
+      parse_error ->
+        publish_sink(event.mission_id, :malformed, %{
+          envelope: event.envelope,
+          parsed_unit: event.parsed_unit,
+          resolved_unit: nil,
+          reason: %{parse_error: parse_error}
+        })
 
-        record_end_to_end(event, sample?, state)
+        {:ok, records, 0}
+    end
+  end
 
-        payload = event.all_items || event.converted_items || event.raw_items || %{}
+  defp process_event_v2_with_parse(%PipelineEvent{parsed_unit: nil} = event, records, _state) do
+    publish_sink(event.mission_id, :malformed, %{
+      envelope: event.envelope,
+      parsed_unit: nil,
+      resolved_unit: nil,
+      reason: %{parse_error: :missing_parsed_unit}
+    })
 
-        envelope = %LogEnvelope{
-          mission_id: state.mission_id,
-          target_id: event.target_id,
-          apid: event.apid,
-          lane: state.lane,
-          shard_id: state.shard_id,
-          router_version: event.router_version,
-          config_version: event.config_version,
-          sequence: extract_sequence(event.packet),
-          ingest_monotonic_ns: event.ingest_monotonic_ns,
-          source_wall_clock_ms: to_wall_ms(event.metadata[:received_at]),
-          checksum: checksum(event.packet),
-          payload: payload,
-          meta: %{
-            packet_format: event.packet_format,
-            packet_def: event.packet_def && event.packet_def.name,
-            link_meta: extract_link_meta(event.metadata),
-            qualified_items: event.qualified_items,
-            items_with_limits: event.items_with_limits
-          }
-        }
+    {:ok, records, 0}
+  end
 
-        {:ok, envelope, map_size(payload)}
+  defp process_event_v2_with_parse(%PipelineEvent{} = event, records, state) do
+    resolved = Resolve.resolve(event.envelope, event.parsed_unit, state.config_bundle)
 
-      {:skip, reason} ->
-        {:skip, reason}
+    records = [
+      PacketLogRecord.classification_record(resolved, state.lane, state.shard_id) | records
+    ]
 
-      {:error, reason} ->
-        {:error, reason}
+    record_resolution_metrics(state, resolved)
+
+    case PipelineRouter.route_resolved(resolved) do
+      {:decom, _resolved} ->
+        case decom_space_packet(event.parsed_unit, resolved) do
+          {:ok, raw_items} ->
+            packet_def = packet_def_from_resolved(resolved)
+            converted_items = convert_items(raw_items, packet_def)
+            qualified_items = qualify_items(converted_items, resolved)
+            apid = apid_from_parsed(event.parsed_unit)
+            target_identifier = target_identifier(state.config_bundle, resolved.identity)
+
+            records = [
+              PacketLogRecord.decom_record(
+                resolved,
+                qualified_items,
+                apid,
+                state.lane,
+                state.shard_id,
+                target_identifier
+              )
+              | records
+            ]
+
+            PipelineMetrics.inc(
+              state.mission_id,
+              {state.lane, state.shard_id},
+              :packets_decom_processed
+            )
+
+            {:ok, records, map_size(qualified_items)}
+
+          {:error, reason} ->
+            publish_sink(event.mission_id, :malformed, %{
+              envelope: event.envelope,
+              parsed_unit: event.parsed_unit,
+              resolved_unit: resolved,
+              reason: %{decom_error: reason}
+            })
+
+            {:ok, records, 0}
+        end
+
+      {:sink, sink, reason} ->
+        publish_sink(event.mission_id, sink, %{
+          envelope: event.envelope,
+          parsed_unit: event.parsed_unit,
+          resolved_unit: resolved,
+          reason: reason
+        })
+
+        {:ok, records, 0}
     end
   end
 
   defp maybe_append([], _state), do: :ok
 
   defp maybe_append(records, state) do
+    # Logger.debug("[DEBUG] lanes.shard_worker.appending",
+    #   mission_id: state.mission_id,
+    #   lane: state.lane,
+    #   shard_id: state.shard_id,
+    #   record_count: length(records),
+    #   sink: state.sink
+    # )
+
     case state.sink.append(state.shard_id, Enum.reverse(records), state.sink_opts) do
       {:ok, _meta} ->
+        # Logger.debug("[DEBUG] lanes.shard_worker.appended",
+        #   mission_id: state.mission_id,
+        #   lane: state.lane,
+        #   shard_id: state.shard_id,
+        #   meta: inspect(meta)
+        # )
+
         :ok
 
       {:error, reason} ->
@@ -248,14 +303,121 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
     end
   end
 
-  defp checksum(%{raw: raw}) when is_binary(raw), do: :erlang.crc32(raw)
-  defp checksum(_), do: nil
+  defp record_resolution_metrics(state, resolved) do
+    partition = {state.lane, state.shard_id}
 
-  defp extract_sequence(%{ccsds_header: %{sequence_count: seq}}) when is_integer(seq), do: seq
-  defp extract_sequence(_), do: nil
+    record_identity_metrics(state, partition, resolved.identity)
+    record_schema_metrics(state, partition, resolved.schema)
+  end
 
-  defp to_wall_ms(%DateTime{} = dt), do: DateTime.to_unix(dt, :millisecond)
-  defp to_wall_ms(_), do: nil
+  defp record_identity_metrics(state, partition, identity) do
+    case identity do
+      {:ok, _} -> PipelineMetrics.inc(state.mission_id, partition, :packets_resolved_ok)
+      {:unresolved, _, _} -> PipelineMetrics.inc(state.mission_id, partition, :packets_unresolved)
+      {:ambiguous, _, _} -> PipelineMetrics.inc(state.mission_id, partition, :packets_ambiguous)
+      _ -> :ok
+    end
+  end
+
+  defp record_schema_metrics(state, partition, schema) do
+    case schema do
+      {:ok, _} ->
+        PipelineMetrics.inc(state.mission_id, partition, :packets_schema_ok)
+
+      {:unknown_apid, _, _, _} ->
+        PipelineMetrics.inc(state.mission_id, partition, :packets_unknown_apid)
+
+      {:uncataloged_target, _} ->
+        PipelineMetrics.inc(state.mission_id, partition, :packets_uncataloged_target)
+
+      {:unsupported_format, _} ->
+        PipelineMetrics.inc(state.mission_id, partition, :packets_unsupported_format)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp decom_space_packet({:space_packet, %Cadence.Telemetry.SpacePacket{} = packet}, resolved) do
+    case resolved.schema do
+      {:ok, packet_def} ->
+        Decommutation.decommutate(packet.user_data, packet_def, :ccsds)
+
+      _ ->
+        {:error, :missing_schema}
+    end
+  end
+
+  defp decom_space_packet(_parsed_unit, _resolved), do: {:error, :unsupported_format}
+
+  defp qualify_items(raw_items, resolved) do
+    case packet_def_name(resolved) do
+      name when is_binary(name) ->
+        Map.new(raw_items, fn {item_name, value} ->
+          {qualify_item_name(name, item_name), value}
+        end)
+
+      _ ->
+        raw_items
+    end
+  end
+
+  defp packet_def_from_resolved(%{schema: {:ok, packet_def}}), do: packet_def
+  defp packet_def_from_resolved(_), do: nil
+
+  defp convert_items(raw_items, %{items_by_name: items_by_name}) when is_map(items_by_name) do
+    Map.new(raw_items, fn {item_name, raw_value} ->
+      item_def = Map.get(items_by_name, to_string(item_name))
+      {item_name, convert_item_value(raw_value, item_def)}
+    end)
+  end
+
+  defp convert_items(raw_items, _packet_def), do: raw_items
+
+  defp convert_item_value(raw_value, %{conversion: conversion}) when not is_nil(conversion) do
+    case Conversions.apply_db_conversion(raw_value, conversion) do
+      {:ok, converted} -> converted
+      _ -> raw_value
+    end
+  end
+
+  defp convert_item_value(raw_value, _item_def), do: raw_value
+
+  defp packet_def_name(%{schema: {:ok, packet_def}}), do: Map.get(packet_def, :name)
+  defp packet_def_name(_), do: nil
+
+  defp qualify_item_name(packet_def_name, item_name) do
+    item_name = to_string(item_name)
+
+    if String.starts_with?(item_name, packet_def_name <> ".") do
+      item_name
+    else
+      packet_def_name <> "." <> item_name
+    end
+  end
+
+  defp apid_from_parsed({:space_packet, %SpacePacket{} = packet}) do
+    SpacePacket.get_apid(packet)
+  end
+
+  defp apid_from_parsed(_), do: nil
+
+  defp target_identifier(%ConfigBundle{targets: targets}, {:ok, target_id}) do
+    case Enum.find(targets, fn target -> Map.get(target, :id) == target_id end) do
+      nil -> nil
+      target -> Map.get(target, :identifier) || Map.get(target, :name)
+    end
+  end
+
+  defp target_identifier(_bundle, _identity), do: nil
+
+  defp publish_sink(mission_id, sink, payload) do
+    Phoenix.PubSub.broadcast(
+      Cadence.PubSub,
+      "mission:#{mission_id}:telemetry:#{sink}",
+      {:telemetry_sink, payload}
+    )
+  end
 
   defp load_config_bundle(mission_id) do
     case ConfigBundle.fetch(mission_id) do
@@ -279,144 +441,4 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
         pending_config_bundle: nil
     }
   end
-
-  defp maybe_time(true, fun) do
-    start = CadenceTime.monotonic(:microsecond)
-    result = fun.()
-    duration = CadenceTime.monotonic(:microsecond) - start
-    {result, duration}
-  end
-
-  defp maybe_time(false, fun), do: {fun.(), nil}
-
-  defp timed_stage(_stage, nil, _sample?, _state), do: {:ok, :no_timing}
-
-  defp timed_stage(stage, duration_us, true, state) do
-    PipelineMetrics.record_timing(
-      state.mission_id,
-      {state.lane, state.shard_id},
-      stage,
-      duration_us
-    )
-
-    {:ok, :timed}
-  end
-
-  defp timed_stage(_stage, _duration_us, false, _state), do: {:ok, :no_timing}
-
-  defp apply_stateless_limits(%Event{all_items: items} = event, state, sample?)
-       when is_map(items) and map_size(items) > 0 do
-    {limits_items, limits_us} =
-      maybe_time(sample?, fn ->
-        StateTracker.evaluate_stateless_batch(
-          state.mission_id,
-          event.target_id,
-          Enum.to_list(items)
-        )
-      end)
-
-    {%{event | items_with_limits: limits_items}, limits_us}
-  end
-
-  defp apply_stateless_limits(event, _state, _sample?), do: {event, nil}
-
-  defp record_end_to_end(%Event{} = event, true, state) do
-    now_us = CadenceTime.monotonic(:microsecond)
-    ingest_us = div(event.ingest_monotonic_ns, 1_000)
-    duration_us = max(now_us - ingest_us, 0)
-
-    PipelineMetrics.record_timing(
-      state.mission_id,
-      {state.lane, state.shard_id},
-      :end_to_end,
-      duration_us
-    )
-  end
-
-  defp record_end_to_end(_event, _sample?, _state), do: :ok
-
-  defp run_pipeline(event, stage_state, sample?, state) do
-    with {:ok, event} <- run_stage(:identify, event, stage_state, sample?, state),
-         {:ok, event} <- run_stage(:decom, event, stage_state, sample?, state),
-         {:ok, event} <- run_stage(:convert, event, stage_state, sample?, state),
-         {:ok, event} <- run_stage(:derive, event, stage_state, sample?, state) do
-      {:ok, event}
-    else
-      {:skip, reason} -> {:skip, reason}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp run_stage(:identify, event, stage_state, sample?, state) do
-    {result, duration} = maybe_time(sample?, fn -> Identify.run(event, stage_state) end)
-    handle_stage_result(:identify, result, duration, sample?, state)
-  end
-
-  defp run_stage(:decom, event, stage_state, sample?, state) do
-    {result, duration} = maybe_time(sample?, fn -> Decom.run(event, stage_state) end)
-    handle_stage_result(:decom, result, duration, sample?, state)
-  end
-
-  defp run_stage(:convert, event, stage_state, sample?, state) do
-    {result, duration} = maybe_time(sample?, fn -> Convert.run(event, stage_state) end)
-    handle_stage_result(:convert, result, duration, sample?, state)
-  end
-
-  defp run_stage(:derive, event, stage_state, sample?, state) do
-    {result, duration} = maybe_time(sample?, fn -> Derive.run(event, stage_state) end)
-    handle_stage_result(:derive, result, duration, sample?, state)
-  end
-
-  defp handle_stage_result(stage, {:ok, event}, duration, sample?, state) do
-    _ = timed_stage(stage, duration, sample?, state)
-    {:ok, event}
-  end
-
-  defp handle_stage_result(_stage, {:skip, reason}, _duration, _sample?, _state),
-    do: {:skip, reason}
-
-  defp handle_stage_result(stage, {:error, reason}, _duration, _sample?, state) do
-    PipelineMetrics.record_error(state.mission_id, {state.lane, state.shard_id}, stage)
-    maybe_record_identify_reason(stage, reason, state)
-    {:error, reason}
-  end
-
-  defp maybe_record_identify_reason(:identify, {:identify_failed, :missing_packet_catalog}, state) do
-    PipelineMetrics.inc(
-      state.mission_id,
-      {state.lane, state.shard_id},
-      :errors_identify_missing_catalog
-    )
-  end
-
-  defp maybe_record_identify_reason(:identify, {:identify_failed, :unknown_packet}, state) do
-    PipelineMetrics.inc(
-      state.mission_id,
-      {state.lane, state.shard_id},
-      :errors_identify_unknown_packet
-    )
-  end
-
-  defp maybe_record_identify_reason(_stage, _reason, _state), do: :ok
-
-  defp extract_link_meta(metadata) when is_map(metadata) do
-    Map.take(metadata, [
-      :scid,
-      :vcid,
-      :map_id,
-      :mcfc,
-      :vcfc,
-      :fhp,
-      :ocf,
-      :ocf_flag,
-      :secondary_header_flag,
-      :sync_flag,
-      :packet_order_flag,
-      :segment_length_id,
-      :lane,
-      :qos
-    ])
-  end
-
-  defp extract_link_meta(_), do: %{}
 end

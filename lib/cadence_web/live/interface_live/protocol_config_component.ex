@@ -89,6 +89,12 @@ defmodule CadenceWeb.InterfaceLive.ProtocolConfigComponent do
 
     ~H"""
     <div class="space-y-6">
+      <div class="rounded-sm border border-warning/50 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <span class="font-semibold">Deprecated:</span>
+        Interface protocol configuration is no longer used for runtime decisions. Configure
+        spacecraft communications via Links and Channels instead.
+      </div>
+
       <div class="rounded-sm border border-base-300 bg-base-100">
         <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
           <h3 class="text-sm font-semibold text-base-content">Protocol Configuration</h3>

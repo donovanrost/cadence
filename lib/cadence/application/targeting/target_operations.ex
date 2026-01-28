@@ -28,7 +28,11 @@ defmodule Cadence.Application.Targeting.TargetOperations do
       {:ok, target} = TargetOperations.update(target, %{status: :online})
   """
 
+  alias Cadence.Application.Missions.MissionQueries
+  alias Cadence.Comms
   alias Cadence.Domain.Targeting.Entities.Target
+  alias Cadence.Missions.Mission, as: MissionSchema
+  alias Cadence.Repo
 
   @type id :: String.t()
   @type attrs :: map()
@@ -72,10 +76,22 @@ defmodule Cadence.Application.Targeting.TargetOperations do
   """
   @spec create(attrs()) :: {:ok, Target.t()} | {:error, term()}
   def create(attrs) do
-    with {:ok, target} <- Target.new(attrs),
-         {:ok, saved} <- repo().save(target) do
-      broadcast_change(saved, :created)
-      {:ok, saved}
+    Repo.transaction(fn ->
+      with {:ok, target} <- Target.new(attrs),
+           {:ok, saved} <- repo().save(target),
+           :ok <- maybe_seed_comms(saved) do
+        saved
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, saved} ->
+        broadcast_change(saved, :created)
+        {:ok, saved}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -99,10 +115,46 @@ defmodule Cadence.Application.Targeting.TargetOperations do
   """
   @spec update(Target.t(), attrs()) :: {:ok, Target.t()} | {:error, term()}
   def update(%Target{} = target, attrs) do
-    with {:ok, updated} <- Target.update(target, attrs),
-         {:ok, saved} <- repo().save(updated) do
-      broadcast_change(saved, :updated)
-      {:ok, saved}
+    Repo.transaction(fn ->
+      with {:ok, updated} <- Target.update(target, attrs),
+           {:ok, saved} <- repo().save(updated),
+           :ok <- maybe_seed_comms(saved) do
+        saved
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+    |> case do
+      {:ok, saved} ->
+        broadcast_change(saved, :updated)
+        {:ok, saved}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp maybe_seed_comms(%Target{type: :spacecraft, scid: scid} = target)
+       when is_integer(scid) do
+    with {:ok, organization_id} <- fetch_mission_org_id(target.mission_id),
+         {:ok, _result} <-
+           Comms.seed_for_target(organization_id, target.mission_id, target.id, scid) do
+      :ok
+    end
+  end
+
+  defp maybe_seed_comms(_target), do: :ok
+
+  defp fetch_mission_org_id(mission_id) do
+    case MissionQueries.find(mission_id) do
+      {:ok, mission} ->
+        {:ok, mission.organization_id}
+
+      {:error, :not_found} ->
+        case Repo.get(MissionSchema, mission_id) do
+          %MissionSchema{organization_id: organization_id} -> {:ok, organization_id}
+          nil -> {:error, :not_found}
+        end
     end
   end
 
@@ -236,7 +288,7 @@ defmodule Cadence.Application.Targeting.TargetOperations do
       {:target_changed, event_type, target}
     )
 
-    # Broadcast to cache listeners (MetaCommandCache, PacketIdentifier)
+    # Broadcast to cache listeners (MetaCommandCache)
     cache_topic = "mission:#{target.mission_id}:targets"
     cache_event = cache_event_for(event_type, target)
 

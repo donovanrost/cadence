@@ -108,7 +108,8 @@ defmodule CadenceWeb.Router do
       # Target routes nested under missions
       live "/missions/:id/targets", MissionLive.Targets, :index
       live "/missions/:id/targets/new", MissionLive.Targets, :new
-      live "/missions/:id/targets/:target_id/edit", MissionLive.Targets, :edit
+      live "/missions/:id/targets/:target_id", MissionLive.TargetShow, :show
+      live "/missions/:id/targets/:target_id/edit", MissionLive.TargetShow, :edit
 
       # Interface routes nested under missions
       live "/missions/:id/interfaces", MissionLive.Interfaces, :index
@@ -203,6 +204,74 @@ defmodule CadenceWeb.Router do
       # Mission Settings
       live "/missions/:id/settings", MissionLive.Settings, :index
       live "/missions/:id/settings/procedures", MissionLive.Settings, :procedures
+
+      # Transports (new transport system)
+      live "/missions/:id/transports", MissionLive.Transports, :index
+      live "/missions/:id/transports/new", MissionLive.Transports, :new
+      live "/missions/:id/transports/:transport_id/edit", MissionLive.Transports, :edit
+      live "/missions/:id/transports/:transport_id", MissionLive.TransportShow, :show
+
+      # Links (spacecraft by SCID)
+      live "/missions/:id/links", MissionLive.Links, :index
+      live "/missions/:id/links/new", MissionLive.Links, :new
+      live "/missions/:id/links/:link_id", MissionLive.LinkShow, :show
+      live "/missions/:id/links/:link_id/edit", MissionLive.LinkShow, :edit
+      live "/missions/:id/links/:link_id/protocol", MissionLive.LinkProtocol, :show
+      live "/missions/:id/links/:link_id/channels/new", MissionLive.LinkShow, :new_channel
+
+      # Channels (VCID binding editor)
+      live "/missions/:id/links/:link_id/channels/:channel_id", MissionLive.ChannelShow, :show
+
+      live "/missions/:id/links/:link_id/channels/:channel_id/edit",
+           MissionLive.ChannelShow,
+           :edit
+
+      live "/missions/:id/links/:link_id/channels/:channel_id/bindings/new",
+           MissionLive.ChannelShow,
+           :new_binding
+
+      live "/missions/:id/links/:link_id/channels/:channel_id/bindings/:binding_id/edit",
+           MissionLive.ChannelShow,
+           :edit_binding
+
+      # Spacecraft Communications (target-centric view)
+      live "/missions/:id/targets/:target_id/comms", SpacecraftCommsLive.Index, :index
+
+      live "/missions/:id/targets/:target_id/comms/protocol",
+           SpacecraftCommsLive.Index,
+           :edit_protocol
+
+      live "/missions/:id/targets/:target_id/comms/channels/new",
+           SpacecraftCommsLive.Index,
+           :new_channel
+
+      live "/missions/:id/targets/:target_id/comms/primary",
+           SpacecraftCommsLive.Index,
+           :edit_primary
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id",
+           SpacecraftCommsLive.ChannelShow,
+           :show
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id/edit",
+           SpacecraftCommsLive.ChannelShow,
+           :edit
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id/overrides",
+           SpacecraftCommsLive.ChannelShow,
+           :edit_overrides
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id/bindings/new",
+           SpacecraftCommsLive.ChannelShow,
+           :new_binding
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id/bindings/:binding_id/edit",
+           SpacecraftCommsLive.ChannelShow,
+           :edit_binding
+
+      live "/missions/:id/targets/:target_id/comms/channels/:channel_id/active",
+           SpacecraftCommsLive.ChannelShow,
+           :edit_active
     end
 
     # Ops Console - Mission control interface

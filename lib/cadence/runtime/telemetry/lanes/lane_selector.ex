@@ -3,15 +3,21 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
   Selects a lane for incoming telemetry based on packet metadata and selectors.
   """
 
-  alias Cadence.Telemetry.Packet
+  alias Cadence.Telemetry.SpacePacket
 
   @type lane_config :: %{
           name: atom(),
           selectors: map()
         }
 
-  @spec select_lane(Packet.t(), map(), [lane_config()]) :: atom()
-  def select_lane(packet, metadata, lanes) do
+  @spec select_lane_envelope(
+          Cadence.Telemetry.PacketEnvelope.t(),
+          Cadence.Telemetry.ParsedUnit.t() | nil,
+          map(),
+          [lane_config()]
+        ) ::
+          atom()
+  def select_lane_envelope(envelope, parsed_unit, metadata, lanes) do
     lane_override =
       metadata[:lane] ||
         metadata[:telemetry_lane] ||
@@ -19,7 +25,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
 
     case resolve_lane_override(lane_override, lanes) do
       {:ok, override} -> override
-      :error -> select_by_rules(packet, metadata, lanes)
+      :error -> select_by_rules_envelope(envelope, parsed_unit, metadata, lanes)
     end
   end
 
@@ -45,11 +51,11 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
 
   defp lane_name_match?(_, _), do: false
 
-  defp select_by_rules(packet, metadata, lanes) do
+  defp select_by_rules_envelope(envelope, parsed_unit, metadata, lanes) do
     lanes
     |> Enum.sort_by(&Map.get(&1, :priority, 0))
     |> Enum.find_value(:payload, fn lane ->
-      if lane_match?(lane, packet, metadata) do
+      if lane_match_envelope?(lane, envelope, parsed_unit, metadata) do
         lane.name
       else
         false
@@ -57,12 +63,11 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
     end)
   end
 
-  defp lane_match?(lane, packet, metadata) do
+  defp lane_match_envelope?(lane, envelope, parsed_unit, metadata) do
     selectors = Map.get(lane, :selectors, %{})
-
-    apid = Packet.get_apid(packet) || metadata[:apid]
-    target_id = metadata[:target_id] || packet.target_id
-    packet_name = packet.packet_name || metadata[:packet_name]
+    apid = apid_from_parsed(parsed_unit) || evidence_apid(envelope) || metadata[:apid]
+    target_id = metadata[:target_id]
+    packet_name = metadata[:packet_name]
 
     apid_match?(selectors, apid) and
       target_match?(selectors, target_id) and
@@ -128,5 +133,20 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
       end
 
     interface_match and source_match
+  end
+
+  defp apid_from_parsed({:space_packet, %SpacePacket{} = packet}) do
+    SpacePacket.get_apid(packet)
+  end
+
+  defp apid_from_parsed(_), do: nil
+
+  defp evidence_apid(%Cadence.Telemetry.PacketEnvelope{evidence: evidence}) do
+    evidence
+    |> Enum.find(&(&1.kind == :apid))
+    |> case do
+      nil -> nil
+      entry -> entry.value
+    end
   end
 end

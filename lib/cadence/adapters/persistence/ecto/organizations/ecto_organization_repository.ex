@@ -90,7 +90,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Organizations.EctoOrganizationReposi
       |> apply_search_filter(search)
 
     query
-    |> Repo.all()
+    |> Repo.all(log: false)
     |> Enum.map(&schema_to_entity/1)
   end
 

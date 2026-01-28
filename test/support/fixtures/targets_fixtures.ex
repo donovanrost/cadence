@@ -62,6 +62,7 @@ defmodule Cadence.TargetsFixtures do
         definition_set_id: definition_set.id,
         name: "Test Target",
         identifier: unique_target_identifier(),
+        scid: System.unique_integer([:positive]) |> rem(1024),
         type: "spacecraft",
         status: "offline"
       })

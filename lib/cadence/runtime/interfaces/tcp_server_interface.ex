@@ -331,10 +331,10 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
 
-    Logger.debug(
-      "TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
-      mission_id: state.interface.mission_id
-    )
+    # Logger.debug(
+    #   "[DEBUG] TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
+    #   mission_id: state.interface.mission_id
+    # )
 
     Router.ingest(
       state.interface.mission_id,

@@ -3,27 +3,7 @@ defmodule Cadence.Runtime.Transport.COP1.Config do
   COP-1 configuration parsing and routing policy.
   """
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
-
   @type cop1_mode :: :fop | :bypass
-
-  @spec enabled?(Interface.t()) :: boolean()
-  def enabled?(%Interface{} = interface) do
-    interface.config
-    |> config()
-    |> mode()
-    |> Kernel.==(:fop)
-  end
-
-  @spec mode_for(Interface.t(), atom() | nil, non_neg_integer() | nil) :: cop1_mode()
-  def mode_for(%Interface{} = interface, pdu_type \\ nil, apid \\ nil) do
-    cop1 = config(interface.config || %{})
-
-    case mode(cop1) do
-      :bypass -> :bypass
-      :fop -> apply_apid_filter(cop1, pdu_type, apid)
-    end
-  end
 
   @spec mode_for_config(map(), atom() | nil, non_neg_integer() | nil) :: cop1_mode()
   def mode_for_config(cop1, pdu_type \\ nil, apid \\ nil) when is_map(cop1) do

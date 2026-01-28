@@ -3,6 +3,8 @@ defmodule Cadence.Runtime.Transport.COP1.StreamSupervisor do
   Dynamic supervisor for per-stream COP-1 processes (mission-scoped).
   """
 
+  require Logger
+
   alias Cadence.Runtime.Transport.COP1.Report
   alias Cadence.Runtime.Transport.COP1.StreamServer
   alias Cadence.Transport.TCStreamId
@@ -11,6 +13,7 @@ defmodule Cadence.Runtime.Transport.COP1.StreamSupervisor do
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     name = via_tuple(mission_id)
+    Logger.debug("Starting COP1.StreamSupervisor for mission_id=#{mission_id}")
     DynamicSupervisor.start_link(strategy: :one_for_one, name: name)
   end
 

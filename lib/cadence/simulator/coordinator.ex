@@ -68,6 +68,7 @@ defmodule Cadence.Simulator.Coordinator do
   require Logger
 
   alias Cadence.CCSDS.Core.SDUOctets
+  alias Cadence.CCSDS.SDLP.Metrics
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Transport.COP1.{CLCW, FARM}
@@ -476,7 +477,8 @@ defmodule Cadence.Simulator.Coordinator do
       parallel_mode: state.parallel_mode,
       connection_mode: state.mode,
       uplink_frame: state.uplink_frame,
-      clcw_enabled: state.clcw_enabled
+      clcw_enabled: state.clcw_enabled,
+      sdlp_metrics: Metrics.get_stats(state.mission_id)
     }
 
     # Add parallel mode specific stats
@@ -535,6 +537,7 @@ defmodule Cadence.Simulator.Coordinator do
     stop_generator_pool(state.generator_pool)
     stop_send_buffer(state.send_buffer)
     SimulatorMetrics.cleanup(state.mission_id)
+    Metrics.cleanup(state.mission_id)
   end
 
   defp stop_generator_pool(nil), do: :ok
@@ -554,6 +557,7 @@ defmodule Cadence.Simulator.Coordinator do
   defp cleanup_sequential(state) do
     if state.socket, do: close_socket(state)
     if state.listener, do: close_listener(state)
+    Metrics.cleanup(state.mission_id)
   end
 
   defp determine_provider(opts) do
@@ -838,7 +842,7 @@ defmodule Cadence.Simulator.Coordinator do
   defp decode_tm_uplink(state, data, frame_size) do
     buffer = state.uplink_buffer <> data
 
-    case TMFrameCodec.decode(buffer, frame_size: frame_size) do
+    case TMFrameCodec.decode(buffer, frame_size: frame_size, metrics_scope: state.mission_id) do
       {:ok, frames, rest} ->
         {frames, rest}
 

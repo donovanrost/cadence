@@ -1,32 +1,40 @@
 defmodule Cadence.Runtime.Links.ProtocolConfig do
   @moduledoc """
-  Normalizes protocol configuration for a link/interface into a runtime map.
-
-  This keeps protocol config in the link layer (not in interface processes),
-  while still allowing interface-specific protocol settings when needed.
+  Normalizes protocol configuration for link/channel runtime usage.
   """
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Runtime.Transport.COP1.Config, as: COP1Config
 
   @type t :: %{
-          required(:interface_id) => String.t(),
           required(:cop1) => map(),
           required(:sdlp) => {:ok, %{mapping: term(), opts: keyword()}} | :error,
           required(:cop1_report_apids) => [non_neg_integer()]
         }
 
-  @spec from_interface(Interface.t()) :: t()
-  def from_interface(%Interface{} = interface) do
-    cop1 = COP1Config.config(interface.config || %{})
+  @spec normalize(map()) :: t()
+  def normalize(config) when is_map(config) do
+    config = drop_interface_id(config)
+    cop1 = COP1Config.config(config)
 
     %{
-      interface_id: interface.id,
       cop1: cop1,
-      sdlp: SDLPConfig.fetch(interface),
+      sdlp: SDLPConfig.fetch(config),
       cop1_report_apids: report_apids_from_cop1(cop1)
     }
+  end
+
+  @spec effective_config(map() | nil, map() | nil, keyword()) :: t()
+  def effective_config(defaults, overrides, opts \\ [])
+      when is_map(defaults) or is_map(overrides) do
+    merged = effective_raw_config(defaults || %{}, overrides || %{})
+    config = normalize(merged)
+    bind_scid(config, Keyword.get(opts, :scid))
+  end
+
+  @spec effective_raw_config(map(), map()) :: map()
+  def effective_raw_config(defaults, overrides) when is_map(defaults) and is_map(overrides) do
+    deep_merge(defaults, overrides)
   end
 
   defp report_apids_from_cop1(config) when is_map(config) do
@@ -67,4 +75,51 @@ defmodule Cadence.Runtime.Links.ProtocolConfig do
   end
 
   defp parse_integer(_), do: nil
+
+  defp deep_merge(defaults, overrides) when is_map(defaults) and is_map(overrides) do
+    Map.merge(defaults, overrides, fn _key, default_val, override_val ->
+      cond do
+        is_nil(override_val) ->
+          default_val
+
+        is_map(default_val) and is_map(override_val) ->
+          deep_merge(default_val, override_val)
+
+        true ->
+          override_val
+      end
+    end)
+  end
+
+  defp drop_interface_id(config) when is_map(config) do
+    config
+    |> Map.delete(:interface_id)
+    |> Map.delete("interface_id")
+  end
+
+  defp bind_scid(config, scid) when is_integer(scid) do
+    case Map.get(config, :sdlp) do
+      {:ok, %{mapping: mapping} = sdlp} ->
+        %{config | sdlp: {:ok, %{sdlp | mapping: bind_mapping_scid(mapping, scid)}}}
+
+      _ ->
+        config
+    end
+  end
+
+  defp bind_scid(config, _scid), do: config
+
+  defp bind_mapping_scid(%Cadence.CCSDS.SDU.Mapping{} = mapping, scid) do
+    entries =
+      mapping.entries
+      |> Enum.reduce(%{}, fn
+        {{nil, vcid, map_id, direction}, sdu_type}, acc ->
+          Map.put_new(acc, {scid, vcid, map_id, direction}, sdu_type)
+
+        {key, sdu_type}, acc ->
+          Map.put(acc, key, sdu_type)
+      end)
+
+    %Cadence.CCSDS.SDU.Mapping{mapping | entries: entries}
+  end
 end

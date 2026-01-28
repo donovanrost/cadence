@@ -6,9 +6,9 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   use GenServer
   require Logger
 
-  alias Cadence.Events.TelemetryPacket
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Transport.COP1.ReportHandler
+  alias Cadence.Telemetry.PacketEnvelope
 
   @default_handlers [ReportHandler, Cadence.Telemetry.PDUHandler]
 
@@ -55,8 +55,19 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
   @impl true
   def handle_cast({:pdu, pdu, ctx}, state) do
+    # Logger.debug("[DEBUG ] pdu_dispatcher.received",
+    #   mission_id: ctx[:mission_id],
+    #   pdu_type: pdu.type
+    # )
+
     ctx = Map.put_new(ctx, :cop1_report_apids, state.cop1_report_apids)
     {events, new_state} = dispatch_to_handlers(pdu, ctx, state)
+
+    # Logger.debug("[DEBUG] pdu_dispatcher.emitting",
+    #   mission_id: ctx[:mission_id],
+    #   event_count: length(events)
+    # )
+
     emit_events(events)
     {:noreply, new_state}
   end
@@ -157,29 +168,25 @@ defmodule Cadence.CCSDS.PDUDispatcher do
     Enum.each(events, &emit_event/1)
   end
 
-  defp emit_event(%TelemetryPacket{} = event) do
-    case telemetry_topic(event) do
+  defp emit_event(%PacketEnvelope{} = envelope) do
+    case telemetry_topic(envelope) do
       {:ok, topic} ->
         Phoenix.PubSub.broadcast(
           Cadence.PubSub,
           topic,
-          {:telemetry_packet, event.packet, event.metadata}
+          {:packet_envelope, envelope}
         )
 
       {:error, reason} ->
-        Logger.warning("Unable to emit telemetry packet event: #{inspect(reason)}")
+        Logger.warning("Unable to emit packet envelope: #{inspect(reason)}")
     end
   end
 
   defp emit_event(_event), do: :ok
 
-  defp telemetry_topic(%TelemetryPacket{} = event) do
-    mission_id = event.packet.mission_id || event.metadata[:mission_id]
-
-    if mission_id do
-      {:ok, "mission:#{mission_id}:telemetry:raw"}
-    else
-      {:error, :missing_mission_id}
-    end
+  defp telemetry_topic(%PacketEnvelope{mission_id: mission_id}) when is_binary(mission_id) do
+    {:ok, "mission:#{mission_id}:telemetry:raw"}
   end
+
+  defp telemetry_topic(_envelope), do: {:error, :missing_mission_id}
 end

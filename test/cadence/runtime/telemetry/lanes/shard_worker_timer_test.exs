@@ -2,8 +2,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
   use Cadence.PureCase, async: false
 
   alias Cadence.Harness.Time
-  alias Cadence.Runtime.Telemetry.Lanes.{Event, ShardWorker}
-  alias Cadence.Telemetry.{Packet, PipelineMetrics}
+  alias Cadence.Runtime.Telemetry.Lanes.ShardWorker
+  alias Cadence.Runtime.Telemetry.PipelineEvent
+  alias Cadence.Telemetry.{PacketEnvelope, PipelineMetrics}
   alias Cadence.TestSupport.FakeLaneRouter
 
   setup_virtual_time()
@@ -82,14 +83,21 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
     {mission_id, lanes, worker_pid}
   end
 
-  defp build_event(mission_id, lanes, target_id) do
-    packet = %Packet{raw: <<1>>, target_id: target_id}
+  defp build_event(mission_id, _lanes, _target_id) do
+    envelope = PacketEnvelope.new(mission_id, <<1>>, config_version_seen: 0)
 
-    Event.new(packet, %{target_id: target_id}, %{
+    %PipelineEvent{
+      packet_id: envelope.packet_id,
       mission_id: mission_id,
-      lanes: lanes,
+      lane: :primary,
+      shard_id: 0,
       router_version: 1,
-      config_version: 0
-    })
+      config_version: 0,
+      envelope: envelope,
+      parsed_unit: nil,
+      parse_error: nil,
+      resolved_unit: nil,
+      ingest_monotonic_ns: envelope.ingest_monotonic_ns
+    }
   end
 end

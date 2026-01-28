@@ -29,7 +29,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: :spacecraft
+          type: :spacecraft,
+          scid: 1
         })
 
       targets = Targets.list_targets(mission.id)
@@ -47,7 +48,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: :spacecraft
+          type: :spacecraft,
+          scid: 1
         })
 
       assert Targets.get_target!(target.id, mission.id).id == target.id
@@ -63,7 +65,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: "spacecraft"
+          type: "spacecraft",
+          scid: 1
         })
 
       {:ok, found} = Targets.get_target_by_identifier(mission, "SAT-001")
@@ -80,6 +83,7 @@ defmodule Cadence.TargetsTest do
         name: "Satellite 1",
         identifier: "SAT-001",
         type: :spacecraft,
+        scid: 1,
         status: :offline
       }
 
@@ -99,7 +103,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: :spacecraft
+          type: :spacecraft,
+          scid: 1
         })
 
       assert {:ok, %Target{} = updated} = Targets.update_target(target, %{name: "Updated Name"})
@@ -116,7 +121,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: :spacecraft
+          type: :spacecraft,
+          scid: 1
         })
 
       assert {:ok, %Target{}} = Targets.delete_target(target)
@@ -132,7 +138,8 @@ defmodule Cadence.TargetsTest do
           definition_set_id: definition_set.id,
           name: "Satellite 1",
           identifier: "SAT-001",
-          type: :spacecraft
+          type: :spacecraft,
+          scid: 1
         })
 
       %{target: target}

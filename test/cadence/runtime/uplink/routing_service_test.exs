@@ -5,11 +5,13 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
   alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Domain.Interfaces.Entities.TargetInterface
   alias Cadence.Interfaces.InterfaceVcid
+  alias Cadence.Links.Channel
+  alias Cadence.Links.ProtocolConfig, as: LinkProtocolConfig
   alias Cadence.Runtime.Uplink.RoutingService
 
   test "resolves target-specific vcid and cop1 mode" do
     target_id = "target-1"
-    interface = build_interface("interface-1", cop1_mode: "fop")
+    interface = build_interface("interface-1")
 
     {:ok, routing} =
       TargetInterface.new(%{
@@ -25,7 +27,14 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
       vcid: 3
     }
 
-    resolver = build_resolver([interface], [routing], [vcid_mapping])
+    links =
+      build_links(
+        scid: 12,
+        cop1: %{"mode" => "fop"},
+        channels: [%{scid: 12, vcid: 3, map_id: nil}]
+      )
+
+    resolver = build_resolver([interface], [routing], [vcid_mapping], links)
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, 10, [])
@@ -73,20 +82,24 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
   test "disables cop1 when apid is not allowlisted" do
     target_id = "target-1"
 
-    interface =
-      build_interface("interface-1",
-        cop1_mode: "fop",
-        cop1_apids: [10, 11]
-      )
+    interface = build_interface("interface-1")
 
     {:ok, routing} =
       TargetInterface.new(%{
         target_id: target_id,
         interface_id: interface.id,
-        direction: :write
+        direction: :write,
+        scid: 1
       })
 
-    resolver = build_resolver([interface], [routing], [])
+    links =
+      build_links(
+        scid: 1,
+        cop1: %{"mode" => "fop", "apids" => [10, 11]},
+        channels: [%{scid: 1, vcid: 0, map_id: nil}]
+      )
+
+    resolver = build_resolver([interface], [routing], [], links)
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, 12, [])
@@ -97,20 +110,24 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
   test "enables cop1 when apid is allowlisted" do
     target_id = "target-1"
 
-    interface =
-      build_interface("interface-1",
-        cop1_mode: "fop",
-        cop1_apids: [10, 11]
-      )
+    interface = build_interface("interface-1")
 
     {:ok, routing} =
       TargetInterface.new(%{
         target_id: target_id,
         interface_id: interface.id,
-        direction: :write
+        direction: :write,
+        scid: 1
       })
 
-    resolver = build_resolver([interface], [routing], [])
+    links =
+      build_links(
+        scid: 1,
+        cop1: %{"mode" => "fop", "apids" => [10, 11]},
+        channels: [%{scid: 1, vcid: 0, map_id: nil}]
+      )
+
+    resolver = build_resolver([interface], [routing], [], links)
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, 10, [])
@@ -126,7 +143,8 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
       TargetInterface.new(%{
         target_id: target_id,
         interface_id: interface.id,
-        direction: :write
+        direction: :write,
+        scid: 4
       })
 
     default_mapping = %InterfaceVcid{
@@ -135,7 +153,14 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
       vcid: 5
     }
 
-    resolver = build_resolver([interface], [routing], [default_mapping])
+    links =
+      build_links(
+        scid: 4,
+        cop1: %{"mode" => "fop"},
+        channels: [%{scid: 4, vcid: 5, map_id: nil}]
+      )
+
+    resolver = build_resolver([interface], [routing], [default_mapping], links)
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, nil, [])
@@ -143,17 +168,9 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
     assert decision.vcid == 5
   end
 
-  test "uses uplink defaults when routing scid is missing" do
+  test "returns nil scid when routing scid is missing" do
     target_id = "target-1"
-
-    interface =
-      build_interface("interface-1",
-        framing: %{
-          "profile" => "tm",
-          "uplink_scid" => 42,
-          "uplink_vcid" => 1
-        }
-      )
+    interface = build_interface("interface-1")
 
     {:ok, routing} =
       TargetInterface.new(%{
@@ -162,13 +179,13 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
         direction: :write
       })
 
-    resolver = build_resolver([interface], [routing], [])
+    resolver = build_resolver([interface], [routing], [], [])
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, nil, [])
 
-    assert decision.scid == 42
-    assert decision.vcid == 1
+    assert is_nil(decision.scid)
+    assert is_nil(decision.vcid)
   end
 
   test "honors interface overrides when selecting a route" do
@@ -190,7 +207,7 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
         direction: :write
       })
 
-    resolver = build_resolver([interface_a, interface_b], [route_a, route_b], [])
+    resolver = build_resolver([interface_a, interface_b], [route_a, route_b], [], [])
 
     assert {:ok, decision} =
              RoutingService.route(resolver, target_id, :space_packet, nil,
@@ -201,7 +218,7 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
   end
 
   test "returns no_interface when target has no routes" do
-    resolver = build_resolver([], [], [])
+    resolver = build_resolver([], [], [], [])
 
     assert {:error, :no_interface} =
              RoutingService.route(resolver, "target-1", :space_packet, nil, [])
@@ -226,7 +243,7 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
         direction: :write
       })
 
-    resolver = build_resolver([interface_a, interface_b], [route_a, route_b], [])
+    resolver = build_resolver([interface_a, interface_b], [route_a, route_b], [], [])
 
     assert {:error, :routing_ambiguous, candidates} =
              RoutingService.route(resolver, target_id, :space_packet, nil, [])
@@ -235,78 +252,49 @@ defmodule Cadence.Runtime.Uplink.RoutingServiceTest do
     assert Enum.sort(interface_ids) == Enum.sort([interface_a.id, interface_b.id])
   end
 
-  defp build_resolver(interfaces, routes, vcids) do
+  defp build_resolver(interfaces, routes, vcids, links \\ []) do
     config = %MissionConfig{
       mission_id: "mission-1",
       organization_id: "org-1",
       interfaces: interfaces,
       target_interface_routings: routes,
-      interface_vcids: vcids
+      interface_vcids: vcids,
+      links: links
     }
 
     RoutingService.new(config)
   end
 
-  defp build_interface(id, opts \\ []) do
-    config = build_interface_config(opts)
-
+  defp build_interface(id, _opts \\ []) do
     Interface.from_persistence(%{
       id: id,
       mission_id: "mission-1",
       name: "IFACE-#{id}",
       connection_type: "tcp_client",
-      config: config
+      config: %{}
     })
   end
 
-  defp build_interface_config(opts) do
-    config = %{}
+  defp build_links(opts) do
+    scid = Keyword.fetch!(opts, :scid)
+    cop1 = Keyword.get(opts, :cop1, %{})
+    channels = Keyword.get(opts, :channels, [])
 
-    config =
-      case Keyword.get(opts, :framing) do
-        nil ->
-          config
+    [
+      %{
+        scid: scid,
+        protocol_config: %LinkProtocolConfig{config: %{"cop1" => cop1}},
+        channels: Enum.map(channels, &to_channel/1)
+      }
+    ]
+  end
 
-        framing_opts ->
-          framing_opts =
-            Map.merge(
-              %{
-                "profile" => "tm",
-                "sdu_mapping" => [
-                  %{
-                    "scid" => 0,
-                    "vcid" => 0,
-                    "direction" => "downlink",
-                    "type" => "space_packet"
-                  }
-                ],
-                "default_sdu_type" => "space_packet"
-              },
-              framing_opts
-            )
-
-          Map.merge(config, %{
-            "framing" => "sdlp",
-            "sdlp" => framing_opts
-          })
-      end
-
-    config =
-      case Keyword.get(opts, :cop1_mode) do
-        nil ->
-          config
-
-        mode ->
-          Map.put(config, "cop1", %{"mode" => mode})
-      end
-
-    case Keyword.get(opts, :cop1_apids) do
-      nil ->
-        config
-
-      apids ->
-        cop1 = Map.get(config, "cop1", %{})
-        Map.put(config, "cop1", Map.put(cop1, "apids", apids))
-    end
+  defp to_channel(%{scid: scid, vcid: vcid} = attrs) do
+    %Channel{
+      scid: scid,
+      vcid: vcid,
+      map_id: Map.get(attrs, :map_id),
+      protocol_config: Map.get(attrs, :protocol_config)
+    }
   end
 end

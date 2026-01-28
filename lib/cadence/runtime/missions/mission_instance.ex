@@ -47,12 +47,12 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Missions.ConfigManager
   alias Cadence.Runtime.Missions.MissionStatus
   alias Cadence.Runtime.Missions.MissionTracker
-  alias Cadence.Runtime.Missions.RuntimeBootstrapper
   alias Cadence.Runtime.Protocol.Supervisor, as: ProtocolSupervisor
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.StalenessMonitor
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
   alias Cadence.Runtime.Transport.COP1.StreamSupervisor, as: COP1StreamSupervisor
+  alias Cadence.Runtime.Transport.InterfaceSupervisor
   alias Cadence.Runtime.Transport.Supervisor, as: TransportSupervisor
   alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
@@ -81,6 +81,9 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   end
 
   defp do_init(mission_id, mission_name, organization_id, config) do
+    Logger.debug("Starting MissionInstance for mission_id=#{mission_id}")
+    Process.put(:mission_id, mission_id)
+
     Logger.info(
       "Initializing mission instance for mission_id=#{mission_id}, name=#{mission_name}"
     )
@@ -107,9 +110,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
         # Current Value Table - stores latest telemetry values
         {CurrentValueTable, mission_id: mission_id},
 
-        # Packet Identifier - ETS-based packet type lookup
-        {Cadence.Runtime.Telemetry.PacketIdentifier, mission_id: mission_id},
-
         # MetaCommand Cache - ETS-based command lookup for O(1) dispatch
         {MetaCommandCache, mission_id: mission_id},
 
@@ -127,14 +127,18 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
           # Transport Supervisor - manages TCP/UDP/Serial connections
           {TransportSupervisor, mission_id: mission_id},
 
+          # Interface Supervisor - manages new transport interface workers
+          {InterfaceSupervisor, mission_id: mission_id},
+
           # Links Supervisor - manages per-SCID link controllers
           {LinksSupervisor, mission_id: mission_id},
 
           # Protocol Supervisor - manages per-channel protocol services
           {ProtocolSupervisor, mission_id: mission_id},
 
-          # Runtime Bootstrapper - builds bindings and channel registry entries
-          {RuntimeBootstrapper, config: config},
+          # Config Reconciler - applies desired bindings from DB
+          {Cadence.Runtime.Links.ConfigReconciler,
+           mission_id: mission_id, organization_id: organization_id},
 
           # COP-1 Stream Supervisor - mission-scoped COP-1 stream state
           {COP1StreamSupervisor, mission_id: mission_id},
@@ -156,6 +160,20 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
     # Strategy: one_for_one means if a child crashes, only restart that child
     # This is appropriate because the CVT, interfaces, pipeline, etc. are independent
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def terminate(reason, _state) do
+    case Process.get(:mission_id) do
+      nil ->
+        :ok
+
+      mission_id ->
+        Logger.debug(
+          "Stopping MissionInstance for mission_id=#{mission_id} reason=#{inspect(reason)}"
+        )
+    end
+
+    :ok
   end
 
   defp lanes_pipeline_children(mission_id, config) do

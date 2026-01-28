@@ -26,7 +26,8 @@ defmodule Cadence.TargetsIntegrationTest do
         definition_set_id: ds.id,
         name: "Satellite 1",
         identifier: "SAT-001",
-        type: :spacecraft
+        type: :spacecraft,
+        scid: 1
       }
 
       assert {:ok, _} = Targets.create_target(attrs)

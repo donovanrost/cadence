@@ -28,6 +28,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulRouter do
     lane = Keyword.get(opts, :lane, :stateful)
     base_dir = Keyword.get(opts, :base_dir)
 
+    Logger.debug("Starting Lanes.StatefulRouter for mission_id=#{mission_id} lane=#{lane}")
+
     Logger.info(
       "Starting stateful lane router for mission_id=#{mission_id}, lane=#{lane}, shards=#{shard_count}"
     )
@@ -66,6 +68,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulRouter do
   end
 
   @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.StatefulRouter for mission_id=#{state.mission_id} lane=#{state.lane} reason=#{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  @impl true
   def handle_info({:log_batch, source_shard, records, meta}, state) do
     records
     |> repartition(state.shard_count)
@@ -84,9 +95,22 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulRouter do
   def handle_info(_msg, state), do: {:noreply, state}
 
   defp repartition(records, shard_count) do
-    Enum.group_by(records, fn record ->
-      sticky_key = {record.target_id, record.apid}
-      :erlang.phash2(sticky_key, shard_count)
+    records
+    |> Enum.flat_map(fn record ->
+      case record do
+        %Cadence.Telemetry.PacketLogRecord{record_type: :decom_result, payload: payload} ->
+          target_id = payload[:target_identifier] || payload[:target_id]
+          [{target_id, payload[:apid], record}]
+
+        _ ->
+          []
+      end
+    end)
+    |> Enum.group_by(fn {target_id, apid, _record} ->
+      :erlang.phash2({target_id, apid}, shard_count)
+    end)
+    |> Enum.into(%{}, fn {shard_id, entries} ->
+      {shard_id, Enum.map(entries, fn {_target_id, _apid, record} -> record end)}
     end)
   end
 

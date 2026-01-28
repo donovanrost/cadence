@@ -26,6 +26,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.CVTConsumer do
     lane = Keyword.get(opts, :lane, :payload)
     base_dir = Keyword.get(opts, :base_dir)
 
+    Logger.debug("Starting Lanes.CVTConsumer for mission_id=#{mission_id} lane=#{lane}")
+
     Logger.info(
       "Starting CVT consumer for mission_id=#{mission_id}, lane=#{lane}, shards=#{shard_count}"
     )
@@ -58,6 +60,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.CVTConsumer do
   end
 
   @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.CVTConsumer for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  @impl true
   def handle_info({:log_batch, shard_id, records, meta}, state) do
     records
     |> build_items()
@@ -73,6 +84,18 @@ defmodule Cadence.Runtime.Telemetry.Lanes.CVTConsumer do
   defp build_items(records) do
     Enum.flat_map(records, &build_record_items/1)
   end
+
+  defp build_record_items(%Cadence.Telemetry.PacketLogRecord{record_type: :decom_result} = record) do
+    payload = record.payload
+    packet_name = payload[:packet_def_name] || "unknown"
+    target_id = payload[:target_identifier] || payload[:target_id]
+
+    Enum.map(payload[:items] || %{}, fn {item_name, value} ->
+      {target_id, packet_name, item_name, value, :green}
+    end)
+  end
+
+  defp build_record_items(%Cadence.Telemetry.PacketLogRecord{}), do: []
 
   defp build_record_items(record) do
     packet_name = record.meta[:packet_def] || "unknown"

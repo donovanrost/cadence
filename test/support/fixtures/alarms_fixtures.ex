@@ -5,6 +5,7 @@ defmodule Cadence.AlarmsFixtures do
 
   alias Cadence.Alarms.{Alarm, AlarmRule}
   alias Cadence.Repo
+  alias Cadence.TestSupport
 
   import Cadence.OrganizationsFixtures
   import Cadence.MissionsFixtures
@@ -70,9 +71,16 @@ defmodule Cadence.AlarmsFixtures do
         enabled: true
       })
 
-    %AlarmRule{}
-    |> AlarmRule.changeset(attrs)
-    |> Repo.insert!()
+    rule =
+      %AlarmRule{}
+      |> AlarmRule.changeset(attrs)
+      |> Repo.insert!()
+
+    if mission_id do
+      _ = TestSupport.refresh_config_bundle(mission_id)
+    end
+
+    rule
   end
 
   @doc """

@@ -75,6 +75,11 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
 
   @impl true
   def init({%Mission{} = mission, %Target{} = target, snapshot}) do
+    Logger.debug("Starting TargetPipeline for mission_id=#{mission.id} target_id=#{target.id}")
+
+    Process.put(:mission_id, mission.id)
+    Process.put(:target_id, target.id)
+
     Logger.info(
       "Starting TargetPipeline for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
@@ -90,6 +95,19 @@ defmodule Cadence.Runtime.Commands.TargetPipeline do
     # if dispatcher crashes, restart just dispatcher
     # They can recover independently using the injected entities
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  def terminate(reason, _state) do
+    mission_id = Process.get(:mission_id)
+    target_id = Process.get(:target_id)
+
+    if mission_id && target_id do
+      Logger.debug(
+        "Stopping TargetPipeline for mission_id=#{mission_id} target_id=#{target_id} reason=#{inspect(reason)}"
+      )
+    end
+
+    :ok
   end
 
   ## Private Functions

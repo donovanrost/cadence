@@ -5,6 +5,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulShardWorker do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
   alias Cadence.Telemetry.{DerivedItems, LogEnvelope}
@@ -23,6 +25,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulShardWorker do
     sink_opts = Keyword.get(opts, :sink_opts, [])
     config_version = Keyword.get(opts, :config_version, 0)
 
+    Logger.debug(
+      "Starting Lanes.StatefulShardWorker for mission_id=#{mission_id} lane=#{lane} shard_id=#{shard_id}"
+    )
+
     {:ok,
      %{
        mission_id: mission_id,
@@ -32,6 +38,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.StatefulShardWorker do
        sink_opts: sink_opts,
        config_version: config_version
      }}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.StatefulShardWorker for mission_id=#{state.mission_id} lane=#{state.lane} shard_id=#{state.shard_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true

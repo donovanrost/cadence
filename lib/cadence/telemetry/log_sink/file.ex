@@ -9,7 +9,7 @@ defmodule Cadence.Telemetry.LogSink.File do
   @behaviour Cadence.Telemetry.LogSink
 
   alias Cadence.Runtime.Telemetry.Lanes.LaneConfig
-  alias Cadence.Telemetry.{LogEnvelope, LogStore}
+  alias Cadence.Telemetry.LogStore
 
   @impl true
   def append(_shard_id, [], _opts), do: {:ok, %{first_offset: 0, last_offset: 0}}
@@ -26,7 +26,7 @@ defmodule Cadence.Telemetry.LogSink.File do
     File.mkdir_p!(path)
 
     encoded =
-      Enum.map(records, fn %LogEnvelope{} = record ->
+      Enum.map(records, fn record ->
         encoded = record |> :erlang.term_to_binary() |> Base.encode64()
         [encoded, "\n"]
       end)

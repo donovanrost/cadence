@@ -184,6 +184,8 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
     mission_id = Keyword.fetch!(opts, :mission_id)
     organization_id = Keyword.fetch!(opts, :organization_id)
 
+    Logger.debug("Starting AlarmManager for mission_id=#{mission_id}")
+
     Logger.info("Starting AlarmManager for mission #{mission_id}")
 
     # Create anonymous ETS table for active alarms cache
@@ -322,6 +324,7 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
 
   @impl true
   def terminate(_reason, state) do
+    Logger.debug("Stopping AlarmManager for mission_id=#{state.mission_id}")
     Logger.info("Terminating AlarmManager for mission #{state.mission_id}")
     :ets.delete(state.table)
     :ok

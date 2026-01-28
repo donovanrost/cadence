@@ -5,13 +5,14 @@ defmodule Cadence.CCSDS.PDUHandler do
   """
 
   alias Cadence.CCSDS.Core.PDU
+  alias Cadence.Telemetry.PacketEnvelope
 
   @callback init(keyword()) :: {:ok, term()}
 
   @callback accepts?(PDU.t(), map()) :: boolean()
 
   @callback handle_pdu(PDU.t(), map(), term()) ::
-              {:ok, [Cadence.Events.event()], term()}
+              {:ok, [PacketEnvelope.t()], term()}
               | {:skip, reason :: term(), term()}
               | {:error, reason :: term(), term()}
 end

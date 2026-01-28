@@ -50,6 +50,7 @@ defmodule CadenceWeb.Schemas.TargetForm do
   embedded_schema do
     field :name, :string
     field :identifier, :string
+    field :scid, :integer
     field :type, Ecto.Enum, values: @target_types, default: :spacecraft
     field :definition_set_id, :binary_id
     field :active_limit_set, :string, default: "NOMINAL"
@@ -71,6 +72,7 @@ defmodule CadenceWeb.Schemas.TargetForm do
     |> cast(attrs, [
       :name,
       :identifier,
+      :scid,
       :type,
       :definition_set_id,
       :active_limit_set,
@@ -82,6 +84,7 @@ defmodule CadenceWeb.Schemas.TargetForm do
     |> validate_length(:name, min: 1, max: 255)
     |> validate_length(:identifier, min: 1, max: 50)
     |> validate_identifier_format()
+    |> validate_scid()
     |> validate_length(:active_limit_set, max: 100)
   end
 
@@ -92,6 +95,7 @@ defmodule CadenceWeb.Schemas.TargetForm do
     %{
       name: form.name,
       identifier: form.identifier,
+      scid: form.scid,
       type: form.type,
       definition_set_id: form.definition_set_id,
       active_limit_set: form.active_limit_set,
@@ -109,6 +113,7 @@ defmodule CadenceWeb.Schemas.TargetForm do
     %__MODULE__{
       name: entity.name,
       identifier: entity.identifier,
+      scid: entity.scid,
       type: entity.type,
       definition_set_id: entity.definition_set_id,
       active_limit_set: entity.active_limit_set,
@@ -143,5 +148,23 @@ defmodule CadenceWeb.Schemas.TargetForm do
     validate_format(changeset, :identifier, ~r/^[A-Z0-9_-]+$/,
       message: "must be uppercase alphanumeric with underscores or hyphens"
     )
+  end
+
+  defp validate_scid(changeset) do
+    type = get_field(changeset, :type)
+    scid = get_field(changeset, :scid)
+
+    changeset =
+      if type == :spacecraft do
+        validate_required(changeset, [:scid])
+      else
+        changeset
+      end
+
+    if is_nil(scid) do
+      changeset
+    else
+      validate_number(changeset, :scid, greater_than_or_equal_to: 0, less_than: 1024)
+    end
   end
 end

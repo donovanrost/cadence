@@ -14,8 +14,7 @@ defmodule Cadence.Runtime.Missions.CacheWarmer do
 
   ## Note
 
-  MetaCommandCache and PacketIdentifier already load eagerly at init, so they
-  don't need warming.
+  MetaCommandCache already loads eagerly at init, so it doesn't need warming.
   """
 
   use GenServer

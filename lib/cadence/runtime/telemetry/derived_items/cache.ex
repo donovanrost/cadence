@@ -30,7 +30,7 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   use GenServer
   require Logger
 
-  alias Cadence.Telemetry.Database.DerivedItem
+  alias Cadence.Runtime.Telemetry.ConfigBundle
   alias Cadence.Telemetry.DerivedItems
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
@@ -233,25 +233,32 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
   end
 
   defp load_and_cache(mission_id) do
-    # Load from database
-    derived_items = DerivedItem.list_enabled(mission_id)
-    derived_defs = Enum.map(derived_items, &DerivedItem.to_compute_format/1)
+    case ConfigBundle.fetch(mission_id) do
+      {:ok, bundle} ->
+        derived_defs = Map.get(bundle, :derived_item_defs, [])
 
-    case build_enriched_defs(derived_defs) do
-      {:ok, {enriched_defs, packet_index}} ->
-        cached_at = CadenceTime.monotonic(:millisecond)
-        :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
+        case build_enriched_defs(derived_defs) do
+          {:ok, {enriched_defs, packet_index}} ->
+            cached_at = CadenceTime.monotonic(:millisecond)
+            :ets.insert(@table, {mission_id, {enriched_defs, packet_index}, cached_at})
 
-        Logger.debug(
-          "Cached #{length(enriched_defs)} derived items for mission #{mission_id} " <>
-            "(#{map_size(packet_index)} packet types indexed)"
-        )
+            Logger.debug(
+              "Cached #{length(enriched_defs)} derived items for mission #{mission_id} " <>
+                "(#{map_size(packet_index)} packet types indexed)"
+            )
 
-        {:ok, {enriched_defs, packet_index}}
+            {:ok, {enriched_defs, packet_index}}
 
-      {:error, reason} = error ->
-        Logger.error("Failed to sort derived items for mission #{mission_id}: #{inspect(reason)}")
-        error
+          {:error, reason} = error ->
+            Logger.error(
+              "Failed to sort derived items for mission #{mission_id}: #{inspect(reason)}"
+            )
+
+            error
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -322,10 +329,14 @@ defmodule Cadence.Runtime.Telemetry.DerivedItems.Cache do
 
   # Load without caching (fallback when cache not started)
   defp load_without_cache(mission_id) do
-    derived_items = DerivedItem.list_enabled(mission_id)
-    derived_defs = Enum.map(derived_items, &DerivedItem.to_compute_format/1)
+    case ConfigBundle.fetch(mission_id) do
+      {:ok, bundle} ->
+        derived_defs = Map.get(bundle, :derived_item_defs, [])
+        build_enriched_defs(derived_defs)
 
-    build_enriched_defs(derived_defs)
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp build_enriched_defs(derived_defs) do

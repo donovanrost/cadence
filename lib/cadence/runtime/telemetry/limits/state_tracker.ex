@@ -537,6 +537,8 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
   def init(mission_id) do
     table_name = table_name(mission_id)
 
+    Logger.debug("Starting Limits.StateTracker for mission_id=#{mission_id}")
+
     Logger.info("Creating limits state tracker table: #{table_name}")
 
     _table =
@@ -553,6 +555,7 @@ defmodule Cadence.Runtime.Telemetry.Limits.StateTracker do
 
   @impl GenServer
   def terminate(_reason, state) do
+    Logger.debug("Stopping Limits.StateTracker for mission_id=#{state.mission_id}")
     Logger.info("Terminating limits state tracker: #{state.table_name}")
     :ets.delete(state.table_name)
     :ok

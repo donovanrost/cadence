@@ -7,6 +7,8 @@ defmodule Cadence.Runtime.Protocol.Supervisor do
 
   use DynamicSupervisor
 
+  require Logger
+
   alias Cadence.CCSDS.PDUDispatcher
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Protocol.ChannelService
@@ -18,8 +20,24 @@ defmodule Cadence.Runtime.Protocol.Supervisor do
   end
 
   @impl true
-  def init(_mission_id) do
+  def init(mission_id) do
+    Logger.debug("Starting Protocol.Supervisor for mission_id=#{mission_id}")
+    Process.put(:mission_id, mission_id)
     DynamicSupervisor.init(strategy: :one_for_one)
+  end
+
+  def terminate(reason, _state) do
+    case Process.get(:mission_id) do
+      nil ->
+        :ok
+
+      mission_id ->
+        Logger.debug(
+          "Stopping Protocol.Supervisor for mission_id=#{mission_id} reason=#{inspect(reason)}"
+        )
+    end
+
+    :ok
   end
 
   @spec ensure_channel(String.t(), ChannelId.t()) :: :ok
@@ -32,9 +50,25 @@ defmodule Cadence.Runtime.Protocol.Supervisor do
         child_spec = {ChannelService, mission_id: mission_id, channel_id: channel_id}
 
         case DynamicSupervisor.start_child(via_tuple(mission_id), child_spec) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
-          {:error, _reason} -> :ok
+          {:ok, _pid} ->
+            Logger.debug("protocol.channel_service.started",
+              mission_id: mission_id,
+              channel_id: ChannelId.key(channel_id)
+            )
+
+            :ok
+
+          {:error, {:already_started, _pid}} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "protocol.channel_service.start_failed reason=#{inspect(reason)}",
+              mission_id: mission_id,
+              channel_id: ChannelId.key(channel_id)
+            )
+
+            :ok
         end
     end
   end
@@ -47,9 +81,25 @@ defmodule Cadence.Runtime.Protocol.Supervisor do
        mission_id: mission_id, channel_id: channel_id, protocol_config: protocol_config}
 
     case DynamicSupervisor.start_child(via_tuple(mission_id), child_spec) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-      {:error, _reason} -> :ok
+      {:ok, _pid} ->
+        Logger.debug("protocol.pdu_dispatcher.started",
+          mission_id: mission_id,
+          channel_id: ChannelId.key(channel_id)
+        )
+
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("protocol.pdu_dispatcher.start_failed",
+          mission_id: mission_id,
+          channel_id: ChannelId.key(channel_id),
+          reason: inspect(reason)
+        )
+
+        :ok
     end
   end
 

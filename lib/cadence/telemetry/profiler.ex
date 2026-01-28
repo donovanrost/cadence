@@ -27,6 +27,7 @@ defmodule Cadence.Telemetry.Profiler do
   """
 
   alias Cadence.CCSDS.Metrics
+  alias Cadence.CCSDS.SDLP.Metrics, as: SDLP
   alias Cadence.Runtime.Telemetry.CurrentValueTable
   alias Cadence.Runtime.Telemetry.Limits.{Cache, StateTracker}
   alias Cadence.Telemetry.PipelineMetrics
@@ -249,6 +250,7 @@ defmodule Cadence.Telemetry.Profiler do
       percentiles: nil,
       stage_errors: Map.get(stats, :errors, %{}),
       ccsds: safe_call(fn -> Metrics.get_stats(mission_id) end),
+      sdlp: safe_call(fn -> SDLP.get_stats(mission_id) end),
       cvt: safe_call(fn -> CurrentValueTable.stats(mission_id) end),
       lanes:
         if lanes_active do
@@ -624,6 +626,7 @@ defmodule Cadence.Telemetry.Profiler do
     print_cvt_snapshot(snapshot.cvt)
     print_stats_snapshot(snapshot, prev)
     print_ccsds_snapshot(snapshot)
+    print_sdlp_snapshot(snapshot)
     print_queue_warnings(snapshot.process_queues)
 
     IO.puts("")
@@ -667,6 +670,27 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp print_ccsds_snapshot(_snapshot), do: :ok
 
+  defp print_sdlp_snapshot(%{sdlp: stats}) when is_map(stats) and map_size(stats) > 0 do
+    stats
+    |> Enum.sort_by(fn {profile, _} -> profile end)
+    |> Enum.each(&print_sdlp_totals/1)
+  end
+
+  defp print_sdlp_snapshot(_snapshot), do: :ok
+
+  defp print_sdlp_totals({profile, metrics}) do
+    decode = metrics.frame_decode
+    encode = metrics.frame_encode
+    seg = metrics.segmentation
+    reasm = metrics.reassembly
+
+    IO.puts(
+      "SDLP #{profile}: dec #{decode.ok}/#{decode.total} drop #{decode.drop} " <>
+        "enc #{encode.ok}/#{encode.total} seg #{seg.segments_emitted} " <>
+        "reasm #{reasm.sdu_emitted} in #{format_bytes(decode.bytes_in)} out #{format_bytes(encode.bytes_out)}"
+    )
+  end
+
   defp build_ccsds_totals(stats) do
     Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
       accumulate_profiles(acc, profiles)
@@ -696,6 +720,16 @@ defmodule Cadence.Telemetry.Profiler do
       Map.get(metrics, :reassembly_errors, 0) +
       Map.get(metrics, :sdu_decode_errors, 0)
   end
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000_000 do
+    "#{Float.round(bytes / 1_000_000, 2)}MB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes) and bytes >= 1_000 do
+    "#{Float.round(bytes / 1_000, 2)}KB"
+  end
+
+  defp format_bytes(bytes) when is_integer(bytes), do: "#{bytes}B"
 
   defp packet_delta(%{stats: %{packets_processed: prev_proc}}, proc),
     do: " (+#{proc - prev_proc}/s)"

@@ -307,7 +307,8 @@ defmodule Cadence.Simulator.GeneratorWorker do
         frame_size: opts[:frame_size],
         scid: opts[:uplink_scid] || opts[:scid],
         vcid: opts[:uplink_vcid] || opts[:vcid],
-        map_id: opts[:uplink_map_id]
+        map_id: opts[:uplink_map_id],
+        metrics_scope: state.coordinator_id
       }
       |> maybe_put_ocf(state, step)
 
@@ -325,7 +326,9 @@ defmodule Cadence.Simulator.GeneratorWorker do
       meta: %{}
     }
 
-    case UplinkPipeline.encode(sdu, ctx, pipeline, opts) do
+    metrics_opts = Keyword.put(opts, :metrics_scope, state.coordinator_id)
+
+    case UplinkPipeline.encode(sdu, ctx, pipeline, metrics_opts) do
       {:ok, encoded, new_pipeline} ->
         {encoded, %{state | uplink_pipeline: new_pipeline}}
 

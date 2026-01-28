@@ -207,6 +207,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository do
       bucket_id: schema.bucket_id,
       name: schema.name,
       identifier: schema.identifier,
+      scid: schema.scid,
       type: normalize_type(schema.type),
       status: normalize_status(schema.status),
       config: schema.config || %{},
@@ -231,6 +232,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository do
       bucket_id: entity.bucket_id,
       name: entity.name,
       identifier: entity.identifier,
+      scid: entity.scid,
       type: Atom.to_string(entity.type),
       status: Atom.to_string(entity.status),
       config: entity.config,
@@ -257,6 +259,7 @@ defmodule Cadence.Adapters.Persistence.Ecto.Targeting.EctoTargetRepository do
       active_limit_set: entity.active_limit_set,
       definition_set_id: entity.definition_set_id,
       bucket_id: entity.bucket_id,
+      scid: entity.scid,
       circuit_breaker_status: Atom.to_string(entity.circuit_breaker_status),
       circuit_breaker_failures: entity.circuit_breaker_failures,
       circuit_breaker_opened_at: entity.circuit_breaker_opened_at

@@ -273,6 +273,7 @@ defmodule Cadence.Targets do
   ## Optional Attributes
 
   - `:status` - Initial status (default: :offline)
+  - `:scid` - Spacecraft ID (required for spacecraft targets)
   - `:config` - Configuration map
   - `:metadata` - Metadata map
   - `:active_limit_set` - Active limit set name (default: "NOMINAL")
@@ -303,6 +304,7 @@ defmodule Cadence.Targets do
 
   - `:name` - Human-readable name
   - `:status` - Target status
+  - `:scid` - Spacecraft ID (spacecraft targets only)
   - `:config` - Configuration map
   - `:metadata` - Metadata map
   - `:active_limit_set` - Active limit set name
@@ -507,6 +509,7 @@ defmodule Cadence.Targets do
       {"bucket_id", v} -> {:bucket_id, v}
       {"name", v} -> {:name, v}
       {"identifier", v} -> {:identifier, v}
+      {"scid", v} -> {:scid, normalize_scid(v)}
       {"type", v} -> {:type, normalize_type(v)}
       {"status", v} -> {:status, normalize_status(v)}
       {"config", v} -> {:config, v}
@@ -521,6 +524,7 @@ defmodule Cadence.Targets do
       m
       |> maybe_normalize_field(:type, &normalize_type/1)
       |> maybe_normalize_field(:status, &normalize_status/1)
+      |> maybe_normalize_field(:scid, &normalize_scid/1)
     end)
   end
 
@@ -544,4 +548,17 @@ defmodule Cadence.Targets do
   defp normalize_status("fault"), do: :fault
   defp normalize_status(status) when is_atom(status), do: status
   defp normalize_status(_), do: :offline
+
+  defp normalize_scid(nil), do: nil
+  defp normalize_scid(""), do: nil
+  defp normalize_scid(scid) when is_integer(scid), do: scid
+
+  defp normalize_scid(scid) when is_binary(scid) do
+    case Integer.parse(scid) do
+      {int, ""} -> int
+      _ -> scid
+    end
+  end
+
+  defp normalize_scid(scid), do: scid
 end

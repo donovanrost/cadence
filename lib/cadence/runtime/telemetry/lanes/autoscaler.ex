@@ -28,6 +28,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Autoscaler do
     router = Keyword.fetch!(opts, :router)
     lanes = Keyword.fetch!(opts, :lanes)
 
+    Logger.debug("Starting Lanes.Autoscaler for mission_id=#{mission_id}")
+
     interval_ms = Keyword.get(opts, :interval_ms, @default_interval_ms)
 
     state = %{
@@ -47,6 +49,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Autoscaler do
 
     schedule_tick(state.interval_ms)
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    Logger.debug(
+      "Stopping Lanes.Autoscaler for mission_id=#{state.mission_id} reason=#{inspect(reason)}"
+    )
+
+    :ok
   end
 
   @impl true
