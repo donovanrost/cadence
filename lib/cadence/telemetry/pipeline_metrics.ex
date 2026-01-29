@@ -71,6 +71,18 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     latency_count_ets_write: 23,
     latency_sum_end_to_end: 24,
     latency_count_end_to_end: 25,
+    latency_sum_parse: 39,
+    latency_count_parse: 40,
+    latency_sum_resolve: 41,
+    latency_count_resolve: 42,
+    latency_sum_log_append: 43,
+    latency_count_log_append: 44,
+    latency_sum_sdlp_decode: 45,
+    latency_count_sdlp_decode: 46,
+    latency_sum_sdlp_reassembly: 47,
+    latency_count_sdlp_reassembly: 48,
+    latency_sum_envelope_build: 49,
+    latency_count_envelope_build: 50,
 
     # Bitrate tracking
     bytes_received: 26,
@@ -85,10 +97,11 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     packets_unknown_apid: 35,
     packets_uncataloged_target: 36,
     packets_unsupported_format: 37,
-    packets_decom_processed: 38
+    packets_decom_processed: 38,
+    envelopes_emitted: 51
   }
 
-  @slot_count 38
+  @slot_count 51
 
   # Atomics slot indices for min/max (per partition)
   # Uses :atomics for compare-and-exchange operations
@@ -108,10 +121,22 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     min_ets_write: 13,
     max_ets_write: 14,
     min_end_to_end: 15,
-    max_end_to_end: 16
+    max_end_to_end: 16,
+    min_parse: 17,
+    max_parse: 18,
+    min_resolve: 19,
+    max_resolve: 20,
+    min_log_append: 21,
+    max_log_append: 22,
+    min_sdlp_decode: 23,
+    max_sdlp_decode: 24,
+    min_sdlp_reassembly: 25,
+    max_sdlp_reassembly: 26,
+    min_envelope_build: 27,
+    max_envelope_build: 28
   }
 
-  @minmax_slot_count 16
+  @minmax_slot_count 28
 
   # Sentinel value for uninitialized min (max possible value)
   @min_sentinel 999_999_999
@@ -125,8 +150,23 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     :limits,
     :cvt_batch,
     :ets_write,
-    :end_to_end
+    :parse,
+    :resolve,
+    :log_append,
+    :end_to_end,
+    :sdlp_decode,
+    :sdlp_reassembly,
+    :envelope_build
   ]
+
+  @histogram_stages [:parse, :resolve, :decom, :log_append, :end_to_end]
+  @histogram_bucket_count 32
+
+  @histogram_stage_offsets Enum.into(Enum.with_index(@histogram_stages), %{}, fn {stage, idx} ->
+                             {stage, idx * @histogram_bucket_count + 1}
+                           end)
+
+  @histogram_slot_count map_size(@histogram_stage_offsets) * @histogram_bucket_count
 
   # Error stages we track
   @error_stages [
@@ -149,6 +189,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
           :set,
           :named_table,
           :public,
+          write_concurrency: true,
           read_concurrency: true
         ])
 
@@ -156,6 +197,11 @@ defmodule Cadence.Telemetry.PipelineMetrics do
         :ok
     end
   end
+
+  @doc """
+  Returns the partition key for pre-lanes ingress metrics.
+  """
+  def ingress_partition, do: {:ingress, 0}
 
   @doc """
   Initializes metrics for a mission with the given partition count.
@@ -180,12 +226,13 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   """
   def init_lanes(mission_id, lanes) when is_list(lanes) do
     partitions =
-      lanes
-      |> Enum.flat_map(fn lane ->
-        Enum.map(0..(lane.shard_count - 1), fn shard_id ->
-          {lane.name, shard_id}
-        end)
-      end)
+      [ingress_partition()] ++
+        (lanes
+         |> Enum.flat_map(fn lane ->
+           Enum.map(0..(lane.shard_count - 1), fn shard_id ->
+             {lane.name, shard_id}
+           end)
+         end))
 
     init_partitions(mission_id, partitions)
     :ets.insert(@table_name, {{mission_id, :lane_shards}, lane_shard_map(lanes)})
@@ -211,6 +258,11 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       end
 
       :ets.insert(@table_name, {{mission_id, :atomics, partition}, atomics_ref})
+
+      if @histogram_slot_count > 0 do
+        histogram_ref = :atomics.new(@histogram_slot_count, [])
+        :ets.insert(@table_name, {{mission_id, :histogram, partition}, histogram_ref})
+      end
     end
 
     # Store metadata
@@ -251,6 +303,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
 
     update_sum_and_count(mission_id, partition, sum_slot, count_slot, duration_us)
     update_min_and_max(mission_id, partition, min_slot, max_slot, duration_us)
+    update_histogram(mission_id, partition, stage, duration_us)
   end
 
   defp update_sum_and_count(_mission_id, _partition, nil, _count_slot, _duration_us), do: :ok
@@ -279,6 +332,22 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       ref ->
         update_min(ref, min_slot, duration_us)
         update_max(ref, max_slot, duration_us)
+    end
+  end
+
+  defp update_histogram(_mission_id, _partition, stage, _duration_us)
+       when not is_map_key(@histogram_stage_offsets, stage),
+       do: :ok
+
+  defp update_histogram(mission_id, partition, stage, duration_us) do
+    case get_histogram_ref(mission_id, partition) do
+      nil ->
+        :ok
+
+      ref ->
+        bucket_index = histogram_bucket_index(duration_us)
+        slot = histogram_slot(stage, bucket_index)
+        :atomics.add(ref, slot, 1)
     end
   end
 
@@ -352,6 +421,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       merged = merge_all_partitions(mission_id, partition_keys)
       minmax = merge_all_minmax(mission_id, partition_keys)
       {duration_ms, duration_sec} = get_duration(mission_id)
+      histograms = merge_all_histograms(mission_id, partition_keys)
+      timing_percentiles = build_timing_percentiles(histograms)
       timing = build_timing_stats(merged, minmax)
       errors = build_error_stats(merged)
       bytes_received = Map.get(merged, :bytes_received, 0)
@@ -367,7 +438,9 @@ defmodule Cadence.Telemetry.PipelineMetrics do
           partition_count
         )
 
-      Map.merge(summary, build_rolling_stats(mission_id, summary))
+      summary
+      |> Map.put(:timing_percentiles, timing_percentiles)
+      |> Map.merge(build_rolling_stats(mission_id, summary))
     end
   end
 
@@ -379,6 +452,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       [{{^mission_id, :partition_count}, count}] -> count
       _ -> 0
     end
+  rescue
+    ArgumentError -> 0
   end
 
   @doc """
@@ -392,6 +467,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       _ ->
         get_partition_count(mission_id)
     end
+  rescue
+    ArgumentError -> 0
   end
 
   @doc """
@@ -402,6 +479,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       [{{^mission_id, :partition_keys}, keys}] -> keys
       _ -> []
     end
+  rescue
+    ArgumentError -> []
   end
 
   @doc """
@@ -419,6 +498,50 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
   end
 
+  @doc """
+  Sets a gauge value for a partition.
+  """
+  def set_gauge(mission_id, partition, gauge, value) when is_integer(value) do
+    ensure_table()
+    :ets.insert(@table_name, {{mission_id, :gauge, partition, gauge}, value})
+    :ok
+  end
+
+  @doc """
+  Returns all gauges for a partition.
+  """
+  def get_gauges(mission_id, partition) do
+    ensure_table()
+
+    match =
+      :ets.match_object(
+        @table_name,
+        {{mission_id, :gauge, partition, :"$1"}, :"$2"}
+      )
+
+    Enum.reduce(match, %{}, fn {{^mission_id, :gauge, ^partition, gauge}, value}, acc ->
+      Map.put(acc, gauge, value)
+    end)
+  end
+
+  @doc """
+  Returns counters and timing stats for a specific partition.
+  """
+  def get_partition_stats(mission_id, partition) do
+    counters = get_counters(mission_id, partition)
+    minmax = get_partition_minmax(mission_id, partition)
+    histograms = get_partition_histograms(mission_id, partition)
+
+    %{
+      counters: counters,
+      timing: build_timing_stats(counters, minmax),
+      timing_percentiles: build_timing_percentiles(histograms)
+    }
+  rescue
+    ArgumentError ->
+      %{counters: %{}, timing: %{}, timing_percentiles: %{}}
+  end
+
   defp empty_stats do
     %{
       packets_received: 0,
@@ -428,6 +551,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       bytes_received: 0,
       errors: %{},
       timing: %{},
+      timing_percentiles: %{},
       duration_ms: 0,
       packets_per_sec: 0.0,
       items_per_sec: 0.0,
@@ -463,6 +587,25 @@ defmodule Cadence.Telemetry.PipelineMetrics do
         max_us: max_val,
         count: count
       })
+    end)
+  end
+
+  defp build_timing_percentiles(histograms) do
+    Enum.reduce(@histogram_stages, %{}, fn stage, acc ->
+      counts = Map.get(histograms, stage, [])
+
+      percentiles =
+        if Enum.sum(counts) > 0 do
+          %{
+            p50: histogram_percentile(counts, 0.50),
+            p95: histogram_percentile(counts, 0.95),
+            p99: histogram_percentile(counts, 0.99)
+          }
+        else
+          %{p50: 0, p95: 0, p99: 0}
+        end
+
+      Map.put(acc, stage, percentiles)
     end)
   end
 
@@ -551,21 +694,6 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   end
 
   @doc """
-  Gets stats for a specific partition (for debugging).
-  """
-  def get_partition_stats(mission_id, partition) do
-    case get_counter_ref(mission_id, partition) do
-      nil ->
-        nil
-
-      ref ->
-        Enum.reduce(@slots, %{}, fn {name, slot}, acc ->
-          Map.put(acc, name, :counters.get(ref, slot))
-        end)
-    end
-  end
-
-  @doc """
   Resets all counters for a mission.
   """
   def reset(mission_id) do
@@ -574,7 +702,10 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     for partition <- partition_keys do
       reset_partition_counters(mission_id, partition)
       reset_partition_atomics(mission_id, partition)
+      reset_partition_histogram(mission_id, partition)
     end
+
+    delete_gauges(mission_id)
 
     # Reset start time
     :ets.insert(@table_name, {{mission_id, :started_at}, CadenceTime.monotonic(:millisecond)})
@@ -611,6 +742,20 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
   end
 
+  defp reset_partition_histogram(mission_id, partition) do
+    if @histogram_slot_count > 0 do
+      case get_histogram_ref(mission_id, partition) do
+        nil ->
+          :ok
+
+        ref ->
+          for slot <- 1..@histogram_slot_count do
+            :atomics.put(ref, slot, 0)
+          end
+      end
+    end
+  end
+
   @doc """
   Cleans up metrics for a mission.
   """
@@ -622,7 +767,10 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     for partition <- partition_keys do
       :ets.delete(@table_name, {mission_id, :counters, partition})
       :ets.delete(@table_name, {mission_id, :atomics, partition})
+      :ets.delete(@table_name, {mission_id, :histogram, partition})
     end
+
+    delete_gauges(mission_id)
 
     :ets.delete(@table_name, {mission_id, :partition_count})
     :ets.delete(@table_name, {mission_id, :partition_keys})
@@ -641,6 +789,8 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       [{^key, ref}] -> ref
       [] -> nil
     end
+  rescue
+    ArgumentError -> nil
   end
 
   defp get_atomics_ref(mission_id, partition) do
@@ -650,6 +800,43 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       [{^key, ref}] -> ref
       [] -> nil
     end
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp get_partition_minmax(mission_id, partition) do
+    case get_atomics_ref(mission_id, partition) do
+      nil ->
+        %{}
+
+      ref ->
+        Enum.reduce(@minmax_slots, %{}, fn {name, slot}, acc ->
+          Map.put(acc, name, :atomics.get(ref, slot))
+        end)
+    end
+  end
+
+  defp get_partition_histograms(mission_id, partition) do
+    case get_histogram_ref(mission_id, partition) do
+      nil ->
+        %{}
+
+      ref ->
+        Enum.reduce(@histogram_stages, %{}, fn stage, acc ->
+          Map.put(acc, stage, histogram_counts(ref, stage))
+        end)
+    end
+  end
+
+  defp get_histogram_ref(mission_id, partition) do
+    key = {mission_id, :histogram, partition}
+
+    case :ets.lookup(@table_name, key) do
+      [{^key, ref}] -> ref
+      [] -> nil
+    end
+  rescue
+    ArgumentError -> nil
   end
 
   defp get_started_at(mission_id) do
@@ -686,6 +873,94 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     Enum.reduce(partition_keys, %{}, fn partition, acc ->
       merge_partition_minmax(mission_id, partition, acc)
     end)
+  end
+
+  defp merge_all_histograms(mission_id, partition_keys) do
+    Enum.reduce(partition_keys, %{}, fn partition, acc ->
+      merge_partition_histograms(mission_id, partition, acc)
+    end)
+  end
+
+  defp merge_partition_histograms(mission_id, partition, acc) do
+    case get_histogram_ref(mission_id, partition) do
+      nil ->
+        acc
+
+      ref ->
+        Enum.reduce(@histogram_stages, acc, fn stage, acc ->
+          merge_stage_histogram(ref, stage, acc)
+        end)
+    end
+  end
+
+  defp merge_stage_histogram(ref, stage, acc) do
+    counts = histogram_counts(ref, stage)
+
+    Map.update(acc, stage, counts, fn existing ->
+      sum_histogram_counts(existing, counts)
+    end)
+  end
+
+  defp histogram_counts(ref, stage) do
+    start_slot = Map.get(@histogram_stage_offsets, stage)
+
+    if start_slot do
+      for offset <- 0..(@histogram_bucket_count - 1) do
+        :atomics.get(ref, start_slot + offset)
+      end
+    else
+      []
+    end
+  end
+
+  defp sum_histogram_counts(existing, counts) do
+    Enum.zip_with(existing, counts, &(&1 + &2))
+  end
+
+  defp histogram_slot(stage, bucket_index) do
+    start_slot = Map.fetch!(@histogram_stage_offsets, stage)
+    start_slot + bucket_index
+  end
+
+  defp histogram_bucket_index(duration_us) when duration_us <= 1, do: 0
+
+  defp histogram_bucket_index(duration_us) do
+    bucket = trunc(:math.log2(duration_us))
+    max(bucket, 0) |> min(@histogram_bucket_count - 1)
+  end
+
+  defp histogram_percentile(counts, percentile) when is_list(counts) do
+    total = Enum.sum(counts)
+
+    if total == 0 do
+      0
+    else
+      target = ceil(total * percentile)
+      bucket = histogram_bucket_for_target(counts, target, 0, 0)
+      histogram_bucket_upper_us(bucket)
+    end
+  end
+
+  defp histogram_bucket_for_target([], _target, idx, _acc), do: idx
+
+  defp histogram_bucket_for_target([count | rest], target, idx, acc) do
+    if acc + count >= target do
+      idx
+    else
+      histogram_bucket_for_target(rest, target, idx + 1, acc + count)
+    end
+  end
+
+  defp histogram_bucket_upper_us(bucket_index) do
+    :erlang.trunc(:math.pow(2, bucket_index + 1))
+  end
+
+  defp delete_gauges(mission_id) do
+    ensure_table()
+
+    :ets.select_delete(@table_name, [
+      {{{mission_id, :gauge, :_, :_}, :_}, [], [true]}
+    ])
   end
 
   defp merge_partition_minmax(mission_id, partition, acc) do

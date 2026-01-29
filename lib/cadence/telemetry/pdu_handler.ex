@@ -8,7 +8,7 @@ defmodule Cadence.Telemetry.PDUHandler do
   alias Cadence.CCSDS.Core.PDU
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDU.SpacePacket
-  alias Cadence.Telemetry.{Evidence, PacketEnvelope}
+  alias Cadence.Telemetry.{Evidence, MetricsConfig, PacketEnvelope, PipelineMetrics}
   alias Cadence.Time, as: CadenceTime
 
   @impl true
@@ -25,10 +25,35 @@ defmodule Cadence.Telemetry.PDUHandler do
 
   @impl true
   def handle_pdu(%PDU{} = pdu, ctx, state) do
+    start_ns =
+      if MetricsConfig.timing_sample?(),
+        do: CadenceTime.monotonic(:nanosecond),
+        else: nil
+
+    mission_id = Map.get(ctx, :mission_id) || get_in(ctx, [:base_meta, :mission_id])
+
     with %SDUOctets{} = sdu <- Map.get(ctx, :sdu),
          {:ok, raw} <- raw_from_pdu(pdu, sdu) do
       metadata = Map.get(ctx, :base_meta, %{})
       envelope = build_envelope(raw, pdu, sdu, ctx, metadata)
+
+      if mission_id do
+        ingress_partition = PipelineMetrics.ingress_partition()
+
+        if is_integer(start_ns) do
+          duration_us = div(CadenceTime.monotonic(:nanosecond) - start_ns, 1000)
+
+          PipelineMetrics.record_timing(
+            mission_id,
+            ingress_partition,
+            :envelope_build,
+            duration_us
+          )
+        end
+
+        PipelineMetrics.inc(mission_id, ingress_partition, :envelopes_emitted)
+      end
+
       {:ok, [envelope], state}
     else
       nil -> {:error, :missing_sdu, state}

@@ -50,11 +50,22 @@ defmodule Cadence.Telemetry.Profiler do
   """
   def analyze(mission_id) do
     IO.puts("\n=== Timing Analysis: Warmup & Spike Detection ===\n")
+    print_ingress_analysis(mission_id)
 
     analysis = Stats.get_all_timing_analysis(mission_id)
 
     # Show analysis for key stages
-    stages_to_show = [:identify, :decom, :convert, :derive, :limits, :end_to_end]
+    stages_to_show = [
+      :parse,
+      :resolve,
+      :decom,
+      :log_append,
+      :identify,
+      :convert,
+      :derive,
+      :limits,
+      :end_to_end
+    ]
 
     Enum.each(stages_to_show, fn stage ->
       case Map.get(analysis, stage) do
@@ -75,6 +86,46 @@ defmodule Cadence.Telemetry.Profiler do
     IO.puts("")
 
     :ok
+  end
+
+  defp print_ingress_analysis(mission_id) do
+    ingress =
+      safe_call(fn ->
+        PipelineMetrics.get_partition_stats(mission_id, PipelineMetrics.ingress_partition())
+      end)
+
+    sdlp = safe_call(fn -> SDLP.get_stats(mission_id) end)
+    totals = sdlp_totals(sdlp)
+    duration_sec = ingress_duration_sec(mission_id)
+    envelopes = get_in(ingress, [:counters, :envelopes_emitted]) || 0
+
+    if duration_sec > 0 and (totals.frames_decoded > 0 or envelopes > 0) do
+      IO.puts("Ingress (pre-lanes):")
+
+      IO.puts(
+        "  Throughput: #{format_number(round(totals.frames_decoded / duration_sec))} frames/sec, " <>
+          "#{format_bytes(round(totals.bytes_in / duration_sec))}/sec, " <>
+          "#{format_number(round(envelopes / duration_sec))} envelopes/sec"
+      )
+
+      print_ingress_timing(ingress)
+
+      if envelopes > 0 do
+        IO.puts(
+          "  Frames→Envelopes: #{format_number(totals.frames_decoded)}/#{format_number(envelopes)} " <>
+            "SDU→Envelopes: #{format_number(totals.sdu_emitted)}/#{format_number(envelopes)}"
+        )
+      end
+
+      IO.puts("")
+    end
+  end
+
+  defp ingress_duration_sec(mission_id) do
+    case safe_call(fn -> PipelineMetrics.get_stats(mission_id) end) do
+      %{duration_sec: duration_sec} when is_number(duration_sec) -> duration_sec
+      _ -> 0.0
+    end
   end
 
   defp print_stage_analysis(stage, data) do
@@ -243,14 +294,21 @@ defmodule Cadence.Telemetry.Profiler do
     lanes_active = lanes_pipeline_active?(mission_id)
 
     stats = safe_call(fn -> PipelineMetrics.get_stats(mission_id) end)
+    percentiles = if is_map(stats), do: Map.get(stats, :timing_percentiles), else: nil
+
+    ingress =
+      safe_call(fn ->
+        PipelineMetrics.get_partition_stats(mission_id, PipelineMetrics.ingress_partition())
+      end)
 
     %{
       timestamp: CadenceTime.now(),
       stats: stats,
-      percentiles: nil,
+      percentiles: percentiles,
       stage_errors: Map.get(stats, :errors, %{}),
       ccsds: safe_call(fn -> Metrics.get_stats(mission_id) end),
       sdlp: safe_call(fn -> SDLP.get_stats(mission_id) end),
+      ingress: ingress,
       cvt: safe_call(fn -> CurrentValueTable.stats(mission_id) end),
       lanes:
         if lanes_active do
@@ -318,25 +376,28 @@ defmodule Cadence.Telemetry.Profiler do
     mission_processes = find_mission_processes(mission_id)
 
     # Get queue info for each
-    mission_processes
-    |> Enum.map(fn {name, pid} ->
-      case Process.info(pid, [:message_queue_len, :reductions, :memory, :current_function]) do
-        nil ->
-          nil
+    processes =
+      mission_processes
+      |> Enum.map(fn {name, pid} ->
+        case Process.info(pid, [:message_queue_len, :reductions, :memory, :current_function]) do
+          nil ->
+            nil
 
-        info ->
-          %{
-            name: name,
-            pid: pid,
-            queue_len: info[:message_queue_len],
-            reductions: info[:reductions],
-            memory_kb: div(info[:memory], 1024),
-            current_function: info[:current_function]
-          }
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.sort_by(& &1.queue_len, :desc)
+          info ->
+            %{
+              name: name,
+              pid: pid,
+              queue_len: info[:message_queue_len],
+              reductions: info[:reductions],
+              memory_kb: div(info[:memory], 1024),
+              current_function: info[:current_function]
+            }
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.sort_by(& &1.queue_len, :desc)
+
+    %{processes: processes, gauges: queue_gauges(mission_id)}
   end
 
   @doc """
@@ -381,14 +442,19 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp shard_stats(mission_id, lane, shard_count) do
-    Enum.map(0..(shard_count - 1), fn shard ->
+    shards = if shard_count > 0, do: 0..(shard_count - 1), else: []
+
+    Enum.map(shards, fn shard ->
       counters = PipelineMetrics.get_counters(mission_id, {lane, shard})
-      %{shard: shard, counters: counters}
+      gauges = PipelineMetrics.get_gauges(mission_id, {lane, shard})
+      %{shard: shard, counters: counters, gauges: gauges}
     end)
   end
 
   defp worker_stats(mission_id, lane, shard_count) do
-    Enum.map(0..(shard_count - 1), fn shard ->
+    shards = if shard_count > 0, do: 0..(shard_count - 1), else: []
+
+    Enum.map(shards, fn shard ->
       worker_stats_for_shard(mission_id, lane, shard)
     end)
   end
@@ -627,6 +693,7 @@ defmodule Cadence.Telemetry.Profiler do
     print_stats_snapshot(snapshot, prev)
     print_ccsds_snapshot(snapshot)
     print_sdlp_snapshot(snapshot)
+    print_ingress_snapshot(snapshot, prev)
     print_queue_warnings(snapshot.process_queues)
 
     IO.puts("")
@@ -677,6 +744,104 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp print_sdlp_snapshot(_snapshot), do: :ok
+
+  defp print_ingress_snapshot(%{ingress: ingress, sdlp: sdlp} = snapshot, prev)
+       when is_map(ingress) and is_map(sdlp) do
+    totals = sdlp_totals(sdlp)
+    envelopes = get_in(ingress, [:counters, :envelopes_emitted]) || 0
+
+    {frames_per_sec, bytes_per_sec, envelopes_per_sec} =
+      ingress_rates(snapshot, prev, totals.frames_decoded, totals.bytes_in, envelopes)
+
+    IO.puts("Ingress (pre-lanes):")
+
+    if frames_per_sec > 0 or bytes_per_sec > 0 or envelopes_per_sec > 0 do
+      IO.puts(
+        "  Throughput: #{format_number(round(frames_per_sec))} frames/sec, " <>
+          "#{format_bytes(round(bytes_per_sec))}/sec, " <>
+          "#{format_number(round(envelopes_per_sec))} envelopes/sec"
+      )
+    end
+
+    print_ingress_timing(ingress)
+
+    if envelopes > 0 do
+      IO.puts(
+        "  Frames→Envelopes: #{format_number(totals.frames_decoded)}/#{format_number(envelopes)} " <>
+          "SDU→Envelopes: #{format_number(totals.sdu_emitted)}/#{format_number(envelopes)}"
+      )
+    end
+  end
+
+  defp print_ingress_snapshot(_snapshot, _prev), do: :ok
+
+  defp print_ingress_timing(%{timing: timing, timing_percentiles: percentiles})
+       when is_map(timing) do
+    IO.puts("  Timing (μs):")
+
+    Enum.each([:sdlp_decode, :sdlp_reassembly, :envelope_build], fn stage ->
+      case Map.get(timing, stage) do
+        %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+          stage_name = stage |> to_string() |> String.pad_trailing(14)
+          basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
+          IO.puts("    #{stage_name} #{ingress_timing_line(basic, percentiles, stage)}")
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+
+  defp print_ingress_timing(_ingress), do: :ok
+
+  defp ingress_timing_line(basic, percentiles, stage) when is_map(percentiles) do
+    case Map.get(percentiles, stage) do
+      %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
+        "#{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
+
+      _ ->
+        basic
+    end
+  end
+
+  defp ingress_timing_line(basic, _percentiles, _stage), do: basic
+
+  defp ingress_rates(snapshot, prev, frames, bytes, envelopes) do
+    case prev do
+      %{timestamp: prev_ts, sdlp: prev_sdlp, ingress: prev_ingress}
+      when is_map(prev_sdlp) and is_map(prev_ingress) ->
+        seconds = max(DateTime.diff(snapshot.timestamp, prev_ts, :millisecond) / 1000, 0.001)
+        prev_totals = sdlp_totals(prev_sdlp)
+        prev_envelopes = get_in(prev_ingress, [:counters, :envelopes_emitted]) || 0
+
+        {
+          (frames - prev_totals.frames_decoded) / seconds,
+          (bytes - prev_totals.bytes_in) / seconds,
+          (envelopes - prev_envelopes) / seconds
+        }
+
+      _ ->
+        {0.0, 0.0, 0.0}
+    end
+  end
+
+  defp sdlp_totals(stats) when is_map(stats) do
+    Enum.reduce(stats, %{frames_decoded: 0, bytes_in: 0, sdu_emitted: 0}, fn {_profile, metrics},
+                                                                             acc ->
+      if is_map(metrics) do
+        decode = Map.get(metrics, :frame_decode, %{})
+        reasm = Map.get(metrics, :reassembly, %{})
+
+        %{
+          frames_decoded: acc.frames_decoded + Map.get(decode, :total, 0),
+          bytes_in: acc.bytes_in + Map.get(decode, :bytes_in, 0),
+          sdu_emitted: acc.sdu_emitted + Map.get(reasm, :sdu_emitted, 0)
+        }
+      else
+        acc
+      end
+    end)
+  end
 
   defp print_sdlp_totals({profile, metrics}) do
     decode = metrics.frame_decode
@@ -788,7 +953,8 @@ defmodule Cadence.Telemetry.Profiler do
   defp print_stage_errors_snapshot(_snapshot), do: :ok
 
   defp print_queue_warnings(process_queues) do
-    backed_up = Enum.filter(process_queues, fn q -> q.queue_len > 10 end)
+    processes = queue_processes(process_queues)
+    backed_up = Enum.filter(processes, fn q -> q.queue_len > 10 end)
 
     if length(backed_up) > 0 do
       IO.puts("⚠️  Backed up processes:")
@@ -797,6 +963,8 @@ defmodule Cadence.Telemetry.Profiler do
         IO.puts("   #{q.name}: #{q.queue_len} messages")
       end)
     end
+
+    print_queue_gauges(process_queues)
   end
 
   # Removed unused single-arity version - use print_timing(timing, nil) directly
@@ -815,7 +983,18 @@ defmodule Cadence.Telemetry.Profiler do
       IO.puts("")
       IO.puts("Timing (μs):          avg   /  samples")
 
-      stages = [:identify, :decom, :convert, :derive, :limits, :cvt_batch, :ets_write]
+      stages = [
+        :parse,
+        :resolve,
+        :decom,
+        :log_append,
+        :identify,
+        :convert,
+        :derive,
+        :limits,
+        :cvt_batch,
+        :ets_write
+      ]
 
       Enum.each(stages, &print_v2_stage(timing, &1))
     end
@@ -853,11 +1032,14 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp all_timing_stages do
     [
+      :parse,
+      :resolve,
+      :decom,
+      :log_append,
       :identify,
       :decommutate,
       :convert,
       :derive,
-      :decom,
       :limits,
       :cvt_batch,
       :ets_write,
@@ -916,6 +1098,40 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp print_stage_errors(_), do: :ok
+
+  defp queue_gauges(mission_id) do
+    PipelineMetrics.get_partition_keys(mission_id)
+    |> Enum.reduce(%{}, fn partition, acc ->
+      gauges = PipelineMetrics.get_gauges(mission_id, partition)
+
+      if map_size(gauges) > 0 do
+        Map.put(acc, partition, gauges)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp queue_processes(%{processes: processes}), do: processes
+  defp queue_processes(processes) when is_list(processes), do: processes
+  defp queue_processes(_), do: []
+
+  defp print_queue_gauges(%{gauges: gauges}) when is_map(gauges) and map_size(gauges) > 0 do
+    router_max = max_gauge_value(gauges, :router_queue_len)
+    shard_max = max_gauge_value(gauges, :shard_queue_len)
+
+    if router_max > 0 or shard_max > 0 do
+      IO.puts("Queue gauges: router_max=#{router_max}, shard_max=#{shard_max}")
+    end
+  end
+
+  defp print_queue_gauges(_), do: :ok
+
+  defp max_gauge_value(gauges_by_partition, gauge) do
+    gauges_by_partition
+    |> Enum.map(fn {_partition, gauges} -> Map.get(gauges, gauge, 0) end)
+    |> Enum.max(fn -> 0 end)
+  end
 
   defp format_us(us) when is_number(us) do
     formatted = if us >= 1000, do: "#{Float.round(us / 1000, 1)}ms", else: "#{round(us)}μs"

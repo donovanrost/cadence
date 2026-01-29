@@ -13,13 +13,16 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
   alias Cadence.Telemetry.{
     Conversions,
     Decommutation,
+    MetricsConfig,
     PipelineRouter,
     Resolve,
-    SpacePacket
+    SpacePacket,
+    Stats
   }
 
   alias Cadence.Telemetry.PacketLogRecord
   alias Cadence.Telemetry.PipelineMetrics
+  alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
 
   @default_max_batch_size 200
@@ -49,6 +52,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
       "Starting Lanes.ShardWorker for mission_id=#{mission_id} lane=#{lane} shard_id=#{shard_id}"
     )
 
+    queue_snapshot_interval_ms = MetricsConfig.queue_snapshot_interval_ms()
+    queue_sample_timer = maybe_schedule_queue_sample(queue_snapshot_interval_ms)
+
     state = %{
       mission_id: mission_id,
       lane: lane,
@@ -66,7 +72,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
       max_inflight: max_inflight,
       buffer: [],
       buffer_size: 0,
-      flush_timer: nil
+      flush_timer: nil,
+      queue_snapshot_interval_ms: queue_snapshot_interval_ms,
+      queue_sample_timer: queue_sample_timer
     }
 
     GenServer.cast(router, {:shard_ready, lane, shard_id, max_inflight})
@@ -124,6 +132,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
      }}
   end
 
+  def handle_info(:queue_snapshot, state) do
+    updated_state = record_queue_gauge(state)
+    timer = maybe_schedule_queue_sample(state.queue_snapshot_interval_ms)
+    {:noreply, %{updated_state | queue_sample_timer: timer}}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   defp enqueue_event(event, state) do
@@ -150,11 +164,19 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
 
     events = Enum.reverse(state.buffer)
 
-    {records, processed, items_processed} =
+    {records, processed, items_processed, pending_end_to_end} =
       events
-      |> Enum.reduce({[], 0, 0}, fn event, {acc_records, processed_count, item_count} ->
-        {:ok, event_records, items} = process_event(event, state)
-        {event_records ++ acc_records, processed_count + 1, item_count + items}
+      |> Enum.reduce({[], 0, 0, []}, fn event,
+                                        {acc_records, processed_count, item_count, pending} ->
+        {:ok, event_records, items, end_to_end_status} = process_event(event, state)
+
+        updated_pending =
+          case end_to_end_status do
+            :append -> [event | pending]
+            _ -> pending
+          end
+
+        {event_records ++ acc_records, processed_count + 1, item_count + items, updated_pending}
       end)
 
     PipelineMetrics.inc(
@@ -171,7 +193,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
       items_processed
     )
 
-    maybe_append(records, state)
+    append_result = maybe_append(records, state)
+    maybe_record_batch_end_to_end(pending_end_to_end, append_result, state)
     GenServer.cast(state.router, {:shard_ready, state.lane, state.shard_id, length(events)})
 
     state
@@ -196,11 +219,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
           reason: %{parse_error: parse_error}
         })
 
-        {:ok, records, 0}
+        maybe_record_end_to_end(event, state)
+        {:ok, records, 0, :recorded}
     end
   end
 
-  defp process_event_v2_with_parse(%PipelineEvent{parsed_unit: nil} = event, records, _state) do
+  defp process_event_v2_with_parse(%PipelineEvent{parsed_unit: nil} = event, records, state) do
     publish_sink(event.mission_id, :malformed, %{
       envelope: event.envelope,
       parsed_unit: nil,
@@ -208,11 +232,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
       reason: %{parse_error: :missing_parsed_unit}
     })
 
-    {:ok, records, 0}
+    maybe_record_end_to_end(event, state)
+    {:ok, records, 0, :recorded}
   end
 
   defp process_event_v2_with_parse(%PipelineEvent{} = event, records, state) do
-    resolved = Resolve.resolve(event.envelope, event.parsed_unit, state.config_bundle)
+    resolved =
+      maybe_time_pipeline(state, :resolve, fn ->
+        Resolve.resolve(event.envelope, event.parsed_unit, state.config_bundle)
+      end)
 
     records = [
       PacketLogRecord.classification_record(resolved, state.lane, state.shard_id) | records
@@ -220,57 +248,84 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
 
     record_resolution_metrics(state, resolved)
 
+    route_resolved_event(event, records, resolved, state)
+  end
+
+  defp route_resolved_event(event, records, resolved, state) do
     case PipelineRouter.route_resolved(resolved) do
       {:decom, _resolved} ->
-        case decom_space_packet(event.parsed_unit, resolved) do
-          {:ok, raw_items} ->
-            packet_def = packet_def_from_resolved(resolved)
-            converted_items = convert_items(raw_items, packet_def)
-            qualified_items = qualify_items(converted_items, resolved)
-            apid = apid_from_parsed(event.parsed_unit)
-            target_identifier = target_identifier(state.config_bundle, resolved.identity)
-
-            records = [
-              PacketLogRecord.decom_record(
-                resolved,
-                qualified_items,
-                apid,
-                state.lane,
-                state.shard_id,
-                target_identifier
-              )
-              | records
-            ]
-
-            PipelineMetrics.inc(
-              state.mission_id,
-              {state.lane, state.shard_id},
-              :packets_decom_processed
-            )
-
-            {:ok, records, map_size(qualified_items)}
-
-          {:error, reason} ->
-            publish_sink(event.mission_id, :malformed, %{
-              envelope: event.envelope,
-              parsed_unit: event.parsed_unit,
-              resolved_unit: resolved,
-              reason: %{decom_error: reason}
-            })
-
-            {:ok, records, 0}
-        end
+        handle_decom_route(event, records, resolved, state)
 
       {:sink, sink, reason} ->
-        publish_sink(event.mission_id, sink, %{
-          envelope: event.envelope,
-          parsed_unit: event.parsed_unit,
-          resolved_unit: resolved,
-          reason: reason
-        })
-
-        {:ok, records, 0}
+        handle_sink_route(event, records, resolved, sink, reason, state)
     end
+  end
+
+  defp handle_decom_route(event, records, resolved, state) do
+    result =
+      maybe_time_pipeline(state, :decom, fn ->
+        decom_space_packet(event.parsed_unit, resolved)
+      end)
+
+    case result do
+      {:ok, raw_items} ->
+        handle_decom_success(event, records, resolved, raw_items, state)
+
+      {:error, reason} ->
+        handle_decom_error(event, records, resolved, reason, state)
+    end
+  end
+
+  defp handle_decom_success(event, records, resolved, raw_items, state) do
+    packet_def = packet_def_from_resolved(resolved)
+    converted_items = convert_items(raw_items, packet_def)
+    qualified_items = qualify_items(converted_items, resolved)
+    apid = apid_from_parsed(event.parsed_unit)
+    target_identifier = target_identifier(state.config_bundle, resolved.identity)
+
+    records = [
+      PacketLogRecord.decom_record(
+        resolved,
+        qualified_items,
+        apid,
+        state.lane,
+        state.shard_id,
+        target_identifier
+      )
+      | records
+    ]
+
+    PipelineMetrics.inc(
+      state.mission_id,
+      {state.lane, state.shard_id},
+      :packets_decom_processed
+    )
+
+    {:ok, records, map_size(qualified_items), :append}
+  end
+
+  defp handle_decom_error(event, records, resolved, reason, state) do
+    publish_sink(event.mission_id, :malformed, %{
+      envelope: event.envelope,
+      parsed_unit: event.parsed_unit,
+      resolved_unit: resolved,
+      reason: %{decom_error: reason}
+    })
+
+    maybe_record_end_to_end(event, state)
+    {:ok, records, 0, :recorded}
+  end
+
+  defp handle_sink_route(event, records, resolved, sink, reason, state) do
+    publish_sink(event.mission_id, sink, %{
+      envelope: event.envelope,
+      parsed_unit: event.parsed_unit,
+      resolved_unit: resolved,
+      reason: reason
+    })
+
+    maybe_record_end_to_end(event, state)
+    {:ok, records, 0, :recorded}
   end
 
   defp maybe_append([], _state), do: :ok
@@ -284,7 +339,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
     #   sink: state.sink
     # )
 
-    case state.sink.append(state.shard_id, Enum.reverse(records), state.sink_opts) do
+    append_result =
+      maybe_time_pipeline(state, :log_append, fn ->
+        state.sink.append(state.shard_id, Enum.reverse(records), state.sink_opts)
+      end)
+
+    case append_result do
       {:ok, _meta} ->
         # Logger.debug("[DEBUG] lanes.shard_worker.appended",
         #   mission_id: state.mission_id,
@@ -300,6 +360,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
           "Failed to append to sink on shard #{state.shard_id} (lane=#{state.lane}): #{inspect(reason)}",
           mission_id: state.mission_id
         )
+
+        {:error, reason}
     end
   end
 
@@ -440,5 +502,78 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorker do
         pending_config_version: nil,
         pending_config_bundle: nil
     }
+  end
+
+  defp maybe_time_pipeline(state, stage, fun) when is_function(fun, 0) do
+    if MetricsConfig.timing_sample?() do
+      t0 = CadenceTime.monotonic(:nanosecond)
+      result = fun.()
+      t1 = CadenceTime.monotonic(:nanosecond)
+
+      PipelineMetrics.record_timing(
+        state.mission_id,
+        {state.lane, state.shard_id},
+        stage,
+        div(t1 - t0, 1000)
+      )
+
+      result
+    else
+      fun.()
+    end
+  end
+
+  defp maybe_record_end_to_end(%PipelineEvent{ingest_monotonic_ns: ingest_ns} = event, state)
+       when is_integer(ingest_ns) do
+    if MetricsConfig.end_to_end_sample?() do
+      now_ns = CadenceTime.monotonic(:nanosecond)
+      duration_us = div(max(now_ns - ingest_ns, 0), 1000)
+      partition = {state.lane, state.shard_id}
+
+      PipelineMetrics.record_timing(state.mission_id, partition, :end_to_end, duration_us)
+      Stats.record_timing_sample(state.mission_id, :end_to_end, duration_us)
+    end
+
+    event
+  end
+
+  defp maybe_record_end_to_end(event, _state), do: event
+
+  defp maybe_record_batch_end_to_end([], _append_result, _state), do: :ok
+
+  defp maybe_record_batch_end_to_end(_events, {:error, _reason}, _state), do: :ok
+
+  defp maybe_record_batch_end_to_end(events, :ok, state) do
+    Enum.each(events, &maybe_record_end_to_end(&1, state))
+  end
+
+  defp maybe_schedule_queue_sample(interval_ms)
+       when is_integer(interval_ms) and interval_ms > 0 do
+    if MetricsConfig.enable_process_queue_sampling?() do
+      TimeTimer.send_after(self(), :queue_snapshot, interval_ms)
+    else
+      nil
+    end
+  end
+
+  defp maybe_schedule_queue_sample(_interval_ms), do: nil
+
+  defp record_queue_gauge(state) do
+    if MetricsConfig.enable_process_queue_sampling?() do
+      queue_len =
+        case Process.info(self(), :message_queue_len) do
+          {:message_queue_len, len} -> len
+          _ -> 0
+        end
+
+      PipelineMetrics.set_gauge(
+        state.mission_id,
+        {state.lane, state.shard_id},
+        :shard_queue_len,
+        queue_len
+      )
+    end
+
+    state
   end
 end

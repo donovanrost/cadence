@@ -29,7 +29,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   alias Cadence.Runtime.Transport.COP1.Context, as: COP1Context
   alias Cadence.Runtime.Transport.COP1.DownlinkHandler
   alias Cadence.Runtime.Uplink.FrameBuilder
-  alias Cadence.Telemetry.{Evidence, PacketEnvelope}
+  alias Cadence.Telemetry.{Evidence, MetricsConfig, PacketEnvelope, PipelineMetrics}
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Transport.TCStreamId
 
@@ -494,13 +494,35 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   defp handle_sdlp_downlink(state, bytes, meta, %Mapping{} = mapping, opts, transport_id) do
+    ingress_partition = PipelineMetrics.ingress_partition()
+    PipelineMetrics.inc(state.mission_id, ingress_partition, :bytes_received, byte_size(bytes))
+
     frame_opts =
       Keyword.take(opts, [:frame_size, :secondary_header_length, :ocf_length, :timestamp])
       |> Keyword.put(:metrics_scope, state.mission_id)
 
     buffer = state.frame_buffer <> bytes
 
-    {:ok, frames, rest} = TMFrameCodec.decode(buffer, frame_opts)
+    {decode_result, decode_us} =
+      if MetricsConfig.timing_sample?() do
+        start_ns = CadenceTime.monotonic(:nanosecond)
+        result = TMFrameCodec.decode(buffer, frame_opts)
+        stop_ns = CadenceTime.monotonic(:nanosecond)
+        {result, div(stop_ns - start_ns, 1000)}
+      else
+        {TMFrameCodec.decode(buffer, frame_opts), nil}
+      end
+
+    {:ok, frames, rest} = decode_result
+
+    if is_integer(decode_us) do
+      PipelineMetrics.record_timing(
+        state.mission_id,
+        ingress_partition,
+        :sdlp_decode,
+        decode_us
+      )
+    end
 
     {next_reassembly, next_cop1} =
       deframe_frames(state, frames, meta, mapping, opts, transport_id)
@@ -562,7 +584,26 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   defp ingest_frame(frame, ctx, acc_state, acc_cop1, state, meta, mapping, transport_id) do
-    case TMReassembly.ingest(frame, ctx, acc_state) do
+    {result, reassembly_us} =
+      if MetricsConfig.timing_sample?() do
+        start_ns = CadenceTime.monotonic(:nanosecond)
+        result = TMReassembly.ingest(frame, ctx, acc_state)
+        stop_ns = CadenceTime.monotonic(:nanosecond)
+        {result, div(stop_ns - start_ns, 1000)}
+      else
+        {TMReassembly.ingest(frame, ctx, acc_state), nil}
+      end
+
+    if is_integer(reassembly_us) do
+      PipelineMetrics.record_timing(
+        state.mission_id,
+        PipelineMetrics.ingress_partition(),
+        :sdlp_reassembly,
+        reassembly_us
+      )
+    end
+
+    case result do
       {:ok, sdu_octets, new_state} ->
         dispatch_sdu_octets(state, sdu_octets, meta, mapping, transport_id)
         {new_state, acc_cop1}

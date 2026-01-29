@@ -9,8 +9,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
 
   alias Cadence.Runtime.Telemetry.Lanes.{LaneConfig, LaneSelector}
   alias Cadence.Runtime.Telemetry.PipelineEvent
-  alias Cadence.Telemetry.{PacketEnvelope, Parse, SpacePacket}
+  alias Cadence.Telemetry.{MetricsConfig, PacketEnvelope, Parse, SpacePacket}
   alias Cadence.Telemetry.PipelineMetrics
+  alias Cadence.Time, as: CadenceTime
+  alias Cadence.Time.Timer, as: TimeTimer
 
   @default_max_queue_depth 100_000
   @default_max_inflight 5_000
@@ -78,12 +80,17 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
         })
       end)
 
+    queue_snapshot_interval_ms = MetricsConfig.queue_snapshot_interval_ms()
+    queue_sample_timer = maybe_schedule_queue_sample(queue_snapshot_interval_ms)
+
     state = %{
       mission_id: mission_id,
       lanes: lanes,
       lane_state: lane_state,
       router_version: router_version,
-      config_version: config_version
+      config_version: config_version,
+      queue_snapshot_interval_ms: queue_snapshot_interval_ms,
+      queue_sample_timer: queue_sample_timer
     }
 
     {:ok, state}
@@ -108,15 +115,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     {:noreply, %{state | config_version: version}}
   end
 
-  defp handle_packet_envelope(%PacketEnvelope{} = envelope, state) do
-    {result, envelope} =
-      case Parse.run(envelope) do
-        {:ok, parsed_unit, updated_envelope} ->
-          {{:ok, parsed_unit}, updated_envelope}
+  @impl true
+  def handle_info(:queue_snapshot, state) do
+    updated_state = record_queue_gauges(state)
+    timer = maybe_schedule_queue_sample(state.queue_snapshot_interval_ms)
+    {:noreply, %{updated_state | queue_sample_timer: timer}}
+  end
 
-        {:error, reason, updated_envelope} ->
-          {{:error, reason}, updated_envelope}
-      end
+  defp handle_packet_envelope(%PacketEnvelope{} = envelope, state) do
+    {result, envelope, parse_us} = maybe_time_parse(envelope)
 
     {lane, shard_id} = select_lane_and_shard(envelope, result, state)
 
@@ -137,6 +144,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     partition_key = {event.lane, event.shard_id}
     PipelineMetrics.inc(state.mission_id, partition_key, :packets_received)
     PipelineMetrics.inc(state.mission_id, partition_key, :bytes_received, byte_size(envelope.raw))
+    maybe_record_parse_timing(state, partition_key, parse_us)
     record_parse_metrics(state, partition_key, result)
 
     state
@@ -388,5 +396,61 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
 
   defp record_parse_metrics(state, partition_key, {:error, _reason}) do
     PipelineMetrics.inc(state.mission_id, partition_key, :packets_malformed)
+  end
+
+  defp maybe_time_parse(envelope) do
+    if MetricsConfig.timing_sample?() do
+      t0 = CadenceTime.monotonic(:nanosecond)
+      {result, updated_envelope} = parse_envelope(envelope)
+      t1 = CadenceTime.monotonic(:nanosecond)
+      {result, updated_envelope, div(t1 - t0, 1000)}
+    else
+      {result, updated_envelope} = parse_envelope(envelope)
+      {result, updated_envelope, nil}
+    end
+  end
+
+  defp parse_envelope(envelope) do
+    case Parse.run(envelope) do
+      {:ok, parsed_unit, updated_envelope} ->
+        {{:ok, parsed_unit}, updated_envelope}
+
+      {:error, reason, updated_envelope} ->
+        {{:error, reason}, updated_envelope}
+    end
+  end
+
+  defp maybe_record_parse_timing(_state, _partition_key, nil), do: :ok
+
+  defp maybe_record_parse_timing(state, partition_key, parse_us) do
+    PipelineMetrics.record_timing(state.mission_id, partition_key, :parse, parse_us)
+  end
+
+  defp maybe_schedule_queue_sample(interval_ms)
+       when is_integer(interval_ms) and interval_ms > 0 do
+    if MetricsConfig.enable_process_queue_sampling?() do
+      TimeTimer.send_after(self(), :queue_snapshot, interval_ms)
+    else
+      nil
+    end
+  end
+
+  defp maybe_schedule_queue_sample(_interval_ms), do: nil
+
+  defp record_queue_gauges(state) do
+    if MetricsConfig.enable_process_queue_sampling?() do
+      Enum.each(state.lane_state, fn lane_entry ->
+        record_lane_queue_gauges(state.mission_id, lane_entry)
+      end)
+    end
+
+    state
+  end
+
+  defp record_lane_queue_gauges(mission_id, {lane, lane_state}) do
+    Enum.each(lane_state.queues, fn {shard_id, queue} ->
+      queue_len = :queue.len(queue)
+      PipelineMetrics.set_gauge(mission_id, {lane, shard_id}, :router_queue_len, queue_len)
+    end)
   end
 end

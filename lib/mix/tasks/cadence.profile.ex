@@ -246,7 +246,17 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp print_analysis(analysis) do
-    stages_to_show = [:identify, :decom, :convert, :derive, :end_to_end]
+    stages_to_show = [
+      :parse,
+      :resolve,
+      :decom,
+      :log_append,
+      :identify,
+      :convert,
+      :derive,
+      :end_to_end
+    ]
+
     Enum.each(stages_to_show, &maybe_print_stage_analysis(&1, analysis))
   end
 
@@ -428,6 +438,7 @@ defmodule Mix.Tasks.Cadence.Profile do
     print_stats_snapshot(snapshot, prev)
     print_ccsds_snapshot(snapshot[:ccsds])
     print_sdlp_snapshot(snapshot[:sdlp])
+    print_ingress_snapshot(snapshot[:ingress], snapshot[:sdlp], snapshot, prev)
     print_lanes_snapshot(snapshot[:lanes])
     print_queue_warnings(snapshot[:process_queues] || [])
 
@@ -599,6 +610,104 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp print_sdlp_snapshot(_stats), do: :ok
 
+  defp print_ingress_snapshot(ingress, sdlp, snapshot, prev)
+       when is_map(ingress) and is_map(sdlp) do
+    totals = sdlp_totals(sdlp)
+    envelopes = get_in(ingress, [:counters, :envelopes_emitted]) || 0
+
+    {frames_per_sec, bytes_per_sec, envelopes_per_sec} =
+      ingress_rates(snapshot, prev, totals.frames_decoded, totals.bytes_in, envelopes)
+
+    Mix.shell().info("Ingress (pre-lanes):")
+
+    if frames_per_sec > 0 or bytes_per_sec > 0 or envelopes_per_sec > 0 do
+      Mix.shell().info(
+        "  Throughput: #{format_number(round(frames_per_sec))} frames/sec, " <>
+          "#{format_bytes(round(bytes_per_sec))}/sec, " <>
+          "#{format_number(round(envelopes_per_sec))} envelopes/sec"
+      )
+    end
+
+    print_ingress_timing(ingress)
+
+    if envelopes > 0 do
+      Mix.shell().info(
+        "  Frames→Envelopes: #{format_number(totals.frames_decoded)}/#{format_number(envelopes)} " <>
+          "SDU→Envelopes: #{format_number(totals.sdu_emitted)}/#{format_number(envelopes)}"
+      )
+    end
+  end
+
+  defp print_ingress_snapshot(_ingress, _sdlp, _snapshot, _prev), do: :ok
+
+  defp print_ingress_timing(%{timing: timing, timing_percentiles: percentiles})
+       when is_map(timing) do
+    Mix.shell().info("  Timing (μs):")
+
+    Enum.each([:sdlp_decode, :sdlp_reassembly, :envelope_build], fn stage ->
+      case Map.get(timing, stage) do
+        %{avg_us: avg, min_us: min, max_us: max, count: count} when count > 0 ->
+          stage_name = stage |> to_string() |> String.pad_trailing(14)
+          basic = "#{format_us(avg)} / #{format_us(min)} / #{format_us(max)}"
+          Mix.shell().info("    #{stage_name} #{ingress_timing_line(basic, percentiles, stage)}")
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+
+  defp print_ingress_timing(_ingress), do: :ok
+
+  defp ingress_timing_line(basic, percentiles, stage) when is_map(percentiles) do
+    case Map.get(percentiles, stage) do
+      %{p50: p50, p95: p95, p99: p99} when p50 > 0 ->
+        "#{basic} | #{format_us(p50)} / #{format_us(p95)} / #{format_us(p99)}"
+
+      _ ->
+        basic
+    end
+  end
+
+  defp ingress_timing_line(basic, _percentiles, _stage), do: basic
+
+  defp ingress_rates(snapshot, prev, frames, bytes, envelopes) do
+    case prev do
+      %{timestamp: prev_ts, sdlp: prev_sdlp, ingress: prev_ingress}
+      when is_map(prev_sdlp) and is_map(prev_ingress) ->
+        seconds = max(DateTime.diff(snapshot.timestamp, prev_ts, :millisecond) / 1000, 0.001)
+        prev_totals = sdlp_totals(prev_sdlp)
+        prev_envelopes = get_in(prev_ingress, [:counters, :envelopes_emitted]) || 0
+
+        {
+          (frames - prev_totals.frames_decoded) / seconds,
+          (bytes - prev_totals.bytes_in) / seconds,
+          (envelopes - prev_envelopes) / seconds
+        }
+
+      _ ->
+        {0.0, 0.0, 0.0}
+    end
+  end
+
+  defp sdlp_totals(stats) when is_map(stats) do
+    Enum.reduce(stats, %{frames_decoded: 0, bytes_in: 0, sdu_emitted: 0}, fn {_profile, metrics},
+                                                                                    acc ->
+      if is_map(metrics) do
+        decode = Map.get(metrics, :frame_decode, %{})
+        reasm = Map.get(metrics, :reassembly, %{})
+
+        %{
+          frames_decoded: acc.frames_decoded + Map.get(decode, :total, 0),
+          bytes_in: acc.bytes_in + Map.get(decode, :bytes_in, 0),
+          sdu_emitted: acc.sdu_emitted + Map.get(reasm, :sdu_emitted, 0)
+        }
+      else
+        acc
+      end
+    end)
+  end
+
   defp print_sdlp_totals({profile, metrics}) do
     decode = metrics.frame_decode
     encode = metrics.frame_encode
@@ -651,8 +760,10 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp print_stage_errors_snapshot(_errors), do: :ok
 
   defp print_queue_warnings(queues) do
+    processes = queue_processes(queues)
+
     backed_up =
-      queues
+      processes
       |> Enum.filter(fn q -> is_map(q) && Map.get(q, :queue_len, 0) > 10 end)
 
     if length(backed_up) > 0 do
@@ -662,16 +773,22 @@ defmodule Mix.Tasks.Cadence.Profile do
         Mix.shell().info("   #{q.name}: #{q.queue_len} messages")
       end)
     end
+
+    print_queue_gauges(queues)
   end
 
   defp print_queues(queues) do
-    if Enum.empty?(queues) do
+    processes = queue_processes(queues)
+
+    if Enum.empty?(processes) do
       Mix.shell().info("No mission processes found.")
     else
       Mix.shell().info("Process Queue Depths:\n")
 
-      Enum.each(queues, &print_queue_entry/1)
+      Enum.each(processes, &print_queue_entry/1)
     end
+
+    print_queue_gauges(queues)
   end
 
   defp print_queue_entry(q) do
@@ -694,6 +811,27 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp format_reductions(r) when r >= 1_000_000, do: "#{Float.round(r / 1_000_000, 1)}M"
   defp format_reductions(r) when r >= 1_000, do: "#{Float.round(r / 1_000, 1)}K"
   defp format_reductions(r), do: "#{r}"
+
+  defp queue_processes(%{processes: processes}), do: processes
+  defp queue_processes(processes) when is_list(processes), do: processes
+  defp queue_processes(_), do: []
+
+  defp print_queue_gauges(%{gauges: gauges}) when is_map(gauges) and map_size(gauges) > 0 do
+    router_max = max_gauge_value(gauges, :router_queue_len)
+    shard_max = max_gauge_value(gauges, :shard_queue_len)
+
+    if router_max > 0 or shard_max > 0 do
+      Mix.shell().info("Queue gauges: router_max=#{router_max}, shard_max=#{shard_max}")
+    end
+  end
+
+  defp print_queue_gauges(_), do: :ok
+
+  defp max_gauge_value(gauges_by_partition, gauge) do
+    gauges_by_partition
+    |> Enum.map(fn {_partition, gauges} -> Map.get(gauges, gauge, 0) end)
+    |> Enum.max(fn -> 0 end)
+  end
 
   defp print_timing(timing, percentiles) do
     if timing_has_data?(timing) do
@@ -733,12 +871,14 @@ defmodule Mix.Tasks.Cadence.Profile do
   defp all_timing_stages do
     [
       # Stage timing keys tracked in stats.
+      :parse,
+      :resolve,
+      :decom,
+      :log_append,
       :identify,
       :decommutate,
       :convert,
       :derive,
-      # Decom is shorter name for decommutation
-      :decom,
       # Limits evaluation
       :limits,
       # Shared stages
@@ -941,7 +1081,8 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp print_max_queue(queues) do
-    max_queue = Enum.max_by(queues, & &1[:queue_len], fn -> %{queue_len: 0} end)
+    processes = queue_processes(queues)
+    max_queue = Enum.max_by(processes, & &1[:queue_len], fn -> %{queue_len: 0} end)
 
     if max_queue[:queue_len] > 0 do
       Mix.shell().info("\nMax queue depth:   #{max_queue[:name]} (#{max_queue[:queue_len]} msgs)")
