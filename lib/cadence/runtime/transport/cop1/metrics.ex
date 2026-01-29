@@ -1,21 +1,21 @@
 defmodule Cadence.Runtime.Transport.COP1.Metrics do
   @moduledoc """
-  Lightweight COP-1 metrics keyed by mission/interface/scid/vcid.
+  Lightweight COP-1 metrics keyed by mission/transport/scid/vcid.
   """
 
   @table_name :cadence_cop1_metrics
 
-  def inc(mission_id, interface_id, scid, vcid, metric, amount \\ 1) do
+  def inc(mission_id, transport_id, scid, vcid, metric, amount \\ 1) do
     ensure_table()
-    key = {mission_id, interface_id, scid, vcid, metric}
+    key = {mission_id, transport_id, scid, vcid, metric}
     :ets.update_counter(@table_name, key, {2, amount}, {key, 0})
     :ok
   end
 
-  def set_gauge(mission_id, interface_id, scid, vcid, metric, value)
+  def set_gauge(mission_id, transport_id, scid, vcid, metric, value)
       when is_integer(value) do
     ensure_table()
-    key = {mission_id, interface_id, scid, vcid, metric}
+    key = {mission_id, transport_id, scid, vcid, metric}
     :ets.insert(@table_name, {key, value})
     :ok
   end

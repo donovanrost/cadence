@@ -780,9 +780,9 @@ defmodule CadenceWeb.MissionDashboardLive do
   end
 
   # Real-time updates via PubSub (Data Plane events)
-  def handle_info({:interface_status_changed, interface_id, status}, socket) do
+  def handle_info({:interface_status_changed, transport_id, status}, socket) do
     # Update local state, no DB call
-    interfaces = update_interface_status(socket.assigns.interfaces, interface_id, status)
+    interfaces = update_interface_status(socket.assigns.interfaces, transport_id, status)
     {:noreply, assign(socket, interfaces: interfaces)}
   end
 end
@@ -955,21 +955,21 @@ For very frequent restarts, read from shared ETS instead of supervisor state:
 defmodule Cadence.Config.InterfaceConfigStore do
   @table :interface_configs
 
-  def get(interface_id) do
-    case :ets.lookup(@table, interface_id) do
-      [{^interface_id, config}] -> {:ok, config}
+  def get(transport_id) do
+    case :ets.lookup(@table, transport_id) do
+      [{^transport_id, config}] -> {:ok, config}
       [] -> {:error, :not_found}
     end
   end
 
-  def put(interface_id, config) do
-    :ets.insert(@table, {interface_id, config})
+  def put(transport_id, config) do
+    :ets.insert(@table, {transport_id, config})
   end
 end
 
 # GenServer reads from ETS on restart
-def init(interface_id) do
-  {:ok, config} = InterfaceConfigStore.get(interface_id)
+def init(transport_id) do
+  {:ok, config} = InterfaceConfigStore.get(transport_id)
   # ... continue with config
 end
 ```

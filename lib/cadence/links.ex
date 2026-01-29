@@ -195,9 +195,9 @@ defmodule Cadence.Links do
     |> Repo.all()
   end
 
-  @spec list_bindings_for_interface(organization_id(), mission_id(), Ecto.UUID.t(), keyword()) ::
+  @spec list_bindings_for_transport(organization_id(), mission_id(), Ecto.UUID.t(), keyword()) ::
           [Binding.t()]
-  def list_bindings_for_interface(organization_id, mission_id, interface_id, opts \\ []) do
+  def list_bindings_for_transport(organization_id, mission_id, transport_id, opts \\ []) do
     direction = Keyword.get(opts, :direction)
     desired_states = Keyword.get(opts, :desired_states)
 
@@ -207,7 +207,7 @@ defmodule Cadence.Links do
       |> where(
         [b, c],
         b.organization_id == ^organization_id and b.mission_id == ^mission_id and
-          b.interface_id == ^interface_id and c.enabled == true
+          b.transport_id == ^transport_id and c.enabled == true
       )
       |> preload([_b, c], channel: c)
 

@@ -38,24 +38,24 @@ defmodule Cadence.Runtime.Transport.COP1.Application do
   @spec report_decode_failed(term(), map()) :: :ok
   def report_decode_failed(reason, ctx \\ %{}) do
     mission_id = Map.get(ctx, :mission_id)
-    interface_id = Map.get(ctx, :interface_id)
+    transport_id = Map.get(ctx, :transport_id)
     scid = Map.get(ctx, :scid)
     vcid = Map.get(ctx, :vcid)
 
     if is_binary(mission_id) and is_integer(scid) and is_integer(vcid) do
-      Metrics.inc(mission_id, interface_id, scid, vcid, :cop1_report_decode_failures_total, 1)
+      Metrics.inc(mission_id, transport_id, scid, vcid, :cop1_report_decode_failures_total, 1)
     end
 
     tc_stream_id =
       if is_binary(mission_id) and is_integer(scid) and is_integer(vcid) do
-        TCStreamId.new!(mission_id, interface_id, scid, vcid)
+        TCStreamId.new!(mission_id, transport_id, scid, vcid)
       else
         nil
       end
 
     event = %{
       mission_id: mission_id,
-      interface_id: interface_id,
+      transport_id: transport_id,
       protocol: :cop1,
       status: :cop1_report_decode_failed,
       reason: reason,

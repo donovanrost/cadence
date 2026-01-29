@@ -45,12 +45,12 @@ defmodule Cadence.Telemetry.PipelineRouterTest do
   test "persistence records include required fields" do
     envelope =
       PacketEnvelope.new("mission-1", <<0xAA>>, config_version_seen: 2, router_version: 5)
-      |> Map.put(:provenance, %{interface_id: "if-1"})
+      |> Map.put(:provenance, %{transport_id: "transport-1"})
 
     record = PacketLogRecord.envelope_record(envelope, :payload, 0)
     assert record.record_type == :envelope
     assert record.payload.raw == <<0xAA>>
-    assert record.payload.provenance == %{interface_id: "if-1"}
+    assert record.payload.provenance == %{transport_id: "transport-1"}
     assert record.payload.config_version_seen == 2
 
     resolved = resolved_unit(%{envelope: envelope})

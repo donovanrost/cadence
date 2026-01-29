@@ -109,8 +109,8 @@ The runtime GenServers (`TcpClientInterface`, `TcpServerInterface`) currently fe
 
 ```elixir
 # CURRENT: GenServer fetches from DB
-def start_link(mission_id, interface_id, _config) do
-  interface = Interfaces.get_interface!(interface_id)  # DB call
+def start_link(mission_id, transport_id, _config) do
+  interface = Interfaces.get_interface!(transport_id)  # DB call
   ...
 end
 ```

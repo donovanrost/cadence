@@ -19,7 +19,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   @type t :: %__MODULE__{
           mission_id: String.t() | nil,
-          interface_id: String.t() | nil,
+          transport_id: String.t() | nil,
           stream_id: term() | nil,
           release_fun: release_fun() | nil,
           event_fun: event_fun() | nil,
@@ -46,7 +46,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
   defstruct [
     :mission_id,
-    :interface_id,
+    :transport_id,
     :stream_id,
     :release_fun,
     :event_fun,
@@ -194,7 +194,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
       frame ->
         if frame.retries >= state.max_retransmit do
           Logger.warning(
-            "COP-1 FOP lockout: exceeded max retransmit for interface=#{state.interface_id} seq=#{seq}"
+            "COP-1 FOP lockout: exceeded max retransmit for transport=#{state.transport_id} seq=#{seq}"
           )
 
           state =
@@ -414,7 +414,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     if is_function(event_fun, 1) do
       event_fun.(%{
         mission_id: state.mission_id,
-        interface_id: state.interface_id,
+        transport_id: state.transport_id,
         stream_id: state.stream_id,
         protocol: :cop1,
         correlation_id: correlation_id,
@@ -477,7 +477,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     release =
       ReleasedUplinkFrame.from_frame(
         state.mission_id,
-        state.interface_id,
+        state.transport_id,
         state.stream_id,
         frame,
         kind
@@ -570,7 +570,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
 
       {:error, reason} ->
         Logger.warning(
-          "COP-1 retransmit failed for interface=#{state.interface_id} seq=#{frame.seq}: #{inspect(reason)}"
+          "COP-1 retransmit failed for transport=#{state.transport_id} seq=#{frame.seq}: #{inspect(reason)}"
         )
 
         state
@@ -692,7 +692,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
       %{state | last_report_value: report_value}
     else
       Logger.warning(
-        "COP-1 FOP received out-of-window CLCW report_value=#{report_value} for interface=#{state.interface_id}"
+        "COP-1 FOP received out-of-window CLCW report_value=#{report_value} for transport=#{state.transport_id}"
       )
 
       state
@@ -737,7 +737,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
       %TCStreamId{} = tc_stream_id ->
         Metrics.inc(
           tc_stream_id.mission_id,
-          tc_stream_id.interface_id,
+          tc_stream_id.transport_id,
           tc_stream_id.scid,
           tc_stream_id.vcid,
           metric,
@@ -764,7 +764,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
       %TCStreamId{} = tc_stream_id ->
         Metrics.set_gauge(
           tc_stream_id.mission_id,
-          tc_stream_id.interface_id,
+          tc_stream_id.transport_id,
           tc_stream_id.scid,
           tc_stream_id.vcid,
           metric,
@@ -782,7 +782,7 @@ defmodule Cadence.Runtime.Transport.COP1.Stream do
     if is_function(event_fun, 1) do
       event_fun.(%{
         mission_id: state.mission_id,
-        interface_id: state.interface_id,
+        transport_id: state.transport_id,
         stream_id: state.stream_id,
         protocol: :cop1,
         status: status,

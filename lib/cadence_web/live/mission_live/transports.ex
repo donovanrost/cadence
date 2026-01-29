@@ -82,13 +82,13 @@ defmodule CadenceWeb.MissionLive.Transports do
   end
 
   @impl true
-  def handle_event("delete", %{"id" => interface_id}, socket) do
+  def handle_event("delete", %{"id" => transport_id}, socket) do
     mission = socket.assigns.mission
     org_id = socket.assigns.current_scope.current_organization.id
 
     with :ok <- authorize_manage(socket),
-         {:ok, interface} <- Transports.get_interface(org_id, mission.id, interface_id),
-         {:ok, _} <- Transports.delete_interface(org_id, mission.id, interface) do
+         {:ok, transport} <- Transports.get_interface(org_id, mission.id, transport_id),
+         {:ok, _} <- Transports.delete_interface(org_id, mission.id, transport) do
       interfaces = Transports.list_interfaces(org_id, mission.id)
 
       {:noreply,

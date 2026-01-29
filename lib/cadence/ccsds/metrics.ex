@@ -5,9 +5,9 @@ defmodule Cadence.CCSDS.Metrics do
 
   @table_name :cadence_ccsds_metrics
 
-  def inc(mission_id, interface_id, profile, metric, amount \\ 1) do
+  def inc(mission_id, transport_id, profile, metric, amount \\ 1) do
     ensure_table()
-    key = {mission_id, interface_id, profile, metric}
+    key = {mission_id, transport_id, profile, metric}
     :ets.update_counter(@table_name, key, {2, amount}, {key, 0})
     :ok
   end
@@ -27,14 +27,14 @@ defmodule Cadence.CCSDS.Metrics do
   end
 
   defp build_stats(rows) do
-    Enum.reduce(rows, %{}, fn {interface_id, profile, metric, count}, acc ->
-      update_interface_stats(acc, interface_id, profile, metric, count)
+    Enum.reduce(rows, %{}, fn {transport_id, profile, metric, count}, acc ->
+      update_transport_stats(acc, transport_id, profile, metric, count)
     end)
   end
 
-  defp update_interface_stats(acc, interface_id, profile, metric, count) do
-    Map.update(acc, interface_id, %{profile => %{metric => count}}, fn interface_stats ->
-      update_profile_stats(interface_stats, profile, metric, count)
+  defp update_transport_stats(acc, transport_id, profile, metric, count) do
+    Map.update(acc, transport_id, %{profile => %{metric => count}}, fn transport_stats ->
+      update_profile_stats(transport_stats, profile, metric, count)
     end)
   end
 

@@ -87,7 +87,7 @@ Uplink bytes released for transport with link metadata.
 
 Required fields:
 - mission_id
-- interface_id
+- transport_id
 - bytes
 - kind (direct | initial | retransmit | bypass)
 - stream_id (optional)

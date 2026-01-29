@@ -28,7 +28,7 @@ Instead of one giant `events` table with a JSON blob, each event type gets its o
 |-------|-------------|---------|
 | Rich | Many domain-specific columns | `CommandDispatched` (name, params, target, hazardous) |
 | Medium | A few key columns | `CommandVerified` (result, stages) |
-| Minimal | Just an ID and maybe one field | `CommandSent` (interface_id) |
+| Minimal | Just an ID and maybe one field | `CommandSent` (transport_id) |
 
 ## The Recordable Protocol
 

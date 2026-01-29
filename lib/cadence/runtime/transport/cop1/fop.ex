@@ -89,7 +89,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
 
     base_stream = %{
       mission_id: mission_id,
-      interface_id: nil,
+      transport_id: nil,
       enabled: enabled,
       release_fun: release_fun,
       frame_size: frame_size,
@@ -120,10 +120,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
 
   def handle_call({:send_frames, frames, context}, _from, state) when is_list(frames) do
     with {:ok, context} <- normalize_context(context),
-         {:ok, interface_id} <- active_interface(state),
-         {:ok, stream_id} <- resolve_stream_id(context, state, interface_id),
+         {:ok, transport_id} <- active_transport(state),
+         {:ok, stream_id} <- resolve_stream_id(context, state, transport_id),
          {:ok, vcid} <- resolve_stream_vcid(context, stream_id, state.base_stream),
-         base_stream <- %{state.base_stream | interface_id: interface_id},
+         base_stream <- %{state.base_stream | transport_id: transport_id},
          {:ok, pid, status} <-
            StreamSupervisor.ensure_stream(state.mission_id, stream_id, base_stream, vcid: vcid),
          :ok <- maybe_apply_cached_report(status, pid, state, stream_id) do
@@ -181,14 +181,14 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp active_interface(state) do
+  defp active_transport(state) do
     if link_controller_running?(state) do
-      case LinkController.active_uplink_interface(state.mission_id, state.channel_id) do
-        nil -> {:error, :no_active_interface}
-        interface_id -> {:ok, interface_id}
+      case LinkController.active_uplink_transport(state.mission_id, state.channel_id) do
+        nil -> {:error, :no_active_transport}
+        transport_id -> {:ok, transport_id}
       end
     else
-      {:error, :no_active_interface}
+      {:error, :no_active_transport}
     end
   end
 
@@ -228,7 +228,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
       correlation_id: release.correlation_id
     }
 
-    case Transport.send_bytes(release.mission_id, release.interface_id, release.bytes, meta) do
+    case Transport.send_bytes(release.mission_id, release.transport_id, release.bytes, meta) do
       :ok -> :ok
       {:error, reason} -> {:error, :send_failed, reason}
     end
@@ -238,15 +238,15 @@ defmodule Cadence.Runtime.Transport.COP1.FOP do
   defp normalize_context(%Context{} = context), do: {:ok, context}
   defp normalize_context(_), do: {:error, :invalid_context}
 
-  defp resolve_stream_id(%Context{stream_id: %TCStreamId{} = stream_id}, _state, _interface_id),
+  defp resolve_stream_id(%Context{stream_id: %TCStreamId{} = stream_id}, _state, _transport_id),
     do: {:ok, stream_id}
 
-  defp resolve_stream_id(%Context{} = context, state, interface_id) do
+  defp resolve_stream_id(%Context{} = context, state, transport_id) do
     scid = (context.stream_id && context.stream_id.scid) || state.channel_id.scid
     vcid = (context.stream_id && context.stream_id.vcid) || state.channel_id.vcid
     map_id = context.stream_id && context.stream_id.map_id
 
-    {:ok, TCStreamId.new!(state.mission_id, interface_id, scid, vcid, map_id: map_id)}
+    {:ok, TCStreamId.new!(state.mission_id, transport_id, scid, vcid, map_id: map_id)}
   end
 
   defp resolve_stream_vcid(%Context{vcid: vcid}, _stream_id, _base_stream) when is_integer(vcid),

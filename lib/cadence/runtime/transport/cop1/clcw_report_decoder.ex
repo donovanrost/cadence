@@ -36,8 +36,8 @@ defmodule Cadence.Runtime.Transport.COP1.CLCWReportDecoder do
     with {:ok, mission_id} <- fetch_context(ctx, :mission_id),
          {:ok, scid} <- fetch_context(ctx, :scid),
          {:ok, vcid} <- fetch_vcid(ctx, clcw) do
-      interface_id = Map.get(ctx, :interface_id)
-      tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
+      transport_id = Map.get(ctx, :transport_id)
+      tc_stream_id = TCStreamId.new!(mission_id, transport_id, scid, vcid)
 
       {:ok,
        %Report{

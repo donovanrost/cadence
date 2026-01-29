@@ -38,7 +38,6 @@ defmodule Cadence.TestSupport do
       dashboard_layout_repository: Application.get_env(:cadence, :dashboard_layout_repository),
       event_recorder: Application.get_env(:cadence, :event_recorder),
       execution_operations: Application.get_env(:cadence, :execution_operations),
-      interface_repository: Application.get_env(:cadence, :interface_repository),
       membership_repository: Application.get_env(:cadence, :membership_repository),
       missions_repository: Application.get_env(:cadence, :missions_repository),
       notification_repository: Application.get_env(:cadence, :notification_repository),
@@ -47,7 +46,6 @@ defmodule Cadence.TestSupport do
       queue_repository: Application.get_env(:cadence, :queue_repository),
       schedule_repository: Application.get_env(:cadence, :schedule_repository),
       settings_repository: Application.get_env(:cadence, :settings_repository),
-      target_interface_repository: Application.get_env(:cadence, :target_interface_repository),
       target_repository: Application.get_env(:cadence, :target_repository),
       token_repository: Application.get_env(:cadence, :token_repository),
       user_repository: Application.get_env(:cadence, :user_repository),
@@ -62,7 +60,6 @@ defmodule Cadence.TestSupport do
     start_if_needed(Cadence.Test.Adapters.InMemoryCommandsRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryDashboardLayoutRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryEventRecorder)
-    start_if_needed(Cadence.Test.Adapters.InMemoryInterfaceRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryMembershipRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryMissionsRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryNotificationRepository)
@@ -71,7 +68,6 @@ defmodule Cadence.TestSupport do
     start_if_needed(Cadence.Test.Adapters.InMemoryQueueRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryScheduleRepository)
     start_if_needed(Cadence.Test.Adapters.InMemorySettingsRepository)
-    start_if_needed(Cadence.Test.Adapters.InMemoryTargetInterfaceRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryTargetRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryTokenRepository)
     start_if_needed(Cadence.Test.Adapters.InMemoryUserRepository)
@@ -115,12 +111,6 @@ defmodule Cadence.TestSupport do
       :cadence,
       :execution_operations,
       Cadence.Test.Adapters.InMemoryProcedureRepository
-    )
-
-    Application.put_env(
-      :cadence,
-      :interface_repository,
-      Cadence.Test.Adapters.InMemoryInterfaceRepository
     )
 
     Application.put_env(
@@ -173,12 +163,6 @@ defmodule Cadence.TestSupport do
 
     Application.put_env(
       :cadence,
-      :target_interface_repository,
-      Cadence.Test.Adapters.InMemoryTargetInterfaceRepository
-    )
-
-    Application.put_env(
-      :cadence,
       :target_repository,
       Cadence.Test.Adapters.InMemoryTargetRepository
     )
@@ -207,7 +191,6 @@ defmodule Cadence.TestSupport do
     stop_if_needed(Cadence.Test.Adapters.InMemoryCommandsRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryDashboardLayoutRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryEventRecorder)
-    stop_if_needed(Cadence.Test.Adapters.InMemoryInterfaceRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryMembershipRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryMissionsRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryNotificationRepository)
@@ -216,7 +199,6 @@ defmodule Cadence.TestSupport do
     stop_if_needed(Cadence.Test.Adapters.InMemoryQueueRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryScheduleRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemorySettingsRepository)
-    stop_if_needed(Cadence.Test.Adapters.InMemoryTargetInterfaceRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryTargetRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryTokenRepository)
     stop_if_needed(Cadence.Test.Adapters.InMemoryUserRepository)

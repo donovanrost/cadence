@@ -7,7 +7,7 @@ defmodule Cadence.Runtime.Uplink.ReleasedUplinkFrame do
 
   @type t :: %__MODULE__{
           mission_id: String.t(),
-          interface_id: String.t(),
+          transport_id: String.t(),
           stream_id: term() | nil,
           seq: non_neg_integer() | nil,
           bytes: binary(),
@@ -18,7 +18,7 @@ defmodule Cadence.Runtime.Uplink.ReleasedUplinkFrame do
 
   defstruct [
     :mission_id,
-    :interface_id,
+    :transport_id,
     :stream_id,
     :seq,
     :bytes,
@@ -28,11 +28,11 @@ defmodule Cadence.Runtime.Uplink.ReleasedUplinkFrame do
   ]
 
   @spec from_frame(String.t(), String.t(), term() | nil, map(), kind()) :: t()
-  def from_frame(mission_id, interface_id, stream_id, frame, kind)
-      when is_binary(mission_id) and is_binary(interface_id) and is_map(frame) do
+  def from_frame(mission_id, transport_id, stream_id, frame, kind)
+      when is_binary(mission_id) and is_binary(transport_id) and is_map(frame) do
     %__MODULE__{
       mission_id: mission_id,
-      interface_id: interface_id,
+      transport_id: transport_id,
       stream_id: stream_id,
       seq: Map.get(frame, :seq),
       bytes: Map.fetch!(frame, :bytes),
@@ -43,11 +43,11 @@ defmodule Cadence.Runtime.Uplink.ReleasedUplinkFrame do
   end
 
   @spec from_bytes(String.t(), String.t(), term() | nil, binary(), kind(), term() | nil) :: t()
-  def from_bytes(mission_id, interface_id, stream_id, bytes, kind, correlation_id \\ nil)
-      when is_binary(mission_id) and is_binary(interface_id) and is_binary(bytes) do
+  def from_bytes(mission_id, transport_id, stream_id, bytes, kind, correlation_id \\ nil)
+      when is_binary(mission_id) and is_binary(transport_id) and is_binary(bytes) do
     %__MODULE__{
       mission_id: mission_id,
-      interface_id: interface_id,
+      transport_id: transport_id,
       stream_id: stream_id,
       seq: nil,
       bytes: bytes,

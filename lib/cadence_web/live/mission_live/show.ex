@@ -4,9 +4,9 @@ defmodule CadenceWeb.MissionLive.Show do
   """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Alarms, Interfaces, MissionDatabase, Missions, Targets}
-  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
+  alias Cadence.{Alarms, MissionDatabase, Missions, Targets, Transports}
   alias Cadence.Telemetry.Database.DerivedItem
+  alias Cadence.Transports.Events.TransportConnectionEvent
 
   @impl true
   def mount(_params, _session, socket) do
@@ -41,14 +41,15 @@ defmodule CadenceWeb.MissionLive.Show do
 
     # Load summary counts for the overview cards
     targets = Targets.list_targets(mission)
-    interfaces = Interfaces.list_interfaces(mission)
+    org_id = socket.assigns.current_scope.current_organization.id
+    transports = Transports.list_interfaces(org_id, mission.id)
     databases = MissionDatabase.list_databases(mission.id)
     derived_items = DerivedItem.list_all(mission.id)
     alarm_rules = Alarms.list_rules(mission.organization_id, mission_id: mission.id)
 
     # Calculate summary stats
     targets_online = Enum.count(targets, &(&1.status == :online))
-    interfaces_connected = Enum.count(interfaces, &(&1.status == "connected"))
+    transports_connected = 0
 
     # Get active definition set from first database with one
     active_definition_set =
@@ -59,19 +60,19 @@ defmodule CadenceWeb.MissionLive.Show do
 
     enabled_alarms = Enum.count(alarm_rules, & &1.enabled)
 
-    # Build interface connection status map
-    interface_connection_status =
-      Enum.reduce(interfaces, %{}, fn interface, acc ->
-        Map.put(acc, interface.id, %{state: :unknown, client_count: 0})
+    # Build transport connection status map
+    transport_connection_status =
+      Enum.reduce(transports, %{}, fn transport, acc ->
+        Map.put(acc, transport.id, %{state: :unknown, client_count: 0})
       end)
 
     socket
     |> assign(:page_title, mission.name)
     |> assign(:targets, targets)
     |> assign(:targets_online, targets_online)
-    |> assign(:interfaces, interfaces)
-    |> assign(:interfaces_connected, interfaces_connected)
-    |> assign(:interface_connection_status, interface_connection_status)
+    |> assign(:transports, transports)
+    |> assign(:transports_connected, transports_connected)
+    |> assign(:transport_connection_status, transport_connection_status)
     |> assign(:databases, databases)
     |> assign(:active_definition_set, active_definition_set)
     |> assign(:derived_items_count, length(derived_items))
@@ -165,26 +166,26 @@ defmodule CadenceWeb.MissionLive.Show do
      |> assign(:targets_online, targets_online)}
   end
 
-  # Real-time interface connection status updates
-  def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, socket) do
-    interface_connection_status =
+  # Real-time transport connection status updates
+  def handle_info({:transport_connection_event, %TransportConnectionEvent{} = event}, socket) do
+    transport_connection_status =
       Map.put(
-        socket.assigns[:interface_connection_status] || %{},
-        event.interface_id,
+        socket.assigns[:transport_connection_status] || %{},
+        event.transport_id,
         %{state: event.new_state, client_count: event.client_count}
       )
 
     # Recalculate connected count based on real-time status
-    interfaces_connected =
-      Enum.count(socket.assigns.interfaces, fn interface ->
-        conn_status = Map.get(interface_connection_status, interface.id, %{state: :disconnected})
+    transports_connected =
+      Enum.count(socket.assigns.transports, fn transport ->
+        conn_status = Map.get(transport_connection_status, transport.id, %{state: :disconnected})
         conn_status.state == :connected
       end)
 
     {:noreply,
      socket
-     |> assign(:interface_connection_status, interface_connection_status)
-     |> assign(:interfaces_connected, interfaces_connected)}
+     |> assign(:transport_connection_status, transport_connection_status)
+     |> assign(:transports_connected, transports_connected)}
   end
 
   # Catch-all for other PubSub events
@@ -255,17 +256,17 @@ defmodule CadenceWeb.MissionLive.Show do
           </div>
         </.link>
         
-    <!-- Interfaces Card -->
-        <.link navigate={~p"/missions/#{@mission}/interfaces"} class="block">
+    <!-- Transports Card -->
+        <.link navigate={~p"/missions/#{@mission}/transports"} class="block">
           <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
             <div class="card-body p-4">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="text-sm text-base-content/60">Interfaces</p>
+                  <p class="text-sm text-base-content/60">Transports</p>
                   <p class="text-2xl font-bold">
-                    <span class="text-success">{@interfaces_connected}</span>
+                    <span class="text-success">{@transports_connected}</span>
                     <span class="text-base-content/40">/</span>
-                    <span>{length(@interfaces)}</span>
+                    <span>{length(@transports)}</span>
                   </p>
                   <p class="text-xs text-base-content/50">connected</p>
                 </div>

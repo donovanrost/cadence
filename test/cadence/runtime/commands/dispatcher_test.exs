@@ -104,8 +104,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
     config = %MissionConfig{
       mission_id: mission.id,
       organization_id: org.id,
-      mission: mission_entity,
-      target_interface_routings: []
+      mission: mission_entity
     }
 
     {:ok, _uplink_pid} =
@@ -200,11 +199,11 @@ defmodule Cadence.Runtime.Commands.TargetDispatcherTest do
       {:error, :requires_confirmation, info} =
         Commands.dispatch(mission.id, "SAFE_MODE", %{}, target: target.id)
 
-      # Confirm should either succeed or fail due to no interface (which is expected in test)
+      # Confirm should either succeed or fail due to no transport (which is expected in test)
       result = Commands.confirm_dispatch(mission.id, target.id, info.token)
 
-      # Will fail because we don't have an interface set up, but the confirmation worked
-      assert {:error, :no_interface} = result
+      # Will fail because we don't have a transport set up, but the confirmation worked
+      assert {:error, :no_transport} = result
     end
 
     test "token expires after timeout", %{mission: mission, target: target} do

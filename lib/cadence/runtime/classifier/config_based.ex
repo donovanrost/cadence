@@ -11,7 +11,7 @@ defmodule Cadence.Runtime.Classifier.ConfigBased do
   alias Cadence.Runtime.Telemetry.ConfigBundle
 
   @impl true
-  def classify(organization_id, mission_id, interface_id, _bytes, metadata) do
+  def classify(organization_id, mission_id, transport_id, _bytes, metadata) do
     case metadata do
       %{channel_id: %ChannelId{} = channel_id} ->
         {:ok, channel_id}
@@ -24,8 +24,8 @@ defmodule Cadence.Runtime.Classifier.ConfigBased do
 
         with {:ok, bundle} <- ConfigBundle.fetch(mission_id),
              [channel_id] <-
-               bundle.bindings_by_interface
-               |> Map.get(interface_id, [])
+               bundle.bindings_by_transport
+               |> Map.get(transport_id, [])
                |> Enum.uniq_by(&ChannelId.key/1) do
           {:ok, channel_id}
         else

@@ -766,7 +766,7 @@ Interfaces manage external connections. Some config changes require reconnection
 ```elixir
 defmodule Cadence.Runtime.Interfaces.InterfaceSupervisor do
   def handle_info({:apply_config, %{interfaces: new_interfaces}}, state) do
-    current_ids = get_running_interface_ids(state)
+    current_ids = get_running_transport_ids(state)
     new_ids = MapSet.new(new_interfaces, & &1.id)
 
     # Stop removed interfaces

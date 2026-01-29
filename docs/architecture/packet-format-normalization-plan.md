@@ -163,7 +163,7 @@ Identification:
 
 Lane routing:
 - Selectors may match on `packet_key`, `target_id`, `format`,
-  or metadata (`interface_id`, `source`)
+  or metadata (`transport_id`, `source`)
 
 ### Lane/shard routing
 ```

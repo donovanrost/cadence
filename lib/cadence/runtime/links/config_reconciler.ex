@@ -79,12 +79,12 @@ defmodule Cadence.Runtime.Links.ConfigReconciler do
           "Applying link config for mission_id=#{state.mission_id} generation=#{bundle.config_version}"
         )
 
-        apply_interfaces(state, bundle)
+        apply_transports(state, bundle)
         apply_links(state, bundle)
         apply_bindings(state, bundle)
         apply_selections(state, bundle)
         apply_channel_protocols(state, bundle)
-        sync_connected_interfaces(state, bundle)
+        sync_connected_transports(state, bundle)
 
         state
 
@@ -97,17 +97,17 @@ defmodule Cadence.Runtime.Links.ConfigReconciler do
     end
   end
 
-  defp apply_interfaces(state, bundle) do
+  defp apply_transports(state, bundle) do
     bundle
     |> Map.get(:transport_interfaces, [])
-    |> Enum.each(&apply_interface(state, &1))
+    |> Enum.each(&apply_transport(state, &1))
   end
 
-  defp apply_interface(state, interface) do
-    if interface.enabled do
-      _ = InterfaceSupervisor.ensure_started(state.mission_id, interface.id, interface)
+  defp apply_transport(state, transport) do
+    if transport.enabled do
+      _ = InterfaceSupervisor.ensure_started(state.mission_id, transport.id, transport)
     else
-      _ = InterfaceSupervisor.ensure_stopped(state.mission_id, interface.id)
+      _ = InterfaceSupervisor.ensure_stopped(state.mission_id, transport.id)
     end
   end
 
@@ -163,7 +163,7 @@ defmodule Cadence.Runtime.Links.ConfigReconciler do
     selection_value =
       case selection.binding do
         nil -> nil
-        binding -> binding.interface_id
+        binding -> binding.transport_id
       end
 
     LinkController.set_active_selection(
@@ -174,12 +174,12 @@ defmodule Cadence.Runtime.Links.ConfigReconciler do
     )
   end
 
-  defp sync_connected_interfaces(state, bundle) do
+  defp sync_connected_transports(state, bundle) do
     bundle
     |> Map.get(:transport_interfaces, [])
-    |> Enum.each(fn interface ->
-      if Transport.connected?(state.mission_id, interface.id) do
-        Router.interface_connected(state.mission_id, interface.id)
+    |> Enum.each(fn transport ->
+      if Transport.connected?(state.mission_id, transport.id) do
+        Router.transport_connected(state.mission_id, transport.id)
       end
     end)
   end
@@ -228,7 +228,7 @@ defmodule Cadence.Runtime.Links.ConfigReconciler do
     %Binding{
       mission_id: binding.mission_id,
       channel_id: channel_id,
-      interface_id: binding.interface_id,
+      transport_id: binding.transport_id,
       direction: binding.direction,
       role: binding.role,
       priority: binding.priority,

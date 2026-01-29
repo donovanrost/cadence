@@ -1,10 +1,10 @@
-defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
+defmodule Cadence.Transports.Events.TransportConnectionEvent do
   @moduledoc """
-  Event emitted when an interface's connection state changes.
+  Event emitted when a transport's connection state changes.
 
   Connection events are broadcast via PubSub when:
-  - An interface goes from disconnected to connected (first client connects)
-  - An interface goes from connected to disconnected (last client disconnects)
+  - A transport goes from disconnected to connected (first client connects)
+  - A transport goes from connected to disconnected (last client disconnects)
 
   These events can trigger alarms to alert operators of communication loss.
 
@@ -12,8 +12,8 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
 
   - `id` - Unique event identifier
   - `mission_id` - Mission this event belongs to
-  - `interface_id` - Interface that changed state
-  - `interface_name` - Human-readable interface name
+  - `transport_id` - Transport that changed state
+  - `transport_name` - Human-readable transport name
   - `previous_state` - State before transition (:connected or :disconnected)
   - `new_state` - State after transition (:connected or :disconnected)
   - `client_count` - Number of connected clients after the change
@@ -35,9 +35,9 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
       Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:\#{mission_id}:events")
 
       # Handle events
-      def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, state) do
+      def handle_info({:transport_connection_event, %TransportConnectionEvent{} = event}, state) do
         if event.new_state == :disconnected do
-          Logger.warning("Interface \#{event.interface_name} lost all connections")
+          Logger.warning("Transport \#{event.transport_name} lost all connections")
         end
         {:noreply, state}
       end
@@ -50,8 +50,8 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
   @type t :: %__MODULE__{
           id: String.t(),
           mission_id: String.t(),
-          interface_id: String.t(),
-          interface_name: String.t() | nil,
+          transport_id: String.t(),
+          transport_name: String.t() | nil,
           previous_state: connection_state(),
           new_state: connection_state(),
           client_count: non_neg_integer(),
@@ -63,8 +63,8 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
   defstruct [
     :id,
     :mission_id,
-    :interface_id,
-    :interface_name,
+    :transport_id,
+    :transport_name,
     :previous_state,
     :new_state,
     :client_count,
@@ -73,15 +73,15 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
   ]
 
   @doc """
-  Creates a new InterfaceConnectionEvent.
+  Creates a new TransportConnectionEvent.
   """
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     %__MODULE__{
       id: attrs[:id] || generate_id(),
       mission_id: attrs[:mission_id],
-      interface_id: attrs[:interface_id],
-      interface_name: attrs[:interface_name],
+      transport_id: attrs[:transport_id],
+      transport_name: attrs[:transport_name],
       previous_state: attrs[:previous_state],
       new_state: attrs[:new_state],
       client_count: attrs[:client_count] || 0,
@@ -109,14 +109,14 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
   """
   @spec describe(t()) :: String.t()
   def describe(%__MODULE__{} = event) do
-    name = event.interface_name || event.interface_id
+    name = event.transport_name || event.transport_id
 
     case event.new_state do
       :connected ->
-        "Interface #{name}: CONNECTED (#{event.client_count} client(s))"
+        "Transport #{name}: CONNECTED (#{event.client_count} client(s))"
 
       :disconnected ->
-        "Interface #{name}: DISCONNECTED"
+        "Transport #{name}: DISCONNECTED"
     end
   end
 
@@ -128,7 +128,7 @@ defmodule Cadence.Interfaces.Events.InterfaceConnectionEvent do
     Phoenix.PubSub.broadcast(
       Cadence.PubSub,
       "mission:#{event.mission_id}:events",
-      {:interface_connection_event, event}
+      {:transport_connection_event, event}
     )
   end
 

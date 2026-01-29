@@ -19,13 +19,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
   """
 
   alias Cadence.Application.Commanding.QueueSnapshotLoader
-  alias Cadence.Application.Interfaces.InterfaceQueries
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
-  alias Cadence.Domain.Interfaces.Entities.TargetInterface, as: TargetInterfaceEntity
-  alias Cadence.Interfaces.InterfaceSchema
-  alias Cadence.Interfaces.InterfaceVcid
-  alias Cadence.Interfaces.TargetInterface, as: TargetInterfaceSchema
   alias Cadence.Links
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Repo
@@ -41,11 +36,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
           mission_id: String.t(),
           organization_id: String.t(),
           config_generation: integer(),
+          config_health: map(),
           mission: map(),
-          interfaces: list(),
           targets: list(),
-          target_interface_routings: list(),
-          interface_vcids: list(),
           queue_snapshots: map(),
           packet_defs: list(),
           packet_catalog_defs: list(),
@@ -66,10 +59,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
     :organization_id,
     :config_generation,
     :mission,
-    interfaces: [],
+    config_health: %{},
     targets: [],
-    target_interface_routings: [],
-    interface_vcids: [],
     queue_snapshots: %{},
     packet_defs: [],
     packet_catalog_defs: [],
@@ -94,11 +85,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
   @spec load(String.t()) :: {:ok, t()} | {:error, term()}
   def load(mission_id) when is_binary(mission_id) do
     with {:ok, mission} <- load_mission(mission_id),
-         {:ok, interfaces} <- load_interfaces(mission_id),
          {:ok, targets} <- load_targets(mission_id),
-         {:ok, target_interface_routings} <- load_target_interface_routings(mission_id),
-         {:ok, interface_vcids} <- load_interface_vcids(mission_id),
-         :ok <- validate_tc_stream_ids(target_interface_routings, interfaces, interface_vcids),
          {:ok, queue_snapshots} <- load_queue_snapshots(mission_id, targets),
          {:ok, packet_catalog_defs} <- load_packet_catalog_defs(mission_id, targets),
          {:ok, packet_defs} <- load_packet_definitions(mission_id),
@@ -118,11 +105,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
          mission_id: mission_id,
          organization_id: mission.organization_id,
          config_generation: mission.config_generation,
+         config_health: %{},
          mission: mission,
-         interfaces: interfaces,
          targets: targets,
-         target_interface_routings: target_interface_routings,
-         interface_vcids: interface_vcids,
          queue_snapshots: queue_snapshots,
          packet_defs: packet_defs,
          packet_catalog_defs: packet_catalog_defs,
@@ -146,15 +131,6 @@ defmodule Cadence.Application.Missions.MissionConfig do
 
   defp load_mission(mission_id) do
     MissionQueries.find(mission_id)
-  end
-
-  defp load_interfaces(mission_id) do
-    interfaces = InterfaceQueries.list_for_mission(mission_id)
-    {:ok, interfaces}
-  rescue
-    e ->
-      Logger.warning("Failed to load interfaces for mission #{mission_id}: #{inspect(e)}")
-      {:ok, []}
   end
 
   defp load_targets(mission_id) do
@@ -200,42 +176,6 @@ defmodule Cadence.Application.Missions.MissionConfig do
 
       {:ok, containers}
     end
-  end
-
-  defp load_target_interface_routings(mission_id) do
-    routings =
-      from(ti in TargetInterfaceSchema,
-        join: t in Cadence.Targets.Target,
-        on: ti.target_id == t.id,
-        where: t.mission_id == ^mission_id
-      )
-      |> Repo.all()
-      |> Enum.map(&TargetInterfaceEntity.from_persistence/1)
-
-    {:ok, routings}
-  rescue
-    e ->
-      Logger.warning(
-        "Failed to load target-interface routings for mission #{mission_id}: #{inspect(e)}"
-      )
-
-      {:ok, []}
-  end
-
-  defp load_interface_vcids(mission_id) do
-    vcids =
-      from(v in InterfaceVcid,
-        join: i in InterfaceSchema,
-        on: v.interface_id == i.id,
-        where: i.mission_id == ^mission_id
-      )
-      |> Repo.all()
-
-    {:ok, vcids}
-  rescue
-    e ->
-      Logger.warning("Failed to load interface vcids for mission #{mission_id}: #{inspect(e)}")
-      {:ok, []}
   end
 
   defp load_queue_snapshots(mission_id, targets) do
@@ -336,97 +276,5 @@ defmodule Cadence.Application.Missions.MissionConfig do
       Logger.warning("Failed to load channel targets for mission #{mission_id}: #{inspect(e)}")
 
       {:ok, []}
-  end
-
-  defp validate_tc_stream_ids(routings, _interfaces, interface_vcids) do
-    {vcid_by_target, vcid_defaults} = index_vcids(interface_vcids)
-
-    cop1_routes =
-      Enum.filter(routings, fn route ->
-        TargetInterfaceEntity.allows_write?(route)
-      end)
-
-    missing_errors =
-      Enum.flat_map(cop1_routes, fn route ->
-        scid =
-          case route.scid do
-            scid when is_integer(scid) -> scid
-            _ -> nil
-          end
-
-        vcid =
-          Map.get(vcid_by_target, {route.interface_id, route.target_id}) ||
-            Map.get(vcid_defaults, route.interface_id)
-
-        []
-        |> maybe_add_missing(route, :scid, scid)
-        |> maybe_add_missing(route, :vcid, vcid)
-      end)
-
-    ambiguity_errors = ambiguous_route_errors(routings)
-
-    errors = missing_errors ++ ambiguity_errors
-
-    if errors == [] do
-      :ok
-    else
-      {:error, {:invalid_tc_stream_ids, errors}}
-    end
-  end
-
-  defp maybe_add_missing(errors, route, key, value) do
-    if is_nil(value) do
-      errors ++
-        [
-          %{
-            target_id: route.target_id,
-            interface_id: route.interface_id,
-            reason: :"missing_#{key}"
-          }
-        ]
-    else
-      errors
-    end
-  end
-
-  defp ambiguous_route_errors(routings) do
-    routings
-    |> Enum.filter(&TargetInterfaceEntity.allows_write?/1)
-    |> Enum.group_by(& &1.target_id)
-    |> Enum.flat_map(fn {target_id, routes} ->
-      interface_ids =
-        routes
-        |> Enum.map(& &1.interface_id)
-        |> Enum.uniq()
-
-      if length(interface_ids) > 1 do
-        [
-          %{
-            target_id: target_id,
-            interface_ids: interface_ids,
-            reason: :ambiguous_routes
-          }
-        ]
-      else
-        []
-      end
-    end)
-  end
-
-  defp index_vcids(nil), do: {%{}, %{}}
-  defp index_vcids([]), do: {%{}, %{}}
-
-  defp index_vcids(vcid_mappings) when is_list(vcid_mappings) do
-    Enum.reduce(vcid_mappings, {%{}, %{}}, fn mapping, {by_target, defaults} ->
-      interface_id = mapping.interface_id
-      vcid = mapping.vcid
-      target_id = mapping.target_id
-
-      if is_binary(target_id) do
-        {Map.put(by_target, {interface_id, target_id}, vcid), defaults}
-      else
-        {by_target, Map.put(defaults, interface_id, vcid)}
-      end
-    end)
   end
 end

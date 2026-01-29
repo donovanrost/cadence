@@ -93,7 +93,7 @@ defmodule Cadence.Runtime.TargetPipelineSupervisorIntegrationTest do
     {:ok, binding} =
       Links.create_binding(org.id, mission.id, %{
         channel_id: channel.id,
-        interface_id: interface.id,
+        transport_id: interface.id,
         direction: :both,
         role: :primary,
         priority: 100,
@@ -122,12 +122,12 @@ defmodule Cadence.Runtime.TargetPipelineSupervisorIntegrationTest do
     _ = wait_for_registry({:link_binding, mission.id, scid, interface.id})
 
     channel_id = ChannelId.new(scid, vcid, map_id)
-    Router.interface_connected(mission.id, interface.id)
+    Router.transport_connected(mission.id, interface.id)
     :ok = wait_for(fn -> binding_active?(mission.id, channel_id, interface.id) end)
 
     Router.ingest(mission.id, interface.id, <<>>, %{
       channel_id: channel_id,
-      interface_id: interface.id
+      transport_id: interface.id
     })
 
     {:ok, channel_pid} =
@@ -138,7 +138,7 @@ defmodule Cadence.Runtime.TargetPipelineSupervisorIntegrationTest do
     fop_pid = wait_for_registry({:cop1_fop, mission.id, ChannelId.key(channel_id)})
     assert_process_alive(fop_pid)
 
-    :ok = wait_for(fn -> active_uplink_interface?(mission.id, channel_id) end)
+    :ok = wait_for(fn -> active_uplink_transport?(mission.id, channel_id) end)
 
     stream_id = TCStreamId.new!(mission.id, interface.id, scid, vcid, map_id: map_id)
     frames = [%{bytes: <<0, 1, 2, 3>>}]
@@ -254,17 +254,17 @@ defmodule Cadence.Runtime.TargetPipelineSupervisorIntegrationTest do
 
   defp wait_for(_fun, 0), do: flunk("Timed out waiting for condition")
 
-  defp binding_active?(mission_id, channel_id, interface_id) do
+  defp binding_active?(mission_id, channel_id, transport_id) do
     LinkController.binding_active?(
       mission_id,
       channel_id,
-      interface_id,
+      transport_id,
       :downlink
     )
   end
 
-  defp active_uplink_interface?(mission_id, channel_id) do
-    LinkController.active_uplink_interface(mission_id, channel_id)
+  defp active_uplink_transport?(mission_id, channel_id) do
+    LinkController.active_uplink_transport(mission_id, channel_id)
     |> is_binary()
   end
 

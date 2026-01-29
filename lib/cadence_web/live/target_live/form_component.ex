@@ -1,7 +1,7 @@
 defmodule CadenceWeb.TargetLive.FormComponent do
   use CadenceWeb, :live_component
 
-  alias Cadence.{Interfaces, MissionDatabase, Targets}
+  alias Cadence.{MissionDatabase, Targets}
   alias Cadence.MissionDatabase.DefinitionSet
   alias Cadence.Targets.Target
 
@@ -137,69 +137,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
           </div>
         </div>
 
-        <hr class="my-6 border-base-300" />
-
-        <div>
-          <label class="block text-sm font-semibold leading-6 text-base-content mb-2">
-            Associated Interfaces
-          </label>
-          <p class="text-sm text-base-content/60 mb-3">
-            Select interfaces that communicate with this target.
-          </p>
-
-          <%= if Enum.empty?(@available_interfaces) do %>
-            <p class="text-sm text-base-content/50 italic">
-              No interfaces defined for this mission. Create interfaces first.
-            </p>
-          <% else %>
-            <div class="space-y-2 max-h-48 overflow-y-auto border border-base-300 rounded-sm p-3 bg-base-200/50">
-              <%= for interface <- @available_interfaces do %>
-                <% is_selected = Map.has_key?(@selected_interfaces, interface.id) %>
-                <% current_direction = Map.get(@selected_interfaces, interface.id, "read_write") %>
-                <div class="flex items-center justify-between py-2 px-3 rounded-sm hover:bg-base-300/50">
-                  <label class="flex items-center gap-3 cursor-pointer flex-1">
-                    <input
-                      type="checkbox"
-                      name="interface_associations[]"
-                      value={interface.id}
-                      checked={is_selected}
-                      phx-click="toggle_interface"
-                      phx-value-interface-id={interface.id}
-                      phx-target={@myself}
-                      class="checkbox checkbox-sm"
-                    />
-                    <span class="text-sm font-medium text-base-content">
-                      {interface.name}
-                      <span class="text-base-content/50">
-                        ({String.replace(interface.connection_type || "none", "_", " ")})
-                      </span>
-                    </span>
-                  </label>
-                  <%= if is_selected do %>
-                    <select
-                      name={"interface_direction[#{interface.id}]"}
-                      phx-change="update_interface_direction"
-                      phx-value-interface-id={interface.id}
-                      phx-target={@myself}
-                      class="select select-sm"
-                    >
-                      <option value="read" selected={current_direction == "read"}>
-                        Read (Telemetry)
-                      </option>
-                      <option value="write" selected={current_direction == "write"}>
-                        Write (Commands)
-                      </option>
-                      <option value="read_write" selected={current_direction == "read_write"}>
-                        Read/Write
-                      </option>
-                    </select>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
-        </div>
-
         <%= if @action == :edit and (@target.config != %{} or @target.metadata != %{}) do %>
           <hr class="my-6 border-base-300" />
           <div class="space-y-4">
@@ -235,12 +172,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
   def update(%{target: target, mission: mission} = assigns, socket) do
     changeset = Target.changeset(target, %{})
 
-    # Load available interfaces from assigns or default to empty
-    available_interfaces = Map.get(assigns, :interfaces, [])
-
-    # Load current interface associations if editing an existing target
-    selected_interfaces = load_selected_interfaces(target)
-
     # Load available databases for the mission
     available_databases = MissionDatabase.list_databases(mission.id)
 
@@ -254,26 +185,11 @@ defmodule CadenceWeb.TargetLive.FormComponent do
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(:available_interfaces, available_interfaces)
-     |> assign(:selected_interfaces, selected_interfaces)
      |> assign(:available_databases, available_databases)
      |> assign(:selected_database_id, selected_database_id)
      |> assign(:selected_definition_set_id, selected_definition_set_id)
      |> assign(:available_versions, available_versions)
      |> assign_form(changeset)}
-  end
-
-  defp load_selected_interfaces(%{id: nil}), do: %{}
-
-  defp load_selected_interfaces(target) do
-    target
-    |> Interfaces.list_interfaces_for_target()
-    |> Enum.map(fn interface ->
-      target_interface = Interfaces.get_target_interface(target, interface)
-      direction = if target_interface, do: target_interface.direction, else: "read_write"
-      {interface.id, direction}
-    end)
-    |> Map.new()
   end
 
   defp load_selected_definition_set(%{definition_set_id: nil}), do: {nil, nil}
@@ -297,29 +213,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
       |> Map.put(:action, :validate)
 
     {:noreply, assign_form(socket, changeset)}
-  end
-
-  def handle_event("toggle_interface", %{"interface-id" => interface_id}, socket) do
-    selected_interfaces = socket.assigns.selected_interfaces
-
-    updated_interfaces =
-      if Map.has_key?(selected_interfaces, interface_id) do
-        Map.delete(selected_interfaces, interface_id)
-      else
-        Map.put(selected_interfaces, interface_id, "read_write")
-      end
-
-    {:noreply, assign(socket, :selected_interfaces, updated_interfaces)}
-  end
-
-  def handle_event(
-        "update_interface_direction",
-        %{"interface-id" => interface_id, "value" => direction},
-        socket
-      ) do
-    selected_interfaces = socket.assigns.selected_interfaces
-    updated_interfaces = Map.put(selected_interfaces, interface_id, direction)
-    {:noreply, assign(socket, :selected_interfaces, updated_interfaces)}
   end
 
   def handle_event("select_database", %{"selected_database_id" => ""}, socket) do
@@ -365,13 +258,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
       :ok ->
         case Targets.update_target(socket.assigns.target, target_params) do
           {:ok, target} ->
-            # Sync interface associations
-            sync_interface_associations(
-              target,
-              socket.assigns.selected_interfaces,
-              socket.assigns.available_interfaces
-            )
-
             notify_parent({:saved, target})
 
             {:noreply,
@@ -413,13 +299,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
 
         case Targets.create_target(params_with_mission) do
           {:ok, target} ->
-            # Add interface associations for new target
-            sync_interface_associations(
-              target,
-              socket.assigns.selected_interfaces,
-              socket.assigns.available_interfaces
-            )
-
             notify_parent({:saved, target})
 
             {:noreply,
@@ -442,37 +321,6 @@ defmodule CadenceWeb.TargetLive.FormComponent do
          socket
          |> put_flash(:error, "You don't have permission to create targets in this mission")
          |> push_patch(to: socket.assigns.patch)}
-    end
-  end
-
-  # Syncs interface associations: removes old ones, adds/updates new ones
-  defp sync_interface_associations(target, selected_interfaces, available_interfaces) do
-    # Get current associations
-    current_interfaces = Interfaces.list_interfaces_for_target(target)
-    current_interface_ids = MapSet.new(Enum.map(current_interfaces, & &1.id))
-    selected_interface_ids = MapSet.new(Map.keys(selected_interfaces))
-
-    # Remove interfaces that are no longer selected
-    interfaces_to_remove = MapSet.difference(current_interface_ids, selected_interface_ids)
-
-    for interface_id <- interfaces_to_remove do
-      interface = Enum.find(current_interfaces, &(&1.id == interface_id))
-      if interface, do: Interfaces.remove_target_from_interface(target, interface)
-    end
-
-    # Add or update interfaces that are selected
-    for {interface_id, direction} <- selected_interfaces do
-      interface = Enum.find(available_interfaces, &(&1.id == interface_id))
-
-      if interface do
-        if MapSet.member?(current_interface_ids, interface_id) do
-          # Update direction if changed
-          Interfaces.update_target_interface_direction(target, interface, direction)
-        else
-          # Add new association
-          Interfaces.add_target_to_interface(target, interface, direction)
-        end
-      end
     end
   end
 

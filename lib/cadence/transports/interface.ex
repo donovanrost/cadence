@@ -26,7 +26,7 @@ defmodule Cadence.Transports.Interface do
     field :allowed_directions, {:array, Ecto.Enum}, values: @allowed_directions, default: [:both]
     field :enabled, :boolean, default: true
 
-    has_many :bindings, Cadence.Links.Binding, foreign_key: :interface_id
+    has_many :bindings, Cadence.Links.Binding, foreign_key: :transport_id
 
     timestamps(type: :utc_datetime)
   end

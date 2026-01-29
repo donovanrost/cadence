@@ -6,8 +6,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.CCSDS.Core.PDU
   alias Cadence.CCSDS.SDU.SpacePacket
-  alias Cadence.Domain.Interfaces.Entities.TargetInterface
-  alias Cadence.Interfaces
+  alias Cadence.Links
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Interfaces.TcpServerInterface
   alias Cadence.Runtime.Missions.MissionSupervisor
@@ -17,6 +16,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
   alias Cadence.Simulator.Coordinator
   alias Cadence.TestHelpers
   alias Cadence.Transport.TCStreamId
+  alias Cadence.Transports
   alias Ecto.Adapters.SQL.Sandbox
 
   @tm_frame_size 256
@@ -29,16 +29,64 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
 
     setup_result = TestHelpers.full_test_setup()
     mission = setup_result.mission
+    org = setup_result.org
     target = hd(setup_result.targets)
     port = find_open_port()
 
-    {:ok, interface} =
-      Interfaces.create_interface(%{
-        mission_id: mission.id,
+    {:ok, transport} =
+      Transports.create_interface(org.id, mission.id, %{
         name: "COP1_LOOPBACK",
-        connection_type: "tcp_server",
-        bind_address: "127.0.0.1",
-        bind_port: port,
+        type: :tcp,
+        endpoint: %{
+          mode: "server",
+          host: "127.0.0.1",
+          port: port
+        }
+      })
+
+    {:ok, link} =
+      Links.create_link(org.id, mission.id, %{
+        scid: @scid,
+        name: "COP1 Link"
+      })
+
+    {:ok, channel} =
+      Links.create_channel(org.id, mission.id, %{
+        link_id: link.id,
+        scid: @scid,
+        vcid: @vcid,
+        direction: :both,
+        enabled: true
+      })
+
+    {:ok, binding} =
+      Links.create_binding(org.id, mission.id, %{
+        channel_id: channel.id,
+        transport_id: transport.id,
+        direction: :both,
+        role: :primary,
+        priority: 100,
+        desired_state: :active
+      })
+
+    {:ok, _selection} =
+      Links.create_active_selection(org.id, mission.id, %{
+        channel_id: channel.id,
+        binding_id: binding.id,
+        direction: :uplink
+      })
+
+    {:ok, _channel_target} =
+      Links.create_channel_target(org.id, mission.id, %{
+        target_id: target.id,
+        scid: @scid,
+        vcid: @vcid,
+        map_id: nil
+      })
+
+    {:ok, _protocol_config} =
+      Links.create_protocol_config(org.id, mission.id, %{
+        link_id: link.id,
         config: %{
           framing: "sdlp",
           sdlp: %{
@@ -68,19 +116,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
         }
       })
 
-    {:ok, _target_interface} = Interfaces.add_target_to_interface(target, interface, "read_write")
-
     {:ok, config} = MissionConfig.load(mission.id)
-
-    {:ok, routing} =
-      TargetInterface.new(%{
-        target_id: target.id,
-        interface_id: interface.id,
-        direction: :read_write,
-        scid: @scid
-      })
-
-    config = %{config | target_interface_routings: [routing]}
 
     {:ok, _pid} = MissionSupervisor.start_mission(config)
 
@@ -88,17 +124,17 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
       MissionSupervisor.stop_mission(mission.id)
     end)
 
-    {:ok, mission: mission, target: target, interface: interface, port: port}
+    {:ok, mission: mission, target: target, transport: transport, port: port}
   end
 
   test "acknowledges uplink via CLCW loopback", %{
     mission: mission,
     target: target,
-    interface: interface,
+    transport: transport,
     port: port
   } do
-    interface_id = interface.id
-    server_pid = wait_for_interface_pid(mission.id, interface_id)
+    transport_id = transport.id
+    server_pid = wait_for_transport_pid(mission.id, transport_id)
     :ok = wait_for(fn -> TcpServerInterface.stats(server_pid).listening end)
 
     {:ok, sim_pid} =
@@ -124,9 +160,8 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
         stats.connected_clients == 1
       end)
 
-    _fop_pid = wait_for_fop_pid(mission.id, interface_id)
-
     channel_id = ChannelId.new(@scid, @vcid)
+    _fop_pid = wait_for_fop_pid(mission.id, channel_id)
     {:ok, initial_stats} = COP1Application.stats(mission.id, channel_id)
     assert initial_stats.in_flight_count == 0
 
@@ -142,7 +177,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
           decision
 
         {:defer, :hold_pending_resync} ->
-          tc_stream_id = TCStreamId.new!(mission.id, interface_id, @scid, @vcid)
+          tc_stream_id = TCStreamId.new!(mission.id, transport_id, @scid, @vcid)
           :ok = Stream.resync(tc_stream_id)
 
           {:ok, decision} =
@@ -151,7 +186,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
           decision
       end
 
-    assert decision.interface_id == interface_id
+    assert decision.transport_id == transport_id
 
     {:ok, stats} = COP1Application.stats(mission.id, channel_id)
     assert stats.in_flight_count > 0
@@ -174,26 +209,29 @@ defmodule Cadence.Runtime.Transport.COP1.FOPLoopbackIntegrationTest do
     }
   end
 
-  defp wait_for_interface_pid(mission_id, interface_id) do
+  defp wait_for_transport_pid(mission_id, transport_id) do
     :ok =
       wait_for(fn ->
-        Registry.lookup(Cadence.MissionRegistry, {:interface, mission_id, interface_id}) != []
+        Registry.lookup(Cadence.MissionRegistry, {:transport, mission_id, transport_id}) != []
       end)
 
     [{pid, _}] =
-      Registry.lookup(Cadence.MissionRegistry, {:interface, mission_id, interface_id})
+      Registry.lookup(Cadence.MissionRegistry, {:transport, mission_id, transport_id})
 
     pid
   end
 
-  defp wait_for_fop_pid(mission_id, interface_id) do
+  defp wait_for_fop_pid(mission_id, %ChannelId{} = channel_id) do
     :ok =
       wait_for(fn ->
-        Registry.lookup(Cadence.MissionRegistry, {:cop1_fop, mission_id, interface_id}) != []
+        Registry.lookup(
+          Cadence.MissionRegistry,
+          {:cop1_fop, mission_id, ChannelId.key(channel_id)}
+        ) != []
       end)
 
     [{pid, _}] =
-      Registry.lookup(Cadence.MissionRegistry, {:cop1_fop, mission_id, interface_id})
+      Registry.lookup(Cadence.MissionRegistry, {:cop1_fop, mission_id, ChannelId.key(channel_id)})
 
     pid
   end

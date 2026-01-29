@@ -44,11 +44,11 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
 
   alias Cadence.Alarms
   alias Cadence.Alarms.Alarm
-  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Ports.Messaging.EventPublisher
-  alias Cadence.Runtime.Alarms.Handlers.{InterfaceConnectionHandler, TelemetryLimitHandler}
+  alias Cadence.Runtime.Alarms.Handlers.{TelemetryLimitHandler, TransportConnectionHandler}
   alias Cadence.Telemetry.Events.TelemetryLimitEvent
   alias Cadence.Time.Timer, as: TimeTimer
+  alias Cadence.Transports.Events.TransportConnectionEvent
 
   @shelve_check_interval :timer.seconds(30)
 
@@ -230,8 +230,8 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
   end
 
   @impl true
-  def handle_info({:interface_connection_event, %InterfaceConnectionEvent{} = event}, state) do
-    handle_interface_connection_event(event, state)
+  def handle_info({:transport_connection_event, %TransportConnectionEvent{} = event}, state) do
+    handle_transport_connection_event(event, state)
     {:noreply, state}
   end
 
@@ -353,8 +353,8 @@ defmodule Cadence.Runtime.Alarms.AlarmManager do
     end
   end
 
-  defp handle_interface_connection_event(%InterfaceConnectionEvent{} = event, state) do
-    case InterfaceConnectionHandler.handle(event, state.organization_id) do
+  defp handle_transport_connection_event(%TransportConnectionEvent{} = event, state) do
+    case TransportConnectionHandler.handle(event, state.organization_id) do
       {:created, alarm, _rule} ->
         cache_alarm(alarm, state.table)
         broadcast_alarm(state.alarms_topic, :alarm_triggered, alarm)

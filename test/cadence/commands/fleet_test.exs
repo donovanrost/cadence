@@ -128,8 +128,7 @@ defmodule Cadence.Commands.FleetTest do
     config = %MissionConfig{
       mission_id: mission.id,
       organization_id: org.id,
-      mission: mission_entity,
-      target_interface_routings: []
+      mission: mission_entity
     }
 
     {:ok, _uplink_pid} =
@@ -187,8 +186,8 @@ defmodule Cadence.Commands.FleetTest do
       # Each result should be {target_id, result}
       Enum.each(results, fn {target_id, result} ->
         assert is_binary(target_id)
-        # Will fail with :no_interface since we don't have interfaces set up
-        assert {:error, :no_interface} = result
+        # Will fail with :no_transport since we don't have transports set up
+        assert {:error, :no_transport} = result
       end)
     end
 
@@ -256,8 +255,8 @@ defmodule Cadence.Commands.FleetTest do
       assert length(results) == length(targets)
 
       Enum.each(results, fn {_target_id, result} ->
-        # Will fail with :no_interface since we don't have interfaces set up
-        assert {:error, :no_interface} = result
+        # Will fail with :no_transport since we don't have transports set up
+        assert {:error, :no_transport} = result
       end)
     end
   end

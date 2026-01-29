@@ -1010,7 +1010,6 @@ defmodule CadenceWeb.Layouts do
         assigns.current_path == base_path or assigns.current_path == "#{base_path}/show/edit"
       )
       |> assign(:is_targets, String.contains?(assigns.current_path, "#{base_path}/targets"))
-      |> assign(:is_interfaces, String.contains?(assigns.current_path, "#{base_path}/interfaces"))
       |> assign(:is_database, String.contains?(assigns.current_path, "#{base_path}/database"))
       |> assign(:is_catalog, String.contains?(assigns.current_path, "#{base_path}/catalog"))
       |> assign(:is_alarms, String.contains?(assigns.current_path, "#{base_path}/alarm"))
@@ -1045,11 +1044,6 @@ defmodule CadenceWeb.Layouts do
       <.sidebar_nav_item navigate={~p"/missions/#{@mission}/targets"} active={@is_targets}>
         <:icon><.icon name="hero-cpu-chip" class="h-5 w-5" /></:icon>
         Targets
-      </.sidebar_nav_item>
-
-      <.sidebar_nav_item navigate={~p"/missions/#{@mission}/interfaces"} active={@is_interfaces}>
-        <:icon><.icon name="hero-signal" class="h-5 w-5" /></:icon>
-        Interfaces
       </.sidebar_nav_item>
 
       <.sidebar_nav_group

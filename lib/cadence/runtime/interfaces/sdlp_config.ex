@@ -4,8 +4,6 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   """
 
   alias Cadence.CCSDS.SDU.Mapping
-  alias Cadence.Domain.Interfaces.Entities.Interface
-
   @type segmentation_mode :: :standard | :legacy_no_segment_header | :legacy_always_segment_header
   @type segmentation_strategy :: :auto | :disabled
 
@@ -32,9 +30,7 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
           optional(:segmentation) => segmentation_config()
         }
 
-  @spec fetch(Interface.t() | map()) :: {:ok, %{mapping: Mapping.t(), opts: keyword()}} | :error
-  def fetch(%Interface{} = interface), do: fetch(interface.config || %{})
-
+  @spec fetch(map()) :: {:ok, %{mapping: Mapping.t(), opts: keyword()}} | :error
   def fetch(config) when is_map(config) do
     case framing_mode(config) do
       :sdlp ->
@@ -53,9 +49,7 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   Extracts TC-specific configuration including segmentation settings.
   Returns tc_config with derived segment_header_flag based on segmentation mode.
   """
-  @spec fetch_tc_config(Interface.t() | map()) :: {:ok, tc_config()} | :error
-  def fetch_tc_config(%Interface{} = interface), do: fetch_tc_config(interface.config || %{})
-
+  @spec fetch_tc_config(map()) :: {:ok, tc_config()} | :error
   def fetch_tc_config(config) when is_map(config) do
     tc_config = fetch_value(config, "tc") || %{}
     cop1_config = fetch_value(config, "cop1") || %{}
@@ -67,9 +61,7 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
   @doc """
   Extracts USLP-specific configuration including MAP settings.
   """
-  @spec fetch_uslp_config(Interface.t() | map()) :: {:ok, uslp_config()} | :error
-  def fetch_uslp_config(%Interface{} = interface), do: fetch_uslp_config(interface.config || %{})
-
+  @spec fetch_uslp_config(map()) :: {:ok, uslp_config()} | :error
   def fetch_uslp_config(config) when is_map(config) do
     uslp_config = fetch_value(config, "uslp") || %{}
     {:ok, build_uslp_config(uslp_config)}

@@ -57,7 +57,7 @@ defmodule Cadence.Telemetry.PDUHandler do
   defp build_envelope(raw, %PDU{} = pdu, %SDUOctets{} = sdu, ctx, metadata) do
     provenance =
       %{}
-      |> maybe_put(:interface_id, Map.get(ctx, :interface_id) || metadata[:interface_id])
+      |> maybe_put(:transport_id, Map.get(ctx, :transport_id) || metadata[:transport_id])
       |> maybe_put(:source, metadata[:source])
       |> maybe_put(:link_key, metadata[:link_key])
       |> maybe_put(:channel_key, metadata[:channel_key])
@@ -68,7 +68,7 @@ defmodule Cadence.Telemetry.PDUHandler do
       |> maybe_add(Evidence.scid(sdu.scid, :link, :high))
       |> maybe_add(Evidence.vcid(sdu.vcid, :link, :high))
       |> maybe_add(Evidence.map_id(sdu.map_id, :link, :high))
-      |> maybe_add(Evidence.interface_id(Map.get(ctx, :interface_id), :ingest, :high))
+      |> maybe_add(Evidence.transport_id(Map.get(ctx, :transport_id), :ingest, :high))
       |> maybe_add(Evidence.apid(pdu_apid(pdu), :space_packet_header, :high))
       |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
 

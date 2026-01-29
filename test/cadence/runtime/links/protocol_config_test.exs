@@ -23,20 +23,20 @@ defmodule Cadence.Runtime.Links.ProtocolConfigTest do
     assert get_in(merged, ["sdlp", "uplink_vcid"]) == 2
   end
 
-  test "effective config drops interface_id" do
+  test "effective config drops transport_id" do
     defaults = %{
       "cop1" => %{"mode" => "fop"},
-      "interface_id" => "iface-legacy"
+      "transport_id" => "transport-legacy"
     }
 
     overrides = %{
-      :interface_id => "iface-override"
+      :transport_id => "transport-override"
     }
 
     effective = ProtocolConfig.effective_config(defaults, overrides)
 
-    refute Map.has_key?(effective, :interface_id)
-    refute Map.has_key?(effective, "interface_id")
+    refute Map.has_key?(effective, :transport_id)
+    refute Map.has_key?(effective, "transport_id")
   end
 
   test "binds scid for scid-less SDU mappings" do

@@ -613,7 +613,7 @@ defmodule Mix.Tasks.Cadence.Profile do
   end
 
   defp build_ccsds_totals(stats) do
-    Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
+    Enum.reduce(stats, %{}, fn {_transport_id, profiles}, acc ->
       Enum.reduce(profiles, acc, fn {profile, metrics}, acc ->
         Map.put(acc, profile, accumulate_ccsds_metrics(Map.get(acc, profile, %{}), metrics))
       end)

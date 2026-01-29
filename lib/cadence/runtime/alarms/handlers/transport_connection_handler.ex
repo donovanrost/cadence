@@ -1,16 +1,16 @@
-defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
+defmodule Cadence.Runtime.Alarms.Handlers.TransportConnectionHandler do
   @moduledoc """
-  Handles InterfaceConnectionEvent to create, update, or clear alarms.
+  Handles TransportConnectionEvent to create, update, or clear alarms.
 
-  This handler is called by the AlarmManager when an InterfaceConnectionEvent is received.
+  This handler is called by the AlarmManager when a TransportConnectionEvent is received.
   It:
-  1. Finds matching alarm rules for interface_connection trigger type
-  2. Creates alarms when interfaces disconnect
-  3. Clears alarms when interfaces reconnect
+  1. Finds matching alarm rules for transport_connection trigger type
+  2. Creates alarms when transports disconnect
+  3. Clears alarms when transports reconnect
 
   ## Event Flow
 
-      InterfaceConnectionEvent
+      TransportConnectionEvent
             │
             ▼
       ┌─────────────────┐
@@ -33,31 +33,31 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
   alias Cadence.Alarms.Alarm
   alias Cadence.Alarms.AlarmRule
   alias Cadence.Alarms.Notifications.Dispatcher
-  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Runtime.Alarms.RuleCache
+  alias Cadence.Transports.Events.TransportConnectionEvent
 
   @type handle_result ::
           {:created, Alarm.t(), AlarmRule.t() | nil}
           | {:cleared, Alarm.t()}
-          | {:no_rule, InterfaceConnectionEvent.t()}
-          | {:no_action, InterfaceConnectionEvent.t()}
+          | {:no_rule, TransportConnectionEvent.t()}
+          | {:no_action, TransportConnectionEvent.t()}
 
   @doc """
-  Handles an InterfaceConnectionEvent.
+  Handles a TransportConnectionEvent.
 
   Returns the action taken and the affected alarm (if any).
   """
-  @spec handle(InterfaceConnectionEvent.t(), String.t()) :: handle_result()
-  def handle(%InterfaceConnectionEvent{} = event, organization_id) do
-    Logger.debug("Handling InterfaceConnectionEvent: #{InterfaceConnectionEvent.describe(event)}")
+  @spec handle(TransportConnectionEvent.t(), String.t()) :: handle_result()
+  def handle(%TransportConnectionEvent{} = event, organization_id) do
+    Logger.debug("Handling TransportConnectionEvent: #{TransportConnectionEvent.describe(event)}")
 
     cond do
       # Reconnection - clear any existing alarm
-      InterfaceConnectionEvent.connected?(event) ->
+      TransportConnectionEvent.connected?(event) ->
         handle_reconnection(event)
 
       # Disconnection - create alarm
-      InterfaceConnectionEvent.disconnected?(event) ->
+      TransportConnectionEvent.disconnected?(event) ->
         handle_disconnection(event, organization_id)
 
       # Should not happen
@@ -66,11 +66,11 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
     end
   end
 
-  defp handle_reconnection(%InterfaceConnectionEvent{} = event) do
+  defp handle_reconnection(%TransportConnectionEvent{} = event) do
     case find_existing_alarm(event) do
       %Alarm{} = alarm ->
         Logger.info(
-          "Clearing alarm #{alarm.id} due to interface reconnection: #{event.interface_name || event.interface_id}"
+          "Clearing alarm #{alarm.id} due to transport reconnection: #{event.transport_name || event.transport_id}"
         )
 
         case Alarms.do_clear_alarm(alarm, nil) do
@@ -88,13 +88,13 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
     end
   end
 
-  defp handle_disconnection(%InterfaceConnectionEvent{} = event, organization_id) do
+  defp handle_disconnection(%TransportConnectionEvent{} = event, organization_id) do
     rules =
       RuleCache.get_rules_for_event(
         organization_id,
         event.mission_id,
         nil,
-        "interface_connection"
+        "transport_connection"
       )
 
     case find_matching_rule(rules, event) do
@@ -111,19 +111,19 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
     Enum.find(rules, fn rule ->
       conditions = rule.conditions || %{}
 
-      # Check interface_id filter if specified
-      interface_filter = Map.get(conditions, "interface_id")
+      # Check transport_id filter if specified
+      transport_filter = Map.get(conditions, "transport_id")
 
       cond do
-        is_nil(interface_filter) -> true
-        is_binary(interface_filter) -> interface_filter == event.interface_id
-        is_list(interface_filter) -> event.interface_id in interface_filter
+        is_nil(transport_filter) -> true
+        is_binary(transport_filter) -> transport_filter == event.transport_id
+        is_list(transport_filter) -> event.transport_id in transport_filter
         true -> true
       end
     end)
   end
 
-  defp create_alarm(%InterfaceConnectionEvent{} = event, %AlarmRule{} = rule, organization_id) do
+  defp create_alarm(%TransportConnectionEvent{} = event, %AlarmRule{} = rule, organization_id) do
     message = render_message(rule.message_template, event)
     severity = rule.severity || :warning
 
@@ -132,28 +132,28 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
     case Alarms.create_alarm(attrs) do
       {:ok, alarm} ->
         Logger.info(
-          "Created alarm #{alarm.id} for interface disconnection: #{event.interface_name || event.interface_id}"
+          "Created alarm #{alarm.id} for transport disconnection: #{event.transport_name || event.transport_id}"
         )
 
         Dispatcher.dispatch(alarm, :triggered, rule)
         {:created, alarm, rule}
 
       {:error, reason} ->
-        Logger.error("Failed to create alarm for interface disconnection: #{inspect(reason)}")
+        Logger.error("Failed to create alarm for transport disconnection: #{inspect(reason)}")
         {:no_action, event}
     end
   end
 
-  defp create_default_alarm(%InterfaceConnectionEvent{} = event, organization_id) do
+  defp create_default_alarm(%TransportConnectionEvent{} = event, organization_id) do
     message =
-      "Interface #{event.interface_name || event.interface_id} disconnected - no clients connected"
+      "Transport #{event.transport_name || event.transport_id} disconnected - no clients connected"
 
     attrs = build_alarm_attrs(event, organization_id, :warning, message, nil)
 
     case Alarms.create_alarm(attrs) do
       {:ok, alarm} ->
         Logger.info(
-          "Created default alarm #{alarm.id} for interface disconnection: #{event.interface_name || event.interface_id}"
+          "Created default alarm #{alarm.id} for transport disconnection: #{event.transport_name || event.transport_id}"
         )
 
         {:created, alarm, nil}
@@ -170,38 +170,38 @@ defmodule Cadence.Runtime.Alarms.Handlers.InterfaceConnectionHandler do
       mission_id: event.mission_id,
       target_id: nil,
       alarm_rule_id: rule_id,
-      alarm_type: "interface_connection",
+      alarm_type: "transport_connection",
       severity: severity,
       status: :active,
-      source_type: "interface",
-      source_id: event.interface_id,
+      source_type: "transport",
+      source_id: event.transport_id,
       message: message,
       triggered_at: event.timestamp || Cadence.Time.now(),
       metadata: %{
-        "interface_name" => event.interface_name,
+        "transport_name" => event.transport_name,
         "previous_state" => to_string(event.previous_state),
         "client_info" => event.client_info
       }
     }
   end
 
-  defp find_existing_alarm(%InterfaceConnectionEvent{} = event) do
+  defp find_existing_alarm(%TransportConnectionEvent{} = event) do
     Alarms.find_active_alarm(
       event.mission_id,
       nil,
-      "interface",
-      event.interface_id
+      "transport",
+      event.transport_id
     )
   end
 
   defp render_message(nil, event) do
-    "Interface #{event.interface_name || event.interface_id} disconnected"
+    "Transport #{event.transport_name || event.transport_id} disconnected"
   end
 
   defp render_message(template, event) when is_binary(template) do
     template
-    |> String.replace("{{interface_id}}", event.interface_id || "")
-    |> String.replace("{{interface_name}}", event.interface_name || event.interface_id || "")
+    |> String.replace("{{transport_id}}", event.transport_id || "")
+    |> String.replace("{{transport_name}}", event.transport_name || event.transport_id || "")
     |> String.replace("{{mission_id}}", event.mission_id || "")
   end
 end

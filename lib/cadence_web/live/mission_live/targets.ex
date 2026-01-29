@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionLive.Targets do
   """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Interfaces, Targets}
+  alias Cadence.Targets
 
   @impl true
   def mount(_params, _session, socket) do
@@ -37,24 +37,20 @@ defmodule CadenceWeb.MissionLive.Targets do
     end
 
     targets = Targets.list_targets_with_preloads(mission)
-    interfaces = Interfaces.list_interfaces(mission)
 
     socket
     |> assign(:page_title, "Targets")
     |> assign(:targets, targets)
-    |> assign(:interfaces, interfaces)
     |> assign(:target, nil)
   end
 
   defp apply_action(socket, :new, _params) do
     mission = socket.assigns.mission
     targets = Targets.list_targets_with_preloads(mission)
-    interfaces = Interfaces.list_interfaces(mission)
 
     socket
     |> assign(:page_title, "New Target")
     |> assign(:targets, targets)
-    |> assign(:interfaces, interfaces)
     |> assign(:target, %Targets.Target{})
   end
 
@@ -191,7 +187,6 @@ defmodule CadenceWeb.MissionLive.Targets do
         action={:new}
         target={@target}
         mission={@mission}
-        interfaces={@interfaces}
         current_scope={@current_scope}
         patch={~p"/missions/#{@mission}/targets"}
       />

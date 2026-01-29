@@ -24,7 +24,7 @@ defmodule Cadence.Runtime.Transport.ProtocolEvent do
   @type t :: %__MODULE__{
           id: String.t(),
           mission_id: String.t(),
-          interface_id: String.t(),
+          transport_id: String.t(),
           protocol: atom(),
           status: status(),
           reason: term() | nil,
@@ -38,7 +38,7 @@ defmodule Cadence.Runtime.Transport.ProtocolEvent do
   defstruct [
     :id,
     :mission_id,
-    :interface_id,
+    :transport_id,
     :protocol,
     :status,
     :reason,
@@ -53,7 +53,7 @@ defmodule Cadence.Runtime.Transport.ProtocolEvent do
     %__MODULE__{
       id: attrs[:id] || generate_id(),
       mission_id: attrs[:mission_id],
-      interface_id: attrs[:interface_id],
+      transport_id: attrs[:transport_id],
       protocol: attrs[:protocol],
       status: attrs[:status],
       reason: attrs[:reason],

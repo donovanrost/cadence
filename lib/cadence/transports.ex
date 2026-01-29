@@ -33,11 +33,11 @@ defmodule Cadence.Transports do
 
   @spec get_interface(organization_id(), mission_id(), Ecto.UUID.t()) ::
           {:ok, Interface.t()} | {:error, :not_found}
-  def get_interface(organization_id, mission_id, interface_id) do
+  def get_interface(organization_id, mission_id, transport_id) do
     interface =
       Interface
       |> where([i], i.organization_id == ^organization_id and i.mission_id == ^mission_id)
-      |> Repo.get(interface_id)
+      |> Repo.get(transport_id)
 
     if interface, do: {:ok, interface}, else: {:error, :not_found}
   end
@@ -51,10 +51,10 @@ defmodule Cadence.Transports do
   end
 
   @spec get_interface!(organization_id(), mission_id(), Ecto.UUID.t()) :: Interface.t()
-  def get_interface!(organization_id, mission_id, interface_id) do
+  def get_interface!(organization_id, mission_id, transport_id) do
     Interface
     |> where([i], i.organization_id == ^organization_id and i.mission_id == ^mission_id)
-    |> Repo.get!(interface_id)
+    |> Repo.get!(transport_id)
   end
 
   @spec delete_interface(organization_id(), mission_id(), Interface.t()) ::

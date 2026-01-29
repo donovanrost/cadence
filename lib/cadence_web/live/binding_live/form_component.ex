@@ -14,7 +14,7 @@ defmodule CadenceWeb.BindingLive.FormComponent do
       <.header>
         {@title}
         <:subtitle>
-          Bind channel SCID {@channel.scid}/VCID {@channel.vcid} to a transport interface.
+          Bind channel SCID {@channel.scid}/VCID {@channel.vcid} to a transport.
         </:subtitle>
       </.header>
 
@@ -26,11 +26,11 @@ defmodule CadenceWeb.BindingLive.FormComponent do
         phx-submit="save"
       >
         <.input
-          field={@form[:interface_id]}
+          field={@form[:transport_id]}
           type="select"
-          label="Transport Interface"
-          prompt="Select interface"
-          options={interface_options(@interfaces)}
+          label="Transport"
+          prompt="Select transport"
+          options={transport_options(@interfaces)}
           disabled={@action == :edit}
         />
 
@@ -88,10 +88,10 @@ defmodule CadenceWeb.BindingLive.FormComponent do
     """
   end
 
-  defp interface_options(interfaces) do
-    Enum.map(interfaces, fn interface ->
-      label = "#{interface.name} (#{interface.type})"
-      {label, interface.id}
+  defp transport_options(interfaces) do
+    Enum.map(interfaces, fn transport ->
+      label = "#{transport.name} (#{transport.type})"
+      {label, transport.id}
     end)
   end
 

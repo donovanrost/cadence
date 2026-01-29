@@ -1,6 +1,6 @@
 defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   @moduledoc """
-  TCP Server interface for receiving bytes from multiple clients.
+  TCP Server transport for receiving bytes from multiple clients.
 
   This GenServer owns socket lifecycle and byte I/O only. It emits raw bytes
   to the runtime router and does not perform protocol framing or routing.
@@ -9,18 +9,18 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   use GenServer
   require Logger
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
-  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.Runtime.Router
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
+  alias Cadence.Transports.Events.TransportConnectionEvent
+  alias Cadence.Transports.Interface, as: TransportInterface
 
   @registry Cadence.MissionRegistry
 
   defmodule State do
     @moduledoc false
     defstruct [
-      :interface,
+      :transport,
       :listen_socket,
       :bind_address,
       :bind_port,
@@ -50,11 +50,11 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   ## Client API
 
   @doc """
-  Starts the TCP server interface with the given Interface entity.
+  Starts the TCP server transport with the given transport interface.
   """
-  def start_link(%Interface{} = interface) do
-    name = {:via, Registry, {@registry, {:interface, interface.mission_id, interface.id}}}
-    GenServer.start_link(__MODULE__, interface, name: name)
+  def start_link(%TransportInterface{} = transport) do
+    name = {:via, Registry, {@registry, {:transport, transport.mission_id, transport.id}}}
+    GenServer.start_link(__MODULE__, transport, name: name)
   end
 
   @doc """
@@ -88,24 +88,25 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   ## Server Callbacks
 
   @impl true
-  def init(%Interface{} = interface) do
-    config = interface_config(interface)
-    bind_address = bind_address_for_interface(interface)
-    max_clients = config_value(config, "max_clients", :max_clients, 100)
-    client_timeout = config_value(config, "client_timeout", :client_timeout, 300_000)
+  def init(%TransportInterface{} = transport) do
+    endpoint = transport.endpoint || %{}
+    bind_address = bind_address_for_transport(transport)
+    bind_port = endpoint_value(endpoint, :port)
+    max_clients = config_value(endpoint, "max_clients", :max_clients, 100)
+    client_timeout = config_value(endpoint, "client_timeout", :client_timeout, 300_000)
 
     Logger.info("""
-    Starting TCP Server Interface #{interface.name}:
-      mission_id: #{interface.mission_id}
-      interface_id: #{interface.id}
+    Starting TCP Server Transport #{transport.name}:
+      mission_id: #{transport.mission_id}
+      transport_id: #{transport.id}
       bind_address: #{bind_address}
-      bind_port: #{interface.bind_port}
+      bind_port: #{bind_port}
     """)
 
     state = %State{
-      interface: interface,
+      transport: transport,
       bind_address: bind_address,
-      bind_port: interface.bind_port,
+      bind_port: bind_port,
       max_clients: max_clients,
       client_timeout: client_timeout,
       clients: %{}
@@ -195,10 +196,16 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
   end
 
   @impl true
+  def handle_cast({:send, data, _meta}, state) when is_binary(data) do
+    {_reply, next_state} = dispatch_uplink(state, data)
+    {:noreply, next_state}
+  end
+
+  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
-      mission_id: state.interface.mission_id,
-      interface_id: state.interface.id,
+      mission_id: state.transport.mission_id,
+      transport_id: state.transport.id,
       listening: state.listening,
       bind_port: state.bind_port,
       connected_clients: map_size(state.clients),
@@ -318,7 +325,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     }
 
     if map_size(state.clients) == 0 do
-      Router.interface_connected(state.interface.mission_id, state.interface.id)
+      Router.transport_connected(state.transport.mission_id, state.transport.id)
       broadcast_connection_event(new_state, :disconnected, :connected, client_state)
     end
 
@@ -331,14 +338,9 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       | bytes_received: client_state.bytes_received + byte_size(data)
     }
 
-    # Logger.debug(
-    #   "[DEBUG] TCP #{state.interface.id} received #{byte_size(data)} bytes from #{client_state.remote_address}:#{client_state.remote_port}",
-    #   mission_id: state.interface.mission_id
-    # )
-
     Router.ingest(
-      state.interface.mission_id,
-      state.interface.id,
+      state.transport.mission_id,
+      state.transport.id,
       data,
       downlink_metadata(state, updated_client_state)
     )
@@ -400,7 +402,7 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
     new_state = %{state | clients: new_clients}
 
     if map_size(new_clients) == 0 and map_size(state.clients) > 0 do
-      Router.interface_disconnected(state.interface.mission_id, state.interface.id)
+      Router.transport_disconnected(state.transport.mission_id, state.transport.id)
       broadcast_connection_event(new_state, :connected, :disconnected, client_state)
     end
 
@@ -417,34 +419,34 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
       end
 
     event =
-      InterfaceConnectionEvent.new(%{
-        mission_id: state.interface.mission_id,
-        interface_id: state.interface.id,
-        interface_name: state.interface.name,
+      TransportConnectionEvent.new(%{
+        mission_id: state.transport.mission_id,
+        transport_id: state.transport.id,
+        transport_name: state.transport.name,
         previous_state: previous_state,
         new_state: new_state,
         client_count: map_size(state.clients),
         client_info: client_info
       })
 
-    Logger.info("Interface connection event: #{InterfaceConnectionEvent.describe(event)}")
-    InterfaceConnectionEvent.broadcast(event)
+    Logger.info("Transport connection event: #{TransportConnectionEvent.describe(event)}")
+    TransportConnectionEvent.broadcast(event)
   end
 
-  defp interface_config(%Interface{config: config}) when is_map(config), do: config
-  defp interface_config(_), do: %{}
-
-  defp bind_address_for_interface(%Interface{bind_address: address})
-       when is_binary(address) and address != "",
-       do: address
-
-  defp bind_address_for_interface(_), do: "0.0.0.0"
+  defp bind_address_for_transport(%TransportInterface{} = transport) do
+    endpoint = transport.endpoint || %{}
+    endpoint_value(endpoint, :host, "0.0.0.0")
+  end
 
   defp config_value(config, string_key, atom_key, default) when is_map(config) do
     Map.get(config, string_key) || Map.get(config, atom_key) || default
   end
 
   defp config_value(_config, _string_key, _atom_key, default), do: default
+
+  defp endpoint_value(endpoint, key, default \\ nil) when is_map(endpoint) do
+    Map.get(endpoint, key) || Map.get(endpoint, Atom.to_string(key)) || default
+  end
 
   defp parse_bind_address(address) when is_binary(address) do
     case :inet.parse_address(String.to_charlist(address)) do
@@ -464,11 +466,12 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterface do
 
   defp downlink_metadata(state, client_state) do
     %{
-      mission_id: state.interface.mission_id,
+      mission_id: state.transport.mission_id,
       received_at: CadenceTime.now(),
-      interface_id: state.interface.id,
+      transport_id: state.transport.id,
       client_address: client_state.remote_address,
-      client_port: client_state.remote_port
+      client_port: client_state.remote_port,
+      mode: :realtime
     }
   end
 end

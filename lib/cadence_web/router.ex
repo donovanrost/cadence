@@ -111,24 +111,6 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/targets/:target_id", MissionLive.TargetShow, :show
       live "/missions/:id/targets/:target_id/edit", MissionLive.TargetShow, :edit
 
-      # Interface routes nested under missions
-      live "/missions/:id/interfaces", MissionLive.Interfaces, :index
-      live "/missions/:id/interfaces/new", MissionLive.Interfaces, :new
-      live "/missions/:id/interfaces/:interface_id/edit", MissionLive.Interfaces, :edit
-      live "/missions/:id/interfaces/:interface_id", MissionLive.InterfaceShow, :show
-
-      live "/missions/:id/interfaces/:interface_id/vcids/new",
-           MissionLive.InterfaceShow,
-           :new_vcid
-
-      live "/missions/:id/interfaces/:interface_id/vcids/:vcid_id/edit",
-           MissionLive.InterfaceShow,
-           :edit_vcid
-
-      live "/missions/:id/interfaces/:interface_id/targets/:target_interface_id/scid/edit",
-           MissionLive.InterfaceShow,
-           :edit_scid
-
       # Database catalog section (database and version management)
       live "/missions/:id/database", MissionLive.Database, :index
       live "/missions/:id/database/new", MissionLive.Database, :new_database

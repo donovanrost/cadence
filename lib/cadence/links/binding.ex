@@ -17,7 +17,7 @@ defmodule Cadence.Links.Binding do
     belongs_to :organization, Cadence.Organizations.Organization
     belongs_to :mission, Cadence.Missions.Mission
     belongs_to :channel, Cadence.Links.Channel
-    belongs_to :interface, Cadence.Transports.Interface
+    belongs_to :transport, Cadence.Transports.Interface, foreign_key: :transport_id
 
     field :direction, Ecto.Enum, values: @directions
     field :role, Ecto.Enum, values: @roles
@@ -32,27 +32,27 @@ defmodule Cadence.Links.Binding do
   """
   def changeset(binding, attrs, organization_id, mission_id) do
     binding
-    |> cast(attrs, [:channel_id, :interface_id, :direction, :role, :priority, :desired_state])
+    |> cast(attrs, [:channel_id, :transport_id, :direction, :role, :priority, :desired_state])
     |> put_change(:organization_id, organization_id)
     |> put_change(:mission_id, mission_id)
     |> validate_required([
       :organization_id,
       :mission_id,
       :channel_id,
-      :interface_id,
+      :transport_id,
       :direction,
       :role,
       :priority,
       :desired_state
     ])
     |> unique_constraint(
-      [:organization_id, :mission_id, :channel_id, :interface_id, :direction, :role],
-      name: :bindings_org_mission_channel_interface_index
+      [:organization_id, :mission_id, :channel_id, :transport_id, :direction, :role],
+      name: :bindings_org_mission_channel_transport_index
     )
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
     |> foreign_key_constraint(:channel_id)
-    |> foreign_key_constraint(:interface_id)
+    |> foreign_key_constraint(:transport_id)
   end
 
   @doc """

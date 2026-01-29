@@ -39,7 +39,6 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   alias Cadence.Commands.CommandCompiler
   alias Cadence.Domain.Missions.Entities.Mission
   alias Cadence.Domain.Targeting.Entities.Target
-  alias Cadence.Interfaces.Events.InterfaceConnectionEvent
   alias Cadence.MissionDatabase.MetaCommand
   alias Cadence.Recordings
 
@@ -57,12 +56,13 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   alias Cadence.Runtime.Uplink.UplinkPDU
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
+  alias Cadence.Transports.Events.TransportConnectionEvent
 
   @confirmation_timeout_ms 60_000
   @default_dispatch_timeout_ms 30_000
   @queue_check_interval_ms 100
   @dispatch_opts_key_map %{
-    "interface_id" => :interface_id,
+    "transport_id" => :transport_id,
     "skip_verification" => :skip_verification,
     "skip_hazardous_check" => :skip_hazardous_check
   }
@@ -158,7 +158,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
   ## Options
 
-  - `:interface_id` - Specific interface to use (optional)
+  - `:transport_id` - Specific transport to use (optional)
   - `:user_id` - User performing the action (for audit)
   - `:skip_verification` - Don't auto-verify even if configured
   - `:skip_hazardous_check` - Bypass hazardous confirmation (dangerous!)
@@ -174,7 +174,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   - `{:error, :encoding_failed, reason}` - Binary encoding failed
   - `{:error, :missing_command_apid}` - No command APID configured for target
   - `{:error, :invalid_command_apid, apid}` - Invalid command APID value
-  - `{:error, :no_interface}` - No uplink interface route for target
+  - `{:error, :no_transport}` - No uplink transport route for target
   - `{:error, :routing_ambiguous}` - Multiple active bindings with no routing hint
   - `{:error, :uplink_not_running}` - Uplink dispatcher not available
   - `{:error, :send_failed, reason}` - Uplink transmission failed
@@ -221,7 +221,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       "Starting TargetDispatcher for mission_id=#{mission.id}, target=#{target.identifier} (#{target.id})"
     )
 
-    # Subscribe to interface connection events for this mission
+    # Subscribe to transport connection events for this mission
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission.id}:events")
 
     state = %State{
@@ -483,14 +483,14 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  # Interface connection events - resume if a route becomes available
+  # Transport connection events - resume if a route becomes available
   def handle_info(
-        {:interface_connection_event, %InterfaceConnectionEvent{} = event},
+        {:transport_connection_event, %TransportConnectionEvent{} = event},
         state
       ) do
     if event.new_state == :connected and uplink_connected?(state) do
       Logger.info(
-        "Interface #{event.interface_id} connected - resuming command dispatch for target #{state.target_id}"
+        "Transport #{event.transport_id} connected - resuming command dispatch for target #{state.target_id}"
       )
 
       # Trigger queue check now that we're connected
@@ -599,7 +599,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
   defp handle_cop1_event(%State{} = state, pending, %ProtocolEvent{} = event) do
     case event.status do
       :accepted ->
-        record_command_sent(state, pending.aggregate_id, pending.recording_id, event.interface_id)
+        record_command_sent(state, pending.aggregate_id, pending.recording_id, event.transport_id)
 
         maybe_complete_queue_entry(
           state,
@@ -743,7 +743,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
             state,
             cmd_info.aggregate_id,
             cmd_info.recording_id,
-            decision.interface_id
+            decision.transport_id
           )
 
           info
@@ -819,10 +819,10 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
         error
 
-      {:error, :no_interface} = error ->
+      {:error, :no_transport} = error ->
         record_command_errored(state, aggregate_id, entry.command_name, %{
-          error_type: "no_interface",
-          error_reason: "No interface available for target"
+          error_type: "no_transport",
+          error_reason: "No transport available for target"
         })
 
         error
@@ -830,7 +830,7 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
       {:error, :routing_ambiguous} = error ->
         record_command_errored(state, aggregate_id, entry.command_name, %{
           error_type: "routing_ambiguous",
-          error_reason: "Multiple active uplink bindings; specify an interface or channel"
+          error_reason: "Multiple active uplink bindings; specify a transport or channel"
         })
 
         error
@@ -843,10 +843,10 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
 
         error
 
-      {:error, :interface_not_running} = error ->
+      {:error, :transport_not_running} = error ->
         record_command_errored(state, aggregate_id, entry.command_name, %{
-          error_type: "interface_disconnected",
-          error_reason: "Interface not running"
+          error_type: "transport_disconnected",
+          error_reason: "Transport not running"
         })
 
         error
@@ -950,10 +950,10 @@ defmodule Cadence.Runtime.Commands.TargetDispatcher do
     end
   end
 
-  defp record_command_sent(state, aggregate_id, parent_recording_id, interface_id) do
+  defp record_command_sent(state, aggregate_id, parent_recording_id, transport_id) do
     now = CadenceTime.now()
 
-    recordable_attrs = %{interface_id: interface_id}
+    recordable_attrs = %{transport_id: transport_id}
 
     recording_attrs = %{
       organization_id: state.mission.organization_id,

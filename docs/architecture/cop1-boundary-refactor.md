@@ -115,7 +115,7 @@ Split current `UplinkPipeline` responsibilities:
 
 Keep `RouteDecision` but limit to routing fields:
 
-- `target_id`, `interface_id`, `scid`, `vcid`, `tc_stream_id`,
+- `target_id`, `transport_id`, `scid`, `vcid`, `tc_stream_id`,
   `protocol_mode` (e.g., `:cop1` or `:direct`), `pdu_type`, `apid`.
 
 ### Uplink Context Split
@@ -149,7 +149,7 @@ Define a transport-level frame envelope (COP-1 agnostic):
   protocol: :cop1,
   status: :accepted | :rejected | :timeout,
   stream_id: term(),
-  interface_id: String.t(),
+  transport_id: String.t(),
   correlation_id: term() | nil,
   reason: term() | nil,
   seq: non_neg_integer() | nil,

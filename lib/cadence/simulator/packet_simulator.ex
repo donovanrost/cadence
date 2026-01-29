@@ -9,7 +9,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   - Generates realistic health, attitude, and power telemetry
   - Configurable packet types and generation rates
-  - TCP/UDP output for interface testing
+  - TCP/UDP output for transport testing
   - Mission-scoped configuration
   - Simulates realistic value variations and anomalies
 
@@ -35,8 +35,6 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
-  alias Cadence.Interfaces
-  alias Cadence.Runtime.Interfaces.SDLPConfig
   alias Cadence.Telemetry.{Evidence, PacketEnvelope}
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
@@ -51,7 +49,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     @moduledoc false
     defstruct [
       :mission_id,
-      :interface_id,
+      :transport_id,
       :targets,
       :packet_types,
       :rate_hz,
@@ -78,7 +76,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   ## Options
 
   - `:mission_id` - Mission ID for scoping (required)
-  - `:interface_id` - Interface ID to look up framing config from (optional)
+  - `:transport_id` - Transport ID to tag provenance (optional)
   - `:targets` - List of target IDs to simulate (default: ["sim-target-1"])
   - `:packet_types` - List of packet types to generate (default: [:health, :attitude, :power])
   - `:rate_hz` - Packet generation rate in Hz (default: 1.0)
@@ -95,9 +93,9 @@ defmodule Cadence.Simulator.PacketSimulator do
     - `:pubsub` - Publish to Phoenix PubSub only
     - `nil` - No network output (PubSub only)
 
-  When `:interface_id` is provided, the simulator uses the interface's SDLP
-  framing configuration to frame outgoing packets via the CCSDS uplink pipeline
-  (this is simulator-only; runtime uplink framing lives in ChannelService).
+  When `:frame` options are provided, the simulator uses them to frame outgoing
+  packets via the CCSDS uplink pipeline (simulator-only; runtime uplink framing
+  lives in ChannelService).
   """
   def start_link(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
@@ -131,7 +129,7 @@ defmodule Cadence.Simulator.PacketSimulator do
   @impl true
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
-    interface_id = Keyword.get(opts, :interface_id)
+    transport_id = Keyword.get(opts, :transport_id)
     targets = Keyword.get(opts, :targets, ["sim-target-1"])
     packet_types = Keyword.get(opts, :packet_types, @default_packet_types)
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
@@ -146,7 +144,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     # At rates > 1000 Hz, we can't send one packet per ms, so we send bursts
     {interval_ms, packets_per_tick} = calculate_burst_params(rate_hz)
 
-    {uplink_pipeline, uplink_opts} = init_uplink_pipeline(interface_id, frame)
+    {uplink_pipeline, uplink_opts} = init_uplink_pipeline(transport_id, frame)
 
     mode_info =
       if packets_per_tick > 1 do
@@ -158,7 +156,7 @@ defmodule Cadence.Simulator.PacketSimulator do
     Logger.info("""
     Starting PacketSimulator:
       mission_id: #{mission_id}
-      interface_id: #{inspect(interface_id)}
+      transport_id: #{inspect(transport_id)}
       targets: #{inspect(targets)}
       packet_types: #{inspect(packet_types)}
       rate_hz: #{rate_hz} (#{mode_info})
@@ -169,7 +167,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
     state = %State{
       mission_id: mission_id,
-      interface_id: interface_id,
+      transport_id: transport_id,
       targets: targets,
       packet_types: packet_types,
       rate_hz: rate_hz,
@@ -285,24 +283,8 @@ defmodule Cadence.Simulator.PacketSimulator do
     {:via, Registry, {Cadence.MissionRegistry, {mission_id, :simulator}}}
   end
 
-  defp init_uplink_pipeline(nil, frame) do
+  defp init_uplink_pipeline(_transport_id, frame) do
     init_uplink_from_frame(frame)
-  end
-
-  defp init_uplink_pipeline(interface_id, frame) do
-    with interface when not is_nil(interface) <- Interfaces.get_interface(interface_id),
-         {:ok, %{opts: opts}} <- SDLPConfig.fetch(interface) do
-      case UplinkPipeline.init(opts) do
-        {:ok, pipeline} -> {pipeline, opts}
-        {:error, _} -> init_uplink_from_frame(frame)
-      end
-    else
-      _ -> init_uplink_from_frame(frame)
-    end
-  rescue
-    error ->
-      Logger.warning("Failed to initialize CCSDS uplink pipeline: #{inspect(error)}")
-      init_uplink_from_frame(frame)
   end
 
   defp init_uplink_from_frame(nil), do: {nil, nil}
@@ -613,7 +595,7 @@ defmodule Cadence.Simulator.PacketSimulator do
       mission_id: mission_id,
       target_id: target_id,
       received_at: CadenceTime.now(),
-      interface_id: nil,
+      transport_id: nil,
       source: %{simulator: true, packet_type: packet_type},
       mode: :sim
     }
@@ -635,7 +617,7 @@ defmodule Cadence.Simulator.PacketSimulator do
 
   defp build_provenance(metadata) do
     %{}
-    |> maybe_put(:interface_id, metadata[:interface_id])
+    |> maybe_put(:transport_id, metadata[:transport_id])
     |> maybe_put(:source, metadata[:source])
   end
 

@@ -1,7 +1,7 @@
 defmodule CadenceWeb.TargetLive.Show do
   use CadenceWeb, :live_view
 
-  alias Cadence.{Interfaces, Missions, Targets}
+  alias Cadence.{Missions, Targets}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -19,15 +19,11 @@ defmodule CadenceWeb.TargetLive.Show do
     # Check if user can view the mission (and thus the target)
     case Bodyguard.permit(Cadence.Missions.Policy, :view, scope, mission) do
       :ok ->
-        # Load interfaces associated with this target
-        interfaces = Interfaces.list_interfaces_for_target(target)
-
         {:noreply,
          socket
          |> assign(:page_title, "Target Details")
          |> assign(:target, target)
-         |> assign(:mission, mission)
-         |> assign(:interfaces, interfaces)}
+         |> assign(:mission, mission)}
 
       {:error, _} ->
         {:noreply,

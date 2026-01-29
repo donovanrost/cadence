@@ -1,50 +1,50 @@
 defmodule Cadence.Runtime.Router do
   @moduledoc """
-  Interface event router for downlink bytes and interface state changes.
+  Transport event router for downlink bytes and transport state changes.
   """
 
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.LinkController
 
   @spec ingest(String.t(), String.t(), binary(), map()) :: :ok
-  def ingest(mission_id, interface_id, bytes, meta \\ %{}) when is_binary(bytes) do
+  def ingest(mission_id, transport_id, bytes, meta \\ %{}) when is_binary(bytes) do
     scid = meta[:scid]
 
     if is_integer(scid) do
-      LinkController.route_downlink(mission_id, scid, interface_id, bytes, meta)
+      LinkController.route_downlink(mission_id, scid, transport_id, bytes, meta)
     else
-      # Fallback: try each link controller that has a binding to this interface.
+      # Fallback: try each link controller that has a binding to this transport.
       # This is an intentionally simple routing heuristic until schedulers/classifiers
       # are fully implemented.
-      for scid <- candidate_scids(mission_id, interface_id) do
-        LinkController.route_downlink(mission_id, scid, interface_id, bytes, meta)
+      for scid <- candidate_scids(mission_id, transport_id) do
+        LinkController.route_downlink(mission_id, scid, transport_id, bytes, meta)
       end
     end
 
     :ok
   end
 
-  @spec interface_connected(String.t(), String.t(), keyword()) :: :ok
-  def interface_connected(mission_id, interface_id, _meta \\ []) do
-    Enum.each(candidate_scids(mission_id, interface_id), fn scid ->
-      LinkController.interface_state(mission_id, scid, interface_id, :up)
+  @spec transport_connected(String.t(), String.t(), keyword()) :: :ok
+  def transport_connected(mission_id, transport_id, _meta \\ []) do
+    Enum.each(candidate_scids(mission_id, transport_id), fn scid ->
+      LinkController.transport_state(mission_id, scid, transport_id, :up)
     end)
 
     :ok
   end
 
-  @spec interface_disconnected(String.t(), String.t(), keyword()) :: :ok
-  def interface_disconnected(mission_id, interface_id, _meta \\ []) do
-    Enum.each(candidate_scids(mission_id, interface_id), fn scid ->
-      LinkController.interface_state(mission_id, scid, interface_id, :down)
+  @spec transport_disconnected(String.t(), String.t(), keyword()) :: :ok
+  def transport_disconnected(mission_id, transport_id, _meta \\ []) do
+    Enum.each(candidate_scids(mission_id, transport_id), fn scid ->
+      LinkController.transport_state(mission_id, scid, transport_id, :down)
     end)
 
     :ok
   end
 
-  defp candidate_scids(mission_id, interface_id) do
+  defp candidate_scids(mission_id, transport_id) do
     Registry.select(Cadence.MissionRegistry, [
-      {{{:link_binding, mission_id, :"$1", interface_id}, :_, :_}, [], [:"$1"]}
+      {{{:link_binding, mission_id, :"$1", transport_id}, :_, :_}, [], [:"$1"]}
     ])
   end
 

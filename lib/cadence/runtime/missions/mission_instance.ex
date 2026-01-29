@@ -4,7 +4,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
 
   This supervisor manages all processes for a specific mission:
   - Current Value Table (CVT)
-  - Transport supervisor (for hardware connections)
+  - Transport interface supervisor (for hardware connections)
   - Link controllers (per SCID)
   - Channel services (per ChannelId)
   - Telemetry pipeline
@@ -53,7 +53,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Telemetry.Limits.StateTracker
   alias Cadence.Runtime.Transport.COP1.StreamSupervisor, as: COP1StreamSupervisor
   alias Cadence.Runtime.Transport.InterfaceSupervisor
-  alias Cadence.Runtime.Transport.Supervisor, as: TransportSupervisor
   alias Cadence.Runtime.Uplink.Dispatcher, as: UplinkDispatcher
 
   @default_lane_shards 8
@@ -124,9 +123,6 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
-          # Transport Supervisor - manages TCP/UDP/Serial connections
-          {TransportSupervisor, mission_id: mission_id},
-
           # Interface Supervisor - manages new transport interface workers
           {InterfaceSupervisor, mission_id: mission_id},
 

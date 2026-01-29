@@ -692,7 +692,7 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp build_ccsds_totals(stats) do
-    Enum.reduce(stats, %{}, fn {_interface_id, profiles}, acc ->
+    Enum.reduce(stats, %{}, fn {_transport_id, profiles}, acc ->
       accumulate_profiles(acc, profiles)
     end)
   end

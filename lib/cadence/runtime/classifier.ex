@@ -12,8 +12,8 @@ defmodule Cadence.Runtime.Classifier do
 
   @spec classify(String.t(), String.t(), String.t(), binary(), map()) ::
           {:ok, ChannelId.t()} | :ignore
-  def classify(organization_id, mission_id, interface_id, bytes, metadata) do
-    impl().classify(organization_id, mission_id, interface_id, bytes, metadata)
+  def classify(organization_id, mission_id, transport_id, bytes, metadata) do
+    impl().classify(organization_id, mission_id, transport_id, bytes, metadata)
   end
 
   defp impl do

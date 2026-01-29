@@ -73,27 +73,3 @@
     <% end %>
   </div>
 <% end %>
-
-<!-- Associated Interfaces -->
-<div class="mt-6">
-  <div class="hud-label mb-3">Associated Interfaces</div>
-  <%= if Enum.empty?(@interfaces) do %>
-    <div class="hud-panel p-4 text-base-content/50 italic text-sm">
-      No interfaces associated with this target.
-      <.link navigate={~p"/missions/#{@mission}"} class="text-primary hover:text-primary/80">
-        Configure interfaces
-      </.link>
-      in the mission settings.
-    </div>
-  <% else %>
-    <.table id="target-interfaces" rows={@interfaces}>
-      <:col :let={interface} label="Interface">{interface.name}</:col>
-      <:col :let={interface} label="Connection">
-        {String.replace(interface.connection_type || "none", "_", " ") |> String.capitalize()}
-      </:col>
-      <:col :let={interface} label="Status">
-        <.status_badge status={interface.status} />
-      </:col>
-    </.table>
-  <% end %>
-</div>

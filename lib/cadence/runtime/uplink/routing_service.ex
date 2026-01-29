@@ -5,7 +5,6 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
 
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.CCSDS.Core.PDU
-  alias Cadence.Domain.Interfaces.Entities.TargetInterface
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.ProtocolConfig
   alias Cadence.Runtime.Transport.COP1.Config
@@ -14,17 +13,13 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
 
   defstruct mission_id: nil,
             routes_by_target: %{},
-            vcid_by_target: %{},
-            vcid_defaults: %{},
             protocol_defaults_by_scid: %{},
             channel_protocol_overrides: %{},
             effective_protocols_by_channel: %{}
 
   @type t :: %__MODULE__{
           mission_id: String.t(),
-          routes_by_target: %{optional(String.t()) => [TargetInterface.t()]},
-          vcid_by_target: %{optional({String.t(), String.t()}) => non_neg_integer()},
-          vcid_defaults: %{optional(String.t()) => non_neg_integer()},
+          routes_by_target: %{optional(String.t()) => [map()]},
           protocol_defaults_by_scid: %{optional(non_neg_integer()) => map()},
           channel_protocol_overrides: %{
             optional({non_neg_integer(), non_neg_integer(), non_neg_integer() | nil}) => map()
@@ -36,12 +31,7 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
 
   @spec new(MissionConfig.t()) :: t()
   def new(%MissionConfig{} = config) do
-    routes_by_target =
-      config.target_interface_routings
-      |> Enum.filter(&TargetInterface.allows_write?/1)
-      |> Enum.group_by(& &1.target_id)
-
-    {vcid_by_target, vcid_defaults} = index_vcids(config.interface_vcids)
+    routes_by_target = build_routes(config.channel_targets, config.bindings)
     protocol_defaults_by_scid = build_protocol_defaults_by_scid(config.links)
     channel_protocol_overrides = build_channel_protocol_overrides(config.links)
 
@@ -55,22 +45,20 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
     %__MODULE__{
       mission_id: config.mission_id,
       routes_by_target: routes_by_target,
-      vcid_by_target: vcid_by_target,
-      vcid_defaults: vcid_defaults,
       protocol_defaults_by_scid: protocol_defaults_by_scid,
       channel_protocol_overrides: channel_protocol_overrides,
       effective_protocols_by_channel: effective_protocols_by_channel
     }
   end
 
-  @spec routes_for_target(t(), String.t()) :: [TargetInterface.t()]
+  @spec routes_for_target(t(), String.t()) :: [map()]
   def routes_for_target(%__MODULE__{} = service, target_id) do
     Map.get(service.routes_by_target, target_id, [])
   end
 
   @spec route(t(), UplinkPDU.t(), keyword()) ::
           {:ok, RouteDecision.t()}
-          | {:error, :no_interface}
+          | {:error, :no_transport}
           | {:error, :routing_ambiguous, list()}
   def route(%__MODULE__{} = service, %UplinkPDU{} = uplink_pdu, opts \\ []) do
     route(service, uplink_pdu.target_id, uplink_pdu.pdu_type, uplink_pdu.apid, opts)
@@ -78,7 +66,7 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
 
   @spec route(t(), String.t(), PDU.pdu_type() | nil, non_neg_integer() | nil, keyword()) ::
           {:ok, RouteDecision.t()}
-          | {:error, :no_interface}
+          | {:error, :no_transport}
           | {:error, :routing_ambiguous, list()}
   def route(%__MODULE__{} = service, target_id, pdu_type, apid, opts) do
     routes = routes_for_target(service, target_id)
@@ -87,8 +75,8 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
       {:ok, route} ->
         {:ok, decision_from_route(service, route, target_id, pdu_type, apid)}
 
-      {:error, :no_interface} ->
-        {:error, :no_interface}
+      {:error, :no_transport} ->
+        {:error, :no_transport}
 
       {:error, :routing_ambiguous, candidates} ->
         {:error, :routing_ambiguous, candidates}
@@ -96,17 +84,17 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
   end
 
   defp select_route(routes, opts) do
-    case Keyword.get(opts, :interface_id) do
+    case Keyword.get(opts, :transport_id) do
       nil ->
         case routes do
-          [] -> {:error, :no_interface}
+          [] -> {:error, :no_transport}
           [route] -> {:ok, route}
           _ -> {:error, :routing_ambiguous, routes}
         end
 
-      interface_id ->
-        case Enum.find(routes, &(&1.interface_id == interface_id)) do
-          nil -> {:error, :no_interface}
+      transport_id ->
+        case Enum.find(routes, &(&1.transport_id == transport_id)) do
+          nil -> {:error, :no_transport}
           route -> {:ok, route}
         end
     end
@@ -114,46 +102,39 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
 
   defp decision_from_route(
          %__MODULE__{} = service,
-         %TargetInterface{} = route,
+         route,
          target_id,
          pdu_type,
          apid
        ) do
-    scid =
-      case route.scid do
-        scid when is_integer(scid) -> scid
-        _ -> nil
-      end
+    scid = route.channel_id.scid
+    vcid = route.channel_id.vcid
 
-    vcid =
-      Map.get(service.vcid_by_target, {route.interface_id, target_id}) ||
-        Map.get(service.vcid_defaults, route.interface_id)
-
-    cop1_mode = resolve_cop1_mode(service, route.interface_id, scid, vcid, pdu_type, apid)
-    tc_stream_id = build_tc_stream_id(service, route.interface_id, scid, vcid)
+    cop1_mode = resolve_cop1_mode(service, scid, vcid, pdu_type, apid)
+    tc_stream_id = build_tc_stream_id(service, route.transport_id, scid, vcid)
 
     %RouteDecision{
       target_id: target_id,
       pdu_type: pdu_type,
       apid: apid,
-      interface_id: route.interface_id,
+      transport_id: route.transport_id,
       scid: scid,
       vcid: vcid,
       cop1_mode: cop1_mode,
       tc_stream_id: tc_stream_id,
-      tc_stream_id_raw: route.tc_stream_id
+      tc_stream_id_raw: nil
     }
   end
 
-  defp build_tc_stream_id(%__MODULE__{} = service, interface_id, scid, vcid) do
+  defp build_tc_stream_id(%__MODULE__{} = service, transport_id, scid, vcid) do
     if is_binary(service.mission_id) and is_integer(scid) and is_integer(vcid) do
-      TCStreamId.new!(service.mission_id, interface_id, scid, vcid)
+      TCStreamId.new!(service.mission_id, transport_id, scid, vcid)
     else
       nil
     end
   end
 
-  defp resolve_cop1_mode(%__MODULE__{} = service, _interface_id, scid, vcid, pdu_type, apid) do
+  defp resolve_cop1_mode(%__MODULE__{} = service, scid, vcid, pdu_type, apid) do
     protocol_config =
       case {scid, vcid} do
         {scid, vcid} when is_integer(scid) and is_integer(vcid) ->
@@ -187,21 +168,59 @@ defmodule Cadence.Runtime.Uplink.RoutingService do
     end
   end
 
-  defp index_vcids(nil), do: {%{}, %{}}
-  defp index_vcids([]), do: {%{}, %{}}
+  defp build_routes(nil, _bindings), do: %{}
+  defp build_routes([], _bindings), do: %{}
 
-  defp index_vcids(vcid_mappings) when is_list(vcid_mappings) do
-    Enum.reduce(vcid_mappings, {%{}, %{}}, fn mapping, {by_target, defaults} ->
-      interface_id = mapping.interface_id
-      vcid = mapping.vcid
-      target_id = mapping.target_id
+  defp build_routes(channel_targets, bindings) when is_list(channel_targets) do
+    bindings_by_channel =
+      bindings
+      |> List.wrap()
+      |> Enum.filter(fn binding -> binding_uplink?(binding) and binding_channel?(binding) end)
+      |> Enum.group_by(&channel_key(&1.channel))
 
-      if is_binary(target_id) do
-        {Map.put(by_target, {interface_id, target_id}, vcid), defaults}
+    channel_targets
+    |> Enum.reduce(%{}, fn channel_target, acc ->
+      with %ChannelId{} = channel_id <- channel_id_from_target(channel_target),
+           bindings when is_list(bindings) <-
+             Map.get(bindings_by_channel, ChannelId.key(channel_id), []) do
+        routes =
+          Enum.map(bindings, fn binding ->
+            %{
+              target_id: channel_target.target_id,
+              channel_id: channel_id,
+              transport_id: binding.transport_id,
+              binding: binding
+            }
+          end)
+
+        Map.update(acc, channel_target.target_id, routes, &(&1 ++ routes))
       else
-        {by_target, Map.put(defaults, interface_id, vcid)}
+        _ -> acc
       end
     end)
+  end
+
+  defp binding_uplink?(binding) do
+    binding.direction in [:uplink, :both] and binding.desired_state in [:active, :draining]
+  end
+
+  defp binding_channel?(binding) do
+    case binding.channel do
+      %{scid: scid, vcid: vcid} when is_integer(scid) and is_integer(vcid) -> true
+      _ -> false
+    end
+  end
+
+  defp channel_key(channel) do
+    ChannelId.key(ChannelId.new(channel.scid, channel.vcid, channel.map_id))
+  end
+
+  defp channel_id_from_target(channel_target) do
+    if is_integer(channel_target.scid) and is_integer(channel_target.vcid) do
+      ChannelId.new(channel_target.scid, channel_target.vcid, channel_target.map_id)
+    else
+      nil
+    end
   end
 
   defp build_protocol_defaults_by_scid(links) do

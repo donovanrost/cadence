@@ -238,7 +238,7 @@ MissionInstance
   - OTP append log: add separate shard-aligned streams for `raw_frames` and `packets`. Segment rotation, optional compression.
   - Kafka/Redpanda: dedicated topics `telemetry.raw.frames` and `telemetry.deframed.packets`, same envelope fields plus `frame_seq`/`frame_ts`.
 - Envelope additions for capture:
-  - Raw frame: `{frame_seq, frame_ts, interface_id, target_hint, config_version, router_version, shard_id, checksum, payload}`.
+  - Raw frame: `{frame_seq, frame_ts, transport_id, target_hint, config_version, router_version, shard_id, checksum, payload}`.
   - Packet: existing packet envelope plus `frame_seq/ref`, `deframe_source` metadata.
 - Replay tooling:
   - `LogSource` readers support time/range filters and speed controls (real-time, accelerated, as-fast-as-possible).

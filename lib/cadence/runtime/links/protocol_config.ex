@@ -14,7 +14,7 @@ defmodule Cadence.Runtime.Links.ProtocolConfig do
 
   @spec normalize(map()) :: t()
   def normalize(config) when is_map(config) do
-    config = drop_interface_id(config)
+    config = drop_transport_id(config)
     cop1 = COP1Config.config(config)
 
     %{
@@ -91,10 +91,10 @@ defmodule Cadence.Runtime.Links.ProtocolConfig do
     end)
   end
 
-  defp drop_interface_id(config) when is_map(config) do
+  defp drop_transport_id(config) when is_map(config) do
     config
-    |> Map.delete(:interface_id)
-    |> Map.delete("interface_id")
+    |> Map.delete(:transport_id)
+    |> Map.delete("transport_id")
   end
 
   defp bind_scid(config, scid) when is_integer(scid) do

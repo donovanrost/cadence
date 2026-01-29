@@ -152,7 +152,7 @@ end
 # Command sent to interface (minimal - just marks transmission)
 create table(:command_sents, primary_key: false) do
   add :id, :binary_id, primary_key: true
-  add :interface_id, :binary_id
+  add :transport_id, :binary_id
   timestamps(type: :utc_datetime_usec, updated_at: false)
 end
 
@@ -741,7 +741,7 @@ end
 
 # When command is sent to interface
 defp record_command_sent(aggregate_id, recording_attrs) do
-  Recordings.create(CommandSent, %{interface_id: recording_attrs[:interface_id]}, %{
+  Recordings.create(CommandSent, %{transport_id: recording_attrs[:transport_id]}, %{
     aggregate_id: aggregate_id,
     # ... other attrs
   })

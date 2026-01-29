@@ -46,9 +46,9 @@ defmodule Cadence.Telemetry.Evidence do
     new(:apid, value, source: source, confidence: confidence)
   end
 
-  @spec interface_id(term(), atom() | tuple(), :high | :medium | :low) :: t()
-  def interface_id(value, source, confidence \\ :high) do
-    new(:interface_id, value, source: source, confidence: confidence)
+  @spec transport_id(term(), atom() | tuple(), :high | :medium | :low) :: t()
+  def transport_id(value, source, confidence \\ :high) do
+    new(:transport_id, value, source: source, confidence: confidence)
   end
 
   @spec target_hint(term(), atom() | tuple(), :high | :medium | :low) :: t()

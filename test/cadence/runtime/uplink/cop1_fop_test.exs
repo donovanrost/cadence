@@ -5,7 +5,6 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   alias Cadence.CCSDS.SDU.SpacePacket
   alias Cadence.CCSDS.TC.TransferFrame
   alias Cadence.CCSDS.Transport.COP1.CLCW
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Harness.Time
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Interfaces.SDLPConfig
@@ -15,11 +14,12 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
   alias Cadence.Runtime.Uplink.FrameBuilder
   alias Cadence.Runtime.Uplink.FramingContext
   alias Cadence.Transport.TCStreamId
+  alias Cadence.Transports.Interface
 
   setup_mission_registry()
   setup_virtual_time()
 
-  test "ignores protocol_config interface_id for interface selection" do
+  test "ignores protocol_config transport_id for transport selection" do
     mission_id = Cadence.PureCase.random_id()
     channel_id = ChannelId.new(10, 0)
 
@@ -27,7 +27,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
       cop1: %{mode: :fop},
       sdlp: {:ok, %{opts: [uplink_frame_size: 16]}},
       cop1_report_apids: [],
-      interface_id: Cadence.PureCase.random_id()
+      transport_id: Cadence.PureCase.random_id()
     }
 
     {:ok, _pid} =
@@ -39,16 +39,16 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
          release_fun: fn _ -> :ok end}
       )
 
-    assert {:error, :no_active_interface} =
+    assert {:error, :no_active_transport} =
              FOP.send_frames(mission_id, channel_id, [%{bytes: <<0>>}])
   end
 
   test "acks frames when CLCW report value advances" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
 
     test_pid = self()
 
@@ -62,7 +62,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(fop_pid)
@@ -87,10 +87,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "retransmits on timeout" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
 
     test_pid = self()
 
@@ -104,7 +104,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 11)
+      cop1_contexts(mission_id, transport_id, 11)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -126,10 +126,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "bypass frames are sent without COP-1 tracking" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     test_pid = self()
 
     send_fun = fn bytes ->
@@ -142,7 +142,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 12, bypass_flag: 1)
+      cop1_contexts(mission_id, transport_id, 12, bypass_flag: 1)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -159,10 +159,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "unlock control command is allowed during lockout" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     test_pid = self()
 
     send_fun = fn bytes ->
@@ -175,7 +175,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     lockout = %CLCW{lockout: 1, vcid: 0, report_value: 0}
     ingest_report(tc_stream_id, 0, clcw: lockout)
@@ -199,10 +199,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "rejects out-of-window report values" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     test_pid = self()
 
     send_fun = fn bytes ->
@@ -215,7 +215,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -236,11 +236,11 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "window full defers pending frames until report advances" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     {interface, link_defaults} =
-      build_interface(mission_id, interface_id, frame_size, cop1: %{"window_size" => 1})
+      build_interface(mission_id, transport_id, frame_size, cop1: %{"window_size" => 1})
 
     test_pid = self()
 
@@ -253,7 +253,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -273,11 +273,11 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "timeout retransmits and locks out after max retransmit" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
     {interface, link_defaults} =
-      build_interface(mission_id, interface_id, frame_size,
+      build_interface(mission_id, transport_id, frame_size,
         cop1: %{"timeout_ms" => 10, "max_retransmit" => 1, "window_size" => 1}
       )
 
@@ -292,7 +292,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -313,10 +313,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "reject report removes command from in-flight and emits rejection" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     test_pid = self()
 
     send_fun = fn bytes ->
@@ -338,7 +338,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10, correlation_id: :corr)
+      cop1_contexts(mission_id, transport_id, 10, correlation_id: :corr)
 
     ingest_report(tc_stream_id, 0)
     _ = FOP.stats(pid)
@@ -360,10 +360,10 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "stream restart holds until resynced" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     test_pid = self()
 
     send_fun = fn bytes ->
@@ -375,7 +375,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     pdu = build_pdu()
 
     {framing_context, cop1_context, tc_stream_id} =
-      cop1_contexts(mission_id, interface_id, 10)
+      cop1_contexts(mission_id, transport_id, 10)
 
     assert {:defer, :hold_pending_resync} ==
              send_frames(mission_id, link_defaults, pdu, framing_context, cop1_context)
@@ -399,18 +399,18 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
 
   test "distinct tc stream ids create distinct stream processes" do
     mission_id = Cadence.PureCase.random_id()
-    interface_id = Cadence.PureCase.random_id()
+    transport_id = Cadence.PureCase.random_id()
     frame_size = 32
 
-    {interface, link_defaults} = build_interface(mission_id, interface_id, frame_size)
+    {interface, link_defaults} = build_interface(mission_id, transport_id, frame_size)
     send_fun = fn _bytes -> :ok end
 
     {:ok, _pid} = start_fop(mission_id, interface, 10, send_fun, link_defaults: link_defaults)
     {:ok, _pid} = start_fop(mission_id, interface, 11, send_fun, link_defaults: link_defaults)
     pdu = build_pdu()
 
-    {framing_a, cop1_a, tc_stream_a} = cop1_contexts(mission_id, interface_id, 10, vcid: 0)
-    {framing_b, cop1_b, tc_stream_b} = cop1_contexts(mission_id, interface_id, 11, vcid: 0)
+    {framing_a, cop1_a, tc_stream_a} = cop1_contexts(mission_id, transport_id, 10, vcid: 0)
+    {framing_b, cop1_b, tc_stream_b} = cop1_contexts(mission_id, transport_id, 11, vcid: 0)
 
     ingest_report(tc_stream_a, 0)
     ingest_report(tc_stream_b, 0)
@@ -424,7 +424,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     assert pid_a != pid_b
   end
 
-  defp build_interface(mission_id, interface_id, frame_size, opts \\ []) do
+  defp build_interface(mission_id, transport_id, frame_size, opts \\ []) do
     cop1_overrides = Keyword.get(opts, :cop1, %{})
 
     link_defaults = %{
@@ -457,14 +457,15 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     }
 
     interface = %Interface{
-      id: interface_id,
+      id: transport_id,
       mission_id: mission_id,
       name: "cop1-test",
-      connection_type: :tcp_server,
-      bind_address: "127.0.0.1",
-      bind_port: 0,
-      target_ids: [],
-      config: %{}
+      type: :tcp,
+      endpoint: %{
+        mode: "server",
+        host: "127.0.0.1",
+        port: 0
+      }
     }
 
     {interface, link_defaults}
@@ -521,9 +522,9 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     report
   end
 
-  defp cop1_contexts(mission_id, interface_id, scid, opts \\ []) do
+  defp cop1_contexts(mission_id, transport_id, scid, opts \\ []) do
     vcid = Keyword.get(opts, :vcid, 0)
-    tc_stream_id = TCStreamId.new!(mission_id, interface_id, scid, vcid)
+    tc_stream_id = TCStreamId.new!(mission_id, transport_id, scid, vcid)
 
     # Note: bypass_flag/control_command_flag/segment_header_flag are TC frame header bits
     # and are derived from segmentation config, not set on Context.
@@ -597,7 +598,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
         )
       )
 
-    ensure_active_interface(mission_id, channel_id, interface.id)
+    ensure_active_transport(mission_id, channel_id, interface.id)
 
     {:ok, pid} = fetch_fop_pid(mission_id, channel_id)
     {:ok, pid}
@@ -613,7 +614,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     end
   end
 
-  defp ensure_active_interface(mission_id, %ChannelId{} = channel_id, interface_id) do
+  defp ensure_active_transport(mission_id, %ChannelId{} = channel_id, transport_id) do
     _ =
       ensure_started(
         Supervisor.child_spec(
@@ -625,7 +626,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     binding = %Binding{
       mission_id: mission_id,
       channel_id: channel_id,
-      interface_id: interface_id,
+      transport_id: transport_id,
       direction: :uplink,
       role: :primary,
       priority: 0,
@@ -634,7 +635,7 @@ defmodule Cadence.Runtime.Transport.COP1.FOPTest do
     }
 
     :ok = LinkController.set_binding(binding)
-    :ok = LinkController.interface_state(mission_id, channel_id.scid, interface_id, :up)
+    :ok = LinkController.transport_state(mission_id, channel_id.scid, transport_id, :up)
   end
 
   defp build_frames(%PDU{} = pdu, %FramingContext{} = context, link_defaults) do

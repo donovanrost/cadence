@@ -78,9 +78,9 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     connected =
       Resolver.list_channels(state.organization_id, state.mission_id, target_id)
       |> Enum.any?(fn channel_id ->
-        case active_interface_for_channel(state.mission_id, channel_id) do
+        case active_transport_for_channel(state.mission_id, channel_id) do
           nil -> false
-          interface_id -> Transport.connected?(state.mission_id, interface_id)
+          transport_id -> Transport.connected?(state.mission_id, transport_id)
         end
       end)
 
@@ -101,21 +101,21 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   end
 
   defp do_dispatch(state, %ChannelId{} = channel_id, %UplinkPDU{} = uplink_pdu, opts) do
-    with {:ok, interface_id} <- select_interface(state.mission_id, channel_id, opts),
+    with {:ok, transport_id} <- select_transport(state.mission_id, channel_id, opts),
          :ok <-
            ChannelService.send_uplink(state.mission_id, channel_id, uplink_pdu.pdu, %{
-             interface_id: interface_id,
+             transport_id: transport_id,
              cop1_context: Keyword.get(opts, :cop1_context)
            }) do
       decision = %RouteDecision{
         target_id: uplink_pdu.target_id,
         pdu_type: uplink_pdu.pdu_type,
         apid: uplink_pdu.apid,
-        interface_id: interface_id,
+        transport_id: transport_id,
         scid: channel_id.scid,
         vcid: channel_id.vcid,
         cop1_mode: resolve_cop1_mode(state.mission_id, channel_id, uplink_pdu),
-        tc_stream_id: build_tc_stream_id(state.mission_id, channel_id, interface_id),
+        tc_stream_id: build_tc_stream_id(state.mission_id, channel_id, transport_id),
         tc_stream_id_raw: nil
       }
 
@@ -133,21 +133,21 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     organization_id = Keyword.fetch!(opts, :organization_id)
     channels = Resolver.list_channels(organization_id, mission_id, target_id)
     channel_override = Keyword.get(opts, :channel_id)
-    interface_override = Keyword.get(opts, :interface_id)
+    transport_override = Keyword.get(opts, :transport_id)
 
     cond do
       match?(%ChannelId{}, channel_override) ->
         if Enum.any?(channels, &(ChannelId.key(&1) == ChannelId.key(channel_override))) do
           {:ok, channel_override}
         else
-          {:error, :no_interface}
+          {:error, :no_transport}
         end
 
       channels == [] ->
-        {:error, :no_interface}
+        {:error, :no_transport}
 
-      is_binary(interface_override) ->
-        pick_channel_for_interface(mission_id, channels, interface_override)
+      is_binary(transport_override) ->
+        pick_channel_for_transport(mission_id, channels, transport_override)
 
       length(channels) == 1 ->
         {:ok, hd(channels)}
@@ -157,15 +157,15 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     end
   end
 
-  defp pick_channel_for_interface(mission_id, channels, interface_id) do
+  defp pick_channel_for_transport(mission_id, channels, transport_id) do
     matches =
       Enum.filter(channels, fn channel_id ->
-        binding_active?(mission_id, channel_id, interface_id, :uplink)
+        binding_active?(mission_id, channel_id, transport_id, :uplink)
       end)
 
     case matches do
       [channel_id] -> {:ok, channel_id}
-      [] -> {:error, :no_interface}
+      [] -> {:error, :no_transport}
       _ -> {:error, :routing_ambiguous}
     end
   end
@@ -173,45 +173,45 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
   defp pick_channel_by_active(mission_id, channels) do
     active =
       Enum.filter(channels, fn channel_id ->
-        is_binary(active_interface_for_channel(mission_id, channel_id))
+        is_binary(active_transport_for_channel(mission_id, channel_id))
       end)
 
     case active do
       [channel_id] -> {:ok, channel_id}
-      [] -> {:error, :no_interface}
+      [] -> {:error, :no_transport}
       _ -> {:error, :routing_ambiguous}
     end
   end
 
-  defp select_interface(mission_id, %ChannelId{} = channel_id, opts) do
-    requested = Keyword.get(opts, :interface_id)
+  defp select_transport(mission_id, %ChannelId{} = channel_id, opts) do
+    requested = Keyword.get(opts, :transport_id)
 
     cond do
       is_binary(requested) and binding_active?(mission_id, channel_id, requested, :uplink) ->
         {:ok, requested}
 
       is_binary(requested) ->
-        {:error, :no_interface}
+        {:error, :no_transport}
 
       true ->
-        case active_interface_for_channel(mission_id, channel_id) do
-          nil -> {:error, :no_interface}
-          interface_id -> {:ok, interface_id}
+        case active_transport_for_channel(mission_id, channel_id) do
+          nil -> {:error, :no_transport}
+          transport_id -> {:ok, transport_id}
         end
     end
   end
 
-  defp active_interface_for_channel(mission_id, %ChannelId{} = channel_id) do
+  defp active_transport_for_channel(mission_id, %ChannelId{} = channel_id) do
     if link_controller_running?(mission_id, channel_id.scid) do
-      LinkController.active_uplink_interface(mission_id, channel_id)
+      LinkController.active_uplink_transport(mission_id, channel_id)
     else
       nil
     end
   end
 
-  defp binding_active?(mission_id, %ChannelId{} = channel_id, interface_id, direction) do
+  defp binding_active?(mission_id, %ChannelId{} = channel_id, transport_id, direction) do
     link_controller_running?(mission_id, channel_id.scid) and
-      LinkController.binding_active?(mission_id, channel_id, interface_id, direction)
+      LinkController.binding_active?(mission_id, channel_id, transport_id, direction)
   end
 
   defp link_controller_running?(mission_id, scid) do
@@ -229,8 +229,8 @@ defmodule Cadence.Runtime.Uplink.Dispatcher do
     end
   end
 
-  defp build_tc_stream_id(mission_id, %ChannelId{} = channel_id, interface_id) do
-    TCStreamId.new_from_channel!(mission_id, channel_id, interface_id: interface_id)
+  defp build_tc_stream_id(mission_id, %ChannelId{} = channel_id, transport_id) do
+    TCStreamId.new_from_channel!(mission_id, channel_id, transport_id: transport_id)
   end
 
   defp protocol_config_for_channel(mission_id, %ChannelId{} = channel_id) do

@@ -217,7 +217,7 @@ defmodule CadenceWeb.MissionLive.ChannelShow do
                   <tr class="hover:bg-base-300/50">
                     <td>
                       <.link
-                        navigate={~p"/missions/#{@mission}/transports/#{binding.interface_id}"}
+                        navigate={~p"/missions/#{@mission}/transports/#{binding.transport_id}"}
                         class="link link-primary"
                       >
                         {binding.interface.name}

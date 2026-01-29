@@ -1,6 +1,6 @@
 defmodule Cadence.Runtime.Links.Binding do
   @moduledoc """
-  Binding between a ChannelId and an Interface.
+  Binding between a ChannelId and a Transport.
 
   Bindings are the schedulable unit and are controlled independently of
   interface connection state.
@@ -15,7 +15,7 @@ defmodule Cadence.Runtime.Links.Binding do
   @type t :: %__MODULE__{
           mission_id: String.t(),
           channel_id: ChannelId.t(),
-          interface_id: String.t(),
+          transport_id: String.t(),
           direction: direction(),
           role: role(),
           priority: non_neg_integer(),
@@ -23,11 +23,11 @@ defmodule Cadence.Runtime.Links.Binding do
           observed_state: state()
         }
 
-  @enforce_keys [:mission_id, :channel_id, :interface_id, :direction]
+  @enforce_keys [:mission_id, :channel_id, :transport_id, :direction]
   defstruct [
     :mission_id,
     :channel_id,
-    :interface_id,
+    :transport_id,
     :direction,
     role: :primary,
     priority: 0,
@@ -36,8 +36,8 @@ defmodule Cadence.Runtime.Links.Binding do
   ]
 
   @spec key(t()) :: {ChannelId.t(), String.t(), direction()}
-  def key(%__MODULE__{channel_id: channel_id, interface_id: interface_id, direction: direction}) do
-    {channel_id, interface_id, direction}
+  def key(%__MODULE__{channel_id: channel_id, transport_id: transport_id, direction: direction}) do
+    {channel_id, transport_id, direction}
   end
 
   @spec allows_direction?(t(), :uplink | :downlink) :: boolean()

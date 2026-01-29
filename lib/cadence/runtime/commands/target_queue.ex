@@ -560,8 +560,8 @@ defmodule Cadence.Runtime.Commands.TargetQueue do
     return_to_pending_local(entry, entry_id, "no clients connected", state)
   end
 
-  defp apply_completion_result(entry, entry_id, {:error, :interface_not_running}, state) do
-    return_to_pending_local(entry, entry_id, "interface not running", state)
+  defp apply_completion_result(entry, entry_id, {:error, :transport_not_running}, state) do
+    return_to_pending_local(entry, entry_id, "transport not running", state)
   end
 
   defp apply_completion_result(entry, entry_id, {:error, reason}, state) do

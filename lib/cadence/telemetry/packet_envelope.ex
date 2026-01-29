@@ -36,6 +36,35 @@ defmodule Cadence.Telemetry.PacketEnvelope do
     mode: :realtime
   ]
 
+  @spec new(keyword() | map()) :: t()
+  def new(opts) when is_list(opts) do
+    mission_id = Keyword.get(opts, :mission_id)
+    raw = Keyword.get(opts, :raw)
+
+    if is_binary(mission_id) and is_binary(raw) do
+      opts = Keyword.drop(opts, [:mission_id, :raw])
+      new(mission_id, raw, opts)
+    else
+      raise ArgumentError, "PacketEnvelope.new/1 requires :mission_id and :raw"
+    end
+  end
+
+  def new(opts) when is_map(opts) do
+    mission_id = Map.get(opts, :mission_id) || Map.get(opts, "mission_id")
+    raw = Map.get(opts, :raw) || Map.get(opts, "raw")
+
+    if is_binary(mission_id) and is_binary(raw) do
+      opts =
+        opts
+        |> Map.drop([:mission_id, "mission_id", :raw, "raw"])
+        |> Enum.into([])
+
+      new(mission_id, raw, opts)
+    else
+      raise ArgumentError, "PacketEnvelope.new/1 requires :mission_id and :raw"
+    end
+  end
+
   @spec new(binary(), binary(), keyword()) :: t()
   def new(mission_id, raw, opts \\ []) when is_binary(mission_id) and is_binary(raw) do
     ingest_ts = Keyword.get(opts, :ingest_ts, CadenceTime.now())
@@ -65,6 +94,11 @@ defmodule Cadence.Telemetry.PacketEnvelope do
   end
 
   def add_evidence(%__MODULE__{} = envelope, evidence_list) when is_list(evidence_list) do
+    add_evidence_many(envelope, evidence_list)
+  end
+
+  @spec add_evidence_many(t(), [Evidence.t()]) :: t()
+  def add_evidence_many(%__MODULE__{} = envelope, evidence_list) when is_list(evidence_list) do
     %{envelope | evidence: envelope.evidence ++ evidence_list}
   end
 end

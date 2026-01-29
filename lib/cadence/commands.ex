@@ -276,7 +276,7 @@ defmodule Cadence.Commands do
   ## Options
 
   - `:target` or `:target_id` - Target ID or identifier (required)
-  - `:interface_id` - Specific interface to use (optional)
+  - `:transport_id` - Specific transport to use (optional)
   - `:user_id` - User performing the action (for audit)
   - `:skip_verification` - Don't auto-verify even if configured
 
@@ -288,7 +288,7 @@ defmodule Cadence.Commands do
   - `{:error, :not_allowed_in_phase, current_phase}` - Phase restriction
   - `{:error, :unknown_command}` - Command not found
   - `{:error, :unknown_target}` - Target not found
-  - `{:error, :no_interface}` - No write interface for target
+  - `{:error, :no_transport}` - No write transport for target
   - `{:error, :encoding_failed, reason}` - Binary encoding failed
   - `{:error, :send_failed, reason}` - Transmission failed
   - `{:error, :paused}` - Dispatcher is paused for this target
@@ -1205,7 +1205,7 @@ defmodule Cadence.Commands do
 
   defp dispatch_opts_from_opts(opts) do
     opts
-    |> Keyword.take([:interface_id, :skip_verification, :skip_hazardous_check])
+    |> Keyword.take([:transport_id, :skip_verification, :skip_hazardous_check])
     |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
   end
 end

@@ -17,6 +17,7 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
           mission_id: String.t(),
           config_version: non_neg_integer(),
           organization_id: String.t() | nil,
+          config_health: map(),
           packet_defs: list(),
           packet_catalog_defs: list(),
           packet_catalog: map(),
@@ -27,13 +28,10 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
           derived_defs: list(),
           derived_packet_index: map(),
           limit_defs: map(),
-          interfaces: list(),
-          interface_vcids: list(),
-          target_interface_routings: list(),
           transport_interfaces: list(),
           links: list(),
           bindings: list(),
-          bindings_by_interface: map(),
+          bindings_by_transport: map(),
           active_selections: list(),
           channel_targets: list(),
           channels_by_target: map(),
@@ -48,6 +46,7 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     :mission_id,
     :config_version,
     :organization_id,
+    config_health: %{},
     packet_defs: [],
     packet_catalog_defs: [],
     packet_catalog: %{},
@@ -58,13 +57,10 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     derived_defs: [],
     derived_packet_index: %{},
     limit_defs: %{},
-    interfaces: [],
-    interface_vcids: [],
-    target_interface_routings: [],
     transport_interfaces: [],
     links: [],
     bindings: [],
-    bindings_by_interface: %{},
+    bindings_by_transport: %{},
     active_selections: [],
     channel_targets: [],
     channels_by_target: %{},
@@ -100,6 +96,7 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       mission_id: config.mission_id,
       config_version: config.config_generation,
       organization_id: config.organization_id,
+      config_health: Map.get(config, :config_health, %{}),
       packet_defs: config.packet_defs,
       packet_catalog_defs: packet_catalog_defs,
       packet_catalog: build_packet_catalog(packet_catalog_defs, targets),
@@ -110,13 +107,10 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       derived_defs: derived_defs,
       derived_packet_index: derived_packet_index,
       limit_defs: config.limit_defs,
-      interfaces: config.interfaces,
-      interface_vcids: config.interface_vcids,
-      target_interface_routings: config.target_interface_routings,
       transport_interfaces: config.transport_interfaces,
       links: links,
       bindings: bindings,
-      bindings_by_interface: build_bindings_by_interface(bindings),
+      bindings_by_transport: build_bindings_by_transport(bindings),
       active_selections: config.active_selections,
       channel_targets: channel_targets,
       channels_by_target: build_channels_by_target(channel_targets),
@@ -200,7 +194,7 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     end)
   end
 
-  defp build_bindings_by_interface(bindings) do
+  defp build_bindings_by_transport(bindings) do
     bindings
     |> Enum.filter(fn binding ->
       (binding.desired_state in [:active, :draining] and
@@ -216,15 +210,15 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       if is_integer(scid) and is_integer(vcid) do
         channel_id = ChannelId.new(scid, vcid, Map.get(channel, :map_id))
 
-        Map.update(acc, binding.interface_id, [channel_id], fn existing ->
+        Map.update(acc, binding.transport_id, [channel_id], fn existing ->
           [channel_id | existing]
         end)
       else
         acc
       end
     end)
-    |> Map.new(fn {interface_id, channels} ->
-      {interface_id, Enum.uniq_by(channels, &ChannelId.key/1)}
+    |> Map.new(fn {transport_id, channels} ->
+      {transport_id, Enum.uniq_by(channels, &ChannelId.key/1)}
     end)
   end
 

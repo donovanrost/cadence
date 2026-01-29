@@ -1,6 +1,6 @@
 defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   @moduledoc """
-  TCP Client interface for connecting to remote endpoints.
+  TCP Client transport for connecting to remote endpoints.
 
   This GenServer owns socket lifecycle and byte I/O only. It emits raw bytes
   to the runtime router and does not perform protocol framing or routing.
@@ -9,16 +9,15 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   use GenServer
   require Logger
 
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Router
   alias Cadence.Time, as: CadenceTime
   alias Cadence.Time.Timer, as: TimeTimer
+  alias Cadence.Transports.Interface, as: TransportInterface
 
   defmodule State do
     @moduledoc false
     defstruct [
-      :interface,
-      :target_id,
+      :transport,
       :host,
       :port,
       :socket,
@@ -34,11 +33,11 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   ## Client API
 
   @doc """
-  Starts the TCP client interface with the given Interface entity.
+  Starts the TCP client transport with the given transport interface.
   """
-  def start_link(%Interface{} = interface) do
-    name = {:via, Registry, {@registry, {:interface, interface.mission_id, interface.id}}}
-    GenServer.start_link(__MODULE__, interface, name: name)
+  def start_link(%TransportInterface{} = transport) do
+    name = {:via, Registry, {@registry, {:transport, transport.mission_id, transport.id}}}
+    GenServer.start_link(__MODULE__, transport, name: name)
   end
 
   @doc """
@@ -58,19 +57,18 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   ## GenServer Callbacks
 
   @impl true
-  def init(%Interface{} = interface) do
-    target_id = List.first(interface.target_ids) || "unknown"
+  def init(%TransportInterface{} = transport) do
+    endpoint = transport.endpoint || %{}
 
     state = %State{
-      interface: interface,
-      target_id: target_id,
-      host: interface.host |> to_charlist(),
-      port: interface.port,
-      reconnect_interval: interface.reconnect_delay_ms || 5000
+      transport: transport,
+      host: endpoint_value(endpoint, :host, "127.0.0.1") |> to_charlist(),
+      port: endpoint_value(endpoint, :port),
+      reconnect_interval: endpoint_value(endpoint, :reconnect_delay_ms, 5_000)
     }
 
     Logger.info(
-      "Starting TCP client interface #{interface.name} for target=#{target_id}, host=#{interface.host}, port=#{interface.port}"
+      "Starting TCP client transport #{transport.name} host=#{endpoint_value(endpoint, :host)} port=#{endpoint_value(endpoint, :port)}"
     )
 
     send(self(), :connect)
@@ -83,14 +81,9 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   end
 
   def handle_call({:send_data, data}, _from, %State{socket: socket} = state) do
-    case :gen_tcp.send(socket, data) do
-      :ok ->
-        updated = %{state | bytes_sent: state.bytes_sent + byte_size(data)}
-        {:reply, :ok, updated}
-
-      {:error, reason} = error ->
-        Logger.error("Failed to send data to #{state.target_id}: #{inspect(reason)}")
-        {:reply, error, handle_disconnect(state)}
+    case send_data_over_socket(%{state | socket: socket}, data) do
+      {:ok, next_state} -> {:reply, :ok, next_state}
+      {:error, reason, next_state} -> {:reply, {:error, reason}, next_state}
     end
   end
 
@@ -101,7 +94,6 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   def handle_call(:stats, _from, state) do
     stats = %{
       connected: state.connected,
-      target_id: state.target_id,
       host: to_string(state.host),
       port: state.port,
       bytes_received: state.bytes_received,
@@ -115,11 +107,9 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   def handle_info(:connect, state) do
     case :gen_tcp.connect(state.host, state.port, [:binary, active: true, packet: :raw]) do
       {:ok, socket} ->
-        Logger.info(
-          "TCP client connected to #{state.host}:#{state.port} for target=#{state.target_id}"
-        )
+        Logger.info("TCP client connected to #{state.host}:#{state.port}")
 
-        Router.interface_connected(state.interface.mission_id, state.interface.id)
+        Router.transport_connected(state.transport.mission_id, state.transport.id)
 
         {:noreply,
          %{
@@ -141,31 +131,39 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
   def handle_info({:tcp, socket, data}, %State{socket: socket} = state) do
     new_state = %{state | bytes_received: state.bytes_received + byte_size(data)}
 
-    Router.ingest(
-      state.interface.mission_id,
-      state.interface.id,
-      data,
-      downlink_metadata(state)
-    )
+    Router.ingest(state.transport.mission_id, state.transport.id, data, downlink_metadata(state))
 
     {:noreply, new_state}
   end
 
   def handle_info({:tcp_closed, socket}, %State{socket: socket} = state) do
-    Logger.warning("TCP connection closed for target=#{state.target_id}")
+    Logger.warning("TCP connection closed for transport=#{state.transport.id}")
     schedule_reconnect(state.reconnect_interval)
     {:noreply, handle_disconnect(state)}
   end
 
   def handle_info({:tcp_error, socket, reason}, %State{socket: socket} = state) do
-    Logger.error("TCP error for target=#{state.target_id}: #{inspect(reason)}")
+    Logger.error("TCP error for transport=#{state.transport.id}: #{inspect(reason)}")
     schedule_reconnect(state.reconnect_interval)
     {:noreply, handle_disconnect(state)}
   end
 
   @impl true
+  def handle_cast({:send, data, _meta}, state) when is_binary(data) do
+    case send_data_over_socket(state, data) do
+      {:ok, next_state} -> {:noreply, next_state}
+      {:error, _reason, next_state} -> {:noreply, next_state}
+    end
+  end
+
+  @impl true
+  def handle_cast({:downlink_packets, _connection_id, _count}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
   def terminate(_reason, %State{socket: socket} = state) when not is_nil(socket) do
-    Logger.info("Closing TCP connection for target=#{state.target_id}")
+    Logger.info("Closing TCP connection for transport=#{state.transport.id}")
     :gen_tcp.close(socket)
     :ok
   end
@@ -174,17 +172,12 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
     :ok
   end
 
-  @impl true
-  def handle_cast({:downlink_packets, _connection_id, _count}, state) do
-    {:noreply, state}
-  end
-
   ## Private Functions
 
   defp handle_disconnect(state) do
     if state.socket, do: :gen_tcp.close(state.socket)
 
-    Router.interface_disconnected(state.interface.mission_id, state.interface.id)
+    Router.transport_disconnected(state.transport.mission_id, state.transport.id)
 
     %{
       state
@@ -193,16 +186,37 @@ defmodule Cadence.Runtime.Interfaces.TcpClientInterface do
     }
   end
 
+  defp send_data_over_socket(%State{connected: false} = state, _data),
+    do: {:error, :not_connected, state}
+
+  defp send_data_over_socket(%State{socket: socket} = state, data) do
+    case :gen_tcp.send(socket, data) do
+      :ok ->
+        {:ok, %{state | bytes_sent: state.bytes_sent + byte_size(data)}}
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to send data for transport=#{state.transport.id}: #{inspect(reason)}"
+        )
+
+        {:error, reason, handle_disconnect(state)}
+    end
+  end
+
   defp schedule_reconnect(interval) do
     TimeTimer.send_after(self(), :connect, interval)
   end
 
   defp downlink_metadata(state) do
     %{
-      mission_id: state.interface.mission_id,
-      target_id: state.target_id,
+      mission_id: state.transport.mission_id,
       received_at: CadenceTime.now(),
-      interface_id: state.interface.id
+      transport_id: state.transport.id,
+      mode: :realtime
     }
+  end
+
+  defp endpoint_value(endpoint, key, default \\ nil) when is_map(endpoint) do
+    Map.get(endpoint, key) || Map.get(endpoint, Atom.to_string(key)) || default
   end
 end

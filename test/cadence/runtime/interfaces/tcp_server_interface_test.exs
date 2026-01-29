@@ -1,12 +1,9 @@
 defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
   use Cadence.IntegrationCase
 
-  alias Cadence.Application.Missions.MissionConfig
-  alias Cadence.Domain.Interfaces.Entities.Interface
   alias Cadence.Runtime.Interfaces.TcpServerInterface
-  alias Cadence.Runtime.Missions.MissionSupervisor
-  alias Cadence.Runtime.Transport.Supervisor, as: TransportSupervisor
   alias Cadence.TestHelpers
+  alias Cadence.Transports.Interface
   alias Ecto.Adapters.SQL.Sandbox
 
   @moduletag :integration
@@ -18,45 +15,36 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
     # Create test organization, mission, and target
     setup_result = TestHelpers.full_test_setup()
     mission = setup_result.mission
-    target = hd(setup_result.targets)
-
-    # Start the mission supervision tree
-    {:ok, config} = MissionConfig.load(mission.id)
-    {:ok, _pid} = MissionSupervisor.start_mission(config)
 
     # Pick a random port to avoid conflicts
     port = Enum.random(10_000..60_000)
 
-    on_exit(fn ->
-      MissionSupervisor.stop_mission(mission.id)
-    end)
-
-    {:ok, mission: mission, target: target, port: port}
+    {:ok, mission: mission, port: port}
   end
 
-  # Helper to build an Interface entity for testing
-  defp build_interface(mission_id, port, target_ids, opts \\ []) do
+  # Helper to build a Transport Interface for testing
+  defp build_interface(mission_id, port, opts \\ []) do
     max_clients = Keyword.get(opts, :max_clients, 10)
-    config = Keyword.get(opts, :config, %{})
-    config = Map.merge(%{max_clients: max_clients}, config)
+
+    endpoint =
+      opts
+      |> Keyword.get(:endpoint, %{})
+      |> Map.merge(%{mode: "server", host: "127.0.0.1", port: port, max_clients: max_clients})
 
     %Interface{
       id: Ecto.UUID.generate(),
       mission_id: mission_id,
       name: "test-tcp-server",
-      connection_type: :tcp_server,
-      bind_address: "127.0.0.1",
-      bind_port: port,
-      target_ids: target_ids,
-      config: config
+      type: :tcp,
+      endpoint: endpoint
     }
   end
 
   describe "TCP Server Interface" do
-    test "starts and listens on configured port", %{mission: mission, target: target, port: port} do
-      interface = build_interface(mission.id, port, [target.identifier])
+    test "starts and listens on configured port", %{mission: mission, port: port} do
+      interface = build_interface(mission.id, port)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       pid = interface_pid!(mission.id, interface.id)
 
       # Give it a moment to start listening
@@ -68,13 +56,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       assert stats.bind_port == port
       assert stats.connected_clients == 0
 
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(pid)
     end
 
-    test "accepts client connections", %{mission: mission, target: target, port: port} do
-      interface = build_interface(mission.id, port, [target.identifier])
+    test "accepts client connections", %{mission: mission, port: port} do
+      interface = build_interface(mission.id, port)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -92,13 +80,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client_socket)
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(server_pid)
     end
 
-    test "accepts multiple client connections", %{mission: mission, target: target, port: port} do
-      interface = build_interface(mission.id, port, [target.identifier])
+    test "accepts multiple client connections", %{mission: mission, port: port} do
+      interface = build_interface(mission.id, port)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -130,13 +118,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       :gen_tcp.close(client1)
       :gen_tcp.close(client2)
       :gen_tcp.close(client3)
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(server_pid)
     end
 
-    test "handles client disconnections", %{mission: mission, target: target, port: port} do
-      interface = build_interface(mission.id, port, [target.identifier])
+    test "handles client disconnections", %{mission: mission, port: port} do
+      interface = build_interface(mission.id, port)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -161,13 +149,13 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client2)
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(server_pid)
     end
 
-    test "receives and tracks data from clients", %{mission: mission, target: target, port: port} do
-      interface = build_interface(mission.id, port, [target.identifier])
+    test "receives and tracks data from clients", %{mission: mission, port: port} do
+      interface = build_interface(mission.id, port)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       # Give server time to start listening
@@ -189,14 +177,14 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
 
       # Clean up
       :gen_tcp.close(client_socket)
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(server_pid)
     end
 
-    test "enforces max_clients limit", %{mission: mission, target: target, port: port} do
+    test "enforces max_clients limit", %{mission: mission, port: port} do
       # Set max clients to 2
-      interface = build_interface(mission.id, port, [target.identifier], max_clients: 2)
+      interface = build_interface(mission.id, port, max_clients: 2)
 
-      {:ok, _pid} = TransportSupervisor.start_interface(mission.id, interface)
+      {:ok, _pid} = TcpServerInterface.start_link(interface)
       server_pid = interface_pid!(mission.id, interface.id)
 
       Process.sleep(100)
@@ -223,14 +211,14 @@ defmodule Cadence.Runtime.Interfaces.TcpServerInterfaceTest do
       # Clean up
       :gen_tcp.close(client1)
       :gen_tcp.close(client2)
-      TransportSupervisor.stop_interface(mission.id, interface.id)
+      GenServer.stop(server_pid)
     end
   end
 
-  defp interface_pid!(mission_id, interface_id) do
-    case Registry.lookup(Cadence.MissionRegistry, {:interface, mission_id, interface_id}) do
+  defp interface_pid!(mission_id, transport_id) do
+    case Registry.lookup(Cadence.MissionRegistry, {:transport, mission_id, transport_id}) do
       [{pid, _}] -> pid
-      [] -> raise "Interface #{interface_id} not found for mission #{mission_id}"
+      [] -> raise "Transport #{transport_id} not found for mission #{mission_id}"
     end
   end
 end

@@ -13,14 +13,14 @@ defmodule Cadence.Recordings.Recordables.CommandSent do
   @foreign_key_type :binary_id
 
   schema "command_sents" do
-    field :interface_id, :binary_id
+    field :transport_id, :binary_id
 
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 
   def changeset(recordable, attrs) do
     recordable
-    |> cast(attrs, [:interface_id])
+    |> cast(attrs, [:transport_id])
   end
 end
 

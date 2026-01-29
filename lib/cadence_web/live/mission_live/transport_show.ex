@@ -20,7 +20,7 @@ defmodule CadenceWeb.MissionLive.TransportShow do
       :ok ->
         case Transports.get_interface(org_id, mission.id, transport_id) do
           {:ok, interface} ->
-            bindings = Links.list_bindings_for_interface(org_id, mission.id, interface.id)
+            bindings = Links.list_bindings_for_transport(org_id, mission.id, interface.id)
 
             {:noreply,
              socket

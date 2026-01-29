@@ -115,11 +115,11 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
   end
 
   defp source_match?(selectors, metadata) do
-    interfaces = Map.get(selectors, :interface_ids)
+    transports = Map.get(selectors, :transport_ids)
     sources = Map.get(selectors, :sources)
 
-    interface_match =
-      case {interfaces, metadata[:interface_id]} do
+    transport_match =
+      case {transports, metadata[:transport_id]} do
         {nil, _} -> true
         {list, id} when is_list(list) -> id in list
         _ -> false
@@ -132,7 +132,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSelector do
         _ -> false
       end
 
-    interface_match and source_match
+    transport_match and source_match
   end
 
   defp apid_from_parsed({:space_packet, %SpacePacket{} = packet}) do

@@ -176,7 +176,7 @@ Multi.new()
     timestamp: DateTime.utc_now()
   }
 end)
-|> Recordings.append(:sent, CommandSent, %{interface_id: interface_id}, fn changes ->
+|> Recordings.append(:sent, CommandSent, %{transport_id: transport_id}, fn changes ->
   %{
     organization_id: org_id,
     mission_id: mission_id,

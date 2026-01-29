@@ -114,12 +114,12 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   @impl true
   def handle_cast({:downlink, bytes, meta}, state) do
-    interface_id = meta[:interface_id]
+    transport_id = meta[:transport_id]
 
     # Logger.debug("[DEBUG] channel.downlink.received",
     #   mission_id: state.mission_id,
     #   channel_id: ChannelId.key(state.channel_id),
-    #   interface_id: interface_id,
+    #   transport_id: transport_id,
     #   bytes: byte_size(bytes)
     # )
 
@@ -131,18 +131,18 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
           # Logger.debug("[DEBUG] channel.downlink.sdlp",
           #   mission_id: state.mission_id,
           #   channel_id: ChannelId.key(state.channel_id),
-          #   interface_id: interface_id
+          #   transport_id: transport_id
           # )
 
           ensure_pdu_dispatcher(state, protocol_config)
           ensure_cop1_fop(state, protocol_config)
-          handle_sdlp_downlink(state, bytes, meta, mapping, opts, interface_id)
+          handle_sdlp_downlink(state, bytes, meta, mapping, opts, transport_id)
 
         _other ->
           # Logger.debug("[DEBUG] channel.downlink.raw",
           #   mission_id: state.mission_id,
           #   channel_id: ChannelId.key(state.channel_id),
-          #   interface_id: interface_id,
+          #   transport_id: transport_id,
           #   protocol_config_result: inspect(other)
           # )
 
@@ -158,19 +158,19 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   @impl true
   def handle_call({:uplink, %PDU{} = pdu, meta}, _from, state) do
-    case select_uplink_interface(state, meta) do
-      {:ok, interface_id} ->
+    case select_uplink_transport(state, meta) do
+      {:ok, transport_id} ->
         case protocol_config(state) do
           {:ok, %{sdlp: {:ok, %{opts: opts}}} = protocol_config} ->
             cop1_mode = resolve_cop1_mode(protocol_config, pdu)
 
             ensure_cop1_fop(state, protocol_config)
 
-            handle_sdlp_uplink(state, pdu, meta, interface_id, opts, cop1_mode)
+            handle_sdlp_uplink(state, pdu, meta, transport_id, opts, cop1_mode)
 
           {:ok, protocol_config} ->
             cop1_mode = resolve_cop1_mode(protocol_config, pdu)
-            handle_non_sdlp_uplink(state, pdu, meta, interface_id, cop1_mode)
+            handle_non_sdlp_uplink(state, pdu, meta, transport_id, cop1_mode)
 
           :error ->
             {:reply, {:error, :tc_framing_unavailable}, state}
@@ -182,11 +182,11 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   def handle_call({:uplink, bytes, meta}, _from, state) when is_binary(bytes) do
-    case select_uplink_interface(state, meta) do
-      {:ok, interface_id} ->
+    case select_uplink_transport(state, meta) do
+      {:ok, transport_id} ->
         payload = Map.put(meta, :channel_id, state.channel_id)
 
-        case Transport.send_bytes(state.mission_id, interface_id, bytes, payload) do
+        case Transport.send_bytes(state.mission_id, transport_id, bytes, payload) do
           :ok -> {:reply, :ok, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
         end
@@ -228,33 +228,33 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   defp ensure_cop1_fop(_state, _protocol_config), do: :ok
 
-  defp select_uplink_interface(state, meta) do
-    requested = Map.get(meta, :interface_id)
+  defp select_uplink_transport(state, meta) do
+    requested = Map.get(meta, :transport_id)
 
     cond do
       is_binary(requested) and binding_active?(state, requested) ->
         {:ok, requested}
 
       is_binary(requested) ->
-        {:error, :no_active_interface}
+        {:error, :no_active_transport}
 
       not link_controller_running?(state) ->
-        {:error, :no_active_interface}
+        {:error, :no_active_transport}
 
       true ->
-        case LinkController.active_uplink_interface(state.mission_id, state.channel_id) do
-          nil -> {:error, :no_active_interface}
-          interface_id -> {:ok, interface_id}
+        case LinkController.active_uplink_transport(state.mission_id, state.channel_id) do
+          nil -> {:error, :no_active_transport}
+          transport_id -> {:ok, transport_id}
         end
     end
   end
 
-  defp binding_active?(state, interface_id) do
+  defp binding_active?(state, transport_id) do
     link_controller_running?(state) and
       LinkController.binding_active?(
         state.mission_id,
         state.channel_id,
-        interface_id,
+        transport_id,
         :uplink
       )
   end
@@ -278,10 +278,10 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   defp apid_from_pdu(_pdu), do: nil
 
-  defp handle_sdlp_uplink(state, %PDU{} = pdu, meta, interface_id, opts, cop1_mode) do
-    case build_tc_frames(state, pdu, meta, interface_id, opts) do
+  defp handle_sdlp_uplink(state, %PDU{} = pdu, meta, transport_id, opts, cop1_mode) do
+    case build_tc_frames(state, pdu, meta, transport_id, opts) do
       {:ok, frames, next_state} ->
-        case maybe_send_frames(state, next_state, frames, meta, interface_id, cop1_mode) do
+        case maybe_send_frames(state, next_state, frames, meta, transport_id, cop1_mode) do
           {:ok, final_state} -> {:reply, :ok, final_state}
           {:defer, reason, final_state} -> {:reply, {:defer, reason}, final_state}
           {:error, reason, final_state} -> {:reply, {:error, reason}, final_state}
@@ -292,16 +292,16 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp handle_non_sdlp_uplink(state, %PDU{} = _pdu, _meta, _interface_id, :fop) do
+  defp handle_non_sdlp_uplink(state, %PDU{} = _pdu, _meta, _transport_id, :fop) do
     {:reply, {:error, :tc_framing_unavailable}, state}
   end
 
-  defp handle_non_sdlp_uplink(state, %PDU{} = pdu, meta, interface_id, _cop1_mode) do
-    case encode_pdu_bytes(state, pdu, meta, interface_id) do
+  defp handle_non_sdlp_uplink(state, %PDU{} = pdu, meta, transport_id, _cop1_mode) do
+    case encode_pdu_bytes(state, pdu, meta, transport_id) do
       {:ok, bytes} ->
         payload = Map.put(meta, :channel_id, state.channel_id)
 
-        case Transport.send_bytes(state.mission_id, interface_id, bytes, payload) do
+        case Transport.send_bytes(state.mission_id, transport_id, bytes, payload) do
           :ok -> {:reply, :ok, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
         end
@@ -311,7 +311,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp build_tc_frames(state, %PDU{} = pdu, meta, interface_id, opts) do
+  defp build_tc_frames(state, %PDU{} = pdu, meta, transport_id, opts) do
     frame_size = opts[:uplink_frame_size] || opts[:frame_size]
     scid = state.channel_id.scid || opts[:uplink_scid]
     vcid = state.channel_id.vcid || opts[:uplink_vcid]
@@ -328,7 +328,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
         {:error, :missing_vcid, state}
 
       true ->
-        build_tc_frames_from_opts(state, pdu, meta, interface_id, opts, %{
+        build_tc_frames_from_opts(state, pdu, meta, transport_id, opts, %{
           frame_size: frame_size,
           scid: scid,
           vcid: vcid,
@@ -337,9 +337,9 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp build_tc_frames_from_opts(state, pdu, meta, interface_id, opts, base_ctx) do
+  defp build_tc_frames_from_opts(state, pdu, meta, transport_id, opts, base_ctx) do
     segmentation = opts[:segmentation] || %{}
-    {stream_id, initial_seq} = stream_context(state, meta, interface_id)
+    {stream_id, initial_seq} = stream_context(state, meta, transport_id)
 
     with {:ok, seg_state, next_state} <- ensure_segmentation(state, stream_id, initial_seq),
          {:ok, frames, next_seg} <-
@@ -358,7 +358,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp stream_context(state, meta, interface_id) do
+  defp stream_context(state, meta, transport_id) do
     case Map.get(meta, :cop1_context) do
       %COP1Context{stream_id: %TCStreamId{} = stream_id} ->
         {stream_id, Map.get(meta, :initial_seq, 0)}
@@ -366,7 +366,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
       _ ->
         stream_id =
           TCStreamId.new_from_channel!(state.mission_id, state.channel_id,
-            interface_id: interface_id
+            transport_id: transport_id
           )
 
         {stream_id, Map.get(meta, :initial_seq, 0)}
@@ -429,8 +429,8 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp maybe_send_frames(state, next_state, frames, meta, interface_id, :fop) do
-    context = cop1_context(state, meta, interface_id)
+  defp maybe_send_frames(state, next_state, frames, meta, transport_id, :fop) do
+    context = cop1_context(state, meta, transport_id)
 
     case COP1Application.propose_send_frames(state.mission_id, state.channel_id, frames, context) do
       :ok -> {:ok, next_state}
@@ -439,12 +439,12 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp maybe_send_frames(state, next_state, frames, meta, interface_id, _mode) do
+  defp maybe_send_frames(state, next_state, frames, meta, transport_id, _mode) do
     payload = Map.put(meta, :channel_id, state.channel_id)
 
     result =
       Enum.reduce_while(frames, :ok, fn frame, acc ->
-        case Transport.send_bytes(state.mission_id, interface_id, frame.bytes, payload) do
+        case Transport.send_bytes(state.mission_id, transport_id, frame.bytes, payload) do
           :ok -> {:cont, acc}
           {:error, reason} -> {:halt, {:error, reason}}
         end
@@ -456,12 +456,12 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp cop1_context(state, meta, interface_id) do
+  defp cop1_context(state, meta, transport_id) do
     base_context =
       COP1Context.new(
         stream_id:
           TCStreamId.new_from_channel!(state.mission_id, state.channel_id,
-            interface_id: interface_id
+            transport_id: transport_id
           ),
         vcid: state.channel_id.vcid
       )
@@ -472,7 +472,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp encode_pdu_bytes(state, %PDU{} = pdu, _meta, _interface_id) do
+  defp encode_pdu_bytes(state, %PDU{} = pdu, _meta, _transport_id) do
     opts = [
       profile: :tc,
       direction: :uplink,
@@ -493,7 +493,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     end
   end
 
-  defp handle_sdlp_downlink(state, bytes, meta, %Mapping{} = mapping, opts, interface_id) do
+  defp handle_sdlp_downlink(state, bytes, meta, %Mapping{} = mapping, opts, transport_id) do
     frame_opts =
       Keyword.take(opts, [:frame_size, :secondary_header_length, :ocf_length, :timestamp])
       |> Keyword.put(:metrics_scope, state.mission_id)
@@ -503,7 +503,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {:ok, frames, rest} = TMFrameCodec.decode(buffer, frame_opts)
 
     {next_reassembly, next_cop1} =
-      deframe_frames(state, frames, meta, mapping, opts, interface_id)
+      deframe_frames(state, frames, meta, mapping, opts, transport_id)
 
     %{state | frame_buffer: rest, reassembly_state: next_reassembly, cop1_state: next_cop1}
   end
@@ -547,24 +547,24 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {reassembly_state, state.cop1_state}
   end
 
-  defp deframe_frames(state, frames, meta, mapping, opts, interface_id) do
+  defp deframe_frames(state, frames, meta, mapping, opts, transport_id) do
     ctx = %{direction: :downlink, metrics_scope: state.mission_id}
     {reassembly_state, cop1_state} = ensure_reassembly(state, opts)
 
     Enum.reduce(frames, {reassembly_state, cop1_state}, fn frame, {acc_state, acc_cop1} ->
-      acc_cop1 = maybe_ingest_clcw(state, frame, interface_id, acc_cop1)
+      acc_cop1 = maybe_ingest_clcw(state, frame, transport_id, acc_cop1)
 
       {next_state, acc_cop1} =
-        ingest_frame(frame, ctx, acc_state, acc_cop1, state, meta, mapping, interface_id)
+        ingest_frame(frame, ctx, acc_state, acc_cop1, state, meta, mapping, transport_id)
 
       {next_state, acc_cop1}
     end)
   end
 
-  defp ingest_frame(frame, ctx, acc_state, acc_cop1, state, meta, mapping, interface_id) do
+  defp ingest_frame(frame, ctx, acc_state, acc_cop1, state, meta, mapping, transport_id) do
     case TMReassembly.ingest(frame, ctx, acc_state) do
       {:ok, sdu_octets, new_state} ->
-        dispatch_sdu_octets(state, sdu_octets, meta, mapping, interface_id)
+        dispatch_sdu_octets(state, sdu_octets, meta, mapping, transport_id)
         {new_state, acc_cop1}
 
       {:error, _reason, new_state} ->
@@ -576,27 +576,27 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     Keyword.get(opts, :reassembly_opts, opts)
   end
 
-  defp maybe_ingest_clcw(state, %{ocf: ocf, scid: scid, vcid: vcid}, interface_id, cop1_state)
+  defp maybe_ingest_clcw(state, %{ocf: ocf, scid: scid, vcid: vcid}, transport_id, cop1_state)
        when is_binary(ocf) and byte_size(ocf) == 4 do
     DownlinkHandler.ingest_tm_ocf(state.mission_id, state.channel_id, ocf, %{
       scid: scid,
       vcid: vcid,
-      interface_id: interface_id
+      transport_id: transport_id
     })
 
     Map.put(cop1_state, :last_clcw, ocf)
   end
 
-  defp maybe_ingest_clcw(_state, _frame, _interface_id, cop1_state), do: cop1_state
+  defp maybe_ingest_clcw(_state, _frame, _transport_id, cop1_state), do: cop1_state
 
-  defp dispatch_sdu_octets(state, sdu_octets, meta, mapping, interface_id) do
+  defp dispatch_sdu_octets(state, sdu_octets, meta, mapping, transport_id) do
     Enum.each(sdu_octets, fn %SDUOctets{} = sdu ->
       case decode_sdu_to_pdu(sdu, mapping) do
         {:ok, %PDU{} = pdu} ->
           ctx = %{
             mission_id: state.mission_id,
             channel_id: state.channel_id,
-            interface_id: interface_id,
+            transport_id: transport_id,
             scid: state.channel_id.scid,
             vcid: state.channel_id.vcid,
             config_version: state.config_version,
@@ -633,7 +633,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   defp build_packet_envelope(binary, metadata, state) do
     provenance =
       %{}
-      |> maybe_put(:interface_id, metadata[:interface_id])
+      |> maybe_put(:transport_id, metadata[:transport_id])
       |> maybe_put(:source, metadata[:source])
       |> maybe_put(:link_key, metadata[:link_key])
       |> maybe_put(:channel_key, metadata[:channel_key])
@@ -644,7 +644,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
       |> maybe_add(Evidence.scid(metadata[:scid], :link, :high))
       |> maybe_add(Evidence.vcid(metadata[:vcid], :link, :high))
       |> maybe_add(Evidence.map_id(metadata[:map_id], :link, :high))
-      |> maybe_add(Evidence.interface_id(metadata[:interface_id], :ingest, :high))
+      |> maybe_add(Evidence.transport_id(metadata[:transport_id], :ingest, :high))
       |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
 
     PacketEnvelope.new(state.mission_id, binary,

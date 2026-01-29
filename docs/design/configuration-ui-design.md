@@ -63,8 +63,8 @@ scope "/missions/:id", CadenceWeb.MissionLive, as: :mission do
   # Interfaces (transport only)
   live "/interfaces", Interfaces, :index
   live "/interfaces/new", Interfaces, :new
-  live "/interfaces/:interface_id", InterfaceShow, :show
-  live "/interfaces/:interface_id/edit", InterfaceShow, :edit
+  live "/interfaces/:transport_id", InterfaceShow, :show
+  live "/interfaces/:transport_id/edit", InterfaceShow, :edit
 
   # Links (spacecraft)
   live "/links", Links, :index
@@ -126,8 +126,8 @@ end
 ```elixir
 %{
   interfaces: [Interface.t()],
-  interface_statuses: %{interface_id => :connected | :disconnected | :error},
-  binding_counts: %{interface_id => non_neg_integer()}
+  interface_statuses: %{transport_id => :connected | :disconnected | :error},
+  binding_counts: %{transport_id => non_neg_integer()}
 }
 ```
 
@@ -137,7 +137,7 @@ end
 
 ---
 
-### 3.2 Interface Show (`/missions/:id/interfaces/:interface_id`)
+### 3.2 Interface Show (`/missions/:id/interfaces/:transport_id`)
 
 **Purpose:** View/edit transport configuration. Show bindings read-only with navigation to edit them at Channel level.
 
@@ -867,8 +867,8 @@ defp state_dot(:draining), do: "bg-warning animate-pulse"
 # Interface pages
 %{
   interfaces: [Interface.t()],
-  interface_statuses: %{interface_id => status},
-  binding_counts: %{interface_id => count}
+  interface_statuses: %{transport_id => status},
+  binding_counts: %{transport_id => count}
 }
 
 # Link pages
@@ -1006,7 +1006,7 @@ defp validate_binding_conflicts(socket, new_binding) do
   existing = socket.assigns.bindings
 
   conflicts = Enum.filter(existing, fn b ->
-    b.interface_id == new_binding.interface_id and
+    b.transport_id == new_binding.transport_id and
     b.direction == new_binding.direction and
     b.role == :primary and new_binding.role == :primary
   end)

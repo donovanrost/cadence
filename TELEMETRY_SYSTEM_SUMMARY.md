@@ -1,5 +1,7 @@
 # 🛰️ Cadence Telemetry System - Implementation Summary
 
+> Note: Legacy “Interfaces” have been replaced by Transport interfaces. The core concepts remain, but runtime/config ownership now lives under Transports. This summary pre-dates that refactor.
+
 **Status**: ✅ **PRODUCTION READY** (Phases 1-4 Complete)
 **Date**: November 18, 2025
 **Lines of Code**: ~2,500+
@@ -181,9 +183,9 @@ MissionInstance (per mission)
 CREATE TABLE target_interfaces (
   id UUID PRIMARY KEY,
   target_id UUID REFERENCES targets,
-  interface_id UUID REFERENCES interfaces,
+  transport_id UUID REFERENCES interfaces,
   direction TEXT CHECK (direction IN ('read', 'write', 'read_write')),
-  UNIQUE (target_id, interface_id)
+  UNIQUE (target_id, transport_id)
 );
 ```
 

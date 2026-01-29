@@ -4,7 +4,7 @@ defmodule CadenceWeb.MissionLive.TargetShow do
   """
   use CadenceWeb, :live_view
 
-  alias Cadence.{Interfaces, Links}
+  alias Cadence.Links
 
   @impl true
   def mount(_params, _session, socket) do
@@ -42,12 +42,9 @@ defmodule CadenceWeb.MissionLive.TargetShow do
     # Get target with definition_set preloaded for display
     case get_target_with_preloads(target_id, mission.id) do
       {:ok, target} ->
-        interfaces = Interfaces.list_interfaces(mission)
-
         socket
         |> assign(:page_title, "Target: #{target.name}")
         |> assign(:target, target)
-        |> assign(:interfaces, interfaces)
         |> load_comms_data(org_id, mission, target)
 
       {:error, :not_found} ->
@@ -267,7 +264,6 @@ defmodule CadenceWeb.MissionLive.TargetShow do
         action={:edit}
         target={@target}
         mission={@mission}
-        interfaces={@interfaces}
         current_scope={@current_scope}
         patch={~p"/missions/#{@mission}/targets/#{@target}"}
       />

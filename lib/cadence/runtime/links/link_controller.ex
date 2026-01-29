@@ -2,9 +2,9 @@ defmodule Cadence.Runtime.Links.LinkController do
   @moduledoc """
   Link controller for a spacecraft, keyed by {mission_id, scid}.
 
-  Owns protocol configuration, bindings, and link policy. Interfaces are
+  Owns protocol configuration, bindings, and link policy. Transports are
   ephemeral; bindings define desired and observed state independently of
-  interface connectivity.
+  transport connectivity.
   """
 
   use GenServer
@@ -26,7 +26,7 @@ defmodule Cadence.Runtime.Links.LinkController do
       channel_overrides: %{},
       effective_protocols: %{},
       bindings: %{},
-      interface_states: %{},
+      transport_states: %{},
       selections: %{}
     ]
   end
@@ -72,10 +72,10 @@ defmodule Cadence.Runtime.Links.LinkController do
   end
 
   @spec set_binding_state(String.t(), ChannelId.t(), String.t(), Binding.state()) :: :ok
-  def set_binding_state(mission_id, %ChannelId{} = channel_id, interface_id, desired_state) do
+  def set_binding_state(mission_id, %ChannelId{} = channel_id, transport_id, desired_state) do
     GenServer.call(
       via_tuple(mission_id, channel_id.scid),
-      {:set_binding_state, channel_id, interface_id, desired_state}
+      {:set_binding_state, channel_id, transport_id, desired_state}
     )
   end
 
@@ -98,33 +98,33 @@ defmodule Cadence.Runtime.Links.LinkController do
     GenServer.call(via_tuple(mission_id, scid), :list_bindings)
   end
 
-  @spec interface_state(String.t(), non_neg_integer(), String.t(), :up | :down) :: :ok
-  def interface_state(mission_id, scid, interface_id, state) do
-    GenServer.cast(via_tuple(mission_id, scid), {:interface_state, interface_id, state})
+  @spec transport_state(String.t(), non_neg_integer(), String.t(), :up | :down) :: :ok
+  def transport_state(mission_id, scid, transport_id, state) do
+    GenServer.cast(via_tuple(mission_id, scid), {:transport_state, transport_id, state})
   end
 
   @spec classify_downlink(String.t(), non_neg_integer(), String.t(), binary(), map()) ::
           {:ok, ChannelId.t()} | :ignore
-  def classify_downlink(mission_id, scid, interface_id, bytes, meta) do
-    GenServer.call(via_tuple(mission_id, scid), {:classify, interface_id, bytes, meta})
+  def classify_downlink(mission_id, scid, transport_id, bytes, meta) do
+    GenServer.call(via_tuple(mission_id, scid), {:classify, transport_id, bytes, meta})
   end
 
   @spec route_downlink(String.t(), non_neg_integer(), String.t(), binary(), map()) :: :ok
-  def route_downlink(mission_id, scid, interface_id, bytes, meta) do
-    GenServer.cast(via_tuple(mission_id, scid), {:route_downlink, interface_id, bytes, meta})
+  def route_downlink(mission_id, scid, transport_id, bytes, meta) do
+    GenServer.cast(via_tuple(mission_id, scid), {:route_downlink, transport_id, bytes, meta})
   end
 
-  @spec active_uplink_interface(String.t(), ChannelId.t()) :: String.t() | nil
-  def active_uplink_interface(mission_id, %ChannelId{} = channel_id) do
+  @spec active_uplink_transport(String.t(), ChannelId.t()) :: String.t() | nil
+  def active_uplink_transport(mission_id, %ChannelId{} = channel_id) do
     GenServer.call(via_tuple(mission_id, channel_id.scid), {:active_uplink, channel_id})
   end
 
   @spec binding_active?(String.t(), ChannelId.t(), String.t(), :uplink | :downlink) :: boolean()
-  def binding_active?(mission_id, %ChannelId{} = channel_id, interface_id, direction)
-      when is_binary(interface_id) do
+  def binding_active?(mission_id, %ChannelId{} = channel_id, transport_id, direction)
+      when is_binary(transport_id) do
     GenServer.call(
       via_tuple(mission_id, channel_id.scid),
-      {:binding_active, channel_id, interface_id, direction}
+      {:binding_active, channel_id, transport_id, direction}
     )
   end
 
@@ -174,8 +174,8 @@ defmodule Cadence.Runtime.Links.LinkController do
     {:reply, :ok, updated}
   end
 
-  def handle_call({:set_binding_state, channel_id, interface_id, desired_state}, _from, state) do
-    updated = update_binding_state(state, channel_id, interface_id, desired_state)
+  def handle_call({:set_binding_state, channel_id, transport_id, desired_state}, _from, state) do
+    updated = update_binding_state(state, channel_id, transport_id, desired_state)
     {:reply, :ok, updated}
   end
 
@@ -184,16 +184,16 @@ defmodule Cadence.Runtime.Links.LinkController do
     {:reply, :ok, updated}
   end
 
-  def handle_call({:classify, interface_id, _bytes, meta}, _from, state) do
-    {:reply, classify_channel(state, interface_id, meta), state}
+  def handle_call({:classify, transport_id, _bytes, meta}, _from, state) do
+    {:reply, classify_channel(state, transport_id, meta), state}
   end
 
   def handle_call({:active_uplink, %ChannelId{} = channel_id}, _from, state) do
     {:reply, pick_active_uplink(state, channel_id), state}
   end
 
-  def handle_call({:binding_active, channel_id, interface_id, direction}, _from, state) do
-    {:reply, binding_active_in_state?(state, channel_id, interface_id, direction), state}
+  def handle_call({:binding_active, channel_id, transport_id, direction}, _from, state) do
+    {:reply, binding_active_in_state?(state, channel_id, transport_id, direction), state}
   end
 
   def handle_call({:effective_protocol, %ChannelId{} = channel_id}, _from, state) do
@@ -201,29 +201,29 @@ defmodule Cadence.Runtime.Links.LinkController do
   end
 
   @impl true
-  def handle_cast({:interface_state, interface_id, state_value}, state) do
+  def handle_cast({:transport_state, transport_id, state_value}, state) do
     updated = %{
       state
-      | interface_states: Map.put(state.interface_states, interface_id, state_value)
+      | transport_states: Map.put(state.transport_states, transport_id, state_value)
     }
 
-    {:noreply, refresh_observed_bindings(updated, interface_id)}
+    {:noreply, refresh_observed_bindings(updated, transport_id)}
   end
 
   def handle_cast({:apply_config, snapshot}, state) do
     {:noreply, apply_config_snapshot(state, snapshot)}
   end
 
-  def handle_cast({:route_downlink, interface_id, bytes, meta}, state) do
-    case classify_channel(state, interface_id, meta) do
+  def handle_cast({:route_downlink, transport_id, bytes, meta}, state) do
+    case classify_channel(state, transport_id, meta) do
       {:ok, channel_id} ->
-        route_to_channel(state, channel_id, interface_id, bytes, meta)
+        route_to_channel(state, channel_id, transport_id, bytes, meta)
 
       :ignore ->
         Logger.debug("link.route_downlink.ignore",
           mission_id: state.mission_id,
           scid: state.scid,
-          interface_id: interface_id
+          transport_id: transport_id
         )
 
         :ok
@@ -263,14 +263,14 @@ defmodule Cadence.Runtime.Links.LinkController do
     end
   end
 
-  defp channel_match?({channel_id, _interface_id, _direction}, channel_id), do: true
+  defp channel_match?({channel_id, _transport_id, _direction}, channel_id), do: true
   defp channel_match?(_, _), do: false
 
-  defp update_binding_state(state, %ChannelId{} = channel_id, interface_id, desired_state) do
+  defp update_binding_state(state, %ChannelId{} = channel_id, transport_id, desired_state) do
     updated =
       state.bindings
       |> Enum.map(fn {binding_key, binding} ->
-        if match_binding?(binding_key, channel_id, interface_id) do
+        if match_binding?(binding_key, channel_id, transport_id) do
           {binding_key, %{binding | desired_state: desired_state}}
         else
           {binding_key, binding}
@@ -281,7 +281,7 @@ defmodule Cadence.Runtime.Links.LinkController do
     %{state | bindings: updated}
   end
 
-  defp match_binding?({channel_id, interface_id, _direction}, channel_id, interface_id), do: true
+  defp match_binding?({channel_id, transport_id, _direction}, channel_id, transport_id), do: true
   defp match_binding?(_, _, _), do: false
 
   defp put_selection(state, %ChannelId{} = channel_id, direction, selection) do
@@ -289,13 +289,13 @@ defmodule Cadence.Runtime.Links.LinkController do
     %{state | selections: Map.put(state.selections, key, selection)}
   end
 
-  defp classify_channel(state, interface_id, meta) do
+  defp classify_channel(state, transport_id, meta) do
     case meta do
       %{channel_id: %ChannelId{} = channel_id} ->
         # Logger.debug("[DEBUG] link.classify.meta_channel_id",
         #   mission_id: state.mission_id,
         #   scid: state.scid,
-        #   interface_id: interface_id,
+        #   transport_id: transport_id,
         #   channel_id: ChannelId.key(channel_id)
         # )
 
@@ -305,21 +305,21 @@ defmodule Cadence.Runtime.Links.LinkController do
         # Logger.debug("[DEBUG] link.classify.meta_scid_vcid",
         #   mission_id: state.mission_id,
         #   scid: scid,
-        #   interface_id: interface_id,
+        #   transport_id: transport_id,
         #   vcid: vcid
         # )
 
         {:ok, ChannelId.new(scid, vcid)}
 
       _ ->
-        bindings = bindings_for_interface(state, interface_id, :downlink)
+        bindings = bindings_for_transport(state, transport_id, :downlink)
 
         case Enum.map(bindings, & &1.channel_id) |> Enum.uniq() do
           [channel_id] ->
             # Logger.debug("[DEBUG] link.classify.binding_unambiguous",
             #   mission_id: state.mission_id,
             #   scid: state.scid,
-            #   interface_id: interface_id,
+            #   transport_id: transport_id,
             #   channel_id: ChannelId.key(channel_id)
             # )
 
@@ -329,7 +329,7 @@ defmodule Cadence.Runtime.Links.LinkController do
             # Logger.debug("[DEBUG] link.classify.ambiguous",
             #   mission_id: state.mission_id,
             #   scid: state.scid,
-            #   interface_id: interface_id
+            #   transport_id: transport_id
             # )
 
             :ignore
@@ -337,22 +337,22 @@ defmodule Cadence.Runtime.Links.LinkController do
     end
   end
 
-  defp bindings_for_interface(state, interface_id, direction) do
+  defp bindings_for_transport(state, transport_id, direction) do
     state.bindings
     |> Map.values()
     |> Enum.filter(fn binding ->
-      binding.interface_id == interface_id and Binding.allows_direction?(binding, direction)
+      binding.transport_id == transport_id and Binding.allows_direction?(binding, direction)
     end)
   end
 
-  defp route_to_channel(state, channel_id, interface_id, bytes, meta) do
-    active? = binding_active_in_state?(state, channel_id, interface_id, :downlink)
+  defp route_to_channel(state, channel_id, transport_id, bytes, meta) do
+    active? = binding_active_in_state?(state, channel_id, transport_id, :downlink)
 
     if active? do
       # Logger.debug("[DEBUG] link.route_downlink.active",
       #   mission_id: state.mission_id,
       #   scid: state.scid,
-      #   interface_id: interface_id,
+      #   transport_id: transport_id,
       #   channel_id: ChannelId.key(channel_id),
       #   bytes: byte_size(bytes)
       # )
@@ -363,17 +363,17 @@ defmodule Cadence.Runtime.Links.LinkController do
       Logger.debug("link.route_downlink.inactive",
         mission_id: state.mission_id,
         scid: state.scid,
-        interface_id: interface_id,
+        transport_id: transport_id,
         channel_id: ChannelId.key(channel_id)
       )
     end
   end
 
-  defp binding_active_in_state?(state, channel_id, interface_id, direction) do
+  defp binding_active_in_state?(state, channel_id, transport_id, direction) do
     state.bindings
     |> Map.values()
     |> Enum.any?(fn binding ->
-      binding.interface_id == interface_id and
+      binding.transport_id == transport_id and
         binding.channel_id == channel_id and
         Binding.allows_direction?(binding, direction) and
         binding.desired_state == :active and
@@ -385,9 +385,9 @@ defmodule Cadence.Runtime.Links.LinkController do
     selection = Map.get(state.selections, {channel_id, :uplink})
 
     case selection do
-      interface_id when is_binary(interface_id) ->
-        if binding_active_in_state?(state, channel_id, interface_id, :uplink) do
-          interface_id
+      transport_id when is_binary(transport_id) ->
+        if binding_active_in_state?(state, channel_id, transport_id, :uplink) do
+          transport_id
         else
           nil
         end
@@ -404,7 +404,7 @@ defmodule Cadence.Runtime.Links.LinkController do
         |> Enum.sort_by(fn binding -> {role_rank(binding.role), binding.priority} end)
         |> case do
           [] -> nil
-          [binding | _] -> binding.interface_id
+          [binding | _] -> binding.transport_id
         end
     end
   end
@@ -415,25 +415,25 @@ defmodule Cadence.Runtime.Links.LinkController do
   defp role_rank(:replay), do: 3
   defp role_rank(_), do: 4
 
-  defp refresh_observed_bindings(state, interface_id) do
-    observed_state = observed_state_for(state, interface_id)
+  defp refresh_observed_bindings(state, transport_id) do
+    observed_state = observed_state_for(state, transport_id)
 
     updated =
       state.bindings
       |> Enum.map(fn {binding_key, binding} ->
-        {binding_key, maybe_update_binding(binding, interface_id, observed_state)}
+        {binding_key, maybe_update_binding(binding, transport_id, observed_state)}
       end)
       |> Map.new()
 
     %{state | bindings: updated}
   end
 
-  defp observed_state_for(state, interface_id) do
-    if Map.get(state.interface_states, interface_id, :down) == :up, do: :active, else: :inactive
+  defp observed_state_for(state, transport_id) do
+    if Map.get(state.transport_states, transport_id, :down) == :up, do: :active, else: :inactive
   end
 
-  defp maybe_update_binding(binding, interface_id, observed_state) do
-    if binding.interface_id == interface_id,
+  defp maybe_update_binding(binding, transport_id, observed_state) do
+    if binding.transport_id == transport_id,
       do: %{binding | observed_state: observed_state},
       else: binding
   end
@@ -470,7 +470,7 @@ defmodule Cadence.Runtime.Links.LinkController do
   end
 
   defp register_binding(%Binding{} = binding) do
-    key = {:link_binding, binding.mission_id, binding.channel_id.scid, binding.interface_id}
+    key = {:link_binding, binding.mission_id, binding.channel_id.scid, binding.transport_id}
 
     case Registry.register(@registry, key, :binding) do
       {:ok, _} -> :ok
