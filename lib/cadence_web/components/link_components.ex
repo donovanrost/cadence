@@ -200,7 +200,7 @@ defmodule CadenceWeb.LinkComponents do
       ]}>
         {@active_count} active
       </span>
-      <span class="text-base-content/40"> /                {@total_count} total</span>
+      <span class="text-base-content/40"> /                 {@total_count} total</span>
     </div>
     """
   end
