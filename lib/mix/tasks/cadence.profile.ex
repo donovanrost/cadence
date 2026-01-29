@@ -692,7 +692,7 @@ defmodule Mix.Tasks.Cadence.Profile do
 
   defp sdlp_totals(stats) when is_map(stats) do
     Enum.reduce(stats, %{frames_decoded: 0, bytes_in: 0, sdu_emitted: 0}, fn {_profile, metrics},
-                                                                                    acc ->
+                                                                             acc ->
       if is_map(metrics) do
         decode = Map.get(metrics, :frame_decode, %{})
         reasm = Map.get(metrics, :reassembly, %{})
