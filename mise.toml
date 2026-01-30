@@ -1,3 +1,9 @@
+
+[tasks.cadence]
+run = "SYSTEM_ADMIN_EMAIL=admin@admin.com SYSTEM_ADMIN_PASSWORD=secure_password iex --sname cadence --cookie cadence -S mix phx.server"
+
 [tools]
+erlang = "latest"
 hk = "latest"
 pkl = "latest"
+elixir = "latest"

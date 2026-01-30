@@ -21,7 +21,7 @@ defmodule Cadence.MixProject do
   def application do
     [
       mod: {Cadence.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :wx, :observer]
     ]
   end
 
@@ -82,7 +82,9 @@ defmodule Cadence.MixProject do
       {:styler, "~> 1.9", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:tidewave, "~> 0.5", only: :dev},
-      {:supertester, "~> 0.5.1", only: :test}
+      {:supertester, "~> 0.5.1", only: :test},
+      {:recon, "~> 2.5", only: :dev}
+
     ]
   end
 
