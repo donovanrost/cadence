@@ -325,4 +325,4 @@ history = Recordings.get_aggregate_history_with_recordables("Alarm", alarm_id)
 ## References
 
 - [37signals Writebook on Recordables](https://dev.37signals.com/vanilla-rails-is-plenty/)
-- [Recordables Implementation Plan](../architecture/recordables-implementation-plan.md)
+- [Recordings Architecture](../architecture/recordings.md)

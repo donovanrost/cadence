@@ -8,7 +8,7 @@ related:
   - "[[domain-entity]]"
   - "[[001-no-db-in-data-plane]]"
 created: 2024-12-21
-updated: 2025-01-27
+updated: 2026-01-29
 status: active
 ---
 
@@ -103,71 +103,45 @@ The hexagonal architecture migration for Interfaces is complete:
    - `:interface_deleted`
    - `:interface_protocols_updated`
 
-### Remaining Work: Runtime GenServer Refactoring
+### Runtime GenServers (Complete)
 
-The runtime GenServers (`TcpClientInterface`, `TcpServerInterface`) currently fetch configuration from the database:
-
-```elixir
-# CURRENT: GenServer fetches from DB
-def start_link(mission_id, transport_id, _config) do
-  interface = Interfaces.get_interface!(transport_id)  # DB call
-  ...
-end
-```
-
-The target architecture has GenServers receive domain entities via injection:
+The runtime GenServers receive domain entities via injection (no DB calls in hot path):
 
 ```elixir
-# TARGET: GenServer receives entity
+# GenServers receive entities - no DB calls
 def start_link(%Interface{} = interface) do
-  # No DB call - config is injected
+  # Config is injected at startup
   GenServer.start_link(__MODULE__, interface, name: via_tuple(interface.id))
 end
 ```
 
-#### Files to Modify
+#### Runtime Module Locations
 
-| File | Change |
-|------|--------|
-| `lib/cadence/interfaces/factory.ex` | Accept `Interface` entity, not schema |
-| `lib/cadence/interfaces/tcp_client_interface.ex` | Receive entity in `start_link/1` |
-| `lib/cadence/interfaces/tcp_server_interface.ex` | Receive entity in `start_link/1` |
-| `lib/cadence/interfaces/interface_supervisor.ex` | Load entities once, subscribe to config events |
+| File | Description |
+|------|-------------|
+| `lib/cadence/runtime/interfaces/factory.ex` | Creates appropriate GenServer for interface type |
+| `lib/cadence/runtime/interfaces/tcp_client_interface.ex` | TCP client GenServer |
+| `lib/cadence/runtime/interfaces/tcp_server_interface.ex` | TCP server GenServer |
+| `lib/cadence/runtime/transport/interface_supervisor.ex` | Supervises interface GenServers, handles hot reload |
 
-#### InterfaceSupervisor Changes
+#### InterfaceSupervisor Architecture
+
+`lib/cadence/runtime/transport/interface_supervisor.ex`
 
 ```elixir
-defmodule Cadence.Interfaces.InterfaceSupervisor do
-  def init(mission_id) do
-    # Load all interfaces for mission at supervisor start
-    interfaces = InterfaceQueries.list_for_mission(mission_id, preload_protocols: true)
+defmodule Cadence.Runtime.Transport.InterfaceSupervisor do
+  # Loads all interfaces for mission at supervisor start
+  # Subscribes to config changes for hot reload
+  # Handles :interface_created, :interface_updated, :interface_deleted events
 
+  def init(mission_id) do
+    interfaces = InterfaceQueries.list_for_mission(mission_id, preload_protocols: true)
     children = Enum.map(interfaces, fn interface ->
       {Factory.module_for(interface), interface}
     end)
 
-    # Subscribe to config changes for hot reload
     Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:interface_config")
-
     Supervisor.init(children, strategy: :one_for_one)
-  end
-
-  def handle_info({:interface_created, interface}, state) do
-    # Start new interface GenServer
-    start_interface(interface)
-    {:noreply, state}
-  end
-
-  def handle_info({:interface_updated, interface}, state) do
-    # Restart interface with new config
-    restart_interface(interface)
-    {:noreply, state}
-  end
-
-  def handle_info({:interface_deleted, interface}, state) do
-    # Stop interface GenServer
-    stop_interface(interface.id)
-    {:noreply, state}
   end
 end
 ```
@@ -259,87 +233,34 @@ The Missions context migration is complete:
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Future Work
-
-- [ ] Subscribe to config change events via PubSub for hot reload
-- [ ] Broadcast mission status via PubSub (not DB writes)
-- [ ] Update dashboard LiveViews to use PubSub for status
-
 ---
 
-## Future Modules
+## Current Implementation Status
 
-As other modules are migrated, they should follow the same pattern:
+### Interfaces Runtime ✅
+- Factory accepts domain entities
+- TcpClientInterface/TcpServerInterface receive entities at startup
+- InterfaceSupervisor loads entities and subscribes to config events
+- Status broadcasting via `InterfaceConnectionEvent` (PubSub, not DB writes)
+
+### Protocol Chain Runtime ✅
+- Processor accepts domain entities
+- ProtocolChain requires protocols (no DB fallback)
+- Hot-reload via PubSub for `:interface_protocols_updated` events
 
 ### Telemetry Pipeline
-
-| Component | DP/CP Consideration |
-|-----------|---------------------|
-| PacketIdentifier | Already uses ETS cache |
-| Limits | Already uses ETS cache |
-| Derived Items | Already uses ETS cache |
-| Protocol Chain | Config should be pushed, not fetched |
-
-### Commanding
-
-| Component | DP/CP Consideration |
-|-----------|---------------------|
-| Command Queue | Status is runtime, commands are persisted |
-| Command Router | Routing config should be pushed |
+- PacketIdentifier uses ETS cache
+- Limits uses ETS cache
+- Derived Items uses ETS cache
 
 ---
 
-## Implementation Phases
-
-### Phase 1: Interfaces Runtime (COMPLETE)
-- [x] Refactor `Factory` to accept domain entities
-- [x] Refactor `TcpClientInterface` to receive entity
-- [x] Refactor `TcpServerInterface` to receive entity
-- [x] Update `InterfaceSupervisor` to:
-  - Load entities at startup via `InterfaceQueries.list_for_mission(mission_id, preload_protocols: true)`
-  - Subscribe to config events on `mission:{mission_id}:interface_config`
-  - Handle hot reload (`:interface_created`, `:interface_updated`, `:interface_deleted`, `:interface_protocols_updated`)
-- [x] GenServers receive domain entities at startup (no DB calls in runtime)
-- [x] Status broadcasting via `InterfaceConnectionEvent` (not DB writes)
-- [ ] Update dashboard LiveViews to use PubSub for status (future work)
-
-### Phase 2: Protocol Chain Runtime (COMPLETE)
-- [x] Update Processor to accept domain entities (atom types, `.config` field)
-- [x] ProtocolChainSupervisor requires protocols in `start_chain/3`
-- [x] ProtocolChain requires protocols (no DB fallback)
-- [x] TcpClientInterface passes `interface.protocols` to protocol chain
-- [x] TcpServerInterface passes `interface.protocols` to protocol chain
-- [x] Hot-reload protocol chain on config change via PubSub
-  - ProtocolChainSupervisor converted to GenServer wrapping DynamicSupervisor
-  - Subscribes to `mission:{mission_id}:interface_config` for protocol updates
-  - Handles `:interface_protocols_updated` events by calling `ProtocolChain.update_protocols/2`
-  - ProtocolChain.update_protocols/2 reinitializes chains in-place without restart
-
-### Phase 3: Telemetry Pipeline
-- [ ] Audit remaining DB calls in hot path
-- [ ] Push remaining config to ETS
-- [ ] Implement config versioning for cache invalidation
-
----
-
-## Testing Strategy
+## Testing Approach
 
 1. **Unit tests** - Domain entities with `PureCase`
 2. **Integration tests** - Full flow with in-memory adapters
 3. **PubSub tests** - Verify event emission and handling
 4. **Hot reload tests** - Config change propagation
-
----
-
-## Open Questions
-
-1. **Config versioning** - How do we handle stale config in ETS when DB is updated directly (migration, manual fix)?
-
-2. **Startup ordering** - If InterfaceSupervisor starts before config is loaded, how do we handle that?
-
-3. **Multi-node** - How does config propagation work in a clustered deployment?
-
-4. **Recovery** - When a GenServer crashes and restarts, where does it get config from?
 
 ---
 
@@ -355,3 +276,4 @@ As other modules are migrated, they should follow the same pattern:
 | 2024-12-22 | **Phase 1 Complete**: Interface runtime refactoring - Factory, TcpClientInterface, TcpServerInterface, and InterfaceSupervisor now use domain entities. Hot reload via PubSub implemented. |
 | 2024-12-22 | **Phase 2 Complete**: Protocol chain runtime refactoring - Processor accepts domain entities, ProtocolChain requires protocols (no DB fallback), interfaces pass protocols from entity. |
 | 2024-12-22 | **Protocol Chain Hot Reload**: ProtocolChainSupervisor converted to GenServer, subscribes to PubSub for `:interface_protocols_updated` events, updates chains in-place without restart. |
+| 2026-01-29 | **Documentation Update**: Fixed module paths to reflect actual locations in `lib/cadence/runtime/` directory structure. |

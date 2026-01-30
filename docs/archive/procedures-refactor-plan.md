@@ -1,35 +1,57 @@
 ---
 title: Procedures Refactoring Plan
-tags: [design, procedures, refactor, implementation-plan]
+tags: [design, procedures, refactor, implementation-plan, historical]
 related:
   - "[[procedure]]"
   - "[[sequence]]"
   - "[[automation]]"
+  - "[[procedures]]"
 created: 2025-01-01
-updated: 2025-01-27
-status: active
+updated: 2026-01-29
+status: superseded
 ---
 
 # Procedures Feature Refactoring Plan
 
+> [!NOTE]
+> **STATUS: LARGELY SUPERSEDED**
+>
+> This document was written for the original procedure execution architecture.
+> Much of this has been addressed by the **V2 Execution System** which uses a
+> completely different architecture:
+>
+> - **Strategy-based execution** (`lib/cadence/procedures/v2/strategies/`)
+> - **Unified persistence** (`lib/cadence/procedures/v2/execution_persistence.ex`)
+> - **Step/Block execution tracking** (schemas in `lib/cadence/procedures/schemas/`)
+>
+> See the [Procedures Design Document](procedures.md) for current architecture.
+
 This document outlines the plan to address architectural issues identified in the Procedures feature review.
 
-## Issues to Address
+## Issues Summary
 
-1. ~~OTP Supervision for Execution Processes~~ (RESOLVED - supervisor exists at `application.ex:29`)
-2. Race Condition in Concurrent Step Execution
-3. Missing Transaction Boundaries
-4. State Machine Validation Gaps
-5. No Idempotency for Resume Operations
-6. Tight Coupling Between DAG Executor and GenServer
-7. Inconsistent Error Handling Patterns
-8. Leaky Abstractions in LiveView
+| Issue | Status | Notes |
+|-------|--------|-------|
+| 1. OTP Supervision | ✅ RESOLVED | V2 has proper supervision |
+| 2. Race Conditions | ✅ ADDRESSED | V2 strategy pattern eliminates Task.async pattern |
+| 3. Transaction Boundaries | ✅ ADDRESSED | `execution_persistence.ex` uses transactions |
+| 4. State Machine Gaps | ✅ RESOLVED | Full state machine in `procedure_execution.ex` |
+| 5. Idempotency | ⚠️ PARTIALLY | Some recording-based idempotency, review needed |
+| 6. Tight Coupling | ✅ ADDRESSED | V2 strategy pattern decouples execution |
+| 7. Error Handling | ⚠️ ONGOING | Patterns documented, some inconsistencies remain |
+| 8. Leaky Abstractions | ✅ ADDRESSED | `procedures_v2.ex` provides clean API |
+
+## Original Issues (Historical Reference)
 
 ---
 
 ## Issue 2: Race Condition in Concurrent Step Execution
 
-### Problem
+> **STATUS:** ✅ ADDRESSED by V2 architecture. The V2 system uses a strategy pattern
+> (`lib/cadence/procedures/v2/execution_strategy.ex`) where execution is driven by
+> explicit state transitions rather than Task.async, eliminating these race conditions.
+
+### Problem (Original)
 Control signals (pause/abort) are forwarded via `send(pid, {:control_signal, signal})` to the Task process running the DAG executor. The executor checks for signals via `check_control_signals/1` which does a non-blocking `receive after 0`. This creates several race windows:
 
 1. A step might complete after a pause signal was sent but before the executor's next signal check
@@ -220,7 +242,11 @@ Create `test/cadence/procedures/dag/cancellation_token_test.exs`:
 
 ## Issue 3: Missing Transaction Boundaries
 
-### Problem
+> **STATUS:** ✅ ADDRESSED. The V2 system's `execution_persistence.ex` handles all
+> persistence with proper transaction boundaries. Step/block execution records are
+> created atomically with status updates.
+
+### Problem (Original)
 Several persistence operations lack proper transaction boundaries:
 
 1. `persist_log/3` in ExecutionProcess (line 694-708) - no transaction
@@ -363,7 +389,11 @@ end
 
 ## Issue 4: State Machine Validation Gaps
 
-### Problem
+> **STATUS:** ✅ RESOLVED. The state machine has been fully implemented in
+> `lib/cadence/procedures/schemas/procedure_execution.ex` with the exact diagram
+> shown below, including the `pausing` intermediate state and field validations.
+
+### Problem (Original)
 Current state transitions in `ProcedureExecution`:
 - `running -> paused` is allowed but should require going through `pausing` first
 - Missing documentation of state machine

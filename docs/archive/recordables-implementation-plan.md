@@ -8,7 +8,7 @@ related:
   - "[[recordable]]"
   - "[[aggregate]]"
 created: 2024-12-01
-updated: 2025-01-27
+updated: 2026-01-29
 status: active
 ---
 
@@ -1455,14 +1455,63 @@ defp update_projections(_), do: :ok
 
 ## Recordable Types Summary
 
+### Implemented Recordable Types
+
+> **Note:** The following types have been implemented in `lib/cadence/recordings/recordables/`
+
 | Aggregate | Event Types |
 |-----------|-------------|
 | **Command** | CommandDispatched, CommandSent, CommandVerified, CommandVerificationFailed, CommandRejected, CommandErrored |
 | **Alarm** | AlarmTriggered, AlarmAcknowledged, AlarmCleared, AlarmShelved, AlarmUnshelved, AlarmEscalated, AlarmValueUpdated |
 | **ProcedureExecution** | ProcedureStarted, ProcedureStepCompleted, ProcedureStepSkipped, ProcedurePaused, ProcedureResumed, ProcedureCompleted, ProcedureFailed, ProcedureCancelled |
-| **ProcedureVersion** | ProcedureVersionCreated, ProcedureVersionSubmitted, ProcedureVersionWithdrawn, ProcedureApprovalAdded, ProcedureVersionApproved, ProcedureVersionRejected, ProcedureVersionDeprecated |
+| **ProcedureVersion** | ProcedureVersionCreated, ProcedureVersionSubmitted, ProcedureVersionWithdrawn, ProcedureVersionApproved, ProcedureVersionRejected, ProcedureVersionDeprecated, ProcedureVersionClosed, ProcedureVersionResubmitted |
+| **ProcedureReview** | ProcedureReviewSubmitted, ProcedureReviewApproved, ProcedureChangesRequested, ProcedureReviewRequested, ProcedureReviewCommentAdded, ProcedureThreadResolved |
+| **StepExecution** | StepActivated, StepSignedOff |
+| **BlockExecution** | BlockValueEntered, BlockTelemetryChecked |
+| **ExecutionComment** | ExecutionCommentAdded |
+| **SuggestedEdit** | SuggestedEditProposed, SuggestedEditResolved |
 | **Automation** | AutomationTriggered, AutomationCompleted, AutomationFailed, AutomationSkipped |
 | **QueueEntry** | CommandQueued, CommandDequeued |
+
+### Review Workflow Recordables (Added 2026-01)
+
+The procedure review workflow uses additional recordables beyond the basic version lifecycle:
+
+```
+ProcedureVersion Lifecycle:
+  Created → Submitted → [Review Cycle] → Approved/Rejected/Closed
+                           ↓
+                    ProcedureReviewRequested (request reviewers)
+                           ↓
+                    ProcedureReviewSubmitted (reviewer submits)
+                           ↓
+             ┌─────────────┼─────────────┐
+             ↓             ↓             ↓
+     ProcedureReview   ProcedureChanges  ProcedureThread
+     Approved          Requested         Resolved
+                           ↓
+                    ProcedureReviewCommentAdded
+                           ↓
+                    ProcedureVersionResubmitted
+```
+
+### Execution Tracking Recordables (Added 2026-01)
+
+Granular execution tracking beyond top-level procedure events:
+
+```
+ProcedureExecution
+    └── StepExecution
+        ├── StepActivated (step becomes active)
+        ├── StepSignedOff (operator signs off)
+        └── BlockExecution
+            ├── BlockValueEntered (input captured)
+            └── BlockTelemetryChecked (telemetry validated)
+    └── ExecutionCommentAdded (comments during execution)
+    └── SuggestedEdits (redlines)
+        ├── SuggestedEditProposed
+        └── SuggestedEditResolved
+```
 
 ---
 

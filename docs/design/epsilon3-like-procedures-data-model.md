@@ -5,11 +5,31 @@ related:
   - "[[procedure]]"
   - "[[sequence]]"
 created: 2025-01-01
-updated: 2025-01-27
-status: active
+updated: 2026-01-29
+status: partially-implemented
 ---
 
 # Epsilon3-Like Procedures Data Model
+
+> **IMPLEMENTATION STATUS (~70% Complete)**
+>
+> **Implemented:**
+> - Core schemas: ProcedureSection, ProcedureStep, ProcedureBlock, StepExecution, BlockExecution, StepSignoff
+> - Supporting schemas: ExecutionComment, SuggestedEdit, Snippet
+> - Data source abstraction: DataSource behaviour, TelemetryResolver, CVT data source
+> - Execution strategies: Manual, Assisted, Automatic modes
+> - Most recordables for procedure events
+>
+> **Not Yet Implemented:**
+> - TSDB, API, Manual, Computed data sources
+> - DataSourceRegistry runtime resolution
+> - DataQuality assessment module
+> - Multi-dictionary support
+> - Target groups with iteration
+>
+> For current implementation details, see [Procedures](procedures.md).
+
+---
 
 > Clean-slate design for Cadence procedures with Epsilon3-inspired UX
 

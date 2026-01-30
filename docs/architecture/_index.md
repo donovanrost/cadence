@@ -2,7 +2,7 @@
 title: Architecture
 tags: [architecture, index]
 created: 2025-01-27
-updated: 2025-01-27
+updated: 2026-01-29
 status: active
 ---
 
@@ -14,28 +14,27 @@ System-level documentation for how Cadence components fit together.
 
 1. [Data Plane / Control Plane](data-plane-control-plane.md) - Core architectural separation
    - Related: [ADR-001: No DB in Data Plane](../decisions/001-no-db-in-data-plane.md)
+2. [Mission Runtime](mission-runtime.md) - Per-mission supervision trees
 
 ## Documents
 
-### Core Architecture
+### Runtime Architecture
 
 | Document | Description |
 |----------|-------------|
 | [Data Plane / Control Plane](data-plane-control-plane.md) | Separation of config management and runtime data flow |
+| [Mission Runtime](mission-runtime.md) | Per-mission isolation and supervision structure |
+| [Telemetry Pipeline](telemetry-pipeline.md) | Lanes and shards architecture for packet processing |
+| [Commands and Uplink](commands-uplink.md) | Command flow from user action to spacecraft |
+| [Interfaces and Transports](interfaces-transports.md) | Socket lifecycle and byte I/O |
+| [COP-1 Protocol](cop1-protocol.md) | Reliable delivery via windowing and retransmission |
 | [Runtime Uplink](runtime-uplink.md) | Uplink flow through COP-1 and non-COP-1 paths |
-| [COP-1 Boundary Refactor](cop1-boundary-refactor.md) | Protocol boundary design |
 
-### Implementation Plans
+### Event Sourcing
 
 | Document | Description |
 |----------|-------------|
-| [Data Plane / Control Plane Migration](data-plane-control-plane-migration-plan.md) | Migration to DP/CP separation |
-| [Recordables Implementation](recordables-implementation-plan.md) | Event sourcing implementation |
-| [Telemetry Pipeline Redesign](telemetry_pipeline_redesign_plan.md) | Pipeline architecture changes |
-| [Packet Format Normalization](packet-format-normalization-plan.md) | Standardizing packet formats |
-| [Bucket Tree Implementation](bucket-tree-implementation-plan.md) | Hierarchical data storage |
-| [Mission Reconciler](mission-reconciler-plan.md) | Mission state reconciliation |
-| [Spacecraft Simulator](spacecraft-simulator-plan.md) | Simulation infrastructure |
+| [Recordings](recordings.md) | Immutable audit trail and event sourcing |
 
 ### Reference
 
@@ -48,3 +47,4 @@ System-level documentation for how Cadence components fit together.
 - [Patterns](../patterns/_index.md) - How to extend these systems
 - [Glossary](../glossary/_index.md) - Terminology
 - [Decisions](../decisions/_index.md) - Why things are this way
+- [Archive](../archive/) - Historical planning documents

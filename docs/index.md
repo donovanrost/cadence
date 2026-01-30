@@ -2,7 +2,7 @@
 title: Cadence Documentation
 tags: [index, entry-point]
 created: 2025-01-27
-updated: 2025-01-27
+updated: 2026-01-29
 status: active
 ---
 
@@ -24,6 +24,8 @@ Cadence is a multi-tenant SaaS platform for managing constellation-scale spacecr
 | [Decisions](decisions/_index.md) | Architecture Decision Records (ADRs) |
 | [Design System](design-system/README.md) | UI components, colors, and styling |
 | [Research](research/_index.md) | Competitive analysis and feature research |
+| [Plans](plans/README.md) | Active implementation plans and roadmaps |
+| [Archive](archive/README.md) | Historical planning documents |
 
 ### Quick Links
 

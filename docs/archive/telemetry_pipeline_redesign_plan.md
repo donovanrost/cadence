@@ -1,18 +1,33 @@
 ---
 title: Telemetry Pipeline Redesign Plan
 aliases: [telemetry pipeline, lanes and shards]
-tags: [architecture, telemetry, pipeline, implementation-plan]
+tags: [architecture, telemetry, pipeline, implementation-plan, future]
 related:
   - "[[telemetry-point]]"
   - "[[cvt]]"
   - "[[data-plane]]"
   - "[[mission]]"
 created: 2025-01-01
-updated: 2025-01-27
-status: active
+updated: 2026-01-29
+status: future
 ---
 
 # Telemetry Pipeline Redesign Plan (Lanes + Shards + Durable Log)
+
+> [!IMPORTANT]
+> **STATUS: FUTURE VISION - NOT YET IMPLEMENTED**
+>
+> This document describes a planned architectural redesign for the telemetry pipeline.
+> It represents aspirational future architecture, not the current implementation.
+>
+> **Current Implementation:** See `lib/cadence/runtime/telemetry/` for the actual
+> telemetry pipeline code. The current system uses per-partition GenStage chains
+> with ETS-based caching (PacketIdentifier, CVT, Limits).
+>
+> **Implementation Phases:** None of the phases described below have been started.
+> This document is maintained as a design reference for future development.
+
+---
 
 > **Glossary:** [Telemetry Point](../glossary/telemetry-point.md) | [CVT](../glossary/cvt.md) | [Data Plane](../glossary/data-plane.md)
 
