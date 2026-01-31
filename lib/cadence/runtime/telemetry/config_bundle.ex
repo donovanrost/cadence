@@ -28,6 +28,8 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
           derived_defs: list(),
           derived_packet_index: map(),
           limit_defs: map(),
+          contacts: list(),
+          ground_station_profiles: list(),
           transport_interfaces: list(),
           links: list(),
           bindings: list(),
@@ -57,6 +59,8 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     derived_defs: [],
     derived_packet_index: %{},
     limit_defs: %{},
+    contacts: [],
+    ground_station_profiles: [],
     transport_interfaces: [],
     links: [],
     bindings: [],
@@ -86,6 +90,8 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     bindings = Map.get(config, :bindings, [])
     channel_targets = Map.get(config, :channel_targets, [])
     links = Map.get(config, :links, [])
+    contacts = Map.get(config, :contacts, [])
+    ground_station_profiles = Map.get(config, :ground_station_profiles, [])
     protocol_defaults_by_scid = build_protocol_defaults_by_scid(links)
     channel_protocol_overrides = build_channel_protocol_overrides(links)
 
@@ -107,6 +113,8 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       derived_defs: derived_defs,
       derived_packet_index: derived_packet_index,
       limit_defs: config.limit_defs,
+      contacts: contacts,
+      ground_station_profiles: ground_station_profiles,
       transport_interfaces: config.transport_interfaces,
       links: links,
       bindings: bindings,

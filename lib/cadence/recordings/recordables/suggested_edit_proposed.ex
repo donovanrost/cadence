@@ -30,7 +30,8 @@ defmodule Cadence.Recordings.Recordables.SuggestedEditProposed do
   end
 end
 
-defimpl Cadence.Recordings.Recordable, for: Cadence.Recordings.Recordables.SuggestedEditProposed do
+defimpl Cadence.Recordings.Recordable,
+  for: Cadence.Recordings.Recordables.SuggestedEditProposed do
   def recording_type(_), do: "SuggestedEditProposed"
   def aggregate_type(_), do: "ProcedureExecution"
 

@@ -53,6 +53,9 @@ defmodule Cadence.Application do
       # Notification Dispatcher - subscribes to outbox events and creates notifications
       Cadence.Notifications.Dispatcher,
 
+      # Contact lifecycle recorder - persists contact events from runtime
+      Cadence.Application.Contacts.ContactEventHandler,
+
       # Mission Tracker - Phoenix.Tracker for data plane state advertisement
       {Cadence.Runtime.Missions.MissionTracker, pubsub_server: Cadence.PubSub},
 
@@ -84,6 +87,7 @@ defmodule Cadence.Application do
     children =
       base_children
       |> maybe_disable_queue_persistence()
+      |> maybe_disable_contact_event_handler()
       |> Kernel.++(reconciler_children)
       |> Kernel.++(final_children)
 
@@ -112,6 +116,16 @@ defmodule Cadence.Application do
 
     if is_list(opts) and Keyword.get(opts, :enabled, true) == false do
       Enum.reject(children, &(&1 == Cadence.Application.Commanding.QueuePersistence))
+    else
+      children
+    end
+  end
+
+  defp maybe_disable_contact_event_handler(children) do
+    opts = Application.get_env(:cadence, Cadence.Application.Contacts.ContactEventHandler, [])
+
+    if is_list(opts) and Keyword.get(opts, :enabled, true) == false do
+      Enum.reject(children, &(&1 == Cadence.Application.Contacts.ContactEventHandler))
     else
       children
     end

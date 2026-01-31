@@ -1033,6 +1033,11 @@ defmodule CadenceWeb.Layouts do
       )
       |> assign(:is_transports, String.contains?(assigns.current_path, "#{base_path}/transports"))
       |> assign(:is_links, String.contains?(assigns.current_path, "#{base_path}/links"))
+      |> assign(:is_contacts, String.contains?(assigns.current_path, "#{base_path}/contacts"))
+      |> assign(
+        :is_ground_station_profiles,
+        String.contains?(assigns.current_path, "#{base_path}/ground-station-profiles")
+      )
 
     ~H"""
     <%= if @mission do %>
@@ -1049,13 +1054,22 @@ defmodule CadenceWeb.Layouts do
       <.sidebar_nav_group
         label="Config"
         icon="hero-cog-8-tooth"
-        expanded={@is_transports or @is_links}
+        expanded={@is_transports or @is_links or @is_contacts or @is_ground_station_profiles}
       >
         <.sidebar_nav_child navigate={~p"/missions/#{@mission}/transports"} active={@is_transports}>
           Transports
         </.sidebar_nav_child>
         <.sidebar_nav_child navigate={~p"/missions/#{@mission}/links"} active={@is_links}>
           Links
+        </.sidebar_nav_child>
+        <.sidebar_nav_child navigate={~p"/missions/#{@mission}/contacts"} active={@is_contacts}>
+          Contacts
+        </.sidebar_nav_child>
+        <.sidebar_nav_child
+          navigate={~p"/missions/#{@mission}/ground-station-profiles"}
+          active={@is_ground_station_profiles}
+        >
+          Ground Station Profiles
         </.sidebar_nav_child>
       </.sidebar_nav_group>
 

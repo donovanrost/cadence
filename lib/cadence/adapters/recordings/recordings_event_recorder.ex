@@ -67,7 +67,11 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     automation_triggered: Recordables.AutomationTriggered,
     automation_completed: Recordables.AutomationCompleted,
     automation_failed: Recordables.AutomationFailed,
-    automation_skipped: Recordables.AutomationSkipped
+    automation_skipped: Recordables.AutomationSkipped,
+    # Contact lifecycle events
+    contact_started: Recordables.ContactStarted,
+    contact_ended: Recordables.ContactEnded,
+    contact_activation_failed: Recordables.ContactActivationFailed
   }
 
   defp get_recordable_module(event_type) do
@@ -205,6 +209,45 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
   defp build_recordable_attrs(:automation_skipped, _automation, attrs) do
     %{
       reason: Map.get(attrs, :reason)
+    }
+  end
+
+  # Contact lifecycle events
+  defp build_recordable_attrs(:contact_started, _contact, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      spacecraft_target_id: Map.get(attrs, :spacecraft_target_id),
+      ground_station_target_id: Map.get(attrs, :ground_station_target_id),
+      antenna_id: Map.get(attrs, :antenna_id),
+      direction: Map.get(attrs, :direction),
+      resolved_transport_ids: Map.get(attrs, :resolved_transport_ids, [])
+    }
+  end
+
+  defp build_recordable_attrs(:contact_ended, _contact, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      spacecraft_target_id: Map.get(attrs, :spacecraft_target_id),
+      ground_station_target_id: Map.get(attrs, :ground_station_target_id),
+      antenna_id: Map.get(attrs, :antenna_id),
+      direction: Map.get(attrs, :direction),
+      reason: Map.get(attrs, :reason, "completed")
+    }
+  end
+
+  defp build_recordable_attrs(:contact_activation_failed, _contact, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      spacecraft_target_id: Map.get(attrs, :spacecraft_target_id),
+      ground_station_target_id: Map.get(attrs, :ground_station_target_id),
+      antenna_id: Map.get(attrs, :antenna_id),
+      direction: Map.get(attrs, :direction),
+      error_code: Map.get(attrs, :error_code),
+      error_message: Map.get(attrs, :error_message),
+      details: Map.get(attrs, :details, %{})
     }
   end
 

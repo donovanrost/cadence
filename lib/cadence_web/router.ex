@@ -201,6 +201,18 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/links/:link_id/protocol", MissionLive.LinkProtocol, :show
       live "/missions/:id/links/:link_id/channels/new", MissionLive.LinkShow, :new_channel
 
+      # Contacts & Ground Station Profiles
+      live "/missions/:id/contacts", MissionLive.Contacts, :index
+      live "/missions/:id/contacts/new", MissionLive.Contacts, :new
+      live "/missions/:id/contacts/:contact_id/edit", MissionLive.Contacts, :edit
+
+      live "/missions/:id/ground-station-profiles", MissionLive.GroundStationProfiles, :index
+      live "/missions/:id/ground-station-profiles/new", MissionLive.GroundStationProfiles, :new
+
+      live "/missions/:id/ground-station-profiles/:profile_id/edit",
+           MissionLive.GroundStationProfiles,
+           :edit
+
       # Channels (VCID binding editor)
       live "/missions/:id/links/:link_id/channels/:channel_id", MissionLive.ChannelShow, :show
 

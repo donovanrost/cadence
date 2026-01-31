@@ -47,6 +47,9 @@ config :cadence, Cadence.Outbox.Processor, enabled: false
 # Disable queue persistence in tests to avoid sandbox ownership issues.
 config :cadence, Cadence.Application.Commanding.QueuePersistence, enabled: false
 
+# Disable contact event handler in tests to avoid sandbox ownership issues.
+config :cadence, Cadence.Application.Contacts.ContactEventHandler, enabled: false
+
 # Disable cache warming in tests to avoid background DB work.
 config :cadence, Cadence.Runtime.Missions.CacheWarmer, enabled: false
 

@@ -42,6 +42,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
   alias Cadence.Runtime.Commands.VerificationManager
+  alias Cadence.Runtime.Contacts.ContactScheduler
   alias Cadence.Runtime.Links.Supervisor, as: LinksSupervisor
   alias Cadence.Runtime.Missions.CacheWarmer
   alias Cadence.Runtime.Missions.ConfigManager
@@ -123,6 +124,9 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
+          # Contact Scheduler - activates transports during planned contacts
+          {ContactScheduler, mission_id: mission_id, organization_id: organization_id},
+
           # Interface Supervisor - manages new transport interface workers
           {InterfaceSupervisor, mission_id: mission_id},
 

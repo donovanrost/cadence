@@ -86,7 +86,11 @@ defmodule Cadence.Recordings do
     "ProcedureReviewCommentAdded" => Cadence.Recordings.Recordables.ProcedureReviewCommentAdded,
     "ProcedureThreadResolved" => Cadence.Recordings.Recordables.ProcedureThreadResolved,
     "ProcedureVersionResubmitted" => Cadence.Recordings.Recordables.ProcedureVersionResubmitted,
-    "ProcedureVersionClosed" => Cadence.Recordings.Recordables.ProcedureVersionClosed
+    "ProcedureVersionClosed" => Cadence.Recordings.Recordables.ProcedureVersionClosed,
+    # Contact lifecycle recordables
+    "ContactStarted" => Cadence.Recordings.Recordables.ContactStarted,
+    "ContactEnded" => Cadence.Recordings.Recordables.ContactEnded,
+    "ContactActivationFailed" => Cadence.Recordings.Recordables.ContactActivationFailed
   }
 
   @doc """

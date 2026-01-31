@@ -84,7 +84,6 @@ defmodule Cadence.MixProject do
       {:tidewave, "~> 0.5", only: :dev},
       {:supertester, "~> 0.5.1", only: :test},
       {:recon, "~> 2.5", only: :dev}
-
     ]
   end
 
