@@ -90,7 +90,14 @@ defmodule Cadence.Recordings do
     # Contact lifecycle recordables
     "ContactStarted" => Cadence.Recordings.Recordables.ContactStarted,
     "ContactEnded" => Cadence.Recordings.Recordables.ContactEnded,
-    "ContactActivationFailed" => Cadence.Recordings.Recordables.ContactActivationFailed
+    "ContactActivationFailed" => Cadence.Recordings.Recordables.ContactActivationFailed,
+    "ContactBlocked" => Cadence.Recordings.Recordables.ContactBlocked,
+    "ContactSkipped" => Cadence.Recordings.Recordables.ContactSkipped,
+    "ContactReady" => Cadence.Recordings.Recordables.ContactReady,
+    "ContactActionDispatched" => Cadence.Recordings.Recordables.ContactActionDispatched,
+    "ContactActionCompleted" => Cadence.Recordings.Recordables.ContactActionCompleted,
+    "ContactActionFailed" => Cadence.Recordings.Recordables.ContactActionFailed,
+    "ContactActionSkipped" => Cadence.Recordings.Recordables.ContactActionSkipped
   }
 
   @doc """

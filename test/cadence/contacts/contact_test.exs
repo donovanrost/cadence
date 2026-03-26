@@ -25,7 +25,9 @@ defmodule Cadence.Contacts.ContactTest do
       state: :planned
     }
 
-    assert %Ecto.Changeset{valid?: true} = Contact.changeset(%Contact{}, attrs)
+    changeset = Contact.changeset(%Contact{}, attrs)
+    assert %Ecto.Changeset{valid?: true} = changeset
+    assert Ecto.Changeset.get_field(changeset, :priority) == 0
 
     invalid_attrs = Map.put(attrs, :end_time, ~U[2024-01-01 00:00:00Z])
 

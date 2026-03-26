@@ -9,7 +9,7 @@ defmodule Cadence.Application.Missions.MissionConfigContactsTest do
   import Cadence.OrganizationsFixtures
   import Cadence.TargetsFixtures
 
-  test "load includes planned contacts and enabled ground station profiles" do
+  test "load includes planned contacts, contact actions, and enabled ground station profiles" do
     org = organization_fixture()
     mission = mission_fixture(organization: org)
 
@@ -36,6 +36,24 @@ defmodule Cadence.Application.Missions.MissionConfigContactsTest do
         end_time: ~U[2024-01-02 00:10:00Z],
         direction: :downlink,
         state: :cancelled
+      })
+
+    {:ok, planned_action} =
+      Contacts.create_contact_command_action(org.id, mission.id, %{
+        contact_id: planned_contact.id,
+        gate: :uplink_ready,
+        order: 0,
+        state: :planned,
+        command_ref: %{"command_name" => "PING", "parameters" => %{}}
+      })
+
+    {:ok, _cancelled_action} =
+      Contacts.create_contact_command_action(org.id, mission.id, %{
+        contact_id: planned_contact.id,
+        gate: :uplink_ready,
+        order: 1,
+        state: :cancelled,
+        command_ref: %{"command_name" => "NOOP", "parameters" => %{}}
       })
 
     {:ok, enabled_profile} =
@@ -67,6 +85,7 @@ defmodule Cadence.Application.Missions.MissionConfigContactsTest do
     {:ok, config} = MissionConfig.load(mission.id)
 
     assert Enum.map(config.contacts, & &1.id) == [planned_contact.id]
+    assert Enum.map(config.contact_command_actions, & &1.id) == [planned_action.id]
     assert Enum.map(config.ground_station_profiles, & &1.id) == [enabled_profile.id]
   end
 end

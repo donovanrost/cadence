@@ -206,6 +206,13 @@ defmodule CadenceWeb.Router do
       live "/missions/:id/contacts/new", MissionLive.Contacts, :new
       live "/missions/:id/contacts/:contact_id/edit", MissionLive.Contacts, :edit
 
+      live "/missions/:id/contacts/:contact_id/actions", MissionLive.ContactActions, :index
+      live "/missions/:id/contacts/:contact_id/actions/new", MissionLive.ContactActions, :new
+
+      live "/missions/:id/contacts/:contact_id/actions/:action_id/edit",
+           MissionLive.ContactActions,
+           :edit
+
       live "/missions/:id/ground-station-profiles", MissionLive.GroundStationProfiles, :index
       live "/missions/:id/ground-station-profiles/new", MissionLive.GroundStationProfiles, :new
 

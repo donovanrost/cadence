@@ -13,55 +13,7 @@ defmodule Cadence.Application do
     VersionRegistry.init()
 
     # Base children always started
-    base_children = [
-      CadenceWeb.Telemetry,
-      Cadence.Repo,
-      {DNSCluster, query: Application.get_env(:cadence, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Cadence.PubSub},
-
-      # Mission Registry - registers all mission processes
-      {Registry, keys: :unique, name: Cadence.MissionRegistry},
-
-      # V2 Execution Registry - registers V2 procedure execution processes by execution_id
-      {Registry, keys: :unique, name: Cadence.Procedures.V2.ExecutionRegistry},
-
-      # Automation Registry - registers automation managers by mission_id
-      {Registry, keys: :unique, name: Cadence.AutomationRegistry},
-
-      # Procedure Execution Supervisor - manages execution processes
-      {DynamicSupervisor, name: Cadence.Procedures.ExecutionSupervisor, strategy: :one_for_one},
-
-      # Derived Items Cache - caches derived item definitions per mission
-      Cadence.Runtime.Telemetry.DerivedItems.Cache,
-
-      # Processor State - ETS storage for stateful derived item functions
-      Cadence.Telemetry.DerivedItems.ProcessorState,
-
-      # Limits Cache - caches limits configurations per mission/target
-      Cadence.Runtime.Telemetry.Limits.Cache,
-
-      # Alarm Rule Cache - caches alarm rules for fast lookup
-      Cadence.Runtime.Alarms.RuleCache,
-
-      # Outbox Processor - processes transactional outbox events
-      Cadence.Outbox.Processor,
-
-      # Queue Persistence - applies data plane queue events in the control plane
-      # (disabled in test to avoid sandbox ownership issues)
-      Cadence.Application.Commanding.QueuePersistence,
-
-      # Notification Dispatcher - subscribes to outbox events and creates notifications
-      Cadence.Notifications.Dispatcher,
-
-      # Contact lifecycle recorder - persists contact events from runtime
-      Cadence.Application.Contacts.ContactEventHandler,
-
-      # Mission Tracker - Phoenix.Tracker for data plane state advertisement
-      {Cadence.Runtime.Missions.MissionTracker, pubsub_server: Cadence.PubSub},
-
-      # Mission Supervisor - manages all mission supervision trees (Data Plane)
-      Cadence.Runtime.Missions.MissionSupervisor
-    ]
+    base_children = base_children()
 
     # Reconcilers are disabled for CLI tools like mix cadence.simulate that
     # only need to send telemetry to a running Cadence instance
@@ -109,6 +61,59 @@ defmodule Cadence.Application do
     if email && password do
       Cadence.Accounts.ensure_system_admin(email, password)
     end
+  end
+
+  @doc false
+  def base_children do
+    [
+      CadenceWeb.Telemetry,
+      Cadence.Repo,
+      {DNSCluster, query: Application.get_env(:cadence, :dns_cluster_query) || :ignore},
+      {Phoenix.PubSub, name: Cadence.PubSub},
+
+      # Mission Registry - registers all mission processes
+      {Registry, keys: :unique, name: Cadence.MissionRegistry},
+
+      # V2 Execution Registry - registers V2 procedure execution processes by execution_id
+      {Registry, keys: :unique, name: Cadence.Procedures.V2.ExecutionRegistry},
+
+      # Automation Registry - registers automation managers by mission_id
+      {Registry, keys: :unique, name: Cadence.AutomationRegistry},
+
+      # Procedure Execution Supervisor - manages execution processes
+      {DynamicSupervisor, name: Cadence.Procedures.ExecutionSupervisor, strategy: :one_for_one},
+
+      # Derived Items Cache - caches derived item definitions per mission
+      Cadence.Runtime.Telemetry.DerivedItems.Cache,
+
+      # Processor State - ETS storage for stateful derived item functions
+      Cadence.Telemetry.DerivedItems.ProcessorState,
+
+      # Limits Cache - caches limits configurations per mission/target
+      Cadence.Runtime.Telemetry.Limits.Cache,
+
+      # Alarm Rule Cache - caches alarm rules for fast lookup
+      Cadence.Runtime.Alarms.RuleCache,
+
+      # Outbox Processor - processes transactional outbox events
+      Cadence.Outbox.Processor,
+
+      # Queue Persistence - applies data plane queue events in the control plane
+      # (disabled in test to avoid sandbox ownership issues)
+      Cadence.Application.Commanding.QueuePersistence,
+
+      # Notification Dispatcher - subscribes to outbox events and creates notifications
+      Cadence.Notifications.Dispatcher,
+
+      # Mission Tracker - Phoenix.Tracker for data plane state advertisement
+      {Cadence.Runtime.Missions.MissionTracker, pubsub_server: Cadence.PubSub},
+
+      # Contact lifecycle recorder - persists contact events from runtime
+      Cadence.Application.Contacts.ContactEventHandler,
+
+      # Mission Supervisor - manages all mission supervision trees (Data Plane)
+      Cadence.Runtime.Missions.MissionSupervisor
+    ]
   end
 
   defp maybe_disable_queue_persistence(children) do

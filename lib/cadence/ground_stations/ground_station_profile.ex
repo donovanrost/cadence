@@ -44,6 +44,9 @@ defmodule Cadence.GroundStations.GroundStationProfile do
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
     |> foreign_key_constraint(:ground_station_target_id)
+    |> unique_constraint(:ground_station_target_id,
+      name: :uniq_enabled_gs_profile_per_station
+    )
   end
 
   defp validate_resources(changeset) do

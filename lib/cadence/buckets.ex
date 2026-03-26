@@ -30,6 +30,7 @@ defmodule Cadence.Buckets do
 
   import Ecto.Query, warn: false
 
+  alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Buckets.{Bucket, Bucketable, BucketMembership}
   alias Cadence.Repo
   alias Cadence.Time, as: CadenceTime
@@ -132,6 +133,44 @@ defmodule Cadence.Buckets do
     Bucket
     |> where([b], b.bucketable_type == ^bucketable_type and b.bucketable_id == ^bucketable_id)
     |> Repo.one()
+  end
+
+  @doc """
+  Gets or creates the mission bucket for a mission.
+  """
+  @spec get_or_create_mission_bucket!(String.t(), String.t()) :: Bucket.t()
+  def get_or_create_mission_bucket!(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    case get_bucket_by_bucketable("Mission", mission_id) do
+      nil ->
+        create_mission_bucket!(organization_id, mission_id)
+
+      bucket ->
+        bucket
+    end
+  end
+
+  defp create_mission_bucket!(organization_id, mission_id) do
+    with {:ok, mission} <- MissionQueries.find(mission_id),
+         {:ok, bucket} <- create_bucket_for(mission, organization_id: organization_id) do
+      bucket
+    else
+      {:error, :not_found} ->
+        raise "mission not found for bucket creation: #{mission_id}"
+
+      {:error, _changeset} ->
+        fetch_mission_bucket_or_raise(mission_id)
+    end
+  end
+
+  defp fetch_mission_bucket_or_raise(mission_id) do
+    case get_bucket_by_bucketable("Mission", mission_id) do
+      nil ->
+        raise "failed to create mission bucket for mission #{mission_id}"
+
+      bucket ->
+        bucket
+    end
   end
 
   @doc """

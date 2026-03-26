@@ -11,16 +11,26 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
   alias Cadence.Buckets
   alias Cadence.Ports.Recordings.EventRecorder
   alias Cadence.Runtime.Missions.MissionTracker
+  alias Cadence.Time.Timer, as: TimeTimer
+
+  @existing_mission_sync_retry_ms 250
 
   @payload_keys [
     :organization_id,
     :mission_id,
     :contact_id,
+    :contact_action_id,
     :spacecraft_target_id,
     :ground_station_target_id,
     :antenna_id,
     :direction,
     :resolved_transport_ids,
+    :blocked_by_contact_id,
+    :gate,
+    :command_ref,
+    :result,
+    :policy,
+    :message,
     :reason,
     :error_code,
     :error_message,
@@ -35,20 +45,42 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
   def init(opts) do
     subscribe? = Keyword.get(opts, :subscribe?, true)
 
-    state = %{subscribed_missions: MapSet.new(), org_ids: MapSet.new()}
+    state = %{
+      subscribed_missions: MapSet.new(),
+      org_ids: MapSet.new(),
+      pending_existing_mission_sync?: false
+    }
 
     if subscribe? do
       org_ids = list_org_ids()
       Enum.each(org_ids, &subscribe_org/1)
 
+      send(self(), :sync_existing_missions)
+
+      {:ok,
+       %{
+         state
+         | org_ids: MapSet.new(org_ids),
+           pending_existing_mission_sync?: true
+       }}
+    else
+      {:ok, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:sync_existing_missions, state) do
+    if mission_tracker_ready?() do
       state =
-        Enum.reduce(org_ids, state, fn org_id, acc ->
+        Enum.reduce(state.org_ids, %{state | pending_existing_mission_sync?: false}, fn org_id,
+                                                                                        acc ->
           subscribe_existing_missions(acc, org_id)
         end)
 
-      {:ok, %{state | org_ids: MapSet.new(org_ids)}}
+      {:noreply, state}
     else
-      {:ok, state}
+      TimeTimer.send_after(self(), :sync_existing_missions, @existing_mission_sync_retry_ms)
+      {:noreply, state}
     end
   end
 
@@ -74,6 +106,18 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
   end
 
   @impl true
+  def handle_info({:contact_readiness, event_type, payload}, state) do
+    record_contact_event(event_type, payload)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:contact_action, event_type, payload}, state) do
+    record_contact_action_event(event_type, payload)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(_msg, state), do: {:noreply, state}
 
   defp record_contact_event(event_type, payload) do
@@ -85,9 +129,7 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
 
     if is_binary(mission_id) and is_binary(organization_id) and is_binary(contact_id) do
       aggregate = %{id: contact_id, mission_id: mission_id, organization_id: organization_id}
-      bucket_id = mission_bucket_id(mission_id)
-
-      context = %{organization_id: organization_id, mission_id: mission_id, bucket_id: bucket_id}
+      context = build_context(organization_id, mission_id)
 
       case recorder().record_with_context(event_type, aggregate, nil, attrs, context) do
         :ok ->
@@ -101,19 +143,51 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
     end
   end
 
+  defp record_contact_action_event(event_type, payload) do
+    attrs = normalize_payload(payload)
+
+    mission_id = Map.get(attrs, :mission_id)
+    organization_id = Map.get(attrs, :organization_id)
+    contact_action_id = Map.get(attrs, :contact_action_id)
+
+    if is_binary(mission_id) and is_binary(organization_id) and is_binary(contact_action_id) do
+      aggregate = %{
+        id: contact_action_id,
+        mission_id: mission_id,
+        organization_id: organization_id
+      }
+
+      context = build_context(organization_id, mission_id)
+
+      case recorder().record_with_context(event_type, aggregate, nil, attrs, context) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error("Failed to record contact action event: #{inspect(reason)}")
+      end
+    else
+      Logger.error("Contact action event missing required identifiers: #{inspect(payload)}")
+    end
+  end
+
   defp normalize_payload(payload) do
     Enum.reduce(@payload_keys, %{}, fn key, acc ->
-      case Map.fetch(payload, key) do
-        {:ok, value} ->
-          Map.put(acc, key, value)
-
-        :error ->
-          case Map.fetch(payload, Atom.to_string(key)) do
-            {:ok, value} -> Map.put(acc, key, value)
-            :error -> acc
-          end
+      case fetch_payload_value(payload, key) do
+        {:ok, value} -> Map.put(acc, key, value)
+        :error -> acc
       end
     end)
+  end
+
+  defp fetch_payload_value(payload, key) do
+    case Map.fetch(payload, key) do
+      {:ok, value} ->
+        {:ok, value}
+
+      :error ->
+        Map.fetch(payload, Atom.to_string(key))
+    end
   end
 
   defp list_org_ids do
@@ -153,10 +227,12 @@ defmodule Cadence.Application.Contacts.ContactEventHandler do
 
   defp recorder, do: EventRecorder.impl()
 
-  defp mission_bucket_id(mission_id) do
-    case Buckets.get_bucket_by_bucketable("Mission", mission_id) do
-      nil -> nil
-      bucket -> bucket.id
-    end
+  defp mission_tracker_ready? do
+    :ets.whereis(MissionTracker) != :undefined
+  end
+
+  defp build_context(organization_id, mission_id) do
+    bucket_id = Buckets.get_or_create_mission_bucket!(organization_id, mission_id).id
+    %{organization_id: organization_id, mission_id: mission_id, bucket_id: bucket_id}
   end
 end

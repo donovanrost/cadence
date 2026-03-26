@@ -19,7 +19,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
   """
 
   alias Cadence.Application.Commanding.QueueSnapshotLoader
-  alias Cadence.Application.Contacts.ContactQueries
+  alias Cadence.Application.Contacts.{ContactCommandActionQueries, ContactQueries}
   alias Cadence.Application.GroundStations.GroundStationProfileQueries
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
@@ -50,6 +50,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
           alarm_rules: list(),
           automations: list(),
           contacts: list(),
+          contact_command_actions: list(),
           ground_station_profiles: list(),
           transport_interfaces: list(),
           links: list(),
@@ -74,6 +75,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
     alarm_rules: [],
     automations: [],
     contacts: [],
+    contact_command_actions: [],
     ground_station_profiles: [],
     transport_interfaces: [],
     links: [],
@@ -101,6 +103,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, alarm_rules} <- load_alarm_rules(mission.organization_id, mission_id),
          {:ok, automations} <- load_automations(mission_id),
          {:ok, contacts} <- load_contacts(mission_id),
+         {:ok, contact_command_actions} <- load_contact_command_actions(mission_id),
          {:ok, ground_station_profiles} <- load_ground_station_profiles(mission_id),
          {:ok, transport_interfaces} <-
            load_transport_interfaces(mission.organization_id, mission_id),
@@ -125,6 +128,7 @@ defmodule Cadence.Application.Missions.MissionConfig do
          alarm_rules: alarm_rules,
          automations: automations,
          contacts: contacts,
+         contact_command_actions: contact_command_actions,
          ground_station_profiles: ground_station_profiles,
          transport_interfaces: transport_interfaces,
          links: links,
@@ -247,6 +251,17 @@ defmodule Cadence.Application.Missions.MissionConfig do
   rescue
     e ->
       Logger.warning("Failed to load contacts for mission #{mission_id}: #{inspect(e)}")
+      {:ok, []}
+  end
+
+  defp load_contact_command_actions(mission_id) do
+    {:ok, ContactCommandActionQueries.list_planned_for_mission(mission_id)}
+  rescue
+    e ->
+      Logger.warning(
+        "Failed to load contact command actions for mission #{mission_id}: #{inspect(e)}"
+      )
+
       {:ok, []}
   end
 

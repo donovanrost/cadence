@@ -71,7 +71,14 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     # Contact lifecycle events
     contact_started: Recordables.ContactStarted,
     contact_ended: Recordables.ContactEnded,
-    contact_activation_failed: Recordables.ContactActivationFailed
+    contact_activation_failed: Recordables.ContactActivationFailed,
+    contact_blocked: Recordables.ContactBlocked,
+    contact_skipped: Recordables.ContactSkipped,
+    contact_ready: Recordables.ContactReady,
+    contact_action_dispatched: Recordables.ContactActionDispatched,
+    contact_action_completed: Recordables.ContactActionCompleted,
+    contact_action_failed: Recordables.ContactActionFailed,
+    contact_action_skipped: Recordables.ContactActionSkipped
   }
 
   defp get_recordable_module(event_type) do
@@ -153,6 +160,57 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
     %{
       command_name: cmd.command_name,
       reason: Map.get(attrs, :reason, to_string(cmd.status))
+    }
+  end
+
+  # Contact readiness & action events
+  defp build_recordable_attrs(:contact_ready, _aggregate, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      gate: Map.get(attrs, :gate),
+      details: Map.get(attrs, :details, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_action_dispatched, _aggregate, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      contact_action_id: Map.get(attrs, :contact_action_id),
+      gate: Map.get(attrs, :gate),
+      command_ref: Map.get(attrs, :command_ref, %{}),
+      details: Map.get(attrs, :details, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_action_completed, _aggregate, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      contact_action_id: Map.get(attrs, :contact_action_id),
+      result: Map.get(attrs, :result, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_action_failed, _aggregate, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      contact_action_id: Map.get(attrs, :contact_action_id),
+      error_code: Map.get(attrs, :error_code),
+      error_message: Map.get(attrs, :error_message),
+      details: Map.get(attrs, :details, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_action_skipped, _aggregate, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      contact_action_id: Map.get(attrs, :contact_action_id),
+      reason: Map.get(attrs, :reason),
+      details: Map.get(attrs, :details, %{})
     }
   end
 
@@ -247,6 +305,34 @@ defmodule Cadence.Adapters.Recordings.RecordingsEventRecorder do
       direction: Map.get(attrs, :direction),
       error_code: Map.get(attrs, :error_code),
       error_message: Map.get(attrs, :error_message),
+      details: Map.get(attrs, :details, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_blocked, _contact, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      spacecraft_target_id: Map.get(attrs, :spacecraft_target_id),
+      ground_station_target_id: Map.get(attrs, :ground_station_target_id),
+      antenna_id: Map.get(attrs, :antenna_id),
+      direction: Map.get(attrs, :direction),
+      blocked_by_contact_id: Map.get(attrs, :blocked_by_contact_id),
+      policy: Map.get(attrs, :policy),
+      message: Map.get(attrs, :message),
+      details: Map.get(attrs, :details, %{})
+    }
+  end
+
+  defp build_recordable_attrs(:contact_skipped, _contact, attrs) do
+    %{
+      mission_id: Map.get(attrs, :mission_id),
+      contact_id: Map.get(attrs, :contact_id),
+      spacecraft_target_id: Map.get(attrs, :spacecraft_target_id),
+      ground_station_target_id: Map.get(attrs, :ground_station_target_id),
+      antenna_id: Map.get(attrs, :antenna_id),
+      direction: Map.get(attrs, :direction),
+      reason: Map.get(attrs, :reason, "resource_unavailable"),
       details: Map.get(attrs, :details, %{})
     }
   end

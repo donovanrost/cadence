@@ -52,6 +52,11 @@ defmodule Cadence.Ports.Recordings.EventRecorder do
           | :contact_started
           | :contact_ended
           | :contact_activation_failed
+          | :contact_ready
+          | :contact_action_dispatched
+          | :contact_action_completed
+          | :contact_action_failed
+          | :contact_action_skipped
 
   @type aggregate :: struct()
   @type actor_id :: String.t() | nil

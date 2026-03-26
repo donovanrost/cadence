@@ -5,8 +5,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.Application.Contacts.ContactValidator
   alias Cadence.Contacts
   alias Cadence.Contacts.Contact
+  alias Cadence.GroundStations
   alias Cadence.Targets
 
   @impl true
@@ -36,8 +38,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
 
     contacts = Contacts.list_contacts(org_id, mission_id: mission.id)
     targets = Targets.list_targets_with_preloads(mission.id)
+    profiles = GroundStations.list_enabled_profiles(mission.id)
 
     {spacecraft_targets, ground_station_targets} = split_targets(targets)
+    profiles_by_station = build_profiles_by_station(profiles)
 
     socket
     |> assign(:page_title, "Contacts")
@@ -45,7 +49,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
     |> assign(:contact, nil)
     |> assign(:spacecraft_targets, spacecraft_targets)
     |> assign(:ground_station_targets, ground_station_targets)
+    |> assign(:profiles_by_station, profiles_by_station)
+    |> assign(:available_antennas, [])
     |> assign(:form, nil)
+    |> assign_validation(org_id, mission.id, contacts)
   end
 
   defp apply_action(socket, :new, _params) do
@@ -54,8 +61,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
 
     contacts = Contacts.list_contacts(org_id, mission_id: mission.id)
     targets = Targets.list_targets_with_preloads(mission.id)
+    profiles = GroundStations.list_enabled_profiles(mission.id)
 
     {spacecraft_targets, ground_station_targets} = split_targets(targets)
+    profiles_by_station = build_profiles_by_station(profiles)
 
     contact = %Contact{state: :planned}
     form = contact |> Contact.changeset(%{}) |> to_form()
@@ -66,7 +75,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
     |> assign(:contact, contact)
     |> assign(:spacecraft_targets, spacecraft_targets)
     |> assign(:ground_station_targets, ground_station_targets)
+    |> assign(:profiles_by_station, profiles_by_station)
+    |> assign(:available_antennas, [])
     |> assign(:form, form)
+    |> assign_validation(org_id, mission.id, contacts)
   end
 
   defp apply_action(socket, :edit, %{"contact_id" => contact_id}) do
@@ -75,12 +87,17 @@ defmodule CadenceWeb.MissionLive.Contacts do
 
     contacts = Contacts.list_contacts(org_id, mission_id: mission.id)
     targets = Targets.list_targets_with_preloads(mission.id)
+    profiles = GroundStations.list_enabled_profiles(mission.id)
 
     {spacecraft_targets, ground_station_targets} = split_targets(targets)
+    profiles_by_station = build_profiles_by_station(profiles)
 
     case Contacts.get_contact(contact_id, org_id, mission.id) do
       {:ok, contact} ->
         form = contact |> Contact.changeset(%{}) |> to_form()
+
+        available_antennas =
+          antennas_for_station(contact.ground_station_target_id, profiles_by_station)
 
         socket
         |> assign(:page_title, "Edit Contact")
@@ -88,7 +105,10 @@ defmodule CadenceWeb.MissionLive.Contacts do
         |> assign(:contact, contact)
         |> assign(:spacecraft_targets, spacecraft_targets)
         |> assign(:ground_station_targets, ground_station_targets)
+        |> assign(:profiles_by_station, profiles_by_station)
+        |> assign(:available_antennas, available_antennas)
         |> assign(:form, form)
+        |> assign_validation(org_id, mission.id, contacts)
 
       {:error, :not_found} ->
         socket
@@ -114,6 +134,23 @@ defmodule CadenceWeb.MissionLive.Contacts do
       :edit ->
         update_contact(socket, org_id, mission.id, contact_params)
     end
+  end
+
+  @impl true
+  def handle_event("validate", %{"contact" => contact_params}, socket) do
+    contact = socket.assigns.contact || %Contact{state: :planned}
+    changeset = Contact.changeset(contact, contact_params)
+    form = to_form(changeset)
+
+    ground_station_id = Map.get(contact_params, "ground_station_target_id")
+
+    available_antennas =
+      antennas_for_station(ground_station_id, socket.assigns.profiles_by_station)
+
+    {:noreply,
+     socket
+     |> assign(:form, form)
+     |> assign(:available_antennas, available_antennas)}
   end
 
   @impl true
@@ -202,34 +239,42 @@ defmodule CadenceWeb.MissionLive.Contacts do
     if trimmed == "" do
       nil
     else
-      normalized =
-        cond do
-          String.contains?(trimmed, "Z") or String.contains?(trimmed, "+") ->
-            trimmed
+      parse_datetime_string(trimmed)
+    end
+  end
 
-          String.match?(trimmed, ~r/\d{2}:\d{2}:\d{2}$/) ->
-            trimmed <> "Z"
+  defp parse_datetime_string(value) do
+    normalized = normalize_datetime_string(value)
 
-          true ->
-            trimmed <> ":00Z"
+    case DateTime.from_iso8601(normalized) do
+      {:ok, dt, _} -> dt
+      _ -> parse_naive_datetime(value)
+    end
+  end
+
+  defp normalize_datetime_string(value) do
+    cond do
+      String.contains?(value, "Z") or String.contains?(value, "+") ->
+        value
+
+      String.match?(value, ~r/\d{2}:\d{2}:\d{2}$/) ->
+        value <> "Z"
+
+      true ->
+        value <> ":00Z"
+    end
+  end
+
+  defp parse_naive_datetime(value) do
+    case NaiveDateTime.from_iso8601(value) do
+      {:ok, naive} ->
+        case DateTime.from_naive(naive, "Etc/UTC") do
+          {:ok, dt} -> dt
+          {:error, _} -> nil
         end
 
-      case DateTime.from_iso8601(normalized) do
-        {:ok, dt, _} ->
-          dt
-
-        _ ->
-          case NaiveDateTime.from_iso8601(trimmed) do
-            {:ok, naive} ->
-              case DateTime.from_naive(naive, "Etc/UTC") do
-                {:ok, dt} -> dt
-                {:error, _} -> nil
-              end
-
-            {:error, _} ->
-              nil
-          end
-      end
+      {:error, _} ->
+        nil
     end
   end
 
@@ -267,14 +312,26 @@ defmodule CadenceWeb.MissionLive.Contacts do
             {target_name(@ground_station_targets, contact.ground_station_target_id)}
           </:col>
           <:col :let={contact} label="Antenna">{contact.antenna_id}</:col>
+          <:col :let={contact} label="Priority">
+            <span class="font-mono">{contact.priority}</span>
+          </:col>
           <:col :let={contact} label="Direction">
             <span class="badge badge-outline">{format_direction(contact.direction)}</span>
+          </:col>
+          <:col :let={contact} label="Conflicts">
+            <% conflict_count = length(Map.get(@contact_conflicts, contact.id, [])) %>
+            <%= if conflict_count > 0 do %>
+              <.badge variant="warning" class="badge-sm">{conflict_count}</.badge>
+            <% else %>
+              <span class="text-xs text-gray-500">None</span>
+            <% end %>
           </:col>
           <:col :let={contact} label="State">
             <.enabled_indicator enabled={contact.state == :planned} />
           </:col>
           <:action :let={contact}>
             <.link patch={~p"/missions/#{@mission}/contacts/#{contact}/edit"}>Edit</.link>
+            <.link navigate={~p"/missions/#{@mission}/contacts/#{contact}/actions"}>Actions</.link>
             <.link
               phx-click={JS.push("delete", value: %{id: contact.id})}
               data-confirm="Are you sure you want to delete this contact?"
@@ -314,6 +371,7 @@ defmodule CadenceWeb.MissionLive.Contacts do
           <.form
             for={@form}
             id="contact-form"
+            phx-change="validate"
             phx-submit="save"
             class="mt-6 space-y-4"
           >
@@ -335,13 +393,27 @@ defmodule CadenceWeb.MissionLive.Contacts do
               required
             />
 
-            <.input
-              field={@form[:antenna_id]}
-              type="text"
-              label="Antenna ID"
-              placeholder="ant-1"
-              required
-            />
+            <%= if @available_antennas != [] do %>
+              <.input
+                field={@form[:antenna_id]}
+                type="select"
+                label="Antenna"
+                options={@available_antennas}
+                prompt="Select antenna"
+                required
+              />
+            <% else %>
+              <.input
+                field={@form[:antenna_id]}
+                type="text"
+                label="Antenna ID"
+                placeholder="ant-1"
+                required
+              />
+              <p class="text-xs text-gray-500">
+                No enabled ground station profile found for this station. Enter an antenna ID.
+              </p>
+            <% end %>
 
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <.input
@@ -383,6 +455,45 @@ defmodule CadenceWeb.MissionLive.Contacts do
               />
             </div>
 
+            <.input
+              field={@form[:priority]}
+              type="number"
+              label="Priority"
+              min="0"
+              step="1"
+            />
+            <p class="text-xs text-gray-500">
+              Higher values take priority when contacts overlap. Running contacts are not preempted.
+            </p>
+
+            <%= if @contact do %>
+              <% hard_errors = Map.get(@contact_hard_errors, @contact.id, []) %>
+              <%= if hard_errors != [] do %>
+                <div class="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <p class="font-semibold">Hard validation issues</p>
+                  <ul class="mt-2 space-y-1">
+                    <%= for issue <- hard_errors do %>
+                      <li>{issue.message}</li>
+                    <% end %>
+                  </ul>
+                </div>
+              <% end %>
+
+              <% conflicts = Map.get(@contact_conflicts, @contact.id, []) %>
+              <%= if conflicts != [] do %>
+                <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p class="font-semibold">Scheduling conflicts</p>
+                  <ul class="mt-2 space-y-1">
+                    <%= for conflict <- conflicts do %>
+                      <li>
+                        {conflict_label(conflict, @ground_station_targets)}
+                      </li>
+                    <% end %>
+                  </ul>
+                </div>
+              <% end %>
+            <% end %>
+
             <div class="flex items-center justify-end gap-3">
               <.button type="submit" class="btn-primary" phx-disable-with="Saving...">
                 Save Contact
@@ -408,4 +519,106 @@ defmodule CadenceWeb.MissionLive.Contacts do
 
   defp format_direction(direction) when is_atom(direction), do: Atom.to_string(direction)
   defp format_direction(direction), do: to_string(direction)
+
+  defp assign_validation(socket, organization_id, mission_id, contacts) do
+    validation = ContactValidator.validate(organization_id, mission_id, contacts)
+
+    socket
+    |> assign(:contact_conflicts, Map.get(validation, :conflicts, %{}))
+    |> assign(:contact_hard_errors, Map.get(validation, :hard_errors, %{}))
+  end
+
+  defp build_profiles_by_station(profiles) do
+    profiles
+    |> Enum.group_by(&Map.get(&1, :ground_station_target_id))
+    |> Map.new(fn {ground_station_id, grouped} ->
+      {to_string(ground_station_id), select_profile(grouped)}
+    end)
+  end
+
+  defp select_profile([]), do: nil
+
+  defp select_profile(profiles) do
+    profiles
+    |> Enum.sort_by(
+      fn profile ->
+        {Map.get(profile, :inserted_at) || ~U[0001-01-01 00:00:00Z],
+         Map.get(profile, :name) || ""}
+      end,
+      fn {left_dt, left_name}, {right_dt, right_name} ->
+        case DateTime.compare(left_dt, right_dt) do
+          :gt -> true
+          :lt -> false
+          :eq -> left_name <= right_name
+        end
+      end
+    )
+    |> List.first()
+  end
+
+  defp antennas_for_station(nil, _profiles_by_station), do: []
+  defp antennas_for_station("", _profiles_by_station), do: []
+
+  defp antennas_for_station(ground_station_id, profiles_by_station) do
+    ground_station_id
+    |> get_profile(profiles_by_station)
+    |> antenna_options()
+  end
+
+  defp get_profile(ground_station_id, profiles_by_station) do
+    Map.get(profiles_by_station, to_string(ground_station_id))
+  end
+
+  defp antenna_options(nil), do: []
+
+  defp antenna_options(profile) do
+    resources = profile.resources || %{}
+    antennas = Map.get(resources, "antennas") || Map.get(resources, :antennas) || []
+
+    antennas
+    |> Enum.map(&antenna_option/1)
+    |> Enum.reject(&invalid_antenna_option?/1)
+  end
+
+  defp antenna_option(antenna) do
+    id = get_key(antenna, "id")
+    name = get_key(antenna, "name")
+    label = if name in [nil, ""], do: to_string(id), else: "#{name} (#{id})"
+    {label, to_string(id)}
+  end
+
+  defp invalid_antenna_option?({_label, id}), do: id in [nil, ""]
+
+  defp get_key(map, key) when is_map(map) do
+    cond do
+      Map.has_key?(map, key) ->
+        Map.get(map, key)
+
+      atom_key_for(key) && Map.has_key?(map, atom_key_for(key)) ->
+        Map.get(map, atom_key_for(key))
+
+      true ->
+        nil
+    end
+  end
+
+  defp atom_key_for("id"), do: :id
+  defp atom_key_for("name"), do: :name
+  defp atom_key_for(_), do: nil
+
+  defp conflict_label(conflict, ground_station_targets) do
+    case conflict.type do
+      :antenna_conflict ->
+        ground_station =
+          target_name(ground_station_targets, conflict.resource.ground_station_target_id)
+
+        "Overlaps contact #{conflict.with} on #{ground_station} antenna #{conflict.resource.antenna_id}"
+
+      :spacecraft_conflict ->
+        "Overlaps contact #{conflict.with} on spacecraft"
+
+      _ ->
+        "Overlaps contact #{conflict.with}"
+    end
+  end
 end

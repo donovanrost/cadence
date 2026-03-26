@@ -27,6 +27,7 @@ defmodule Cadence.Contacts.Contact do
     field :end_time, :utc_datetime_usec
     field :direction, Ecto.Enum, values: @directions
     field :state, Ecto.Enum, values: @states, default: :planned
+    field :priority, :integer, default: 0
     field :metadata, :map, default: %{}
 
     timestamps(type: :utc_datetime_usec)
@@ -45,6 +46,7 @@ defmodule Cadence.Contacts.Contact do
       :end_time,
       :direction,
       :state,
+      :priority,
       :metadata
     ])
     |> validate_required([
@@ -56,8 +58,10 @@ defmodule Cadence.Contacts.Contact do
       :start_time,
       :end_time,
       :direction,
-      :state
+      :state,
+      :priority
     ])
+    |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_time_range()
     |> foreign_key_constraint(:organization_id)
     |> foreign_key_constraint(:mission_id)
