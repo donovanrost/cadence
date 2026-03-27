@@ -3,6 +3,8 @@ defmodule Cadence.CCSDS.Metrics do
   Lightweight counters for CCSDS uplink/downlink processing steps.
   """
 
+  alias Cadence.ETS, as: CadenceETS
+
   @table_name :cadence_ccsds_metrics
 
   def inc(mission_id, transport_id, profile, metric, amount \\ 1) do
@@ -45,18 +47,12 @@ defmodule Cadence.CCSDS.Metrics do
   end
 
   defp ensure_table do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          read_concurrency: true,
-          write_concurrency: true
-        ])
-
-      _ref ->
-        :ok
-    end
+    CadenceETS.ensure_named_table(@table_name, [
+      :set,
+      :named_table,
+      :public,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
   end
 end

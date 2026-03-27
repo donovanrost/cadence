@@ -32,22 +32,33 @@ defmodule Cadence.Simulator.GeneratorWorker do
   use GenServer
   require Logger
 
-  alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.Transport.COP1.CLCW
   alias Cadence.CCSDS.Uplink.Pipeline, as: UplinkPipeline
   alias Cadence.Simulator.COP1.CLCWInjector
-  alias Cadence.Simulator.{PacketEncoder, SendBuffer, SequenceAllocator, SimulatorMetrics}
+
+  alias Cadence.Simulator.{
+    PacketEncoder,
+    SendBuffer,
+    SequenceAllocator,
+    SimulatorMetrics,
+    UplinkRuntime
+  }
+
   alias Cadence.Time, as: CadenceTime
 
   defstruct [
     :worker_id,
     :coordinator_id,
+    :coordinator_pid,
     :provider_module,
     :provider_state,
     :encoder,
     :target_id,
     :uplink_pipeline,
     :uplink_opts,
+    :uplink_ctx_base,
+    :uplink_encode_opts,
+    :uplink_sdu_base,
     :sequence_allocator,
     :send_buffer,
     :clcw_enabled,
@@ -98,7 +109,16 @@ defmodule Cadence.Simulator.GeneratorWorker do
   """
   @spec generate(GenServer.server(), non_neg_integer()) :: :ok
   def generate(pid, step) when is_integer(step) do
-    GenServer.cast(pid, {:generate, step})
+    generate_batch(pid, step, 1)
+  end
+
+  @doc """
+  Dispatches a contiguous batch of steps to the worker. Non-blocking cast.
+  """
+  @spec generate_batch(GenServer.server(), non_neg_integer(), pos_integer()) :: :ok
+  def generate_batch(pid, start_step, step_count)
+      when is_integer(start_step) and is_integer(step_count) and step_count > 0 do
+    GenServer.cast(pid, {:generate_batch, start_step, step_count})
   end
 
   @doc """
@@ -106,7 +126,17 @@ defmodule Cadence.Simulator.GeneratorWorker do
   """
   @spec generate_sync(GenServer.server(), non_neg_integer()) :: :ok | {:error, term()}
   def generate_sync(pid, step) when is_integer(step) do
-    GenServer.call(pid, {:generate, step})
+    generate_batch_sync(pid, step, 1)
+  end
+
+  @doc """
+  Synchronous batch generation for testing. Blocks until complete.
+  """
+  @spec generate_batch_sync(GenServer.server(), non_neg_integer(), pos_integer()) ::
+          :ok | {:error, term()}
+  def generate_batch_sync(pid, start_step, step_count)
+      when is_integer(start_step) and is_integer(step_count) and step_count > 0 do
+    GenServer.call(pid, {:generate_batch, start_step, step_count})
   end
 
   @doc """
@@ -133,12 +163,14 @@ defmodule Cadence.Simulator.GeneratorWorker do
   def init(opts) do
     worker_id = Keyword.fetch!(opts, :worker_id)
     coordinator_id = Keyword.get(opts, :coordinator_id, :default)
+    coordinator_pid = Keyword.get(opts, :coordinator_pid)
     provider_module = Keyword.fetch!(opts, :provider_module)
     provider_state = Keyword.fetch!(opts, :provider_state)
     encoder = Keyword.get(opts, :encoder)
     target_id = Keyword.fetch!(opts, :target_id)
     uplink_opts = Keyword.get(opts, :uplink_opts)
     uplink_pipeline = init_uplink_pipeline(uplink_opts)
+    uplink_runtime = UplinkRuntime.build(uplink_opts, coordinator_id)
     sequence_allocator = Keyword.fetch!(opts, :sequence_allocator)
     send_buffer = Keyword.fetch!(opts, :send_buffer)
     clcw_enabled = Keyword.get(opts, :clcw_enabled, false)
@@ -148,12 +180,16 @@ defmodule Cadence.Simulator.GeneratorWorker do
     state = %__MODULE__{
       worker_id: worker_id,
       coordinator_id: coordinator_id,
+      coordinator_pid: coordinator_pid,
       provider_module: provider_module,
       provider_state: provider_state,
       encoder: encoder,
       target_id: target_id,
       uplink_pipeline: uplink_pipeline,
       uplink_opts: uplink_opts,
+      uplink_ctx_base: uplink_runtime.ctx_base,
+      uplink_encode_opts: uplink_runtime.encode_opts,
+      uplink_sdu_base: uplink_runtime.sdu_base,
       sequence_allocator: sequence_allocator,
       send_buffer: send_buffer,
       clcw_enabled: clcw_enabled,
@@ -169,14 +205,14 @@ defmodule Cadence.Simulator.GeneratorWorker do
   end
 
   @impl true
-  def handle_cast({:generate, step}, state) do
-    {_result, new_state} = do_generate(state, step)
+  def handle_cast({:generate_batch, start_step, step_count}, state) do
+    {_result, new_state} = do_generate_batch(state, start_step, step_count)
     {:noreply, new_state}
   end
 
   @impl true
-  def handle_call({:generate, step}, _from, state) do
-    {result, new_state} = do_generate(state, step)
+  def handle_call({:generate_batch, start_step, step_count}, _from, state) do
+    {result, new_state} = do_generate_batch(state, start_step, step_count)
     {:reply, result, new_state}
   end
 
@@ -196,41 +232,111 @@ defmodule Cadence.Simulator.GeneratorWorker do
   # Private Functions
   # ============================================================================
 
-  defp do_generate(state, step) do
+  defp do_generate_batch(state, start_step, step_count) do
+    {packets_reversed, total_bytes, generated_count, packet_count, result, new_state} =
+      Enum.reduce(
+        0..(step_count - 1),
+        {[], 0, 0, 0, :ok, state},
+        fn offset, {packets_acc, bytes_acc, count_acc, packet_count_acc, result_acc, acc_state} ->
+          step = start_step + offset
+
+          case do_generate_step(acc_state, step) do
+            {:ok, packets, packet_bytes, next_state} ->
+              {
+                :lists.reverse(packets, packets_acc),
+                bytes_acc + packet_bytes,
+                count_acc + 1,
+                packet_count_acc + length(packets),
+                result_acc,
+                next_state
+              }
+
+            {{:error, reason}, next_state} ->
+              {packets_acc, bytes_acc, count_acc, packet_count_acc, {:error, reason}, next_state}
+          end
+        end
+      )
+
+    if generated_count > 0 do
+      SimulatorMetrics.inc(new_state.coordinator_id, :packets_generated, generated_count)
+    end
+
+    buffer_status =
+      if packets_reversed != [] do
+        SendBuffer.buffer_packets(
+          new_state.send_buffer,
+          Enum.reverse(packets_reversed),
+          total_bytes
+        )
+      else
+        nil
+      end
+
+    notify_batch_complete(new_state, step_count, generated_count, packet_count, buffer_status)
+
+    {result, new_state}
+  end
+
+  defp notify_batch_complete(
+         %{coordinator_pid: pid, worker_id: worker_id},
+         step_count,
+         generated_count,
+         packet_count,
+         buffer_status
+       )
+       when is_pid(pid) do
+    send(
+      pid,
+      {:generator_batch_complete, worker_id, step_count, generated_count, packet_count,
+       buffer_status}
+    )
+  end
+
+  defp notify_batch_complete(
+         _state,
+         _step_count,
+         _generated_count,
+         _packet_count,
+         _buffer_status
+       ),
+       do: :ok
+
+  defp do_generate_step(state, step) do
     %{
       provider_module: provider_module,
       provider_state: provider_state,
       sequence_allocator: sequence_allocator,
-      send_buffer: send_buffer,
       coordinator_id: coordinator_id,
       sample_rate: sample_rate
     } = state
 
-    # Sample timing
     should_time = rem(step, sample_rate) == 0
     start_time = if should_time, do: CadenceTime.monotonic(:microsecond)
 
-    # Generate values from provider
     case provider_module.generate_values(provider_state, step) do
-      {:ok, values, _new_provider_state} ->
+      {:ok, values, new_provider_state} ->
         maybe_record_generation(coordinator_id, should_time, start_time)
-        SimulatorMetrics.inc(coordinator_id, :packets_generated)
 
         encode_start = if should_time, do: CadenceTime.monotonic(:microsecond)
 
-        {result, updated_state} =
-          encode_and_send_values(state, values, sequence_allocator, send_buffer, step)
+        {packets, packet_bytes, updated_state} =
+          encode_values(
+            %{state | provider_state: new_provider_state},
+            values,
+            sequence_allocator,
+            step
+          )
 
         maybe_record_encoding(coordinator_id, should_time, encode_start)
 
-        {result, updated_state}
+        {:ok, packets, packet_bytes, updated_state}
 
-      {:error, reason, _new_provider_state} ->
+      {:error, reason, new_provider_state} ->
         Logger.warning(
           "GeneratorWorker #{state.worker_id} generation error at step #{step}: #{inspect(reason)}"
         )
 
-        {{:error, reason}, state}
+        {{:error, reason}, %{state | provider_state: new_provider_state}}
     end
   end
 
@@ -248,37 +354,32 @@ defmodule Cadence.Simulator.GeneratorWorker do
     SimulatorMetrics.record_timing(coordinator_id, :encoding, encode_time)
   end
 
-  defp encode_and_send_values(state, values, sequence_allocator, send_buffer, step) do
+  defp encode_values(state, values, sequence_allocator, step) do
     case state.encoder do
       nil ->
         Logger.error(
           "GeneratorWorker #{state.worker_id} missing encoder; skipping telemetry generation"
         )
 
-        {{:error, :missing_encoder}, state}
+        {[], 0, state}
 
       encoder ->
-        {:ok, updated_state} =
-          encode_and_send(
-            encoder,
-            state.target_id,
-            values,
-            sequence_allocator,
-            send_buffer,
-            state,
-            step
-          )
-
-        {:ok, updated_state}
+        encode_packets(
+          encoder,
+          state.target_id,
+          values,
+          sequence_allocator,
+          state,
+          step
+        )
     end
   end
 
-  defp encode_and_send(
+  defp encode_packets(
          encoder,
          target_id,
          values,
          sequence_allocator,
-         send_buffer,
          state,
          step
        ) do
@@ -289,46 +390,32 @@ defmodule Cadence.Simulator.GeneratorWorker do
 
     {:ok, packets} = PacketEncoder.encode_with_sequence(encoder, target_id, values, sequence_fn)
 
-    updated_state =
-      Enum.reduce(packets, state, fn {_packet_name, binary}, acc_state ->
+    {processed_packets, total_bytes, updated_state} =
+      Enum.reduce(packets, {[], 0, state}, fn {_packet_name, binary},
+                                              {acc_packets, acc_bytes, acc_state} ->
         {processed, next_state} = encode_uplink(acc_state, binary, step)
-        SendBuffer.send_packet(send_buffer, processed)
-        next_state
+        {[processed | acc_packets], acc_bytes + byte_size(processed), next_state}
       end)
 
-    {:ok, updated_state}
+    {Enum.reverse(processed_packets), total_bytes, updated_state}
   end
 
   defp encode_uplink(%{uplink_pipeline: nil} = state, packet, _step), do: {packet, state}
 
-  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet, step) do
-    ctx =
-      %{
-        frame_size: opts[:frame_size],
-        scid: opts[:uplink_scid] || opts[:scid],
-        vcid: opts[:uplink_vcid] || opts[:vcid],
-        map_id: opts[:uplink_map_id],
-        metrics_scope: state.coordinator_id
-      }
-      |> maybe_put_ocf(state, step)
+  defp encode_uplink(
+         %{
+           uplink_pipeline: pipeline,
+           uplink_ctx_base: ctx_base,
+           uplink_encode_opts: encode_opts,
+           uplink_sdu_base: sdu_base
+         } = state,
+         packet,
+         step
+       ) do
+    ctx = maybe_put_ocf(ctx_base, state, step)
+    sdu = %{sdu_base | octets: packet}
 
-    sdu = %SDUOctets{
-      profile: opts[:profile],
-      scid: ctx.scid,
-      vcid: ctx.vcid,
-      map_id: ctx.map_id,
-      direction: :uplink,
-      sdu_kind_hint: :space_packet,
-      octets: packet,
-      quality: :good,
-      source_frames: [],
-      timestamp: nil,
-      meta: %{}
-    }
-
-    metrics_opts = Keyword.put(opts, :metrics_scope, state.coordinator_id)
-
-    case UplinkPipeline.encode(sdu, ctx, pipeline, metrics_opts) do
+    case UplinkPipeline.encode(sdu, ctx, pipeline, encode_opts) do
       {:ok, encoded, new_pipeline} ->
         {encoded, %{state | uplink_pipeline: new_pipeline}}
 

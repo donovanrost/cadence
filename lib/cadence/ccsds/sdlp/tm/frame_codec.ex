@@ -59,41 +59,34 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     fhp = Map.get(frame.meta, :fhp, 0)
     mcfc = Map.get(frame.meta, :mcfc, 0)
     vcfc = Map.get(frame.meta, :vcfc, frame.frame_seq || 0)
+    payload = frame.payload_octets
+    payload_size = byte_size(payload)
 
-    if sec_hdr_flag != 0 do
-      Metrics.inc(scope, profile(), :frame_encode_error)
-      {:error, :secondary_header_not_supported}
-    else
-      expected_data_len =
-        frame_size - @primary_header_size - ocf_length_bytes(ocf_flag, ocf_len) -
-          secondary_header_bytes(sec_hdr_flag, sec_hdr_len)
+    header_fields =
+      {ocf_flag, mcfc, vcfc, sec_hdr_flag, sync_flag, packet_order_flag, segment_len_id, fhp}
 
-      if byte_size(frame.payload_octets) != expected_data_len do
+    expected_data_len =
+      frame_size - @primary_header_size - ocf_length_bytes(ocf_flag, ocf_len) -
+        secondary_header_bytes(sec_hdr_flag, sec_hdr_len)
+
+    cond do
+      sec_hdr_flag != 0 ->
         Metrics.inc(scope, profile(), :frame_encode_error)
-        {:error, {:invalid_data_field_length, byte_size(frame.payload_octets), expected_data_len}}
-      else
-        header_opts = %{
-          ocf_flag: ocf_flag,
-          sec_hdr_flag: sec_hdr_flag,
-          sync_flag: sync_flag,
-          packet_order_flag: packet_order_flag,
-          segment_len_id: segment_len_id,
-          fhp: fhp
-        }
+        {:error, :secondary_header_not_supported}
 
-        with {:ok, ocf} <- maybe_extract_ocf(frame, ocf_flag, ocf_len),
-             {:ok, header} <-
-               build_primary_header(frame.scid, frame.vcid, mcfc, vcfc, header_opts) do
-          encoded = header <> frame.payload_octets <> ocf
-          Metrics.inc(scope, profile(), :frame_encode_ok)
-          Metrics.inc(scope, profile(), :bytes_out, byte_size(encoded))
-          {:ok, encoded}
-        else
-          {:error, reason} ->
-            Metrics.inc(scope, profile(), :frame_encode_error)
-            {:error, reason}
-        end
-      end
+      payload_size != expected_data_len ->
+        Metrics.inc(scope, profile(), :frame_encode_error)
+        {:error, {:invalid_data_field_length, payload_size, expected_data_len}}
+
+      true ->
+        encode_valid_frame(
+          frame,
+          scope,
+          frame_size,
+          payload,
+          ocf_len,
+          header_fields
+        )
     end
   end
 
@@ -124,6 +117,39 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
   end
 
   defp maybe_extract_ocf(_frame, 1, _ocf_len), do: {:error, :missing_ocf}
+
+  defp encode_valid_frame(frame, scope, frame_size, payload, ocf_len, header_fields) do
+    {ocf_flag, mcfc, vcfc, sec_hdr_flag, sync_flag, packet_order_flag, segment_len_id, fhp} =
+      header_fields
+
+    case maybe_extract_ocf(frame, ocf_flag, ocf_len) do
+      {:ok, ocf} ->
+        encoded =
+          <<
+            0::2,
+            frame.scid::10,
+            frame.vcid::3,
+            ocf_flag::1,
+            mcfc::8,
+            vcfc::8,
+            sec_hdr_flag::1,
+            sync_flag::1,
+            packet_order_flag::1,
+            segment_len_id::2,
+            fhp::11,
+            payload::binary,
+            ocf::binary
+          >>
+
+        Metrics.inc(scope, profile(), :frame_encode_ok)
+        Metrics.inc(scope, profile(), :bytes_out, frame_size)
+        {:ok, encoded}
+
+      {:error, reason} ->
+        Metrics.inc(scope, profile(), :frame_encode_error)
+        {:error, reason}
+    end
+  end
 
   defp split_frames(buffer, frame_size) do
     if byte_size(buffer) < frame_size do
@@ -225,30 +251,5 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
       <<data_field::binary-size(data_len), ocf::binary-size(ocf_len)>> = rest
       {:ok, data_field, ocf}
     end
-  end
-
-  defp build_primary_header(scid, vcid, mcfc, vcfc, header_opts) do
-    version = 0
-    ocf_flag = Map.get(header_opts, :ocf_flag, 0)
-    sec_hdr_flag = Map.get(header_opts, :sec_hdr_flag, 0)
-    sync_flag = Map.get(header_opts, :sync_flag, 0)
-    packet_order_flag = Map.get(header_opts, :packet_order_flag, 0)
-    segment_len_id = Map.get(header_opts, :segment_len_id, 3)
-    fhp = Map.get(header_opts, :fhp, 0)
-
-    {:ok,
-     <<
-       version::2,
-       scid::10,
-       vcid::3,
-       ocf_flag::1,
-       mcfc::8,
-       vcfc::8,
-       sec_hdr_flag::1,
-       sync_flag::1,
-       packet_order_flag::1,
-       segment_len_id::2,
-       fhp::11
-     >>}
   end
 end

@@ -27,6 +27,7 @@ defmodule Cadence.Simulator.SimulatorMetrics do
       SimulatorMetrics.get_stats(coordinator_id)
   """
 
+  alias Cadence.ETS, as: CadenceETS
   alias Cadence.Time, as: CadenceTime
 
   @table_name :cadence_simulator_metrics
@@ -60,18 +61,12 @@ defmodule Cadence.Simulator.SimulatorMetrics do
   Ensures the metrics ETS table exists.
   """
   def ensure_table do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          read_concurrency: true
-        ])
-
-      _ref ->
-        :ok
-    end
+    CadenceETS.ensure_named_table(@table_name, [
+      :set,
+      :named_table,
+      :public,
+      read_concurrency: true
+    ])
   end
 
   @doc """

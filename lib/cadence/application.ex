@@ -71,6 +71,9 @@ defmodule Cadence.Application do
       {DNSCluster, query: Application.get_env(:cadence, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Cadence.PubSub},
 
+      # Stable owner for lazily-created named ETS tables
+      Cadence.ETS.Owner,
+
       # Mission Registry - registers all mission processes
       {Registry, keys: :unique, name: Cadence.MissionRegistry},
 

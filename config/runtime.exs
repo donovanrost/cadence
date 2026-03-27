@@ -20,6 +20,24 @@ if System.get_env("PHX_SERVER") do
   config :cadence, CadenceWeb.Endpoint, server: true
 end
 
+case System.get_env("CADENCE_PIPELINE_SINK") do
+  nil ->
+    :ok
+
+  "file" ->
+    config :cadence, :pipeline_lane_sink, Cadence.Telemetry.LogSink.File
+
+  "noop" ->
+    config :cadence, :pipeline_lane_sink, Cadence.Telemetry.LogSink.Noop
+
+  value ->
+    raise """
+    invalid CADENCE_PIPELINE_SINK=#{inspect(value)}
+
+    expected one of: file, noop
+    """
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

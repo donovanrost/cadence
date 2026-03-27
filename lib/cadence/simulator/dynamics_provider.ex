@@ -45,6 +45,7 @@ defmodule Cadence.Simulator.DynamicsProvider do
 
   - `handle_command/2` - Respond to commands from the command queue
   - `status/1` - Return current provider state for introspection
+  - `parallel_safe?/1` - Whether the provider can safely run with multiple workers
   """
 
   @type telemetry_values :: %{String.t() => number() | String.t()}
@@ -96,5 +97,13 @@ defmodule Cadence.Simulator.DynamicsProvider do
   """
   @callback status(state :: term()) :: map()
 
-  @optional_callbacks [handle_command: 2, status: 1]
+  @doc """
+  Return whether the provider can safely run in simulator parallel mode.
+
+  Providers that depend on globally sequential state transitions should return
+  `false` so the simulator can fall back to sequential generation.
+  """
+  @callback parallel_safe?(config :: map()) :: boolean()
+
+  @optional_callbacks [handle_command: 2, status: 1, parallel_safe?: 1]
 end

@@ -81,7 +81,7 @@ defmodule Cadence.Telemetry.LogSink.File do
 
   defp ensure_segment(path, shard_id, segment_bytes, bytes_to_write) do
     manifest_path = Path.join(path, "#{shard_id}.manifest")
-    current_segment = read_segment_index(manifest_path)
+    current_segment = read_segment_index(path, shard_id, manifest_path)
     segment_path = Path.join(path, "#{shard_id}-#{current_segment}.log")
 
     current_size =
@@ -92,11 +92,11 @@ defmodule Cadence.Telemetry.LogSink.File do
 
     if current_size > 0 and current_size + bytes_to_write > segment_bytes do
       next_segment = current_segment + 1
-      File.write!(manifest_path, Integer.to_string(next_segment))
+      write_segment_index!(manifest_path, next_segment)
       Path.join(path, "#{shard_id}-#{next_segment}.log")
     else
       if current_size == 0 do
-        File.write!(manifest_path, Integer.to_string(current_segment))
+        write_segment_index!(manifest_path, current_segment)
       end
 
       segment_path
@@ -178,14 +178,67 @@ defmodule Cadence.Telemetry.LogSink.File do
     end
   end
 
-  defp read_segment_index(manifest_path) do
+  defp read_segment_index(path, shard_id, manifest_path) do
     case File.read(manifest_path) do
       {:ok, contents} ->
-        contents |> String.trim() |> String.to_integer()
+        parse_segment_index(contents, path, shard_id, manifest_path)
+
+      _ ->
+        recover_segment_index(path, shard_id, manifest_path)
+    end
+  end
+
+  defp parse_segment_index(contents, path, shard_id, manifest_path) do
+    case Integer.parse(String.trim(contents)) do
+      {index, ""} when index >= 0 ->
+        index
+
+      _ ->
+        recover_segment_index(path, shard_id, manifest_path)
+    end
+  end
+
+  defp recover_segment_index(path, shard_id, manifest_path) do
+    index = latest_segment_index(path, shard_id)
+    write_segment_index!(manifest_path, index)
+    index
+  end
+
+  defp latest_segment_index(path, shard_id) do
+    path
+    |> Path.join("#{shard_id}-*.log")
+    |> Path.wildcard()
+    |> Enum.reduce(0, fn segment_path, max_index ->
+      max(max_index, segment_index(segment_path, shard_id))
+    end)
+  end
+
+  defp segment_index(segment_path, shard_id) do
+    shard_prefix = "#{shard_id}-"
+    shard_suffix = ".log"
+
+    case Path.basename(segment_path) do
+      <<^shard_prefix::binary, rest::binary>> ->
+        rest
+        |> String.trim_trailing(shard_suffix)
+        |> parse_segment_suffix()
 
       _ ->
         0
     end
+  end
+
+  defp parse_segment_suffix(value) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 -> index
+      _ -> 0
+    end
+  end
+
+  defp write_segment_index!(manifest_path, index) do
+    tmp_path = manifest_path <> ".tmp"
+    File.write!(tmp_path, Integer.to_string(index) <> "\n")
+    File.rename!(tmp_path, manifest_path)
   end
 
   defp broadcast(shard_id, records, first_offset, last_offset) do

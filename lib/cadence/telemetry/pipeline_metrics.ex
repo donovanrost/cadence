@@ -32,6 +32,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
       PipelineMetrics.get_stats(mission_id)
   """
 
+  alias Cadence.ETS, as: CadenceETS
   alias Cadence.Time, as: CadenceTime
 
   @table_name :cadence_pipeline_metrics
@@ -183,19 +184,13 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   Ensures the metrics ETS table exists.
   """
   def ensure_table do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          write_concurrency: true,
-          read_concurrency: true
-        ])
-
-      _ref ->
-        :ok
-    end
+    CadenceETS.ensure_named_table(@table_name, [
+      :set,
+      :named_table,
+      :public,
+      write_concurrency: true,
+      read_concurrency: true
+    ])
   end
 
   @doc """

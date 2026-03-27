@@ -103,6 +103,9 @@ defmodule Cadence.Simulator.Providers.ScenarioProvider do
     }
   end
 
+  @impl true
+  def parallel_safe?(_config), do: false
+
   # Load scenario from file path or inline config
   defp load_scenario(%{scenario_path: path}) when is_binary(path) do
     Parser.parse_file(path)

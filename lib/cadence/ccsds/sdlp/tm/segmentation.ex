@@ -17,27 +17,24 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
     {:ok,
      %{
        mcfc: Keyword.get(opts, :mcfc, 0),
-       vcfc: Keyword.get(opts, :vcfc, 0)
+       vcfc: Keyword.get(opts, :vcfc, 0),
+       idle_padding_cache: %{}
      }}
   end
 
   @impl true
   def segment(%SDUOctets{profile: :tm} = sdu, ctx, state) do
-    scope = Metrics.scope_from_ctx(ctx)
+    scope = metrics_scope(ctx)
     Metrics.inc(scope, :tm, :segmentation_calls)
 
-    frame_size = Map.fetch!(ctx, :frame_size)
-    scid = sdu.scid || Map.get(ctx, :scid, 0)
-    vcid = sdu.vcid || Map.get(ctx, :vcid, 0)
+    case build_frame_ctx(sdu, ctx) do
+      {:ok, frame_ctx} ->
+        {frames, frame_count, next_state} = build_frames(sdu.octets, frame_ctx, state)
 
-    with {:ok, ocf, ocf_len} <- normalize_ocf(ctx),
-         max_payload when max_payload > 0 <- frame_size - @primary_header_size - ocf_len do
-      ocf_flag = if ocf_len > 0, do: 1, else: 0
-      {frames, next_state} = build_frames(sdu, scid, vcid, max_payload, ocf, ocf_flag, state)
-      Metrics.inc(scope, :tm, :segmentation_ok)
-      Metrics.inc(scope, :tm, :segments_emitted, length(frames))
-      {:ok, Enum.reverse(frames), next_state}
-    else
+        Metrics.inc(scope, :tm, :segmentation_ok)
+        Metrics.inc(scope, :tm, :segments_emitted, frame_count)
+        {:ok, frames, next_state}
+
       {:error, reason} ->
         Metrics.inc(scope, :tm, :segmentation_error)
         {:error, reason, state}
@@ -49,55 +46,121 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
   end
 
   def segment(_sdu, ctx, state) do
-    scope = Metrics.scope_from_ctx(ctx)
+    scope = metrics_scope(ctx)
     Metrics.inc(scope, :tm, :segmentation_calls)
     Metrics.inc(scope, :tm, :segmentation_error)
     {:error, :invalid_profile, state}
   end
 
-  defp split_segments(packet, max_payload) do
-    if byte_size(packet) <= max_payload do
-      [packet]
-    else
-      do_split_segments(packet, max_payload, [])
+  def segment_encode(%SDUOctets{profile: :tm} = sdu, ctx, state, opts) do
+    scope = metrics_scope(ctx, opts)
+    Metrics.inc(scope, :tm, :segmentation_calls)
+
+    case build_frame_ctx(sdu, ctx) do
+      {:ok, frame_ctx} ->
+        {frames, frame_count, next_state} = encode_frames(sdu.octets, frame_ctx, state)
+
+        Metrics.inc(scope, :tm, :segmentation_ok)
+        Metrics.inc(scope, :tm, :segments_emitted, frame_count)
+        Metrics.inc(scope, :tm, :frame_encode_total, frame_count)
+        Metrics.inc(scope, :tm, :frame_encode_ok, frame_count)
+        Metrics.inc(scope, :tm, :bytes_out, frame_count * frame_ctx.frame_size)
+
+        {:ok, IO.iodata_to_binary(frames), next_state}
+
+      {:error, reason} ->
+        Metrics.inc(scope, :tm, :segmentation_error)
+        {:error, reason, state}
+
+      _ ->
+        Metrics.inc(scope, :tm, :segmentation_error)
+        {:error, :frame_size_too_small, state}
     end
   end
 
-  defp do_split_segments(<<>>, _max_payload, acc), do: Enum.reverse(acc)
-
-  defp do_split_segments(packet, max_payload, acc) when byte_size(packet) > max_payload do
-    <<chunk::binary-size(max_payload), rest::binary>> = packet
-    do_split_segments(rest, max_payload, [chunk | acc])
+  def segment_encode(_sdu, ctx, state, opts) do
+    scope = metrics_scope(ctx, opts)
+    Metrics.inc(scope, :tm, :segmentation_calls)
+    Metrics.inc(scope, :tm, :segmentation_error)
+    {:error, :invalid_profile, state}
   end
 
-  defp do_split_segments(packet, _max_payload, acc) do
-    Enum.reverse([packet | acc])
+  defp build_frames(packet, %{max_payload: max_payload} = frame_ctx, state) do
+    if byte_size(packet) <= max_payload do
+      {payload, next_state} = build_last_payload(packet, max_payload, state)
+      frame = build_frame(payload, 0, frame_ctx, next_state)
+      {[frame], 1, increment_state(next_state)}
+    else
+      build_segmented_frames(packet, max_payload, frame_ctx, state, [], true, 0)
+    end
   end
 
-  defp build_frames(sdu, scid, vcid, max_payload, ocf, ocf_flag, state) do
-    segments = split_segments(sdu.octets, max_payload)
-    last_index = length(segments) - 1
-    frame_ctx = %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag, timestamp: sdu.timestamp}
+  defp encode_frames(packet, %{max_payload: max_payload} = frame_ctx, state) do
+    if byte_size(packet) <= max_payload do
+      {payload, next_state} = build_last_payload(packet, max_payload, state)
+      frame = encode_frame(payload, 0, frame_ctx, next_state)
+      {[frame], 1, increment_state(next_state)}
+    else
+      encode_segmented_frames(packet, max_payload, frame_ctx, state, [], true, 0)
+    end
+  end
 
-    Enum.reduce(Enum.with_index(segments), {[], state}, fn {segment, index}, {acc, st} ->
-      frame = build_frame(segment, index, last_index, max_payload, frame_ctx, st)
+  defp build_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count)
+       when byte_size(packet) > max_payload do
+    <<segment::binary-size(max_payload), rest::binary>> = packet
+    fhp = if first?, do: 0, else: 2047
+    frame = build_frame(segment, fhp, frame_ctx, state)
 
-      next = %{st | mcfc: increment_counter(st.mcfc), vcfc: increment_counter(st.vcfc)}
-      {[frame | acc], next}
-    end)
+    build_segmented_frames(
+      rest,
+      max_payload,
+      frame_ctx,
+      increment_state(state),
+      [frame | acc],
+      false,
+      count + 1
+    )
+  end
+
+  defp build_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count) do
+    {payload, next_state} = build_last_payload(packet, max_payload, state)
+    fhp = if first?, do: 0, else: 2047
+    frame = build_frame(payload, fhp, frame_ctx, next_state)
+
+    {Enum.reverse([frame | acc]), count + 1, increment_state(next_state)}
+  end
+
+  defp encode_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count)
+       when byte_size(packet) > max_payload do
+    <<segment::binary-size(max_payload), rest::binary>> = packet
+    fhp = if first?, do: 0, else: 2047
+    frame = encode_frame(segment, fhp, frame_ctx, state)
+
+    encode_segmented_frames(
+      rest,
+      max_payload,
+      frame_ctx,
+      increment_state(state),
+      [frame | acc],
+      false,
+      count + 1
+    )
+  end
+
+  defp encode_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count) do
+    {payload, next_state} = build_last_payload(packet, max_payload, state)
+    fhp = if first?, do: 0, else: 2047
+    frame = encode_frame(payload, fhp, frame_ctx, next_state)
+
+    {Enum.reverse([frame | acc]), count + 1, increment_state(next_state)}
   end
 
   defp build_frame(
-         segment,
-         index,
-         last_index,
-         max_payload,
+         payload,
+         fhp,
          %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag, timestamp: timestamp},
          st
        ) do
-    fhp = if index == 0, do: 0, else: 2047
-    payload = build_payload(segment, index, last_index, max_payload)
-
     %LinkFrame{
       profile: :tm,
       scid: scid,
@@ -121,22 +184,56 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
     }
   end
 
-  defp build_payload(segment, index, last_index, max_payload) when index == last_index do
-    padding_size = max_payload - byte_size(segment)
-    segment <> build_idle_padding(padding_size)
+  defp encode_frame(
+         payload,
+         fhp,
+         %{scid: scid, vcid: vcid, ocf: ocf, ocf_flag: ocf_flag},
+         st
+       ) do
+    ocf_bin = if ocf_flag == 1, do: ocf, else: <<>>
+
+    <<
+      0::2,
+      scid::10,
+      vcid::3,
+      ocf_flag::1,
+      st.mcfc::8,
+      st.vcfc::8,
+      0::1,
+      0::1,
+      0::1,
+      3::2,
+      fhp::11,
+      payload::binary,
+      ocf_bin::binary
+    >>
   end
 
-  defp build_payload(segment, _index, _last_index, _max_payload), do: segment
+  defp build_last_payload(segment, max_payload, state) do
+    padding_size = max_payload - byte_size(segment)
 
-  defp build_idle_padding(0), do: <<>>
+    case build_idle_padding(padding_size, state) do
+      {<<>>, next_state} -> {segment, next_state}
+      {padding, next_state} -> {segment <> padding, next_state}
+    end
+  end
 
-  defp build_idle_padding(padding_size) when padding_size < @min_idle_packet_size do
+  defp build_idle_padding(0, state), do: {<<>>, state}
+
+  defp build_idle_padding(padding_size, _state) when padding_size < @min_idle_packet_size do
     raise ArgumentError,
           "TM frame padding #{padding_size} bytes is too small for an idle packet"
   end
 
-  defp build_idle_padding(padding_size) do
-    build_idle_packet(padding_size)
+  defp build_idle_padding(padding_size, %{idle_padding_cache: cache} = state) do
+    case cache do
+      %{^padding_size => padding} ->
+        {padding, state}
+
+      _ ->
+        padding = build_idle_packet(padding_size)
+        {padding, %{state | idle_padding_cache: Map.put(cache, padding_size, padding)}}
+    end
   end
 
   defp build_idle_packet(size) do
@@ -156,7 +253,38 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
     >>
   end
 
+  defp increment_state(%{mcfc: mcfc, vcfc: vcfc} = state) do
+    %{state | mcfc: increment_counter(mcfc), vcfc: increment_counter(vcfc)}
+  end
+
   defp increment_counter(value), do: rem(value + 1, 256)
+
+  defp metrics_scope(ctx, opts \\ []) do
+    case Metrics.scope_from_ctx(ctx) do
+      :global -> Metrics.scope_from_opts(opts)
+      scope -> scope
+    end
+  end
+
+  defp build_frame_ctx(sdu, ctx) do
+    frame_size = Map.fetch!(ctx, :frame_size)
+    scid = sdu.scid || Map.get(ctx, :scid, 0)
+    vcid = sdu.vcid || Map.get(ctx, :vcid, 0)
+
+    with {:ok, ocf, ocf_len} <- normalize_ocf(ctx),
+         max_payload when max_payload > 0 <- frame_size - @primary_header_size - ocf_len do
+      {:ok,
+       %{
+         frame_size: frame_size,
+         max_payload: max_payload,
+         scid: scid,
+         vcid: vcid,
+         ocf: ocf,
+         ocf_flag: if(ocf_len > 0, do: 1, else: 0),
+         timestamp: sdu.timestamp
+       }}
+    end
+  end
 
   defp normalize_ocf(ctx) do
     case Map.get(ctx, :ocf) do
