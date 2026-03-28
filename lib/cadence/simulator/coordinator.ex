@@ -67,7 +67,6 @@ defmodule Cadence.Simulator.Coordinator do
 
   require Logger
 
-  alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.Metrics
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
   alias Cadence.CCSDS.TC.TransferFrame
@@ -80,7 +79,8 @@ defmodule Cadence.Simulator.Coordinator do
     PacketEncoder,
     SendBuffer,
     SequenceAllocator,
-    SimulatorMetrics
+    SimulatorMetrics,
+    UplinkRuntime
   }
 
   alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
@@ -91,6 +91,10 @@ defmodule Cadence.Simulator.Coordinator do
   @default_generator_count System.schedulers_online()
   @default_send_batch_timeout 10
   @default_send_batch_size 32_768
+  @default_in_flight_multiplier 4
+  @default_send_buffer_queue_floor 16
+  @default_dispatch_batch_floor 4
+  @default_dispatch_batch_ceiling 32
 
   defstruct [
     :mission_id,
@@ -106,6 +110,9 @@ defmodule Cadence.Simulator.Coordinator do
     :uplink_frame,
     :uplink_pipeline,
     :uplink_opts,
+    :uplink_ctx_base,
+    :uplink_encode_opts,
+    :uplink_sdu_base,
     :clcw_enabled,
     :clcw_injector,
     :farm,
@@ -118,6 +125,19 @@ defmodule Cadence.Simulator.Coordinator do
     :generator_pool,
     :sequence_allocator,
     :send_buffer,
+    :max_in_flight_steps,
+    :max_send_buffer_queue,
+    :dispatch_batch_floor,
+    :dispatch_batch_ceiling,
+    :send_buffer_queue_len,
+    :send_buffer_backlog_bytes,
+    :send_buffer_status_version,
+    :idle_workers,
+    in_flight_steps: 0,
+    backpressure_events: 0,
+    dispatch_cursor: 0,
+    next_step: 0,
+    pending_steps: 0,
     step: 0,
     packet_count: 0,
     uplink_seen: 0
@@ -167,7 +187,7 @@ defmodule Cadence.Simulator.Coordinator do
     target_id = Keyword.get(opts, :target_id, @default_target_id)
     rate_hz = Keyword.get(opts, :rate_hz, @default_rate_hz)
     output = Keyword.get(opts, :output)
-    parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
+    requested_parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
     mode = Keyword.get(opts, :mode, :connect)
     frame = Keyword.get(opts, :frame)
     uplink_frame = Keyword.get(opts, :uplink_frame)
@@ -182,6 +202,9 @@ defmodule Cadence.Simulator.Coordinator do
 
     # Determine provider based on options
     {provider_module, provider_config} = determine_provider(opts)
+
+    parallel_mode =
+      normalize_parallel_mode(requested_parallel_mode, provider_module, provider_config)
 
     with {:ok, provider_state} <- provider_module.init(provider_config),
          {:ok, encoder} <- require_encoder(opts),
@@ -233,9 +256,20 @@ defmodule Cadence.Simulator.Coordinator do
 
   # Initialize parallel mode with workers, send buffer, and sequence allocator
   defp init_parallel_mode(state, opts) do
-    generator_count = Keyword.get(opts, :generator_count, @default_generator_count)
+    generator_count =
+      opts
+      |> Keyword.get(:generator_count, @default_generator_count)
+      |> normalize_generator_count()
+
     batch_timeout = Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout)
     batch_size = Keyword.get(opts, :send_batch_size, @default_send_batch_size)
+    steps_per_tick = parallel_steps_per_tick(state.rate_hz)
+    max_in_flight_steps = normalize_max_in_flight_steps(opts, generator_count, steps_per_tick)
+    max_send_buffer_queue = normalize_max_send_buffer_queue(opts, generator_count)
+    dispatch_batch_floor = normalize_dispatch_batch_floor(opts)
+
+    dispatch_batch_ceiling =
+      normalize_dispatch_batch_ceiling(opts, dispatch_batch_floor, steps_per_tick)
 
     state =
       if state.mode == :listen do
@@ -263,6 +297,7 @@ defmodule Cadence.Simulator.Coordinator do
         output: state.output,
         batch_timeout: batch_timeout,
         batch_size: batch_size,
+        coordinator_pid: self(),
         mode: state.mode
       )
 
@@ -273,6 +308,7 @@ defmodule Cadence.Simulator.Coordinator do
           GeneratorWorker.start_link(
             worker_id: worker_id,
             coordinator_id: state.mission_id,
+            coordinator_pid: self(),
             provider_module: state.provider_module,
             provider_state: state.provider_state,
             encoder: state.encoder,
@@ -294,7 +330,15 @@ defmodule Cadence.Simulator.Coordinator do
       state
       | sequence_allocator: sequence_allocator,
         send_buffer: send_buffer,
-        generator_pool: generator_pool
+        generator_pool: generator_pool,
+        idle_workers: Enum.to_list(0..(generator_count - 1)),
+        max_in_flight_steps: max_in_flight_steps,
+        max_send_buffer_queue: max_send_buffer_queue,
+        dispatch_batch_floor: dispatch_batch_floor,
+        dispatch_batch_ceiling: dispatch_batch_ceiling,
+        send_buffer_queue_len: 0,
+        send_buffer_backlog_bytes: 0,
+        send_buffer_status_version: 0
     }
   end
 
@@ -324,6 +368,8 @@ defmodule Cadence.Simulator.Coordinator do
          uplink_drop_every: uplink_drop_every,
          opts: opts
        }) do
+    uplink_runtime = UplinkRuntime.build(uplink_opts, nil)
+
     state = %__MODULE__{
       mission_id: mission_id,
       target_id: target_id,
@@ -336,6 +382,9 @@ defmodule Cadence.Simulator.Coordinator do
       uplink_frame: uplink_frame,
       uplink_pipeline: uplink_pipeline,
       uplink_opts: uplink_opts,
+      uplink_ctx_base: uplink_runtime.ctx_base,
+      uplink_encode_opts: uplink_runtime.encode_opts,
+      uplink_sdu_base: uplink_runtime.sdu_base,
       clcw_enabled: clcw_enabled,
       clcw_injector: clcw_injector,
       farm: init_farm(clcw_enabled, frame),
@@ -358,39 +407,47 @@ defmodule Cadence.Simulator.Coordinator do
 
   @impl true
   def handle_info(:generate, %{parallel_mode: :parallel} = state) do
-    # Parallel mode: dispatch to workers in round-robin
-    # Use burst mode for high rates (>1000 Hz) - dispatch multiple steps per tick
-    worker_count = length(state.generator_pool)
-
-    {steps_per_tick, interval_ms} =
-      if state.rate_hz <= 1000 do
-        # Standard mode: 1 step per interval
-        {1, max(trunc(1000 / state.rate_hz), 1)}
-      else
-        # Burst mode: multiple steps per 1ms tick
-        {ceil(state.rate_hz / 1000), 1}
-      end
-
-    # Dispatch steps to workers (or emit OID frames)
-    state =
-      Enum.reduce(0..(steps_per_tick - 1), state, fn offset, acc_state ->
-        step = acc_state.step + offset
-
-        worker_index = rem(step, worker_count)
-        worker = Enum.at(acc_state.generator_pool, worker_index)
-        GeneratorWorker.generate(worker, step)
-        acc_state
-      end)
+    steps_per_tick = parallel_steps_per_tick(state.rate_hz)
+    interval_ms = parallel_interval_ms(state.rate_hz)
 
     # Schedule next tick
     timer_ref = TimeTimer.send_after(self(), :generate, interval_ms)
 
-    new_state = %{
+    new_state =
       state
-      | timer_ref: timer_ref,
-        step: state.step + steps_per_tick,
-        packet_count: state.packet_count + steps_per_tick
-    }
+      |> add_dispatch_budget(steps_per_tick)
+      |> dispatch_parallel_batches()
+      |> Map.put(:timer_ref, timer_ref)
+
+    {:noreply, new_state}
+  end
+
+  def handle_info(
+        {:generator_batch_complete, worker_id, dispatched_steps, generated_steps, _packet_count,
+         buffer_status},
+        %{parallel_mode: :parallel} = state
+      ) do
+    new_state =
+      state
+      |> maybe_apply_send_buffer_status(buffer_status)
+      |> complete_parallel_batch(worker_id, dispatched_steps, generated_steps)
+      |> dispatch_parallel_batches()
+
+    {:noreply, new_state}
+  end
+
+  def handle_info(
+        {:send_buffer_status, status_version, packets_buffered, buffer_bytes},
+        %{parallel_mode: :parallel} = state
+      ) do
+    new_state =
+      state
+      |> maybe_apply_send_buffer_status(%{
+        status_version: status_version,
+        packets_buffered: packets_buffered,
+        buffer_bytes: buffer_bytes
+      })
+      |> dispatch_parallel_batches()
 
     {:noreply, new_state}
   end
@@ -487,6 +544,16 @@ defmodule Cadence.Simulator.Coordinator do
         :parallel ->
           parallel_stats = %{
             generator_count: length(state.generator_pool),
+            in_flight_steps: state.in_flight_steps,
+            max_in_flight_steps: state.max_in_flight_steps,
+            dispatch_batch_floor: state.dispatch_batch_floor,
+            dispatch_batch_ceiling: state.dispatch_batch_ceiling,
+            pending_steps: state.pending_steps,
+            next_step: state.next_step,
+            max_send_buffer_queue: state.max_send_buffer_queue,
+            send_buffer_queue_len: state.send_buffer_queue_len,
+            send_buffer_backlog_bytes: state.send_buffer_backlog_bytes,
+            backpressure_events: state.backpressure_events,
             send_buffer_stats: SendBuffer.stats(state.send_buffer),
             metrics: SimulatorMetrics.get_stats(state.mission_id)
           }
@@ -574,22 +641,57 @@ defmodule Cadence.Simulator.Coordinator do
 
       # Explicit provider
       provider = Keyword.get(opts, :provider) ->
-        config = Keyword.get(opts, :provider_config, %{})
+        config = provider_config(provider, opts)
         {provider, config}
-
-      # Definitions path provided -> use DatabaseDynamics
-      definitions_path = Keyword.get(opts, :definitions_path) ->
-        config = %{
-          definitions_path: definitions_path,
-          noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)
-        }
-
-        {DatabaseDynamics, config}
 
       # Default to BasicDynamics
       true ->
         config = Keyword.get(opts, :provider_config, %{})
         {BasicDynamics, config}
+    end
+  end
+
+  defp provider_config(DatabaseDynamics, opts) do
+    %{
+      definitions_path: Keyword.get(opts, :definitions_path),
+      noise_amplitude: Keyword.get(opts, :noise_amplitude, 1.0)
+    }
+  end
+
+  defp provider_config(ScenarioProvider, opts) do
+    cond do
+      scenario_path = Keyword.get(opts, :scenario_path) ->
+        %{scenario_path: scenario_path}
+
+      scenario = Keyword.get(opts, :scenario) ->
+        %{scenario: scenario}
+
+      true ->
+        Keyword.get(opts, :provider_config, %{})
+    end
+  end
+
+  defp provider_config(_provider, opts), do: Keyword.get(opts, :provider_config, %{})
+
+  defp normalize_parallel_mode(:parallel, provider_module, provider_config) do
+    if provider_parallel_safe?(provider_module, provider_config) do
+      :parallel
+    else
+      Logger.warning(
+        "Provider #{inspect(provider_module)} is not parallel-safe; falling back to sequential mode"
+      )
+
+      :sequential
+    end
+  end
+
+  defp normalize_parallel_mode(mode, _provider_module, _provider_config), do: mode
+
+  defp provider_parallel_safe?(provider_module, provider_config) do
+    if function_exported?(provider_module, :parallel_safe?, 1) do
+      provider_module.parallel_safe?(provider_config)
+    else
+      provider_module != ScenarioProvider
     end
   end
 
@@ -704,57 +806,251 @@ defmodule Cadence.Simulator.Coordinator do
     state
   end
 
-  defp send_frame(%{parallel_mode: :parallel, send_buffer: send_buffer}, frame_binary) do
-    SendBuffer.send_packet(send_buffer, frame_binary)
+  defp send_frame(%{parallel_mode: :parallel, send_buffer: send_buffer}, frame_data) do
+    SendBuffer.send_packet(send_buffer, frame_data)
   end
 
-  defp send_frame(%{output: {:tcp, _, _}, socket: nil}, _frame_binary), do: :ok
+  defp send_frame(%{output: {:tcp, _, _}, socket: nil}, _frame_data), do: :ok
 
-  defp send_frame(%{output: {:tcp, _, _}, socket: socket}, frame_binary) do
-    case :gen_tcp.send(socket, frame_binary) do
+  defp send_frame(%{output: {:tcp, _, _}, socket: socket}, frame_data) do
+    case :gen_tcp.send(socket, frame_data) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("TCP send failed: #{inspect(reason)}")
     end
   end
 
-  defp send_frame(%{output: {:udp, _, _}, socket: nil}, _frame_binary), do: :ok
+  defp send_frame(%{output: {:udp, _, _}, socket: nil}, _frame_data), do: :ok
 
-  defp send_frame(%{output: {:udp, host, port}, socket: socket}, frame_binary) do
-    case :gen_udp.send(socket, String.to_charlist(host), port, frame_binary) do
+  defp send_frame(%{output: {:udp, host, port}, socket: socket}, frame_data) do
+    case :gen_udp.send(socket, String.to_charlist(host), port, IO.iodata_to_binary(frame_data)) do
       :ok -> :ok
       {:error, reason} -> Logger.warning("UDP send failed: #{inspect(reason)}")
     end
   end
 
-  defp send_frame(_, _frame_binary), do: :ok
+  defp send_frame(_, _frame_data), do: :ok
+
+  defp dispatch_parallel_batches(%{parallel_mode: :parallel} = state) do
+    worker_count = length(state.generator_pool)
+    {new_state, _dispatched_steps} = dispatch_parallel_batches(state, worker_count)
+    new_state
+  end
+
+  defp dispatch_parallel_batches(state), do: state
+
+  defp dispatch_parallel_batches(%{pending_steps: pending_steps} = state, worker_count)
+       when worker_count <= 0 or pending_steps <= 0 do
+    {state, 0}
+  end
+
+  defp dispatch_parallel_batches(state, worker_count) do
+    if state.send_buffer_queue_len >= state.max_send_buffer_queue do
+      {increment_backpressure(state), 0}
+    else
+      dispatch_available_parallel_batches(state, worker_count)
+    end
+  end
+
+  defp dispatch_available_parallel_batches(state, worker_count) do
+    available_workers = length(state.idle_workers || [])
+    available_steps = max(state.max_in_flight_steps - state.in_flight_steps, 0)
+    target_steps_per_worker = dispatch_target_steps_per_worker(state)
+    dispatch_capacity = min(available_steps, available_workers * target_steps_per_worker)
+    steps_to_dispatch = min(state.pending_steps, dispatch_capacity)
+
+    throttled? =
+      steps_to_dispatch < state.pending_steps or available_workers <= 0 or available_steps <= 0
+
+    state = maybe_increment_backpressure(state, throttled?)
+
+    if steps_to_dispatch <= 0 or available_workers <= 0 do
+      {state, 0}
+    else
+      dispatch_parallel_work(
+        state,
+        steps_to_dispatch,
+        worker_count,
+        available_workers,
+        target_steps_per_worker
+      )
+    end
+  end
+
+  defp dispatch_parallel_work(
+         state,
+         steps_to_dispatch,
+         worker_count,
+         available_workers,
+         target_steps_per_worker
+       ) do
+    active_workers =
+      min(
+        min(worker_count, available_workers),
+        max(ceil_div(steps_to_dispatch, max(target_steps_per_worker, 1)), 1)
+      )
+
+    base_batch_size = div(steps_to_dispatch, active_workers)
+    remainder = rem(steps_to_dispatch, active_workers)
+    {assigned_worker_ids, remaining_idle_workers} = Enum.split(state.idle_workers, active_workers)
+
+    do_dispatch_parallel_work(
+      state.generator_pool,
+      assigned_worker_ids,
+      state.next_step,
+      base_batch_size,
+      remainder
+    )
+
+    {
+      %{
+        state
+        | idle_workers: remaining_idle_workers,
+          dispatch_cursor: rem(state.dispatch_cursor + active_workers, worker_count),
+          in_flight_steps: state.in_flight_steps + steps_to_dispatch,
+          next_step: state.next_step + steps_to_dispatch,
+          pending_steps: max(state.pending_steps - steps_to_dispatch, 0)
+      },
+      steps_to_dispatch
+    }
+  end
+
+  defp do_dispatch_parallel_work(
+         generator_pool,
+         assigned_worker_ids,
+         start_step,
+         base_batch_size,
+         remainder
+       ) do
+    Enum.reduce(Enum.with_index(assigned_worker_ids), start_step, fn {worker_id, index},
+                                                                     next_step ->
+      step_count = batch_step_count(index, base_batch_size, remainder)
+      worker = Enum.at(generator_pool, worker_id)
+      GeneratorWorker.generate_batch(worker, next_step, step_count)
+      next_step + step_count
+    end)
+  end
+
+  defp batch_step_count(index, base_batch_size, remainder) do
+    base_batch_size + if(index < remainder, do: 1, else: 0)
+  end
+
+  defp dispatch_target_steps_per_worker(state) do
+    floor = max(state.dispatch_batch_floor || @default_dispatch_batch_floor, 1)
+    ceiling = max(state.dispatch_batch_ceiling || @default_dispatch_batch_ceiling, floor)
+
+    cond do
+      send_buffer_utilization(state) >= 0.75 ->
+        1
+
+      send_buffer_utilization(state) >= 0.5 ->
+        max(div(floor, 2), 1)
+
+      state.pending_steps >= ceiling ->
+        ceiling
+
+      state.pending_steps >= floor ->
+        floor
+
+      state.pending_steps >= 2 ->
+        2
+
+      true ->
+        1
+    end
+  end
+
+  defp send_buffer_utilization(%{max_send_buffer_queue: max_queue}) when max_queue in [nil, 0],
+    do: 0.0
+
+  defp send_buffer_utilization(%{
+         send_buffer_queue_len: queue_len,
+         max_send_buffer_queue: max_queue
+       }) do
+    queue_len / max(max_queue, 1)
+  end
+
+  defp increment_backpressure(state) do
+    %{state | backpressure_events: state.backpressure_events + 1}
+  end
+
+  defp maybe_increment_backpressure(state, true), do: increment_backpressure(state)
+  defp maybe_increment_backpressure(state, false), do: state
+
+  defp add_dispatch_budget(state, steps_per_tick) when steps_per_tick > 0 do
+    %{state | pending_steps: state.pending_steps + steps_per_tick}
+  end
+
+  defp add_dispatch_budget(state, _steps_per_tick), do: state
+
+  defp complete_parallel_batch(state, worker_id, dispatched_steps, generated_steps) do
+    state
+    |> Map.merge(%{
+      in_flight_steps: max(state.in_flight_steps - dispatched_steps, 0),
+      packet_count: state.packet_count + generated_steps,
+      step: state.step + dispatched_steps
+    })
+    |> release_worker(worker_id)
+  end
+
+  defp release_worker(%{idle_workers: idle_workers} = state, worker_id)
+       when is_integer(worker_id) and is_list(idle_workers) do
+    if worker_id in idle_workers do
+      state
+    else
+      %{state | idle_workers: idle_workers ++ [worker_id]}
+    end
+  end
+
+  defp release_worker(state, _worker_id), do: state
+
+  defp maybe_apply_send_buffer_status(state, nil), do: state
+
+  defp maybe_apply_send_buffer_status(
+         state,
+         %{
+           status_version: status_version,
+           packets_buffered: packets_buffered,
+           buffer_bytes: buffer_bytes
+         }
+       )
+       when is_integer(status_version) do
+    if status_version >= state.send_buffer_status_version do
+      %{
+        state
+        | send_buffer_status_version: status_version,
+          send_buffer_queue_len: packets_buffered,
+          send_buffer_backlog_bytes: buffer_bytes
+      }
+    else
+      state
+    end
+  end
+
+  defp parallel_steps_per_tick(rate_hz) when rate_hz <= 1000, do: 1
+  defp parallel_steps_per_tick(rate_hz), do: ceil(rate_hz / 1000)
+
+  defp parallel_interval_ms(rate_hz) when rate_hz <= 1000 do
+    max(trunc(1000 / rate_hz), 1)
+  end
+
+  defp parallel_interval_ms(_rate_hz), do: 1
 
   defp encode_uplink(%{uplink_pipeline: nil} = state, packet, _step), do: {packet, state}
 
-  defp encode_uplink(%{uplink_pipeline: pipeline, uplink_opts: opts} = state, packet, step) do
-    ctx =
-      %{
-        frame_size: opts[:frame_size],
-        scid: opts[:uplink_scid] || opts[:scid],
-        vcid: opts[:uplink_vcid] || opts[:vcid],
-        map_id: opts[:uplink_map_id]
-      }
-      |> maybe_put_ocf(state, step)
+  defp encode_uplink(
+         %{
+           uplink_pipeline: pipeline,
+           uplink_ctx_base: ctx_base,
+           uplink_encode_opts: encode_opts,
+           uplink_sdu_base: sdu_base
+         } = state,
+         packet,
+         step
+       ) do
+    ctx = maybe_put_ocf(ctx_base, state, step)
+    sdu = %{sdu_base | octets: packet}
 
-    sdu = %SDUOctets{
-      profile: opts[:profile],
-      scid: ctx.scid,
-      vcid: ctx.vcid,
-      map_id: ctx.map_id,
-      direction: :uplink,
-      sdu_kind_hint: :space_packet,
-      octets: packet,
-      quality: :good,
-      source_frames: [],
-      timestamp: nil,
-      meta: %{}
-    }
-
-    case UplinkPipeline.encode(sdu, ctx, pipeline, opts) do
+    case UplinkPipeline.encode(sdu, ctx, pipeline, encode_opts) do
       {:ok, encoded, new_pipeline} ->
         {encoded, %{state | uplink_pipeline: new_pipeline}}
 
@@ -1013,6 +1309,51 @@ defmodule Cadence.Simulator.Coordinator do
   end
 
   defp parse_integer(_), do: nil
+
+  defp normalize_generator_count(nil), do: @default_generator_count
+  defp normalize_generator_count(count) when is_integer(count) and count > 0, do: count
+  defp normalize_generator_count(_count), do: 1
+
+  defp normalize_max_in_flight_steps(opts, generator_count, steps_per_tick) do
+    case Keyword.get(opts, :max_in_flight_steps) do
+      value when is_integer(value) and value > 0 ->
+        value
+
+      _ ->
+        max(steps_per_tick * @default_in_flight_multiplier, generator_count * 2)
+    end
+  end
+
+  defp normalize_max_send_buffer_queue(opts, generator_count) do
+    case Keyword.get(opts, :max_send_buffer_queue) do
+      value when is_integer(value) and value > 0 ->
+        value
+
+      _ ->
+        max(generator_count * @default_in_flight_multiplier, @default_send_buffer_queue_floor)
+    end
+  end
+
+  defp normalize_dispatch_batch_floor(opts) do
+    case Keyword.get(opts, :dispatch_batch_floor) do
+      value when is_integer(value) and value > 0 -> value
+      _ -> @default_dispatch_batch_floor
+    end
+  end
+
+  defp normalize_dispatch_batch_ceiling(opts, dispatch_batch_floor, steps_per_tick) do
+    case Keyword.get(opts, :dispatch_batch_ceiling) do
+      value when is_integer(value) and value >= dispatch_batch_floor ->
+        value
+
+      _ ->
+        max(@default_dispatch_batch_ceiling, max(dispatch_batch_floor, steps_per_tick * 2))
+    end
+  end
+
+  defp ceil_div(value, divisor) when is_integer(value) and is_integer(divisor) and divisor > 0 do
+    div(value + divisor - 1, divisor)
+  end
 
   defp parse_bind_address(address) when is_binary(address) do
     case :inet.parse_address(String.to_charlist(address)) do

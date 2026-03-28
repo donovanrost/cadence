@@ -48,6 +48,15 @@ defmodule Cadence.Ports.Recordings.EventRecorder do
           | :procedure_version_rejected
           | :procedure_version_withdrawn
           | :procedure_version_deprecated
+          # Contact lifecycle events
+          | :contact_started
+          | :contact_ended
+          | :contact_activation_failed
+          | :contact_ready
+          | :contact_action_dispatched
+          | :contact_action_completed
+          | :contact_action_failed
+          | :contact_action_skipped
 
   @type aggregate :: struct()
   @type actor_id :: String.t() | nil

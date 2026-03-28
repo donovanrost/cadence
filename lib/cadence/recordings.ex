@@ -86,7 +86,18 @@ defmodule Cadence.Recordings do
     "ProcedureReviewCommentAdded" => Cadence.Recordings.Recordables.ProcedureReviewCommentAdded,
     "ProcedureThreadResolved" => Cadence.Recordings.Recordables.ProcedureThreadResolved,
     "ProcedureVersionResubmitted" => Cadence.Recordings.Recordables.ProcedureVersionResubmitted,
-    "ProcedureVersionClosed" => Cadence.Recordings.Recordables.ProcedureVersionClosed
+    "ProcedureVersionClosed" => Cadence.Recordings.Recordables.ProcedureVersionClosed,
+    # Contact lifecycle recordables
+    "ContactStarted" => Cadence.Recordings.Recordables.ContactStarted,
+    "ContactEnded" => Cadence.Recordings.Recordables.ContactEnded,
+    "ContactActivationFailed" => Cadence.Recordings.Recordables.ContactActivationFailed,
+    "ContactBlocked" => Cadence.Recordings.Recordables.ContactBlocked,
+    "ContactSkipped" => Cadence.Recordings.Recordables.ContactSkipped,
+    "ContactReady" => Cadence.Recordings.Recordables.ContactReady,
+    "ContactActionDispatched" => Cadence.Recordings.Recordables.ContactActionDispatched,
+    "ContactActionCompleted" => Cadence.Recordings.Recordables.ContactActionCompleted,
+    "ContactActionFailed" => Cadence.Recordings.Recordables.ContactActionFailed,
+    "ContactActionSkipped" => Cadence.Recordings.Recordables.ContactActionSkipped
   }
 
   @doc """

@@ -4,10 +4,28 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
   alias Cadence.Harness.Time
   alias Cadence.Runtime.Telemetry.Lanes.ShardWorker
   alias Cadence.Runtime.Telemetry.PipelineEvent
-  alias Cadence.Telemetry.{PacketEnvelope, PipelineMetrics}
+  alias Cadence.Telemetry.{MetricsConfig, PacketEnvelope, PipelineMetrics}
   alias Cadence.TestSupport.FakeLaneRouter
 
   setup_virtual_time()
+
+  setup do
+    previous = Application.get_env(:cadence, MetricsConfig, [])
+
+    Application.put_env(:cadence, MetricsConfig,
+      enable_pipeline_timings?: true,
+      timing_sample_rate: 1.0
+    )
+
+    MetricsConfig.refresh()
+
+    on_exit(fn ->
+      Application.put_env(:cadence, MetricsConfig, previous)
+      MetricsConfig.refresh()
+    end)
+
+    :ok
+  end
 
   test "flushes buffered events after virtual time advances" do
     {mission_id, lanes, worker_pid} =
@@ -55,6 +73,95 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
     )
   end
 
+  test "flushes buffered telemetry batches after virtual time advances" do
+    {mission_id, lanes, worker_pid} =
+      start_worker(max_batch_size: 10, max_batch_delay_ms: 1_000)
+
+    events =
+      Enum.map(1..3, fn _ ->
+        build_event(mission_id, lanes, "target-1")
+      end)
+
+    GenServer.cast(worker_pid, {:telemetry_batch, events})
+
+    Cadence.PureCase.assert_eventually(
+      fn -> :sys.get_state(worker_pid).buffer_size == 3 end,
+      timeout: 1000
+    )
+
+    :ok = Time.advance(1_000)
+
+    Cadence.PureCase.assert_eventually(
+      fn -> :sys.get_state(worker_pid).buffer_size == 0 end,
+      timeout: 1000
+    )
+  end
+
+  test "records worker queue, buffer, and batch timings for dispatched batches" do
+    {mission_id, lanes, worker_pid} =
+      start_worker(max_batch_size: 3, max_batch_delay_ms: 1_000)
+
+    events =
+      Enum.map(1..3, fn _ ->
+        build_event(mission_id, lanes, "target-1", parse_error: :bad_packet)
+      end)
+
+    dispatch_ns = System.monotonic_time(:nanosecond) - 1_000_000
+    GenServer.cast(worker_pid, {:telemetry_batch, events, dispatch_ns})
+
+    Cadence.PureCase.assert_eventually(
+      fn ->
+        timing = PipelineMetrics.get_partition_stats(mission_id, {:primary, 0}).timing
+
+        get_in(timing, [:worker_queue_wait, :count]) == 1 and
+          get_in(timing, [:worker_buffer_wait, :count]) == 1 and
+          get_in(timing, [:worker_batch_total, :count]) == 1
+      end,
+      timeout: 1000
+    )
+  end
+
+  test "flushes buffered work when a follow-up dispatched batch arrives" do
+    {mission_id, lanes, worker_pid} =
+      start_worker(max_batch_size: 10, max_batch_delay_ms: 60_000)
+
+    first_batch =
+      Enum.map(1..2, fn _ ->
+        build_event(mission_id, lanes, "target-1", parse_error: :bad_packet)
+      end)
+
+    second_batch =
+      Enum.map(1..2, fn _ ->
+        build_event(mission_id, lanes, "target-1", parse_error: :bad_packet)
+      end)
+
+    GenServer.cast(
+      worker_pid,
+      {:telemetry_batch, first_batch, System.monotonic_time(:nanosecond)}
+    )
+
+    Cadence.PureCase.assert_eventually(
+      fn -> :sys.get_state(worker_pid).buffer_size == 2 end,
+      timeout: 1000
+    )
+
+    GenServer.cast(
+      worker_pid,
+      {:telemetry_batch, second_batch, System.monotonic_time(:nanosecond)}
+    )
+
+    Cadence.PureCase.assert_eventually(
+      fn ->
+        state = :sys.get_state(worker_pid)
+        counters = PipelineMetrics.get_counters(mission_id, {:primary, 0})
+
+        state.buffer_size == 2 and
+          Map.get(counters, :packets_processed) == 2
+      end,
+      timeout: 1000
+    )
+  end
+
   defp start_worker(opts) do
     mission_id = random_id()
     router_pid = start_supervised!({FakeLaneRouter, queue_depths: %{}})
@@ -83,7 +190,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
     {mission_id, lanes, worker_pid}
   end
 
-  defp build_event(mission_id, _lanes, _target_id) do
+  defp build_event(mission_id, _lanes, _target_id, opts \\ []) do
     envelope = PacketEnvelope.new(mission_id, <<1>>, config_version_seen: 0)
 
     %PipelineEvent{
@@ -95,7 +202,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.ShardWorkerTimerTest do
       config_version: 0,
       envelope: envelope,
       parsed_unit: nil,
-      parse_error: nil,
+      parse_error: Keyword.get(opts, :parse_error),
       resolved_unit: nil,
       ingest_monotonic_ns: envelope.ingest_monotonic_ns
     }

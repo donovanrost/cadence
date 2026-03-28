@@ -19,6 +19,8 @@ defmodule Cadence.Application.Missions.MissionConfig do
   """
 
   alias Cadence.Application.Commanding.QueueSnapshotLoader
+  alias Cadence.Application.Contacts.{ContactCommandActionQueries, ContactQueries}
+  alias Cadence.Application.GroundStations.GroundStationProfileQueries
   alias Cadence.Application.Missions.MissionQueries
   alias Cadence.Application.Targeting.TargetQueries
   alias Cadence.Links
@@ -47,6 +49,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
           derived_item_defs: list(),
           alarm_rules: list(),
           automations: list(),
+          contacts: list(),
+          contact_command_actions: list(),
+          ground_station_profiles: list(),
           transport_interfaces: list(),
           links: list(),
           bindings: list(),
@@ -69,6 +74,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
     derived_item_defs: [],
     alarm_rules: [],
     automations: [],
+    contacts: [],
+    contact_command_actions: [],
+    ground_station_profiles: [],
     transport_interfaces: [],
     links: [],
     bindings: [],
@@ -94,6 +102,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
          {:ok, derived_item_defs} <- load_derived_items(mission_id),
          {:ok, alarm_rules} <- load_alarm_rules(mission.organization_id, mission_id),
          {:ok, automations} <- load_automations(mission_id),
+         {:ok, contacts} <- load_contacts(mission_id),
+         {:ok, contact_command_actions} <- load_contact_command_actions(mission_id),
+         {:ok, ground_station_profiles} <- load_ground_station_profiles(mission_id),
          {:ok, transport_interfaces} <-
            load_transport_interfaces(mission.organization_id, mission_id),
          {:ok, links} <- load_links(mission.organization_id, mission_id),
@@ -116,6 +127,9 @@ defmodule Cadence.Application.Missions.MissionConfig do
          derived_item_defs: derived_item_defs,
          alarm_rules: alarm_rules,
          automations: automations,
+         contacts: contacts,
+         contact_command_actions: contact_command_actions,
+         ground_station_profiles: ground_station_profiles,
          transport_interfaces: transport_interfaces,
          links: links,
          bindings: bindings,
@@ -230,6 +244,36 @@ defmodule Cadence.Application.Missions.MissionConfig do
     # TODO: Load automation definitions
     # For now, return empty list - AutomationManager loads from DB
     {:ok, []}
+  end
+
+  defp load_contacts(mission_id) do
+    {:ok, ContactQueries.list_planned_for_mission(mission_id)}
+  rescue
+    e ->
+      Logger.warning("Failed to load contacts for mission #{mission_id}: #{inspect(e)}")
+      {:ok, []}
+  end
+
+  defp load_contact_command_actions(mission_id) do
+    {:ok, ContactCommandActionQueries.list_planned_for_mission(mission_id)}
+  rescue
+    e ->
+      Logger.warning(
+        "Failed to load contact command actions for mission #{mission_id}: #{inspect(e)}"
+      )
+
+      {:ok, []}
+  end
+
+  defp load_ground_station_profiles(mission_id) do
+    {:ok, GroundStationProfileQueries.list_enabled_for_mission(mission_id)}
+  rescue
+    e ->
+      Logger.warning(
+        "Failed to load ground station profiles for mission #{mission_id}: #{inspect(e)}"
+      )
+
+      {:ok, []}
   end
 
   defp load_transport_interfaces(organization_id, mission_id) do

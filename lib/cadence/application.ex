@@ -13,11 +13,66 @@ defmodule Cadence.Application do
     VersionRegistry.init()
 
     # Base children always started
-    base_children = [
+    base_children = base_children()
+
+    # Reconcilers are disabled for CLI tools like mix cadence.simulate that
+    # only need to send telemetry to a running Cadence instance
+    reconciler_children =
+      if Application.get_env(:cadence, :start_reconcilers, true) do
+        [
+          # Reconciliation Supervisor - control plane reconcilers (manages missions via periodic reconciliation)
+          Cadence.Runtime.Reconciliation.Supervisor
+        ]
+      else
+        []
+      end
+
+    # Final children: Oban and web endpoint always last
+    final_children = [
+      # Oban - background job processing and scheduled tasks
+      {Oban, Application.fetch_env!(:cadence, Oban)},
+
+      # Start to serve requests, typically the last entry
+      CadenceWeb.Endpoint
+    ]
+
+    children =
+      base_children
+      |> maybe_disable_queue_persistence()
+      |> maybe_disable_contact_event_handler()
+      |> Kernel.++(reconciler_children)
+      |> Kernel.++(final_children)
+
+    # See https://hexdocs.pm/elixir/Supervisor.html
+    # for other strategies and supported options
+    opts = [strategy: :one_for_one, name: Cadence.Supervisor]
+
+    with {:ok, pid} <- Supervisor.start_link(children, opts) do
+      # Bootstrap system admin after supervisor starts
+      ensure_system_admin()
+      {:ok, pid}
+    end
+  end
+
+  defp ensure_system_admin do
+    email = System.get_env("SYSTEM_ADMIN_EMAIL")
+    password = System.get_env("SYSTEM_ADMIN_PASSWORD")
+
+    if email && password do
+      Cadence.Accounts.ensure_system_admin(email, password)
+    end
+  end
+
+  @doc false
+  def base_children do
+    [
       CadenceWeb.Telemetry,
       Cadence.Repo,
       {DNSCluster, query: Application.get_env(:cadence, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Cadence.PubSub},
+
+      # Stable owner for lazily-created named ETS tables
+      Cadence.ETS.Owner,
 
       # Mission Registry - registers all mission processes
       {Registry, keys: :unique, name: Cadence.MissionRegistry},
@@ -56,55 +111,12 @@ defmodule Cadence.Application do
       # Mission Tracker - Phoenix.Tracker for data plane state advertisement
       {Cadence.Runtime.Missions.MissionTracker, pubsub_server: Cadence.PubSub},
 
+      # Contact lifecycle recorder - persists contact events from runtime
+      Cadence.Application.Contacts.ContactEventHandler,
+
       # Mission Supervisor - manages all mission supervision trees (Data Plane)
       Cadence.Runtime.Missions.MissionSupervisor
     ]
-
-    # Reconcilers are disabled for CLI tools like mix cadence.simulate that
-    # only need to send telemetry to a running Cadence instance
-    reconciler_children =
-      if Application.get_env(:cadence, :start_reconcilers, true) do
-        [
-          # Reconciliation Supervisor - control plane reconcilers (manages missions via periodic reconciliation)
-          Cadence.Runtime.Reconciliation.Supervisor
-        ]
-      else
-        []
-      end
-
-    # Final children: Oban and web endpoint always last
-    final_children = [
-      # Oban - background job processing and scheduled tasks
-      {Oban, Application.fetch_env!(:cadence, Oban)},
-
-      # Start to serve requests, typically the last entry
-      CadenceWeb.Endpoint
-    ]
-
-    children =
-      base_children
-      |> maybe_disable_queue_persistence()
-      |> Kernel.++(reconciler_children)
-      |> Kernel.++(final_children)
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Cadence.Supervisor]
-
-    with {:ok, pid} <- Supervisor.start_link(children, opts) do
-      # Bootstrap system admin after supervisor starts
-      ensure_system_admin()
-      {:ok, pid}
-    end
-  end
-
-  defp ensure_system_admin do
-    email = System.get_env("SYSTEM_ADMIN_EMAIL")
-    password = System.get_env("SYSTEM_ADMIN_PASSWORD")
-
-    if email && password do
-      Cadence.Accounts.ensure_system_admin(email, password)
-    end
   end
 
   defp maybe_disable_queue_persistence(children) do
@@ -112,6 +124,16 @@ defmodule Cadence.Application do
 
     if is_list(opts) and Keyword.get(opts, :enabled, true) == false do
       Enum.reject(children, &(&1 == Cadence.Application.Commanding.QueuePersistence))
+    else
+      children
+    end
+  end
+
+  defp maybe_disable_contact_event_handler(children) do
+    opts = Application.get_env(:cadence, Cadence.Application.Contacts.ContactEventHandler, [])
+
+    if is_list(opts) and Keyword.get(opts, :enabled, true) == false do
+      Enum.reject(children, &(&1 == Cadence.Application.Contacts.ContactEventHandler))
     else
       children
     end

@@ -38,6 +38,7 @@ defmodule Cadence.Simulator.PacketEncoder do
 
   defstruct [
     :packets,
+    :packet_order,
     :items_by_qualified_name,
     :conversions,
     :sequence_counts
@@ -48,23 +49,35 @@ defmodule Cadence.Simulator.PacketEncoder do
 
   @type t :: %__MODULE__{
           packets: %{String.t() => packet_def()},
+          packet_order: [String.t()],
           items_by_qualified_name: %{String.t() => item_def()},
           conversions: %{String.t() => conversion_def()},
           sequence_counts: %{non_neg_integer() => non_neg_integer()}
         }
 
+  @type packet_pack_item :: {binary(), item_def(), binary()}
+
   @type packet_def :: %{
           name: String.t(),
           apid: non_neg_integer() | nil,
           is_big_endian: boolean(),
+          payload_size: non_neg_integer(),
+          packet_id: non_neg_integer(),
+          data_length: non_neg_integer(),
+          packing_strategy: :sequential | :spliced,
+          pack_items: [packet_pack_item()],
+          tail_gap: binary(),
           items: [item_def()]
         }
 
   @type item_def :: %{
           name: String.t(),
           packet_name: String.t(),
+          qualified_name: String.t(),
           bit_offset: non_neg_integer(),
+          byte_offset: non_neg_integer(),
           bit_size: non_neg_integer(),
+          byte_size: non_neg_integer(),
           data_type: String.t(),
           endianness: String.t(),
           conversion: conversion_def() | nil
@@ -73,7 +86,8 @@ defmodule Cadence.Simulator.PacketEncoder do
   @type conversion_def :: %{
           type: String.t(),
           coefficients: [number()] | nil,
-          states: %{String.t() => any()} | nil
+          states: %{String.t() => any()} | nil,
+          reverse_states: %{any() => non_neg_integer()} | nil
         }
 
   @doc """
@@ -108,28 +122,19 @@ defmodule Cadence.Simulator.PacketEncoder do
   @spec encode(t(), String.t(), %{String.t() => any()}) ::
           {:ok, [{String.t(), binary()}], t()} | {:error, term()}
   def encode(encoder, target_id, values) do
-    # Group values by packet name
-    values_by_packet =
-      values
-      |> Enum.group_by(fn {qualified_name, _value} ->
-        case String.split(qualified_name, ".", parts: 2) do
-          [packet_name, _item_name] -> packet_name
-          _ -> nil
-        end
-      end)
-      |> Map.delete(nil)
+    target_hash = :erlang.phash2(target_id, 65_536)
+    timestamp = CadenceTime.system_time(:second)
+    active_packets = active_packets(encoder, values)
 
     # Encode each packet
     {packets, encoder} =
-      Enum.reduce(values_by_packet, {[], encoder}, fn {packet_name, items}, {acc, enc} ->
-        case encode_packet(enc, packet_name, target_id, items) do
-          {:ok, binary, updated_enc} ->
-            {[{packet_name, binary} | acc], updated_enc}
-
-          {:error, reason} ->
-            Logger.warning("Failed to encode packet #{packet_name}: #{inspect(reason)}")
-            {acc, enc}
-        end
+      reduce_active_packets(encoder, active_packets, {[], encoder}, fn packet_name, {acc, enc} ->
+        append_encoded_packet(
+          encode_packet(enc, packet_name, target_hash, timestamp, values),
+          packet_name,
+          acc,
+          enc
+        )
       end)
 
     {:ok, Enum.reverse(packets), encoder}
@@ -140,7 +145,7 @@ defmodule Cadence.Simulator.PacketEncoder do
   """
   @spec packet_names(t()) :: [String.t()]
   def packet_names(encoder) do
-    Map.keys(encoder.packets)
+    encoder.packet_order
   end
 
   @doc """
@@ -156,9 +161,8 @@ defmodule Cadence.Simulator.PacketEncoder do
   """
   @spec apids(t()) :: [non_neg_integer()]
   def apids(encoder) do
-    encoder.packets
-    |> Map.values()
-    |> Enum.map(& &1.apid)
+    encoder.packet_order
+    |> Enum.map(&Map.fetch!(encoder.packets, &1).apid)
     |> Enum.filter(&(&1 != nil))
     |> Enum.uniq()
   end
@@ -196,105 +200,82 @@ defmodule Cadence.Simulator.PacketEncoder do
           {:ok, [{String.t(), binary()}]} | {:error, term()}
   def encode_with_sequence(encoder, target_id, values, sequence_fn)
       when is_function(sequence_fn, 1) do
-    # Group values by packet name
-    values_by_packet =
-      values
-      |> Enum.group_by(fn {qualified_name, _value} ->
-        case String.split(qualified_name, ".", parts: 2) do
-          [packet_name, _item_name] -> packet_name
-          _ -> nil
-        end
-      end)
-      |> Map.delete(nil)
+    target_hash = :erlang.phash2(target_id, 65_536)
+    timestamp = CadenceTime.system_time(:second)
+    active_packets = active_packets(encoder, values)
 
     # Encode each packet
     packets =
-      Enum.reduce(values_by_packet, [], fn {packet_name, items}, acc ->
-        case encode_packet_with_sequence(encoder, packet_name, target_id, items, sequence_fn) do
-          {:ok, binary} ->
-            [{packet_name, binary} | acc]
-
-          {:error, reason} ->
-            Logger.warning("Failed to encode packet #{packet_name}: #{inspect(reason)}")
-            acc
-        end
+      reduce_active_packets(encoder, active_packets, [], fn packet_name, acc ->
+        append_encoded_packet(
+          encode_packet_with_sequence(
+            encoder,
+            packet_name,
+            target_hash,
+            timestamp,
+            values,
+            sequence_fn
+          ),
+          packet_name,
+          acc
+        )
       end)
 
     {:ok, Enum.reverse(packets)}
   end
 
   # Encode a single packet with external sequence number
-  defp encode_packet_with_sequence(encoder, packet_name, target_id, items, sequence_fn) do
+  defp encode_packet_with_sequence(
+         encoder,
+         packet_name,
+         target_hash,
+         timestamp,
+         item_values,
+         sequence_fn
+       ) do
     case Map.get(encoder.packets, packet_name) do
       nil ->
         {:error, {:unknown_packet, packet_name}}
 
       packet_def ->
-        # Convert items list to map of item_name => value
-        item_values =
-          items
-          |> Enum.map(fn {qualified_name, value} ->
-            [_packet, item_name] = String.split(qualified_name, ".", parts: 2)
-            {item_name, value}
-          end)
-          |> Map.new()
-
         # Get sequence from external allocator
         apid = packet_def.apid || 0
         seq = sequence_fn.(apid)
 
         # Encode to binary with provided sequence
-        binary = encode_packet_binary_with_seq(encoder, packet_def, target_id, item_values, seq)
+        binary =
+          encode_packet_binary_with_seq(packet_def, target_hash, timestamp, item_values, seq)
 
         {:ok, binary}
     end
   end
 
   # Encode packet binary with explicit sequence number
-  defp encode_packet_binary_with_seq(_encoder, packet_def, target_id, item_values, sequence) do
-    # Calculate packet size from item definitions
-    max_bit =
-      packet_def.items
-      |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
-      |> Enum.max(fn -> 0 end)
-
-    # Round up to byte boundary
-    payload_size = div(max_bit + 7, 8)
-
-    # Start with zeroed payload
-    payload = :binary.copy(<<0>>, payload_size)
-
-    # Pack each item into the payload
-    payload =
-      Enum.reduce(packet_def.items, payload, fn item_def, acc ->
-        case Map.get(item_values, item_def.name) do
-          nil ->
-            acc
-
-          value ->
-            # Apply reverse conversion if needed
-            raw_value = reverse_convert(value, item_def.conversion)
-            pack_value(acc, item_def, raw_value)
-        end
-      end)
+  defp encode_packet_binary_with_seq(packet_def, target_hash, timestamp, values, sequence) do
+    payload = build_payload(packet_def, values)
 
     # Build CCSDS packet with provided sequence
-    apid = packet_def.apid || 0
-    build_ccsds_packet(apid, sequence, target_id, payload)
+    build_ccsds_packet(packet_def, sequence, target_hash, timestamp, payload)
   end
 
   # Build encoder from parsed YAML
   defp build_encoder(parsed) do
     packets = parsed["packets"] || []
 
-    {packet_map, items_map, conversions_map} =
-      Enum.reduce(packets, {%{}, %{}, %{}}, fn packet_data, {pkts, items, convs} ->
+    {packet_map, packet_order, items_map, conversions_map} =
+      Enum.reduce(packets, {%{}, [], %{}, %{}}, fn packet_data, {pkts, order, items, convs} ->
         packet_name = packet_data["name"]
 
         packet_def = %{
           name: packet_name,
           apid: packet_data["apid"],
           is_big_endian: packet_data["big_endian"] != false,
+          payload_size: 0,
+          packet_id: 0,
+          data_length: 0,
+          packing_strategy: :spliced,
+          pack_items: [],
+          tail_gap: <<>>,
           items: []
         }
 
@@ -312,7 +293,9 @@ defmodule Cadence.Simulator.PacketEncoder do
               packet_name: packet_name,
               qualified_name: qualified_name,
               bit_offset: item_data["bit_offset"],
+              byte_offset: div(item_data["bit_offset"], 8),
               bit_size: item_data["bit_size"],
+              byte_size: div(item_data["bit_size"] + 7, 8),
               data_type: item_data["data_type"],
               endianness: item_data["endianness"] || "big",
               conversion: conversion
@@ -322,7 +305,23 @@ defmodule Cadence.Simulator.PacketEncoder do
           end)
           |> Enum.unzip()
 
-        packet_def = %{packet_def | items: item_defs}
+        payload_size = payload_size(item_defs)
+
+        %{strategy: strategy, pack_items: pack_items, tail_gap: tail_gap} =
+          build_packing_layout(item_defs, payload_size)
+
+        apid = packet_def.apid || 0
+
+        packet_def = %{
+          packet_def
+          | items: item_defs,
+            payload_size: payload_size,
+            packet_id: build_packet_id(apid),
+            data_length: payload_size + 7,
+            packing_strategy: strategy,
+            pack_items: pack_items,
+            tail_gap: tail_gap
+        }
 
         new_items = Enum.into(item_defs, items, fn item -> {item.qualified_name, item} end)
 
@@ -331,11 +330,17 @@ defmodule Cadence.Simulator.PacketEncoder do
           |> Enum.filter(fn {_name, conv} -> conv != nil end)
           |> Enum.into(convs)
 
-        {Map.put(pkts, packet_name, packet_def), new_items, Map.merge(convs, new_conv_map)}
+        {
+          Map.put(pkts, packet_name, packet_def),
+          [packet_name | order],
+          new_items,
+          Map.merge(convs, new_conv_map)
+        }
       end)
 
     encoder = %__MODULE__{
       packets: packet_map,
+      packet_order: Enum.reverse(packet_order),
       items_by_qualified_name: items_map,
       conversions: conversions_map,
       sequence_counts: %{}
@@ -347,13 +352,22 @@ defmodule Cadence.Simulator.PacketEncoder do
   defp parse_conversion(nil), do: nil
 
   defp parse_conversion(%{"type" => "polynomial", "coefficients" => coefficients}) do
-    %{type: "polynomial", coefficients: coefficients}
+    %{type: "polynomial", coefficients: coefficients, reverse_states: nil}
   end
 
   defp parse_conversion(%{"type" => "state_table", "states" => states}) do
     # Convert keys to strings
     string_states = Enum.into(states, %{}, fn {k, v} -> {to_string(k), v} end)
-    %{type: "state_table", states: string_states}
+
+    reverse_states =
+      Enum.reduce(string_states, %{}, fn {raw_value, state_value}, acc ->
+        case Integer.parse(raw_value) do
+          {raw_int, ""} -> Map.put(acc, state_value, raw_int)
+          _ -> acc
+        end
+      end)
+
+    %{type: "state_table", states: string_states, reverse_states: reverse_states}
   end
 
   defp parse_conversion(data) do
@@ -362,23 +376,14 @@ defmodule Cadence.Simulator.PacketEncoder do
   end
 
   # Encode a single packet
-  defp encode_packet(encoder, packet_name, target_id, items) do
+  defp encode_packet(encoder, packet_name, target_hash, timestamp, values) do
     case Map.get(encoder.packets, packet_name) do
       nil ->
         {:error, {:unknown_packet, packet_name}}
 
       packet_def ->
-        # Convert items list to map of item_name => value
-        item_values =
-          items
-          |> Enum.map(fn {qualified_name, value} ->
-            [_packet, item_name] = String.split(qualified_name, ".", parts: 2)
-            {item_name, value}
-          end)
-          |> Map.new()
-
         # Encode to binary
-        binary = encode_packet_binary(encoder, packet_def, target_id, item_values)
+        binary = encode_packet_binary(encoder, packet_def, target_hash, timestamp, values)
 
         # Update sequence count
         apid = packet_def.apid || 0
@@ -390,38 +395,53 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp encode_packet_binary(encoder, packet_def, target_id, item_values) do
-    # Calculate packet size from item definitions
-    max_bit =
-      packet_def.items
-      |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
-      |> Enum.max(fn -> 0 end)
-
-    # Round up to byte boundary
-    payload_size = div(max_bit + 7, 8)
-
-    # Start with zeroed payload
-    payload = :binary.copy(<<0>>, payload_size)
-
-    # Pack each item into the payload
-    payload =
-      Enum.reduce(packet_def.items, payload, fn item_def, acc ->
-        case Map.get(item_values, item_def.name) do
-          nil ->
-            acc
-
-          value ->
-            # Apply reverse conversion if needed
-            raw_value = reverse_convert(value, item_def.conversion)
-            pack_value(acc, item_def, raw_value)
-        end
-      end)
+  defp encode_packet_binary(encoder, packet_def, target_hash, timestamp, values) do
+    payload = build_payload(packet_def, values)
 
     # Build CCSDS packet
     apid = packet_def.apid || 0
     seq = Map.get(encoder.sequence_counts, apid, 0)
 
-    build_ccsds_packet(apid, seq, target_id, payload)
+    build_ccsds_packet(packet_def, seq, target_hash, timestamp, payload)
+  end
+
+  defp build_payload(%{packing_strategy: :sequential} = packet_def, values) do
+    iodata =
+      Enum.reduce(packet_def.pack_items, [], fn {gap_before, item_def, empty_value}, acc ->
+        value_binary =
+          case Map.get(values, item_def.qualified_name) do
+            nil ->
+              empty_value
+
+            value ->
+              raw_value = reverse_convert(value, item_def.conversion)
+
+              value_to_binary(
+                raw_value,
+                item_def.data_type,
+                item_def.bit_size,
+                item_def.byte_size,
+                item_def.endianness
+              )
+          end
+
+        [acc, gap_before, value_binary]
+      end)
+
+    IO.iodata_to_binary([iodata, packet_def.tail_gap])
+  end
+
+  defp build_payload(packet_def, values) do
+    Enum.reduce(packet_def.items, zero_binary(packet_def.payload_size), fn item_def, acc ->
+      case Map.get(values, item_def.qualified_name) do
+        nil ->
+          acc
+
+        value ->
+          raw_value = reverse_convert(value, item_def.conversion)
+          pack_value(acc, item_def, raw_value)
+      end
+    end)
   end
 
   # Apply reverse conversion (CONVERTED → RAW)
@@ -447,16 +467,12 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp reverse_convert(value, %{type: "state_table", states: states}) do
-    # Find the raw value that maps to this state
-    case Enum.find(states, fn {_k, v} -> v == value end) do
-      {raw_str, _state} ->
-        case Integer.parse(raw_str) do
-          {raw_int, ""} -> raw_int
-          _ -> 0
-        end
+  defp reverse_convert(value, %{type: "state_table", reverse_states: reverse_states}) do
+    case Map.fetch(reverse_states, value) do
+      {:ok, raw_value} ->
+        raw_value
 
-      nil ->
+      :error ->
         Logger.warning("State '#{value}' not found in state table, using 0")
         0
     end
@@ -464,19 +480,19 @@ defmodule Cadence.Simulator.PacketEncoder do
 
   # Pack a value into the binary payload at the specified bit offset
   defp pack_value(payload, item_def, value) do
-    bit_offset = item_def.bit_offset
-    bit_size = item_def.bit_size
-    data_type = item_def.data_type
-    endianness = item_def.endianness
+    value_binary =
+      value_to_binary(
+        value,
+        item_def.data_type,
+        item_def.bit_size,
+        item_def.byte_size,
+        item_def.endianness
+      )
 
-    # Convert value to binary representation
-    value_binary = value_to_binary(value, data_type, bit_size, endianness)
-
-    # Insert into payload at bit offset
-    insert_bits(payload, value_binary, bit_offset, bit_size)
+    insert_bits(payload, value_binary, item_def.byte_offset, item_def.byte_size)
   end
 
-  defp value_to_binary(value, "float", 32, endianness) do
+  defp value_to_binary(value, "float", 32, _byte_size, endianness) do
     case endianness do
       "big" -> <<value::float-big-32>>
       "little" -> <<value::float-little-32>>
@@ -484,7 +500,7 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp value_to_binary(value, "float", 64, endianness) do
+  defp value_to_binary(value, "float", 64, _byte_size, endianness) do
     case endianness do
       "big" -> <<value::float-big-64>>
       "little" -> <<value::float-little-64>>
@@ -492,9 +508,8 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp value_to_binary(value, "uint", bit_size, endianness) do
+  defp value_to_binary(value, "uint", _bit_size, byte_size, endianness) do
     int_value = trunc(value)
-    byte_size = div(bit_size + 7, 8)
 
     case endianness do
       "big" -> <<int_value::unsigned-big-size(byte_size * 8)>>
@@ -503,9 +518,8 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp value_to_binary(value, "int", bit_size, endianness) do
+  defp value_to_binary(value, "int", _bit_size, byte_size, endianness) do
     int_value = trunc(value)
-    byte_size = div(bit_size + 7, 8)
 
     case endianness do
       "big" -> <<int_value::signed-big-size(byte_size * 8)>>
@@ -514,20 +528,19 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp value_to_binary(value, "boolean", _bit_size, _endianness) do
+  defp value_to_binary(value, "boolean", _bit_size, _byte_size, _endianness) do
     if value, do: <<1>>, else: <<0>>
   end
 
-  defp value_to_binary(value, "string", bit_size, _endianness) do
+  defp value_to_binary(value, "string", _bit_size, byte_size, _endianness) do
     str = to_string(value)
-    byte_size = div(bit_size, 8)
 
     String.pad_trailing(str, byte_size, <<0>>)
     |> String.slice(0, byte_size)
   end
 
-  defp value_to_binary(value, "binary", bit_size, _endianness) when is_binary(value) do
-    byte_size = div(bit_size, 8)
+  defp value_to_binary(value, "binary", _bit_size, byte_size, _endianness)
+       when is_binary(value) do
     # Pad or truncate to exact size
     case byte_size(value) do
       ^byte_size -> value
@@ -536,24 +549,20 @@ defmodule Cadence.Simulator.PacketEncoder do
     end
   end
 
-  defp value_to_binary(_value, "binary", bit_size, _endianness) do
+  defp value_to_binary(_value, "binary", _bit_size, byte_size, _endianness) do
     # If not already binary, generate zeros
-    byte_size = div(bit_size, 8)
     :binary.copy(<<0>>, byte_size)
   end
 
-  defp value_to_binary(value, _unknown_type, bit_size, endianness) do
+  defp value_to_binary(value, _unknown_type, bit_size, byte_size, endianness) do
     # Default to uint
-    value_to_binary(value, "uint", bit_size, endianness)
+    value_to_binary(value, "uint", bit_size, byte_size, endianness)
   end
 
   # Insert bits into payload (simplified byte-aligned version)
-  defp insert_bits(payload, value_binary, bit_offset, bit_size) do
+  defp insert_bits(payload, value_binary, byte_offset, byte_size) do
     # For simplicity, we handle byte-aligned offsets
     # A more complete implementation would handle arbitrary bit offsets
-    byte_offset = div(bit_offset, 8)
-    byte_size = div(bit_size + 7, 8)
-
     prefix = binary_part(payload, 0, byte_offset)
     suffix_start = byte_offset + byte_size
     suffix_len = byte_size(payload) - suffix_start
@@ -563,31 +572,114 @@ defmodule Cadence.Simulator.PacketEncoder do
   end
 
   # Build a CCSDS packet (no sync pattern - TM frames provide framing)
-  defp build_ccsds_packet(apid, sequence, target_id, payload) do
-    # Secondary header (8 bytes): timestamp + target hash
-    timestamp = CadenceTime.system_time(:second)
-    target_hash = :erlang.phash2(target_id, 65_536)
-    secondary_header = <<timestamp::48, target_hash::16>>
-
-    user_data = secondary_header <> payload
-
-    # Primary header (6 bytes)
-    version = 0
-    # telemetry
-    type = 0
-    sec_hdr_flag = 1
-    packet_id = version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
-
+  defp build_ccsds_packet(packet_def, sequence, target_hash, timestamp, payload) do
     # unsegmented
     sequence_flags = 3
     seq_control = sequence_flags <<< 14 ||| sequence
 
-    data_length = byte_size(user_data) - 1
-
-    primary_header = <<packet_id::16, seq_control::16, data_length::16>>
-
     # No sync pattern - when used with TM frames, framing is provided by the frame structure
     # The sync pattern was causing APID misalignment (0x1ACF parsed as APID 719)
-    primary_header <> user_data
+    <<packet_def.packet_id::16, seq_control::16, packet_def.data_length::16, timestamp::48,
+      target_hash::16, payload::binary>>
   end
+
+  defp active_packets(encoder, values) do
+    Enum.reduce(values, %{}, fn {qualified_name, _value}, acc ->
+      case Map.get(encoder.items_by_qualified_name, qualified_name) do
+        %{packet_name: packet_name} ->
+          Map.put(acc, packet_name, true)
+
+        nil ->
+          acc
+      end
+    end)
+  end
+
+  defp reduce_active_packets(encoder, active_packets, initial_acc, fun) do
+    Enum.reduce(encoder.packet_order, initial_acc, fn packet_name, acc ->
+      if Map.has_key?(active_packets, packet_name), do: fun.(packet_name, acc), else: acc
+    end)
+  end
+
+  defp append_encoded_packet({:ok, binary, updated_encoder}, packet_name, acc, _encoder) do
+    {[{packet_name, binary} | acc], updated_encoder}
+  end
+
+  defp append_encoded_packet({:error, reason}, packet_name, acc, encoder) do
+    Logger.warning("Failed to encode packet #{packet_name}: #{inspect(reason)}")
+    {acc, encoder}
+  end
+
+  defp append_encoded_packet({:ok, binary}, packet_name, acc) do
+    [{packet_name, binary} | acc]
+  end
+
+  defp append_encoded_packet({:error, reason}, packet_name, acc) do
+    Logger.warning("Failed to encode packet #{packet_name}: #{inspect(reason)}")
+    acc
+  end
+
+  defp payload_size(items) do
+    max_bit =
+      items
+      |> Enum.map(fn item -> item.bit_offset + item.bit_size end)
+      |> Enum.max(fn -> 0 end)
+
+    div(max_bit + 7, 8)
+  end
+
+  defp build_packet_id(apid) do
+    version = 0
+    type = 0
+    sec_hdr_flag = 1
+    version <<< 13 ||| type <<< 12 ||| sec_hdr_flag <<< 11 ||| apid
+  end
+
+  defp build_packing_layout(items, payload_size) do
+    if Enum.all?(items, &byte_aligned?/1) do
+      items
+      |> Enum.sort_by(& &1.byte_offset)
+      |> build_pack_items(0, [])
+      |> finalize_packing_layout(payload_size)
+    else
+      fallback_packing_layout()
+    end
+  end
+
+  defp build_pack_items([], cursor, acc), do: {:ok, Enum.reverse(acc), cursor}
+
+  defp build_pack_items([item | rest], cursor, acc) do
+    if item.byte_offset < cursor do
+      :error
+    else
+      next_cursor = item.byte_offset + item.byte_size
+
+      build_pack_items(
+        rest,
+        next_cursor,
+        [{zero_binary(item.byte_offset - cursor), item, zero_binary(item.byte_size)} | acc]
+      )
+    end
+  end
+
+  defp finalize_packing_layout({:ok, pack_items, cursor}, payload_size) do
+    %{
+      strategy: :sequential,
+      pack_items: pack_items,
+      tail_gap: zero_binary(payload_size - cursor)
+    }
+  end
+
+  defp finalize_packing_layout(:error, _payload_size), do: fallback_packing_layout()
+
+  defp fallback_packing_layout do
+    %{strategy: :spliced, pack_items: [], tail_gap: <<>>}
+  end
+
+  defp byte_aligned?(item) do
+    rem(item.bit_offset, 8) == 0 and rem(item.bit_size, 8) == 0
+  end
+
+  defp zero_binary(0), do: <<>>
+  defp zero_binary(size), do: :binary.copy(<<0>>, size)
 end

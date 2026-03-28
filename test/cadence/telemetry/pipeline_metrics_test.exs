@@ -1,9 +1,10 @@
 defmodule Cadence.Telemetry.PipelineMetricsTest do
   use Cadence.PureCase, async: false
 
+  alias Cadence.Runtime.Telemetry.ConfigBundle
   alias Cadence.Runtime.Telemetry.Lanes.ShardWorker
   alias Cadence.Runtime.Telemetry.PipelineEvent
-  alias Cadence.Telemetry.{MetricsConfig, PacketEnvelope, PipelineMetrics}
+  alias Cadence.Telemetry.{Evidence, MetricsConfig, PacketEnvelope, PipelineMetrics, SpacePacket}
   alias Cadence.TestSupport.FakeLaneRouter
 
   setup do
@@ -35,6 +36,32 @@ defmodule Cadence.Telemetry.PipelineMetricsTest do
     assert timing.min_us == 120
     assert timing.max_us == 120
     assert timing.avg_us == 120.0
+  end
+
+  test "cached partition refs update counters and timings" do
+    mission_id = random_id()
+
+    :ok =
+      PipelineMetrics.init_lanes(mission_id, [
+        %{name: :primary, shard_count: 1, virtual_shards: 1, selectors: %{}}
+      ])
+
+    refs = PipelineMetrics.partition_refs(mission_id, {:primary, 0})
+    PipelineMetrics.inc_refs(refs, :packets_received, 3)
+    PipelineMetrics.record_timing_refs(refs, :parse, 42)
+
+    stats = PipelineMetrics.get_partition_stats(mission_id, {:primary, 0})
+
+    assert get_in(stats, [:counters, :packets_received]) == 3
+    assert get_in(stats, [:timing, :parse, :count]) == 1
+    assert get_in(stats, [:timing, :parse, :min_us]) == 42
+  end
+
+  test "cached partition refs are safe when metrics are not initialized" do
+    refs = PipelineMetrics.partition_refs(random_id(), {:primary, 0})
+
+    assert :ok == PipelineMetrics.inc_refs(refs, :packets_received, 1)
+    assert :ok == PipelineMetrics.record_timing_refs(refs, :parse, 10)
   end
 
   test "record_timing is safe when metrics are not initialized" do
@@ -163,5 +190,100 @@ defmodule Cadence.Telemetry.PipelineMetricsTest do
     timing = Map.get(stats.timing, :end_to_end)
 
     assert timing.min_us >= 2_000
+  end
+
+  test "worker post decom timing is recorded for successful decom packets" do
+    Application.put_env(:cadence, MetricsConfig,
+      enable_pipeline_timings?: true,
+      timing_sample_rate: 1.0
+    )
+
+    MetricsConfig.refresh()
+
+    mission_id = random_id()
+    lanes = [%{name: :primary, shard_count: 1, virtual_shards: 1, selectors: %{}}]
+    :ok = PipelineMetrics.init_lanes(mission_id, lanes)
+    :ok = ConfigBundle.store(build_decom_bundle(mission_id))
+
+    router_pid = start_supervised!({FakeLaneRouter, queue_depths: %{}})
+
+    {:ok, worker_pid} =
+      start_supervised(
+        {ShardWorker,
+         mission_id: mission_id,
+         lane: :primary,
+         shard_id: 0,
+         router: router_pid,
+         sink_opts: [skip_log_records: true],
+         max_batch_size: 1,
+         max_batch_delay_ms: 1_000,
+         max_inflight: 10}
+      )
+
+    GenServer.cast(worker_pid, {:telemetry_event, build_decom_event(mission_id)})
+
+    assert_eventually(
+      fn ->
+        timing = PipelineMetrics.get_partition_stats(mission_id, {:primary, 0}).timing
+        get_in(timing, [:worker_post_decom, :count]) == 1
+      end,
+      timeout: 1000
+    )
+  end
+
+  defp build_decom_bundle(mission_id) do
+    target = %{id: "target-1", scid: 42, definition_set_id: "def-set-1"}
+
+    packet_def = %{
+      id: "packet-1",
+      name: "PKT",
+      items: [
+        %{name: "temp", bit_offset: 0, bit_size: 8, data_type: "uint"}
+      ]
+    }
+
+    %ConfigBundle{
+      mission_id: mission_id,
+      config_version: 0,
+      targets: [target],
+      targets_by_identifier: %{target.id => target},
+      target_ids_by_scid: %{target.scid => target.id},
+      packet_catalog: %{by_apid: %{{"def-set-1", 100} => packet_def}}
+    }
+  end
+
+  defp build_decom_event(mission_id) do
+    envelope =
+      PacketEnvelope.new(mission_id, <<1>>, config_version_seen: 0)
+      |> PacketEnvelope.add_evidence(Evidence.scid(42, :frame, :high))
+
+    packet = %SpacePacket{
+      primary: %{
+        version: 0,
+        type: 0,
+        sec_hdr_flag: 1,
+        apid: 100,
+        seq_flags: 3,
+        seq_count: 1,
+        length: 0
+      },
+      sec_header: nil,
+      user_data: <<17>>,
+      raw_ref: nil
+    }
+
+    %PipelineEvent{
+      packet_id: envelope.packet_id,
+      mission_id: mission_id,
+      lane: :primary,
+      shard_id: 0,
+      router_version: 1,
+      config_version: 0,
+      envelope: envelope,
+      parsed_unit: {:space_packet, packet},
+      parse_error: nil,
+      resolved_unit: nil,
+      ingest_monotonic_ns: envelope.ingest_monotonic_ns
+    }
   end
 end

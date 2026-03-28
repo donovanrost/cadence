@@ -32,26 +32,23 @@ defmodule Cadence.Telemetry.PDUHandler do
 
     mission_id = Map.get(ctx, :mission_id) || get_in(ctx, [:base_meta, :mission_id])
 
+    metric_refs =
+      Map.get(ctx, :metrics_refs) ||
+        PipelineMetrics.partition_refs(mission_id, PipelineMetrics.ingress_partition())
+
     with %SDUOctets{} = sdu <- Map.get(ctx, :sdu),
          {:ok, raw} <- raw_from_pdu(pdu, sdu) do
       metadata = Map.get(ctx, :base_meta, %{})
-      envelope = build_envelope(raw, pdu, sdu, ctx, metadata)
+      envelope = build_envelope(mission_id, raw, pdu, sdu, ctx, metadata)
 
       if mission_id do
-        ingress_partition = PipelineMetrics.ingress_partition()
-
         if is_integer(start_ns) do
           duration_us = div(CadenceTime.monotonic(:nanosecond) - start_ns, 1000)
 
-          PipelineMetrics.record_timing(
-            mission_id,
-            ingress_partition,
-            :envelope_build,
-            duration_us
-          )
+          PipelineMetrics.record_timing_refs(metric_refs, :envelope_build, duration_us)
         end
 
-        PipelineMetrics.inc(mission_id, ingress_partition, :envelopes_emitted)
+        PipelineMetrics.inc_refs(metric_refs, :envelopes_emitted)
       end
 
       {:ok, [envelope], state}
@@ -79,25 +76,30 @@ defmodule Cadence.Telemetry.PDUHandler do
 
   defp raw_from_pdu(_pdu, _sdu), do: {:error, :missing_raw}
 
-  defp build_envelope(raw, %PDU{} = pdu, %SDUOctets{} = sdu, ctx, metadata) do
+  defp build_envelope(mission_id, raw, %PDU{} = pdu, %SDUOctets{} = sdu, ctx, metadata) do
+    transport_id = Map.get(ctx, :transport_id)
+    source_frames = sdu.source_frames || metadata[:source_frames]
+
     provenance =
-      %{}
-      |> maybe_put(:transport_id, Map.get(ctx, :transport_id) || metadata[:transport_id])
-      |> maybe_put(:source, metadata[:source])
-      |> maybe_put(:link_key, metadata[:link_key])
-      |> maybe_put(:channel_key, metadata[:channel_key])
-      |> maybe_put(:source_frames, sdu.source_frames || metadata[:source_frames])
+      build_provenance(
+        transport_id || metadata[:transport_id],
+        metadata[:source],
+        metadata[:link_key],
+        metadata[:channel_key],
+        source_frames
+      )
 
     evidence =
-      []
-      |> maybe_add(Evidence.scid(sdu.scid, :link, :high))
-      |> maybe_add(Evidence.vcid(sdu.vcid, :link, :high))
-      |> maybe_add(Evidence.map_id(sdu.map_id, :link, :high))
-      |> maybe_add(Evidence.transport_id(Map.get(ctx, :transport_id), :ingest, :high))
-      |> maybe_add(Evidence.apid(pdu_apid(pdu), :space_packet_header, :high))
-      |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
+      build_evidence(
+        sdu.scid,
+        sdu.vcid,
+        sdu.map_id,
+        transport_id,
+        pdu_apid(pdu),
+        metadata[:target_id]
+      )
 
-    PacketEnvelope.new(Map.get(ctx, :mission_id) || metadata[:mission_id], raw,
+    PacketEnvelope.new(mission_id || metadata[:mission_id], raw,
       ingest_ts: metadata[:received_at] || CadenceTime.now(),
       ingest_monotonic_ns: metadata[:ingest_monotonic_ns] || CadenceTime.monotonic(:nanosecond),
       provenance: provenance,
@@ -111,9 +113,36 @@ defmodule Cadence.Telemetry.PDUHandler do
   defp pdu_apid(%PDU{value: %SpacePacket{apid: apid}}), do: apid
   defp pdu_apid(_pdu), do: nil
 
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+  defp build_provenance(transport_id, source, link_key, channel_key, source_frames) do
+    []
+    |> maybe_prepend_entry(:transport_id, transport_id)
+    |> maybe_prepend_entry(:source, source)
+    |> maybe_prepend_entry(:link_key, link_key)
+    |> maybe_prepend_entry(:channel_key, channel_key)
+    |> maybe_prepend_entry(:source_frames, source_frames)
+    |> provenance_map()
+  end
 
-  defp maybe_add(list, %Evidence{value: nil}), do: list
-  defp maybe_add(list, %Evidence{} = evidence), do: list ++ [evidence]
+  defp build_evidence(scid, vcid, map_id, transport_id, apid, target_hint) do
+    []
+    |> maybe_prepend_evidence(:scid, scid, :link, :high)
+    |> maybe_prepend_evidence(:vcid, vcid, :link, :high)
+    |> maybe_prepend_evidence(:map_id, map_id, :link, :high)
+    |> maybe_prepend_evidence(:transport_id, transport_id, :ingest, :high)
+    |> maybe_prepend_evidence(:apid, apid, :space_packet_header, :high)
+    |> maybe_prepend_evidence(:target_hint, target_hint, :ingest, :low)
+    |> :lists.reverse()
+  end
+
+  defp maybe_prepend_entry(entries, _key, nil), do: entries
+  defp maybe_prepend_entry(entries, key, value), do: [{key, value} | entries]
+
+  defp provenance_map([]), do: %{}
+  defp provenance_map(entries), do: entries |> :lists.reverse() |> Map.new()
+
+  defp maybe_prepend_evidence(evidence, _kind, nil, _source, _confidence), do: evidence
+
+  defp maybe_prepend_evidence(evidence, kind, value, source, confidence) do
+    [%Evidence{kind: kind, value: value, source: source, confidence: confidence} | evidence]
+  end
 end

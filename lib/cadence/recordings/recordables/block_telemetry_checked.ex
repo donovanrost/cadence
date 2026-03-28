@@ -33,7 +33,8 @@ defmodule Cadence.Recordings.Recordables.BlockTelemetryChecked do
   end
 end
 
-defimpl Cadence.Recordings.Recordable, for: Cadence.Recordings.Recordables.BlockTelemetryChecked do
+defimpl Cadence.Recordings.Recordable,
+  for: Cadence.Recordings.Recordables.BlockTelemetryChecked do
   def recording_type(_), do: "BlockTelemetryChecked"
   def aggregate_type(_), do: "ProcedureExecution"
 

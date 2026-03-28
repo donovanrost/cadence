@@ -29,6 +29,7 @@ defmodule Cadence.CCSDS.PDUDispatcher do
 
   @impl true
   def init(opts) do
+    mission_id = Keyword.fetch!(opts, :mission_id)
     handlers = load_handlers(opts)
     cop1_report_apids = cop1_report_apids(opts)
 
@@ -45,6 +46,8 @@ defmodule Cadence.CCSDS.PDUDispatcher do
       end)
 
     state = %{
+      mission_id: mission_id,
+      raw_topic: raw_topic(mission_id),
       handlers: handlers,
       handler_states: handler_states,
       cop1_report_apids: cop1_report_apids
@@ -68,7 +71,7 @@ defmodule Cadence.CCSDS.PDUDispatcher do
     #   event_count: length(events)
     # )
 
-    emit_events(events)
+    emit_events(events, new_state)
     {:noreply, new_state}
   end
 
@@ -137,14 +140,16 @@ defmodule Cadence.CCSDS.PDUDispatcher do
   defp channel_id_key(channel_id), do: channel_id
 
   defp dispatch_to_handlers(pdu, ctx, state) do
-    Enum.reduce(state.handlers, {[], state}, fn handler, {events, acc_state} ->
+    state.handlers
+    |> Enum.reduce({[], state}, fn handler, {events, acc_state} ->
       if handler.accepts?(pdu, ctx) do
         {handler_events, updated_state} = invoke_handler(handler, pdu, ctx, acc_state)
-        {events ++ handler_events, updated_state}
+        {:lists.reverse(handler_events, events), updated_state}
       else
         {events, acc_state}
       end
     end)
+    |> then(fn {events, updated_state} -> {:lists.reverse(events), updated_state} end)
   end
 
   defp invoke_handler(handler, pdu, ctx, state) do
@@ -164,14 +169,25 @@ defmodule Cadence.CCSDS.PDUDispatcher do
     end
   end
 
-  defp emit_events(events) do
-    Enum.each(events, &emit_event/1)
+  defp emit_events(events, state) do
+    Enum.each(events, &emit_event(&1, state))
   end
 
-  defp emit_event(%PacketEnvelope{} = envelope) do
+  defp emit_event(%PacketEnvelope{mission_id: mission_id} = envelope, %{
+         mission_id: mission_id,
+         raw_topic: raw_topic
+       }) do
+    Phoenix.PubSub.local_broadcast(
+      Cadence.PubSub,
+      raw_topic,
+      {:packet_envelope, envelope}
+    )
+  end
+
+  defp emit_event(%PacketEnvelope{} = envelope, _state) do
     case telemetry_topic(envelope) do
       {:ok, topic} ->
-        Phoenix.PubSub.broadcast(
+        Phoenix.PubSub.local_broadcast(
           Cadence.PubSub,
           topic,
           {:packet_envelope, envelope}
@@ -182,11 +198,13 @@ defmodule Cadence.CCSDS.PDUDispatcher do
     end
   end
 
-  defp emit_event(_event), do: :ok
+  defp emit_event(_event, _state), do: :ok
 
   defp telemetry_topic(%PacketEnvelope{mission_id: mission_id}) when is_binary(mission_id) do
-    {:ok, "mission:#{mission_id}:telemetry:raw"}
+    {:ok, raw_topic(mission_id)}
   end
 
   defp telemetry_topic(_envelope), do: {:error, :missing_mission_id}
+
+  defp raw_topic(mission_id), do: "mission:#{mission_id}:telemetry:raw"
 end

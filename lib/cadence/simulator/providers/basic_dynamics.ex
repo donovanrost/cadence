@@ -79,6 +79,9 @@ defmodule Cadence.Simulator.Providers.BasicDynamics do
     }
   end
 
+  @impl true
+  def parallel_safe?(_config), do: true
+
   # Generate values for HEALTH packet
   defp generate_packet_values(:health, step, noise_amp) do
     base_temp = 20.0
@@ -114,9 +117,9 @@ defmodule Cadence.Simulator.Providers.BasicDynamics do
 
     power_mode =
       cond do
-        solar_efficiency > 0.7 -> "CHARGING"
+        solar_efficiency > 0.7 -> "HIGH_POWER"
         solar_efficiency > 0.1 -> "NOMINAL"
-        true -> "BATTERY"
+        true -> "OFF"
       end
 
     [

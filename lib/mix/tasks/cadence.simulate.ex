@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--mode` - Connection mode: connect (default) or listen (TCP only)
     * `--scenario` - Path to YAML scenario file for deterministic testing
     * `--definitions` - Path to YAML packet definitions for proper encoding (required)
-    * `--provider` - Provider: basic (default) or scenario
+    * `--provider` - Provider: basic (default), database, or scenario
     * `--frame` - Frame format for network output (tm)
     * `--scid` - Spacecraft ID for frames (tm only)
     * `--vcid` - Virtual channel ID for frames (tm only)
@@ -53,6 +53,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
     * `--generators` - Number of generator workers (default: CPU cores)
     * `--batch-timeout` - Send buffer flush interval in ms (default: 10)
     * `--batch-size` - Send buffer flush size in bytes (default: 32768)
+    * `--max-in-flight-steps` - Max queued simulation steps before throttling
+    * `--max-send-buffer-queue` - Max send buffer packet backlog before throttling
 
   ## Scenarios
 
@@ -84,6 +86,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
   @shortdoc "Generates continuous telemetry for testing and development"
 
   alias Cadence.Simulator.Coordinator
+  alias Cadence.Simulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
 
   @default_rate 1.0
   @default_duration 0
@@ -137,6 +140,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
           generators: :integer,
           batch_timeout: :integer,
           batch_size: :integer,
+          max_in_flight_steps: :integer,
+          max_send_buffer_queue: :integer,
           help: :boolean
         ],
         aliases: [
@@ -173,7 +178,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       mode: parse_mode(opts[:mode]),
       scenario_path: opts[:scenario],
       definitions_path: opts[:definitions] || missing_definitions!(),
-      provider: parse_provider(opts[:provider]),
+      provider_module: parse_provider(opts[:provider]),
       frame: parse_frame(opts),
       uplink_frame: parse_uplink_frame(opts),
       clcw_enabled: opts[:clcw] || false,
@@ -183,7 +188,9 @@ defmodule Mix.Tasks.Cadence.Simulate do
       parallel_mode: if(opts[:parallel], do: :parallel, else: :sequential),
       generator_count: opts[:generators],
       send_batch_timeout: opts[:batch_timeout],
-      send_batch_size: opts[:batch_size]
+      send_batch_size: opts[:batch_size],
+      max_in_flight_steps: opts[:max_in_flight_steps],
+      max_send_buffer_queue: opts[:max_send_buffer_queue]
     }
     |> validate_clcw!()
     |> validate_mode!()
@@ -196,7 +203,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
       rate_hz: config.rate_hz,
       output: config.output,
       parallel_mode: config.parallel_mode,
-      mode: config.mode
+      mode: config.mode,
+      provider: config.provider_module
     ]
 
     # Add scenario if provided
@@ -221,6 +229,8 @@ defmodule Mix.Tasks.Cadence.Simulate do
       |> maybe_add_opt(:generator_count, config.generator_count)
       |> maybe_add_opt(:send_batch_timeout, config.send_batch_timeout)
       |> maybe_add_opt(:send_batch_size, config.send_batch_size)
+      |> maybe_add_opt(:max_in_flight_steps, config.max_in_flight_steps)
+      |> maybe_add_opt(:max_send_buffer_queue, config.max_send_buffer_queue)
       |> maybe_add_opt(:frame, config.frame)
       |> maybe_add_opt(:uplink_frame, config.uplink_frame)
       |> maybe_add_opt(:clcw_enabled, config.clcw_enabled)
@@ -234,10 +244,14 @@ defmodule Mix.Tasks.Cadence.Simulate do
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
-  defp parse_provider(nil), do: :basic
-  defp parse_provider("basic"), do: :basic
-  defp parse_provider("scenario"), do: :scenario
-  defp parse_provider(other), do: Mix.raise("Invalid provider: #{other}. Valid: basic, scenario")
+  defp parse_provider(nil), do: BasicDynamics
+  defp parse_provider("basic"), do: BasicDynamics
+  defp parse_provider("database"), do: DatabaseDynamics
+  defp parse_provider("scenario"), do: ScenarioProvider
+
+  defp parse_provider(other) do
+    Mix.raise("Invalid provider: #{other}. Valid: basic, database, scenario")
+  end
 
   defp parse_mode(nil), do: :connect
   defp parse_mode("connect"), do: :connect
@@ -518,11 +532,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       end
 
     provider_info =
-      if config.scenario_path do
-        "scenario (#{Path.basename(config.scenario_path)})"
-      else
-        "basic dynamics"
-      end
+      format_provider(config)
 
     definitions_info = Path.basename(config.definitions_path)
 
@@ -582,6 +592,15 @@ defmodule Mix.Tasks.Cadence.Simulate do
 
   defp format_clcw(true), do: "enabled"
   defp format_clcw(false), do: "disabled"
+
+  defp format_provider(%{scenario_path: path}) when is_binary(path) do
+    "scenario (#{Path.basename(path)})"
+  end
+
+  defp format_provider(%{provider_module: BasicDynamics}), do: "basic dynamics"
+  defp format_provider(%{provider_module: DatabaseDynamics}), do: "database dynamics"
+  defp format_provider(%{provider_module: ScenarioProvider}), do: "scenario"
+  defp format_provider(%{provider_module: provider}), do: inspect(provider)
 
   defp missing_definitions! do
     Mix.raise("--definitions is required for simulator output")
@@ -711,8 +730,23 @@ defmodule Mix.Tasks.Cadence.Simulate do
         "Steps: #{format_number(stats.step)}"
 
     base_info
+    |> maybe_add_parallel_pressure(stats)
     |> maybe_add_send_buffer(stats, elapsed)
     |> maybe_add_sdlp(stats)
+  end
+
+  defp maybe_add_parallel_pressure(output, stats) do
+    case {stats[:in_flight_steps], stats[:max_in_flight_steps], stats[:send_buffer_queue_len]} do
+      {nil, _, _} ->
+        output
+
+      {in_flight, max_in_flight, send_buffer_queue_len} ->
+        output <>
+          " | InFlight: #{in_flight}/#{max_in_flight}" <>
+          " | Pending: #{stats[:pending_steps] || 0}" <>
+          " | SB: #{send_buffer_queue_len}/#{stats[:max_send_buffer_queue] || 0}" <>
+          " | BP: #{stats[:backpressure_events] || 0}"
+    end
   end
 
   defp maybe_add_send_buffer(output, stats, elapsed) do
@@ -800,7 +834,7 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --mode <mode>              Connection mode: connect (default) or listen (TCP only)
       --scenario, -s <path>      Path to YAML scenario file for deterministic testing
       --definitions <path>       Path to YAML packet definitions for encoding
-      --provider <type>          Provider: basic (default) or scenario
+      --provider <type>          Provider: basic (default), database, or scenario
       --frame <format>           Frame format for network output: tm
       --scid <id>                Spacecraft ID for frames (tm only)
       --vcid <id>                Virtual channel ID for frames (tm only)
@@ -819,9 +853,12 @@ defmodule Mix.Tasks.Cadence.Simulate do
       --generators <count>       Number of generator workers (default: CPU cores)
       --batch-timeout <ms>       Send buffer flush interval (default: 10)
       --batch-size <bytes>       Send buffer flush size (default: 32768)
+      --max-in-flight-steps <n>  Max queued steps before parallel throttling
+      --max-send-buffer-queue <n>Max SendBuffer packet backlog before throttling
 
     Providers:
       basic     - Generates sinusoidal telemetry values (default)
+      database  - Generates values from the YAML database definition set
       scenario  - Executes YAML-defined scenarios for alarm testing
 
     Examples:

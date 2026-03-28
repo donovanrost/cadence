@@ -42,6 +42,8 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
   alias Cadence.Runtime.Commands.MetaCommandCache
   alias Cadence.Runtime.Commands.TargetPipelineSupervisor
   alias Cadence.Runtime.Commands.VerificationManager
+  alias Cadence.Runtime.Contacts.{ContactScheduler, SignalRouter}
+  alias Cadence.Runtime.Contacts.Supervisor, as: ContactSupervisor
   alias Cadence.Runtime.Links.Supervisor, as: LinksSupervisor
   alias Cadence.Runtime.Missions.CacheWarmer
   alias Cadence.Runtime.Missions.ConfigManager
@@ -123,8 +125,15 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       ] ++
         pipeline_children ++
         [
+          # Contact Scheduler - activates transports during planned contacts
           # Interface Supervisor - manages new transport interface workers
           {InterfaceSupervisor, mission_id: mission_id},
+          # Contact Runtime Supervisor - per-contact readiness & actions
+          {ContactSupervisor, mission_id: mission_id},
+          # Contact Signal Router - routes transport readiness signals
+          {SignalRouter, mission_id: mission_id},
+          # Contact Scheduler - activates transports during planned contacts
+          {ContactScheduler, mission_id: mission_id, organization_id: organization_id},
 
           # Links Supervisor - manages per-SCID link controllers
           {LinksSupervisor, mission_id: mission_id},
@@ -189,6 +198,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       Application.get_env(:cadence, :pipeline_lane_source, Cadence.Telemetry.LogSource.File)
 
     sink_opts = Application.get_env(:cadence, :pipeline_lane_sink_opts, [])
+    sink_opts = maybe_enable_fast_noop_mode(sink, sink_opts)
     lanes = Application.get_env(:cadence, :pipeline_lanes)
     consumer_lanes = Application.get_env(:cadence, :pipeline_lane_consumers, [:payload])
     stateful_lane = Application.get_env(:cadence, :pipeline_stateful_lane, :stateful)
@@ -255,4 +265,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
         Logger.warning("Failed to track mission #{mission_id}: #{inspect(reason)}")
     end
   end
+
+  defp maybe_enable_fast_noop_mode(Cadence.Telemetry.LogSink.Noop, sink_opts) do
+    Keyword.put_new(sink_opts, :skip_log_records, true)
+  end
+
+  defp maybe_enable_fast_noop_mode(_sink, sink_opts), do: sink_opts
 end

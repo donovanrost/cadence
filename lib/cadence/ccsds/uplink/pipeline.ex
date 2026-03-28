@@ -51,22 +51,24 @@ defmodule Cadence.CCSDS.Uplink.Pipeline do
           {:ok, binary(), state()} | {:error, term(), state()}
   def encode(%PDU{} = pdu, ctx, state, opts) do
     with {:ok, sdu} <- encode_sdu(pdu, opts),
-         {:ok, frames, seg_state} <- state.segmentation_mod.segment(sdu, ctx, state.segmentation),
-         {:ok, bytes} <- encode_frames(frames, opts) do
-      {:ok, bytes, %{state | segmentation: seg_state}}
+         {:ok, bytes, next_state} <- encode_sdu_octets(sdu, ctx, state, opts) do
+      {:ok, bytes, next_state}
     else
       {:error, reason} -> {:error, reason, state}
-      {:error, reason, seg_state} -> {:error, reason, %{state | segmentation: seg_state}}
+      {:error, reason, next_state} -> {:error, reason, next_state}
     end
   end
 
   def encode(%SDUOctets{} = sdu, ctx, state, opts) do
-    with {:ok, frames, seg_state} <- state.segmentation_mod.segment(sdu, ctx, state.segmentation),
-         {:ok, bytes} <- encode_frames(frames, opts) do
-      {:ok, bytes, %{state | segmentation: seg_state}}
-    else
-      {:error, reason} -> {:error, reason, state}
-      {:error, reason, seg_state} -> {:error, reason, %{state | segmentation: seg_state}}
+    case encode_sdu_octets(sdu, ctx, state, opts) do
+      {:ok, bytes, next_state} ->
+        {:ok, bytes, next_state}
+
+      {:error, reason} ->
+        {:error, reason, state}
+
+      {:error, reason, next_state} ->
+        {:error, reason, next_state}
     end
   end
 
@@ -76,6 +78,28 @@ defmodule Cadence.CCSDS.Uplink.Pipeline do
     case Registry.fetch(pdu.type) do
       {:ok, codec} -> codec.encode(pdu, opts)
       :error -> {:error, :unknown_sdu_type}
+    end
+  end
+
+  defp encode_sdu_octets(
+         sdu,
+         ctx,
+         %{segmentation_mod: segmentation_mod, segmentation: segmentation} = state,
+         opts
+       ) do
+    if function_exported?(segmentation_mod, :segment_encode, 4) do
+      case segmentation_mod.segment_encode(sdu, ctx, segmentation, opts) do
+        {:ok, bytes, seg_state} -> {:ok, bytes, %{state | segmentation: seg_state}}
+        {:error, reason, seg_state} -> {:error, reason, %{state | segmentation: seg_state}}
+      end
+    else
+      with {:ok, frames, seg_state} <- segmentation_mod.segment(sdu, ctx, segmentation),
+           {:ok, bytes} <- encode_frames(frames, opts) do
+        {:ok, bytes, %{state | segmentation: seg_state}}
+      else
+        {:error, reason} -> {:error, reason, state}
+        {:error, reason, seg_state} -> {:error, reason, %{state | segmentation: seg_state}}
+      end
     end
   end
 

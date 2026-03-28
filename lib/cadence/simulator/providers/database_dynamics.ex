@@ -57,16 +57,31 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
 
   @behaviour Cadence.Simulator.DynamicsProvider
 
+  import Bitwise
+
   require Logger
 
+  @boolean_toggle_rate 20
   defstruct [
     :packets,
+    :packet_count,
     :items,
-    :noise_amplitude,
-    :state_indices
+    :item_count,
+    :noise_amplitude
   ]
 
   @default_noise_amplitude 1.0
+  @float_range_keywords [
+    {["temp"], {-40.0, 85.0}},
+    {["voltage"], {0.0, 50.0}},
+    {["current"], {-10.0, 10.0}},
+    {["percent", "soc"], {0.0, 100.0}},
+    {["rate"], {-5.0, 5.0}},
+    {["angle", "roll", "pitch", "yaw"], {-180.0, 180.0}}
+  ]
+  @float_step_divisor 20.0
+  @int_step_divisor 15.0
+  @state_cycle_rate 10
 
   @impl true
   def init(config) do
@@ -90,18 +105,21 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
     case result do
       {:ok, parsed} ->
         {packets, items} = extract_definitions(parsed)
+        packet_count = length(packets)
+        item_count = length(items)
 
         state = %__MODULE__{
           packets: packets,
+          packet_count: packet_count,
           items: items,
-          noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude),
-          state_indices: %{}
+          item_count: item_count,
+          noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
         }
 
         Logger.info("""
         DatabaseDynamics initialized:
-          packets: #{length(packets)}
-          items: #{length(items)}
+          packets: #{packet_count}
+          items: #{item_count}
         """)
 
         {:ok, state}
@@ -113,26 +131,28 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
 
   @impl true
   def generate_values(state, step) do
-    {values, state_indices} =
+    values =
       state.items
-      |> Enum.reduce({%{}, state.state_indices}, fn item, {vals, indices} ->
-        {value, new_indices} = generate_item_value(item, step, state.noise_amplitude, indices)
-        qualified_name = "#{item.packet_name}.#{item.name}"
-        {Map.put(vals, qualified_name, value), new_indices}
+      |> Enum.reduce(%{}, fn {qualified_name, generator}, vals ->
+        value = generate_item_value(generator, step, state.noise_amplitude)
+        Map.put(vals, qualified_name, value)
       end)
 
-    {:ok, values, %{state | state_indices: state_indices}}
+    {:ok, values, state}
   end
 
   @impl true
   def status(state) do
     %{
       provider: "DatabaseDynamics",
-      packet_count: length(state.packets),
-      item_count: length(state.items),
+      packet_count: state.packet_count,
+      item_count: state.item_count,
       noise_amplitude: state.noise_amplitude
     }
   end
+
+  @impl true
+  def parallel_safe?(_config), do: true
 
   # ============================================================================
   # Definition Extraction
@@ -153,114 +173,137 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
 
         packet_items =
           (packet_data["items"] || [])
-          |> Enum.map(fn item_data ->
-            %{
-              name: item_data["name"],
-              packet_name: packet_name,
-              data_type: item_data["data_type"],
-              bit_size: item_data["bit_size"],
-              conversion: item_data["conversion"],
-              limits: item_data["limits"],
-              units: item_data["units"],
-              description: item_data["description"]
-            }
-          end)
+          |> Enum.map(&build_item_spec(packet_name, &1))
 
-        {[packet_def | pkts], items ++ packet_items}
+        {[packet_def | pkts], Enum.reverse(packet_items, items)}
       end)
 
-    {Enum.reverse(packet_defs), item_defs}
+    {Enum.reverse(packet_defs), Enum.reverse(item_defs)}
   end
 
   # ============================================================================
   # Value Generation
   # ============================================================================
 
-  defp generate_item_value(item, step, noise_amp, state_indices) do
-    qualified_name = "#{item.packet_name}.#{item.name}"
+  defp build_item_spec(packet_name, item_data) do
+    item_name = item_data["name"]
+    qualified_name = "#{packet_name}.#{item_name}"
+    phase = :erlang.phash2(item_name) / 1000.0
 
-    # Check for state table conversion first
-    case item.conversion do
-      %{"type" => "state_table", "states" => states} when is_map(states) ->
-        generate_state_value(qualified_name, states, state_indices, step)
+    {qualified_name, build_generator(packet_name, item_name, item_data, phase)}
+  end
+
+  defp build_generator(packet_name, item_name, item_data, phase) do
+    conversion = item_data["conversion"]
+    limits = item_data["limits"] || %{}
+    bit_size = item_data["bit_size"]
+
+    case sorted_state_values(conversion) do
+      state_values when is_list(state_values) ->
+        {:state_cycle, List.to_tuple(state_values), length(state_values)}
 
       _ ->
-        # Generate based on data type
-        value = generate_typed_value(item, step, noise_amp)
-        {value, state_indices}
+        build_typed_generator(
+          packet_name,
+          item_name,
+          item_data["data_type"],
+          bit_size,
+          limits,
+          phase
+        )
     end
   end
 
-  defp generate_state_value(qualified_name, states, state_indices, step) do
-    # Get sorted state values for consistent cycling
-    state_values = states |> Map.values() |> Enum.sort()
-
-    # Cycle through states, changing every ~10 steps
-    cycle_rate = 10
-    current_index = rem(div(step, cycle_rate), length(state_values))
-
-    value = Enum.at(state_values, current_index)
-    new_indices = Map.put(state_indices, qualified_name, current_index)
-
-    {value, new_indices}
+  defp build_typed_generator(_packet_name, item_name, "float", _bit_size, limits, phase) do
+    build_float_generator(item_name, limits, phase)
   end
 
-  defp generate_typed_value(%{data_type: "float"} = item, step, noise_amp) do
-    generate_float(item, step, noise_amp, item.limits || %{})
+  defp build_typed_generator(_packet_name, item_name, "uint", bit_size, limits, phase) do
+    {_min_val, max_val} = get_int_range(limits, bit_size, false)
+
+    if counter_name?(item_name) do
+      {:uint_counter, max_val}
+    else
+      build_integer_wave_generator(limits, bit_size, false, phase)
+    end
   end
 
-  defp generate_typed_value(%{data_type: "uint"} = item, step, _noise_amp) do
-    generate_uint(item, step, item.limits || %{})
+  defp build_typed_generator(_packet_name, _item_name, "int", bit_size, limits, phase) do
+    build_integer_wave_generator(limits, bit_size, true, phase)
   end
 
-  defp generate_typed_value(%{data_type: "int"} = item, step, _noise_amp) do
-    generate_int(item, step, item.limits || %{})
+  defp build_typed_generator(_packet_name, _item_name, "boolean", _bit_size, _limits, _phase) do
+    :boolean_toggle
   end
 
-  defp generate_typed_value(%{data_type: "boolean"}, step, _noise_amp) do
-    # Toggle every 20 steps
-    rem(div(step, 20), 2) == 0
+  defp build_typed_generator(packet_name, item_name, "string", _bit_size, _limits, _phase) do
+    {:step_string, "#{packet_name}_#{item_name}_v"}
   end
 
-  defp generate_typed_value(%{data_type: "string"} = item, step, _noise_amp) do
-    # Return a placeholder string
-    "#{item.packet_name}_#{item.name}_v#{step}"
+  defp build_typed_generator(_packet_name, _item_name, "binary", bit_size, _limits, _phase) do
+    {:binary_random, div(bit_size || 8, 8)}
   end
 
-  defp generate_typed_value(%{data_type: "binary"} = item, _step, _noise_amp) do
-    # Generate random bytes based on bit_size
-    byte_size = div(item.bit_size || 8, 8)
-    :crypto.strong_rand_bytes(byte_size)
+  defp build_typed_generator(_packet_name, item_name, _data_type, _bit_size, limits, phase) do
+    build_float_generator(item_name, limits, phase)
   end
 
-  defp generate_typed_value(item, step, noise_amp) do
-    # Default to float-like behavior
-    generate_float(item, step, noise_amp, item.limits || %{})
-  end
-
-  defp generate_float(item, step, noise_amp, limits) do
-    # Determine range from limits or use sensible defaults
-    {min_val, max_val} = get_float_range(limits, item)
-
-    # Generate sinusoidal value within range
+  defp build_float_generator(item_name, limits, phase) do
+    {min_val, max_val} = get_float_range(limits, item_name)
     mid = (min_val + max_val) / 2
-    # Use 80% of range
     amplitude = (max_val - min_val) / 2 * 0.8
 
-    # Use item name hash to create different phases for different items
-    phase = :erlang.phash2(item.name) / 1000.0
+    {:float_wave, phase, mid, amplitude, amplitude * 0.1}
+  end
 
-    base_value = mid + amplitude * :math.sin(step / 20.0 + phase)
+  defp build_integer_wave_generator(limits, bit_size, signed, phase) do
+    {min_val, max_val} = get_int_range(limits, bit_size, signed)
+    mid = (min_val + max_val) / 2
+    amplitude = (max_val - min_val) / 2 * 0.8
 
-    # Add noise
-    noise = (0.5 - :rand.uniform()) * noise_amp * amplitude * 0.1
+    {:integer_wave, phase, min_val, max_val, mid, amplitude}
+  end
+
+  defp generate_item_value({:state_cycle, state_values, state_count}, step, _noise_amp) do
+    current_index = rem(div(step, @state_cycle_rate), state_count)
+    elem(state_values, current_index)
+  end
+
+  defp generate_item_value({:float_wave, phase, mid, amplitude, noise_scale}, step, noise_amp) do
+    base_value = mid + amplitude * :math.sin(step / @float_step_divisor + phase)
+    noise = (0.5 - :rand.uniform()) * noise_amp * noise_scale
     base_value + noise
   end
 
-  defp get_float_range(limits, item) do
+  defp generate_item_value({:uint_counter, max_val}, step, _noise_amp) do
+    rem(step, max_val + 1)
+  end
+
+  defp generate_item_value(
+         {:integer_wave, phase, min_val, max_val, mid, amplitude},
+         step,
+         _noise_amp
+       ) do
+    value = mid + amplitude * :math.sin(step / @int_step_divisor + phase)
+    round(value) |> max(min_val) |> min(max_val)
+  end
+
+  defp generate_item_value(:boolean_toggle, step, _noise_amp) do
+    rem(div(step, @boolean_toggle_rate), 2) == 0
+  end
+
+  defp generate_item_value({:step_string, prefix}, step, _noise_amp) do
+    prefix <> Integer.to_string(step)
+  end
+
+  defp generate_item_value({:binary_random, byte_size}, _step, _noise_amp) do
+    :crypto.strong_rand_bytes(byte_size)
+  end
+
+  defp get_float_range(limits, item_name) do
     case range_from_limits(limits) do
       {:ok, range} -> range
-      :error -> infer_float_range(item.name)
+      :error -> infer_float_range(item_name)
     end
   end
 
@@ -277,75 +320,54 @@ defmodule Cadence.Simulator.Providers.DatabaseDynamics do
 
   defp infer_float_range(name) do
     range =
-      Enum.find_value(float_range_keywords(), fn {keywords, range} ->
-        if Enum.any?(keywords, &String.contains?(name, &1)), do: range, else: nil
+      Enum.find_value(@float_range_keywords, fn {keywords, range} ->
+        if String.contains?(name, keywords), do: range, else: nil
       end)
 
     range || {0.0, 100.0}
   end
 
-  defp float_range_keywords do
-    [
-      {["temp"], {-40.0, 85.0}},
-      {["voltage"], {0.0, 50.0}},
-      {["current"], {-10.0, 10.0}},
-      {["percent", "soc"], {0.0, 100.0}},
-      {["rate"], {-5.0, 5.0}},
-      {["angle", "roll", "pitch", "yaw"], {-180.0, 180.0}}
-    ]
+  defp counter_name?(name) do
+    String.contains?(name, ["count", "uptime", "seq"])
   end
 
-  defp generate_uint(item, step, limits) do
-    {min_val, max_val} = get_int_range(limits, item, false)
+  defp sorted_state_values(%{"type" => "state_table", "states" => states}) when is_map(states) do
+    states
+    |> Map.values()
+    |> Enum.sort()
+  end
 
-    # For counters, increment; for others, sinusoidal pattern
-    if String.contains?(item.name, "count") || String.contains?(item.name, "uptime") ||
-         String.contains?(item.name, "seq") do
-      # Counter - just return step or step mod max
-      rem(step, max_val + 1)
-    else
-      # Sinusoidal within range
-      mid = (min_val + max_val) / 2
-      amplitude = (max_val - min_val) / 2 * 0.8
-      phase = :erlang.phash2(item.name) / 1000.0
+  defp sorted_state_values(_), do: nil
 
-      value = mid + amplitude * :math.sin(step / 15.0 + phase)
-      round(value) |> max(min_val) |> min(max_val)
+  defp get_int_range(limits, bit_size, signed) do
+    case int_range_from_limits(limits) do
+      {:ok, range} -> range
+      :error -> default_int_range(bit_size, signed)
     end
   end
 
-  defp generate_int(item, step, limits) do
-    {min_val, max_val} = get_int_range(limits, item, true)
-
-    mid = (min_val + max_val) / 2
-    amplitude = (max_val - min_val) / 2 * 0.8
-    phase = :erlang.phash2(item.name) / 1000.0
-
-    value = mid + amplitude * :math.sin(step / 15.0 + phase)
-    round(value) |> max(min_val) |> min(max_val)
-  end
-
-  defp get_int_range(limits, item, signed) do
+  defp int_range_from_limits(limits) do
     min_from_limits = limits["red_low"] || limits["yellow_low"]
     max_from_limits = limits["red_high"] || limits["yellow_high"]
 
-    cond do
-      min_from_limits && max_from_limits ->
-        {round(min_from_limits), round(max_from_limits)}
-
-      # Use bit_size to determine max
-      item.bit_size ->
-        max_val = round(:math.pow(2, item.bit_size)) - 1
-
-        if signed do
-          half = div(max_val + 1, 2)
-          {-half, half - 1}
-        else
-          {0, max_val}
-        end
-
-      true ->
-        if signed, do: {-1000, 1000}, else: {0, 1000}
+    if min_from_limits && max_from_limits do
+      {:ok, {round(min_from_limits), round(max_from_limits)}}
+    else
+      :error
     end
   end
+
+  defp default_int_range(bit_size, signed) when is_integer(bit_size) and bit_size > 0 do
+    max_val = (1 <<< bit_size) - 1
+
+    if signed do
+      half = div(max_val + 1, 2)
+      {-half, half - 1}
+    else
+      {0, max_val}
+    end
+  end
+
+  defp default_int_range(_bit_size, true), do: {-1000, 1000}
+  defp default_int_range(_bit_size, false), do: {0, 1000}
 end

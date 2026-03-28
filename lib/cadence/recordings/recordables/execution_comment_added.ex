@@ -30,7 +30,8 @@ defmodule Cadence.Recordings.Recordables.ExecutionCommentAdded do
   end
 end
 
-defimpl Cadence.Recordings.Recordable, for: Cadence.Recordings.Recordables.ExecutionCommentAdded do
+defimpl Cadence.Recordings.Recordable,
+  for: Cadence.Recordings.Recordables.ExecutionCommentAdded do
   def recording_type(_), do: "ExecutionCommentAdded"
   def aggregate_type(_), do: "ProcedureExecution"
 

@@ -3,6 +3,8 @@ defmodule Cadence.CCSDS.SDLP.Metrics do
   Lightweight SDLP metrics using :counters keyed by scope + profile.
   """
 
+  alias Cadence.ETS, as: CadenceETS
+
   @table_name :cadence_sdlp_metrics
 
   @slots %{
@@ -31,18 +33,12 @@ defmodule Cadence.CCSDS.SDLP.Metrics do
   @type profile :: :tm | :aos | :uslp | :tc | term()
 
   def ensure_table do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          read_concurrency: true
-        ])
-
-      _ref ->
-        :ok
-    end
+    CadenceETS.ensure_named_table(@table_name, [
+      :set,
+      :named_table,
+      :public,
+      read_concurrency: true
+    ])
   end
 
   def scope_from_opts(opts) when is_list(opts) do

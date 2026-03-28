@@ -84,7 +84,6 @@ defmodule Cadence.MixProject do
       {:tidewave, "~> 0.5", only: :dev},
       {:supertester, "~> 0.5.1", only: :test},
       {:recon, "~> 2.5", only: :dev}
-
     ]
   end
 
@@ -104,7 +103,7 @@ defmodule Cadence.MixProject do
       "test.integration": [
         "ecto.create --quiet",
         "ecto.migrate --quiet",
-        "cmd CADENCE_INTEGRATION=1 mix test --only integration"
+        "cmd env CADENCE_INTEGRATION=1 mix test --only integration"
       ],
       "test.all": ["test.unit", "test.integration"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],

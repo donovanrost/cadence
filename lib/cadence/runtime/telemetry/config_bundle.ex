@@ -7,6 +7,8 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
   runtime components without any database access.
   """
 
+  require Logger
+
   alias Cadence.Application.Missions.MissionConfig
   alias Cadence.Runtime.ChannelId
   alias Cadence.Runtime.Links.ProtocolConfig
@@ -24,10 +26,14 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
           targets: list(),
           targets_by_identifier: map(),
           target_ids_by_identifier: map(),
+          target_ids_by_scid: map(),
           derived_item_defs: list(),
           derived_defs: list(),
           derived_packet_index: map(),
           limit_defs: map(),
+          contacts: list(),
+          contact_command_actions: list(),
+          ground_station_profiles: list(),
           transport_interfaces: list(),
           links: list(),
           bindings: list(),
@@ -53,10 +59,14 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     targets: [],
     targets_by_identifier: %{},
     target_ids_by_identifier: %{},
+    target_ids_by_scid: %{},
     derived_item_defs: [],
     derived_defs: [],
     derived_packet_index: %{},
     limit_defs: %{},
+    contacts: [],
+    contact_command_actions: [],
+    ground_station_profiles: [],
     transport_interfaces: [],
     links: [],
     bindings: [],
@@ -83,9 +93,16 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
     targets = Map.get(config, :targets, [])
     target_ids_by_identifier = build_target_id_lookup(targets)
     targets_by_identifier = build_target_lookup(targets)
+
+    target_ids_by_scid =
+      build_target_scid_lookup(targets, config.mission_id, config.config_generation)
+
     bindings = Map.get(config, :bindings, [])
     channel_targets = Map.get(config, :channel_targets, [])
     links = Map.get(config, :links, [])
+    contacts = Map.get(config, :contacts, [])
+    contact_command_actions = Map.get(config, :contact_command_actions, [])
+    ground_station_profiles = Map.get(config, :ground_station_profiles, [])
     protocol_defaults_by_scid = build_protocol_defaults_by_scid(links)
     channel_protocol_overrides = build_channel_protocol_overrides(links)
 
@@ -103,10 +120,14 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       targets: targets,
       targets_by_identifier: targets_by_identifier,
       target_ids_by_identifier: target_ids_by_identifier,
+      target_ids_by_scid: target_ids_by_scid,
       derived_item_defs: config.derived_item_defs,
       derived_defs: derived_defs,
       derived_packet_index: derived_packet_index,
       limit_defs: config.limit_defs,
+      contacts: contacts,
+      contact_command_actions: contact_command_actions,
+      ground_station_profiles: ground_station_profiles,
       transport_interfaces: config.transport_interfaces,
       links: links,
       bindings: bindings,
@@ -168,6 +189,57 @@ defmodule Cadence.Runtime.Telemetry.ConfigBundle do
       |> maybe_put_target_key(Map.get(target, :name), target)
       |> maybe_put_target_key(target_id, target)
     end)
+  end
+
+  defp build_target_scid_lookup(targets, mission_id, config_version) do
+    {lookup, _warned_scids} =
+      Enum.reduce(targets, {%{}, MapSet.new()}, fn target, {acc, warned_scids} ->
+        target_id = Map.get(target, :id)
+
+        case Map.get(target, :scid) do
+          scid when is_integer(scid) ->
+            warned_scids =
+              maybe_warn_duplicate_scid(
+                acc,
+                warned_scids,
+                scid,
+                target_id,
+                mission_id,
+                config_version
+              )
+
+            {Map.put(acc, scid, target_id), warned_scids}
+
+          _ ->
+            {acc, warned_scids}
+        end
+      end)
+
+    lookup
+  end
+
+  defp maybe_warn_duplicate_scid(
+         acc,
+         warned_scids,
+         scid,
+         target_id,
+         mission_id,
+         config_version
+       ) do
+    case {Map.get(acc, scid), MapSet.member?(warned_scids, scid)} do
+      {nil, _} ->
+        warned_scids
+
+      {_existing_target_id, true} ->
+        warned_scids
+
+      {existing_target_id, false} ->
+        Logger.warning(
+          "Duplicate target SCID #{scid} in telemetry config for mission_id=#{mission_id} config_version=#{config_version}; using last target id #{inspect(target_id)} over #{inspect(existing_target_id)}"
+        )
+
+        MapSet.put(warned_scids, scid)
+    end
   end
 
   defp maybe_put_target_key(acc, key, value) when is_binary(key) do

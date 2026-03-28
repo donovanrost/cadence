@@ -3,6 +3,8 @@ defmodule Cadence.Application.Missions.MissionConfigMetrics do
   Lightweight counters for mission configuration validation signals.
   """
 
+  alias Cadence.ETS, as: CadenceETS
+
   @table_name :cadence_mission_config_metrics
 
   @spec inc(binary(), atom(), non_neg_integer()) :: :ok
@@ -25,18 +27,12 @@ defmodule Cadence.Application.Missions.MissionConfigMetrics do
   end
 
   defp ensure_table do
-    case :ets.whereis(@table_name) do
-      :undefined ->
-        :ets.new(@table_name, [
-          :set,
-          :named_table,
-          :public,
-          read_concurrency: true,
-          write_concurrency: true
-        ])
-
-      _ref ->
-        :ok
-    end
+    CadenceETS.ensure_named_table(@table_name, [
+      :set,
+      :named_table,
+      :public,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
   end
 end

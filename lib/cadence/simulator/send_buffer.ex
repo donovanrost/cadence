@@ -8,7 +8,7 @@ defmodule Cadence.Simulator.SendBuffer do
   ## Batching Strategy
 
   Follows the CVTBatcher pattern with dual-trigger flushing:
-  - **Time-based**: Flush after `batch_timeout_ms` (default: 10ms for timing fidelity)
+  - **Time-based**: Arm a one-shot flush timer only when the buffer becomes non-empty
   - **Size-based**: Flush when batch reaches `batch_size_bytes` (default: 32KB)
   - Whichever comes first triggers a flush
 
@@ -38,21 +38,27 @@ defmodule Cadence.Simulator.SendBuffer do
 
   @default_batch_timeout 10
   @default_batch_size 32_768
+  @default_batch_size_multiplier 4
 
   defstruct [
     :output,
     :socket,
+    :base_batch_timeout,
+    :base_batch_size,
+    :max_batch_size,
     :batch_timeout,
     :batch_size,
     :timer_ref,
     :mode,
+    :coordinator_pid,
     :socket_owner,
     buffer: [],
     buffer_bytes: 0,
     packets_buffered: 0,
     packets_sent: 0,
     bytes_sent: 0,
-    flushes: 0
+    flushes: 0,
+    status_version: 0
   ]
 
   @type output ::
@@ -85,6 +91,35 @@ defmodule Cadence.Simulator.SendBuffer do
   @spec send_packet(GenServer.server(), binary()) :: :ok
   def send_packet(pid, binary) when is_binary(binary) do
     GenServer.cast(pid, {:packet, binary})
+  end
+
+  @doc """
+  Sends a batch of packets to the buffer with a single cast.
+
+  Packets must be in send order.
+  """
+  @spec send_packets(GenServer.server(), [binary()], non_neg_integer() | nil) :: :ok
+  def send_packets(pid, binaries, total_bytes \\ nil)
+      when is_list(binaries) and (is_integer(total_bytes) or is_nil(total_bytes)) do
+    {packet_count, total_bytes} = batch_stats(binaries, total_bytes)
+
+    GenServer.cast(pid, {:packets, binaries, packet_count, total_bytes})
+  end
+
+  @doc """
+  Buffers a batch of packets synchronously.
+
+  Returns the current backlog after the batch has been accepted.
+  """
+  @spec buffer_packets(GenServer.server(), [binary()], non_neg_integer() | nil) :: %{
+          packets_buffered: non_neg_integer(),
+          buffer_bytes: non_neg_integer(),
+          status_version: non_neg_integer()
+        }
+  def buffer_packets(pid, binaries, total_bytes \\ nil)
+      when is_list(binaries) and (is_integer(total_bytes) or is_nil(total_bytes)) do
+    {packet_count, total_bytes} = batch_stats(binaries, total_bytes)
+    GenServer.call(pid, {:buffer_packets, binaries, packet_count, total_bytes}, :infinity)
   end
 
   @doc """
@@ -136,21 +171,27 @@ defmodule Cadence.Simulator.SendBuffer do
     output = Keyword.get(opts, :output)
     batch_timeout = Keyword.get(opts, :batch_timeout, @default_batch_timeout)
     batch_size = Keyword.get(opts, :batch_size, @default_batch_size)
+
+    max_batch_size =
+      Keyword.get(opts, :max_batch_size, batch_size * @default_batch_size_multiplier)
+
     mode = Keyword.get(opts, :mode, :connect)
+    coordinator_pid = Keyword.get(opts, :coordinator_pid)
 
     state = %__MODULE__{
       output: output,
+      base_batch_timeout: batch_timeout,
+      base_batch_size: batch_size,
+      max_batch_size: max(max_batch_size, batch_size),
       batch_timeout: batch_timeout,
       batch_size: batch_size,
       mode: mode,
+      coordinator_pid: coordinator_pid,
       socket_owner: nil
     }
 
     # Connect to output
     state = connect_output(state)
-
-    # Schedule first flush timer
-    state = schedule_flush(state)
 
     Logger.debug(
       "SendBuffer started: output=#{inspect(output)}, timeout=#{batch_timeout}ms, size=#{batch_size}"
@@ -161,22 +202,22 @@ defmodule Cadence.Simulator.SendBuffer do
 
   @impl true
   def handle_cast({:packet, binary}, state) do
-    # O(1) cons onto buffer
-    new_buffer = [binary | state.buffer]
-    new_bytes = state.buffer_bytes + byte_size(binary)
-    new_count = state.packets_buffered + 1
+    new_state =
+      state
+      |> enqueue_packets([binary], 1, byte_size(binary))
+      |> maybe_publish_status(state)
 
-    state = %{state | buffer: new_buffer, buffer_bytes: new_bytes, packets_buffered: new_count}
+    {:noreply, new_state}
+  end
 
-    # Size-based flush check
-    state =
-      if new_bytes >= state.batch_size do
-        do_flush(state)
-      else
-        state
-      end
+  @impl true
+  def handle_cast({:packets, binaries, packet_count, total_bytes}, state) do
+    new_state =
+      state
+      |> enqueue_packets(binaries, packet_count, total_bytes)
+      |> maybe_publish_status(state)
 
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   @impl true
@@ -190,17 +231,35 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   @impl true
+  def handle_call({:buffer_packets, binaries, packet_count, total_bytes}, _from, state) do
+    new_state =
+      state
+      |> enqueue_packets(binaries, packet_count, total_bytes)
+      |> maybe_publish_status(state)
+
+    {:reply, buffer_status(new_state), new_state}
+  end
+
+  @impl true
   def handle_call(:flush, _from, state) do
-    state = do_flush(state)
-    {:reply, :ok, state}
+    new_state =
+      state
+      |> cancel_flush_timer()
+      |> do_flush(:manual)
+      |> maybe_publish_status(state)
+
+    {:reply, :ok, new_state}
   end
 
   @impl true
   def handle_call(:stats, _from, state) do
     stats = %{
       output: format_output(state.output),
+      base_batch_timeout: state.base_batch_timeout,
+      base_batch_size: state.base_batch_size,
       batch_timeout: state.batch_timeout,
       batch_size: state.batch_size,
+      max_batch_size: state.max_batch_size,
       buffer_bytes: state.buffer_bytes,
       packets_buffered: state.packets_buffered,
       packets_sent: state.packets_sent,
@@ -213,15 +272,23 @@ defmodule Cadence.Simulator.SendBuffer do
 
   @impl true
   def handle_info(:flush, state) do
-    state = do_flush(state)
-    state = schedule_flush(state)
-    {:noreply, state}
+    previous_state = state
+
+    new_state =
+      state
+      |> clear_timer_ref()
+      |> do_flush(:timer)
+      |> maybe_publish_status(previous_state)
+
+    {:noreply, new_state}
   end
 
   @impl true
   def terminate(_reason, state) do
     # Flush any remaining packets
-    do_flush(state)
+    state
+    |> cancel_flush_timer()
+    |> do_flush(:manual)
 
     # Close socket
     close_socket(state)
@@ -233,9 +300,9 @@ defmodule Cadence.Simulator.SendBuffer do
   # Private Functions
   # ============================================================================
 
-  defp do_flush(%{buffer: []} = state), do: state
+  defp do_flush(%{buffer: []} = state, _reason), do: state
 
-  defp do_flush(state) do
+  defp do_flush(state, flush_reason) do
     %{buffer: buffer, buffer_bytes: buffer_bytes, packets_buffered: packets_buffered} = state
 
     # Reverse buffer to restore send order and create iolist
@@ -254,6 +321,7 @@ defmodule Cadence.Simulator.SendBuffer do
             bytes_sent: state.bytes_sent + buffer_bytes,
             flushes: state.flushes + 1
         }
+        |> adjust_batching(flush_reason, buffer_bytes)
 
       {:error, reason} ->
         Logger.warning(
@@ -275,9 +343,7 @@ defmodule Cadence.Simulator.SendBuffer do
   end
 
   defp do_send(%{output: {:udp, host, port}, socket: socket}, iolist) do
-    # UDP needs binary, not iolist
-    binary = IO.iodata_to_binary(iolist)
-    :gen_udp.send(socket, String.to_charlist(host), port, binary)
+    :gen_udp.send(socket, String.to_charlist(host), port, IO.iodata_to_binary(iolist))
   end
 
   defp do_send(_, _), do: {:error, :invalid_output}
@@ -349,15 +415,110 @@ defmodule Cadence.Simulator.SendBuffer do
   defp close_socket(%{output: {:udp, _, _}, socket: socket}), do: :gen_udp.close(socket)
   defp close_socket(_), do: :ok
 
-  defp schedule_flush(state) do
-    # Cancel existing timer if any
-    if state.timer_ref do
-      TimeTimer.cancel(state.timer_ref)
-    end
+  defp enqueue_packets(state, [], _packet_count, _total_bytes), do: state
 
+  defp enqueue_packets(state, packets, packet_count, total_bytes) do
+    was_empty = state.buffer == []
+    new_buffer = :lists.reverse(packets, state.buffer)
+    new_bytes = state.buffer_bytes + total_bytes
+    new_count = state.packets_buffered + packet_count
+
+    updated_state = %{
+      state
+      | buffer: new_buffer,
+        buffer_bytes: new_bytes,
+        packets_buffered: new_count
+    }
+
+    cond do
+      new_bytes >= state.batch_size ->
+        updated_state
+        |> cancel_flush_timer()
+        |> do_flush(:size)
+
+      was_empty ->
+        schedule_flush(updated_state)
+
+      true ->
+        updated_state
+    end
+  end
+
+  defp maybe_publish_status(new_state, previous_state) do
+    if buffer_changed?(new_state, previous_state) do
+      published_state = %{new_state | status_version: previous_state.status_version + 1}
+      notify_coordinator(published_state)
+      published_state
+    else
+      new_state
+    end
+  end
+
+  defp buffer_changed?(new_state, previous_state) do
+    new_state.packets_buffered != previous_state.packets_buffered or
+      new_state.buffer_bytes != previous_state.buffer_bytes
+  end
+
+  defp notify_coordinator(%{coordinator_pid: pid} = state) when is_pid(pid) do
+    send(
+      pid,
+      {:send_buffer_status, state.status_version, state.packets_buffered, state.buffer_bytes}
+    )
+  end
+
+  defp notify_coordinator(_state), do: :ok
+
+  defp buffer_status(state) do
+    %{
+      packets_buffered: state.packets_buffered,
+      buffer_bytes: state.buffer_bytes,
+      status_version: state.status_version
+    }
+  end
+
+  defp batch_stats(binaries, nil) do
+    Enum.reduce(binaries, {0, 0}, fn binary, {count, bytes} ->
+      {count + 1, bytes + byte_size(binary)}
+    end)
+  end
+
+  defp batch_stats(binaries, total_bytes), do: {length(binaries), total_bytes}
+
+  defp adjust_batching(
+         %{batch_size: batch_size, max_batch_size: max_batch_size} = state,
+         :size,
+         flushed_bytes
+       )
+       when flushed_bytes >= batch_size and batch_size < max_batch_size do
+    %{state | batch_size: min(batch_size * 2, max_batch_size)}
+  end
+
+  defp adjust_batching(
+         %{batch_size: batch_size, base_batch_size: base_batch_size} = state,
+         :timer,
+         flushed_bytes
+       )
+       when batch_size > base_batch_size and flushed_bytes * 4 <= batch_size do
+    %{state | batch_size: max(base_batch_size, div(batch_size, 2))}
+  end
+
+  defp adjust_batching(state, _flush_reason, _flushed_bytes), do: state
+
+  defp schedule_flush(%{timer_ref: nil} = state) do
     timer_ref = TimeTimer.send_after(self(), :flush, state.batch_timeout)
     %{state | timer_ref: timer_ref}
   end
+
+  defp schedule_flush(state), do: state
+
+  defp cancel_flush_timer(%{timer_ref: nil} = state), do: state
+
+  defp cancel_flush_timer(state) do
+    TimeTimer.cancel(state.timer_ref)
+    %{state | timer_ref: nil}
+  end
+
+  defp clear_timer_ref(state), do: %{state | timer_ref: nil}
 
   defp format_output(nil), do: "none"
   defp format_output({:tcp, host, port}), do: "tcp:#{host}:#{port}"

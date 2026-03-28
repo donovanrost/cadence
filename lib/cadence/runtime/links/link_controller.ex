@@ -207,7 +207,10 @@ defmodule Cadence.Runtime.Links.LinkController do
       | transport_states: Map.put(state.transport_states, transport_id, state_value)
     }
 
-    {:noreply, refresh_observed_bindings(updated, transport_id)}
+    updated = refresh_observed_bindings(updated, transport_id)
+    maybe_reset_downlink_channels(updated, transport_id, state_value)
+
+    {:noreply, updated}
   end
 
   def handle_cast({:apply_config, snapshot}, state) do
@@ -428,6 +431,16 @@ defmodule Cadence.Runtime.Links.LinkController do
     %{state | bindings: updated}
   end
 
+  defp maybe_reset_downlink_channels(state, transport_id, :down) do
+    state
+    |> bindings_for_transport(transport_id, :downlink)
+    |> Enum.map(& &1.channel_id)
+    |> Enum.uniq()
+    |> Enum.each(&ChannelService.reset_downlink_if_started(state.mission_id, &1))
+  end
+
+  defp maybe_reset_downlink_channels(_state, _transport_id, _state_value), do: :ok
+
   defp observed_state_for(state, transport_id) do
     if Map.get(state.transport_states, transport_id, :down) == :up, do: :active, else: :inactive
   end
@@ -458,7 +471,7 @@ defmodule Cadence.Runtime.Links.LinkController do
     end
   end
 
-  defp apply_config_snapshot(state, snapshot) do
+  defp apply_config_snapshot(%State{} = state, snapshot) do
     %State{
       state
       | config_version: Map.get(snapshot, :config_version, state.config_version),

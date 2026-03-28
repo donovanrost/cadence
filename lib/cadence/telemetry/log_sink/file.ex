@@ -11,6 +11,9 @@ defmodule Cadence.Telemetry.LogSink.File do
   alias Cadence.Runtime.Telemetry.Lanes.LaneConfig
   alias Cadence.Telemetry.LogStore
 
+  @state_prefix {__MODULE__, :state}
+  @default_base_dir Path.join([File.cwd!(), "priv", "telemetry_logs"])
+
   @impl true
   def append(_shard_id, [], _opts), do: {:ok, %{first_offset: 0, last_offset: 0}}
 
@@ -23,37 +26,30 @@ defmodule Cadence.Telemetry.LogSink.File do
     max_total_bytes = Keyword.get(opts, :max_total_bytes)
 
     path = Path.join([base_dir, mission_id, Atom.to_string(lane)])
-    File.mkdir_p!(path)
+    state_key = sink_state_key(base_dir, mission_id, lane, shard_id)
 
-    encoded =
-      Enum.map(records, fn record ->
-        encoded = record |> :erlang.term_to_binary() |> Base.encode64()
-        [encoded, "\n"]
-      end)
+    try do
+      state = load_state(state_key, path, shard_id, segment_bytes, max_segments, max_total_bytes)
 
-    bytes_to_write = IO.iodata_length(encoded)
+      encoded =
+        Enum.map(records, fn record ->
+          encoded = record |> :erlang.term_to_binary() |> Base.encode64()
+          [encoded, "\n"]
+        end)
 
-    file_path =
-      if is_integer(segment_bytes) and segment_bytes > 0 do
-        ensure_segment(path, shard_id, segment_bytes, bytes_to_write)
-      else
-        Path.join(path, "#{shard_id}.log")
-      end
+      bytes_to_write = IO.iodata_length(encoded)
+      state = write_records(state, encoded, bytes_to_write)
+      store_state(state_key, state)
 
-    {:ok, file} =
-      File.open(file_path, [:append, :binary, :raw, {:delayed_write, 64_000, 100}])
+      {first_offset, last_offset} = LogStore.next_offsets(shard_id, length(records))
+      broadcast(shard_id, records, first_offset, last_offset)
 
-    IO.binwrite(file, encoded)
-    File.close(file)
-
-    maybe_apply_retention(path, shard_id, max_segments, max_total_bytes)
-
-    {first_offset, last_offset} = LogStore.next_offsets(shard_id, length(records))
-    broadcast(shard_id, records, first_offset, last_offset)
-
-    {:ok, %{first_offset: first_offset, last_offset: last_offset}}
-  rescue
-    error -> {:error, error}
+      {:ok, %{first_offset: first_offset, last_offset: last_offset}}
+    rescue
+      error ->
+        clear_state(state_key)
+        {:error, error}
+    end
   end
 
   @impl true
@@ -76,116 +72,311 @@ defmodule Cadence.Telemetry.LogSink.File do
   def health, do: {:ok, %{status: :ok}}
 
   defp default_base_dir do
-    Path.join([File.cwd!(), "priv", "telemetry_logs"])
+    @default_base_dir
   end
 
-  defp ensure_segment(path, shard_id, segment_bytes, bytes_to_write) do
-    manifest_path = Path.join(path, "#{shard_id}.manifest")
-    current_segment = read_segment_index(manifest_path)
-    segment_path = Path.join(path, "#{shard_id}-#{current_segment}.log")
+  defp load_state(state_key, path, shard_id, segment_bytes, max_segments, max_total_bytes) do
+    case Process.get(state_key) do
+      %{
+        path: ^path,
+        shard_id: ^shard_id,
+        segment_bytes: ^segment_bytes,
+        max_segments: ^max_segments,
+        max_total_bytes: ^max_total_bytes
+      } = state ->
+        state
 
-    current_size =
-      case File.stat(segment_path) do
-        {:ok, stat} -> stat.size
-        _ -> 0
-      end
-
-    if current_size > 0 and current_size + bytes_to_write > segment_bytes do
-      next_segment = current_segment + 1
-      File.write!(manifest_path, Integer.to_string(next_segment))
-      Path.join(path, "#{shard_id}-#{next_segment}.log")
-    else
-      if current_size == 0 do
-        File.write!(manifest_path, Integer.to_string(current_segment))
-      end
-
-      segment_path
+      existing ->
+        maybe_close_file(existing)
+        init_state(path, shard_id, segment_bytes, max_segments, max_total_bytes)
     end
   end
 
-  defp maybe_apply_retention(_path, _shard_id, nil, nil), do: :ok
+  defp init_state(path, shard_id, segment_bytes, max_segments, max_total_bytes) do
+    File.mkdir_p!(path)
+    segmented? = is_integer(segment_bytes) and segment_bytes > 0
 
-  defp maybe_apply_retention(path, shard_id, max_segments, max_total_bytes) do
-    segment_paths =
-      path
-      |> Path.join("#{shard_id}-*.log")
-      |> Path.wildcard()
-      |> Enum.sort()
+    state =
+      if segmented? do
+        manifest_path = Path.join(path, "#{shard_id}.manifest")
+        current_segment = read_segment_index(path, shard_id, manifest_path)
+        current_path = segment_path(path, shard_id, current_segment)
+        segments = load_segment_entries(path, shard_id)
+        current_size = file_size(current_path)
 
-    segment_paths
-    |> enforce_max_segments(max_segments)
-    |> enforce_max_total_bytes(max_total_bytes)
+        %{
+          path: path,
+          shard_id: shard_id,
+          segmented?: true,
+          segment_bytes: segment_bytes,
+          max_segments: max_segments,
+          max_total_bytes: max_total_bytes,
+          manifest_path: manifest_path,
+          current_segment: current_segment,
+          current_path: current_path,
+          current_size: current_size,
+          current_file: nil,
+          segments: ensure_current_segment(segments, current_path, current_segment, current_size),
+          total_bytes: total_bytes(segments, current_path, current_segment, current_size)
+        }
+      else
+        current_path = Path.join(path, "#{shard_id}.log")
+        current_size = file_size(current_path)
 
-    :ok
+        %{
+          path: path,
+          shard_id: shard_id,
+          segmented?: false,
+          segment_bytes: segment_bytes,
+          max_segments: max_segments,
+          max_total_bytes: max_total_bytes,
+          manifest_path: nil,
+          current_segment: nil,
+          current_path: current_path,
+          current_size: current_size,
+          current_file: nil,
+          segments: [%{path: current_path, index: nil, size: current_size}],
+          total_bytes: current_size
+        }
+      end
+
+    apply_retention(state)
   end
 
-  defp enforce_max_segments(paths, max_segments)
+  defp write_records(state, encoded, bytes_to_write) do
+    state =
+      state
+      |> maybe_roll_segment(bytes_to_write)
+      |> ensure_file_open()
+
+    IO.binwrite(state.current_file, encoded)
+
+    state
+    |> update_current_size(bytes_to_write)
+    |> apply_retention()
+  end
+
+  defp maybe_roll_segment(
+         %{segmented?: true, current_size: current_size, segment_bytes: segment_bytes} = state,
+         bytes_to_write
+       )
+       when current_size > 0 and current_size + bytes_to_write > segment_bytes do
+    next_segment = state.current_segment + 1
+    next_path = segment_path(state.path, state.shard_id, next_segment)
+    write_segment_index!(state.manifest_path, next_segment)
+
+    state
+    |> close_current_file()
+    |> Map.merge(%{
+      current_segment: next_segment,
+      current_path: next_path,
+      current_size: 0,
+      segments: state.segments ++ [%{path: next_path, index: next_segment, size: 0}]
+    })
+  end
+
+  defp maybe_roll_segment(state, _bytes_to_write), do: state
+
+  defp ensure_file_open(%{current_file: nil, current_path: current_path} = state) do
+    {:ok, file} = File.open(current_path, [:append, :binary, :raw])
+    %{state | current_file: file}
+  end
+
+  defp ensure_file_open(state), do: state
+
+  defp update_current_size(%{segments: segments} = state, bytes_to_write) do
+    updated_segments =
+      case Enum.reverse(segments) do
+        [%{size: size} = current | rest] ->
+          Enum.reverse([%{current | size: size + bytes_to_write} | rest])
+
+        [] ->
+          []
+      end
+
+    %{
+      state
+      | current_size: state.current_size + bytes_to_write,
+        segments: updated_segments,
+        total_bytes: state.total_bytes + bytes_to_write
+    }
+  end
+
+  defp apply_retention(state) do
+    state
+    |> enforce_max_segments()
+    |> enforce_max_total_bytes()
+  end
+
+  defp enforce_max_segments(%{segmented?: true, max_segments: max_segments} = state)
        when is_integer(max_segments) and max_segments > 0 do
-    overflow = max(length(paths) - max_segments, 0)
-
-    paths
-    |> Enum.take(overflow)
-    |> Enum.each(&File.rm/1)
-
-    Enum.drop(paths, overflow)
-  end
-
-  defp enforce_max_segments(paths, _), do: paths
-
-  defp enforce_max_total_bytes(paths, max_total_bytes)
-       when is_integer(max_total_bytes) and max_total_bytes > 0 do
-    total_bytes = sum_bytes(paths)
-
-    if total_bytes > max_total_bytes do
-      :ok = trim_to_bytes(paths, total_bytes, max_total_bytes)
-    else
-      paths
-    end
-  end
-
-  defp enforce_max_total_bytes(paths, _), do: paths
-
-  defp sum_bytes(paths) do
-    Enum.reduce(paths, 0, fn path, acc ->
-      case File.stat(path) do
-        {:ok, stat} -> acc + stat.size
-        _ -> acc
-      end
+    trim_segments_while(state, fn current_state ->
+      length(current_state.segments) > max_segments
     end)
   end
 
-  defp trim_to_bytes(paths, total_bytes, max_total_bytes) do
-    _remaining =
-      Enum.reduce_while(paths, total_bytes, fn path, current_bytes ->
-        drop_path(path, current_bytes, max_total_bytes)
-      end)
+  defp enforce_max_segments(state), do: state
 
-    :ok
+  defp enforce_max_total_bytes(%{max_total_bytes: max_total_bytes} = state)
+       when is_integer(max_total_bytes) and max_total_bytes > 0 do
+    trim_segments_while(state, fn current_state ->
+      current_state.total_bytes > max_total_bytes
+    end)
   end
 
-  defp drop_path(_path, current_bytes, max_total_bytes) when current_bytes <= max_total_bytes do
-    {:halt, current_bytes}
+  defp enforce_max_total_bytes(state), do: state
+
+  defp trim_segments_while(state, predicate) do
+    do_trim_segments(state, predicate)
   end
 
-  defp drop_path(path, current_bytes, _max_total_bytes) do
-    case File.stat(path) do
-      {:ok, stat} ->
-        _ = File.rm(path)
-        {:cont, current_bytes - stat.size}
+  defp do_trim_segments(%{segments: []} = state, _predicate), do: state
 
-      _ ->
-        {:cont, current_bytes}
+  defp do_trim_segments(state, predicate) do
+    if predicate.(state) and trimmable?(state) do
+      [%{path: path, size: size} | rest] = state.segments
+      _ = File.rm(path)
+
+      state
+      |> Map.put(:segments, rest)
+      |> Map.put(:total_bytes, max(state.total_bytes - size, 0))
+      |> do_trim_segments(predicate)
+    else
+      state
     end
   end
 
-  defp read_segment_index(manifest_path) do
+  defp trimmable?(%{segments: [%{path: current_path} | _], current_path: current_path}), do: false
+  defp trimmable?(%{segments: [_oldest, _next | _rest]}), do: true
+  defp trimmable?(_state), do: false
+
+  defp maybe_close_file(%{current_file: file}) when file != nil do
+    _ = File.close(file)
+    :ok
+  end
+
+  defp maybe_close_file(_state), do: :ok
+
+  defp close_current_file(%{current_file: nil} = state), do: state
+
+  defp close_current_file(%{current_file: file} = state) do
+    _ = File.close(file)
+    %{state | current_file: nil}
+  end
+
+  defp sink_state_key(base_dir, mission_id, lane, shard_id) do
+    {@state_prefix, base_dir, mission_id, lane, shard_id}
+  end
+
+  defp store_state(state_key, state), do: Process.put(state_key, state)
+
+  defp clear_state(state_key) do
+    case Process.delete(state_key) do
+      nil -> :ok
+      state -> maybe_close_file(state)
+    end
+  end
+
+  defp load_segment_entries(path, shard_id) do
+    path
+    |> Path.join("#{shard_id}-*.log")
+    |> Path.wildcard()
+    |> Enum.map(fn segment_path ->
+      %{
+        path: segment_path,
+        index: segment_index(segment_path, shard_id),
+        size: file_size(segment_path)
+      }
+    end)
+    |> Enum.sort_by(& &1.index)
+  end
+
+  defp ensure_current_segment(segments, current_path, current_segment, current_size) do
+    case Enum.any?(segments, &(&1.path == current_path)) do
+      true ->
+        segments
+
+      false ->
+        segments ++ [%{path: current_path, index: current_segment, size: current_size}]
+    end
+  end
+
+  defp total_bytes(segments, current_path, current_segment, current_size) do
+    segments
+    |> ensure_current_segment(current_path, current_segment, current_size)
+    |> Enum.reduce(0, fn %{size: size}, total -> total + size end)
+  end
+
+  defp file_size(path) do
+    case File.stat(path) do
+      {:ok, stat} -> stat.size
+      _ -> 0
+    end
+  end
+
+  defp segment_path(path, shard_id, segment), do: Path.join(path, "#{shard_id}-#{segment}.log")
+
+  defp read_segment_index(path, shard_id, manifest_path) do
     case File.read(manifest_path) do
       {:ok, contents} ->
-        contents |> String.trim() |> String.to_integer()
+        parse_segment_index(contents, path, shard_id, manifest_path)
+
+      _ ->
+        recover_segment_index(path, shard_id, manifest_path)
+    end
+  end
+
+  defp parse_segment_index(contents, path, shard_id, manifest_path) do
+    case Integer.parse(String.trim(contents)) do
+      {index, ""} when index >= 0 ->
+        index
+
+      _ ->
+        recover_segment_index(path, shard_id, manifest_path)
+    end
+  end
+
+  defp recover_segment_index(path, shard_id, manifest_path) do
+    index = latest_segment_index(path, shard_id)
+    write_segment_index!(manifest_path, index)
+    index
+  end
+
+  defp latest_segment_index(path, shard_id) do
+    path
+    |> Path.join("#{shard_id}-*.log")
+    |> Path.wildcard()
+    |> Enum.reduce(0, fn segment_path, max_index ->
+      max(max_index, segment_index(segment_path, shard_id))
+    end)
+  end
+
+  defp segment_index(segment_path, shard_id) do
+    shard_prefix = "#{shard_id}-"
+    shard_suffix = ".log"
+
+    case Path.basename(segment_path) do
+      <<^shard_prefix::binary, rest::binary>> ->
+        rest
+        |> String.trim_trailing(shard_suffix)
+        |> parse_segment_suffix()
 
       _ ->
         0
     end
+  end
+
+  defp parse_segment_suffix(value) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 -> index
+      _ -> 0
+    end
+  end
+
+  defp write_segment_index!(manifest_path, index) do
+    tmp_path = manifest_path <> ".tmp"
+    File.write!(tmp_path, Integer.to_string(index) <> "\n")
+    File.rename!(tmp_path, manifest_path)
   end
 
   defp broadcast(shard_id, records, first_offset, last_offset) do
