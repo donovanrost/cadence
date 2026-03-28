@@ -91,7 +91,7 @@ defmodule Cadence.Runtime.Interfaces.SDLPConfig do
     with {:ok, profile} <- normalize_profile(fetch_value(sdlp_config, "profile")),
          {:ok, uplink_profile} <-
            normalize_uplink_profile(fetch_value(sdlp_config, "uplink_profile"), profile),
-         {:ok, mapping} <- build_mapping(fetch_value(sdlp_config, "sdu_mapping")),
+         {:ok, %Mapping{} = mapping} <- build_mapping(fetch_value(sdlp_config, "sdu_mapping")),
          {:ok, default_sdu_type} <-
            normalize_optional_sdu_type(fetch_value(sdlp_config, "default_sdu_type")) do
       mapping = %Mapping{mapping | default: default_sdu_type}

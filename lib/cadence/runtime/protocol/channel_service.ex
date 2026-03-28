@@ -84,6 +84,22 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     GenServer.cast(via_tuple(mission_id, channel_id), {:apply_config, snapshot})
   end
 
+  @spec reset_downlink_if_started(String.t(), ChannelId.t()) :: :ok
+  def reset_downlink_if_started(mission_id, %ChannelId{} = channel_id) do
+    case Registry.lookup(
+           Cadence.MissionRegistry,
+           {:channel_service, mission_id, ChannelId.key(channel_id)}
+         ) do
+      [{pid, _}] ->
+        GenServer.cast(pid, :reset_downlink)
+
+      [] ->
+        :ok
+    end
+
+    :ok
+  end
+
   # ---------------------------------------------------------------------------
   # GenServer Callbacks
   # ---------------------------------------------------------------------------
@@ -166,6 +182,10 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {:noreply, apply_config_snapshot(state, snapshot)}
   end
 
+  def handle_cast(:reset_downlink, state) do
+    {:noreply, reset_downlink_state(state)}
+  end
+
   @impl true
   def handle_call({:uplink, %PDU{} = pdu, meta}, _from, state) do
     {config_result, state} = protocol_config(state)
@@ -230,6 +250,24 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
             {other, state}
         end
     end
+  end
+
+  defp reset_downlink_state(%State{} = state) do
+    if state.frame_buffer != <<>> or state.reassembly_state != nil do
+      Logger.debug(
+        "Resetting downlink parser state after transport disconnect " <>
+          "mission_id=#{state.mission_id} " <>
+          "channel_id=#{inspect(ChannelId.key(state.channel_id))} " <>
+          "buffered_bytes=#{byte_size(state.frame_buffer)}"
+      )
+    end
+
+    %{
+      state
+      | frame_buffer: <<>>,
+        space_packet_framer: SpacePacketFramer.new(),
+        reassembly_state: nil
+    }
   end
 
   defp ensure_pdu_dispatcher(state, protocol_config) do
