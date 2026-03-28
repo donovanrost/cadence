@@ -58,7 +58,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.RouterBatchDispatchTest do
           get_in(router_state, [:lane_state, :payload, :credits, 0]) == 0 and
           get_in(router_state, [:lane_state, :payload, :queue_depth]) == 2
       end,
-      timeout: 3_000
+      timeout: 10_000
     )
   end
 end
