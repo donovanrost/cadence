@@ -21,9 +21,10 @@ defmodule Cadence.Telemetry.Parse do
         apid = SpacePacket.get_apid(space_packet)
 
         envelope =
-          envelope
-          |> PacketEnvelope.add_evidence(Evidence.apid(apid, :space_packet_header, :high))
-          |> PacketEnvelope.add_evidence(Evidence.packet_format(:space_packet, :parse, :high))
+          PacketEnvelope.add_evidence_many(envelope, [
+            Evidence.apid(apid, :space_packet_header, :high),
+            Evidence.packet_format(:space_packet, :parse, :high)
+          ])
 
         {:ok, {:space_packet, space_packet}, envelope}
 

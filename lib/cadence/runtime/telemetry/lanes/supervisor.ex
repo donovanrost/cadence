@@ -47,7 +47,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Supervisor do
     router_version = Keyword.get(opts, :router_version, 1)
     config_version = Keyword.get(opts, :config_version, 0)
     max_batch_size = Keyword.get(opts, :max_batch_size, 200)
-    max_batch_delay_ms = Keyword.get(opts, :max_batch_delay_ms, 50)
+    max_batch_delay_ms = Keyword.get(opts, :max_batch_delay_ms, 10)
     max_inflight = Keyword.get(opts, :max_inflight, 5_000)
     max_queue_depth = Keyword.get(opts, :max_queue_depth, 100_000)
     stateful_lane = Keyword.get(opts, :stateful_lane, :stateful)
@@ -129,6 +129,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Supervisor do
            router_version: router_version,
            config_version: config_version,
            max_inflight: max_inflight,
+           max_dispatch_batch_size: max_batch_size,
            name: router_name
          ]},
         {Autoscaler,

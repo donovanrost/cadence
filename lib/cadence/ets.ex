@@ -5,12 +5,18 @@ defmodule Cadence.ETS do
 
   @spec ensure_named_table(atom(), [term()]) :: :ok
   def ensure_named_table(table_name, options) when is_atom(table_name) and is_list(options) do
-    case Process.whereis(ETSOwner) do
-      nil ->
-        ensure_named_table_locally(table_name, options)
+    case :ets.whereis(table_name) do
+      :undefined ->
+        case Process.whereis(ETSOwner) do
+          nil ->
+            ensure_named_table_locally(table_name, options)
 
-      _pid ->
-        ETSOwner.ensure_named_table(table_name, options)
+          _pid ->
+            ETSOwner.ensure_named_table(table_name, options)
+        end
+
+      _ref ->
+        :ok
     end
   end
 

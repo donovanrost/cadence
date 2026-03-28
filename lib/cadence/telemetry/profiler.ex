@@ -987,7 +987,11 @@ defmodule Cadence.Telemetry.Profiler do
         :parse,
         :resolve,
         :decom,
+        :worker_post_decom,
         :log_append,
+        :worker_queue_wait,
+        :worker_buffer_wait,
+        :worker_batch_total,
         :identify,
         :convert,
         :derive,
@@ -1035,7 +1039,11 @@ defmodule Cadence.Telemetry.Profiler do
       :parse,
       :resolve,
       :decom,
+      :worker_post_decom,
       :log_append,
+      :worker_queue_wait,
+      :worker_buffer_wait,
+      :worker_batch_total,
       :identify,
       :decommutate,
       :convert,
@@ -1119,9 +1127,14 @@ defmodule Cadence.Telemetry.Profiler do
   defp print_queue_gauges(%{gauges: gauges}) when is_map(gauges) and map_size(gauges) > 0 do
     router_max = max_gauge_value(gauges, :router_queue_len)
     shard_max = max_gauge_value(gauges, :shard_queue_len)
+    buffer_max = max_gauge_value(gauges, :shard_buffer_size)
+    memory_max_kb = max_gauge_value(gauges, :shard_memory_kb)
 
-    if router_max > 0 or shard_max > 0 do
-      IO.puts("Queue gauges: router_max=#{router_max}, shard_max=#{shard_max}")
+    if router_max > 0 or shard_max > 0 or buffer_max > 0 or memory_max_kb > 0 do
+      IO.puts(
+        "Queue gauges: router_max=#{router_max}, shard_max=#{shard_max}, " <>
+          "buffer_max=#{buffer_max}, shard_mem_max=#{memory_max_kb}KB"
+      )
     end
   end
 

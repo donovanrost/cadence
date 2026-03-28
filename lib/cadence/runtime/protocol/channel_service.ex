@@ -38,6 +38,9 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     defstruct [
       :mission_id,
       :channel_id,
+      :ingress_metrics_refs,
+      :pdu_dispatcher_ready?,
+      :cop1_fop_ready?,
       :config_version,
       :protocol_config,
       :frame_buffer,
@@ -95,6 +98,10 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
      %State{
        mission_id: mission_id,
        channel_id: channel_id,
+       ingress_metrics_refs:
+         PipelineMetrics.partition_refs(mission_id, PipelineMetrics.ingress_partition()),
+       pdu_dispatcher_ready?: false,
+       cop1_fop_ready?: false,
        config_version: nil,
        protocol_config: nil,
        frame_buffer: <<>>,
@@ -123,7 +130,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     #   bytes: byte_size(bytes)
     # )
 
-    config_result = protocol_config(state)
+    {config_result, state} = protocol_config(state)
 
     updated =
       case config_result do
@@ -134,8 +141,11 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
           #   transport_id: transport_id
           # )
 
-          ensure_pdu_dispatcher(state, protocol_config)
-          ensure_cop1_fop(state, protocol_config)
+          state =
+            state
+            |> ensure_pdu_dispatcher(protocol_config)
+            |> ensure_cop1_fop(protocol_config)
+
           handle_sdlp_downlink(state, bytes, meta, mapping, opts, transport_id)
 
         _other ->
@@ -158,13 +168,15 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
   @impl true
   def handle_call({:uplink, %PDU{} = pdu, meta}, _from, state) do
+    {config_result, state} = protocol_config(state)
+
     case select_uplink_transport(state, meta) do
       {:ok, transport_id} ->
-        case protocol_config(state) do
+        case config_result do
           {:ok, %{sdlp: {:ok, %{opts: opts}}} = protocol_config} ->
             cop1_mode = resolve_cop1_mode(protocol_config, pdu)
 
-            ensure_cop1_fop(state, protocol_config)
+            state = ensure_cop1_fop(state, protocol_config)
 
             handle_sdlp_uplink(state, pdu, meta, transport_id, opts, cop1_mode)
 
@@ -207,26 +219,50 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   defp protocol_config(state) do
     case state.protocol_config do
       %{} = protocol_config ->
-        {:ok, protocol_config}
+        {{:ok, protocol_config}, state}
 
       _ ->
-        LinkController.effective_protocol_config(state.mission_id, state.channel_id)
+        case LinkController.effective_protocol_config(state.mission_id, state.channel_id) do
+          {:ok, %{} = protocol_config} ->
+            {{:ok, protocol_config}, %{state | protocol_config: protocol_config}}
+
+          other ->
+            {other, state}
+        end
     end
   end
 
   defp ensure_pdu_dispatcher(state, protocol_config) do
-    ProtocolSupervisor.ensure_pdu_dispatcher(state.mission_id, state.channel_id, protocol_config)
+    if state.pdu_dispatcher_ready? do
+      state
+    else
+      ProtocolSupervisor.ensure_pdu_dispatcher(
+        state.mission_id,
+        state.channel_id,
+        protocol_config
+      )
+
+      %{state | pdu_dispatcher_ready?: true}
+    end
   end
 
   defp ensure_cop1_fop(state, protocol_config) when is_map(protocol_config) do
     cop1 = Map.get(protocol_config, :cop1, %{})
 
-    if COP1Config.mode(cop1) == :fop do
-      ProtocolSupervisor.ensure_cop1_fop(state.mission_id, state.channel_id, protocol_config)
+    cond do
+      COP1Config.mode(cop1) != :fop ->
+        state
+
+      state.cop1_fop_ready? ->
+        state
+
+      true ->
+        ProtocolSupervisor.ensure_cop1_fop(state.mission_id, state.channel_id, protocol_config)
+        %{state | cop1_fop_ready?: true}
     end
   end
 
-  defp ensure_cop1_fop(_state, _protocol_config), do: :ok
+  defp ensure_cop1_fop(state, _protocol_config), do: state
 
   defp select_uplink_transport(state, meta) do
     requested = Map.get(meta, :transport_id)
@@ -494,8 +530,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   end
 
   defp handle_sdlp_downlink(state, bytes, meta, %Mapping{} = mapping, opts, transport_id) do
-    ingress_partition = PipelineMetrics.ingress_partition()
-    PipelineMetrics.inc(state.mission_id, ingress_partition, :bytes_received, byte_size(bytes))
+    PipelineMetrics.inc_refs(state.ingress_metrics_refs, :bytes_received, byte_size(bytes))
 
     frame_opts =
       Keyword.take(opts, [:frame_size, :secondary_header_length, :ocf_length, :timestamp])
@@ -516,12 +551,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     {:ok, frames, rest} = decode_result
 
     if is_integer(decode_us) do
-      PipelineMetrics.record_timing(
-        state.mission_id,
-        ingress_partition,
-        :sdlp_decode,
-        decode_us
-      )
+      PipelineMetrics.record_timing_refs(state.ingress_metrics_refs, :sdlp_decode, decode_us)
     end
 
     {next_reassembly, next_cop1} =
@@ -537,7 +567,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     Enum.each(packet_binaries, fn binary ->
       envelope = build_packet_envelope(binary, meta, state)
 
-      Phoenix.PubSub.broadcast(
+      Phoenix.PubSub.local_broadcast(
         Cadence.PubSub,
         "mission:#{state.mission_id}:telemetry:raw",
         {:packet_envelope, envelope}
@@ -547,11 +577,13 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
     %{state | space_packet_framer: framer}
   end
 
-  defp apply_config_snapshot(state, snapshot) do
+  defp apply_config_snapshot(%State{} = state, snapshot) do
     %State{
       state
       | config_version: Map.get(snapshot, :config_version, state.config_version),
-        protocol_config: Map.get(snapshot, :protocol_config, state.protocol_config)
+        protocol_config: Map.get(snapshot, :protocol_config, state.protocol_config),
+        pdu_dispatcher_ready?: false,
+        cop1_fop_ready?: false
     }
   end
 
@@ -595,9 +627,8 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
       end
 
     if is_integer(reassembly_us) do
-      PipelineMetrics.record_timing(
-        state.mission_id,
-        PipelineMetrics.ingress_partition(),
+      PipelineMetrics.record_timing_refs(
+        state.ingress_metrics_refs,
         :sdlp_reassembly,
         reassembly_us
       )
@@ -637,6 +668,7 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
           ctx = %{
             mission_id: state.mission_id,
             channel_id: state.channel_id,
+            metrics_refs: state.ingress_metrics_refs,
             transport_id: transport_id,
             scid: state.channel_id.scid,
             vcid: state.channel_id.vcid,
@@ -682,11 +714,12 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
 
     evidence =
       []
-      |> maybe_add(Evidence.scid(metadata[:scid], :link, :high))
-      |> maybe_add(Evidence.vcid(metadata[:vcid], :link, :high))
-      |> maybe_add(Evidence.map_id(metadata[:map_id], :link, :high))
-      |> maybe_add(Evidence.transport_id(metadata[:transport_id], :ingest, :high))
-      |> maybe_add(Evidence.target_hint(metadata[:target_id], :ingest, :low))
+      |> maybe_prepend(Evidence.scid(metadata[:scid], :link, :high))
+      |> maybe_prepend(Evidence.vcid(metadata[:vcid], :link, :high))
+      |> maybe_prepend(Evidence.map_id(metadata[:map_id], :link, :high))
+      |> maybe_prepend(Evidence.transport_id(metadata[:transport_id], :ingest, :high))
+      |> maybe_prepend(Evidence.target_hint(metadata[:target_id], :ingest, :low))
+      |> Enum.reverse()
 
     PacketEnvelope.new(state.mission_id, binary,
       ingest_ts: metadata[:received_at] || CadenceTime.now(),
@@ -700,6 +733,6 @@ defmodule Cadence.Runtime.Protocol.ChannelService do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  defp maybe_add(list, %Evidence{value: nil}), do: list
-  defp maybe_add(list, %Evidence{} = evidence), do: list ++ [evidence]
+  defp maybe_prepend(list, %Evidence{value: nil}), do: list
+  defp maybe_prepend(list, %Evidence{} = evidence), do: [evidence | list]
 end

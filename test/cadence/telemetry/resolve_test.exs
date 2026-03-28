@@ -17,6 +17,7 @@ defmodule Cadence.Telemetry.ResolveTest do
       targets: [target],
       targets_by_identifier: %{target.id => target},
       target_ids_by_identifier: %{},
+      target_ids_by_scid: %{target.scid => target.id},
       packet_catalog: Keyword.get(opts, :packet_catalog, %{})
     }
   end

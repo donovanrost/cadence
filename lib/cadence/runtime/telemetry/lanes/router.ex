@@ -16,6 +16,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
 
   @default_max_queue_depth 100_000
   @default_max_inflight 5_000
+  @default_max_dispatch_batch_size 200
   @high_watermark_ratio 0.8
   @low_watermark_ratio 0.5
 
@@ -47,6 +48,9 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     max_queue_depth = Keyword.get(opts, :max_queue_depth, @default_max_queue_depth)
     max_inflight = Keyword.get(opts, :max_inflight, @default_max_inflight)
 
+    max_dispatch_batch_size =
+      Keyword.get(opts, :max_dispatch_batch_size, @default_max_dispatch_batch_size)
+
     lane_summary =
       Enum.map_join(lanes, ", ", fn lane ->
         "#{lane.name}=#{lane.shard_count}"
@@ -68,8 +72,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
         Map.put(acc, lane.name, %{
           shard_count: lane.shard_count,
           virtual_shards: lane.virtual_shards,
+          metric_refs: build_metric_refs(mission_id, lane.name, lane.shard_count),
           max_queue_depth: lane_max_queue_depth,
           max_inflight: lane_max_inflight,
+          max_dispatch_batch_size: max(max_dispatch_batch_size, 1),
           high_watermark: floor(lane_max_queue_depth * @high_watermark_ratio),
           low_watermark: floor(lane_max_queue_depth * @low_watermark_ratio),
           backpressure: false,
@@ -89,6 +95,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
       lane_state: lane_state,
       router_version: router_version,
       config_version: config_version,
+      dispatch_pending: false,
       queue_snapshot_interval_ms: queue_snapshot_interval_ms,
       queue_sample_timer: queue_sample_timer
     }
@@ -111,6 +118,16 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
   end
 
   @impl true
+  def handle_info(:dispatch_events, state) do
+    state =
+      state
+      |> Map.put(:dispatch_pending, false)
+      |> dispatch_events()
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:config_version, version}, state) when is_integer(version) do
     {:noreply, %{state | config_version: version}}
   end
@@ -126,6 +143,8 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     {result, envelope, parse_us} = maybe_time_parse(envelope)
 
     {lane, shard_id} = select_lane_and_shard(envelope, result, state)
+    lane_state = Map.fetch!(state.lane_state, lane)
+    metric_refs = Map.fetch!(lane_state.metric_refs, shard_id)
 
     event = %PipelineEvent{
       packet_id: envelope.packet_id,
@@ -141,16 +160,15 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
       ingest_monotonic_ns: envelope.ingest_monotonic_ns
     }
 
-    partition_key = {event.lane, event.shard_id}
-    PipelineMetrics.inc(state.mission_id, partition_key, :packets_received)
-    PipelineMetrics.inc(state.mission_id, partition_key, :bytes_received, byte_size(envelope.raw))
-    maybe_record_parse_timing(state, partition_key, parse_us)
-    record_parse_metrics(state, partition_key, result)
+    PipelineMetrics.inc_refs(metric_refs, :packets_received)
+    PipelineMetrics.inc_refs(metric_refs, :bytes_received, byte_size(envelope.raw))
+    maybe_record_parse_timing(metric_refs, parse_us)
+    record_parse_metrics(metric_refs, result)
 
     state
     |> enqueue_event_v2(event)
     |> then(fn updated -> maybe_toggle_backpressure(updated, event.lane) end)
-    |> dispatch_events()
+    |> maybe_schedule_dispatch()
   end
 
   @impl true
@@ -187,7 +205,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     updated_lane_state = %{lane_state | credits: credits}
     updated_state = put_in(state.lane_state[lane], updated_lane_state)
 
-    {:noreply, dispatch_events(updated_state)}
+    {:noreply, maybe_schedule_dispatch(updated_state)}
   end
 
   @impl true
@@ -233,11 +251,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
   end
 
   defp drop_oldest(state, event, queue, lane_state) do
+    metric_refs = Map.fetch!(lane_state.metric_refs, event.shard_id)
+
     case :queue.out(queue) do
-      {{:value, dropped}, trimmed_queue} ->
+      {{:value, _dropped}, trimmed_queue} ->
         dropped_count = lane_state.dropped_count + 1
-        partition_key = {dropped.lane, dropped.shard_id}
-        PipelineMetrics.inc(state.mission_id, partition_key, :packets_dropped)
+        PipelineMetrics.inc_refs(metric_refs, :packets_dropped)
 
         if rem(dropped_count, 1000) == 0 do
           Logger.warning(
@@ -258,8 +277,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
 
       {:empty, _} ->
         dropped_count = lane_state.dropped_count + 1
-        partition_key = {event.lane, event.shard_id}
-        PipelineMetrics.inc(state.mission_id, partition_key, :packets_dropped)
+        PipelineMetrics.inc_refs(metric_refs, :packets_dropped)
 
         updated_lane_state = %{lane_state | dropped_count: dropped_count}
         put_in(state.lane_state[event.lane], updated_lane_state)
@@ -274,42 +292,80 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     end)
   end
 
+  defp maybe_schedule_dispatch(%{dispatch_pending: true} = state), do: state
+
+  defp maybe_schedule_dispatch(state) do
+    send(self(), :dispatch_events)
+    %{state | dispatch_pending: true}
+  end
+
   defp dispatch_shard(lane, shard_id, state) do
     lane_state = Map.fetch!(state.lane_state, lane)
     queue = Map.fetch!(lane_state.queues, shard_id)
     credit = Map.fetch!(lane_state.credits, shard_id)
 
-    dispatch_from_queue(lane, shard_id, queue, credit, state)
+    dispatch_from_queue(lane, shard_id, queue, credit, lane_state.max_dispatch_batch_size, state)
   end
 
-  defp dispatch_from_queue(_lane, _shard_id, _queue, credit, state) when credit <= 0,
-    do: state
+  defp dispatch_from_queue(_lane, _shard_id, _queue, credit, _dispatch_batch_size, state)
+       when credit <= 0,
+       do: state
 
-  defp dispatch_from_queue(lane, shard_id, queue, credit, state) do
+  defp dispatch_from_queue(lane, shard_id, queue, credit, dispatch_batch_size, state) do
+    batch_count = min(credit, dispatch_batch_size)
+    {events, new_queue, dispatched_count} = take_dispatch_batch(queue, batch_count)
+
+    if dispatched_count == 0 do
+      state
+    else
+      GenServer.cast(
+        shard_name(state.mission_id, lane, shard_id),
+        {:telemetry_batch, events, dispatch_started_ns()}
+      )
+
+      lane_state = Map.fetch!(state.lane_state, lane)
+
+      new_state = %{
+        state
+        | lane_state:
+            Map.put(state.lane_state, lane, %{
+              lane_state
+              | queues: Map.put(lane_state.queues, shard_id, new_queue),
+                credits: Map.put(lane_state.credits, shard_id, credit - dispatched_count),
+                queue_depth: lane_state.queue_depth - dispatched_count
+            })
+      }
+
+      dispatch_from_queue(
+        lane,
+        shard_id,
+        new_queue,
+        credit - dispatched_count,
+        dispatch_batch_size,
+        new_state
+      )
+    end
+  end
+
+  defp take_dispatch_batch(queue, count) when count <= 0 do
+    {[], queue, 0}
+  end
+
+  defp take_dispatch_batch(queue, count) do
+    do_take_dispatch_batch(queue, count, [])
+  end
+
+  defp do_take_dispatch_batch(queue, 0, acc) do
+    {Enum.reverse(acc), queue, length(acc)}
+  end
+
+  defp do_take_dispatch_batch(queue, remaining, acc) do
     case :queue.out(queue) do
       {{:value, event}, new_queue} ->
-        GenServer.cast(
-          shard_name(state.mission_id, lane, shard_id),
-          {:telemetry_event, event}
-        )
-
-        lane_state = Map.fetch!(state.lane_state, lane)
-
-        new_state = %{
-          state
-          | lane_state:
-              Map.put(state.lane_state, lane, %{
-                lane_state
-                | queues: Map.put(lane_state.queues, shard_id, new_queue),
-                  credits: Map.put(lane_state.credits, shard_id, credit - 1),
-                  queue_depth: lane_state.queue_depth - 1
-              })
-        }
-
-        dispatch_from_queue(lane, shard_id, new_queue, credit - 1, new_state)
+        do_take_dispatch_batch(new_queue, remaining - 1, [event | acc])
 
       {:empty, _} ->
-        state
+        {Enum.reverse(acc), queue, length(acc)}
     end
   end
 
@@ -359,6 +415,20 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     {queues, credits}
   end
 
+  defp build_metric_refs(mission_id, lane, shard_count) do
+    for shard <- 0..(shard_count - 1), into: %{} do
+      {shard, PipelineMetrics.partition_refs(mission_id, {lane, shard})}
+    end
+  end
+
+  defp dispatch_started_ns do
+    if MetricsConfig.enable_pipeline_timings?() do
+      CadenceTime.monotonic(:nanosecond)
+    else
+      nil
+    end
+  end
+
   defp select_lane_and_shard(envelope, result, state) do
     metadata = envelope.provenance || %{}
     parsed_unit = if(match?({:ok, _}, result), do: elem(result, 1), else: nil)
@@ -390,12 +460,12 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     rem(vnode, shard_count)
   end
 
-  defp record_parse_metrics(state, partition_key, {:ok, _parsed_unit}) do
-    PipelineMetrics.inc(state.mission_id, partition_key, :packets_parsed_ok)
+  defp record_parse_metrics(metric_refs, {:ok, _parsed_unit}) do
+    PipelineMetrics.inc_refs(metric_refs, :packets_parsed_ok)
   end
 
-  defp record_parse_metrics(state, partition_key, {:error, _reason}) do
-    PipelineMetrics.inc(state.mission_id, partition_key, :packets_malformed)
+  defp record_parse_metrics(metric_refs, {:error, _reason}) do
+    PipelineMetrics.inc_refs(metric_refs, :packets_malformed)
   end
 
   defp maybe_time_parse(envelope) do
@@ -420,10 +490,10 @@ defmodule Cadence.Runtime.Telemetry.Lanes.Router do
     end
   end
 
-  defp maybe_record_parse_timing(_state, _partition_key, nil), do: :ok
+  defp maybe_record_parse_timing(_metric_refs, nil), do: :ok
 
-  defp maybe_record_parse_timing(state, partition_key, parse_us) do
-    PipelineMetrics.record_timing(state.mission_id, partition_key, :parse, parse_us)
+  defp maybe_record_parse_timing(metric_refs, parse_us) do
+    PipelineMetrics.record_timing_refs(metric_refs, :parse, parse_us)
   end
 
   defp maybe_schedule_queue_sample(interval_ms)

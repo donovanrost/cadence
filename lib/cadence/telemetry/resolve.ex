@@ -40,7 +40,7 @@ defmodule Cadence.Telemetry.Resolve do
 
     cond do
       is_integer(scid) ->
-        case scid_target_map(bundle) |> Map.get(scid) do
+        case (bundle.target_ids_by_scid || %{}) |> Map.get(scid) do
           nil ->
             {{:unresolved, :no_scid_mapping, %{scid: scid}},
              %{evidence_used: [:scid], rules_applied: [:scid_target_map]}}
@@ -149,15 +149,6 @@ defmodule Cadence.Telemetry.Resolve do
       _ ->
         Enum.find(bundle.targets, fn target -> Map.get(target, :id) == target_id end)
     end
-  end
-
-  defp scid_target_map(%ConfigBundle{} = bundle) do
-    Enum.reduce(bundle.targets, %{}, fn target, acc ->
-      case Map.get(target, :scid) do
-        scid when is_integer(scid) -> Map.put(acc, scid, Map.get(target, :id))
-        _ -> acc
-      end
-    end)
   end
 
   defp resolve_target_hint(%ConfigBundle{} = bundle, hint) do

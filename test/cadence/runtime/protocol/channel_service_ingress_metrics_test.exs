@@ -6,6 +6,7 @@ defmodule Cadence.Runtime.Protocol.ChannelServiceIngressMetricsTest do
   alias Cadence.CCSDS.SDLP.TM.FrameCodec, as: TMFrameCodec
   alias Cadence.CCSDS.SDU.Mapping
   alias Cadence.Runtime.ChannelId
+  alias Cadence.Runtime.Links.LinkController
   alias Cadence.Runtime.Protocol.ChannelService
   alias Cadence.Runtime.Protocol.Supervisor, as: ProtocolSupervisor
   alias Cadence.Telemetry.{MetricsConfig, PacketEnvelope, PipelineMetrics}
@@ -85,6 +86,95 @@ defmodule Cadence.Runtime.Protocol.ChannelServiceIngressMetricsTest do
       decode_total > 0 and sdu_emitted > 0 and envelopes > 0 and decode_timing > 0 and
         reassembly_timing > 0 and envelope_timing > 0
     end)
+  end
+
+  test "caches dispatcher readiness after first TM downlink" do
+    mission_id = random_id()
+    channel_id = ChannelId.new(1, 2, nil)
+
+    start_supervised!({ProtocolSupervisor, mission_id: mission_id})
+
+    lanes = [%{name: :primary, shard_count: 1, virtual_shards: 1, selectors: %{}}]
+    :ok = PipelineMetrics.init_lanes(mission_id, lanes)
+    :ok = ProtocolSupervisor.ensure_channel(mission_id, channel_id)
+
+    mapping = Mapping.new(%{{1, 2, nil, :downlink} => :space_packet}, :space_packet)
+
+    packet = build_space_packet(10, 1)
+    frame_size = 6 + byte_size(packet)
+    frame = build_tm_frame(packet, frame_size, 1, 2)
+
+    ChannelService.apply_config(mission_id, channel_id, %{
+      protocol_config: %{sdlp: {:ok, %{mapping: mapping, opts: [frame_size: frame_size]}}},
+      config_version: 1
+    })
+
+    ChannelService.handle_downlink(mission_id, channel_id, frame, %{
+      received_at: CadenceTime.now()
+    })
+
+    service_pid =
+      case Registry.lookup(Cadence.MissionRegistry, {:channel_service, mission_id, {1, 2, nil}}) do
+        [{pid, _}] -> pid
+        [] -> flunk("expected channel service registration")
+      end
+
+    assert_eventually(
+      fn ->
+        state = :sys.get_state(service_pid)
+        state.pdu_dispatcher_ready? == true
+      end,
+      timeout: 1_000
+    )
+  end
+
+  test "caches fallback protocol config after first TM downlink" do
+    mission_id = random_id()
+    channel_id = ChannelId.new(1, 2, nil)
+
+    start_supervised!({ProtocolSupervisor, mission_id: mission_id})
+    start_supervised!({LinkController, mission_id: mission_id, scid: 1})
+
+    lanes = [%{name: :primary, shard_count: 1, virtual_shards: 1, selectors: %{}}]
+    :ok = PipelineMetrics.init_lanes(mission_id, lanes)
+    :ok = ProtocolSupervisor.ensure_channel(mission_id, channel_id)
+
+    mapping = Mapping.new(%{{1, 2, nil, :downlink} => :space_packet}, :space_packet)
+
+    packet = build_space_packet(10, 1)
+    frame_size = 6 + byte_size(packet)
+    frame = build_tm_frame(packet, frame_size, 1, 2)
+
+    protocol_config = %{sdlp: {:ok, %{mapping: mapping, opts: [frame_size: frame_size]}}}
+
+    :ok =
+      LinkController.apply_config(mission_id, 1, %{
+        config_version: 1,
+        link_defaults: protocol_config,
+        effective_protocols: %{ChannelId.key(channel_id) => protocol_config}
+      })
+
+    Phoenix.PubSub.subscribe(Cadence.PubSub, "mission:#{mission_id}:telemetry:raw")
+
+    ChannelService.handle_downlink(mission_id, channel_id, frame, %{
+      received_at: CadenceTime.now()
+    })
+
+    assert_receive {:packet_envelope, %PacketEnvelope{}}, 1_000
+
+    service_pid =
+      case Registry.lookup(Cadence.MissionRegistry, {:channel_service, mission_id, {1, 2, nil}}) do
+        [{pid, _}] -> pid
+        [] -> flunk("expected channel service registration")
+      end
+
+    assert_eventually(
+      fn ->
+        state = :sys.get_state(service_pid)
+        state.protocol_config == protocol_config
+      end,
+      timeout: 1_000
+    )
   end
 
   defp build_space_packet(apid, seq) do

@@ -198,6 +198,7 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
       Application.get_env(:cadence, :pipeline_lane_source, Cadence.Telemetry.LogSource.File)
 
     sink_opts = Application.get_env(:cadence, :pipeline_lane_sink_opts, [])
+    sink_opts = maybe_enable_fast_noop_mode(sink, sink_opts)
     lanes = Application.get_env(:cadence, :pipeline_lanes)
     consumer_lanes = Application.get_env(:cadence, :pipeline_lane_consumers, [:payload])
     stateful_lane = Application.get_env(:cadence, :pipeline_stateful_lane, :stateful)
@@ -264,4 +265,10 @@ defmodule Cadence.Runtime.Missions.MissionInstance do
         Logger.warning("Failed to track mission #{mission_id}: #{inspect(reason)}")
     end
   end
+
+  defp maybe_enable_fast_noop_mode(Cadence.Telemetry.LogSink.Noop, sink_opts) do
+    Keyword.put_new(sink_opts, :skip_log_records, true)
+  end
+
+  defp maybe_enable_fast_noop_mode(_sink, sink_opts), do: sink_opts
 end

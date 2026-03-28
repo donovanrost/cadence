@@ -33,7 +33,7 @@ defmodule Cadence.Runtime.Telemetry.Lanes.LaneSupervisor do
     config_version = Keyword.get(opts, :config_version, 0)
     router_version = Keyword.get(opts, :router_version, 1)
     max_batch_size = Keyword.get(opts, :max_batch_size, 200)
-    max_batch_delay_ms = Keyword.get(opts, :max_batch_delay_ms, 50)
+    max_batch_delay_ms = Keyword.get(opts, :max_batch_delay_ms, 10)
     max_inflight = Keyword.get(opts, :max_inflight, 5_000)
 
     children =

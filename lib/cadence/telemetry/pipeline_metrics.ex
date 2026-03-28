@@ -84,6 +84,14 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     latency_count_sdlp_reassembly: 48,
     latency_sum_envelope_build: 49,
     latency_count_envelope_build: 50,
+    latency_sum_worker_queue_wait: 52,
+    latency_count_worker_queue_wait: 53,
+    latency_sum_worker_buffer_wait: 54,
+    latency_count_worker_buffer_wait: 55,
+    latency_sum_worker_batch_total: 56,
+    latency_count_worker_batch_total: 57,
+    latency_sum_worker_post_decom: 58,
+    latency_count_worker_post_decom: 59,
 
     # Bitrate tracking
     bytes_received: 26,
@@ -102,7 +110,7 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     envelopes_emitted: 51
   }
 
-  @slot_count 51
+  @slot_count 59
 
   # Atomics slot indices for min/max (per partition)
   # Uses :atomics for compare-and-exchange operations
@@ -134,10 +142,18 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     min_sdlp_reassembly: 25,
     max_sdlp_reassembly: 26,
     min_envelope_build: 27,
-    max_envelope_build: 28
+    max_envelope_build: 28,
+    min_worker_queue_wait: 29,
+    max_worker_queue_wait: 30,
+    min_worker_buffer_wait: 31,
+    max_worker_buffer_wait: 32,
+    min_worker_batch_total: 33,
+    max_worker_batch_total: 34,
+    min_worker_post_decom: 35,
+    max_worker_post_decom: 36
   }
 
-  @minmax_slot_count 28
+  @minmax_slot_count 36
 
   # Sentinel value for uninitialized min (max possible value)
   @min_sentinel 999_999_999
@@ -157,10 +173,24 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     :end_to_end,
     :sdlp_decode,
     :sdlp_reassembly,
-    :envelope_build
+    :envelope_build,
+    :worker_queue_wait,
+    :worker_buffer_wait,
+    :worker_batch_total,
+    :worker_post_decom
   ]
 
-  @histogram_stages [:parse, :resolve, :decom, :log_append, :end_to_end]
+  @histogram_stages [
+    :parse,
+    :resolve,
+    :decom,
+    :log_append,
+    :end_to_end,
+    :worker_queue_wait,
+    :worker_buffer_wait,
+    :worker_batch_total,
+    :worker_post_decom
+  ]
   @histogram_bucket_count 32
 
   @histogram_stage_offsets Enum.into(Enum.with_index(@histogram_stages), %{}, fn {stage, idx} ->
@@ -284,6 +314,29 @@ defmodule Cadence.Telemetry.PipelineMetrics do
   end
 
   @doc """
+  Returns cached refs for a partition so hot-path callers can avoid ETS lookups.
+  """
+  def partition_refs(mission_id, partition) do
+    %{
+      counter_ref: get_counter_ref(mission_id, partition),
+      atomics_ref: get_atomics_ref(mission_id, partition),
+      histogram_ref: get_histogram_ref(mission_id, partition)
+    }
+  end
+
+  @doc """
+  Atomically increments a counter using pre-fetched partition refs.
+  """
+  def inc_refs(refs, counter, amount \\ 1)
+
+  def inc_refs(%{counter_ref: nil}, _counter, _amount), do: :ok
+
+  def inc_refs(%{counter_ref: ref}, counter, amount) do
+    slot = Map.fetch!(@slots, counter)
+    :counters.add(ref, slot, amount)
+  end
+
+  @doc """
   Records a timing sample for a stage.
 
   Updates sum, count, min, and max for the stage.
@@ -301,6 +354,21 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     update_histogram(mission_id, partition, stage, duration_us)
   end
 
+  @doc """
+  Records a timing sample using pre-fetched partition refs.
+  """
+  def record_timing_refs(refs, stage, duration_us)
+      when is_atom(stage) and is_integer(duration_us) do
+    sum_slot = Map.get(@slots, :"latency_sum_#{stage}")
+    count_slot = Map.get(@slots, :"latency_count_#{stage}")
+    min_slot = Map.get(@minmax_slots, :"min_#{stage}")
+    max_slot = Map.get(@minmax_slots, :"max_#{stage}")
+
+    update_sum_and_count_refs(refs, sum_slot, count_slot, duration_us)
+    update_min_and_max_refs(refs, min_slot, max_slot, duration_us)
+    update_histogram_refs(refs, stage, duration_us)
+  end
+
   defp update_sum_and_count(_mission_id, _partition, nil, _count_slot, _duration_us), do: :ok
   defp update_sum_and_count(_mission_id, _partition, _sum_slot, nil, _duration_us), do: :ok
 
@@ -313,6 +381,17 @@ defmodule Cadence.Telemetry.PipelineMetrics do
         :counters.add(ref, sum_slot, duration_us)
         :counters.add(ref, count_slot, 1)
     end
+  end
+
+  defp update_sum_and_count_refs(_refs, nil, _count_slot, _duration_us), do: :ok
+  defp update_sum_and_count_refs(_refs, _sum_slot, nil, _duration_us), do: :ok
+
+  defp update_sum_and_count_refs(%{counter_ref: nil}, _sum_slot, _count_slot, _duration_us),
+    do: :ok
+
+  defp update_sum_and_count_refs(%{counter_ref: ref}, sum_slot, count_slot, duration_us) do
+    :counters.add(ref, sum_slot, duration_us)
+    :counters.add(ref, count_slot, 1)
   end
 
   # Update min/max using atomics CAS
@@ -330,6 +409,15 @@ defmodule Cadence.Telemetry.PipelineMetrics do
     end
   end
 
+  defp update_min_and_max_refs(_refs, nil, _max_slot, _duration_us), do: :ok
+  defp update_min_and_max_refs(_refs, _min_slot, nil, _duration_us), do: :ok
+  defp update_min_and_max_refs(%{atomics_ref: nil}, _min_slot, _max_slot, _duration_us), do: :ok
+
+  defp update_min_and_max_refs(%{atomics_ref: ref}, min_slot, max_slot, duration_us) do
+    update_min(ref, min_slot, duration_us)
+    update_max(ref, max_slot, duration_us)
+  end
+
   defp update_histogram(_mission_id, _partition, stage, _duration_us)
        when not is_map_key(@histogram_stage_offsets, stage),
        do: :ok
@@ -344,6 +432,18 @@ defmodule Cadence.Telemetry.PipelineMetrics do
         slot = histogram_slot(stage, bucket_index)
         :atomics.add(ref, slot, 1)
     end
+  end
+
+  defp update_histogram_refs(_refs, stage, _duration_us)
+       when not is_map_key(@histogram_stage_offsets, stage),
+       do: :ok
+
+  defp update_histogram_refs(%{histogram_ref: nil}, _stage, _duration_us), do: :ok
+
+  defp update_histogram_refs(%{histogram_ref: ref}, stage, duration_us) do
+    bucket_index = histogram_bucket_index(duration_us)
+    slot = histogram_slot(stage, bucket_index)
+    :atomics.add(ref, slot, 1)
   end
 
   # Atomically update min using compare-and-exchange loop

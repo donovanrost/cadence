@@ -608,7 +608,7 @@ defmodule Cadence.Simulator.PacketSimulator do
         mode: :sim
       )
 
-    PubSub.broadcast(
+    PubSub.local_broadcast(
       Cadence.PubSub,
       "mission:#{mission_id}:telemetry:raw",
       {:packet_envelope, envelope}
