@@ -1,18 +1,14 @@
 # Cadence
 
-To start your Phoenix server:
+Cadence is now structured as an umbrella project.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+## Layout
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+- `apps/cadence` - new core application for the redesigned ground data system
+- `apps/cadence_web` - new web/application boundary for Cadence
+- `legacy/cadence_legacy` - preserved snapshot of the previous monolithic Cadence codebase
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+## Legacy Code
 
-## Learn more
-
-* Official website: https://www.phoenixframework.org/
-* Guides: https://hexdocs.pm/phoenix/overview.html
-* Docs: https://hexdocs.pm/phoenix
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+The legacy application is intentionally kept outside the umbrella `apps/` path so
+its `Cadence` and `CadenceWeb` modules do not conflict with the new system.

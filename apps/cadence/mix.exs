@@ -1,0 +1,48 @@
+defmodule Cadence.MixProject do
+  use Mix.Project
+
+  def project do
+    [
+      app: :cadence,
+      version: "0.1.0",
+      build_path: "../../_build",
+      config_path: "../../config/config.exs",
+      deps_path: "../../deps",
+      lockfile: "../../mix.lock",
+      elixirc_paths: elixirc_paths(Mix.env()),
+      elixir: "~> 1.15",
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
+      aliases: aliases()
+    ]
+  end
+
+  # Run "mix help compile.app" to learn about applications.
+  def application do
+    [
+      extra_applications: [:logger],
+      mod: {Cadence.Application, []}
+    ]
+  end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_env), do: ["lib"]
+
+  # Run "mix help deps" to learn about dependencies.
+  defp deps do
+    [
+      {:ecto_sql, "~> 3.13"},
+      {:jason, "~> 1.4"},
+      {:nimble_parsec, "~> 1.4"},
+      {:postgrex, ">= 0.0.0"},
+      {:req, "~> 0.5"},
+      {:yaml_elixir, "~> 2.12"}
+    ]
+  end
+
+  defp aliases do
+    [
+      "db.setup.test": ["ecto.create --quiet", "ecto.migrate --quiet"]
+    ]
+  end
+end
