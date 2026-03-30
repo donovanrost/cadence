@@ -1,0 +1,107 @@
+defmodule CadenceWeb.StagedCommandItemController do
+  use CadenceWeb, :controller
+
+  action_fallback CadenceWeb.FallbackController
+
+  alias Cadence.Commanding.CommandStage
+  alias Cadence.Commanding.StagedCommandItem
+  alias CadenceWeb.{ControlPlaneAccess, ControlPlaneJSON, ControlPlaneParams}
+
+  def index(
+        conn,
+        %{
+          "organization_id" => organization_id,
+          "mission_id" => mission_id,
+          "command_stage_id" => command_stage_id
+        } = params
+      ) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %CommandStage{}} <-
+           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id),
+         {:ok, filters} <- ControlPlaneParams.staged_command_item_filters(params) do
+      staged_command_items =
+        filters
+        |> Keyword.put(:command_stage_id, command_stage_id)
+        |> then(&Cadence.list_staged_command_items(organization_id, mission_id, &1))
+        |> Enum.map(&ControlPlaneJSON.staged_command_item/1)
+
+      json(conn, %{data: staged_command_items})
+    end
+  end
+
+  def create(conn, %{
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "command_stage_id" => command_stage_id,
+        "staged_command_item" => staged_command_item_params
+      }) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %CommandStage{}} <-
+           Cadence.fetch_command_stage(organization_id, mission_id, command_stage_id),
+         {:ok, %StagedCommandItem{} = staged_command_item} <-
+           ControlPlaneParams.staged_command_item(
+             organization_id,
+             mission_id,
+             command_stage_id,
+             staged_command_item_params
+           ),
+         {:ok, %StagedCommandItem{} = persisted_staged_command_item} <-
+           Cadence.persist_staged_command_item(organization_id, staged_command_item) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
+    end
+  end
+
+  def show(conn, %{
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "staged_command_item_id" => staged_command_item_id
+      }) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %StagedCommandItem{} = staged_command_item} <-
+           Cadence.fetch_staged_command_item(organization_id, mission_id, staged_command_item_id) do
+      json(conn, %{data: ControlPlaneJSON.staged_command_item(staged_command_item)})
+    end
+  end
+
+  def update(conn, %{
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "staged_command_item_id" => staged_command_item_id,
+        "staged_command_item" => staged_command_item_params
+      }) do
+    with {:ok, _mission} <-
+           ControlPlaneAccess.authorize_mission(
+             conn.assigns.current_scope,
+             organization_id,
+             mission_id
+           ),
+         {:ok, %StagedCommandItem{} = existing_staged_command_item} <-
+           Cadence.fetch_staged_command_item(organization_id, mission_id, staged_command_item_id),
+         {:ok, %StagedCommandItem{} = updated_staged_command_item} <-
+           ControlPlaneParams.staged_command_item(
+             existing_staged_command_item,
+             staged_command_item_params
+           ),
+         {:ok, %StagedCommandItem{} = persisted_staged_command_item} <-
+           Cadence.update_staged_command_item(organization_id, updated_staged_command_item) do
+      json(conn, %{data: ControlPlaneJSON.staged_command_item(persisted_staged_command_item)})
+    end
+  end
+end
