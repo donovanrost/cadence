@@ -1,0 +1,3181 @@
+defmodule Cadence.Commanding do
+  @moduledoc """
+  Persistence and validation boundary for command stages, staged command items,
+  validated command requests, command approvals, queued command entries, and
+  release attempts.
+  """
+
+  import Ecto.Query
+
+  alias Ecto.Changeset
+  alias Ecto.Multi
+
+  alias Cadence.ActionRequests.UplinkRequest
+  alias Cadence.Catalog
+  alias Cadence.Catalog.Command.Compiler
+
+  alias Cadence.Catalog.Command.Compiler.{
+    ArgumentSpec,
+    OperationalBinding,
+    RuntimeDefinition,
+    VerifierPlan
+  }
+
+  alias Cadence.Catalog.Command.Definition, as: CommandDefinition
+  alias Cadence.Catalog.Command.MatchCriteria
+  alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
+
+  alias Cadence.Commanding.{
+    CommandApproval,
+    CommandQueueEntry,
+    CommandReleaseAttempt,
+    CommandRequest,
+    CommandStage,
+    CommandVerifierInstance,
+    Encoder,
+    StagedCommandItem
+  }
+
+  alias Cadence.Contacts
+  alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
+  alias Cadence.Missions
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
+  alias Cadence.Telemetry.Sample
+
+  alias Cadence.Persistence.Schemas.{
+    CommandApprovalRow,
+    CommandQueueEntryRow,
+    CommandReleaseAttemptRow,
+    CommandRequestRow,
+    CommandStageRow,
+    CommandVerifierInstanceRow,
+    StagedCommandItemRow,
+    TransportCapabilityRecordRow,
+    TransportActionRequestRow
+  }
+
+  alias Cadence.Repo
+  alias Cadence.Runtime
+  alias Cadence.SourceEndpoints
+
+  @spec persist_command_stage(binary(), CommandStage.t()) ::
+          {:ok, CommandStage.t()} | {:error, term()}
+  def persist_command_stage(organization_id, %CommandStage{} = command_stage)
+      when is_binary(organization_id) do
+    with {:ok, scoped_command_stage} <- put_organization_scope(command_stage, organization_id),
+         {:ok, _mission} <-
+           Missions.fetch_mission(
+             scoped_command_stage.organization_id,
+             scoped_command_stage.mission_id
+           ),
+         {:ok, %CommandStageRow{} = row} <-
+           Repo.insert(CommandStageRow.changeset(scoped_command_stage),
+             on_conflict: :nothing,
+             conflict_target: [:mission_id, :command_stage_id]
+           ) do
+      {:ok, CommandStageRow.to_domain(row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec update_command_stage(binary(), CommandStage.t()) ::
+          {:ok, CommandStage.t()} | {:error, term()}
+  def update_command_stage(organization_id, %CommandStage{} = command_stage)
+      when is_binary(organization_id) do
+    with {:ok, scoped_command_stage} <- put_organization_scope(command_stage, organization_id),
+         {:ok, row} <-
+           fetch_command_stage_row(
+             scoped_command_stage.organization_id,
+             scoped_command_stage.mission_id,
+             scoped_command_stage.command_stage_id
+           ),
+         {:ok, %CommandStageRow{} = updated_row} <-
+           row
+           |> CommandStageRow.update_changeset(scoped_command_stage)
+           |> Repo.update() do
+      {:ok, CommandStageRow.to_domain(updated_row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_command_stage(binary(), binary(), binary()) ::
+          {:ok, CommandStage.t()} | {:error, term()}
+  def fetch_command_stage(organization_id, mission_id, command_stage_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) do
+    case Repo.get_by(CommandStageRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_stage_id: command_stage_id
+         ) do
+      nil -> {:error, :command_stage_not_found}
+      %CommandStageRow{} = row -> {:ok, CommandStageRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_stages(binary(), binary(), keyword()) :: [CommandStage.t()]
+  def list_command_stages(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandStageRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row], asc: row.inserted_at, asc: row.command_stage_id)
+    |> Repo.all()
+    |> Enum.map(&CommandStageRow.to_domain/1)
+  end
+
+  @spec persist_staged_command_item(binary(), StagedCommandItem.t()) ::
+          {:ok, StagedCommandItem.t()} | {:error, term()}
+  def persist_staged_command_item(organization_id, %StagedCommandItem{} = staged_command_item)
+      when is_binary(organization_id) do
+    with {:ok, scoped_item} <- put_organization_scope(staged_command_item, organization_id),
+         {:ok, _stage} <- validate_stage_assignment(scoped_item),
+         {:ok, _source_endpoint} <-
+           SourceEndpoints.fetch_source_endpoint(
+             scoped_item.organization_id,
+             scoped_item.mission_id,
+             scoped_item.source_endpoint_ref
+           ),
+         {:ok, _request_basis} <-
+           resolve_request_basis(
+             scoped_item.organization_id,
+             scoped_item.mission_id,
+             scoped_item.command_snapshot_id,
+             scoped_item.command_id
+           ),
+         {:ok, %StagedCommandItemRow{} = row} <-
+           Repo.insert(StagedCommandItemRow.changeset(scoped_item),
+             on_conflict: :nothing,
+             conflict_target: [:mission_id, :staged_command_item_id]
+           ) do
+      {:ok, StagedCommandItemRow.to_domain(row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec update_staged_command_item(binary(), StagedCommandItem.t()) ::
+          {:ok, StagedCommandItem.t()} | {:error, term()}
+  def update_staged_command_item(organization_id, %StagedCommandItem{} = staged_command_item)
+      when is_binary(organization_id) do
+    with {:ok, scoped_item} <- put_organization_scope(staged_command_item, organization_id),
+         {:ok, row} <-
+           fetch_staged_command_item_row(
+             scoped_item.organization_id,
+             scoped_item.mission_id,
+             scoped_item.staged_command_item_id
+           ),
+         :ok <- ensure_staged_command_item_editable(row),
+         {:ok, _stage} <- validate_stage_assignment(scoped_item),
+         {:ok, _source_endpoint} <-
+           SourceEndpoints.fetch_source_endpoint(
+             scoped_item.organization_id,
+             scoped_item.mission_id,
+             scoped_item.source_endpoint_ref
+           ),
+         {:ok, _request_basis} <-
+           resolve_request_basis(
+             scoped_item.organization_id,
+             scoped_item.mission_id,
+             scoped_item.command_snapshot_id,
+             scoped_item.command_id
+           ),
+         {:ok, %StagedCommandItemRow{} = updated_row} <-
+           row
+           |> StagedCommandItemRow.update_changeset(scoped_item)
+           |> Repo.update() do
+      {:ok, StagedCommandItemRow.to_domain(updated_row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_staged_command_item(binary(), binary(), binary()) ::
+          {:ok, StagedCommandItem.t()} | {:error, term()}
+  def fetch_staged_command_item(organization_id, mission_id, staged_command_item_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(staged_command_item_id) do
+    case Repo.get_by(StagedCommandItemRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           staged_command_item_id: staged_command_item_id
+         ) do
+      nil -> {:error, :staged_command_item_not_found}
+      %StagedCommandItemRow{} = row -> {:ok, StagedCommandItemRow.to_domain(row)}
+    end
+  end
+
+  @spec list_staged_command_items(binary(), binary(), keyword()) :: [StagedCommandItem.t()]
+  def list_staged_command_items(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    StagedCommandItemRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:command_stage_id, Keyword.get(opts, :command_stage_id))
+    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row], asc: row.item_order, asc: row.inserted_at, asc: row.staged_command_item_id)
+    |> Repo.all()
+    |> Enum.map(&StagedCommandItemRow.to_domain/1)
+  end
+
+  @spec persist_command_request(binary(), CommandRequest.t()) ::
+          {:ok, CommandRequest.t()} | {:error, term()}
+  def persist_command_request(organization_id, %CommandRequest{} = command_request)
+      when is_binary(organization_id) do
+    with {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
+         {:ok, validated_request} <- validate_and_enrich_request(scoped_request),
+         {:ok, %CommandRequestRow{} = row} <-
+           Repo.insert(CommandRequestRow.changeset(validated_request),
+             on_conflict: :nothing,
+             conflict_target: [:mission_id, :command_request_id]
+           ) do
+      {:ok, CommandRequestRow.to_domain(row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec fetch_command_request(binary(), binary(), binary()) ::
+          {:ok, CommandRequest.t()} | {:error, term()}
+  def fetch_command_request(organization_id, mission_id, command_request_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_request_id) do
+    case Repo.get_by(CommandRequestRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_request_id: command_request_id
+         ) do
+      nil -> {:error, :command_request_not_found}
+      %CommandRequestRow{} = row -> {:ok, CommandRequestRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_requests(binary(), binary(), keyword()) :: [CommandRequest.t()]
+  def list_command_requests(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandRequestRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
+    |> maybe_filter_equals(:source_command_stage_id, Keyword.get(opts, :command_stage_id))
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row], asc: row.requested_at, asc: row.command_request_id)
+    |> Repo.all()
+    |> Enum.map(&CommandRequestRow.to_domain/1)
+  end
+
+  @spec approve_command_request(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
+          | {:error, term()}
+  def approve_command_request(
+        organization_id,
+        mission_id,
+        command_request_id,
+        approved_by,
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_request_id) and is_map(approved_by) and is_list(opts) do
+    decide_command_request(
+      organization_id,
+      mission_id,
+      command_request_id,
+      :approved,
+      approved_by,
+      opts
+    )
+  end
+
+  @spec reject_command_request(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, %{approval: CommandApproval.t(), command_request: CommandRequest.t()}}
+          | {:error, term()}
+  def reject_command_request(
+        organization_id,
+        mission_id,
+        command_request_id,
+        rejected_by,
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_request_id) and is_map(rejected_by) and is_list(opts) do
+    decide_command_request(
+      organization_id,
+      mission_id,
+      command_request_id,
+      :rejected,
+      rejected_by,
+      opts
+    )
+  end
+
+  @spec fetch_command_approval(binary(), binary(), binary()) ::
+          {:ok, CommandApproval.t()} | {:error, term()}
+  def fetch_command_approval(organization_id, mission_id, command_approval_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_approval_id) do
+    case Repo.get_by(CommandApprovalRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_approval_id: command_approval_id
+         ) do
+      nil -> {:error, :command_approval_not_found}
+      %CommandApprovalRow{} = row -> {:ok, CommandApprovalRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_approvals(binary(), binary(), keyword()) :: [CommandApproval.t()]
+  def list_command_approvals(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandApprovalRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
+    |> maybe_filter_equals(:decision, decision_filter(opts))
+    |> order_by([row], asc: row.decided_at, asc: row.command_approval_id)
+    |> Repo.all()
+    |> Enum.map(&CommandApprovalRow.to_domain/1)
+  end
+
+  @spec enqueue_command_request(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, %{command_request: CommandRequest.t(), queue_entry: CommandQueueEntry.t()}}
+          | {:error, term()}
+  def enqueue_command_request(
+        organization_id,
+        mission_id,
+        command_request_id,
+        enqueued_by \\ %{},
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_request_id) and is_map(enqueued_by) and is_list(opts) do
+    with {:ok, %CommandRequestRow{} = request_row} <-
+           fetch_command_request_row(organization_id, mission_id, command_request_id),
+         :ok <- ensure_request_queueable(request_row),
+         :ok <- ensure_request_not_expired(request_row),
+         :ok <- ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
+      queue_entry =
+        CommandQueueEntry.new(%{
+          organization_id: organization_id,
+          mission_id: mission_id,
+          command_request_id: command_request_id,
+          source_endpoint_ref: request_row.source_endpoint_ref,
+          queue_lane_key: request_row.source_endpoint_ref,
+          priority: request_row.priority,
+          queue_sequence: System.unique_integer([:positive, :monotonic]),
+          not_before: request_row.not_before,
+          expires_at: request_row.expires_at,
+          lifecycle_state: :pending,
+          enqueued_by: enqueued_by,
+          enqueued_at: Keyword.get(opts, :enqueued_at, DateTime.utc_now()),
+          metadata: Keyword.get(opts, :metadata, %{})
+        })
+
+      multi =
+        Multi.new()
+        |> Multi.insert(:queue_entry, CommandQueueEntryRow.changeset(queue_entry))
+        |> Multi.update(
+          :command_request,
+          CommandRequestRow.lifecycle_changeset(request_row, :queued)
+        )
+
+      case Repo.transaction(multi) do
+        {:ok, %{queue_entry: queue_entry_row, command_request: updated_request_row}} ->
+          maybe_schedule_queue_lane_dispatch(
+            queue_entry_row.organization_id,
+            queue_entry_row.mission_id,
+            queue_entry_row.queue_lane_key
+          )
+
+          {:ok,
+           %{
+             queue_entry: CommandQueueEntryRow.to_domain(queue_entry_row),
+             command_request: CommandRequestRow.to_domain(updated_request_row)
+           }}
+
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+          {:error, changeset}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  @spec fetch_command_queue_entry(binary(), binary(), binary()) ::
+          {:ok, CommandQueueEntry.t()} | {:error, term()}
+  def fetch_command_queue_entry(organization_id, mission_id, command_queue_entry_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_queue_entry_id) do
+    case Repo.get_by(CommandQueueEntryRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_queue_entry_id: command_queue_entry_id
+         ) do
+      nil -> {:error, :command_queue_entry_not_found}
+      %CommandQueueEntryRow{} = row -> {:ok, CommandQueueEntryRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_queue_entries(binary(), binary(), keyword()) :: [CommandQueueEntry.t()]
+  def list_command_queue_entries(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandQueueEntryRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
+    |> maybe_filter_equals(:queue_lane_key, Keyword.get(opts, :queue_lane_key))
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row],
+      asc: row.queue_lane_key,
+      asc: row.priority,
+      asc: row.queue_sequence,
+      asc: row.command_queue_entry_id
+    )
+    |> Repo.all()
+    |> Enum.map(&CommandQueueEntryRow.to_domain/1)
+  end
+
+  @spec list_pending_queue_lanes(keyword()) :: [
+          %{organization_id: binary(), mission_id: binary(), queue_lane_key: binary()}
+        ]
+  def list_pending_queue_lanes(opts \\ []) when is_list(opts) do
+    CommandQueueEntryRow
+    |> where([row], row.lifecycle_state == "pending")
+    |> maybe_filter_equals(:organization_id, Keyword.get(opts, :organization_id))
+    |> maybe_filter_equals(:mission_id, Keyword.get(opts, :mission_id))
+    |> distinct([row], [row.organization_id, row.mission_id, row.queue_lane_key])
+    |> order_by([row], asc: row.organization_id, asc: row.mission_id, asc: row.queue_lane_key)
+    |> select([row], %{
+      organization_id: row.organization_id,
+      mission_id: row.mission_id,
+      queue_lane_key: row.queue_lane_key
+    })
+    |> Repo.all()
+  end
+
+  @spec requeue_release_pending_queue_entries() :: non_neg_integer()
+  def requeue_release_pending_queue_entries do
+    {updated_count, _rows} =
+      CommandQueueEntryRow
+      |> where([row], row.lifecycle_state == "release_pending")
+      |> Repo.update_all(set: [lifecycle_state: "pending"])
+
+    updated_count
+  end
+
+  @spec dispatch_queue_lane(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok,
+           %{
+             release_attempt: CommandReleaseAttempt.t(),
+             queue_entry: CommandQueueEntry.t(),
+             command_request: CommandRequest.t()
+           }}
+          | {:error, term()}
+  def dispatch_queue_lane(
+        organization_id,
+        mission_id,
+        queue_lane_key,
+        released_by \\ %{},
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
+             is_map(released_by) and is_list(opts) do
+    attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
+
+    with :ok <- ensure_queue_lane_not_in_flight(organization_id, mission_id, queue_lane_key),
+         {:ok, %CommandQueueEntryRow{} = queue_entry_row} <-
+           next_dispatch_candidate(
+             organization_id,
+             mission_id,
+             queue_lane_key,
+             attempted_at
+           ),
+         {:ok, %CommandRequestRow{} = request_row} <-
+           fetch_command_request_row(
+             organization_id,
+             mission_id,
+             queue_entry_row.command_request_id
+           ),
+         {:ok,
+          %{
+            realized_contact: %RealizedContact{} = realized_contact,
+            path: %Path{} = path,
+            transport_binding: %TransportBinding{} = transport_binding
+          }} <-
+           resolve_dispatch_release_target(
+             organization_id,
+             mission_id,
+             request_row
+           ) do
+      release_command_queue_entry(
+        organization_id,
+        mission_id,
+        queue_entry_row.command_queue_entry_id,
+        realized_contact.realized_contact_id,
+        released_by,
+        attempted_at: attempted_at,
+        path_id: path.path_id,
+        transport_binding_id: transport_binding.transport_binding_id
+      )
+    end
+  end
+
+  @spec fetch_command_release_attempt(binary(), binary(), binary()) ::
+          {:ok, CommandReleaseAttempt.t()} | {:error, term()}
+  def fetch_command_release_attempt(organization_id, mission_id, command_release_attempt_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_release_attempt_id) do
+    case Repo.get_by(CommandReleaseAttemptRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_release_attempt_id: command_release_attempt_id
+         ) do
+      nil -> {:error, :command_release_attempt_not_found}
+      %CommandReleaseAttemptRow{} = row -> {:ok, CommandReleaseAttemptRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_release_attempts(binary(), binary(), keyword()) :: [
+          CommandReleaseAttempt.t()
+        ]
+  def list_command_release_attempts(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandReleaseAttemptRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
+    |> maybe_filter_equals(:command_queue_entry_id, Keyword.get(opts, :command_queue_entry_id))
+    |> maybe_filter_equals(:realized_contact_id, Keyword.get(opts, :realized_contact_id))
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row], asc: row.attempted_at, asc: row.command_release_attempt_id)
+    |> Repo.all()
+    |> Enum.map(&CommandReleaseAttemptRow.to_domain/1)
+  end
+
+  @spec fetch_command_verifier_instance(binary(), binary(), binary()) ::
+          {:ok, CommandVerifierInstance.t()} | {:error, term()}
+  def fetch_command_verifier_instance(organization_id, mission_id, command_verifier_instance_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_verifier_instance_id) do
+    case Repo.get_by(CommandVerifierInstanceRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_verifier_instance_id: command_verifier_instance_id
+         ) do
+      nil -> {:error, :command_verifier_instance_not_found}
+      %CommandVerifierInstanceRow{} = row -> {:ok, CommandVerifierInstanceRow.to_domain(row)}
+    end
+  end
+
+  @spec list_command_verifier_instances(binary(), binary(), keyword()) :: [
+          CommandVerifierInstance.t()
+        ]
+  def list_command_verifier_instances(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    CommandVerifierInstanceRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> maybe_filter_equals(:command_request_id, Keyword.get(opts, :command_request_id))
+    |> maybe_filter_equals(
+      :command_release_attempt_id,
+      Keyword.get(opts, :command_release_attempt_id)
+    )
+    |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
+    |> maybe_filter_equals(:phase, phase_filter(opts))
+    |> maybe_filter_equals(:lifecycle_state, lifecycle_state_filter(opts))
+    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+    |> Repo.all()
+    |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)
+  end
+
+  @spec evaluate_command_verifiers([Sample.t()]) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_command_verifiers(telemetry_samples) when is_list(telemetry_samples) do
+    case Repo.transaction(fn -> evaluate_command_verifiers(Repo, telemetry_samples) end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec evaluate_command_verifiers(module(), [Sample.t()]) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_command_verifiers(repo, telemetry_samples)
+      when is_list(telemetry_samples) do
+    telemetry_samples
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_samples}, {:ok, acc} ->
+      case evaluate_command_verifiers_for_mission(repo, mission_id, mission_samples) do
+        {:ok, verifier_instances} ->
+          {:cont, {:ok, acc ++ verifier_instances}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @spec evaluate_transport_command_verifiers(
+          [TransportCapabilityRecord.t()],
+          [TransportActionRequest.t()]
+        ) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_transport_command_verifiers(
+        transport_capability_records,
+        transport_action_requests
+      )
+      when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    case Repo.transaction(fn ->
+           evaluate_transport_command_verifiers(
+             Repo,
+             transport_capability_records,
+             transport_action_requests
+           )
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec evaluate_transport_command_verifiers(
+          module(),
+          [TransportCapabilityRecord.t()],
+          [TransportActionRequest.t()]
+        ) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def evaluate_transport_command_verifiers(
+        repo,
+        transport_capability_records,
+        transport_action_requests
+      )
+      when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    transport_signals =
+      build_transport_signals(transport_capability_records, transport_action_requests)
+
+    transport_signals
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_transport_signals}, {:ok, acc} ->
+      case evaluate_transport_command_verifiers_for_mission(
+             repo,
+             mission_id,
+             mission_transport_signals
+           ) do
+        {:ok, verifier_instances} ->
+          {:cont, {:ok, acc ++ verifier_instances}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @spec timeout_command_verifier_instances(DateTime.t()) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def timeout_command_verifier_instances(%DateTime{} = current_time) do
+    case Repo.transaction(fn -> timeout_command_verifier_instances(Repo, current_time) end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @spec timeout_command_verifier_instances(module(), DateTime.t()) ::
+          {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
+  def timeout_command_verifier_instances(repo, %DateTime{} = current_time) do
+    timed_out_rows =
+      CommandVerifierInstanceRow
+      |> where(
+        [row],
+        row.lifecycle_state == "pending" and not is_nil(row.timeout_at) and
+          row.timeout_at <= ^current_time
+      )
+      |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
+      |> repo.all()
+
+    apply_command_verifier_updates(
+      repo,
+      Enum.map(timed_out_rows, fn %CommandVerifierInstanceRow{} = row ->
+        command_verifier_instance =
+          CommandVerifierInstanceRow.to_domain(row)
+          |> Map.put(:lifecycle_state, :timed_out)
+          |> Map.put(:failure_reason, "timed_out")
+
+        {row, command_verifier_instance}
+      end)
+    )
+  end
+
+  @spec release_command_queue_entry(binary(), binary(), binary(), binary(), map(), keyword()) ::
+          {:ok,
+           %{
+             release_attempt: CommandReleaseAttempt.t(),
+             queue_entry: CommandQueueEntry.t(),
+             command_request: CommandRequest.t()
+           }}
+          | {:error, term()}
+  def release_command_queue_entry(
+        organization_id,
+        mission_id,
+        command_queue_entry_id,
+        realized_contact_id,
+        released_by \\ %{},
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(command_queue_entry_id) and is_binary(realized_contact_id) and
+             is_map(released_by) and is_list(opts) do
+    attempted_at = Keyword.get(opts, :attempted_at, DateTime.utc_now())
+
+    with {:ok, %CommandQueueEntryRow{} = queue_entry_row} <-
+           fetch_command_queue_entry_row(organization_id, mission_id, command_queue_entry_id),
+         :ok <- ensure_queue_entry_releaseable(queue_entry_row, attempted_at),
+         :ok <-
+           ensure_queue_lane_not_in_flight(
+             organization_id,
+             mission_id,
+             queue_entry_row.queue_lane_key
+           ),
+         :ok <- ensure_queue_entry_is_next_release_candidate(queue_entry_row, attempted_at),
+         {:ok, %CommandRequestRow{} = request_row} <-
+           fetch_command_request_row(
+             organization_id,
+             mission_id,
+             queue_entry_row.command_request_id
+           ),
+         :ok <- ensure_request_releasable(request_row),
+         {:ok, %RealizedContact{} = realized_contact} <-
+           fetch_realized_contact_for_release(
+             organization_id,
+             mission_id,
+             realized_contact_id
+           ),
+         {:ok, _pid} <-
+           Contacts.start_realized_contact(organization_id, mission_id, realized_contact_id),
+         {:ok,
+          %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} <-
+           resolve_release_target(realized_contact, request_row, opts),
+         {:ok, request_basis} <-
+           resolve_request_basis(
+             organization_id,
+             mission_id,
+             request_row.command_snapshot_id,
+             request_row.command_id
+           ),
+         {:ok, encoded_command} <-
+           Encoder.encode(
+             request_basis.runtime_definition,
+             JsonDocument.unwrap_value(request_row.resolved_argument_values_document)
+           ) do
+      case claim_queue_entry_for_release(queue_entry_row) do
+        {:ok, %CommandQueueEntryRow{} = claimed_queue_entry_row} ->
+          pending_attempt =
+            build_release_attempt(
+              organization_id,
+              claimed_queue_entry_row,
+              request_row,
+              realized_contact,
+              path,
+              transport_binding,
+              request_basis.runtime_definition,
+              encoded_command,
+              released_by,
+              attempted_at,
+              Keyword.get(opts, :metadata, %{})
+            )
+
+          case persist_command_release_attempt(organization_id, pending_attempt) do
+            {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
+              uplink_request = build_uplink_request(persisted_attempt)
+
+              case Runtime.handle_path_control_input(
+                     mission_id,
+                     realized_contact.realized_contact_id,
+                     path.path_id,
+                     transport_binding.transport_binding_id,
+                     uplink_request,
+                     occurred_at: attempted_at
+                   ) do
+                {:ok, _transport_outputs} ->
+                  complete_release_success(
+                    claimed_queue_entry_row,
+                    request_row,
+                    persisted_attempt,
+                    request_basis.verifier_plans,
+                    attempted_at
+                  )
+
+                {:error, reason} ->
+                  complete_release_failure(claimed_queue_entry_row, persisted_attempt, reason)
+                  {:error, reason}
+              end
+
+            {:error, reason} ->
+              restore_queue_entry_pending(claimed_queue_entry_row)
+
+              maybe_schedule_queue_lane_dispatch(
+                claimed_queue_entry_row.organization_id,
+                claimed_queue_entry_row.mission_id,
+                claimed_queue_entry_row.queue_lane_key
+              )
+
+              {:error, reason}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, reason} ->
+        {:error, reason}
+
+      reason ->
+        {:error, reason}
+    end
+  rescue
+    error in [ArgumentError] ->
+      {:error, {:command_release_encoding_failed, Exception.message(error)}}
+  end
+
+  @spec submit_staged_command_items(binary(), binary(), binary(), [binary()], map()) ::
+          {:ok, [CommandRequest.t()]} | {:error, term()}
+  def submit_staged_command_items(
+        organization_id,
+        mission_id,
+        command_stage_id,
+        staged_command_item_ids,
+        requested_by \\ %{}
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(command_stage_id) and
+             is_list(staged_command_item_ids) and is_map(requested_by) do
+    with {:ok, stage_row} <-
+           fetch_command_stage_row(organization_id, mission_id, command_stage_id),
+         :ok <- ensure_stage_editable(stage_row),
+         {:ok, item_rows} <-
+           fetch_submission_item_rows(
+             organization_id,
+             mission_id,
+             command_stage_id,
+             staged_command_item_ids
+           ),
+         {:ok, validated_requests} <- build_stage_requests(item_rows, requested_by) do
+      multi =
+        validated_requests
+        |> Enum.reduce(Multi.new(), fn {item_row, request}, multi ->
+          multi
+          |> Multi.insert(
+            {:command_request, request.command_request_id},
+            CommandRequestRow.changeset(request)
+          )
+          |> Multi.update(
+            {:staged_command_item, item_row.staged_command_item_id},
+            StagedCommandItemRow.submission_changeset(item_row, request.command_request_id)
+          )
+        end)
+        |> maybe_mark_stage_submitted(stage_row, staged_command_item_ids)
+
+      case Repo.transaction(multi) do
+        {:ok, _changes} ->
+          command_request_ids =
+            Enum.map(validated_requests, fn {_row, request} -> request.command_request_id end)
+
+          {:ok,
+           Enum.map(command_request_ids, fn command_request_id ->
+             {:ok, request} =
+               fetch_command_request(organization_id, mission_id, command_request_id)
+
+             request
+           end)}
+
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+          {:error, changeset}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp maybe_mark_stage_submitted(
+         %Multi{} = multi,
+         %CommandStageRow{} = stage_row,
+         submitted_item_ids
+       ) do
+    remaining_draft_count =
+      StagedCommandItemRow
+      |> where(
+        [row],
+        row.organization_id == ^stage_row.organization_id and
+          row.mission_id == ^stage_row.mission_id and
+          row.command_stage_id == ^stage_row.command_stage_id and
+          row.lifecycle_state == "draft" and
+          row.staged_command_item_id not in ^submitted_item_ids
+      )
+      |> select([row], count(row.staged_command_item_id))
+      |> Repo.one()
+
+    if remaining_draft_count == 0 do
+      Multi.update(
+        multi,
+        :command_stage_submitted,
+        CommandStageRow.lifecycle_changeset(stage_row, :submitted)
+      )
+    else
+      multi
+    end
+  end
+
+  defp build_stage_requests(item_rows, requested_by) do
+    item_rows
+    |> Enum.reduce_while({:ok, []}, fn %StagedCommandItemRow{} = item_row, {:ok, acc} ->
+      request =
+        CommandRequest.new(%{
+          mission_id: item_row.mission_id,
+          organization_id: item_row.organization_id,
+          source_endpoint_ref: item_row.source_endpoint_ref,
+          command_snapshot_id: item_row.command_snapshot_id,
+          command_id: item_row.command_id,
+          priority: item_row.priority,
+          not_before: item_row.not_before,
+          expires_at: item_row.expires_at,
+          requested_by: requested_by,
+          source_command_stage_id: item_row.command_stage_id,
+          source_staged_command_item_id: item_row.staged_command_item_id,
+          argument_values:
+            Cadence.Persistence.JsonDocument.unwrap_value(item_row.argument_values_document),
+          metadata: %{
+            "notes" => item_row.notes,
+            "stage_item_order" => item_row.item_order,
+            "stage_item_metadata" =>
+              Cadence.Persistence.JsonDocument.unwrap_value(item_row.metadata_document)
+          }
+        })
+
+      case validate_and_enrich_request(request) do
+        {:ok, validated_request} ->
+          {:cont, {:ok, [{item_row, validated_request} | acc]}}
+
+        {:error, reason} ->
+          {:halt,
+           {:error, {:staged_command_submission_failed, item_row.staged_command_item_id, reason}}}
+      end
+    end)
+    |> case do
+      {:ok, requests} -> {:ok, Enum.reverse(requests)}
+      error -> error
+    end
+  end
+
+  defp validate_and_enrich_request(%CommandRequest{} = command_request) do
+    with {:ok, _mission} <-
+           Missions.fetch_mission(command_request.organization_id, command_request.mission_id),
+         {:ok, _source_endpoint} <-
+           SourceEndpoints.fetch_source_endpoint(
+             command_request.organization_id,
+             command_request.mission_id,
+             command_request.source_endpoint_ref
+           ),
+         {:ok, request_basis} <-
+           resolve_request_basis(
+             command_request.organization_id,
+             command_request.mission_id,
+             command_request.command_snapshot_id,
+             command_request.command_id
+           ),
+         {:ok, resolved_argument_values} <-
+           resolve_argument_values(
+             command_request.argument_values,
+             request_basis.runtime_definition
+           ) do
+      {:ok,
+       CommandRequest.new(%{
+         command_request_id: command_request.command_request_id,
+         organization_id: command_request.organization_id,
+         mission_id: command_request.mission_id,
+         source_endpoint_ref: command_request.source_endpoint_ref,
+         command_snapshot_id: command_request.command_snapshot_id,
+         command_id: command_request.command_id,
+         command_name: request_basis.definition.name,
+         command_display_name: request_basis.definition.display_name,
+         lifecycle_state:
+           request_lifecycle_state(
+             request_basis.operational_binding.significance,
+             request_basis.operational_binding.critical,
+             request_basis.operational_binding.hazardous,
+             request_basis.operational_binding.release_policy_hint
+           ),
+         priority: command_request.priority,
+         not_before: command_request.not_before,
+         expires_at: command_request.expires_at,
+         requested_by: command_request.requested_by,
+         source_command_stage_id: command_request.source_command_stage_id,
+         source_staged_command_item_id: command_request.source_staged_command_item_id,
+         argument_values: normalize_argument_values(command_request.argument_values),
+         resolved_argument_values: resolved_argument_values,
+         significance: request_basis.operational_binding.significance,
+         critical: request_basis.operational_binding.critical,
+         hazardous: request_basis.operational_binding.hazardous,
+         subsystem: request_basis.operational_binding.subsystem,
+         group_name: request_basis.operational_binding.group_name,
+         preferred_uplink_service: request_basis.operational_binding.preferred_uplink_service,
+         release_policy_hint: request_basis.operational_binding.release_policy_hint,
+         apid: request_basis.operational_binding.apid,
+         service_type: request_basis.operational_binding.service_type,
+         service_subtype: request_basis.operational_binding.service_subtype,
+         opcode: request_basis.operational_binding.opcode,
+         requested_at: command_request.requested_at || DateTime.utc_now(),
+         metadata:
+           Map.merge(command_request.metadata, %{
+             "validation_basis" => %{
+               "snapshot_id" => request_basis.snapshot.snapshot_id,
+               "runtime_layout_id" => request_basis.runtime_definition.layout_id
+             }
+           })
+       })}
+    end
+  end
+
+  defp resolve_request_basis(organization_id, mission_id, command_snapshot_id, command_id)
+       when is_binary(organization_id) and is_binary(mission_id) and
+              is_binary(command_snapshot_id) and is_binary(command_id) do
+    with {:ok, %CommandSnapshot{} = snapshot} <-
+           Catalog.fetch_command_snapshot(organization_id, mission_id, command_snapshot_id),
+         {:ok, %CommandDefinition{} = definition} <-
+           fetch_command_definition(snapshot, command_id),
+         {:ok, compiler_result} <- compile_command_snapshot(snapshot),
+         {:ok, %RuntimeDefinition{} = runtime_definition} <-
+           fetch_runtime_definition(compiler_result, command_id),
+         verifier_plans <- fetch_verifier_plans(compiler_result, command_id),
+         {:ok, %OperationalBinding{} = operational_binding} <-
+           fetch_operational_binding(compiler_result, command_id) do
+      {:ok,
+       %{
+         snapshot: snapshot,
+         definition: definition,
+         runtime_definition: runtime_definition,
+         verifier_plans: verifier_plans,
+         operational_binding: operational_binding
+       }}
+    end
+  end
+
+  defp fetch_command_definition(%CommandSnapshot{} = snapshot, command_id) do
+    case Enum.find(snapshot.command_definitions, &(&1.command_id == command_id)) do
+      nil -> {:error, {:command_definition_not_found, snapshot.snapshot_id, command_id}}
+      %CommandDefinition{} = definition -> {:ok, definition}
+    end
+  end
+
+  defp compile_command_snapshot(%CommandSnapshot{} = snapshot) do
+    {:ok, Compiler.compile(snapshot)}
+  end
+
+  defp fetch_runtime_definition(compiler_result, command_id) do
+    case Enum.find(compiler_result.runtime_definitions, &(&1.command_id == command_id)) do
+      nil -> {:error, {:command_runtime_definition_not_found, command_id}}
+      %RuntimeDefinition{} = runtime_definition -> {:ok, runtime_definition}
+    end
+  end
+
+  defp fetch_operational_binding(compiler_result, command_id) do
+    case Enum.find(compiler_result.operational_bindings, &(&1.command_id == command_id)) do
+      nil -> {:error, {:command_operational_binding_not_found, command_id}}
+      %OperationalBinding{} = operational_binding -> {:ok, operational_binding}
+    end
+  end
+
+  defp fetch_verifier_plans(compiler_result, command_id) do
+    Enum.filter(compiler_result.verifier_plans, &(&1.command_id == command_id))
+  end
+
+  defp resolve_argument_values(argument_values, %RuntimeDefinition{} = runtime_definition) do
+    normalized_values = normalize_argument_values(argument_values)
+
+    argument_specs_by_name =
+      Map.new(runtime_definition.argument_specs, fn %ArgumentSpec{} = argument_spec ->
+        {argument_spec.name, argument_spec}
+      end)
+
+    unknown_arguments =
+      normalized_values
+      |> Map.keys()
+      |> Enum.reject(&Map.has_key?(argument_specs_by_name, &1))
+
+    if unknown_arguments != [] do
+      {:error, {:unknown_command_arguments, Enum.sort(unknown_arguments)}}
+    else
+      runtime_definition.argument_specs
+      |> Enum.reduce_while({:ok, %{}}, fn %ArgumentSpec{} = argument_spec, {:ok, acc} ->
+        case resolve_argument_value(argument_spec, normalized_values) do
+          {:ok, :skip} ->
+            {:cont, {:ok, acc}}
+
+          {:ok, value} ->
+            {:cont, {:ok, Map.put(acc, argument_spec.name, value)}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+      end)
+    end
+  end
+
+  defp resolve_argument_value(%ArgumentSpec{} = argument_spec, normalized_values) do
+    case Map.fetch(normalized_values, argument_spec.name) do
+      {:ok, provided_value} ->
+        cond do
+          not is_nil(argument_spec.fixed_value) and provided_value != argument_spec.fixed_value ->
+            {:error,
+             {:command_argument_fixed_value_conflict, argument_spec.name,
+              argument_spec.fixed_value, provided_value}}
+
+          not valid_argument_value?(provided_value, argument_spec) ->
+            {:error,
+             {:invalid_command_argument_type, argument_spec.name, argument_spec.base_type,
+              provided_value}}
+
+          not is_nil(argument_spec.fixed_value) ->
+            {:ok, argument_spec.fixed_value}
+
+          true ->
+            {:ok, provided_value}
+        end
+
+      :error ->
+        cond do
+          not is_nil(argument_spec.fixed_value) ->
+            {:ok, argument_spec.fixed_value}
+
+          not is_nil(argument_spec.default_value) ->
+            {:ok, argument_spec.default_value}
+
+          argument_spec.required ->
+            {:error, {:missing_required_command_argument, argument_spec.name}}
+
+          true ->
+            {:ok, :skip}
+        end
+    end
+  end
+
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :integer}), do: is_integer(value)
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :float}), do: is_number(value)
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :string}), do: is_binary(value)
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :binary}), do: is_binary(value)
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :boolean}), do: is_boolean(value)
+
+  defp valid_argument_value?(value, %ArgumentSpec{base_type: :enumerated}) do
+    is_integer(value) or is_binary(value)
+  end
+
+  defp valid_argument_value?(_value, _argument_spec), do: false
+
+  defp normalize_argument_values(argument_values) when is_map(argument_values) do
+    Map.new(argument_values, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp normalize_argument_values(_other), do: %{}
+
+  defp decide_command_request(
+         organization_id,
+         mission_id,
+         command_request_id,
+         decision,
+         decided_by,
+         opts
+       )
+       when decision in [:approved, :rejected] do
+    with {:ok, %CommandRequestRow{} = request_row} <-
+           fetch_command_request_row(organization_id, mission_id, command_request_id),
+         :ok <- ensure_request_pending_approval(request_row),
+         :ok <- ensure_human_approval_actor(decided_by, command_request_id),
+         :ok <- ensure_not_self_approval(request_row, decided_by) do
+      approval =
+        CommandApproval.new(%{
+          organization_id: organization_id,
+          mission_id: mission_id,
+          command_request_id: command_request_id,
+          decision: decision,
+          decided_by: decided_by,
+          decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
+          reason: Keyword.get(opts, :reason),
+          metadata: Keyword.get(opts, :metadata, %{})
+        })
+
+      request_lifecycle_state =
+        case decision do
+          :approved -> :approved
+          :rejected -> :rejected
+        end
+
+      multi =
+        Multi.new()
+        |> Multi.insert(:approval, CommandApprovalRow.changeset(approval))
+        |> Multi.update(
+          :command_request,
+          CommandRequestRow.lifecycle_changeset(request_row, request_lifecycle_state)
+        )
+
+      case Repo.transaction(multi) do
+        {:ok, %{approval: approval_row, command_request: updated_request_row}} ->
+          {:ok,
+           %{
+             approval: CommandApprovalRow.to_domain(approval_row),
+             command_request: CommandRequestRow.to_domain(updated_request_row)
+           }}
+
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+          {:error, changeset}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp request_lifecycle_state(significance, critical, hazardous, release_policy_hint) do
+    if approval_required?(significance, critical, hazardous, release_policy_hint) do
+      :approval_pending
+    else
+      :validated
+    end
+  end
+
+  defp approval_required?(significance, critical, hazardous, release_policy_hint) do
+    critical or hazardous or significance in [:critical, :hazardous] or
+      release_policy_hint in ["confirmation_required", "approval_required"]
+  end
+
+  defp ensure_request_pending_approval(%CommandRequestRow{
+         lifecycle_state: "approval_pending"
+       }),
+       do: :ok
+
+  defp ensure_request_pending_approval(%CommandRequestRow{} = request_row) do
+    {:error,
+     {:command_request_not_pending_approval, request_row.command_request_id,
+      request_row.lifecycle_state}}
+  end
+
+  defp ensure_human_approval_actor(decided_by, command_request_id) when is_map(decided_by) do
+    case Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id) do
+      user_id when is_binary(user_id) and user_id != "" ->
+        :ok
+
+      _other ->
+        {:error, {:command_request_approval_requires_user_actor, command_request_id}}
+    end
+  end
+
+  defp ensure_not_self_approval(%CommandRequestRow{} = request_row, decided_by) do
+    requester_user_id =
+      request_row.requested_by_document
+      |> JsonDocument.unwrap_value()
+      |> case do
+        requested_by when is_map(requested_by) ->
+          Map.get(requested_by, "user_id") || Map.get(requested_by, :user_id)
+
+        _other ->
+          nil
+      end
+
+    approver_user_id = Map.get(decided_by, "user_id") || Map.get(decided_by, :user_id)
+
+    if is_binary(requester_user_id) and requester_user_id != "" and
+         requester_user_id == approver_user_id do
+      {:error, {:command_request_self_approval_not_allowed, request_row.command_request_id}}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_request_queueable(%CommandRequestRow{lifecycle_state: lifecycle_state})
+       when lifecycle_state in ["validated", "approved"],
+       do: :ok
+
+  defp ensure_request_queueable(
+         %CommandRequestRow{lifecycle_state: "approval_pending"} = request_row
+       ) do
+    {:error, {:command_request_requires_approval, request_row.command_request_id}}
+  end
+
+  defp ensure_request_queueable(%CommandRequestRow{} = request_row) do
+    {:error,
+     {:command_request_not_queueable, request_row.command_request_id, request_row.lifecycle_state}}
+  end
+
+  defp ensure_request_releasable(%CommandRequestRow{lifecycle_state: "queued"}), do: :ok
+
+  defp ensure_request_releasable(%CommandRequestRow{} = request_row) do
+    {:error,
+     {:command_request_not_releasable, request_row.command_request_id,
+      request_row.lifecycle_state}}
+  end
+
+  defp ensure_request_not_expired(%CommandRequestRow{expires_at: nil}), do: :ok
+
+  defp ensure_request_not_expired(%CommandRequestRow{} = request_row) do
+    if DateTime.compare(request_row.expires_at, DateTime.utc_now()) == :lt do
+      {:error, {:command_request_expired, request_row.command_request_id}}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_request_not_already_queued(organization_id, mission_id, command_request_id) do
+    case Repo.get_by(CommandQueueEntryRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_request_id: command_request_id
+         ) do
+      nil -> :ok
+      %CommandQueueEntryRow{} -> {:error, {:command_request_already_queued, command_request_id}}
+    end
+  end
+
+  defp ensure_queue_entry_releaseable(
+         %CommandQueueEntryRow{lifecycle_state: "pending"} = queue_entry_row,
+         %DateTime{} = attempted_at
+       ) do
+    with :ok <- ensure_queue_entry_not_before_elapsed(queue_entry_row, attempted_at),
+         :ok <- ensure_queue_entry_not_expired(queue_entry_row, attempted_at) do
+      :ok
+    end
+  end
+
+  defp ensure_queue_entry_releaseable(%CommandQueueEntryRow{} = queue_entry_row, %DateTime{}) do
+    {:error,
+     {:command_queue_entry_not_releasable, queue_entry_row.command_queue_entry_id,
+      queue_entry_row.lifecycle_state}}
+  end
+
+  defp ensure_queue_lane_not_in_flight(organization_id, mission_id, queue_lane_key)
+       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
+    case Repo.get_by(CommandQueueEntryRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           queue_lane_key: queue_lane_key,
+           lifecycle_state: "release_pending"
+         ) do
+      nil ->
+        :ok
+
+      %CommandQueueEntryRow{} ->
+        {:error, {:command_queue_lane_release_pending, queue_lane_key}}
+    end
+  end
+
+  defp ensure_queue_entry_not_before_elapsed(
+         %CommandQueueEntryRow{not_before: nil},
+         _attempted_at
+       ),
+       do: :ok
+
+  defp ensure_queue_entry_not_before_elapsed(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %DateTime{} = attempted_at
+       ) do
+    if DateTime.compare(queue_entry_row.not_before, attempted_at) in [:lt, :eq] do
+      :ok
+    else
+      {:error,
+       {:command_queue_entry_not_ready, queue_entry_row.command_queue_entry_id,
+        queue_entry_row.not_before}}
+    end
+  end
+
+  defp ensure_queue_entry_not_expired(%CommandQueueEntryRow{expires_at: nil}, _attempted_at),
+    do: :ok
+
+  defp ensure_queue_entry_not_expired(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %DateTime{} = attempted_at
+       ) do
+    if DateTime.compare(queue_entry_row.expires_at, attempted_at) == :lt do
+      {:error, {:command_queue_entry_expired, queue_entry_row.command_queue_entry_id}}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_queue_entry_is_next_release_candidate(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %DateTime{} = attempted_at
+       ) do
+    case next_release_candidate(
+           queue_entry_row.organization_id,
+           queue_entry_row.mission_id,
+           queue_entry_row.queue_lane_key,
+           attempted_at
+         ) do
+      nil ->
+        {:error, {:command_queue_lane_empty, queue_entry_row.queue_lane_key}}
+
+      %CommandQueueEntryRow{command_queue_entry_id: queue_entry_id}
+      when queue_entry_id == queue_entry_row.command_queue_entry_id ->
+        :ok
+
+      %CommandQueueEntryRow{} = next_queue_entry_row ->
+        {:error,
+         {:command_queue_entry_not_next_for_release, queue_entry_row.command_queue_entry_id,
+          next_queue_entry_row.command_queue_entry_id}}
+    end
+  end
+
+  defp next_release_candidate(
+         organization_id,
+         mission_id,
+         queue_lane_key,
+         %DateTime{} = attempted_at
+       )
+       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
+    CommandQueueEntryRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.queue_lane_key == ^queue_lane_key and row.lifecycle_state == "pending" and
+        (is_nil(row.not_before) or row.not_before <= ^attempted_at) and
+        (is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
+    )
+    |> order_by([row],
+      asc: row.priority,
+      asc: row.queue_sequence,
+      asc: row.command_queue_entry_id
+    )
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  defp next_dispatch_candidate(
+         organization_id,
+         mission_id,
+         queue_lane_key,
+         %DateTime{} = attempted_at
+       ) do
+    case next_release_candidate(organization_id, mission_id, queue_lane_key, attempted_at) do
+      %CommandQueueEntryRow{} = queue_entry_row ->
+        {:ok, queue_entry_row}
+
+      nil ->
+        next_pending_not_before =
+          CommandQueueEntryRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.queue_lane_key == ^queue_lane_key and row.lifecycle_state == "pending" and
+              not is_nil(row.not_before) and row.not_before > ^attempted_at and
+              (is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
+          )
+          |> order_by([row], asc: row.not_before, asc: row.queue_sequence)
+          |> select([row], row.not_before)
+          |> limit(1)
+          |> Repo.one()
+
+        case next_pending_not_before do
+          %DateTime{} = not_before ->
+            {:error, {:command_queue_lane_waiting_for_not_before, queue_lane_key, not_before}}
+
+          nil ->
+            {:error, :command_queue_lane_empty}
+        end
+    end
+  end
+
+  defp fetch_realized_contact_for_release(organization_id, mission_id, realized_contact_id) do
+    with {:ok, %RealizedContact{} = realized_contact} <-
+           Contacts.fetch_realized_contact(organization_id, mission_id, realized_contact_id),
+         :ok <- ensure_realized_contact_releasable(realized_contact) do
+      {:ok, realized_contact}
+    end
+  end
+
+  defp ensure_realized_contact_releasable(%RealizedContact{lifecycle_state: lifecycle_state})
+       when lifecycle_state in [:defined, :active],
+       do: :ok
+
+  defp ensure_realized_contact_releasable(%RealizedContact{} = realized_contact) do
+    {:error,
+     {:realized_contact_not_releasable, realized_contact.realized_contact_id,
+      realized_contact.lifecycle_state}}
+  end
+
+  defp resolve_dispatch_release_target(
+         organization_id,
+         mission_id,
+         %CommandRequestRow{} = request_row
+       ) do
+    organization_id
+    |> Contacts.list_realized_contacts(mission_id)
+    |> Enum.filter(fn %RealizedContact{} = realized_contact ->
+      ensure_realized_contact_releasable(realized_contact) == :ok
+    end)
+    |> Enum.sort_by(&dispatch_contact_sort_key/1)
+    |> Enum.reduce_while(
+      {:error,
+       {:command_queue_lane_no_release_target, request_row.source_endpoint_ref, mission_id}},
+      fn %RealizedContact{} = realized_contact, _acc ->
+        case resolve_release_target(realized_contact, request_row, []) do
+          {:ok,
+           %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} ->
+            {:halt,
+             {:ok,
+              %{
+                realized_contact: realized_contact,
+                path: path,
+                transport_binding: transport_binding
+              }}}
+
+          {:error, _reason} ->
+            {:cont,
+             {:error,
+              {:command_queue_lane_no_release_target, request_row.source_endpoint_ref, mission_id}}}
+        end
+      end
+    )
+  end
+
+  defp dispatch_contact_sort_key(%RealizedContact{} = realized_contact) do
+    lifecycle_rank =
+      case realized_contact.lifecycle_state do
+        :active -> 0
+        :defined -> 1
+        _other -> 2
+      end
+
+    {lifecycle_rank, realized_contact.realized_at || realized_contact.initial_time,
+     realized_contact.realized_contact_id}
+  end
+
+  defp resolve_release_target(
+         %RealizedContact{} = realized_contact,
+         %CommandRequestRow{} = request_row,
+         opts
+       ) do
+    with {:ok, %Path{} = path} <- resolve_release_path(realized_contact, request_row, opts),
+         {:ok, %TransportBinding{} = transport_binding} <-
+           resolve_release_transport_binding(path, request_row, opts) do
+      {:ok, %{path: path, transport_binding: transport_binding}}
+    end
+  end
+
+  defp resolve_release_path(
+         %RealizedContact{} = realized_contact,
+         %CommandRequestRow{} = request_row,
+         opts
+       ) do
+    case Keyword.get(opts, :path_id) do
+      path_id when is_binary(path_id) ->
+        with {:ok, %Path{} = path} <- fetch_contact_path(realized_contact, path_id),
+             :ok <- ensure_uplink_path(path),
+             :ok <- ensure_selected_uplink_path(path),
+             :ok <- ensure_path_matches_source_endpoint(path, request_row.source_endpoint_ref) do
+          {:ok, path}
+        end
+
+      _other ->
+        select_release_path(realized_contact, request_row.source_endpoint_ref)
+    end
+  end
+
+  defp fetch_contact_path(%RealizedContact{} = realized_contact, path_id) do
+    case Enum.find(realized_contact.paths, &(&1.path_id == path_id)) do
+      nil ->
+        {:error,
+         {:realized_contact_path_not_found, realized_contact.realized_contact_id, path_id}}
+
+      %Path{} = path ->
+        {:ok, path}
+    end
+  end
+
+  defp ensure_uplink_path(%Path{direction: :uplink}), do: :ok
+
+  defp ensure_uplink_path(%Path{} = path),
+    do: {:error, {:realized_contact_path_not_uplink, path.path_id}}
+
+  defp ensure_selected_uplink_path(%Path{selection_role: :selected}), do: :ok
+
+  defp ensure_selected_uplink_path(%Path{} = path) do
+    {:error, {:realized_contact_path_not_selected_for_uplink, path.path_id}}
+  end
+
+  defp ensure_path_matches_source_endpoint(%Path{source_endpoint_ref: nil}, _source_endpoint_ref),
+    do: :ok
+
+  defp ensure_path_matches_source_endpoint(
+         %Path{source_endpoint_ref: source_endpoint_ref},
+         source_endpoint_ref
+       ),
+       do: :ok
+
+  defp ensure_path_matches_source_endpoint(%Path{} = path, source_endpoint_ref) do
+    {:error, {:realized_contact_path_source_endpoint_mismatch, path.path_id, source_endpoint_ref}}
+  end
+
+  defp select_release_path(%RealizedContact{} = realized_contact, source_endpoint_ref) do
+    matching_paths =
+      Enum.filter(realized_contact.paths, fn %Path{} = path ->
+        path.direction == :uplink and path.selection_role == :selected and
+          (is_nil(path.source_endpoint_ref) or path.source_endpoint_ref == source_endpoint_ref)
+      end)
+
+    case matching_paths do
+      [%Path{} = path] ->
+        {:ok, path}
+
+      [] ->
+        {:error,
+         {:selected_uplink_path_not_found, realized_contact.realized_contact_id,
+          source_endpoint_ref}}
+
+      _multiple ->
+        {:error,
+         {:realized_contact_has_multiple_matching_selected_uplink_paths,
+          realized_contact.realized_contact_id, source_endpoint_ref}}
+    end
+  end
+
+  defp resolve_release_transport_binding(%Path{} = path, %CommandRequestRow{} = request_row, opts) do
+    case Keyword.get(opts, :transport_binding_id) do
+      transport_binding_id when is_binary(transport_binding_id) ->
+        with {:ok, %TransportBinding{} = transport_binding} <-
+               fetch_transport_binding(path, transport_binding_id),
+             :ok <-
+               ensure_transport_binding_matches_preferred_service(transport_binding, request_row) do
+          {:ok, transport_binding}
+        end
+
+      _other ->
+        select_transport_binding(path, request_row)
+    end
+  end
+
+  defp fetch_transport_binding(%Path{} = path, transport_binding_id) do
+    case Enum.find(path.transport_bindings, &(&1.transport_binding_id == transport_binding_id)) do
+      nil -> {:error, {:uplink_transport_binding_not_found, path.path_id, transport_binding_id}}
+      %TransportBinding{} = transport_binding -> {:ok, transport_binding}
+    end
+  end
+
+  defp select_transport_binding(%Path{transport_bindings: []} = path, _request_row) do
+    {:error, {:uplink_transport_binding_not_configured, path.path_id}}
+  end
+
+  defp select_transport_binding(
+         %Path{transport_bindings: [transport_binding]},
+         %CommandRequestRow{} = request_row
+       ) do
+    with :ok <- ensure_transport_binding_matches_preferred_service(transport_binding, request_row) do
+      {:ok, transport_binding}
+    end
+  end
+
+  defp select_transport_binding(%Path{} = path, %CommandRequestRow{} = request_row) do
+    preferred_uplink_service = request_row.preferred_uplink_service
+
+    matching_transport_bindings =
+      Enum.filter(path.transport_bindings, fn %TransportBinding{} = transport_binding ->
+        transport_binding_matches_preferred_service?(transport_binding, preferred_uplink_service)
+      end)
+
+    case {preferred_uplink_service, matching_transport_bindings} do
+      {preferred_uplink_service, [%TransportBinding{} = transport_binding]}
+      when is_binary(preferred_uplink_service) and preferred_uplink_service != "" ->
+        {:ok, transport_binding}
+
+      {preferred_uplink_service, []}
+      when is_binary(preferred_uplink_service) and preferred_uplink_service != "" ->
+        {:error,
+         {:preferred_uplink_transport_binding_not_found, path.path_id, preferred_uplink_service}}
+
+      {nil, _matching_transport_bindings} ->
+        {:error, {:multiple_uplink_transport_bindings_require_explicit_selection, path.path_id}}
+
+      {_preferred_uplink_service, _matching_transport_bindings} ->
+        {:error, {:multiple_uplink_transport_bindings_match_preferred_service, path.path_id}}
+    end
+  end
+
+  defp ensure_transport_binding_matches_preferred_service(
+         %TransportBinding{} = transport_binding,
+         %CommandRequestRow{} = request_row
+       ) do
+    if transport_binding_matches_preferred_service?(
+         transport_binding,
+         request_row.preferred_uplink_service
+       ) do
+      :ok
+    else
+      {:error,
+       {:preferred_uplink_transport_binding_not_found, transport_binding.transport_binding_id,
+        request_row.preferred_uplink_service}}
+    end
+  end
+
+  defp transport_binding_matches_preferred_service?(
+         %TransportBinding{},
+         preferred_uplink_service
+       )
+       when not is_binary(preferred_uplink_service) or preferred_uplink_service == "",
+       do: true
+
+  defp transport_binding_matches_preferred_service?(
+         %TransportBinding{} = transport_binding,
+         preferred_uplink_service
+       ) do
+    preferred_uplink_service in transport_binding_service_names(transport_binding)
+  end
+
+  defp transport_binding_service_names(%TransportBinding{} = transport_binding) do
+    configuration_service_name =
+      case transport_binding.configuration do
+        configuration when is_map(configuration) ->
+          Map.get(configuration, :service_name) || Map.get(configuration, "service_name")
+
+        _other ->
+          nil
+      end
+
+    metadata_service_name =
+      Map.get(transport_binding.metadata, :service_name) ||
+        Map.get(transport_binding.metadata, "service_name")
+
+    [
+      configuration_service_name,
+      metadata_service_name,
+      Atom.to_string(transport_binding.family_key)
+    ]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+  end
+
+  defp claim_queue_entry_for_release(%CommandQueueEntryRow{} = queue_entry_row) do
+    {updated_count, _rows} =
+      CommandQueueEntryRow
+      |> where(
+        [row],
+        row.organization_id == ^queue_entry_row.organization_id and
+          row.mission_id == ^queue_entry_row.mission_id and
+          row.command_queue_entry_id == ^queue_entry_row.command_queue_entry_id and
+          row.lifecycle_state == "pending"
+      )
+      |> Repo.update_all(set: [lifecycle_state: "release_pending"])
+
+    if updated_count == 1 do
+      fetch_command_queue_entry_row(
+        queue_entry_row.organization_id,
+        queue_entry_row.mission_id,
+        queue_entry_row.command_queue_entry_id
+      )
+    else
+      {:error,
+       {:command_queue_entry_not_releasable, queue_entry_row.command_queue_entry_id,
+        queue_entry_row.lifecycle_state}}
+    end
+  end
+
+  defp restore_queue_entry_pending(%CommandQueueEntryRow{} = queue_entry_row) do
+    _ =
+      queue_entry_row
+      |> CommandQueueEntryRow.lifecycle_changeset(:pending)
+      |> Repo.update()
+
+    :ok
+  end
+
+  defp build_release_attempt(
+         organization_id,
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandRequestRow{} = request_row,
+         %RealizedContact{} = realized_contact,
+         %Path{} = path,
+         %TransportBinding{} = transport_binding,
+         %RuntimeDefinition{} = runtime_definition,
+         encoded_command,
+         released_by,
+         attempted_at,
+         metadata
+       ) do
+    CommandReleaseAttempt.new(%{
+      organization_id: organization_id,
+      mission_id: queue_entry_row.mission_id,
+      command_queue_entry_id: queue_entry_row.command_queue_entry_id,
+      command_request_id: request_row.command_request_id,
+      source_endpoint_ref: queue_entry_row.source_endpoint_ref,
+      realized_contact_id: realized_contact.realized_contact_id,
+      path_id: path.path_id,
+      transport_binding_id: transport_binding.transport_binding_id,
+      command_snapshot_id: request_row.command_snapshot_id,
+      command_id: request_row.command_id,
+      command_name: request_row.command_name,
+      layout_kind: runtime_definition.layout_kind,
+      preferred_uplink_service: request_row.preferred_uplink_service,
+      apid: runtime_definition.apid,
+      service_type: runtime_definition.service_type,
+      service_subtype: runtime_definition.service_subtype,
+      opcode: runtime_definition.opcode,
+      encoded_binary_base64: encoded_command.base64,
+      encoded_size_bytes: encoded_command.size_bytes,
+      lifecycle_state: :release_pending,
+      verification_state: nil,
+      released_by: released_by,
+      attempted_at: attempted_at,
+      metadata: metadata
+    })
+  end
+
+  defp build_uplink_request(%CommandReleaseAttempt{} = command_release_attempt) do
+    UplinkRequest.new(%{
+      command_release_attempt_id: command_release_attempt.command_release_attempt_id,
+      command_queue_entry_id: command_release_attempt.command_queue_entry_id,
+      command_request_id: command_release_attempt.command_request_id,
+      source_endpoint_ref: command_release_attempt.source_endpoint_ref,
+      command_snapshot_id: command_release_attempt.command_snapshot_id,
+      command_id: command_release_attempt.command_id,
+      command_name: command_release_attempt.command_name,
+      layout_kind: command_release_attempt.layout_kind,
+      preferred_uplink_service: command_release_attempt.preferred_uplink_service,
+      apid: command_release_attempt.apid,
+      service_type: command_release_attempt.service_type,
+      service_subtype: command_release_attempt.service_subtype,
+      opcode: command_release_attempt.opcode,
+      encoded_binary_base64: command_release_attempt.encoded_binary_base64,
+      encoded_size_bytes: command_release_attempt.encoded_size_bytes || 0,
+      metadata: command_release_attempt.metadata
+    })
+  end
+
+  defp persist_command_release_attempt(
+         organization_id,
+         %CommandReleaseAttempt{} = command_release_attempt
+       ) do
+    with {:ok, scoped_command_release_attempt} <-
+           put_organization_scope(command_release_attempt, organization_id),
+         {:ok, %CommandReleaseAttemptRow{} = row} <-
+           Repo.insert(CommandReleaseAttemptRow.changeset(scoped_command_release_attempt),
+             on_conflict: :nothing,
+             conflict_target: [:mission_id, :command_release_attempt_id]
+           ) do
+      {:ok, CommandReleaseAttemptRow.to_domain(row)}
+    else
+      {:error, %Changeset{} = changeset} -> {:error, changeset}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp complete_release_success(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandRequestRow{} = request_row,
+         %CommandReleaseAttempt{} = command_release_attempt,
+         verifier_plans,
+         %DateTime{} = attempted_at
+       )
+       when is_list(verifier_plans) do
+    with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
+           fetch_command_release_attempt_row(
+             command_release_attempt.organization_id,
+             command_release_attempt.mission_id,
+             command_release_attempt.command_release_attempt_id
+           ) do
+      initial_verification_state =
+        case verifier_plans do
+          [] -> :not_required
+          _plans -> :pending
+        end
+
+      completed_release_attempt =
+        %CommandReleaseAttempt{
+          command_release_attempt
+          | lifecycle_state: :released,
+            verification_state: initial_verification_state,
+            released_at: attempted_at,
+            failure_reason: nil
+        }
+
+      verifier_instances =
+        build_command_verifier_instances(
+          queue_entry_row,
+          request_row,
+          completed_release_attempt,
+          verifier_plans,
+          attempted_at
+        )
+
+      multi =
+        Multi.new()
+        |> Multi.update(
+          :command_release_attempt,
+          CommandReleaseAttemptRow.update_changeset(
+            release_attempt_row,
+            completed_release_attempt
+          )
+        )
+        |> Multi.update(
+          :command_queue_entry,
+          CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :released)
+        )
+        |> Multi.update(
+          :command_request,
+          request_row
+          |> CommandRequestRow.lifecycle_changeset(:released)
+          |> Ecto.Changeset.put_change(
+            :verification_state,
+            Atom.to_string(initial_verification_state)
+          )
+        )
+        |> add_command_verifier_instance_inserts(verifier_instances)
+        |> Multi.run(:transport_command_verifier_evaluations, fn repo, _changes ->
+          evaluate_transport_command_verifiers_for_release_attempt(
+            repo,
+            queue_entry_row.organization_id,
+            queue_entry_row.mission_id,
+            command_release_attempt.command_release_attempt_id
+          )
+        end)
+        |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
+          case repo.get_by(CommandReleaseAttemptRow,
+                 organization_id: queue_entry_row.organization_id,
+                 mission_id: queue_entry_row.mission_id,
+                 command_release_attempt_id: command_release_attempt.command_release_attempt_id
+               ) do
+            %CommandReleaseAttemptRow{} = final_release_attempt_row ->
+              {:ok, final_release_attempt_row}
+
+            nil ->
+              {:error, :command_release_attempt_not_found}
+          end
+        end)
+        |> Multi.run(:final_command_request, fn repo, _changes ->
+          case repo.get_by(CommandRequestRow,
+                 organization_id: queue_entry_row.organization_id,
+                 mission_id: queue_entry_row.mission_id,
+                 command_request_id: request_row.command_request_id
+               ) do
+            %CommandRequestRow{} = final_request_row ->
+              {:ok, final_request_row}
+
+            nil ->
+              {:error, :command_request_not_found}
+          end
+        end)
+
+      case Repo.transaction(multi) do
+        {:ok,
+         %{
+           final_command_release_attempt: release_attempt_row,
+           command_queue_entry: queue_entry_row,
+           final_command_request: request_row
+         }} ->
+          maybe_schedule_queue_lane_dispatch(
+            queue_entry_row.organization_id,
+            queue_entry_row.mission_id,
+            queue_entry_row.queue_lane_key
+          )
+
+          {:ok,
+           %{
+             release_attempt: CommandReleaseAttemptRow.to_domain(release_attempt_row),
+             queue_entry: CommandQueueEntryRow.to_domain(queue_entry_row),
+             command_request: CommandRequestRow.to_domain(request_row)
+           }}
+
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+          {:error, changeset}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp complete_release_failure(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandReleaseAttempt{} = command_release_attempt,
+         reason
+       ) do
+    with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
+           fetch_command_release_attempt_row(
+             command_release_attempt.organization_id,
+             command_release_attempt.mission_id,
+             command_release_attempt.command_release_attempt_id
+           ) do
+      failed_release_attempt =
+        %CommandReleaseAttempt{
+          command_release_attempt
+          | lifecycle_state: :release_failed,
+            failure_reason: inspect(reason),
+            released_at: nil
+        }
+
+      _ =
+        Multi.new()
+        |> Multi.update(
+          :command_release_attempt,
+          CommandReleaseAttemptRow.update_changeset(release_attempt_row, failed_release_attempt)
+        )
+        |> Multi.update(
+          :command_queue_entry,
+          CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :pending)
+        )
+        |> Repo.transaction()
+
+      maybe_schedule_queue_lane_dispatch(
+        queue_entry_row.organization_id,
+        queue_entry_row.mission_id,
+        queue_entry_row.queue_lane_key
+      )
+
+      :ok
+    else
+      {:error, _reason} ->
+        :ok
+    end
+  end
+
+  defp add_command_verifier_instance_inserts(%Multi{} = multi, verifier_instances)
+       when is_list(verifier_instances) do
+    Enum.reduce(verifier_instances, multi, fn %CommandVerifierInstance{} = verifier_instance,
+                                              %Multi{} = acc ->
+      Multi.insert(
+        acc,
+        {:command_verifier_instance, verifier_instance.command_verifier_instance_id},
+        CommandVerifierInstanceRow.changeset(verifier_instance)
+      )
+    end)
+  end
+
+  defp build_command_verifier_instances(
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandRequestRow{} = request_row,
+         %CommandReleaseAttempt{} = command_release_attempt,
+         verifier_plans,
+         %DateTime{} = released_at
+       )
+       when is_list(verifier_plans) do
+    Enum.map(verifier_plans, fn %VerifierPlan{} = verifier_plan ->
+      CommandVerifierInstance.new(%{
+        organization_id: queue_entry_row.organization_id,
+        mission_id: queue_entry_row.mission_id,
+        command_request_id: request_row.command_request_id,
+        command_release_attempt_id: command_release_attempt.command_release_attempt_id,
+        source_endpoint_ref: queue_entry_row.source_endpoint_ref,
+        command_snapshot_id: request_row.command_snapshot_id,
+        command_id: request_row.command_id,
+        command_name: request_row.command_name,
+        verifier_id: verifier_plan.verifier_id,
+        verifier_name: verifier_plan.name,
+        phase: verifier_plan.phase,
+        severity: verifier_plan.severity,
+        success_criteria: verifier_plan.success_criteria,
+        failure_criteria: verifier_plan.failure_criteria,
+        delay_until: shift_time(released_at, verifier_plan.delay_ms),
+        timeout_at: shift_time(released_at, verifier_plan.timeout_ms),
+        metadata: verifier_plan.metadata
+      })
+    end)
+  end
+
+  defp evaluate_command_verifiers_for_mission(repo, mission_id, telemetry_samples)
+       when is_binary(mission_id) and is_list(telemetry_samples) do
+    case OrganizationScope.organization_id_for_mission(mission_id) do
+      nil ->
+        {:ok, []}
+
+      organization_id ->
+        pending_rows =
+          CommandVerifierInstanceRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.lifecycle_state == "pending"
+          )
+          |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+          |> repo.all()
+
+        updates =
+          telemetry_samples
+          |> Enum.sort_by(&sample_sort_key/1, DateTime)
+          |> then(fn sorted_samples ->
+            Enum.reduce(pending_rows, [], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
+              case evaluate_command_verifier_instance(verifier_row, sorted_samples) do
+                nil ->
+                  acc
+
+                %CommandVerifierInstance{} = updated_instance ->
+                  [{verifier_row, updated_instance} | acc]
+              end
+            end)
+            |> Enum.reverse()
+          end)
+
+        apply_command_verifier_updates(repo, updates)
+    end
+  end
+
+  defp evaluate_transport_command_verifiers_for_mission(repo, mission_id, transport_signals)
+       when is_binary(mission_id) and is_list(transport_signals) do
+    case OrganizationScope.organization_id_for_mission(mission_id) do
+      nil ->
+        {:ok, []}
+
+      organization_id ->
+        command_release_attempt_ids =
+          transport_signals
+          |> Enum.map(& &1.command_release_attempt_id)
+          |> Enum.filter(&is_binary/1)
+          |> Enum.uniq()
+
+        if command_release_attempt_ids == [] do
+          {:ok, []}
+        else
+          pending_rows =
+            CommandVerifierInstanceRow
+            |> where(
+              [row],
+              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+                row.lifecycle_state == "pending" and
+                row.command_release_attempt_id in ^command_release_attempt_ids
+            )
+            |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+            |> repo.all()
+
+          sorted_transport_signals = Enum.sort_by(transport_signals, &transport_signal_sort_key/1)
+
+          transport_signals_by_release_attempt_id =
+            Enum.group_by(sorted_transport_signals, & &1.command_release_attempt_id)
+
+          updates =
+            Enum.reduce(pending_rows, [], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
+              relevant_signals =
+                Map.get(
+                  transport_signals_by_release_attempt_id,
+                  verifier_row.command_release_attempt_id,
+                  []
+                )
+
+              case evaluate_command_verifier_instance_against_transport_signals(
+                     verifier_row,
+                     relevant_signals
+                   ) do
+                nil ->
+                  acc
+
+                %CommandVerifierInstance{} = updated_instance ->
+                  [{verifier_row, updated_instance} | acc]
+              end
+            end)
+            |> Enum.reverse()
+
+          apply_command_verifier_updates(repo, updates)
+        end
+    end
+  end
+
+  defp evaluate_transport_command_verifiers_for_release_attempt(
+         repo,
+         organization_id,
+         mission_id,
+         command_release_attempt_id
+       )
+       when is_binary(organization_id) and is_binary(mission_id) and
+              is_binary(command_release_attempt_id) do
+    transport_capability_records =
+      TransportCapabilityRecordRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          fragment(
+            "? ->> 'command_release_attempt_id' = ?",
+            row.metadata,
+            ^command_release_attempt_id
+          )
+      )
+      |> order_by([row], asc: row.recorded_at, asc: row.transport_record_id)
+      |> repo.all()
+      |> Enum.map(&TransportCapabilityRecordRow.to_domain/1)
+
+    transport_action_requests =
+      TransportActionRequestRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_release_attempt_id == ^command_release_attempt_id
+      )
+      |> order_by([row], asc: row.requested_at, asc: row.action_request_id)
+      |> repo.all()
+      |> Enum.map(&TransportActionRequestRow.to_domain/1)
+
+    evaluate_transport_command_verifiers(
+      repo,
+      transport_capability_records,
+      transport_action_requests
+    )
+  end
+
+  defp evaluate_command_verifier_instance(
+         %CommandVerifierInstanceRow{} = verifier_row,
+         telemetry_samples
+       )
+       when is_list(telemetry_samples) do
+    %CommandVerifierInstance{} =
+      verifier_instance =
+      CommandVerifierInstanceRow.to_domain(verifier_row)
+
+    Enum.reduce_while(telemetry_samples, nil, fn %Sample{} = sample, _acc ->
+      cond do
+        sample_not_ready_for_verifier?(sample, verifier_instance) ->
+          {:cont, nil}
+
+        verifier_timed_out_before_sample?(verifier_instance, sample) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :timed_out,
+               matched_at: verifier_instance.timeout_at || sample.receipt_time,
+               failure_reason: "timed_out"
+           }}
+
+        criteria_matches?(verifier_instance.failure_criteria, sample) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :failed,
+               matched_record_kind: :telemetry_sample,
+               matched_record_id: sample.sample_id,
+               matched_at: sample.receipt_time,
+               failure_reason: "failure_criteria_matched"
+           }}
+
+        criteria_matches?(verifier_instance.success_criteria, sample) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :satisfied,
+               matched_record_kind: :telemetry_sample,
+               matched_record_id: sample.sample_id,
+               matched_at: sample.receipt_time,
+               failure_reason: nil
+           }}
+
+        true ->
+          {:cont, nil}
+      end
+    end)
+  end
+
+  defp evaluate_command_verifier_instance_against_transport_signals(
+         %CommandVerifierInstanceRow{} = verifier_row,
+         transport_signals
+       )
+       when is_list(transport_signals) do
+    %CommandVerifierInstance{} =
+      verifier_instance =
+      CommandVerifierInstanceRow.to_domain(verifier_row)
+
+    Enum.reduce_while(transport_signals, nil, fn transport_signal, _acc ->
+      cond do
+        transport_signal_phase_mismatch?(transport_signal, verifier_instance) ->
+          {:cont, nil}
+
+        transport_signal_not_ready_for_verifier?(transport_signal, verifier_instance) ->
+          {:cont, nil}
+
+        verifier_timed_out_before_transport_signal?(verifier_instance, transport_signal) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :timed_out,
+               matched_at: verifier_instance.timeout_at || transport_signal.occurred_at,
+               failure_reason: "timed_out"
+           }}
+
+        criteria_matches?(verifier_instance.failure_criteria, transport_signal) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :failed,
+               matched_record_kind: transport_signal.matched_record_kind,
+               matched_record_id: transport_signal.matched_record_id,
+               matched_at: transport_signal.occurred_at,
+               failure_reason: "failure_criteria_matched"
+           }}
+
+        criteria_matches?(verifier_instance.success_criteria, transport_signal) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :satisfied,
+               matched_record_kind: transport_signal.matched_record_kind,
+               matched_record_id: transport_signal.matched_record_id,
+               matched_at: transport_signal.occurred_at,
+               failure_reason: nil
+           }}
+
+        true ->
+          {:cont, nil}
+      end
+    end)
+  end
+
+  defp apply_command_verifier_updates(_repo, []), do: {:ok, []}
+
+  defp apply_command_verifier_updates(repo, verifier_updates) when is_list(verifier_updates) do
+    affected_rollups =
+      verifier_updates
+      |> Enum.map(fn {%CommandVerifierInstanceRow{} = row, _updated_instance} ->
+        {row.organization_id, row.mission_id, row.command_request_id,
+         row.command_release_attempt_id}
+      end)
+      |> Enum.uniq()
+
+    with {:ok, updated_rows} <- update_command_verifier_rows(repo, verifier_updates),
+         {:ok, _rollups} <- recompute_command_verification_rollups(repo, affected_rollups) do
+      {:ok, Enum.map(updated_rows, &CommandVerifierInstanceRow.to_domain/1)}
+    end
+  end
+
+  defp update_command_verifier_rows(repo, verifier_updates) when is_list(verifier_updates) do
+    Enum.reduce_while(verifier_updates, {:ok, []}, fn
+      {%CommandVerifierInstanceRow{} = row, %CommandVerifierInstance{} = updated_instance},
+      {:ok, acc} ->
+        case repo.update(CommandVerifierInstanceRow.update_changeset(row, updated_instance)) do
+          {:ok, updated_row} -> {:cont, {:ok, [updated_row | acc]}}
+          {:error, %Changeset{} = changeset} -> {:halt, {:error, changeset}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+    end)
+    |> case do
+      {:ok, updated_rows} -> {:ok, Enum.reverse(updated_rows)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp recompute_command_verification_rollups(repo, affected_rollups)
+       when is_list(affected_rollups) do
+    Enum.reduce_while(affected_rollups, {:ok, []}, fn
+      {organization_id, mission_id, command_request_id, command_release_attempt_id}, {:ok, acc} ->
+        verifier_rows =
+          CommandVerifierInstanceRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.command_request_id == ^command_request_id and
+              row.command_release_attempt_id == ^command_release_attempt_id
+          )
+          |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+          |> repo.all()
+
+        verification_state = aggregate_command_verification_state(verifier_rows)
+        verification_state_string = verification_state_to_string(verification_state)
+
+        with %CommandRequestRow{} = command_request_row <-
+               repo.get_by(CommandRequestRow,
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 command_request_id: command_request_id
+               ),
+             %CommandReleaseAttemptRow{} = command_release_attempt_row <-
+               repo.get_by(CommandReleaseAttemptRow,
+                 organization_id: organization_id,
+                 mission_id: mission_id,
+                 command_release_attempt_id: command_release_attempt_id
+               ),
+             {:ok, updated_request_row} <-
+               maybe_update_command_request_verification_state(
+                 repo,
+                 command_request_row,
+                 verification_state_string
+               ),
+             {:ok, updated_release_attempt_row} <-
+               maybe_update_command_release_attempt_verification_state(
+                 repo,
+                 command_release_attempt_row,
+                 verification_state_string
+               ) do
+          {:cont,
+           {:ok,
+            [
+              {updated_request_row.command_request_id,
+               updated_release_attempt_row.command_release_attempt_id}
+              | acc
+            ]}}
+        else
+          nil ->
+            {:halt, {:error, :command_verification_rollup_target_not_found}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+    end)
+  end
+
+  defp maybe_update_command_request_verification_state(
+         repo,
+         %CommandRequestRow{} = command_request_row,
+         verification_state_string
+       ) do
+    if command_request_row.verification_state == verification_state_string do
+      {:ok, command_request_row}
+    else
+      command_request_row
+      |> CommandRequestRow.verification_state_changeset(
+        verification_state_string && String.to_existing_atom(verification_state_string)
+      )
+      |> repo.update()
+    end
+  rescue
+    ArgumentError ->
+      {:error, :invalid_command_request_verification_state}
+  end
+
+  defp maybe_update_command_release_attempt_verification_state(
+         repo,
+         %CommandReleaseAttemptRow{} = command_release_attempt_row,
+         verification_state_string
+       ) do
+    if command_release_attempt_row.verification_state == verification_state_string do
+      {:ok, command_release_attempt_row}
+    else
+      command_release_attempt_row
+      |> CommandReleaseAttemptRow.verification_state_changeset(
+        verification_state_string && String.to_existing_atom(verification_state_string)
+      )
+      |> repo.update()
+    end
+  rescue
+    ArgumentError ->
+      {:error, :invalid_command_release_attempt_verification_state}
+  end
+
+  defp aggregate_command_verification_state([]), do: :not_required
+
+  defp aggregate_command_verification_state(verifier_rows) when is_list(verifier_rows) do
+    lifecycle_states =
+      Enum.map(verifier_rows, fn %CommandVerifierInstanceRow{} = row ->
+        row.lifecycle_state
+      end)
+
+    cond do
+      Enum.any?(lifecycle_states, &(&1 == "failed")) ->
+        :failed
+
+      Enum.any?(lifecycle_states, &(&1 == "timed_out")) ->
+        :timed_out
+
+      Enum.all?(lifecycle_states, &(&1 == "satisfied")) ->
+        :satisfied
+
+      true ->
+        :pending
+    end
+  end
+
+  defp criteria_matches?(nil, _input), do: false
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :comparison} = criteria,
+         %Sample{} = sample
+       ) do
+    case sample_subject_value(criteria, sample) do
+      {:ok, subject_value} ->
+        compare_values(subject_value, criteria.comparison, criteria.value)
+
+      :error ->
+        false
+    end
+  end
+
+  defp criteria_matches?(%MatchCriteria{criteria_type: :range} = criteria, %Sample{} = sample) do
+    case sample_subject_value(criteria, sample) do
+      {:ok, subject_value} ->
+        range_matches?(subject_value, criteria.range_min, criteria.range_max)
+
+      :error ->
+        false
+    end
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :compound, operator: :and} = criteria,
+         %Sample{} = sample
+       ) do
+    Enum.all?(criteria.conditions, &criteria_matches?(&1, sample))
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :compound, operator: :or} = criteria,
+         %Sample{} = sample
+       ) do
+    Enum.any?(criteria.conditions, &criteria_matches?(&1, sample))
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :comparison} = criteria,
+         %{input_kind: :transport} = transport_signal
+       ) do
+    case transport_signal_subject_value(criteria, transport_signal) do
+      {:ok, subject_value} ->
+        compare_values(subject_value, criteria.comparison, criteria.value)
+
+      :error ->
+        false
+    end
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :range} = criteria,
+         %{input_kind: :transport} = transport_signal
+       ) do
+    case transport_signal_subject_value(criteria, transport_signal) do
+      {:ok, subject_value} ->
+        range_matches?(subject_value, criteria.range_min, criteria.range_max)
+
+      :error ->
+        false
+    end
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :compound, operator: :and} = criteria,
+         %{input_kind: :transport} = transport_signal
+       ) do
+    Enum.all?(criteria.conditions, &criteria_matches?(&1, transport_signal))
+  end
+
+  defp criteria_matches?(
+         %MatchCriteria{criteria_type: :compound, operator: :or} = criteria,
+         %{input_kind: :transport} = transport_signal
+       ) do
+    Enum.any?(criteria.conditions, &criteria_matches?(&1, transport_signal))
+  end
+
+  defp criteria_matches?(%MatchCriteria{}, _sample), do: false
+
+  defp sample_subject_value(%MatchCriteria{} = criteria, %Sample{} = sample) do
+    if sample_matches_subject_ref?(criteria.subject_ref, sample) do
+      value =
+        if criteria.use_calibrated do
+          sample.engineering_value
+        else
+          sample.raw_value
+        end
+
+      {:ok, value}
+    else
+      :error
+    end
+  end
+
+  defp transport_signal_subject_value(
+         %MatchCriteria{} = criteria,
+         %{input_kind: :transport, subject_values: subject_values}
+       )
+       when is_map(subject_values) do
+    normalized_ref = normalize_transport_subject_ref(criteria.subject_ref)
+
+    case normalized_ref do
+      nil ->
+        :error
+
+      _subject_ref ->
+        case Map.fetch(subject_values, normalized_ref) do
+          {:ok, value} -> {:ok, value}
+          :error -> :error
+        end
+    end
+  end
+
+  defp sample_matches_subject_ref?(nil, _sample), do: false
+
+  defp sample_matches_subject_ref?(subject_ref, %Sample{} = sample) when is_binary(subject_ref) do
+    normalized_ref = normalize_subject_ref(subject_ref)
+    normalized_point_id = normalize_subject_ref(sample.point_id)
+    normalized_point_name = normalize_subject_ref(sample.point_name)
+
+    normalized_ref in [normalized_point_id, normalized_point_name]
+  end
+
+  defp normalize_subject_ref(subject_ref) when is_binary(subject_ref) do
+    subject_ref
+    |> String.trim()
+    |> String.trim_leading("telemetry:")
+  end
+
+  defp normalize_transport_subject_ref(nil), do: nil
+
+  defp normalize_transport_subject_ref(subject_ref) when is_binary(subject_ref) do
+    normalized_ref = String.trim(subject_ref)
+
+    if String.starts_with?(normalized_ref, "transport:") do
+      normalized_ref
+    else
+      "transport:" <> normalized_ref
+    end
+  end
+
+  defp compare_values(_subject_value, nil, _expected_value), do: false
+  defp compare_values(subject_value, :equal, expected_value), do: subject_value == expected_value
+
+  defp compare_values(subject_value, :not_equal, expected_value),
+    do: subject_value != expected_value
+
+  defp compare_values(subject_value, comparison, expected_value)
+       when comparison in [:greater, :less, :greater_equal, :less_equal] do
+    with {:ok, subject_number} <- numeric_term(subject_value),
+         {:ok, expected_number} <- numeric_term(expected_value) do
+      case comparison do
+        :greater -> subject_number > expected_number
+        :less -> subject_number < expected_number
+        :greater_equal -> subject_number >= expected_number
+        :less_equal -> subject_number <= expected_number
+      end
+    else
+      :error -> false
+    end
+  end
+
+  defp compare_values(subject_value, :in_range, expected_value) when is_map(expected_value) do
+    range_matches?(subject_value, Map.get(expected_value, "min"), Map.get(expected_value, "max"))
+  end
+
+  defp compare_values(subject_value, :not_in_range, expected_value) when is_map(expected_value) do
+    not range_matches?(
+      subject_value,
+      Map.get(expected_value, "min"),
+      Map.get(expected_value, "max")
+    )
+  end
+
+  defp compare_values(_subject_value, _comparison, _expected_value), do: false
+
+  defp range_matches?(subject_value, range_min, range_max) do
+    with {:ok, subject_number} <- numeric_term(subject_value),
+         {:ok, min_number} <- numeric_term(range_min),
+         {:ok, max_number} <- numeric_term(range_max) do
+      subject_number >= min_number and subject_number <= max_number
+    else
+      :error -> false
+    end
+  end
+
+  defp numeric_term(value) when is_integer(value), do: {:ok, value}
+  defp numeric_term(value) when is_float(value), do: {:ok, value}
+  defp numeric_term(_value), do: :error
+
+  defp sample_not_ready_for_verifier?(
+         %Sample{} = sample,
+         %CommandVerifierInstance{} = verifier_instance
+       ) do
+    case verifier_instance.delay_until do
+      %DateTime{} = delay_until ->
+        DateTime.compare(sample.receipt_time, delay_until) == :lt
+
+      nil ->
+        false
+    end
+  end
+
+  defp transport_signal_not_ready_for_verifier?(
+         %{input_kind: :transport, occurred_at: occurred_at},
+         %CommandVerifierInstance{} = verifier_instance
+       )
+       when is_struct(occurred_at, DateTime) do
+    case verifier_instance.delay_until do
+      %DateTime{} = delay_until ->
+        DateTime.compare(occurred_at, delay_until) == :lt
+
+      nil ->
+        false
+    end
+  end
+
+  defp verifier_timed_out_before_sample?(
+         %CommandVerifierInstance{} = verifier_instance,
+         %Sample{} = sample
+       ) do
+    case verifier_instance.timeout_at do
+      %DateTime{} = timeout_at ->
+        DateTime.compare(sample.receipt_time, timeout_at) == :gt
+
+      nil ->
+        false
+    end
+  end
+
+  defp verifier_timed_out_before_transport_signal?(
+         %CommandVerifierInstance{} = verifier_instance,
+         %{input_kind: :transport, occurred_at: occurred_at}
+       )
+       when is_struct(occurred_at, DateTime) do
+    case verifier_instance.timeout_at do
+      %DateTime{} = timeout_at ->
+        DateTime.compare(occurred_at, timeout_at) == :gt
+
+      nil ->
+        false
+    end
+  end
+
+  defp transport_signal_phase_mismatch?(
+         %{input_kind: :transport, phase: signal_phase},
+         %CommandVerifierInstance{} = verifier_instance
+       ) do
+    signal_phase != verifier_instance.phase
+  end
+
+  defp verification_state_to_string(verification_state) when is_atom(verification_state),
+    do: Atom.to_string(verification_state)
+
+  defp shift_time(%DateTime{} = _datetime, nil), do: nil
+
+  defp shift_time(%DateTime{} = datetime, milliseconds) when is_integer(milliseconds),
+    do: DateTime.add(datetime, milliseconds, :millisecond)
+
+  defp sample_sort_key(%Sample{} = sample), do: sample.receipt_time || sample.generation_time
+
+  defp transport_signal_sort_key(%{
+         occurred_at: %DateTime{} = occurred_at,
+         matched_record_id: matched_record_id
+       }),
+       do: {DateTime.to_unix(occurred_at, :microsecond), matched_record_id}
+
+  defp build_transport_signals(transport_capability_records, transport_action_requests)
+       when is_list(transport_capability_records) and is_list(transport_action_requests) do
+    capability_signals =
+      transport_capability_records
+      |> Enum.map(&build_transport_signal/1)
+      |> Enum.reject(&is_nil/1)
+
+    action_request_signals =
+      transport_action_requests
+      |> Enum.map(&build_transport_signal/1)
+      |> Enum.reject(&is_nil/1)
+
+    capability_signals ++ action_request_signals
+  end
+
+  defp build_transport_signal(%TransportActionRequest{} = transport_action_request) do
+    with command_release_attempt_id when is_binary(command_release_attempt_id) <-
+           transport_action_request.command_release_attempt_id,
+         command_request_id when is_binary(command_request_id) <-
+           transport_action_request.command_request_id,
+         phase when is_atom(phase) <- transport_action_request.signal_phase do
+      %{
+        input_kind: :transport,
+        mission_id: transport_action_request.mission_id,
+        command_release_attempt_id: command_release_attempt_id,
+        command_request_id: command_request_id,
+        phase: phase,
+        occurred_at: transport_action_request.requested_at,
+        matched_record_kind: :transport_action_request,
+        matched_record_id: transport_action_request.action_request_id,
+        subject_values: %{
+          "transport:accepted" => phase == :acceptance,
+          "transport:started" => phase == :start,
+          "transport:completed" => phase == :completion,
+          "transport:phase" => Atom.to_string(phase),
+          "transport:action_kind" => Atom.to_string(transport_action_request.action_kind),
+          "transport:command_release_attempt_id" => command_release_attempt_id,
+          "transport:command_request_id" => command_request_id,
+          "transport:source_endpoint_ref" => transport_action_request.source_endpoint_ref,
+          "transport:command_name" => transport_action_request.command_name,
+          "transport:path_id" => transport_action_request.path_id,
+          "transport:realized_contact_id" => transport_action_request.realized_contact_id,
+          "transport:family_key" => Atom.to_string(transport_action_request.family_key)
+        }
+      }
+    else
+      _other ->
+        nil
+    end
+  end
+
+  defp build_transport_signal(%TransportCapabilityRecord{} = transport_capability_record) do
+    state_snapshot = unwrap_transport_state_snapshot(transport_capability_record.state_snapshot)
+    metadata = unwrap_transport_metadata(transport_capability_record.metadata)
+
+    with phase when is_atom(phase) <-
+           transport_record_signal_phase(transport_capability_record, metadata),
+         command_release_attempt_id when is_binary(command_release_attempt_id) <-
+           transport_record_command_release_attempt_id(state_snapshot, metadata),
+         command_request_id when is_binary(command_request_id) <-
+           transport_record_command_request_id(state_snapshot, metadata) do
+      %{
+        input_kind: :transport,
+        mission_id: transport_capability_record.mission_id,
+        command_release_attempt_id: command_release_attempt_id,
+        command_request_id: command_request_id,
+        phase: phase,
+        occurred_at: transport_capability_record.recorded_at,
+        matched_record_kind: :transport_capability_record,
+        matched_record_id: transport_capability_record.transport_record_id,
+        subject_values: %{
+          "transport:accepted" => phase == :acceptance,
+          "transport:started" => phase == :start,
+          "transport:completed" => phase == :completion,
+          "transport:phase" => Atom.to_string(phase),
+          "transport:event_kind" => Atom.to_string(transport_capability_record.event_kind),
+          "transport:command_release_attempt_id" => command_release_attempt_id,
+          "transport:command_request_id" => command_request_id,
+          "transport:command_name" => transport_record_command_name(state_snapshot, metadata),
+          "transport:path_id" => transport_capability_record.path_id,
+          "transport:realized_contact_id" => transport_capability_record.realized_contact_id,
+          "transport:family_key" => Atom.to_string(transport_capability_record.family_key)
+        }
+      }
+    else
+      _other ->
+        nil
+    end
+  end
+
+  defp transport_record_signal_phase(
+         %TransportCapabilityRecord{} = transport_capability_record,
+         metadata
+       )
+       when is_map(metadata) do
+    metadata_phase =
+      metadata[:signal_phase] ||
+        metadata["signal_phase"] ||
+        metadata[:verifier_phase] ||
+        metadata["verifier_phase"]
+
+    cond do
+      is_atom(metadata_phase) ->
+        metadata_phase
+
+      is_binary(metadata_phase) ->
+        String.to_existing_atom(metadata_phase)
+
+      transport_capability_record.family_key == :uplink_gateway and
+          transport_capability_record.event_kind == :control_input_handled ->
+        :acceptance
+
+      true ->
+        nil
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp transport_record_command_release_attempt_id(state_snapshot, metadata)
+       when is_map(state_snapshot) and is_map(metadata) do
+    state_snapshot[:last_release_attempt_id] ||
+      state_snapshot["last_release_attempt_id"] ||
+      metadata[:command_release_attempt_id] ||
+      metadata["command_release_attempt_id"]
+  end
+
+  defp transport_record_command_request_id(state_snapshot, metadata)
+       when is_map(state_snapshot) and is_map(metadata) do
+    state_snapshot[:last_command_request_id] ||
+      state_snapshot["last_command_request_id"] ||
+      metadata[:command_request_id] ||
+      metadata["command_request_id"]
+  end
+
+  defp transport_record_command_name(state_snapshot, metadata)
+       when is_map(state_snapshot) and is_map(metadata) do
+    state_snapshot[:last_command_name] ||
+      state_snapshot["last_command_name"] ||
+      metadata[:command_name] ||
+      metadata["command_name"]
+  end
+
+  defp unwrap_transport_state_snapshot(%{} = state_snapshot),
+    do: JsonDocument.unwrap_value(state_snapshot)
+
+  defp unwrap_transport_state_snapshot(state_snapshot), do: state_snapshot
+
+  defp unwrap_transport_metadata(%{} = metadata), do: JsonDocument.unwrap_value(metadata)
+  defp unwrap_transport_metadata(metadata), do: metadata
+
+  defp maybe_schedule_queue_lane_dispatch(organization_id, mission_id, queue_lane_key)
+       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
+    case Cadence.Commanding.DispatchSupervisor.lane_dispatcher(
+           organization_id,
+           mission_id,
+           queue_lane_key
+         ) do
+      {:ok, lane_dispatcher} when lane_dispatcher == self() ->
+        send(self(), :dispatch)
+
+      _other ->
+        _ = Cadence.Commanding.Dispatcher.kick_lane(organization_id, mission_id, queue_lane_key)
+        :ok
+    end
+
+    :ok
+  end
+
+  defp validate_stage_assignment(%StagedCommandItem{} = staged_command_item) do
+    with {:ok, %CommandStage{} = command_stage} <-
+           fetch_command_stage(
+             staged_command_item.organization_id,
+             staged_command_item.mission_id,
+             staged_command_item.command_stage_id
+           ),
+         :ok <- ensure_stage_editable(command_stage) do
+      {:ok, command_stage}
+    end
+  end
+
+  defp ensure_stage_editable(%CommandStage{} = command_stage) do
+    ensure_stage_editable(command_stage.lifecycle_state, command_stage.command_stage_id)
+  end
+
+  defp ensure_stage_editable(%CommandStageRow{} = command_stage_row) do
+    ensure_stage_editable(command_stage_row.lifecycle_state, command_stage_row.command_stage_id)
+  end
+
+  defp ensure_stage_editable(lifecycle_state, _command_stage_id)
+       when lifecycle_state in [:draft, :in_review, :ready_to_submit] do
+    :ok
+  end
+
+  defp ensure_stage_editable(lifecycle_state, command_stage_id) when is_binary(lifecycle_state) do
+    normalized_lifecycle_state =
+      CommandStage.new(%{
+        mission_id: "normalize",
+        stage_name: "normalize",
+        lifecycle_state: lifecycle_state
+      }).lifecycle_state
+
+    ensure_stage_editable(normalized_lifecycle_state, command_stage_id)
+  end
+
+  defp ensure_stage_editable(lifecycle_state, command_stage_id) do
+    {:error, {:command_stage_not_editable, command_stage_id, lifecycle_state}}
+  end
+
+  defp ensure_staged_command_item_editable(%StagedCommandItemRow{lifecycle_state: "draft"}),
+    do: :ok
+
+  defp ensure_staged_command_item_editable(%StagedCommandItemRow{} = row) do
+    {:error, {:staged_command_item_not_editable, row.staged_command_item_id, row.lifecycle_state}}
+  end
+
+  defp fetch_command_stage_row(organization_id, mission_id, command_stage_id) do
+    case Repo.get_by(CommandStageRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_stage_id: command_stage_id
+         ) do
+      nil -> {:error, :command_stage_not_found}
+      %CommandStageRow{} = row -> {:ok, row}
+    end
+  end
+
+  defp fetch_staged_command_item_row(organization_id, mission_id, staged_command_item_id) do
+    case Repo.get_by(StagedCommandItemRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           staged_command_item_id: staged_command_item_id
+         ) do
+      nil -> {:error, :staged_command_item_not_found}
+      %StagedCommandItemRow{} = row -> {:ok, row}
+    end
+  end
+
+  defp fetch_command_request_row(organization_id, mission_id, command_request_id) do
+    case Repo.get_by(CommandRequestRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_request_id: command_request_id
+         ) do
+      nil -> {:error, :command_request_not_found}
+      %CommandRequestRow{} = row -> {:ok, row}
+    end
+  end
+
+  defp fetch_command_queue_entry_row(organization_id, mission_id, command_queue_entry_id) do
+    case Repo.get_by(CommandQueueEntryRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_queue_entry_id: command_queue_entry_id
+         ) do
+      nil -> {:error, :command_queue_entry_not_found}
+      %CommandQueueEntryRow{} = row -> {:ok, row}
+    end
+  end
+
+  defp fetch_command_release_attempt_row(
+         organization_id,
+         mission_id,
+         command_release_attempt_id
+       ) do
+    case Repo.get_by(CommandReleaseAttemptRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           command_release_attempt_id: command_release_attempt_id
+         ) do
+      nil -> {:error, :command_release_attempt_not_found}
+      %CommandReleaseAttemptRow{} = row -> {:ok, row}
+    end
+  end
+
+  defp fetch_submission_item_rows(
+         organization_id,
+         mission_id,
+         command_stage_id,
+         staged_command_item_ids
+       ) do
+    normalized_ids =
+      staged_command_item_ids
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+
+    item_rows =
+      StagedCommandItemRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_stage_id == ^command_stage_id and
+          row.staged_command_item_id in ^normalized_ids
+      )
+      |> order_by([row], asc: row.item_order, asc: row.staged_command_item_id)
+      |> Repo.all()
+
+    cond do
+      normalized_ids == [] ->
+        {:error, :no_staged_command_items_selected}
+
+      length(item_rows) != length(normalized_ids) ->
+        found_ids = MapSet.new(Enum.map(item_rows, & &1.staged_command_item_id))
+
+        missing_ids =
+          normalized_ids
+          |> Enum.reject(&MapSet.member?(found_ids, &1))
+          |> Enum.sort()
+
+        {:error, {:staged_command_items_not_found, missing_ids}}
+
+      Enum.any?(item_rows, &(&1.lifecycle_state != "draft")) ->
+        row = Enum.find(item_rows, &(&1.lifecycle_state != "draft"))
+
+        {:error,
+         {:staged_command_item_not_editable, row.staged_command_item_id, row.lifecycle_state}}
+
+      true ->
+        {:ok, item_rows}
+    end
+  end
+
+  defp lifecycle_state_filter(opts) do
+    case Keyword.get(opts, :lifecycle_state) do
+      nil -> nil
+      lifecycle_state when is_atom(lifecycle_state) -> Atom.to_string(lifecycle_state)
+      lifecycle_state when is_binary(lifecycle_state) -> lifecycle_state
+    end
+  end
+
+  defp decision_filter(opts) do
+    case Keyword.get(opts, :decision) do
+      nil -> nil
+      decision when is_atom(decision) -> Atom.to_string(decision)
+      decision when is_binary(decision) -> decision
+    end
+  end
+
+  defp phase_filter(opts) do
+    case Keyword.get(opts, :phase) do
+      nil -> nil
+      phase when is_atom(phase) -> Atom.to_string(phase)
+      phase when is_binary(phase) -> phase
+    end
+  end
+
+  defp maybe_filter_equals(query, _field, nil), do: query
+
+  defp maybe_filter_equals(query, field, value) when is_atom(value) do
+    where(query, [row], field(row, ^field) == ^Atom.to_string(value))
+  end
+
+  defp maybe_filter_equals(query, field, value) when is_binary(value) do
+    where(query, [row], field(row, ^field) == ^value)
+  end
+
+  defp put_organization_scope(%CommandStage{} = command_stage, organization_id)
+       when is_binary(organization_id) and organization_id != "" do
+    case command_stage.organization_id do
+      nil ->
+        {:ok, %CommandStage{command_stage | organization_id: organization_id}}
+
+      ^organization_id ->
+        {:ok, command_stage}
+
+      existing_organization_id ->
+        {:error,
+         {:organization_mission_mismatch, existing_organization_id, organization_id,
+          command_stage.mission_id}}
+    end
+  end
+
+  defp put_organization_scope(%StagedCommandItem{} = staged_command_item, organization_id)
+       when is_binary(organization_id) and organization_id != "" do
+    case staged_command_item.organization_id do
+      nil ->
+        {:ok, %StagedCommandItem{staged_command_item | organization_id: organization_id}}
+
+      ^organization_id ->
+        {:ok, staged_command_item}
+
+      existing_organization_id ->
+        {:error,
+         {:organization_mission_mismatch, existing_organization_id, organization_id,
+          staged_command_item.mission_id}}
+    end
+  end
+
+  defp put_organization_scope(%CommandRequest{} = command_request, organization_id)
+       when is_binary(organization_id) and organization_id != "" do
+    case command_request.organization_id do
+      nil ->
+        {:ok, %CommandRequest{command_request | organization_id: organization_id}}
+
+      ^organization_id ->
+        {:ok, command_request}
+
+      existing_organization_id ->
+        {:error,
+         {:organization_mission_mismatch, existing_organization_id, organization_id,
+          command_request.mission_id}}
+    end
+  end
+
+  defp put_organization_scope(%CommandReleaseAttempt{} = command_release_attempt, organization_id)
+       when is_binary(organization_id) and organization_id != "" do
+    case command_release_attempt.organization_id do
+      nil ->
+        {:ok, %CommandReleaseAttempt{command_release_attempt | organization_id: organization_id}}
+
+      ^organization_id ->
+        {:ok, command_release_attempt}
+
+      existing_organization_id ->
+        {:error,
+         {:organization_mission_mismatch, existing_organization_id, organization_id,
+          command_release_attempt.mission_id}}
+    end
+  end
+end

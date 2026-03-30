@@ -1,0 +1,791 @@
+defmodule Cadence.ProviderAdapters.TCPSocket do
+  @moduledoc """
+  Path-local TCP provider adapter.
+
+  This adapter supports:
+
+  - outbound uplink byte delivery over one TCP connection
+  - inbound fixed-size downlink message ingest for simulator-style packet or
+    frame streams
+  - inbound fixed-size transport-event ingest for simulator-style COP-1 CLCW
+    loopback
+  - both `:connect` and `:listen` socket ownership modes
+  """
+
+  use GenServer
+
+  @behaviour Cadence.ProviderAdapters.Adapter
+
+  require Logger
+
+  alias Cadence.ActionRequests.ProviderRequest
+  alias Cadence.Ingress.RawEvidence
+  alias Cadence.Runtime.{IngressPersistenceProjector, MissionRuntime, ProviderIngressExecutor}
+  @tcp_socket_buffer 1_048_576
+  @tcp_opts [
+    :binary,
+    packet: 0,
+    active: false,
+    reuseaddr: true,
+    nodelay: true,
+    sndbuf: @tcp_socket_buffer,
+    recbuf: @tcp_socket_buffer
+  ]
+  @socket_active_batch 32
+  @executor_high_watermark 8_192
+  @executor_low_watermark 2_048
+  @backpressure_poll_ms 10
+
+  @type mode :: :connect | :listen
+
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts) when is_list(opts) do
+    case Keyword.get(opts, :name) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
+  end
+
+  @impl true
+  def child_spec(opts) when is_list(opts) do
+    %{
+      id: {:tcp_socket_provider, Keyword.fetch!(opts, :provider_binding_id)},
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 5_000
+    }
+  end
+
+  @impl true
+  def snapshot(provider_runtime) do
+    GenServer.call(provider_runtime, :snapshot)
+  end
+
+  @impl true
+  def deliver_uplink(provider_runtime, %ProviderRequest{} = provider_request) do
+    GenServer.call(provider_runtime, {:deliver_uplink, provider_request})
+  end
+
+  @impl true
+  def init(opts) do
+    Process.flag(:trap_exit, true)
+
+    mission_id = Keyword.fetch!(opts, :mission_id)
+    realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
+    path_id = Keyword.fetch!(opts, :path_id)
+    provider_binding_id = Keyword.fetch!(opts, :provider_binding_id)
+    source_endpoint_ref = Keyword.get(opts, :source_endpoint_ref)
+    direction = Keyword.fetch!(opts, :direction)
+    configuration = normalize_configuration(Keyword.fetch!(opts, :configuration))
+
+    base_state = %{
+      mission_id: mission_id,
+      realized_contact_id: realized_contact_id,
+      path_id: path_id,
+      provider_binding_id: provider_binding_id,
+      source_endpoint_ref: source_endpoint_ref,
+      direction: direction,
+      mode: configuration.mode,
+      host: configuration.host,
+      configured_port: configuration.port,
+      port: configuration.port,
+      ingress_protocol_family: configuration.ingress_protocol_family,
+      fixed_message_bytes: configuration.fixed_message_bytes,
+      ingress_transport_binding_id: configuration.ingress_transport_binding_id,
+      ingress_executor_name: Keyword.fetch!(opts, :ingress_executor_name),
+      ingress_executor_pid: nil,
+      ingress_executor_monitor_ref: nil,
+      source_ref: configuration.source_ref,
+      ingress_metadata: configuration.ingress_metadata,
+      listener: nil,
+      socket: nil,
+      receive_buffer: <<>>,
+      uplink_bytes_sent: 0,
+      uplink_payload_count: 0,
+      downlink_bytes_received: 0,
+      downlink_message_count: 0,
+      last_delivery_at: nil,
+      last_ingress_at: nil,
+      last_ingress_error: nil,
+      accept_ref: nil,
+      reads_paused?: false,
+      pressure_check_pending?: false,
+      read_credits_remaining: 0
+    }
+
+    with {:ok, base_state} <- ensure_ingress_executor(base_state) do
+      case configuration.mode do
+        :connect ->
+          case connect_socket(configuration.host, configuration.port) do
+            {:ok, socket} ->
+              state =
+                base_state
+                |> Map.put(:socket, socket)
+                |> maybe_resume_socket_reads(socket)
+
+              log_provider_started(state)
+              {:ok, state}
+
+            {:error, reason} ->
+              {:stop, {:tcp_provider_connect_failed, provider_binding_id, reason}}
+          end
+
+        :listen ->
+          case :gen_tcp.listen(configuration.port, listen_opts(configuration.host)) do
+            {:ok, listener} ->
+              port = listener_port(listener, configuration.port)
+              state = %{base_state | listener: listener, port: port}
+              log_provider_started(state)
+              {:ok, schedule_accept(state)}
+
+            {:error, reason} ->
+              {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
+          end
+      end
+    else
+      {:error, reason} ->
+        {:stop, {:tcp_provider_missing_ingress_executor, provider_binding_id, reason}}
+    end
+  end
+
+  @impl true
+  def handle_call(:snapshot, _from, state) do
+    ingress_executor =
+      case ProviderIngressExecutor.snapshot(state.ingress_executor_name) do
+        {:ok, snapshot} -> snapshot
+        {:error, reason} -> %{error: inspect(reason)}
+      end
+
+    ingress_persistence_projector =
+      case IngressPersistenceProjector.snapshot(
+             MissionRuntime.provider_persistence_projector_name(
+               state.mission_id,
+               state.realized_contact_id,
+               state.path_id,
+               state.provider_binding_id
+             )
+           ) do
+        {:ok, snapshot} -> snapshot
+        {:error, reason} -> %{error: inspect(reason)}
+      end
+
+    {:reply,
+     {:ok,
+      %{
+        provider_binding_id: state.provider_binding_id,
+        adapter_key: :tcp_socket,
+        direction: state.direction,
+        mode: state.mode,
+        host: state.host,
+        configured_port: state.configured_port,
+        port: state.port,
+        connected?: match?({:ok, _socket}, current_socket(state)),
+        ingress_protocol_family: state.ingress_protocol_family,
+        fixed_message_bytes: state.fixed_message_bytes,
+        ingress_transport_binding_id: state.ingress_transport_binding_id,
+        source_ref: state.source_ref,
+        ingress_metadata: state.ingress_metadata,
+        uplink_bytes_sent: state.uplink_bytes_sent,
+        uplink_payload_count: state.uplink_payload_count,
+        downlink_bytes_received: state.downlink_bytes_received,
+        downlink_message_count: state.downlink_message_count,
+        last_delivery_at: state.last_delivery_at,
+        last_ingress_at: state.last_ingress_at,
+        last_ingress_error: state.last_ingress_error,
+        reads_paused?: state.reads_paused?,
+        read_credits_remaining: state.read_credits_remaining,
+        ingress_executor: ingress_executor,
+        ingress_persistence_projector: ingress_persistence_projector
+      }}, state}
+  end
+
+  def handle_call({:deliver_uplink, %ProviderRequest{} = provider_request}, _from, state) do
+    reply =
+      with {:ok, socket} <- current_socket(state),
+           {:ok, payloads, total_bytes} <- decode_payloads(provider_request.payloads_base64),
+           :ok <- send_payloads(socket, payloads) do
+        delivery_metadata = %{
+          provider_binding_id: state.provider_binding_id,
+          provider_adapter_key: :tcp_socket,
+          host: state.host,
+          port: state.port,
+          bytes_sent: total_bytes,
+          payload_count: length(payloads),
+          delivered_at: DateTime.utc_now()
+        }
+
+        next_state = %{
+          state
+          | uplink_bytes_sent: state.uplink_bytes_sent + total_bytes,
+            uplink_payload_count: state.uplink_payload_count + length(payloads),
+            last_delivery_at: delivery_metadata.delivered_at
+        }
+
+        {:ok, delivery_metadata, next_state}
+      end
+
+    case reply do
+      {:ok, delivery_metadata, next_state} ->
+        {:reply, {:ok, delivery_metadata}, next_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    level =
+      case reason do
+        :normal -> :info
+        :shutdown -> :info
+        {:shutdown, _detail} -> :info
+        _other -> :error
+      end
+
+    Logger.log(
+      level,
+      "TCP provider #{state.provider_binding_id} terminating: #{inspect(reason)}"
+    )
+
+    :ok
+  end
+
+  @impl true
+  def handle_info(
+        {:accept_result, accept_ref, {:ok, socket, :ok}},
+        %{accept_ref: accept_ref} = state
+      ) do
+    case current_socket(state) do
+      {:ok, _existing_socket} ->
+        :gen_tcp.close(socket)
+        {:noreply, schedule_accept(%{state | accept_ref: nil})}
+
+      {:error, :tcp_provider_not_connected} ->
+        {:noreply,
+         state
+         |> Map.put(:socket, socket)
+         |> Map.put(:accept_ref, nil)
+         |> maybe_resume_socket_reads(socket)}
+    end
+  end
+
+  def handle_info(
+        {:accept_result, accept_ref, {:ok, _socket, {:error, reason}}},
+        %{accept_ref: accept_ref} = state
+      ) do
+    Logger.warning(
+      "TCP provider socket handoff failed for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    {:noreply, schedule_accept(%{state | accept_ref: nil})}
+  end
+
+  def handle_info(
+        {:accept_result, accept_ref, {:error, reason}},
+        %{accept_ref: accept_ref} = state
+      ) do
+    Logger.warning(
+      "TCP provider accept failed for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    {:noreply, %{state | accept_ref: nil}}
+  end
+
+  def handle_info({:tcp, socket, data}, state) when is_binary(data) do
+    next_state =
+      if socket_matches?(state, socket) do
+        state
+        |> consume_read_credit()
+        |> Map.update!(:downlink_bytes_received, &(&1 + byte_size(data)))
+        |> ingest_received_data(data)
+        |> maybe_resume_socket_reads(socket)
+      else
+        state
+      end
+
+    {:noreply, next_state}
+  end
+
+  def handle_info(:check_read_pressure, state) do
+    next_state =
+      state
+      |> Map.put(:pressure_check_pending?, false)
+      |> maybe_resume_socket_reads(state.socket)
+
+    {:noreply, next_state}
+  end
+
+  def handle_info({:tcp_closed, socket}, state) do
+    next_state =
+      if socket_matches?(state, socket) do
+        state
+        |> Map.put(:socket, nil)
+        |> Map.put(:receive_buffer, <<>>)
+        |> maybe_schedule_accept_after_disconnect()
+      else
+        state
+      end
+
+    {:noreply, next_state}
+  end
+
+  def handle_info(
+        {:DOWN, monitor_ref, :process, executor_pid, reason},
+        %{ingress_executor_monitor_ref: monitor_ref, ingress_executor_pid: executor_pid} = state
+      ) do
+    Logger.warning(
+      "TCP provider ingress executor exited for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    {:noreply, %{state | ingress_executor_pid: nil, ingress_executor_monitor_ref: nil}}
+  end
+
+  def handle_info({:tcp_error, socket, reason}, state) do
+    Logger.warning(
+      "TCP provider socket error for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    next_state =
+      if socket_matches?(state, socket) do
+        state
+        |> Map.put(:socket, nil)
+        |> Map.put(:receive_buffer, <<>>)
+        |> Map.put(:last_ingress_error, inspect(reason))
+        |> maybe_schedule_accept_after_disconnect()
+      else
+        state
+      end
+
+    {:noreply, next_state}
+  end
+
+  defp normalize_configuration(configuration) when is_map(configuration) do
+    mode =
+      case Map.get(configuration, :mode, Map.get(configuration, "mode", :connect)) do
+        :connect -> :connect
+        "connect" -> :connect
+        :listen -> :listen
+        "listen" -> :listen
+      end
+
+    ingress_protocol_family =
+      case Map.get(
+             configuration,
+             :ingress_protocol_family,
+             Map.get(configuration, "ingress_protocol_family")
+           ) do
+        nil ->
+          nil
+
+        protocol_family when is_atom(protocol_family) ->
+          protocol_family
+
+        protocol_family when is_binary(protocol_family) ->
+          String.to_existing_atom(protocol_family)
+      end
+
+    %{
+      mode: mode,
+      host: Map.get(configuration, :host, Map.get(configuration, "host", "127.0.0.1")),
+      port: Map.get(configuration, :port, Map.get(configuration, "port", 0)),
+      ingress_protocol_family: ingress_protocol_family,
+      fixed_message_bytes:
+        Map.get(
+          configuration,
+          :fixed_message_bytes,
+          Map.get(configuration, "fixed_message_bytes")
+        ) ||
+          Map.get(configuration, :frame_size, Map.get(configuration, "frame_size")),
+      ingress_transport_binding_id:
+        Map.get(
+          configuration,
+          :ingress_transport_binding_id,
+          Map.get(configuration, "ingress_transport_binding_id")
+        ),
+      source_ref: Map.get(configuration, :source_ref, Map.get(configuration, "source_ref")),
+      ingress_metadata:
+        Map.get(configuration, :ingress_metadata, Map.get(configuration, "ingress_metadata", %{}))
+    }
+  end
+
+  defp connect_socket(host, port) when is_binary(host) and is_integer(port) do
+    :gen_tcp.connect(String.to_charlist(host), port, @tcp_opts)
+  end
+
+  defp listen_opts(host) when is_binary(host) do
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, ip} -> [{:ip, ip} | @tcp_opts]
+      {:error, _reason} -> @tcp_opts
+    end
+  end
+
+  defp listener_port(listener, fallback_port) do
+    case :inet.sockname(listener) do
+      {:ok, {_address, actual_port}} -> actual_port
+      {:error, _reason} -> fallback_port
+    end
+  end
+
+  defp schedule_accept(%{listener: listener} = state) when not is_nil(listener) do
+    accept_ref = make_ref()
+    parent = self()
+
+    Task.start(fn ->
+      result =
+        case :gen_tcp.accept(listener) do
+          {:ok, socket} ->
+            {:ok, socket, :gen_tcp.controlling_process(socket, parent)}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      send(parent, {:accept_result, accept_ref, result})
+    end)
+
+    %{state | accept_ref: accept_ref}
+  end
+
+  defp schedule_accept(state), do: state
+
+  defp current_socket(%{socket: socket}) when is_port(socket), do: {:ok, socket}
+  defp current_socket(_state), do: {:error, :tcp_provider_not_connected}
+
+  defp decode_payloads(payloads_base64) when is_list(payloads_base64) do
+    Enum.reduce_while(payloads_base64, {:ok, [], 0}, fn payload_base64, {:ok, acc, total_bytes} ->
+      case Base.decode64(payload_base64) do
+        {:ok, payload} ->
+          {:cont, {:ok, acc ++ [payload], total_bytes + byte_size(payload)}}
+
+        :error ->
+          {:halt, {:error, {:invalid_provider_payload_base64, payload_base64}}}
+      end
+    end)
+  end
+
+  defp send_payloads(socket, payloads) when is_list(payloads) do
+    Enum.reduce_while(payloads, :ok, fn payload, :ok ->
+      case :gen_tcp.send(socket, payload) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, {:tcp_provider_send_failed, reason}}}
+      end
+    end)
+  end
+
+  defp ingest_received_data(
+         %{
+           direction: :downlink,
+           ingress_protocol_family: protocol_family,
+           fixed_message_bytes: bytes
+         } =
+           state,
+         data
+       )
+       when protocol_family in [
+              :space_packet,
+              :packet,
+              :space_packet_stream,
+              :tm,
+              :tm_transfer_frame
+            ] and
+              is_integer(bytes) and bytes > 0 do
+    buffer = state.receive_buffer <> data
+    {messages, rest} = split_fixed_messages(buffer, bytes, [])
+
+    state
+    |> Map.put(:receive_buffer, rest)
+    |> ingest_messages(protocol_family, messages)
+  end
+
+  defp ingest_received_data(
+         %{
+           ingress_protocol_family: :cop1_clcw,
+           fixed_message_bytes: bytes
+         } = state,
+         data
+       )
+       when is_integer(bytes) and bytes > 0 do
+    buffer = state.receive_buffer <> data
+    {messages, rest} = split_fixed_messages(buffer, bytes, [])
+
+    state
+    |> Map.put(:receive_buffer, rest)
+    |> ingest_transport_event_messages(:cop1_clcw, messages)
+  end
+
+  defp ingest_received_data(state, data) do
+    %{state | receive_buffer: state.receive_buffer <> data}
+  end
+
+  defp ingest_messages(state, _protocol_family, []), do: state
+
+  defp ingest_messages(state, protocol_family, messages) do
+    receipt_time = DateTime.utc_now()
+
+    raw_evidences =
+      Enum.map(messages, fn message ->
+        RawEvidence.new(%{
+          mission_id: state.mission_id,
+          source_endpoint_ref: state.source_endpoint_ref,
+          protocol_family: protocol_family,
+          direction: :downlink,
+          raw: message,
+          receipt_time: receipt_time,
+          source_ref: state.source_ref || state.provider_binding_id,
+          metadata:
+            Map.merge(state.ingress_metadata || %{}, %{
+              "realized_contact_id" => state.realized_contact_id,
+              "path_id" => state.path_id,
+              "provider_binding_id" => state.provider_binding_id
+            })
+        })
+      end)
+
+    case ensure_ingress_executor(state) do
+      {:ok, next_state} ->
+        case ProviderIngressExecutor.enqueue_many_telemetry(
+               next_state.ingress_executor_pid,
+               raw_evidences
+             ) do
+          :ok ->
+            %{
+              next_state
+              | downlink_message_count: next_state.downlink_message_count + length(messages),
+                last_ingress_at: receipt_time,
+                last_ingress_error: nil
+            }
+
+          {:error, reason} ->
+            Logger.warning(
+              "TCP provider ingress enqueue failed for #{state.provider_binding_id}: #{inspect(reason)}"
+            )
+
+            %{
+              next_state
+              | last_ingress_at: receipt_time,
+                last_ingress_error: inspect(reason)
+            }
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "TCP provider ingress executor unavailable for #{state.provider_binding_id}: #{inspect(reason)}"
+        )
+
+        %{
+          state
+          | last_ingress_at: receipt_time,
+            last_ingress_error: inspect(reason)
+        }
+    end
+  end
+
+  defp ingest_transport_event_messages(state, _protocol_family, []), do: state
+
+  defp ingest_transport_event_messages(
+         %{ingress_transport_binding_id: nil} = state,
+         _protocol_family,
+         _messages
+       ) do
+    Logger.warning(
+      "TCP provider ingress transport event dropped for #{state.provider_binding_id}: ingress_transport_binding_id is required"
+    )
+
+    %{state | last_ingress_error: "missing_ingress_transport_binding_id"}
+  end
+
+  defp ingest_transport_event_messages(state, :cop1_clcw, messages) do
+    receipt_time = DateTime.utc_now()
+
+    events =
+      Enum.map(messages, fn message ->
+        %{
+          kind: :cop1_clcw,
+          clcw_binary: message
+        }
+      end)
+
+    case ensure_ingress_executor(state) do
+      {:ok, next_state} ->
+        case ProviderIngressExecutor.enqueue_many_transport_events(
+               next_state.ingress_executor_pid,
+               next_state.ingress_transport_binding_id,
+               events,
+               mission_id: next_state.mission_id,
+               realized_contact_id: next_state.realized_contact_id,
+               path_id: next_state.path_id,
+               occurred_at: receipt_time
+             ) do
+          :ok ->
+            %{
+              next_state
+              | downlink_message_count: next_state.downlink_message_count + length(messages),
+                last_ingress_at: receipt_time,
+                last_ingress_error: nil
+            }
+
+          {:error, reason} ->
+            Logger.warning(
+              "TCP provider transport-event enqueue failed for #{state.provider_binding_id}: #{inspect(reason)}"
+            )
+
+            %{
+              next_state
+              | last_ingress_at: receipt_time,
+                last_ingress_error: inspect(reason)
+            }
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "TCP provider ingress executor unavailable for #{state.provider_binding_id}: #{inspect(reason)}"
+        )
+
+        %{
+          state
+          | last_ingress_at: receipt_time,
+            last_ingress_error: inspect(reason)
+        }
+    end
+  end
+
+  defp split_fixed_messages(buffer, bytes, acc) when byte_size(buffer) >= bytes do
+    <<message::binary-size(bytes), rest::binary>> = buffer
+    split_fixed_messages(rest, bytes, [message | acc])
+  end
+
+  defp split_fixed_messages(buffer, _bytes, acc), do: {Enum.reverse(acc), buffer}
+
+  defp log_provider_started(state) do
+    Logger.info(
+      "TCP provider #{state.provider_binding_id} started in #{state.mode} mode on #{state.host}:#{state.port}"
+    )
+  end
+
+  defp arm_socket_reads(state, socket) do
+    if socket_matches?(state, socket) do
+      :ok = :inet.setopts(socket, active: @socket_active_batch)
+      %{state | read_credits_remaining: @socket_active_batch}
+    else
+      state
+    end
+  end
+
+  defp maybe_resume_socket_reads(state, socket) when not is_port(socket), do: state
+
+  defp maybe_resume_socket_reads(state, socket) do
+    if socket_matches?(state, socket) do
+      case ingress_executor_queue_depth(state) do
+        {:ok, next_state, queue_depth} ->
+          was_paused? = next_state.reads_paused?
+
+          threshold =
+            if was_paused? do
+              @executor_low_watermark
+            else
+              @executor_high_watermark
+            end
+
+          if queue_depth >= threshold do
+            next_state
+            |> Map.put(:reads_paused?, true)
+            |> schedule_pressure_check()
+          else
+            next_state
+            |> Map.put(:reads_paused?, false)
+            |> Map.put(:pressure_check_pending?, false)
+            |> maybe_arm_socket_reads(socket, was_paused?)
+          end
+
+        {:error, reason, next_state} ->
+          Logger.warning(
+            "TCP provider could not inspect ingress executor pressure for #{state.provider_binding_id}: #{inspect(reason)}"
+          )
+
+          %{
+            next_state
+            | last_ingress_error: inspect(reason)
+          }
+      end
+    else
+      state
+    end
+  end
+
+  defp schedule_pressure_check(%{pressure_check_pending?: true} = state), do: state
+
+  defp schedule_pressure_check(state) do
+    Process.send_after(self(), :check_read_pressure, @backpressure_poll_ms)
+    %{state | pressure_check_pending?: true}
+  end
+
+  defp maybe_arm_socket_reads(%{read_credits_remaining: credits} = state, socket, was_paused?)
+       when was_paused? or credits <= 0 do
+    arm_socket_reads(state, socket)
+  end
+
+  defp maybe_arm_socket_reads(state, _socket, _was_paused?), do: state
+
+  defp maybe_schedule_accept_after_disconnect(%{mode: :listen} = state),
+    do: schedule_accept(state)
+
+  defp maybe_schedule_accept_after_disconnect(state), do: state
+
+  defp socket_matches?(%{socket: socket}, socket) when is_port(socket), do: true
+  defp socket_matches?(_state, _socket), do: false
+
+  defp consume_read_credit(%{read_credits_remaining: credits} = state) when credits > 0 do
+    %{state | read_credits_remaining: credits - 1}
+  end
+
+  defp consume_read_credit(state), do: state
+
+  defp ensure_ingress_executor(%{ingress_executor_pid: pid} = state) when is_pid(pid) do
+    if Process.alive?(pid) do
+      {:ok, state}
+    else
+      resolve_ingress_executor(%{
+        state
+        | ingress_executor_pid: nil,
+          ingress_executor_monitor_ref: nil
+      })
+    end
+  end
+
+  defp ensure_ingress_executor(state), do: resolve_ingress_executor(state)
+
+  defp ingress_executor_queue_depth(state) do
+    case ensure_ingress_executor(state) do
+      {:ok, next_state} ->
+        case ProviderIngressExecutor.snapshot(next_state.ingress_executor_pid) do
+          {:ok, snapshot} -> {:ok, next_state, Map.get(snapshot, :queue_depth, 0)}
+          {:error, reason} -> {:error, reason, next_state}
+        end
+
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  defp resolve_ingress_executor(state) do
+    with {:ok, pid} <- ProviderIngressExecutor.lookup(state.ingress_executor_name) do
+      next_state =
+        state
+        |> maybe_demonitor_ingress_executor()
+        |> Map.put(:ingress_executor_pid, pid)
+        |> Map.put(:ingress_executor_monitor_ref, Process.monitor(pid))
+
+      {:ok, next_state}
+    end
+  end
+
+  defp maybe_demonitor_ingress_executor(%{ingress_executor_monitor_ref: monitor_ref} = state)
+       when is_reference(monitor_ref) do
+    Process.demonitor(monitor_ref, [:flush])
+    %{state | ingress_executor_monitor_ref: nil}
+  end
+
+  defp maybe_demonitor_ingress_executor(state), do: state
+end
