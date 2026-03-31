@@ -1,55 +1,36 @@
 ---
 title: Architecture Decision Records
 tags: [decisions, adr, index]
-created: 2025-01-27
-updated: 2025-01-27
+created: 2026-03-28
+updated: 2026-03-30
 status: active
 ---
 
 # Architecture Decision Records
 
-ADRs capture significant architectural decisions and their rationale. Check here before modifying architecture to avoid undoing intentional choices.
+This directory holds ADRs for the redesigned Cadence system in `apps/cadence`
+and `apps/cadence_web`.
+
+Legacy ADRs remain under
+[`legacy/cadence_legacy/docs/decisions`](../../legacy/cadence_legacy/docs/decisions/_index.md).
 
 ## Accepted Decisions
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [ADR-001](001-no-db-in-data-plane.md) | No Database Calls in Data Plane | Accepted |
-| [ADR-002](002-luerl-for-procedures.md) | Luerl for Procedure Execution | Accepted |
+| [ADR-001](001-mission-scoped-runtime-and-selector-model.md) | Mission-Scoped Runtime and Selector Model | Accepted |
+| [ADR-002](002-organization-mission-scope-and-identity-model.md) | Organization, Mission, and Identity Scope Model | Accepted |
+| [ADR-003](003-authorization-context-and-policy-evaluation-model.md) | Authorization Context and Policy Evaluation Model | Accepted |
+| [ADR-004](004-activation-authorization-and-approval-policy.md) | Activation Authorization and Approval Policy | Accepted |
+| [ADR-005](005-runtime-partitioning-and-workload-isolation.md) | Runtime Partitioning and Workload Isolation | Accepted |
+| [ADR-006](006-contact-link-and-transport-runtime-model.md) | Contact, Link, and Transport Runtime Model | Accepted |
+| [ADR-007](007-first-party-capability-abi.md) | First-Party Capability ABI | Accepted |
+| [ADR-008](008-multi-format-catalog-import-architecture.md) | Multi-Format Catalog Import Architecture | Accepted |
+| [ADR-009](009-canonical-telemetry-catalog-model.md) | Canonical Telemetry Catalog Model | Accepted |
+| [ADR-010](010-canonical-command-catalog-model.md) | Canonical Command Catalog Model | Accepted |
+| [ADR-011](011-command-staging-queueing-and-release-lifecycle.md) | Command Staging, Queueing, and Release Lifecycle | Accepted |
+| [ADR-012](012-provider-adapter-and-ground-station-simulator-model.md) | Provider Adapter and Ground Station Simulator Model | Accepted |
 
-## Planned ADRs
+## Planned Decisions
 
-Decisions embedded in existing docs that should be extracted:
-
-- **Recordables Pattern for Event Sourcing** - From [Adding a Recordable](../patterns/adding-recordable.md)
-- **Hexagonal Architecture** - From [Data Plane / Control Plane](../architecture/data-plane-control-plane.md)
-
-## ADR Template
-
-```markdown
----
-title: "ADR-NNN: Title"
-tags: [adr, topic]
-status: proposed | accepted | deprecated | superseded
-created: YYYY-MM-DD
----
-
-# ADR-NNN: Title
-
-## Status
-Accepted
-
-## Context
-What's the situation? What forces are at play?
-
-## Decision
-What did we decide?
-
-## Consequences
-What are the trade-offs? What does this enable/prevent?
-```
-
-## See Also
-
-- [Architecture](../architecture/_index.md) - Technical details
-- [Glossary](../glossary/_index.md) - Terminology
+- Future mission-supplied plugin ABI
