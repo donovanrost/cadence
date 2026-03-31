@@ -1,0 +1,9 @@
+defmodule CadenceSimulator.Case do
+  use ExUnit.CaseTemplate
+
+  using opts do
+    quote do
+      use ExUnit.Case, unquote(opts)
+    end
+  end
+end

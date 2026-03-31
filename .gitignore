@@ -37,3 +37,4 @@ cadence-*.tar
 npm-debug.log
 /assets/node_modules/
 /legacy/cadence_legacy/assets/node_modules/
+/apps/cadence_simulator/cadence_simulator
