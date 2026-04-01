@@ -1,0 +1,26 @@
+# COP-1 CLCW schedule example for simulator error injection.
+# Each entry applies from its "at" step onward; later entries override earlier ones.
+- at: 0
+  overrides:
+    lockout: 0
+    wait: 0
+    retransmit: 0
+    no_rf_available: 0
+    no_bit_lock: 0
+    farm_busy: 0
+- at: 50
+  overrides:
+    wait: 1
+- at: 100
+  overrides:
+    wait: 0
+    retransmit: 1
+- at: 140
+  overrides:
+    retransmit: 0
+- at: 200
+  overrides:
+    lockout: 1
+- at: 260
+  overrides:
+    lockout: 0

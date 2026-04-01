@@ -1,0 +1,157 @@
+defmodule CadenceWeb.MissionLive.FormComponent do
+  @moduledoc """
+  Form component for creating and editing missions.
+
+  Uses the Mission schema directly for changesets rather than going through
+  the context, following hexagonal architecture principles where the web
+  layer works directly with schemas for form validation.
+  """
+  use CadenceWeb, :live_component
+
+  alias Cadence.Missions
+  alias Cadence.Missions.Mission
+  alias Cadence.Organizations
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div>
+      <.header>
+        {@title}
+        <:subtitle>Use this form to manage mission records in your database.</:subtitle>
+      </.header>
+
+      <.simple_form
+        for={@form}
+        id="mission-form"
+        phx-target={@myself}
+        phx-change="validate"
+        phx-submit="save"
+      >
+        <.input
+          field={@form[:organization_id]}
+          type="select"
+          label="Organization"
+          prompt="Choose an organization"
+          options={@organizations}
+        />
+        <.input field={@form[:name]} type="text" label="Name" />
+        <.input field={@form[:slug]} type="text" label="Slug" />
+        <.input field={@form[:description]} type="textarea" label="Description" />
+        <.input
+          field={@form[:status]}
+          type="select"
+          label="Status"
+          options={[{"Inactive", "inactive"}, {"Active", "active"}, {"Suspended", "suspended"}]}
+        />
+        <.input
+          field={@form[:phase]}
+          type="select"
+          label="Phase"
+          options={[
+            {"Planning", "planning"},
+            {"Testing", "testing"},
+            {"Operational", "operational"},
+            {"Decommissioned", "decommissioned"}
+          ]}
+        />
+        <:actions>
+          <.button phx-disable-with="Saving...">Save Mission</.button>
+        </:actions>
+      </.simple_form>
+    </div>
+    """
+  end
+
+  @impl true
+  def update(%{mission: mission} = assigns, socket) do
+    # Use schema changeset directly instead of context wrapper
+    changeset = Mission.changeset(mission, %{})
+
+    organizations =
+      Organizations.list_organizations()
+      |> Enum.map(&{&1.name, &1.id})
+
+    {:ok,
+     socket
+     |> assign(assigns)
+     |> assign(:organizations, organizations)
+     |> assign_form(changeset)}
+  end
+
+  @impl true
+  def handle_event("validate", %{"mission" => mission_params}, socket) do
+    # Use schema changeset directly for validation
+    changeset =
+      socket.assigns.mission
+      |> Mission.changeset(mission_params)
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign_form(socket, changeset)}
+  end
+
+  def handle_event("save", %{"mission" => mission_params}, socket) do
+    save_mission(socket, socket.assigns.action, mission_params)
+  end
+
+  defp save_mission(socket, :edit, mission_params) do
+    scope = socket.assigns.current_scope
+    mission = socket.assigns.mission
+
+    case Bodyguard.permit(Cadence.Missions.Policy, :update, scope, mission) do
+      :ok ->
+        case Missions.update_mission(mission.id, mission.organization_id, mission_params) do
+          {:ok, updated_mission} ->
+            notify_parent({:saved, updated_mission})
+
+            {:noreply,
+             socket
+             |> put_flash(:info, "Mission updated successfully")
+             |> push_patch(to: socket.assigns.patch)}
+
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Failed to update mission: #{inspect(reason)}")
+             |> assign_form(Mission.changeset(mission, mission_params))}
+        end
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "You don't have permission to update this mission")
+         |> push_patch(to: socket.assigns.patch)}
+    end
+  end
+
+  defp save_mission(socket, :new, mission_params) do
+    org_id = mission_params["organization_id"]
+    creator_user_id = socket.assigns.current_user.id
+
+    attrs =
+      mission_params
+      |> Map.put("creator_user_id", creator_user_id)
+
+    case Missions.create_mission(org_id, attrs) do
+      {:ok, mission} ->
+        notify_parent({:saved, mission})
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Mission created successfully")
+         |> push_patch(to: socket.assigns.patch)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to create mission: #{inspect(reason)}")
+         |> assign_form(Mission.changeset(socket.assigns.mission, mission_params))}
+    end
+  end
+
+  defp assign_form(socket, %Ecto.Changeset{} = changeset) do
+    assign(socket, :form, to_form(changeset))
+  end
+
+  defp notify_parent(msg), do: send(self(), {__MODULE__, msg})
+end
