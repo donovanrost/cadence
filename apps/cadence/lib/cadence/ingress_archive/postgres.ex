@@ -20,7 +20,11 @@ defmodule Cadence.IngressArchive.Postgres do
 
   @impl true
   def persist_raw_evidence_multi(%Multi{} = multi, %RawEvidence{} = raw_evidence) do
-    Multi.insert(multi, :raw_evidence, RawEvidenceRow.changeset(raw_evidence))
+    Multi.insert(
+      multi,
+      {:raw_evidence, raw_evidence.evidence_id},
+      RawEvidenceRow.changeset(raw_evidence)
+    )
   end
 
   @impl true

@@ -64,6 +64,24 @@ defmodule CadenceSimulator.PacketEncoderTest do
     assert Enum.all?(packets, fn {_name, binary} -> is_binary(binary) and byte_size(binary) > 0 end)
   end
 
+  test "encode_packet_values_with_sequence emits the same packets without rescanning flat values" do
+    {:ok, encoder} = PacketEncoder.load_string(@definitions)
+
+    {:ok, packets} =
+      PacketEncoder.encode_packet_values_with_sequence(
+        encoder,
+        "SIM-1",
+        [
+          {"FIRST", %{"count" => 7}},
+          {"SECOND", %{"mode" => "NOMINAL"}}
+        ],
+        fn _apid -> 0 end
+      )
+
+    assert Enum.map(packets, &elem(&1, 0)) == ["FIRST", "SECOND"]
+    assert Enum.all?(packets, fn {_name, binary} -> is_binary(binary) and byte_size(binary) > 0 end)
+  end
+
   test "encode_with_sequence ignores unknown values instead of emitting empty packets" do
     {:ok, encoder} = PacketEncoder.load_string(@definitions)
 

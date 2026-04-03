@@ -5,6 +5,10 @@ defmodule CadenceSimulator.GeneratorWorker do
   Workers generate values for assigned steps, encode them into space packets,
   then either buffer those packets into the shared `SendBuffer` or hand them
   back to the coordinator for ordered post-processing.
+
+  When TM framing is enabled, workers never own final frame counters or emit
+  framed bytes directly. They either return packets for coordinator-owned
+  framing or frame plans for coordinator-owned ordered emission.
   """
 
   use GenServer
@@ -18,14 +22,13 @@ defmodule CadenceSimulator.GeneratorWorker do
     :coordinator_pid,
     :provider_module,
     :provider_state,
+    :packet_value_provider?,
     :encoder,
     :target_id,
     :sequence_allocator,
     :send_buffer,
     :delivery_mode,
     :frame,
-    :tm_frame_state,
-    :frame_counter_step,
     :frame_plan_cache,
     :metrics_id,
     :metrics_sample_rate
@@ -50,20 +53,21 @@ defmodule CadenceSimulator.GeneratorWorker do
 
   @impl true
   def init(opts) do
+    provider_module = Keyword.fetch!(opts, :provider_module)
+
     {:ok,
      %__MODULE__{
        worker_id: Keyword.fetch!(opts, :worker_id),
        coordinator_pid: Keyword.get(opts, :coordinator_pid),
-       provider_module: Keyword.fetch!(opts, :provider_module),
+       provider_module: provider_module,
        provider_state: Keyword.fetch!(opts, :provider_state),
+       packet_value_provider?: packet_value_provider?(provider_module),
        encoder: Keyword.fetch!(opts, :encoder),
        target_id: Keyword.fetch!(opts, :target_id),
        sequence_allocator: Keyword.fetch!(opts, :sequence_allocator),
        send_buffer: Keyword.get(opts, :send_buffer),
        delivery_mode: Keyword.get(opts, :delivery_mode, :send_buffer),
        frame: Keyword.get(opts, :frame),
-       tm_frame_state: init_tm_frame_state(opts),
-       frame_counter_step: Keyword.get(opts, :frame_counter_step, 1),
        frame_plan_cache: %{},
        metrics_id: Keyword.get(opts, :metrics_id),
        metrics_sample_rate: Keyword.get(opts, :metrics_sample_rate, 100)
@@ -85,21 +89,13 @@ defmodule CadenceSimulator.GeneratorWorker do
         fn offset, {outputs_acc, bytes_acc, packet_count_acc, acc_state} ->
           step = start_step + offset
 
-          case acc_state.provider_module.generate_values(acc_state.provider_state, step) do
-            {:ok, values, provider_state} ->
-              {:ok, packets} =
-                PacketEncoder.encode_with_sequence(
-                  acc_state.encoder,
-                  acc_state.target_id,
-                  values,
-                  fn apid -> SequenceAllocator.next(acc_state.sequence_allocator, apid) end
-                )
-
+          case generate_packets_for_step(acc_state, step) do
+            {:ok, packets, next_generation_state} ->
               binaries = Enum.map(packets, &elem(&1, 1))
 
               {delivery_outputs, output_bytes, delivery_state} =
                 prepare_delivery_outputs(
-                  %{acc_state | provider_state: provider_state},
+                  next_generation_state,
                   binaries,
                   step
                 )
@@ -111,13 +107,12 @@ defmodule CadenceSimulator.GeneratorWorker do
                 delivery_state
               }
 
-            {:error, reason, provider_state} ->
+            {:error, reason, next_generation_state} ->
               Logger.warning(
                 "Simulator worker #{acc_state.worker_id} generation error at step #{step}: #{inspect(reason)}"
               )
 
-              {outputs_acc, bytes_acc, packet_count_acc,
-               %{acc_state | provider_state: provider_state}}
+              {outputs_acc, bytes_acc, packet_count_acc, next_generation_state}
           end
         end
       )
@@ -132,7 +127,7 @@ defmodule CadenceSimulator.GeneratorWorker do
 
     delivery_result =
       case state.delivery_mode do
-        delivery_mode when delivery_mode in [:send_buffer, :worker_tm_fast_path] ->
+        :send_buffer ->
           buffer_status =
             if outputs != [] do
               SendBuffer.buffer_packets(state.send_buffer, Enum.reverse(outputs), total_bytes)
@@ -165,7 +160,8 @@ defmodule CadenceSimulator.GeneratorWorker do
       if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
 
     {plans_reversed, total_bytes, cache} =
-      Enum.reduce(binaries, {[], 0, state.frame_plan_cache}, fn packet, {plans_acc, bytes_acc, cache} ->
+      Enum.reduce(binaries, {[], 0, state.frame_plan_cache}, fn packet,
+                                                                {plans_acc, bytes_acc, cache} ->
         {:ok, packet_plans, next_cache} = TMFramePlan.plan(packet, frame, cache)
 
         {
@@ -186,60 +182,48 @@ defmodule CadenceSimulator.GeneratorWorker do
     {plans_reversed, total_bytes, %{state | frame_plan_cache: cache}}
   end
 
-  defp prepare_delivery_outputs(
-         %{delivery_mode: :worker_tm_fast_path, frame: %{format: :tm} = frame} = state,
-         binaries,
-         sample_ordinal
-       ) do
-    framing_sample? =
-      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, sample_ordinal)
-
-    framing_start =
-      if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
-
-    {plans_reversed, cache} =
-      Enum.reduce(binaries, {[], state.frame_plan_cache}, fn packet, {plans_acc, cache} ->
-        {:ok, packet_plans, next_cache} = TMFramePlan.plan(packet, frame, cache)
-        {:lists.reverse(packet_plans, plans_acc), next_cache}
-      end)
-
-    {frames, total_bytes, next_frame_state} =
-      TMFramePlan.encode_many(
-        Enum.reverse(plans_reversed),
-        frame,
-        state.tm_frame_state
-      )
-
-    if framing_sample? do
-      SimulatorMetrics.record_timing(
-        state.metrics_id,
-        :framing,
-        System.monotonic_time(:microsecond) - framing_start
-      )
-    end
-
-    {frames, total_bytes, %{state | frame_plan_cache: cache, tm_frame_state: next_frame_state}}
-  end
-
   defp prepare_delivery_outputs(state, binaries, _sample_ordinal) do
     {binaries, Enum.reduce(binaries, 0, fn binary, acc -> acc + byte_size(binary) end), state}
   end
 
-  defp init_tm_frame_state(opts) do
-    case {Keyword.get(opts, :delivery_mode), Keyword.get(opts, :frame)} do
-      {:worker_tm_fast_path, %{format: :tm}} ->
-        worker_id = Keyword.fetch!(opts, :worker_id)
-        counter_step = Keyword.get(opts, :frame_counter_step, 1)
+  defp generate_packets_for_step(%{packet_value_provider?: true} = state, step) do
+    case state.provider_module.generate_packet_values(state.provider_state, step) do
+      {:ok, packet_values, provider_state} ->
+        {:ok, packets} =
+          PacketEncoder.encode_packet_values_with_sequence(
+            state.encoder,
+            state.target_id,
+            packet_values,
+            fn apid -> SequenceAllocator.next(state.sequence_allocator, apid) end
+          )
 
-        %{
-          mcfc: rem(worker_id, 256),
-          vcfc: rem(worker_id, 256),
-          counter_step: max(counter_step, 1)
-        }
+        {:ok, packets, %{state | provider_state: provider_state}}
 
-      _other ->
-        nil
+      {:error, reason, provider_state} ->
+        {:error, reason, %{state | provider_state: provider_state}}
     end
+  end
+
+  defp generate_packets_for_step(state, step) do
+    case state.provider_module.generate_values(state.provider_state, step) do
+      {:ok, values, provider_state} ->
+        {:ok, packets} =
+          PacketEncoder.encode_with_sequence(
+            state.encoder,
+            state.target_id,
+            values,
+            fn apid -> SequenceAllocator.next(state.sequence_allocator, apid) end
+          )
+
+        {:ok, packets, %{state | provider_state: provider_state}}
+
+      {:error, reason, provider_state} ->
+        {:error, reason, %{state | provider_state: provider_state}}
+    end
+  end
+
+  defp packet_value_provider?(provider_module) do
+    function_exported?(provider_module, :generate_packet_values, 2)
   end
 
   defp notify_batch_complete(

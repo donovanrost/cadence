@@ -4,9 +4,15 @@ defmodule CadenceSimulator.DynamicsProvider do
 
   Providers emit converted telemetry values keyed by qualified point name. A
   later encoding/runtime layer can turn those values into packets or frames.
+
+  Providers may optionally emit packet-scoped values directly to avoid
+  rebuilding a flat point map and then rediscovering packet membership during
+  encoding.
   """
 
   @type telemetry_values :: %{String.t() => number() | String.t() | binary() | boolean()}
+  @type packet_item_values :: %{String.t() => number() | String.t() | binary() | boolean()}
+  @type packet_values :: [{String.t(), packet_item_values()}]
 
   @doc """
   Initialize the provider with provider-specific configuration.
@@ -21,6 +27,13 @@ defmodule CadenceSimulator.DynamicsProvider do
               | {:error, reason :: term(), state :: term()}
 
   @doc """
+  Generate packet-scoped values for a simulation step.
+  """
+  @callback generate_packet_values(state :: term(), step :: non_neg_integer()) ::
+              {:ok, packet_values(), new_state :: term()}
+              | {:error, reason :: term(), state :: term()}
+
+  @doc """
   Return human-readable provider status.
   """
   @callback status(state :: term()) :: map()
@@ -30,5 +43,5 @@ defmodule CadenceSimulator.DynamicsProvider do
   """
   @callback parallel_safe?(config :: map()) :: boolean()
 
-  @optional_callbacks [status: 1, parallel_safe?: 1]
+  @optional_callbacks [generate_packet_values: 2, status: 1, parallel_safe?: 1]
 end

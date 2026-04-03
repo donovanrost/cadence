@@ -10,6 +10,10 @@ defmodule CadenceSimulator.Coordinator do
   - `:sequential` mode for framed or unframed output
   - `:parallel` mode for high-rate packet generation with ordered post-worker
     framing when TM output is enabled
+
+  Parallel mode collapses to sequential semantics when only one generator is
+  configured. For TM output, workers may plan framing work in parallel, but the
+  coordinator remains the sole owner of final frame sequencing and emission.
   """
 
   use GenServer
@@ -43,6 +47,7 @@ defmodule CadenceSimulator.Coordinator do
     :target_id,
     :provider_module,
     :provider_state,
+    :packet_value_provider?,
     :encoder,
     :sequence_allocator,
     :output,
@@ -105,11 +110,18 @@ defmodule CadenceSimulator.Coordinator do
     requested_parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
     {provider_module, provider_config} = determine_provider(opts)
 
+    generator_count = normalize_generator_count(opts[:generator_count])
+
     with {:ok, provider_state} <- provider_module.init(provider_config),
          {:ok, encoder} <- require_encoder(opts),
          {:ok, frame_state} <- init_frame_state(frame) do
       parallel_mode =
-        normalize_parallel_mode(requested_parallel_mode, provider_module, provider_config, frame)
+        normalize_parallel_mode(
+          requested_parallel_mode,
+          provider_module,
+          provider_config,
+          generator_count
+        )
 
       parallel_delivery_mode = parallel_delivery_mode(parallel_mode, frame, opts)
       metrics_id = make_ref()
@@ -136,6 +148,7 @@ defmodule CadenceSimulator.Coordinator do
           target_id: target_id,
           provider_module: provider_module,
           provider_state: provider_state,
+          packet_value_provider?: packet_value_provider?(provider_module),
           encoder: encoder,
           sequence_allocator: sequence_allocator,
           output: output,
@@ -156,7 +169,7 @@ defmodule CadenceSimulator.Coordinator do
           send_buffer_bytes_sent: 0,
           send_buffer_flushes: 0
         }
-        |> maybe_init_parallel_mode(opts, provider_state)
+        |> maybe_init_parallel_mode(opts, provider_state, generator_count)
 
       timer_ref = Process.send_after(self(), :generate, interval_ms)
       {:ok, %{base_state | timer_ref: timer_ref}}
@@ -187,7 +200,7 @@ defmodule CadenceSimulator.Coordinator do
          {:buffered, buffer_status}},
         %{parallel_mode: :parallel, parallel_delivery_mode: parallel_delivery_mode} = state
       ) do
-    if parallel_delivery_mode not in [:send_buffer, :worker_tm_fast_path] do
+    if parallel_delivery_mode != :send_buffer do
       raise "unexpected buffered delivery result for #{inspect(parallel_delivery_mode)}"
     end
 
@@ -350,12 +363,7 @@ defmodule CadenceSimulator.Coordinator do
     :ok
   end
 
-  defp maybe_init_parallel_mode(%{parallel_mode: :parallel} = state, opts, provider_state) do
-    generator_count =
-      opts
-      |> Keyword.get(:generator_count, @default_generator_count)
-      |> normalize_generator_count()
-
+  defp maybe_init_parallel_mode(%{parallel_mode: :parallel} = state, opts, provider_state, generator_count) do
     max_in_flight_steps =
       normalize_max_in_flight_steps(opts, generator_count, state.steps_per_tick)
 
@@ -382,8 +390,7 @@ defmodule CadenceSimulator.Coordinator do
             delivery_mode: state.parallel_delivery_mode,
             frame: state.frame,
             metrics_id: state.metrics_id,
-            metrics_sample_rate: state.metrics_sample_rate,
-            frame_counter_step: generator_count
+            metrics_sample_rate: state.metrics_sample_rate
           )
 
         pid
@@ -408,29 +415,23 @@ defmodule CadenceSimulator.Coordinator do
     }
   end
 
-  defp maybe_init_parallel_mode(state, _opts, _provider_state), do: state
+  defp maybe_init_parallel_mode(state, _opts, _provider_state, _generator_count), do: state
 
   defp generate_steps(state, step_count) do
-      Enum.reduce(1..step_count, {[], 0, state}, fn _index, {outputs_acc, bytes_acc, acc_state} ->
+    Enum.reduce(1..step_count, {[], 0, state}, fn _index, {outputs_acc, bytes_acc, acc_state} ->
       generation_sample? =
         SimulatorMetrics.sample_timing?(acc_state.metrics_sample_rate, acc_state.step)
 
       generation_start =
         if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
 
-          case acc_state.provider_module.generate_values(acc_state.provider_state, acc_state.step) do
-            {:ok, values, provider_state} ->
-          {:ok, packets} =
-            PacketEncoder.encode_with_sequence(
-              acc_state.encoder,
-              acc_state.target_id,
-              values,
-              fn apid -> SequenceAllocator.next(acc_state.sequence_allocator, apid) end
-            )
+      case generate_packets_for_step(acc_state, acc_state.step) do
+        {:ok, packets, next_generation_state} ->
+          next_generation_state = %{next_generation_state | step: next_generation_state.step + 1}
 
           if generation_sample? do
             SimulatorMetrics.record_timing(
-              acc_state.metrics_id,
+              next_generation_state.metrics_id,
               :generation,
               System.monotonic_time(:microsecond) - generation_start
             )
@@ -442,7 +443,7 @@ defmodule CadenceSimulator.Coordinator do
           {framed_outputs, framed_bytes, next_state} =
             Enum.reduce(
               packets,
-              {[], 0, %{acc_state | provider_state: provider_state}},
+              {[], 0, next_generation_state},
               fn {_name, packet}, {packet_acc, packet_bytes, packet_state} ->
                 {output_binary, updated_packet_state} = encode_output(packet_state, packet)
 
@@ -464,18 +465,52 @@ defmodule CadenceSimulator.Coordinator do
             bytes_acc + framed_bytes,
             %{
               next_state
-              | step: next_state.step + 1,
-                packet_count: next_state.packet_count + length(packets)
+              | packet_count: next_state.packet_count + length(packets)
             }
           }
 
-        {:error, reason, provider_state} ->
+        {:error, reason, next_generation_state} ->
           Logger.warning("Simulator provider error at step #{acc_state.step}: #{inspect(reason)}")
 
-          {outputs_acc, bytes_acc,
-           %{acc_state | provider_state: provider_state, step: acc_state.step + 1}}
+          {outputs_acc, bytes_acc, %{next_generation_state | step: next_generation_state.step + 1}}
       end
     end)
+  end
+
+  defp generate_packets_for_step(%{packet_value_provider?: true} = state, step) do
+    case state.provider_module.generate_packet_values(state.provider_state, step) do
+      {:ok, packet_values, provider_state} ->
+        {:ok, packets} =
+          PacketEncoder.encode_packet_values_with_sequence(
+            state.encoder,
+            state.target_id,
+            packet_values,
+            fn apid -> SequenceAllocator.next(state.sequence_allocator, apid) end
+          )
+
+        {:ok, packets, %{state | provider_state: provider_state}}
+
+      {:error, reason, provider_state} ->
+        {:error, reason, %{state | provider_state: provider_state}}
+    end
+  end
+
+  defp generate_packets_for_step(state, step) do
+    case state.provider_module.generate_values(state.provider_state, step) do
+      {:ok, values, provider_state} ->
+        {:ok, packets} =
+          PacketEncoder.encode_with_sequence(
+            state.encoder,
+            state.target_id,
+            values,
+            fn apid -> SequenceAllocator.next(state.sequence_allocator, apid) end
+          )
+
+        {:ok, packets, %{state | provider_state: provider_state}}
+
+      {:error, reason, provider_state} ->
+        {:error, reason, %{state | provider_state: provider_state}}
+    end
   end
 
   defp encode_output(%{frame: nil} = state, packet), do: {packet, state}
@@ -590,7 +625,12 @@ defmodule CadenceSimulator.Coordinator do
   defp init_frame_state(nil), do: {:ok, nil}
   defp init_frame_state(%{format: :tm}), do: Segmentation.init([])
 
-  defp normalize_parallel_mode(:parallel, provider_module, provider_config, _frame) do
+  defp normalize_parallel_mode(:parallel, _provider_module, _provider_config, generator_count)
+       when generator_count <= 1 do
+    :sequential
+  end
+
+  defp normalize_parallel_mode(:parallel, provider_module, provider_config, _generator_count) do
     if provider_parallel_safe?(provider_module, provider_config) do
       :parallel
     else
@@ -602,23 +642,19 @@ defmodule CadenceSimulator.Coordinator do
     end
   end
 
-  defp normalize_parallel_mode(mode, _provider_module, _provider_config, _frame), do: mode
+  defp normalize_parallel_mode(mode, _provider_module, _provider_config, _generator_count),
+    do: mode
 
   defp parallel_delivery_mode(:parallel, %{format: :tm}, opts) do
-    cond do
-      Keyword.get(opts, :tm_worker_fast_path, false) ->
-        :worker_tm_fast_path
-
-      Keyword.get(opts, :tm_parallel_framing, false) ->
-        :ordered_frame_plan
-
-      true ->
-        :ordered_framer
-    end
+    if Keyword.get(opts, :tm_parallel_framing, false), do: :ordered_frame_plan, else: :ordered_framer
   end
 
   defp parallel_delivery_mode(:parallel, _frame, _opts), do: :send_buffer
   defp parallel_delivery_mode(_mode, _frame, _opts), do: nil
+
+  defp packet_value_provider?(provider_module) do
+    function_exported?(provider_module, :generate_packet_values, 2)
+  end
 
   defp provider_parallel_safe?(provider_module, provider_config) do
     if function_exported?(provider_module, :parallel_safe?, 1) do

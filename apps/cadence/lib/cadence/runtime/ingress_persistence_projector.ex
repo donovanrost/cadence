@@ -14,6 +14,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   alias Cadence.Runtime.ProcessedIngressBatch
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
+  @max_persist_batch_size 2_048
   @default_retry_delay_ms 100
 
   @type state :: %{
@@ -145,15 +146,15 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   @impl true
   def handle_info(:process_queue, state) do
-    case :queue.out(state.queue) do
-      {{:value, %ProcessedIngressBatch{} = batch}, rest} ->
+    case dequeue_persist_batch(state) do
+      {:ok, %ProcessedIngressBatch{} = batch, rest, batch_size} ->
         case persist_batch(batch) do
           :ok ->
             next_state = %{
               state
               | queue: rest,
-                queue_depth: max(state.queue_depth - ProcessedIngressBatch.size(batch), 0),
-                persisted_count: state.persisted_count + ProcessedIngressBatch.size(batch),
+                queue_depth: max(state.queue_depth - batch_size, 0),
+                persisted_count: state.persisted_count + batch_size,
                 last_completed_at: DateTime.utc_now(),
                 last_error: nil
             }
@@ -183,7 +184,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
             {:noreply, next_state}
         end
 
-      {:empty, _queue} ->
+      :empty ->
         {:noreply, %{state | queue_depth: 0, processing?: false}}
     end
   end
@@ -255,5 +256,59 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
         {:crash, Exception.format_banner(kind, reason)}
     end
+  end
+
+  defp dequeue_persist_batch(state) do
+    case :queue.out(state.queue) do
+      {:empty, _queue} ->
+        :empty
+
+      {{:value, %ProcessedIngressBatch{} = batch}, rest} ->
+        do_dequeue_persist_batch(
+          state,
+          rest,
+          ProcessedIngressBatch.size(batch),
+          [batch.processing_results]
+        )
+    end
+  end
+
+  defp do_dequeue_persist_batch(state, queue, size, processing_result_lists) do
+    case :queue.peek(queue) do
+      {:value, %ProcessedIngressBatch{} = batch} ->
+        batch_size = ProcessedIngressBatch.size(batch)
+
+        if size + batch_size <= @max_persist_batch_size do
+          {{:value, _next_batch}, rest} = :queue.out(queue)
+
+          do_dequeue_persist_batch(
+            state,
+            rest,
+            size + batch_size,
+            [batch.processing_results | processing_result_lists]
+          )
+        else
+          build_persist_batch(state, queue, size, processing_result_lists)
+        end
+
+      _other ->
+        build_persist_batch(state, queue, size, processing_result_lists)
+    end
+  end
+
+  defp build_persist_batch(state, queue, size, processing_result_lists) do
+    processing_results =
+      processing_result_lists
+      |> Enum.reverse()
+      |> Enum.flat_map(& &1)
+
+    {:ok,
+     ProcessedIngressBatch.new(%{
+       mission_id: state.mission_id,
+       realized_contact_id: state.realized_contact_id,
+       path_id: state.path_id,
+       provider_binding_id: state.provider_binding_id,
+       processing_results: processing_results
+     }), queue, size}
   end
 end

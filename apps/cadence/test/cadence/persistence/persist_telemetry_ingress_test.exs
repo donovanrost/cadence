@@ -557,6 +557,85 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert Repo.aggregate(ProtocolAnomalyRow, :count, :anomaly_id) == 1
   end
 
+  test "persists multiple processing results in one batch with Postgres archive backends" do
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "sc-batch",
+        mission_id: "mission-alpha",
+        display_name: "SC Batch"
+      })
+
+    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(spacecraft)
+
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "endpoint-sc-batch",
+        mission_id: "mission-alpha",
+        spacecraft_id: "sc-batch",
+        source_ref: "station-batch"
+      })
+
+    assert {:ok, _persisted_source_endpoint} = Cadence.persist_source_endpoint(source_endpoint)
+
+    packet_definition =
+      PacketDefinition.new(%{
+        mission_id: "mission-alpha",
+        packet_name: "BATCH",
+        apid: 42,
+        fields: [%{name: "counter", offset_bits: 0, size_bits: 16, data_type: :uint}]
+      })
+
+    binding_set =
+      BindingSet.new(%{
+        mission_id: "mission-alpha",
+        binding_set_id: "mission-alpha-batch",
+        version: 1,
+        rules: [
+          BindingRule.new(%{
+            handler_key: :definition_bound_telemetry,
+            packet_kind: :space_packet,
+            apid: 42,
+            handler_configuration: packet_definition
+          })
+        ]
+      })
+
+    raw_evidence_one =
+      RawEvidence.new(%{
+        mission_id: "mission-alpha",
+        source_ref: "station-batch",
+        raw: build_space_packet(42, 21, <<0, 7>>)
+      })
+
+    raw_evidence_two =
+      RawEvidence.new(%{
+        mission_id: "mission-alpha",
+        source_ref: "station-batch",
+        raw: build_space_packet(42, 22, <<0, 8>>)
+      })
+
+    assert {:ok, first_result} = Cadence.process_telemetry_ingress(raw_evidence_one, binding_set)
+    assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two, binding_set)
+
+    assert :ok =
+             Cadence.Persistence.persist_processing_results(
+               [first_result, second_result],
+               record_current_values?: false
+             )
+
+    assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 2
+    assert Repo.aggregate(PacketRecordRow, :count, :packet_id) == 2
+    assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 2
+
+    sample_values =
+      TelemetrySampleRow
+      |> order_by(asc: :receipt_time, asc: :sample_id)
+      |> Repo.all()
+      |> Enum.map(fn row -> row.raw_value["value"] end)
+
+    assert sample_values == [7, 8]
+  end
+
   test "persists TM raw evidence before packet reassembly completes across runtime calls" do
     spacecraft =
       Spacecraft.new(%{

@@ -65,4 +65,21 @@ defmodule CadenceSimulator.Providers.DatabaseDynamicsTest do
     assert values_at_10["HK.mode"] in ["NOMINAL", "SAFE"]
     assert values_at_0["HK.mode"] != values_at_10["HK.mode"]
   end
+
+  test "precompiled definitions generate packet-scoped values in yaml order" do
+    {:ok, state} =
+      DatabaseDynamics.init(%{
+        definitions_content: @definitions,
+        noise_amplitude: 0.0
+      })
+
+    {:ok, [{"HK", values_at_10}], ^state} = DatabaseDynamics.generate_packet_values(state, 10)
+
+    assert values_at_10["uptime_seconds"] == 10
+    assert values_at_10["label"] == "HK_label_v10"
+    assert byte_size(values_at_10["blob"]) == 2
+    assert values_at_10["mode"] in ["NOMINAL", "SAFE"]
+    assert values_at_10["cpu_temp"] >= 10.0
+    assert values_at_10["cpu_temp"] <= 20.0
+  end
 end

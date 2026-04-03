@@ -111,6 +111,30 @@ defmodule CadenceSimulator.PacketEncoder do
     {:ok, Enum.reverse(packets)}
   end
 
+  @spec encode_packet_values_with_sequence(
+          t(),
+          String.t(),
+          [{String.t(), %{String.t() => any()}}],
+          (non_neg_integer() -> non_neg_integer())
+        ) :: {:ok, [{String.t(), binary()}]} | {:error, term()}
+  def encode_packet_values_with_sequence(encoder, _target_id, packet_values, sequence_fn)
+      when is_list(packet_values) and is_function(sequence_fn, 1) do
+    packets =
+      Enum.reduce(packet_values, [], fn
+        {packet_name, item_values}, acc when is_binary(packet_name) and is_map(item_values) ->
+          append_encoded_packet(
+            encode_packet_item_values_with_sequence(encoder, packet_name, item_values, sequence_fn),
+            packet_name,
+            acc
+          )
+
+        _other, acc ->
+          acc
+      end)
+
+    {:ok, Enum.reverse(packets)}
+  end
+
   @spec packet_names(t()) :: [String.t()]
   def packet_names(encoder), do: encoder.packet_order
 
@@ -263,6 +287,17 @@ defmodule CadenceSimulator.PacketEncoder do
     end
   end
 
+  defp encode_packet_item_values_with_sequence(encoder, packet_name, item_values, sequence_fn) do
+    case Map.get(encoder.packets, packet_name) do
+      nil ->
+        {:error, {:unknown_packet, packet_name}}
+
+      packet_def ->
+        apid = packet_def.apid || 0
+        {:ok, encode_packet_binary_from_item_values(packet_def, item_values, sequence_fn.(apid))}
+    end
+  end
+
   defp encode_packet_binary(encoder, packet_def, values) do
     payload = build_payload(packet_def, values)
     apid = packet_def.apid || 0
@@ -272,6 +307,11 @@ defmodule CadenceSimulator.PacketEncoder do
 
   defp encode_packet_binary_with_seq(packet_def, values, sequence) do
     payload = build_payload(packet_def, values)
+    build_ccsds_packet(packet_def, sequence, payload)
+  end
+
+  defp encode_packet_binary_from_item_values(packet_def, item_values, sequence) do
+    payload = build_payload_from_item_values(packet_def, item_values)
     build_ccsds_packet(packet_def, sequence, payload)
   end
 
@@ -304,6 +344,45 @@ defmodule CadenceSimulator.PacketEncoder do
   defp build_payload(packet_def, values) do
     Enum.reduce(packet_def.items, zero_binary(packet_def.payload_size), fn item_def, acc ->
       case Map.get(values, item_def.qualified_name) do
+        nil ->
+          acc
+
+        value ->
+          raw_value = reverse_convert(value, item_def.conversion)
+          pack_value(acc, item_def, raw_value)
+      end
+    end)
+  end
+
+  defp build_payload_from_item_values(%{packing_strategy: :sequential} = packet_def, item_values) do
+    iodata =
+      Enum.reduce(packet_def.pack_items, [], fn {gap_before, item_def, empty_value}, acc ->
+        value_binary =
+          case Map.get(item_values, item_def.name) do
+            nil ->
+              empty_value
+
+            value ->
+              raw_value = reverse_convert(value, item_def.conversion)
+
+              value_to_binary(
+                raw_value,
+                item_def.data_type,
+                item_def.bit_size,
+                item_def.byte_size,
+                item_def.endianness
+              )
+          end
+
+        [acc, gap_before, value_binary]
+      end)
+
+    IO.iodata_to_binary([iodata, packet_def.tail_gap])
+  end
+
+  defp build_payload_from_item_values(packet_def, item_values) do
+    Enum.reduce(packet_def.items, zero_binary(packet_def.payload_size), fn item_def, acc ->
+      case Map.get(item_values, item_def.name) do
         nil ->
           acc
 

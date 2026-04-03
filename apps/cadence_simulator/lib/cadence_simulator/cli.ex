@@ -30,7 +30,6 @@ defmodule CadenceSimulator.CLI do
     vcid: :integer,
     parallel: :boolean,
     tm_parallel_framing: :boolean,
-    tm_worker_fast_path: :boolean,
     generator_count: :integer,
     metrics_sample_rate: :integer,
     send_batch_timeout: :integer,
@@ -181,9 +180,8 @@ defmodule CadenceSimulator.CLI do
       --provider-binding-id ID Select one provider runtime when a path has many
 
     Performance:
-      --parallel               Enable raw-packet parallel generation
-      --tm-parallel-framing    Plan TM frame segmentation in workers before ordered emit
-      --tm-worker-fast-path    Use worker-side TM framing and direct send buffering
+      --parallel               Enable concurrent packet generation; with --generator-count 1 this behaves sequentially
+      --tm-parallel-framing    Plan TM frame payloads in workers before ordered framing emit
       --generator-count N      Parallel worker count
       --metrics-sample-rate N  Record hot-path timings every Nth sample (default: 100, 0 disables)
       --send-batch-timeout MS  Send buffer flush timeout
@@ -443,7 +441,6 @@ defmodule CadenceSimulator.CLI do
         |> maybe_put(:output, output)
         |> maybe_put(:frame, frame)
         |> maybe_put(:tm_parallel_framing, parsed[:tm_parallel_framing])
-        |> maybe_put(:tm_worker_fast_path, parsed[:tm_worker_fast_path])
         |> maybe_put(:generator_count, parsed[:generator_count])
         |> maybe_put(:metrics_sample_rate, parsed[:metrics_sample_rate])
         |> maybe_put(:send_batch_timeout, parsed[:send_batch_timeout])
@@ -733,11 +730,10 @@ defmodule CadenceSimulator.CLI do
 
   defp parsed_options_from_config(runtime_mode, config_root) do
     with :ok <- validate_config_runtime_mode(runtime_mode, config_root) do
-      {:ok,
-       case runtime_mode do
-         :telemetry -> telemetry_config_options(config_root)
-         :cop1_loopback -> loopback_config_options(config_root)
-       end}
+      case runtime_mode do
+        :telemetry -> telemetry_config_options(config_root)
+        :cop1_loopback -> {:ok, loopback_config_options(config_root)}
+      end
     end
   end
 
@@ -761,37 +757,56 @@ defmodule CadenceSimulator.CLI do
     end
   end
 
+  defp validate_telemetry_config(config_root) do
+    if is_nil(fetch_config_value(config_root, ["tm_worker_fast_path"])) do
+      :ok
+    else
+      {:error, "tm_worker_fast_path is no longer supported; remove it from the simulator config"}
+    end
+  end
+
   defp telemetry_config_options(config_root) do
     output = fetch_map_value(config_root, ["output"]) || %{}
     frame = fetch_map_value(config_root, ["frame"]) || %{}
     cadence = fetch_map_value(config_root, ["cadence"]) || %{}
 
-    []
-    |> maybe_put_config(:target, fetch_config_value(config_root, ["target", "target_id"]))
-    |> maybe_put_config(
-      :definitions,
-      fetch_config_value(config_root, ["definitions", "definitions_path"])
-    )
-    |> maybe_put_config(:rate, fetch_config_value(config_root, ["rate", "rate_hz"]))
-    |> maybe_put_config(:tcp, config_socket_value(config_root, output, :tcp))
-    |> maybe_put_config(:udp, config_socket_value(config_root, output, :udp))
-    |> maybe_put_config(:provider, fetch_config_value(config_root, ["provider"]))
-    |> maybe_put_config(:scenario, fetch_config_value(config_root, ["scenario", "scenario_path"]))
-    |> maybe_put_config(:noise_amplitude, fetch_config_value(config_root, ["noise_amplitude"]))
-    |> maybe_put_config(:tm_frame_size, config_frame_value(config_root, frame, "tm_frame_size"))
-    |> maybe_put_config(:scid, config_frame_value(config_root, frame, "scid"))
-    |> maybe_put_config(:vcid, config_frame_value(config_root, frame, "vcid"))
-    |> maybe_put_config(:parallel, config_parallel_value(config_root))
-    |> maybe_put_config(:tm_parallel_framing, fetch_config_value(config_root, ["tm_parallel_framing"]))
-    |> maybe_put_config(:tm_worker_fast_path, fetch_config_value(config_root, ["tm_worker_fast_path"]))
-    |> maybe_put_config(:generator_count, fetch_config_value(config_root, ["generator_count"]))
-    |> maybe_put_config(:metrics_sample_rate, fetch_config_value(config_root, ["metrics_sample_rate"]))
-    |> maybe_put_config(
-      :send_batch_timeout,
-      fetch_config_value(config_root, ["send_batch_timeout"])
-    )
-    |> maybe_put_config(:send_batch_size, fetch_config_value(config_root, ["send_batch_size"]))
-    |> Keyword.merge(cadence_bootstrap_config_options(config_root, cadence))
+    with :ok <- validate_telemetry_config(config_root) do
+      {:ok,
+       []
+       |> maybe_put_config(:target, fetch_config_value(config_root, ["target", "target_id"]))
+       |> maybe_put_config(
+         :definitions,
+         fetch_config_value(config_root, ["definitions", "definitions_path"])
+       )
+       |> maybe_put_config(:rate, fetch_config_value(config_root, ["rate", "rate_hz"]))
+       |> maybe_put_config(:tcp, config_socket_value(config_root, output, :tcp))
+       |> maybe_put_config(:udp, config_socket_value(config_root, output, :udp))
+       |> maybe_put_config(:provider, fetch_config_value(config_root, ["provider"]))
+       |> maybe_put_config(
+         :scenario,
+         fetch_config_value(config_root, ["scenario", "scenario_path"])
+       )
+       |> maybe_put_config(:noise_amplitude, fetch_config_value(config_root, ["noise_amplitude"]))
+       |> maybe_put_config(:tm_frame_size, config_frame_value(config_root, frame, "tm_frame_size"))
+       |> maybe_put_config(:scid, config_frame_value(config_root, frame, "scid"))
+       |> maybe_put_config(:vcid, config_frame_value(config_root, frame, "vcid"))
+       |> maybe_put_config(:parallel, config_parallel_value(config_root))
+       |> maybe_put_config(
+         :tm_parallel_framing,
+         fetch_config_value(config_root, ["tm_parallel_framing"])
+       )
+       |> maybe_put_config(:generator_count, fetch_config_value(config_root, ["generator_count"]))
+       |> maybe_put_config(
+         :metrics_sample_rate,
+         fetch_config_value(config_root, ["metrics_sample_rate"])
+       )
+       |> maybe_put_config(
+         :send_batch_timeout,
+         fetch_config_value(config_root, ["send_batch_timeout"])
+       )
+       |> maybe_put_config(:send_batch_size, fetch_config_value(config_root, ["send_batch_size"]))
+       |> Keyword.merge(cadence_bootstrap_config_options(config_root, cadence))}
+    end
   end
 
   defp loopback_config_options(config_root) do
@@ -962,7 +977,6 @@ defmodule CadenceSimulator.CLI do
   defp normalize_config_value(:noise_amplitude, value), do: parse_float(value) || value
   defp normalize_config_value(:parallel, value), do: parse_boolean(value)
   defp normalize_config_value(:tm_parallel_framing, value), do: parse_boolean(value)
-  defp normalize_config_value(:tm_worker_fast_path, value), do: parse_boolean(value)
   defp normalize_config_value(_key, value), do: value
 
   defp fetch_config_value(nil, _keys), do: nil

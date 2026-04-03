@@ -31,7 +31,6 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defstruct [
     :packets,
     :packet_count,
-    :items,
     :item_count,
     :noise_amplitude
   ]
@@ -57,20 +56,19 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
     case result do
       {:ok, parsed} ->
-        {packets, items} = extract_definitions(parsed)
+        {packets, item_count} = extract_definitions(parsed)
 
         Logger.info("""
         DatabaseDynamics initialized:
           packets: #{length(packets)}
-          items: #{length(items)}
+          items: #{item_count}
         """)
 
         {:ok,
          %__MODULE__{
            packets: packets,
            packet_count: length(packets),
-           items: items,
-           item_count: length(items),
+           item_count: item_count,
            noise_amplitude: Map.get(config, :noise_amplitude, @default_noise_amplitude)
          }}
 
@@ -81,13 +79,12 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   @impl true
   def generate_values(state, step) do
-    values =
-      state.items
-      |> Enum.reduce(%{}, fn {qualified_name, generator}, acc ->
-        Map.put(acc, qualified_name, generate_item_value(generator, step, state.noise_amplitude))
-      end)
+    {:ok, build_flat_values(state.packets, step, state.noise_amplitude), state}
+  end
 
-    {:ok, values, state}
+  @impl true
+  def generate_packet_values(state, step) do
+    {:ok, build_packet_values(state.packets, step, state.noise_amplitude), state}
   end
 
   @impl true
@@ -106,31 +103,58 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defp extract_definitions(parsed) do
     packets = parsed["packets"] || []
 
-    {packet_defs, item_defs} =
-      Enum.reduce(packets, {[], []}, fn packet_data, {pkts, items} ->
+    Enum.reduce(packets, {[], 0}, fn packet_data, {pkts, item_count} ->
         packet_name = packet_data["name"]
-
-        packet_def = %{
-          name: packet_name,
-          apid: packet_data["apid"],
-          description: packet_data["description"]
-        }
 
         packet_items =
           (packet_data["items"] || [])
           |> Enum.map(&build_item_spec(packet_name, &1))
 
-        {[packet_def | pkts], Enum.reverse(packet_items, items)}
+        {
+          [
+            %{
+              name: packet_name,
+              apid: packet_data["apid"],
+              description: packet_data["description"],
+              items: packet_items
+            }
+            | pkts
+          ],
+          item_count + length(packet_items)
+        }
       end)
-
-    {Enum.reverse(packet_defs), Enum.reverse(item_defs)}
+    |> then(fn {packet_defs, item_count} -> {Enum.reverse(packet_defs), item_count} end)
   end
 
   defp build_item_spec(packet_name, item_data) do
     item_name = item_data["name"]
     qualified_name = "#{packet_name}.#{item_name}"
     phase = :erlang.phash2(item_name) / 1000.0
-    {qualified_name, build_generator(packet_name, item_name, item_data, phase)}
+
+    %{
+      name: item_name,
+      qualified_name: qualified_name,
+      generator: build_generator(packet_name, item_name, item_data, phase)
+    }
+  end
+
+  defp build_packet_values(packet_specs, step, noise_amplitude) do
+    Enum.map(packet_specs, fn %{name: packet_name, items: item_specs} ->
+      values =
+        Enum.reduce(item_specs, %{}, fn %{name: item_name, generator: generator}, acc ->
+          Map.put(acc, item_name, generate_item_value(generator, step, noise_amplitude))
+        end)
+
+      {packet_name, values}
+    end)
+  end
+
+  defp build_flat_values(packet_specs, step, noise_amplitude) do
+    Enum.reduce(packet_specs, %{}, fn %{items: item_specs}, acc ->
+      Enum.reduce(item_specs, acc, fn %{qualified_name: qualified_name, generator: generator}, item_acc ->
+        Map.put(item_acc, qualified_name, generate_item_value(generator, step, noise_amplitude))
+      end)
+    end)
   end
 
   defp build_generator(packet_name, item_name, item_data, phase) do

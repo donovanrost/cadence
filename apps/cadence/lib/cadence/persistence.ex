@@ -42,41 +42,16 @@ defmodule Cadence.Persistence do
           {:ok, Cadence.processing_result()} | {:error, term()}
   def persist_processing_result(
         %{
-          raw_evidence: %RawEvidence{} = raw_evidence,
-          packet_records: packet_records,
-          transfer_frame_records: transfer_frame_records,
-          protocol_anomalies: protocol_anomalies,
-          outputs: outputs
+          raw_evidence: %RawEvidence{},
+          packet_records: _packet_records,
+          transfer_frame_records: _transfer_frame_records,
+          protocol_anomalies: _protocol_anomalies,
+          outputs: _outputs
         } = processing_result,
         opts \\ []
       ) do
-    with {:ok, telemetry_samples} <- telemetry_samples(outputs) do
-      case persist_canonical_processing_result(
-             raw_evidence,
-             transfer_frame_records,
-             protocol_anomalies,
-             packet_records,
-             telemetry_samples
-           ) do
-        {:ok, _changes} ->
-          with :ok <- Cadence.IngressArchive.persist_raw_evidence(raw_evidence),
-               :ok <-
-                 RecordArchive.persist_records(
-                   raw_evidence,
-                   transfer_frame_records,
-                   packet_records
-                 ),
-               :ok <- maybe_record_current_values(telemetry_samples, opts),
-               :ok <- Cadence.Telemetry.HistoryStore.persist_samples(telemetry_samples) do
-            {:ok, processing_result}
-          end
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
+    with :ok <- persist_processing_results([processing_result], opts) do
+      {:ok, processing_result}
     end
   end
 
@@ -85,30 +60,16 @@ defmodule Cadence.Persistence do
   def persist_processing_results(processing_results, opts \\ [])
       when is_list(processing_results) and is_list(opts) do
     with {:ok, prepared_results} <- prepare_processing_results(processing_results),
+         telemetry_samples = telemetry_samples_from_prepared(prepared_results),
          :ok <- persist_canonical_processing_results(prepared_results),
          :ok <-
            Cadence.IngressArchive.persist_raw_evidences(
              Enum.map(prepared_results, & &1.raw_evidence)
            ),
          :ok <-
-           RecordArchive.persist_records_many(
-             Enum.map(prepared_results, fn prepared ->
-               {
-                 prepared.raw_evidence,
-                 prepared.transfer_frame_records,
-                 prepared.packet_records
-               }
-             end)
-           ),
-         :ok <-
-           maybe_record_current_values(
-             Enum.flat_map(prepared_results, & &1.telemetry_samples),
-             opts
-           ),
-         :ok <-
-           Cadence.Telemetry.HistoryStore.persist_samples(
-             Enum.flat_map(prepared_results, & &1.telemetry_samples)
-           ) do
+           RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
+         :ok <- maybe_record_current_values(telemetry_samples, opts),
+         :ok <- Cadence.Telemetry.HistoryStore.persist_samples(telemetry_samples) do
       :ok
     end
   end
@@ -377,21 +338,17 @@ defmodule Cadence.Persistence do
     end)
   end
 
-  defp persist_canonical_processing_result(
-         raw_evidence,
-         transfer_frame_records,
-         protocol_anomalies,
-         packet_records,
-         telemetry_samples
-       ) do
-    Multi.new()
-    |> Cadence.IngressArchive.persist_raw_evidence_multi(raw_evidence)
-    |> RecordArchive.persist_records_multi(raw_evidence, transfer_frame_records, packet_records)
-    |> add_protocol_anomaly_inserts(protocol_anomalies)
-    |> Multi.run(:command_verifier_evaluations, fn repo, _changes ->
-      Cadence.Commanding.evaluate_command_verifiers(repo, telemetry_samples)
+  defp add_prepared_processing_result_inserts(%Multi{} = multi, prepared_results)
+       when is_list(prepared_results) do
+    Enum.reduce(prepared_results, multi, fn prepared_result, acc ->
+      acc
+      |> Cadence.IngressArchive.persist_raw_evidence_multi(prepared_result.raw_evidence)
+      |> RecordArchive.persist_records_multi(
+        prepared_result.raw_evidence,
+        prepared_result.transfer_frame_records,
+        prepared_result.packet_records
+      )
     end)
-    |> Repo.transaction()
   end
 
   defp prepare_processing_results(processing_results) do
@@ -435,23 +392,43 @@ defmodule Cadence.Persistence do
   end
 
   defp persist_canonical_processing_results(prepared_results) do
-    Enum.reduce_while(prepared_results, :ok, fn prepared_result, :ok ->
-      case persist_canonical_processing_result(
-             prepared_result.raw_evidence,
-             prepared_result.transfer_frame_records,
-             prepared_result.protocol_anomalies,
-             prepared_result.packet_records,
-             prepared_result.telemetry_samples
-           ) do
-        {:ok, _changes} ->
-          {:cont, :ok}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:halt, {:error, changeset}}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:halt, {:error, reason}}
-      end
+    Multi.new()
+    |> add_prepared_processing_result_inserts(prepared_results)
+    |> add_protocol_anomaly_inserts(protocol_anomalies_from_prepared(prepared_results))
+    |> Multi.run(:command_verifier_evaluations, fn repo, _changes ->
+      Cadence.Commanding.evaluate_command_verifiers(
+        repo,
+        telemetry_samples_from_prepared(prepared_results)
+      )
     end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, _changes} ->
+        :ok
+
+      {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+        {:error, changeset}
+
+      {:error, _operation, reason, _changes_so_far} ->
+        {:error, reason}
+    end
+  end
+
+  defp archive_records_batch(prepared_results) when is_list(prepared_results) do
+    Enum.map(prepared_results, fn prepared ->
+      {
+        prepared.raw_evidence,
+        prepared.transfer_frame_records,
+        prepared.packet_records
+      }
+    end)
+  end
+
+  defp telemetry_samples_from_prepared(prepared_results) when is_list(prepared_results) do
+    Enum.flat_map(prepared_results, & &1.telemetry_samples)
+  end
+
+  defp protocol_anomalies_from_prepared(prepared_results) when is_list(prepared_results) do
+    Enum.flat_map(prepared_results, & &1.protocol_anomalies)
   end
 end

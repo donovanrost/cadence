@@ -42,6 +42,73 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
     end)
   end
 
+  test "parallel request with one generator behaves sequentially" do
+    {:ok, pid} =
+      Coordinator.start_link(
+        target_id: "SIM-1",
+        rate_hz: 2_000.0,
+        output: nil,
+        definitions_content: @definitions,
+        provider: DatabaseDynamics,
+        parallel_mode: :parallel,
+        generator_count: 1,
+        send_batch_timeout: 1_000
+      )
+
+    on_exit(fn ->
+      if Process.alive?(pid), do: Coordinator.stop(pid)
+    end)
+
+    assert_eventually(fn ->
+      stats = Coordinator.stats(pid)
+
+      stats.parallel_mode == :sequential and
+        stats.packet_count > 0 and
+        stats.send_buffer_stats.packets_buffered > 0 and
+        not Map.has_key?(stats, :parallel_delivery_mode)
+    end)
+  end
+
+  test "tm framing with one generator matches sequential output bytes" do
+    frame_size = 32
+
+    {:ok, sequential_pid} =
+      Coordinator.start_link(
+        target_id: "SIM-1",
+        rate_hz: 2_000.0,
+        output: nil,
+        definitions_content: @definitions,
+        provider: DatabaseDynamics,
+        send_batch_timeout: 1_000,
+        frame: %{format: :tm, frame_size: frame_size, scid: 11, vcid: 2}
+      )
+
+    {:ok, one_generator_pid} =
+      Coordinator.start_link(
+        target_id: "SIM-1",
+        rate_hz: 2_000.0,
+        output: nil,
+        definitions_content: @definitions,
+        provider: DatabaseDynamics,
+        parallel_mode: :parallel,
+        generator_count: 1,
+        send_batch_timeout: 1_000,
+        frame: %{format: :tm, frame_size: frame_size, scid: 11, vcid: 2}
+      )
+
+    on_exit(fn ->
+      if Process.alive?(sequential_pid), do: Coordinator.stop(sequential_pid)
+      if Process.alive?(one_generator_pid), do: Coordinator.stop(one_generator_pid)
+    end)
+
+    assert_eventually(fn ->
+      buffered_frame_count(sequential_pid) >= 4 and buffered_frame_count(one_generator_pid) >= 4
+    end)
+
+    assert first_buffered_bytes(sequential_pid, 4 * frame_size) ==
+             first_buffered_bytes(one_generator_pid, 4 * frame_size)
+  end
+
   test "tm framing keeps parallel generation and emits ordered frame sequences" do
     frame_size = 32
 
@@ -122,44 +189,17 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
     assert frame_seqs == Enum.to_list(0..(length(frame_seqs) - 1))
   end
 
-  test "tm worker fast path buffers framed output directly from workers" do
-    frame_size = 32
-
-    {:ok, pid} =
-      Coordinator.start_link(
-        target_id: "SIM-1",
-        rate_hz: 2_000.0,
-        output: nil,
-        definitions_content: @definitions,
-        provider: DatabaseDynamics,
-        parallel_mode: :parallel,
-        tm_worker_fast_path: true,
-        generator_count: 2,
-        send_batch_timeout: 1_000,
-        frame: %{format: :tm, frame_size: frame_size, scid: 11, vcid: 2}
-      )
-
-    on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
-    end)
-
-    assert_eventually(fn ->
-      stats = Coordinator.stats(pid)
-
-      stats.parallel_mode == :parallel and
-        stats.parallel_delivery_mode == :worker_tm_fast_path and
-        stats.packet_count > 0 and
-        stats.send_buffer_stats.packets_buffered >= 2
-    end)
-
+  defp buffered_frame_count(pid) do
     coordinator_state = :sys.get_state(pid)
     send_buffer_state = :sys.get_state(coordinator_state.send_buffer)
-    buffered_frames = send_buffer_state.buffer |> Enum.reverse() |> IO.iodata_to_binary()
+    div(IO.iodata_length(Enum.reverse(send_buffer_state.buffer)), 32)
+  end
 
-    assert {:ok, frames, <<>>} =
-             FrameCodec.decode(buffered_frames, frame_size: frame_size, ocf_length: 0)
-
-    assert length(frames) >= 2
+  defp first_buffered_bytes(pid, byte_count) do
+    coordinator_state = :sys.get_state(pid)
+    send_buffer_state = :sys.get_state(coordinator_state.send_buffer)
+    buffered = send_buffer_state.buffer |> Enum.reverse() |> IO.iodata_to_binary()
+    binary_part(buffered, 0, byte_count)
   end
 
   defp assert_eventually(fun, attempts \\ 20)
