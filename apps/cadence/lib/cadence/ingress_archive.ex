@@ -56,6 +56,31 @@ defmodule Cadence.IngressArchive do
     ensure_backend_loaded!(backend_module()).persist_raw_evidence(raw_evidence)
   end
 
+  @spec persist_raw_evidences([RawEvidence.t()]) :: :ok | {:error, term()}
+  def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
+    backend = ensure_backend_loaded!(backend_module())
+
+    cond do
+      raw_evidences == [] ->
+        :ok
+
+      function_exported?(backend, :persist_raw_evidences, 1) ->
+        backend.persist_raw_evidences(raw_evidences)
+
+      true ->
+        Enum.reduce_while(raw_evidences, :ok, fn
+          %RawEvidence{} = raw_evidence, :ok ->
+            case backend.persist_raw_evidence(raw_evidence) do
+              :ok -> {:cont, :ok}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
+
+          _other, :ok ->
+            {:halt, {:error, :invalid_raw_evidence_batch}}
+        end)
+    end
+  end
+
   @spec fetch_raw_evidences(binary(), Scope.t()) :: {:ok, [RawEvidence.t()]} | {:error, term()}
   def fetch_raw_evidences(mission_id, %Scope{} = scope) when is_binary(mission_id) do
     ensure_backend_loaded!(backend_module()).fetch_raw_evidences(mission_id, scope)

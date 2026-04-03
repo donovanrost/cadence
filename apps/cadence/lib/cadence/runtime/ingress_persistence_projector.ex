@@ -201,16 +201,10 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
         TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
           TelemetryProfiler.with_stage(:persistence, fn ->
-            Enum.reduce_while(processing_results, :ok, fn processing_result, :ok ->
-              case Cadence.Persistence.persist_processing_result(
-                     processing_result,
-                     record_current_values?:
-                       not Cadence.Telemetry.CurrentValueStore.hot_path_safe?()
-                   ) do
-                {:ok, _persisted_result} -> {:cont, :ok}
-                {:error, reason} -> {:halt, {:error, reason}}
-              end
-            end)
+            Cadence.Persistence.persist_processing_results(
+              processing_results,
+              record_current_values?: not Cadence.Telemetry.CurrentValueStore.hot_path_safe?()
+            )
           end)
         end)
       end)

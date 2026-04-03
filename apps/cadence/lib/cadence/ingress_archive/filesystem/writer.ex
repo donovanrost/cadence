@@ -28,6 +28,11 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
     GenServer.call(__MODULE__, {:enqueue, raw_evidence})
   end
 
+  @spec enqueue_many([RawEvidence.t()]) :: :ok | {:error, term()}
+  def enqueue_many(raw_evidences) when is_list(raw_evidences) do
+    GenServer.call(__MODULE__, {:enqueue_many, raw_evidences})
+  end
+
   @spec flush(binary() | nil) :: :ok | {:error, term()}
   def flush(mission_id \\ nil) do
     GenServer.call(__MODULE__, {:flush, mission_id}, :infinity)
@@ -60,6 +65,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
        flush_interval_ms: flush_interval_ms,
        flush_count: flush_count,
        buffers: %{},
+       buffer_sizes: %{},
        timer_refs: %{},
        buffer_started_at_ms: %{},
        metrics: %{}
@@ -68,28 +74,25 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
 
   @impl true
   def handle_call({:enqueue, %RawEvidence{} = raw_evidence}, _from, state) do
-    mission_id = raw_evidence.mission_id
-    buffered = Map.get(state.buffers, mission_id, [])
-    next_buffer = buffered ++ [raw_evidence]
-    enqueue_ms = System.monotonic_time(:millisecond)
+    state = normalize_state(state)
+    {:reply, :ok, enqueue_raw_evidences(state, [raw_evidence])}
+  end
 
-    state =
-      state
-      |> put_in([:buffers, mission_id], next_buffer)
-      |> maybe_mark_buffer_started(mission_id, buffered, enqueue_ms)
-      |> maybe_schedule_flush(mission_id)
+  def handle_call({:enqueue_many, raw_evidences}, _from, state) when is_list(raw_evidences) do
+    state = normalize_state(state)
 
-    state =
-      if length(next_buffer) >= state.flush_count do
-        reschedule_flush(state, mission_id, 0)
-      else
-        state
-      end
+    case Enum.all?(raw_evidences, &match?(%RawEvidence{}, &1)) do
+      true ->
+        {:reply, :ok, enqueue_raw_evidences(state, raw_evidences)}
 
-    {:reply, :ok, state}
+      false ->
+        {:reply, {:error, :invalid_raw_evidence_batch}, state}
+    end
   end
 
   def handle_call({:flush, nil}, _from, state) do
+    state = normalize_state(state)
+
     case Enum.reduce_while(Map.keys(state.buffers), {:ok, state}, fn mission_id,
                                                                      {:ok, acc_state} ->
            case flush_mission(acc_state, mission_id) do
@@ -107,6 +110,8 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
   end
 
   def handle_call({:flush, mission_id}, _from, state) when is_binary(mission_id) do
+    state = normalize_state(state)
+
     case flush_mission(state, mission_id) do
       {:ok, next_state} ->
         {:reply, :ok, next_state}
@@ -118,22 +123,34 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
   end
 
   def handle_call({:stats, mission_id}, _from, state) when is_binary(mission_id) do
+    state = normalize_state(state)
     {:reply, build_stats(state, mission_id), state}
   end
 
   def handle_call({:reset_stats, mission_id}, _from, state) when is_binary(mission_id) do
+    state = normalize_state(state)
     {:reply, :ok, put_in(state.metrics[mission_id], zero_metrics())}
   end
 
   def handle_call(:reset, _from, state) do
+    state = normalize_state(state)
     _ = File.rm_rf(state.base_path)
 
     {:reply, :ok,
-     %{state | buffers: %{}, timer_refs: %{}, buffer_started_at_ms: %{}, metrics: %{}}}
+     %{
+       state
+       | buffers: %{},
+         buffer_sizes: %{},
+         timer_refs: %{},
+         buffer_started_at_ms: %{},
+         metrics: %{}
+     }}
   end
 
   @impl true
   def handle_info({:flush_mission, mission_id, timer_ref}, state) do
+    state = normalize_state(state)
+
     state =
       case Map.get(state.timer_refs, mission_id) do
         {_process_timer_ref, ^timer_ref} ->
@@ -176,12 +193,13 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
   end
 
   defp flush_mission(state, mission_id) do
-    case Map.get(state.buffers, mission_id, []) do
-      [] ->
+    case Map.get(state.buffers, mission_id) do
+      nil ->
         {:ok, cancel_flush_timer(state, mission_id)}
 
-      raw_evidences ->
+      queue ->
         state = cancel_flush_timer(state, mission_id)
+        raw_evidences = :queue.to_list(queue)
         segment_id = FileSystem.new_segment_id()
         organization_id = OrganizationScope.organization_id_for_mission(mission_id)
         flush_started_us = System.monotonic_time(:microsecond)
@@ -200,6 +218,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
           next_state =
             state
             |> update_in([:buffers], &Map.delete(&1, mission_id))
+            |> update_in([:buffer_sizes], &Map.delete(&1, mission_id))
             |> update_in([:buffer_started_at_ms], &Map.delete(&1, mission_id))
             |> update_in([:metrics, mission_id], fn metrics ->
               metrics
@@ -239,15 +258,18 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
     end
   end
 
-  defp maybe_mark_buffer_started(state, mission_id, [], enqueue_ms) do
-    put_in(state.buffer_started_at_ms[mission_id], enqueue_ms)
+  defp maybe_mark_buffer_started(state, mission_id, buffered_size, enqueue_ms)
+       when is_integer(buffered_size) do
+    if buffered_size == 0 do
+      put_in(state.buffer_started_at_ms[mission_id], enqueue_ms)
+    else
+      state
+    end
   end
-
-  defp maybe_mark_buffer_started(state, _mission_id, _buffered, _enqueue_ms), do: state
 
   defp build_stats(state, mission_id) do
     metrics = ensure_metrics(Map.get(state.metrics, mission_id))
-    queue_depth = length(Map.get(state.buffers, mission_id, []))
+    queue_depth = Map.get(state.buffer_sizes, mission_id, 0)
 
     oldest_buffered_age_ms =
       case Map.get(state.buffer_started_at_ms, mission_id) do
@@ -272,6 +294,75 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
 
   defp ensure_metrics(nil), do: zero_metrics()
   defp ensure_metrics(metrics), do: metrics
+
+  defp normalize_state(state) do
+    buffers =
+      state
+      |> Map.get(:buffers, %{})
+      |> Enum.into(%{}, fn {mission_id, buffer} -> {mission_id, normalize_buffer(buffer)} end)
+
+    buffer_sizes =
+      case Map.get(state, :buffer_sizes) do
+        nil ->
+          build_buffer_sizes(buffers)
+
+        buffer_sizes ->
+          Enum.reduce(buffers, buffer_sizes, fn {mission_id, buffer}, acc ->
+            Map.put_new(acc, mission_id, buffer_length(buffer))
+          end)
+      end
+
+    state
+    |> Map.put(:buffers, buffers)
+    |> Map.put(:buffer_sizes, buffer_sizes)
+  end
+
+  defp normalize_buffer(buffer) when is_list(buffer), do: :queue.from_list(buffer)
+
+  defp normalize_buffer({front, rear} = queue) when is_list(front) and is_list(rear), do: queue
+
+  defp build_buffer_sizes(buffers) do
+    Enum.into(buffers, %{}, fn {mission_id, buffer} -> {mission_id, buffer_length(buffer)} end)
+  end
+
+  defp buffer_length(buffer) when is_list(buffer), do: length(buffer)
+
+  defp buffer_length({front, rear}) when is_list(front) and is_list(rear),
+    do: :queue.len({front, rear})
+
+  defp enqueue_raw_evidences(state, []), do: state
+
+  defp enqueue_raw_evidences(state, raw_evidences) do
+    enqueue_ms = System.monotonic_time(:millisecond)
+
+    raw_evidences
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce(state, fn {mission_id, mission_raw_evidences}, acc ->
+      buffered_queue = Map.get(acc.buffers, mission_id, :queue.new())
+      buffered_size = Map.get(acc.buffer_sizes, mission_id, 0)
+      next_queue = queue_join(buffered_queue, mission_raw_evidences)
+      next_size = buffered_size + length(mission_raw_evidences)
+
+      next_state =
+        acc
+        |> put_in([:buffers, mission_id], next_queue)
+        |> put_in([:buffer_sizes, mission_id], next_size)
+        |> maybe_mark_buffer_started(mission_id, buffered_size, enqueue_ms)
+        |> maybe_schedule_flush(mission_id)
+
+      if next_size >= next_state.flush_count do
+        reschedule_flush(next_state, mission_id, 0)
+      else
+        next_state
+      end
+    end)
+  end
+
+  defp queue_join(queue, []), do: queue
+
+  defp queue_join(queue, raw_evidences) do
+    :queue.join(queue, :queue.from_list(raw_evidences))
+  end
 
   defp zero_metrics do
     %{

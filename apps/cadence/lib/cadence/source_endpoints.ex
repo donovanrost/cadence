@@ -122,6 +122,17 @@ defmodule Cadence.SourceEndpoints do
   end
 
   @spec resolve_raw_evidence(RawEvidence.t()) :: {:ok, RawEvidence.t()} | {:error, term()}
+  def resolve_raw_evidence(
+        %RawEvidence{
+          source_endpoint_ref: source_endpoint_ref,
+          spacecraft_id: spacecraft_id
+        } = raw_evidence
+      )
+      when is_binary(source_endpoint_ref) and source_endpoint_ref != "" and
+             is_binary(spacecraft_id) and spacecraft_id != "" do
+    {:ok, raw_evidence}
+  end
+
   def resolve_raw_evidence(%RawEvidence{source_endpoint_ref: source_endpoint_ref} = raw_evidence)
       when is_binary(source_endpoint_ref) and source_endpoint_ref != "" do
     with {:ok, %SourceEndpoint{} = source_endpoint} <-

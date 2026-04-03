@@ -160,4 +160,37 @@ defmodule Cadence.IngressArchive.FileSystemTest do
 
     assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
   end
+
+  test "stats and flush tolerate legacy writer state without buffer sizes", %{
+    mission_id: mission_id
+  } do
+    receipt_time = DateTime.from_unix!(1_700_900_000, :second)
+
+    raw_evidence =
+      RawEvidence.new(%{
+        evidence_id: "evidence-legacy-state",
+        mission_id: mission_id,
+        protocol_family: :tm,
+        direction: :downlink,
+        raw: <<7, 8, 9>>,
+        receipt_time: receipt_time
+      })
+
+    :sys.replace_state(Cadence.IngressArchive.FileSystem.Writer, fn state ->
+      state
+      |> Map.put(:buffers, %{mission_id => [raw_evidence]})
+      |> Map.put(:buffer_started_at_ms, %{mission_id => System.monotonic_time(:millisecond)})
+      |> Map.delete(:buffer_sizes)
+    end)
+
+    stats_before_flush = IngressArchive.stats(mission_id)
+    assert stats_before_flush.queue_depth == 1
+
+    assert :ok = IngressArchive.flush(mission_id)
+    assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+
+    stats_after_flush = IngressArchive.stats(mission_id)
+    assert stats_after_flush.queue_depth == 0
+    assert stats_after_flush.flush_count == 1
+  end
 end

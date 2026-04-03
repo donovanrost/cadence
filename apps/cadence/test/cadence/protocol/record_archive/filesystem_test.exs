@@ -218,4 +218,72 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
 
     assert 2 == Repo.aggregate(ProtocolArchiveRecordEntryRow, :count, :entry_id)
   end
+
+  test "stats and flush tolerate legacy writer state without buffer sizes", %{
+    mission_id: mission_id
+  } do
+    receipt_time = DateTime.from_unix!(1_700_910_000, :second)
+
+    raw_evidence =
+      RawEvidence.new(%{
+        evidence_id: "evidence-protocol-legacy-state",
+        mission_id: mission_id,
+        protocol_family: :tm,
+        direction: :downlink,
+        raw: <<1, 2, 3, 4>>,
+        receipt_time: receipt_time
+      })
+
+    transfer_frame_record =
+      TransferFrameRecord.new(%{
+        frame_record_id: "frame-legacy-state",
+        evidence_id: raw_evidence.evidence_id,
+        mission_id: mission_id,
+        protocol_family: :tm,
+        direction: :downlink,
+        scid: 11,
+        vcid: 2,
+        frame_seq: 21,
+        raw_frame_offset_bytes: 0,
+        raw_frame_length_bytes: 1115,
+        payload_length_bytes: 1109,
+        first_header_pointer: 0,
+        quality: :good,
+        receipt_time: receipt_time
+      })
+
+    packet_record = %PacketRecord{
+      packet_id: "packet-legacy-state",
+      evidence_id: raw_evidence.evidence_id,
+      mission_id: mission_id,
+      protocol_family: :tm,
+      packet_kind: :space_packet,
+      apid: 42,
+      sequence_flags: 3,
+      sequence_count: 29,
+      secondary_header?: false,
+      packet_data: <<2, 9>>,
+      receipt_time: receipt_time,
+      provenance: %{}
+    }
+
+    entries = FileSystem.build_entries(raw_evidence, [transfer_frame_record], [packet_record])
+
+    :sys.replace_state(Cadence.Protocol.RecordArchive.FileSystem.Writer, fn state ->
+      state
+      |> Map.put(:buffers, %{mission_id => entries})
+      |> Map.put(:buffer_started_at_ms, %{mission_id => System.monotonic_time(:millisecond)})
+      |> Map.delete(:buffer_sizes)
+    end)
+
+    stats_before_flush = RecordArchive.stats(mission_id)
+    assert stats_before_flush.queue_depth == 2
+
+    assert :ok = RecordArchive.flush(mission_id)
+    assert 2 == Repo.aggregate(ProtocolArchiveRecordEntryRow, :count, :entry_id)
+
+    stats_after_flush = RecordArchive.stats(mission_id)
+    assert stats_after_flush.queue_depth == 0
+    assert stats_after_flush.flush_count == 1
+  end
 end

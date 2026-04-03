@@ -402,6 +402,161 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert anomaly_row.evidence_id == raw_evidence_two.evidence_id
   end
 
+  test "batched persistence retries tolerate already-inserted protocol anomalies" do
+    previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
+    previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])
+    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+
+    ingress_base_path =
+      Path.join(
+        System.tmp_dir!(),
+        "cadence_ingress_archive_retry_#{System.unique_integer([:positive])}"
+      )
+
+    protocol_base_path =
+      Path.join(
+        System.tmp_dir!(),
+        "cadence_protocol_archive_retry_#{System.unique_integer([:positive])}"
+      )
+
+    Application.put_env(:cadence, :ingress_archive,
+      module: IngressArchiveFileSystem,
+      base_path: ingress_base_path,
+      flush_interval_ms: 5_000,
+      flush_count: 10
+    )
+
+    Application.put_env(:cadence, :protocol_record_archive,
+      module: ProtocolRecordArchiveFileSystem,
+      base_path: protocol_base_path,
+      flush_interval_ms: 5_000,
+      flush_count: 10
+    )
+
+    Application.put_env(:cadence, :telemetry_history_store,
+      module: Cadence.Telemetry.HistoryStore.Noop
+    )
+
+    start_supervised!(
+      {Cadence.IngressArchive.FileSystem.Writer, Application.get_env(:cadence, :ingress_archive)}
+    )
+
+    start_supervised!(
+      {Cadence.Protocol.RecordArchive.FileSystem.Writer,
+       Application.get_env(:cadence, :protocol_record_archive)}
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
+      Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
+      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
+      File.rm_rf!(ingress_base_path)
+      File.rm_rf!(protocol_base_path)
+    end)
+
+    organization_id =
+      "org-anomaly-retry-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    mission_id = "mission-anomaly-retry-" <> Integer.to_string(System.unique_integer([:positive]))
+
+    persist_mission_scope(organization_id, mission_id)
+
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "sc-anomaly-retry",
+        mission_id: mission_id,
+        display_name: "SC Retry"
+      })
+
+    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(organization_id, spacecraft)
+
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "endpoint-anomaly-retry",
+        mission_id: mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        source_ref: "station-anomaly-retry"
+      })
+
+    assert {:ok, _persisted_source_endpoint} =
+             Cadence.persist_source_endpoint(organization_id, source_endpoint)
+
+    packet_definition =
+      PacketDefinition.new(%{
+        mission_id: mission_id,
+        packet_name: "RETRY",
+        apid: 42,
+        fields: [%{name: "counter", offset_bits: 0, size_bits: 16, data_type: :uint}]
+      })
+
+    binding_set =
+      BindingSet.new(%{
+        mission_id: mission_id,
+        binding_set_id: "#{mission_id}-default",
+        version: 1,
+        rules: [
+          BindingRule.new(%{
+            handler_key: :definition_bound_telemetry,
+            packet_kind: :space_packet,
+            apid: 42,
+            handler_configuration: packet_definition
+          })
+        ]
+      })
+
+    assert {:ok, persisted_binding_set} =
+             Cadence.persist_binding_set(organization_id, binding_set)
+
+    assert {:ok, _activation} =
+             Cadence.activate_binding_set(
+               organization_id,
+               mission_id,
+               persisted_binding_set.binding_set_id,
+               persisted_binding_set.version,
+               activated_by: %{"service_identity_id" => "svc-test"}
+             )
+
+    frame_size = 14
+
+    raw_evidence_one =
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        protocol_family: :tm,
+        source_ref: "station-anomaly-retry",
+        metadata: %{frame_size: frame_size, ocf_length: 0},
+        raw: build_tm_single_frame(42, 1, <<0, 31>>, frame_size, 1)
+      })
+
+    raw_evidence_two =
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        protocol_family: :tm,
+        source_ref: "station-anomaly-retry",
+        metadata: %{frame_size: frame_size, ocf_length: 0},
+        raw: build_tm_single_frame(42, 2, <<0, 32>>, frame_size, 3)
+      })
+
+    assert {:ok, first_result} = Cadence.process_telemetry_ingress(raw_evidence_one)
+    assert first_result.protocol_anomalies == []
+
+    assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two)
+    assert length(second_result.protocol_anomalies) == 1
+
+    assert :ok =
+             Cadence.Persistence.persist_processing_results(
+               [second_result],
+               record_current_values?: false
+             )
+
+    assert :ok =
+             Cadence.Persistence.persist_processing_results(
+               [second_result],
+               record_current_values?: false
+             )
+
+    assert Repo.aggregate(ProtocolAnomalyRow, :count, :anomaly_id) == 1
+  end
+
   test "persists TM raw evidence before packet reassembly completes across runtime calls" do
     spacecraft =
       Spacecraft.new(%{

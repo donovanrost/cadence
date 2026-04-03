@@ -95,6 +95,33 @@ defmodule Cadence.Protocol.RecordArchive do
     )
   end
 
+  @spec persist_records_many([{RawEvidence.t(), [TransferFrameRecord.t()], [PacketRecord.t()]}]) ::
+          :ok | {:error, term()}
+  def persist_records_many(records_batch) when is_list(records_batch) do
+    backend = ensure_backend_loaded!(backend_module())
+
+    cond do
+      records_batch == [] ->
+        :ok
+
+      function_exported?(backend, :persist_records_many, 1) ->
+        backend.persist_records_many(records_batch)
+
+      true ->
+        Enum.reduce_while(records_batch, :ok, fn
+          {%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records}, :ok
+          when is_list(transfer_frame_records) and is_list(packet_records) ->
+            case backend.persist_records(raw_evidence, transfer_frame_records, packet_records) do
+              :ok -> {:cont, :ok}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
+
+          _other, :ok ->
+            {:halt, {:error, :invalid_protocol_record_batch}}
+        end)
+    end
+  end
+
   @spec fetch_packet_records(binary(), Scope.t()) ::
           {:ok, [PacketRecord.t()]} | {:error, term()}
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do

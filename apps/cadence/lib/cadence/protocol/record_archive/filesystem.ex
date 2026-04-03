@@ -45,6 +45,10 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     Writer.enqueue(raw_evidence, transfer_frame_records, packet_records)
   end
 
+  def persist_records_many(records_batch) when is_list(records_batch) do
+    Writer.enqueue_many(records_batch)
+  end
+
   @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
     fetch_records(mission_id, scope, @packet_record_kind)

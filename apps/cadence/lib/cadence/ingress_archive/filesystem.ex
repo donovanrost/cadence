@@ -33,6 +33,10 @@ defmodule Cadence.IngressArchive.FileSystem do
     Writer.enqueue(raw_evidence)
   end
 
+  def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
+    Writer.enqueue_many(raw_evidences)
+  end
+
   @impl true
   def fetch_raw_evidences(mission_id, %Scope{} = scope) when is_binary(mission_id) do
     with :ok <- flush(mission_id),

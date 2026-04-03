@@ -80,6 +80,39 @@ defmodule Cadence.Persistence do
     end
   end
 
+  @spec persist_processing_results([Cadence.processing_result()], keyword()) ::
+          :ok | {:error, term()}
+  def persist_processing_results(processing_results, opts \\ [])
+      when is_list(processing_results) and is_list(opts) do
+    with {:ok, prepared_results} <- prepare_processing_results(processing_results),
+         :ok <- persist_canonical_processing_results(prepared_results),
+         :ok <-
+           Cadence.IngressArchive.persist_raw_evidences(
+             Enum.map(prepared_results, & &1.raw_evidence)
+           ),
+         :ok <-
+           RecordArchive.persist_records_many(
+             Enum.map(prepared_results, fn prepared ->
+               {
+                 prepared.raw_evidence,
+                 prepared.transfer_frame_records,
+                 prepared.packet_records
+               }
+             end)
+           ),
+         :ok <-
+           maybe_record_current_values(
+             Enum.flat_map(prepared_results, & &1.telemetry_samples),
+             opts
+           ),
+         :ok <-
+           Cadence.Telemetry.HistoryStore.persist_samples(
+             Enum.flat_map(prepared_results, & &1.telemetry_samples)
+           ) do
+      :ok
+    end
+  end
+
   @spec telemetry_samples([term()]) :: {:ok, [Sample.t()]} | {:error, term()}
   def telemetry_samples(outputs) when is_list(outputs) do
     validate_outputs(outputs)
@@ -222,17 +255,29 @@ defmodule Cadence.Persistence do
         )
       end)
 
-    maybe_insert_all(multi, :protocol_anomalies, ProtocolAnomalyRow, rows)
+    maybe_insert_all(multi, :protocol_anomalies, ProtocolAnomalyRow, rows,
+      on_conflict: :nothing,
+      conflict_target: [:anomaly_id]
+    )
   end
 
-  defp maybe_insert_all(%Multi{} = multi, _operation, _schema, []), do: multi
+  defp maybe_insert_all(%Multi{} = multi, _operation, _schema, [], _opts), do: multi
 
-  defp maybe_insert_all(%Multi{} = multi, operation, schema, rows)
-       when is_atom(operation) and is_list(rows) do
+  defp maybe_insert_all(%Multi{} = multi, operation, schema, rows, opts)
+       when is_atom(operation) and is_list(rows) and is_list(opts) do
     Multi.run(multi, operation, fn repo, _changes ->
-      case repo.insert_all(schema, rows) do
-        {count, _returned_rows} when count == length(rows) -> {:ok, count}
-        {count, _returned_rows} -> {:error, {:insert_all_count_mismatch, operation, count}}
+      count_matches? = Keyword.get(opts, :on_conflict) == :nothing
+
+      case repo.insert_all(schema, rows, opts) do
+        {count, _returned_rows} when count == length(rows) ->
+          {:ok, count}
+
+        {count, _returned_rows} ->
+          if count_matches? do
+            {:ok, count}
+          else
+            {:error, {:insert_all_count_mismatch, operation, count}}
+          end
       end
     end)
   end
@@ -347,5 +392,66 @@ defmodule Cadence.Persistence do
       Cadence.Commanding.evaluate_command_verifiers(repo, telemetry_samples)
     end)
     |> Repo.transaction()
+  end
+
+  defp prepare_processing_results(processing_results) do
+    Enum.reduce_while(processing_results, {:ok, []}, fn
+      %{
+        raw_evidence: %RawEvidence{} = raw_evidence,
+        packet_records: packet_records,
+        transfer_frame_records: transfer_frame_records,
+        protocol_anomalies: protocol_anomalies,
+        outputs: outputs
+      },
+      {:ok, acc}
+      when is_list(packet_records) and is_list(transfer_frame_records) and
+             is_list(protocol_anomalies) and is_list(outputs) ->
+        case telemetry_samples(outputs) do
+          {:ok, telemetry_samples} ->
+            {:cont,
+             {:ok,
+              [
+                %{
+                  raw_evidence: raw_evidence,
+                  packet_records: packet_records,
+                  transfer_frame_records: transfer_frame_records,
+                  protocol_anomalies: protocol_anomalies,
+                  telemetry_samples: telemetry_samples
+                }
+                | acc
+              ]}}
+
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+
+      _other, {:ok, _acc} ->
+        {:halt, {:error, :invalid_processing_results_batch}}
+    end)
+    |> case do
+      {:ok, prepared_results} -> {:ok, Enum.reverse(prepared_results)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp persist_canonical_processing_results(prepared_results) do
+    Enum.reduce_while(prepared_results, :ok, fn prepared_result, :ok ->
+      case persist_canonical_processing_result(
+             prepared_result.raw_evidence,
+             prepared_result.transfer_frame_records,
+             prepared_result.protocol_anomalies,
+             prepared_result.packet_records,
+             prepared_result.telemetry_samples
+           ) do
+        {:ok, _changes} ->
+          {:cont, :ok}
+
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
+          {:halt, {:error, changeset}}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:halt, {:error, reason}}
+      end
+    end)
   end
 end

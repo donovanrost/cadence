@@ -41,6 +41,20 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
   @impl true
   def persist_records(%RawEvidence{}, _transfer_frame_records, _packet_records), do: :ok
 
+  def persist_records_many(records_batch) when is_list(records_batch) do
+    case Enum.all?(records_batch, fn
+           {%RawEvidence{}, transfer_frame_records, packet_records}
+           when is_list(transfer_frame_records) and is_list(packet_records) ->
+             true
+
+           _other ->
+             false
+         end) do
+      true -> :ok
+      false -> {:error, :invalid_protocol_record_batch}
+    end
+  end
+
   @impl true
   def fetch_packet_records(mission_id, %Scope{} = scope) when is_binary(mission_id) do
     records =

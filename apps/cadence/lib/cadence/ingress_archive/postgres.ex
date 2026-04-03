@@ -26,6 +26,13 @@ defmodule Cadence.IngressArchive.Postgres do
   @impl true
   def persist_raw_evidence(_raw_evidence), do: :ok
 
+  def persist_raw_evidences(raw_evidences) when is_list(raw_evidences) do
+    case Enum.all?(raw_evidences, &match?(%RawEvidence{}, &1)) do
+      true -> :ok
+      false -> {:error, :invalid_raw_evidence_batch}
+    end
+  end
+
   @impl true
   def fetch_raw_evidences(mission_id, %Scope{} = scope) when is_binary(mission_id) do
     raw_evidences =

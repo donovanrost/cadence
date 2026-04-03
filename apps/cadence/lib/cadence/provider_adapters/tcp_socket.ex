@@ -21,6 +21,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime.{IngressPersistenceProjector, MissionRuntime, ProviderIngressExecutor}
+  alias Cadence.SourceEndpoints
   @tcp_socket_buffer 1_048_576
   @tcp_opts [
     :binary,
@@ -31,7 +32,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     sndbuf: @tcp_socket_buffer,
     recbuf: @tcp_socket_buffer
   ]
-  @socket_active_batch 32
   @executor_high_watermark 8_192
   @executor_low_watermark 2_048
   @backpressure_poll_ms 10
@@ -85,6 +85,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       path_id: path_id,
       provider_binding_id: provider_binding_id,
       source_endpoint_ref: source_endpoint_ref,
+      source_endpoint_spacecraft_id:
+        resolve_source_endpoint_spacecraft_id(mission_id, source_endpoint_ref),
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -96,22 +98,22 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ingress_executor_name: Keyword.fetch!(opts, :ingress_executor_name),
       ingress_executor_pid: nil,
       ingress_executor_monitor_ref: nil,
+      socket_receiver_pid: nil,
+      socket_receiver_monitor_ref: nil,
       source_ref: configuration.source_ref,
       ingress_metadata: configuration.ingress_metadata,
       listener: nil,
       socket: nil,
-      receive_buffer: <<>>,
       uplink_bytes_sent: 0,
       uplink_payload_count: 0,
       downlink_bytes_received: 0,
       downlink_message_count: 0,
+      tcp_read_count: 0,
       last_delivery_at: nil,
       last_ingress_at: nil,
       last_ingress_error: nil,
       accept_ref: nil,
-      reads_paused?: false,
-      pressure_check_pending?: false,
-      read_credits_remaining: 0
+      reads_paused?: false
     }
 
     with {:ok, base_state} <- ensure_ingress_executor(base_state) do
@@ -122,7 +124,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
               state =
                 base_state
                 |> Map.put(:socket, socket)
-                |> maybe_resume_socket_reads(socket)
+                |> start_socket_receiver!(socket)
 
               log_provider_started(state)
               {:ok, state}
@@ -190,11 +192,16 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         uplink_payload_count: state.uplink_payload_count,
         downlink_bytes_received: state.downlink_bytes_received,
         downlink_message_count: state.downlink_message_count,
+        tcp_read_count: state.tcp_read_count,
+        avg_tcp_read_bytes:
+          if(state.tcp_read_count > 0,
+            do: state.downlink_bytes_received / state.tcp_read_count,
+            else: 0.0
+          ),
         last_delivery_at: state.last_delivery_at,
         last_ingress_at: state.last_ingress_at,
         last_ingress_error: state.last_ingress_error,
         reads_paused?: state.reads_paused?,
-        read_credits_remaining: state.read_credits_remaining,
         ingress_executor: ingress_executor,
         ingress_persistence_projector: ingress_persistence_projector
       }}, state}
@@ -249,6 +256,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       "TCP provider #{state.provider_binding_id} terminating: #{inspect(reason)}"
     )
 
+    maybe_stop_socket_receiver(state)
     :ok
   end
 
@@ -267,7 +275,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
          state
          |> Map.put(:socket, socket)
          |> Map.put(:accept_ref, nil)
-         |> maybe_resume_socket_reads(socket)}
+         |> start_socket_receiver!(socket)}
     end
   end
 
@@ -293,14 +301,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, %{state | accept_ref: nil}}
   end
 
-  def handle_info({:tcp, socket, data}, state) when is_binary(data) do
+  def handle_info({:tcp_receiver_batch, receiver_pid, batch_status}, state) do
     next_state =
-      if socket_matches?(state, socket) do
-        state
-        |> consume_read_credit()
-        |> Map.update!(:downlink_bytes_received, &(&1 + byte_size(data)))
-        |> ingest_received_data(data)
-        |> maybe_resume_socket_reads(socket)
+      if receiver_matches?(state, receiver_pid) do
+        apply_receiver_batch_status(state, batch_status)
       else
         state
       end
@@ -308,22 +312,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, next_state}
   end
 
-  def handle_info(:check_read_pressure, state) do
+  def handle_info({:tcp_receiver_reads_paused, receiver_pid, paused?}, state) do
     next_state =
-      state
-      |> Map.put(:pressure_check_pending?, false)
-      |> maybe_resume_socket_reads(state.socket)
-
-    {:noreply, next_state}
-  end
-
-  def handle_info({:tcp_closed, socket}, state) do
-    next_state =
-      if socket_matches?(state, socket) do
-        state
-        |> Map.put(:socket, nil)
-        |> Map.put(:receive_buffer, <<>>)
-        |> maybe_schedule_accept_after_disconnect()
+      if receiver_matches?(state, receiver_pid) do
+        %{state | reads_paused?: paused?}
       else
         state
       end
@@ -342,21 +334,43 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, %{state | ingress_executor_pid: nil, ingress_executor_monitor_ref: nil}}
   end
 
-  def handle_info({:tcp_error, socket, reason}, state) do
-    Logger.warning(
-      "TCP provider socket error for #{state.provider_binding_id}: #{inspect(reason)}"
-    )
-
+  def handle_info({:tcp_receiver_closed, receiver_pid, reason}, state) do
     next_state =
-      if socket_matches?(state, socket) do
+      if receiver_matches?(state, receiver_pid) do
+        Logger.warning(
+          "TCP provider socket closed for #{state.provider_binding_id}: #{inspect(reason)}"
+        )
+
         state
+        |> maybe_demonitor_socket_receiver()
+        |> Map.put(:socket_receiver_pid, nil)
         |> Map.put(:socket, nil)
-        |> Map.put(:receive_buffer, <<>>)
         |> Map.put(:last_ingress_error, inspect(reason))
         |> maybe_schedule_accept_after_disconnect()
       else
         state
       end
+
+    {:noreply, next_state}
+  end
+
+  def handle_info(
+        {:DOWN, monitor_ref, :process, receiver_pid, reason},
+        %{socket_receiver_monitor_ref: monitor_ref, socket_receiver_pid: receiver_pid} = state
+      ) do
+    next_state =
+      state
+      |> Map.put(:socket_receiver_pid, nil)
+      |> Map.put(:socket_receiver_monitor_ref, nil)
+      |> Map.put(:socket, nil)
+      |> maybe_put_receiver_down_error(reason)
+      |> maybe_schedule_accept_after_disconnect()
+
+    if reason not in [:normal, :shutdown] do
+      Logger.warning(
+        "TCP provider receiver exited for #{state.provider_binding_id}: #{inspect(reason)}"
+      )
+    end
 
     {:noreply, next_state}
   end
@@ -474,14 +488,117 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     end)
   end
 
-  defp ingest_received_data(
+  defp split_fixed_messages(buffer, bytes, acc) when byte_size(buffer) >= bytes do
+    <<message::binary-size(bytes), rest::binary>> = buffer
+    split_fixed_messages(rest, bytes, [message | acc])
+  end
+
+  defp split_fixed_messages(buffer, _bytes, acc), do: {Enum.reverse(acc), buffer}
+
+  defp log_provider_started(state) do
+    Logger.info(
+      "TCP provider #{state.provider_binding_id} started in #{state.mode} mode on #{state.host}:#{state.port}"
+    )
+  end
+
+  defp start_socket_receiver!(state, socket) do
+    state = maybe_stop_socket_receiver(state)
+    receiver_state = socket_receiver_state(state)
+
+    receiver_pid =
+      spawn(fn ->
+        receive do
+          {:socket, receiver_socket} ->
+            socket_receiver_loop(%{receiver_state | socket: receiver_socket})
+        end
+      end)
+
+    :ok = :gen_tcp.controlling_process(socket, receiver_pid)
+    send(receiver_pid, {:socket, socket})
+
+    %{
+      state
+      | socket_receiver_pid: receiver_pid,
+        socket_receiver_monitor_ref: Process.monitor(receiver_pid),
+        reads_paused?: false
+    }
+  end
+
+  defp socket_receiver_state(state) do
+    %{
+      provider_pid: self(),
+      provider_binding_id: state.provider_binding_id,
+      ingress_executor_name: state.ingress_executor_name,
+      mission_id: state.mission_id,
+      realized_contact_id: state.realized_contact_id,
+      path_id: state.path_id,
+      source_endpoint_ref: state.source_endpoint_ref,
+      source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
+      direction: state.direction,
+      ingress_protocol_family: state.ingress_protocol_family,
+      fixed_message_bytes: state.fixed_message_bytes,
+      ingress_transport_binding_id: state.ingress_transport_binding_id,
+      source_ref: state.source_ref,
+      ingress_metadata: state.ingress_metadata,
+      socket: nil,
+      receive_buffer: <<>>,
+      reads_paused?: false
+    }
+  end
+
+  defp socket_receiver_loop(state) do
+    state = maybe_wait_for_executor_capacity(state)
+
+    case :gen_tcp.recv(state.socket, 0) do
+      {:ok, data} ->
+        receipt_time = DateTime.utc_now()
+        {next_state, batch_status} = consume_socket_data(state, data, receipt_time)
+        send(state.provider_pid, {:tcp_receiver_batch, self(), batch_status})
+        socket_receiver_loop(next_state)
+
+      {:error, reason} ->
+        send(state.provider_pid, {:tcp_receiver_closed, self(), reason})
+        :ok
+    end
+  end
+
+  defp maybe_wait_for_executor_capacity(state) do
+    case ProviderIngressExecutor.snapshot(state.ingress_executor_name) do
+      {:ok, snapshot} ->
+        queue_depth = Map.get(snapshot, :queue_depth, 0)
+
+        cond do
+          state.reads_paused? and queue_depth >= @executor_low_watermark ->
+            Process.sleep(@backpressure_poll_ms)
+            maybe_wait_for_executor_capacity(state)
+
+          state.reads_paused? ->
+            send(state.provider_pid, {:tcp_receiver_reads_paused, self(), false})
+            %{state | reads_paused?: false}
+
+          queue_depth >= @executor_high_watermark ->
+            send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
+            Process.sleep(@backpressure_poll_ms)
+            maybe_wait_for_executor_capacity(%{state | reads_paused?: true})
+
+          true ->
+            state
+        end
+
+      {:error, _reason} ->
+        Process.sleep(@backpressure_poll_ms)
+        maybe_wait_for_executor_capacity(state)
+    end
+  end
+
+  defp consume_socket_data(
          %{
            direction: :downlink,
            ingress_protocol_family: protocol_family,
            fixed_message_bytes: bytes
-         } =
-           state,
-         data
+         } = state,
+         data,
+         receipt_time
        )
        when protocol_family in [
               :space_packet,
@@ -494,41 +611,61 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     buffer = state.receive_buffer <> data
     {messages, rest} = split_fixed_messages(buffer, bytes, [])
 
-    state
-    |> Map.put(:receive_buffer, rest)
-    |> ingest_messages(protocol_family, messages)
+    {message_count, last_ingress_error} =
+      enqueue_telemetry_messages(state, protocol_family, messages, receipt_time)
+
+    {%{state | receive_buffer: rest},
+     %{
+       bytes_received: byte_size(data),
+       read_count: 1,
+       message_count: message_count,
+       last_ingress_at: if(message_count > 0 or last_ingress_error, do: receipt_time, else: nil),
+       last_ingress_error: last_ingress_error
+     }}
   end
 
-  defp ingest_received_data(
-         %{
-           ingress_protocol_family: :cop1_clcw,
-           fixed_message_bytes: bytes
-         } = state,
-         data
+  defp consume_socket_data(
+         %{ingress_protocol_family: :cop1_clcw, fixed_message_bytes: bytes} = state,
+         data,
+         receipt_time
        )
        when is_integer(bytes) and bytes > 0 do
     buffer = state.receive_buffer <> data
     {messages, rest} = split_fixed_messages(buffer, bytes, [])
 
-    state
-    |> Map.put(:receive_buffer, rest)
-    |> ingest_transport_event_messages(:cop1_clcw, messages)
+    {message_count, last_ingress_error} =
+      enqueue_transport_event_messages(state, messages, receipt_time)
+
+    {%{state | receive_buffer: rest},
+     %{
+       bytes_received: byte_size(data),
+       read_count: 1,
+       message_count: message_count,
+       last_ingress_at: if(message_count > 0 or last_ingress_error, do: receipt_time, else: nil),
+       last_ingress_error: last_ingress_error
+     }}
   end
 
-  defp ingest_received_data(state, data) do
-    %{state | receive_buffer: state.receive_buffer <> data}
+  defp consume_socket_data(state, data, _receipt_time) do
+    {%{state | receive_buffer: state.receive_buffer <> data},
+     %{
+       bytes_received: byte_size(data),
+       read_count: 1,
+       message_count: 0,
+       last_ingress_at: nil,
+       last_ingress_error: nil
+     }}
   end
 
-  defp ingest_messages(state, _protocol_family, []), do: state
+  defp enqueue_telemetry_messages(_state, _protocol_family, [], _receipt_time), do: {0, nil}
 
-  defp ingest_messages(state, protocol_family, messages) do
-    receipt_time = DateTime.utc_now()
-
+  defp enqueue_telemetry_messages(state, protocol_family, messages, receipt_time) do
     raw_evidences =
       Enum.map(messages, fn message ->
         RawEvidence.new(%{
           mission_id: state.mission_id,
           source_endpoint_ref: state.source_endpoint_ref,
+          spacecraft_id: state.source_endpoint_spacecraft_id,
           protocol_family: protocol_family,
           direction: :downlink,
           raw: message,
@@ -543,204 +680,101 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         })
       end)
 
-    case ensure_ingress_executor(state) do
-      {:ok, next_state} ->
-        case ProviderIngressExecutor.enqueue_many_telemetry(
-               next_state.ingress_executor_pid,
-               raw_evidences
-             ) do
-          :ok ->
-            %{
-              next_state
-              | downlink_message_count: next_state.downlink_message_count + length(messages),
-                last_ingress_at: receipt_time,
-                last_ingress_error: nil
-            }
-
-          {:error, reason} ->
-            Logger.warning(
-              "TCP provider ingress enqueue failed for #{state.provider_binding_id}: #{inspect(reason)}"
-            )
-
-            %{
-              next_state
-              | last_ingress_at: receipt_time,
-                last_ingress_error: inspect(reason)
-            }
-        end
-
-      {:error, reason} ->
-        Logger.warning(
-          "TCP provider ingress executor unavailable for #{state.provider_binding_id}: #{inspect(reason)}"
-        )
-
-        %{
-          state
-          | last_ingress_at: receipt_time,
-            last_ingress_error: inspect(reason)
-        }
+    case ProviderIngressExecutor.enqueue_many_telemetry(
+           state.ingress_executor_name,
+           raw_evidences
+         ) do
+      :ok -> {length(messages), nil}
+      {:error, reason} -> {0, inspect(reason)}
     end
   end
 
-  defp ingest_transport_event_messages(state, _protocol_family, []), do: state
+  defp enqueue_transport_event_messages(
+         %{ingress_transport_binding_id: nil},
+         _messages,
+         _receipt_time
+       ),
+       do: {0, "missing_ingress_transport_binding_id"}
 
-  defp ingest_transport_event_messages(
-         %{ingress_transport_binding_id: nil} = state,
-         _protocol_family,
-         _messages
-       ) do
-    Logger.warning(
-      "TCP provider ingress transport event dropped for #{state.provider_binding_id}: ingress_transport_binding_id is required"
-    )
+  defp enqueue_transport_event_messages(_state, [], _receipt_time), do: {0, nil}
 
-    %{state | last_ingress_error: "missing_ingress_transport_binding_id"}
-  end
-
-  defp ingest_transport_event_messages(state, :cop1_clcw, messages) do
-    receipt_time = DateTime.utc_now()
-
+  defp enqueue_transport_event_messages(state, messages, receipt_time) do
     events =
       Enum.map(messages, fn message ->
-        %{
-          kind: :cop1_clcw,
-          clcw_binary: message
-        }
+        %{kind: :cop1_clcw, clcw_binary: message}
       end)
 
-    case ensure_ingress_executor(state) do
-      {:ok, next_state} ->
-        case ProviderIngressExecutor.enqueue_many_transport_events(
-               next_state.ingress_executor_pid,
-               next_state.ingress_transport_binding_id,
-               events,
-               mission_id: next_state.mission_id,
-               realized_contact_id: next_state.realized_contact_id,
-               path_id: next_state.path_id,
-               occurred_at: receipt_time
-             ) do
-          :ok ->
-            %{
-              next_state
-              | downlink_message_count: next_state.downlink_message_count + length(messages),
-                last_ingress_at: receipt_time,
-                last_ingress_error: nil
-            }
-
-          {:error, reason} ->
-            Logger.warning(
-              "TCP provider transport-event enqueue failed for #{state.provider_binding_id}: #{inspect(reason)}"
-            )
-
-            %{
-              next_state
-              | last_ingress_at: receipt_time,
-                last_ingress_error: inspect(reason)
-            }
-        end
-
-      {:error, reason} ->
-        Logger.warning(
-          "TCP provider ingress executor unavailable for #{state.provider_binding_id}: #{inspect(reason)}"
-        )
-
-        %{
-          state
-          | last_ingress_at: receipt_time,
-            last_ingress_error: inspect(reason)
-        }
+    case ProviderIngressExecutor.enqueue_many_transport_events(
+           state.ingress_executor_name,
+           state.ingress_transport_binding_id,
+           events,
+           mission_id: state.mission_id,
+           realized_contact_id: state.realized_contact_id,
+           path_id: state.path_id,
+           occurred_at: receipt_time
+         ) do
+      :ok -> {length(messages), nil}
+      {:error, reason} -> {0, inspect(reason)}
     end
   end
 
-  defp split_fixed_messages(buffer, bytes, acc) when byte_size(buffer) >= bytes do
-    <<message::binary-size(bytes), rest::binary>> = buffer
-    split_fixed_messages(rest, bytes, [message | acc])
+  defp apply_receiver_batch_status(state, batch_status) do
+    state
+    |> Map.update!(:downlink_bytes_received, &(&1 + Map.get(batch_status, :bytes_received, 0)))
+    |> Map.update!(:tcp_read_count, &(&1 + Map.get(batch_status, :read_count, 0)))
+    |> Map.update!(:downlink_message_count, &(&1 + Map.get(batch_status, :message_count, 0)))
+    |> maybe_put_batch_timestamp(batch_status[:last_ingress_at])
+    |> maybe_put_batch_error(batch_status[:last_ingress_error])
   end
 
-  defp split_fixed_messages(buffer, _bytes, acc), do: {Enum.reverse(acc), buffer}
+  defp maybe_put_batch_timestamp(state, nil), do: state
+  defp maybe_put_batch_timestamp(state, timestamp), do: %{state | last_ingress_at: timestamp}
 
-  defp log_provider_started(state) do
-    Logger.info(
-      "TCP provider #{state.provider_binding_id} started in #{state.mode} mode on #{state.host}:#{state.port}"
-    )
-  end
+  defp maybe_put_batch_error(state, nil), do: %{state | last_ingress_error: nil}
+  defp maybe_put_batch_error(state, error), do: %{state | last_ingress_error: error}
 
-  defp arm_socket_reads(state, socket) do
-    if socket_matches?(state, socket) do
-      :ok = :inet.setopts(socket, active: @socket_active_batch)
-      %{state | read_credits_remaining: @socket_active_batch}
-    else
-      state
-    end
-  end
+  defp maybe_put_receiver_down_error(state, reason) when reason in [:normal, :shutdown], do: state
 
-  defp maybe_resume_socket_reads(state, socket) when not is_port(socket), do: state
-
-  defp maybe_resume_socket_reads(state, socket) do
-    if socket_matches?(state, socket) do
-      case ingress_executor_queue_depth(state) do
-        {:ok, next_state, queue_depth} ->
-          was_paused? = next_state.reads_paused?
-
-          threshold =
-            if was_paused? do
-              @executor_low_watermark
-            else
-              @executor_high_watermark
-            end
-
-          if queue_depth >= threshold do
-            next_state
-            |> Map.put(:reads_paused?, true)
-            |> schedule_pressure_check()
-          else
-            next_state
-            |> Map.put(:reads_paused?, false)
-            |> Map.put(:pressure_check_pending?, false)
-            |> maybe_arm_socket_reads(socket, was_paused?)
-          end
-
-        {:error, reason, next_state} ->
-          Logger.warning(
-            "TCP provider could not inspect ingress executor pressure for #{state.provider_binding_id}: #{inspect(reason)}"
-          )
-
-          %{
-            next_state
-            | last_ingress_error: inspect(reason)
-          }
-      end
-    else
-      state
-    end
-  end
-
-  defp schedule_pressure_check(%{pressure_check_pending?: true} = state), do: state
-
-  defp schedule_pressure_check(state) do
-    Process.send_after(self(), :check_read_pressure, @backpressure_poll_ms)
-    %{state | pressure_check_pending?: true}
-  end
-
-  defp maybe_arm_socket_reads(%{read_credits_remaining: credits} = state, socket, was_paused?)
-       when was_paused? or credits <= 0 do
-    arm_socket_reads(state, socket)
-  end
-
-  defp maybe_arm_socket_reads(state, _socket, _was_paused?), do: state
+  defp maybe_put_receiver_down_error(state, reason),
+    do: %{state | last_ingress_error: inspect(reason)}
 
   defp maybe_schedule_accept_after_disconnect(%{mode: :listen} = state),
     do: schedule_accept(state)
 
   defp maybe_schedule_accept_after_disconnect(state), do: state
 
-  defp socket_matches?(%{socket: socket}, socket) when is_port(socket), do: true
-  defp socket_matches?(_state, _socket), do: false
+  defp resolve_source_endpoint_spacecraft_id(_mission_id, nil), do: nil
+  defp resolve_source_endpoint_spacecraft_id(_mission_id, ""), do: nil
 
-  defp consume_read_credit(%{read_credits_remaining: credits} = state) when credits > 0 do
-    %{state | read_credits_remaining: credits - 1}
+  defp resolve_source_endpoint_spacecraft_id(mission_id, source_endpoint_ref)
+       when is_binary(mission_id) and is_binary(source_endpoint_ref) do
+    case SourceEndpoints.fetch_source_endpoint(mission_id, source_endpoint_ref) do
+      {:ok, source_endpoint} -> source_endpoint.spacecraft_id
+      {:error, _reason} -> nil
+    end
   end
 
-  defp consume_read_credit(state), do: state
+  defp receiver_matches?(%{socket_receiver_pid: pid}, pid) when is_pid(pid), do: true
+  defp receiver_matches?(_state, _pid), do: false
+
+  defp maybe_stop_socket_receiver(%{socket_receiver_pid: pid} = state) when is_pid(pid) do
+    Process.exit(pid, :shutdown)
+
+    state
+    |> maybe_demonitor_socket_receiver()
+    |> Map.put(:socket_receiver_pid, nil)
+    |> Map.put(:socket_receiver_monitor_ref, nil)
+  end
+
+  defp maybe_stop_socket_receiver(state), do: state
+
+  defp maybe_demonitor_socket_receiver(%{socket_receiver_monitor_ref: monitor_ref} = state)
+       when is_reference(monitor_ref) do
+    Process.demonitor(monitor_ref, [:flush])
+    %{state | socket_receiver_monitor_ref: nil}
+  end
+
+  defp maybe_demonitor_socket_receiver(state), do: state
 
   defp ensure_ingress_executor(%{ingress_executor_pid: pid} = state) when is_pid(pid) do
     if Process.alive?(pid) do
@@ -755,19 +789,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp ensure_ingress_executor(state), do: resolve_ingress_executor(state)
-
-  defp ingress_executor_queue_depth(state) do
-    case ensure_ingress_executor(state) do
-      {:ok, next_state} ->
-        case ProviderIngressExecutor.snapshot(next_state.ingress_executor_pid) do
-          {:ok, snapshot} -> {:ok, next_state, Map.get(snapshot, :queue_depth, 0)}
-          {:error, reason} -> {:error, reason, next_state}
-        end
-
-      {:error, reason} ->
-        {:error, reason, state}
-    end
-  end
 
   defp resolve_ingress_executor(state) do
     with {:ok, pid} <- ProviderIngressExecutor.lookup(state.ingress_executor_name) do
