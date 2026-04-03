@@ -27,8 +27,11 @@ defmodule CadenceSimulator.CLITest do
                "2",
                "--parallel",
                "--tm-parallel-framing",
+               "--tm-worker-fast-path",
                "--generator-count",
                "4",
+               "--metrics-sample-rate",
+               "250",
                "--send-batch-timeout",
                "50",
                "--send-batch-size",
@@ -45,7 +48,9 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:noise_amplitude] == 0.5
     assert opts[:parallel_mode] == :parallel
     assert opts[:tm_parallel_framing] == true
+    assert opts[:tm_worker_fast_path] == true
     assert opts[:generator_count] == 4
+    assert opts[:metrics_sample_rate] == 250
     assert opts[:send_batch_timeout] == 50
     assert opts[:send_batch_size] == 8192
 
@@ -153,7 +158,9 @@ defmodule CadenceSimulator.CLITest do
           vcid: 2
         parallel: true
         tm_parallel_framing: true
+        tm_worker_fast_path: true
         generator_count: 3
+        metrics_sample_rate: 500
       """)
 
     assert {:ok, opts} = CLI.parse_args(["--config", config_path])
@@ -173,7 +180,9 @@ defmodule CadenceSimulator.CLITest do
     assert opts[:frame] == %{format: :tm, frame_size: 1115, scid: 5, vcid: 2}
     assert opts[:parallel_mode] == :parallel
     assert opts[:tm_parallel_framing] == true
+    assert opts[:tm_worker_fast_path] == true
     assert opts[:generator_count] == 3
+    assert opts[:metrics_sample_rate] == 500
   end
 
   test "parse_args loads cop1_loopback runtime options from yaml config" do

@@ -11,8 +11,9 @@ defmodule CadenceSimulator.SendBuffer do
 
   @default_batch_timeout 10
   @default_batch_size 32_768
-  @default_batch_size_multiplier 8
+  @default_batch_size_multiplier 4
   @default_tcp_socket_buffer 1_048_576
+  @default_send_timeout 30_000
 
   defstruct [
     :output,
@@ -22,6 +23,7 @@ defmodule CadenceSimulator.SendBuffer do
     :base_batch_size,
     :max_batch_size,
     :metrics_id,
+    :metrics_sample_rate,
     :batch_timeout,
     :batch_size,
     :timer_ref,
@@ -110,6 +112,7 @@ defmodule CadenceSimulator.SendBuffer do
       base_batch_size: batch_size,
       max_batch_size: max(max_batch_size, batch_size),
       metrics_id: Keyword.get(opts, :metrics_id),
+      metrics_sample_rate: Keyword.get(opts, :metrics_sample_rate, 100),
       batch_timeout: batch_timeout,
       batch_size: batch_size,
       mode: Keyword.get(opts, :mode, :connect),
@@ -210,7 +213,12 @@ defmodule CadenceSimulator.SendBuffer do
   defp do_flush(%{buffer: []} = state, _reason), do: state
 
   defp do_flush(state, flush_reason) do
-    send_start = System.monotonic_time(:microsecond)
+    send_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, state.flushes + 1)
+
+    send_start =
+      if send_sample?, do: System.monotonic_time(:microsecond), else: nil
+
     iolist = Enum.reverse(state.buffer)
 
     case do_send(state, iolist) do
@@ -218,11 +226,13 @@ defmodule CadenceSimulator.SendBuffer do
         SimulatorMetrics.inc(state.metrics_id, :tx_packets, state.packets_buffered)
         SimulatorMetrics.inc(state.metrics_id, :tx_bytes, state.buffer_bytes)
 
-        SimulatorMetrics.record_timing(
-          state.metrics_id,
-          :sending,
-          System.monotonic_time(:microsecond) - send_start
-        )
+        if send_sample? do
+          SimulatorMetrics.record_timing(
+            state.metrics_id,
+            :sending,
+            System.monotonic_time(:microsecond) - send_start
+          )
+        end
 
         %{
           state
@@ -271,7 +281,7 @@ defmodule CadenceSimulator.SendBuffer do
       nodelay: true,
       sndbuf: @default_tcp_socket_buffer,
       recbuf: @default_tcp_socket_buffer,
-      send_timeout: 5_000
+      send_timeout: @default_send_timeout
     ]
 
     case :gen_tcp.connect(String.to_charlist(host), port, opts) do
@@ -355,7 +365,10 @@ defmodule CadenceSimulator.SendBuffer do
 
   defp buffer_changed?(new_state, previous_state) do
     new_state.packets_buffered != previous_state.packets_buffered or
-      new_state.buffer_bytes != previous_state.buffer_bytes
+      new_state.buffer_bytes != previous_state.buffer_bytes or
+      new_state.packets_sent != previous_state.packets_sent or
+      new_state.bytes_sent != previous_state.bytes_sent or
+      new_state.flushes != previous_state.flushes
   end
 
   defp notify_coordinator(%{coordinator_pid: pid} = state) when is_pid(pid) do

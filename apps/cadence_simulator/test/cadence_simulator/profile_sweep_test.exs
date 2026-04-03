@@ -97,4 +97,56 @@ defmodule CadenceSimulator.ProfileSweepTest do
     assert summary.simulator_framing_ms == 0.3
     assert summary.simulator_send_ms == 0.4
   end
+
+  test "build_summary prefers lock-free tx counters when send buffer stats lag" do
+    snapshot = %{
+      ingress_count: 8,
+      packets: %{packet_count: 8},
+      dispatch: %{sample_count: 8},
+      stages: %{
+        resolve: %{avg_us: 0.0},
+        runtime: %{avg_us: 0.0},
+        persistence: %{avg_us: 0.0},
+        end_to_end: %{avg_us: 0.0}
+      },
+      db: %{
+        queries_per_ingress: 0.0,
+        query_time_per_ingress_us: 0.0
+      }
+    }
+
+    simulator_before = %{
+      send_buffer_stats: %{
+        packets_sent: 100,
+        bytes_sent: 1_000,
+        packets_buffered: 0,
+        flushes: 10
+      },
+      simulator_metrics: %{
+        tx_packets: 100,
+        tx_bytes: 1_000,
+        timing: %{}
+      }
+    }
+
+    simulator_after = %{
+      send_buffer_stats: %{
+        packets_sent: 100,
+        bytes_sent: 1_000,
+        packets_buffered: 0,
+        flushes: 18
+      },
+      simulator_metrics: %{
+        tx_packets: 180,
+        tx_bytes: 17_000,
+        timing: %{}
+      }
+    }
+
+    summary = ProfileSweep.build_summary(25.0, snapshot, 8, simulator_before, simulator_after)
+
+    assert summary.simulator_tx_per_sec == 10.0
+    assert summary.simulator_mbps == 0.016
+    assert summary.simulator_flushes_per_sec == 1.0
+  end
 end

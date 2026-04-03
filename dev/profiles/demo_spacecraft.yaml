@@ -25,6 +25,7 @@ simulator:
   target: SIM-1
   rate: 1.0
   provider: database
+  parallel: true
   output:
     protocol: tcp
     host: 127.0.0.1

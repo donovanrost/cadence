@@ -122,6 +122,46 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
     assert frame_seqs == Enum.to_list(0..(length(frame_seqs) - 1))
   end
 
+  test "tm worker fast path buffers framed output directly from workers" do
+    frame_size = 32
+
+    {:ok, pid} =
+      Coordinator.start_link(
+        target_id: "SIM-1",
+        rate_hz: 2_000.0,
+        output: nil,
+        definitions_content: @definitions,
+        provider: DatabaseDynamics,
+        parallel_mode: :parallel,
+        tm_worker_fast_path: true,
+        generator_count: 2,
+        send_batch_timeout: 1_000,
+        frame: %{format: :tm, frame_size: frame_size, scid: 11, vcid: 2}
+      )
+
+    on_exit(fn ->
+      if Process.alive?(pid), do: Coordinator.stop(pid)
+    end)
+
+    assert_eventually(fn ->
+      stats = Coordinator.stats(pid)
+
+      stats.parallel_mode == :parallel and
+        stats.parallel_delivery_mode == :worker_tm_fast_path and
+        stats.packet_count > 0 and
+        stats.send_buffer_stats.packets_buffered >= 2
+    end)
+
+    coordinator_state = :sys.get_state(pid)
+    send_buffer_state = :sys.get_state(coordinator_state.send_buffer)
+    buffered_frames = send_buffer_state.buffer |> Enum.reverse() |> IO.iodata_to_binary()
+
+    assert {:ok, frames, <<>>} =
+             FrameCodec.decode(buffered_frames, frame_size: frame_size, ocf_length: 0)
+
+    assert length(frames) >= 2
+  end
+
   defp assert_eventually(fun, attempts \\ 20)
 
   defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")

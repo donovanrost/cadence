@@ -32,6 +32,8 @@ defmodule CadenceSimulator.TMFramePlan do
           {iodata(), non_neg_integer(), map()}
   def encode_many(plans, %{scid: scid, vcid: vcid}, %{mcfc: mcfc, vcfc: vcfc} = state)
       when is_list(plans) do
+    counter_step = Map.get(state, :counter_step, 1)
+
     {frames, _frame_count, next_mcfc, next_vcfc} =
       Enum.reduce(plans, {[], 0, mcfc, vcfc}, fn %{payload: payload, fhp: fhp},
                                                  {frames_acc, count, current_mcfc, current_vcfc} ->
@@ -54,8 +56,8 @@ defmodule CadenceSimulator.TMFramePlan do
         {
           [frame | frames_acc],
           count + 1,
-          increment_counter(current_mcfc),
-          increment_counter(current_vcfc)
+          increment_counter(current_mcfc, counter_step),
+          increment_counter(current_vcfc, counter_step)
         }
       end)
 
@@ -123,5 +125,5 @@ defmodule CadenceSimulator.TMFramePlan do
     >>
   end
 
-  defp increment_counter(value), do: rem(value + 1, 256)
+  defp increment_counter(value, step), do: rem(value + step, 256)
 end

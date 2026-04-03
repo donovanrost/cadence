@@ -59,6 +59,34 @@ defmodule CadenceSimulator.SimulatorMetrics do
     end
   end
 
+  @spec record_timing_sampled(
+          term(),
+          :generation | :framing | :sending,
+          integer(),
+          non_neg_integer() | nil,
+          integer()
+        ) :: :ok
+  def record_timing_sampled(scope, stage, duration_us, sample_rate, sample_ordinal)
+      when stage in @timing_stages and is_integer(duration_us) and duration_us >= 0 and
+             is_integer(sample_ordinal) do
+    if sample_timing?(sample_rate, sample_ordinal) do
+      record_timing(scope, stage, duration_us)
+    else
+      :ok
+    end
+  end
+
+  @spec sample_timing?(non_neg_integer() | nil, integer()) :: boolean()
+  def sample_timing?(sample_rate, _ordinal) when sample_rate in [nil, 1], do: true
+  def sample_timing?(0, _ordinal), do: false
+
+  def sample_timing?(sample_rate, ordinal)
+      when is_integer(sample_rate) and sample_rate > 1 and is_integer(ordinal) do
+    rem(max(ordinal, 0), sample_rate) == 0
+  end
+
+  def sample_timing?(_sample_rate, _ordinal), do: true
+
   @spec snapshot(term()) :: map()
   def snapshot(scope) do
     ensure_table()

@@ -32,7 +32,8 @@ defmodule CadenceSimulator.Coordinator do
   @default_target_id "SIM-1"
   @default_generator_count System.schedulers_online()
   @default_send_batch_timeout 10
-  @default_send_batch_size 131_072
+  @default_send_batch_size 65_536
+  @default_metrics_sample_rate 100
   @default_in_flight_multiplier 4
   @default_send_buffer_queue_floor 16
   @default_dispatch_batch_floor 4
@@ -47,6 +48,7 @@ defmodule CadenceSimulator.Coordinator do
     :output,
     :send_buffer,
     :metrics_id,
+    :metrics_sample_rate,
     :rate_hz,
     :interval_ms,
     :steps_per_tick,
@@ -111,6 +113,7 @@ defmodule CadenceSimulator.Coordinator do
 
       parallel_delivery_mode = parallel_delivery_mode(parallel_mode, frame, opts)
       metrics_id = make_ref()
+      metrics_sample_rate = normalize_metrics_sample_rate(opts[:metrics_sample_rate])
       :ok = SimulatorMetrics.init(metrics_id)
 
       send_buffer_opts =
@@ -120,6 +123,7 @@ defmodule CadenceSimulator.Coordinator do
           batch_timeout: Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout),
           batch_size: Keyword.get(opts, :send_batch_size, @default_send_batch_size),
           metrics_id: metrics_id,
+          metrics_sample_rate: metrics_sample_rate,
           coordinator_pid: self()
         ]
 
@@ -137,6 +141,7 @@ defmodule CadenceSimulator.Coordinator do
           output: output,
           send_buffer: send_buffer,
           metrics_id: metrics_id,
+          metrics_sample_rate: metrics_sample_rate,
           rate_hz: rate_hz,
           interval_ms: interval_ms,
           steps_per_tick: steps_per_tick,
@@ -180,8 +185,12 @@ defmodule CadenceSimulator.Coordinator do
   def handle_info(
         {:generator_batch_complete, worker_id, _start_step, dispatched_steps, packet_count,
          {:buffered, buffer_status}},
-        %{parallel_mode: :parallel, parallel_delivery_mode: :send_buffer} = state
+        %{parallel_mode: :parallel, parallel_delivery_mode: parallel_delivery_mode} = state
       ) do
+    if parallel_delivery_mode not in [:send_buffer, :worker_tm_fast_path] do
+      raise "unexpected buffered delivery result for #{inspect(parallel_delivery_mode)}"
+    end
+
     new_state =
       state
       |> maybe_apply_send_buffer_status(buffer_status)
@@ -263,6 +272,7 @@ defmodule CadenceSimulator.Coordinator do
       target_id: state.target_id,
       provider: state.provider_module,
       rate_hz: state.rate_hz,
+      metrics_sample_rate: state.metrics_sample_rate,
       interval_ms: state.interval_ms,
       steps_per_tick: state.steps_per_tick,
       step: state.step,
@@ -371,7 +381,9 @@ defmodule CadenceSimulator.Coordinator do
             send_buffer: state.send_buffer,
             delivery_mode: state.parallel_delivery_mode,
             frame: state.frame,
-            metrics_id: state.metrics_id
+            metrics_id: state.metrics_id,
+            metrics_sample_rate: state.metrics_sample_rate,
+            frame_counter_step: generator_count
           )
 
         pid
@@ -399,11 +411,15 @@ defmodule CadenceSimulator.Coordinator do
   defp maybe_init_parallel_mode(state, _opts, _provider_state), do: state
 
   defp generate_steps(state, step_count) do
-    Enum.reduce(1..step_count, {[], 0, state}, fn _index, {outputs_acc, bytes_acc, acc_state} ->
-      generation_start = System.monotonic_time(:microsecond)
+      Enum.reduce(1..step_count, {[], 0, state}, fn _index, {outputs_acc, bytes_acc, acc_state} ->
+      generation_sample? =
+        SimulatorMetrics.sample_timing?(acc_state.metrics_sample_rate, acc_state.step)
 
-      case acc_state.provider_module.generate_values(acc_state.provider_state, acc_state.step) do
-        {:ok, values, provider_state} ->
+      generation_start =
+        if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
+
+          case acc_state.provider_module.generate_values(acc_state.provider_state, acc_state.step) do
+            {:ok, values, provider_state} ->
           {:ok, packets} =
             PacketEncoder.encode_with_sequence(
               acc_state.encoder,
@@ -412,13 +428,16 @@ defmodule CadenceSimulator.Coordinator do
               fn apid -> SequenceAllocator.next(acc_state.sequence_allocator, apid) end
             )
 
-          SimulatorMetrics.record_timing(
-            acc_state.metrics_id,
-            :generation,
-            System.monotonic_time(:microsecond) - generation_start
-          )
+          if generation_sample? do
+            SimulatorMetrics.record_timing(
+              acc_state.metrics_id,
+              :generation,
+              System.monotonic_time(:microsecond) - generation_start
+            )
+          end
 
-          framing_start = System.monotonic_time(:microsecond)
+          framing_start =
+            if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
 
           {framed_outputs, framed_bytes, next_state} =
             Enum.reduce(
@@ -432,11 +451,13 @@ defmodule CadenceSimulator.Coordinator do
               end
             )
 
-          SimulatorMetrics.record_timing(
-            acc_state.metrics_id,
-            :framing,
-            System.monotonic_time(:microsecond) - framing_start
-          )
+          if generation_sample? do
+            SimulatorMetrics.record_timing(
+              acc_state.metrics_id,
+              :framing,
+              System.monotonic_time(:microsecond) - framing_start
+            )
+          end
 
           {
             :lists.reverse(framed_outputs, outputs_acc),
@@ -584,10 +605,15 @@ defmodule CadenceSimulator.Coordinator do
   defp normalize_parallel_mode(mode, _provider_module, _provider_config, _frame), do: mode
 
   defp parallel_delivery_mode(:parallel, %{format: :tm}, opts) do
-    if Keyword.get(opts, :tm_parallel_framing, false) do
-      :ordered_frame_plan
-    else
-      :ordered_framer
+    cond do
+      Keyword.get(opts, :tm_worker_fast_path, false) ->
+        :worker_tm_fast_path
+
+      Keyword.get(opts, :tm_parallel_framing, false) ->
+        :ordered_frame_plan
+
+      true ->
+        :ordered_framer
     end
   end
 
@@ -862,7 +888,11 @@ defmodule CadenceSimulator.Coordinator do
   end
 
   defp ordered_parallel_outputs(state, packets, _total_bytes) do
-    framing_start = System.monotonic_time(:microsecond)
+    framing_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, state.next_emit_step)
+
+    framing_start =
+      if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
 
     Enum.reduce(packets, {[], 0, state}, fn packet, {outputs_acc, bytes_acc, acc_state} ->
       {output_binary, next_state} = encode_output(acc_state, packet)
@@ -870,25 +900,34 @@ defmodule CadenceSimulator.Coordinator do
       {[output_binary | outputs_acc], bytes_acc + byte_size(output_binary), next_state}
     end)
     |> then(fn {outputs_reversed, output_bytes, next_state} ->
-      SimulatorMetrics.record_timing(
-        next_state.metrics_id,
-        :framing,
-        System.monotonic_time(:microsecond) - framing_start
-      )
+      if framing_sample? do
+        SimulatorMetrics.record_timing(
+          next_state.metrics_id,
+          :framing,
+          System.monotonic_time(:microsecond) - framing_start
+        )
+      end
 
       {Enum.reverse(outputs_reversed), output_bytes, next_state}
     end)
   end
 
   defp ordered_parallel_frame_plans(%{frame: %{format: :tm} = frame, frame_state: frame_state} = state, frame_plans, _total_bytes) do
-    framing_start = System.monotonic_time(:microsecond)
+    framing_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, state.next_emit_step)
+
+    framing_start =
+      if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
+
     {outputs, output_bytes, next_frame_state} = TMFramePlan.encode_many(frame_plans, frame, frame_state)
 
-    SimulatorMetrics.record_timing(
-      state.metrics_id,
-      :framing,
-      System.monotonic_time(:microsecond) - framing_start
-    )
+    if framing_sample? do
+      SimulatorMetrics.record_timing(
+        state.metrics_id,
+        :framing,
+        System.monotonic_time(:microsecond) - framing_start
+      )
+    end
 
     {outputs, output_bytes, %{state | frame_state: next_frame_state}}
   end
@@ -931,6 +970,10 @@ defmodule CadenceSimulator.Coordinator do
   defp normalize_generator_count(nil), do: @default_generator_count
   defp normalize_generator_count(count) when is_integer(count) and count > 0, do: count
   defp normalize_generator_count(_count), do: 1
+
+  defp normalize_metrics_sample_rate(nil), do: @default_metrics_sample_rate
+  defp normalize_metrics_sample_rate(rate) when is_integer(rate) and rate >= 0, do: rate
+  defp normalize_metrics_sample_rate(_rate), do: @default_metrics_sample_rate
 
   defp normalize_max_in_flight_steps(opts, generator_count, steps_per_tick) do
     case Keyword.get(opts, :max_in_flight_steps) do

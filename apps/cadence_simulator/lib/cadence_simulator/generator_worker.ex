@@ -24,8 +24,11 @@ defmodule CadenceSimulator.GeneratorWorker do
     :send_buffer,
     :delivery_mode,
     :frame,
+    :tm_frame_state,
+    :frame_counter_step,
     :frame_plan_cache,
-    :metrics_id
+    :metrics_id,
+    :metrics_sample_rate
   ]
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -59,14 +62,21 @@ defmodule CadenceSimulator.GeneratorWorker do
        send_buffer: Keyword.get(opts, :send_buffer),
        delivery_mode: Keyword.get(opts, :delivery_mode, :send_buffer),
        frame: Keyword.get(opts, :frame),
+       tm_frame_state: init_tm_frame_state(opts),
+       frame_counter_step: Keyword.get(opts, :frame_counter_step, 1),
        frame_plan_cache: %{},
-       metrics_id: Keyword.get(opts, :metrics_id)
+       metrics_id: Keyword.get(opts, :metrics_id),
+       metrics_sample_rate: Keyword.get(opts, :metrics_sample_rate, 100)
      }}
   end
 
   @impl true
   def handle_cast({:generate_batch, start_step, step_count}, state) do
-    generation_start = System.monotonic_time(:microsecond)
+    generation_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, start_step)
+
+    generation_start =
+      if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
 
     {outputs, total_bytes, packet_count, next_state} =
       Enum.reduce(
@@ -88,7 +98,11 @@ defmodule CadenceSimulator.GeneratorWorker do
               binaries = Enum.map(packets, &elem(&1, 1))
 
               {delivery_outputs, output_bytes, delivery_state} =
-                prepare_delivery_outputs(%{acc_state | provider_state: provider_state}, binaries)
+                prepare_delivery_outputs(
+                  %{acc_state | provider_state: provider_state},
+                  binaries,
+                  step
+                )
 
               {
                 :lists.reverse(delivery_outputs, outputs_acc),
@@ -108,15 +122,17 @@ defmodule CadenceSimulator.GeneratorWorker do
         end
       )
 
-    SimulatorMetrics.record_timing(
-      next_state.metrics_id,
-      :generation,
-      System.monotonic_time(:microsecond) - generation_start
-    )
+    if generation_sample? do
+      SimulatorMetrics.record_timing(
+        next_state.metrics_id,
+        :generation,
+        System.monotonic_time(:microsecond) - generation_start
+      )
+    end
 
     delivery_result =
       case state.delivery_mode do
-        :send_buffer ->
+        delivery_mode when delivery_mode in [:send_buffer, :worker_tm_fast_path] ->
           buffer_status =
             if outputs != [] do
               SendBuffer.buffer_packets(state.send_buffer, Enum.reverse(outputs), total_bytes)
@@ -137,8 +153,16 @@ defmodule CadenceSimulator.GeneratorWorker do
     {:noreply, next_state}
   end
 
-  defp prepare_delivery_outputs(%{delivery_mode: :ordered_frame_plan, frame: frame} = state, binaries) do
-    framing_start = System.monotonic_time(:microsecond)
+  defp prepare_delivery_outputs(
+         %{delivery_mode: :ordered_frame_plan, frame: frame} = state,
+         binaries,
+         sample_ordinal
+       ) do
+    framing_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, sample_ordinal)
+
+    framing_start =
+      if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
 
     {plans_reversed, total_bytes, cache} =
       Enum.reduce(binaries, {[], 0, state.frame_plan_cache}, fn packet, {plans_acc, bytes_acc, cache} ->
@@ -151,17 +175,71 @@ defmodule CadenceSimulator.GeneratorWorker do
         }
       end)
 
-    SimulatorMetrics.record_timing(
-      state.metrics_id,
-      :framing,
-      System.monotonic_time(:microsecond) - framing_start
-    )
+    if framing_sample? do
+      SimulatorMetrics.record_timing(
+        state.metrics_id,
+        :framing,
+        System.monotonic_time(:microsecond) - framing_start
+      )
+    end
 
     {plans_reversed, total_bytes, %{state | frame_plan_cache: cache}}
   end
 
-  defp prepare_delivery_outputs(state, binaries) do
+  defp prepare_delivery_outputs(
+         %{delivery_mode: :worker_tm_fast_path, frame: %{format: :tm} = frame} = state,
+         binaries,
+         sample_ordinal
+       ) do
+    framing_sample? =
+      SimulatorMetrics.sample_timing?(state.metrics_sample_rate, sample_ordinal)
+
+    framing_start =
+      if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
+
+    {plans_reversed, cache} =
+      Enum.reduce(binaries, {[], state.frame_plan_cache}, fn packet, {plans_acc, cache} ->
+        {:ok, packet_plans, next_cache} = TMFramePlan.plan(packet, frame, cache)
+        {:lists.reverse(packet_plans, plans_acc), next_cache}
+      end)
+
+    {frames, total_bytes, next_frame_state} =
+      TMFramePlan.encode_many(
+        Enum.reverse(plans_reversed),
+        frame,
+        state.tm_frame_state
+      )
+
+    if framing_sample? do
+      SimulatorMetrics.record_timing(
+        state.metrics_id,
+        :framing,
+        System.monotonic_time(:microsecond) - framing_start
+      )
+    end
+
+    {frames, total_bytes, %{state | frame_plan_cache: cache, tm_frame_state: next_frame_state}}
+  end
+
+  defp prepare_delivery_outputs(state, binaries, _sample_ordinal) do
     {binaries, Enum.reduce(binaries, 0, fn binary, acc -> acc + byte_size(binary) end), state}
+  end
+
+  defp init_tm_frame_state(opts) do
+    case {Keyword.get(opts, :delivery_mode), Keyword.get(opts, :frame)} do
+      {:worker_tm_fast_path, %{format: :tm}} ->
+        worker_id = Keyword.fetch!(opts, :worker_id)
+        counter_step = Keyword.get(opts, :frame_counter_step, 1)
+
+        %{
+          mcfc: rem(worker_id, 256),
+          vcfc: rem(worker_id, 256),
+          counter_step: max(counter_step, 1)
+        }
+
+      _other ->
+        nil
+    end
   end
 
   defp notify_batch_complete(

@@ -66,7 +66,50 @@ defmodule CadenceSimulator.SendBufferTest do
     assert stats.flushes == 1
     assert stats.batch_size == 8
     assert stats.base_batch_size == 4
-    assert stats.max_batch_size == 32
+    assert stats.max_batch_size == 16
+  end
+
+  test "publishes sent counters to the coordinator after a size-triggered flush" do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(listener)
+
+    {:ok, client} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false])
+    {:ok, server} = :gen_tcp.accept(listener)
+    :gen_tcp.close(listener)
+
+    {:ok, pid} =
+      SendBuffer.start_link(
+        output: {:tcp, "127.0.0.1", port},
+        mode: :listen,
+        coordinator_pid: self(),
+        batch_timeout: 1_000,
+        batch_size: 4
+      )
+
+    on_exit(fn ->
+      if Process.alive?(pid), do: SendBuffer.stop(pid)
+      :gen_tcp.close(client)
+      :gen_tcp.close(server)
+    end)
+
+    SendBuffer.attach_socket(pid, server)
+
+    status = SendBuffer.buffer_packets(pid, ["ab", "cd"], 4)
+
+    assert status.packets_buffered == 0
+    assert status.buffer_bytes == 0
+    assert status.packets_sent == 2
+    assert status.bytes_sent == 4
+    assert status.flushes == 1
+
+    assert_receive {:send_buffer_status, published_status}, 1_000
+    assert published_status.packets_buffered == 0
+    assert published_status.buffer_bytes == 0
+    assert published_status.packets_sent == 2
+    assert published_status.bytes_sent == 4
+    assert published_status.flushes == 1
+
+    assert {:ok, "abcd"} == :gen_tcp.recv(client, 4, 1_000)
   end
 
   test "refreshes runtime output before reconnecting to a stale TCP port" do

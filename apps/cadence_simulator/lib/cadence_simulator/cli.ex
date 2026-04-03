@@ -30,7 +30,9 @@ defmodule CadenceSimulator.CLI do
     vcid: :integer,
     parallel: :boolean,
     tm_parallel_framing: :boolean,
+    tm_worker_fast_path: :boolean,
     generator_count: :integer,
+    metrics_sample_rate: :integer,
     send_batch_timeout: :integer,
     send_batch_size: :integer,
     help: :boolean
@@ -181,7 +183,9 @@ defmodule CadenceSimulator.CLI do
     Performance:
       --parallel               Enable raw-packet parallel generation
       --tm-parallel-framing    Plan TM frame segmentation in workers before ordered emit
+      --tm-worker-fast-path    Use worker-side TM framing and direct send buffering
       --generator-count N      Parallel worker count
+      --metrics-sample-rate N  Record hot-path timings every Nth sample (default: 100, 0 disables)
       --send-batch-timeout MS  Send buffer flush timeout
       --send-batch-size BYTES  Send buffer flush size
 
@@ -439,7 +443,9 @@ defmodule CadenceSimulator.CLI do
         |> maybe_put(:output, output)
         |> maybe_put(:frame, frame)
         |> maybe_put(:tm_parallel_framing, parsed[:tm_parallel_framing])
+        |> maybe_put(:tm_worker_fast_path, parsed[:tm_worker_fast_path])
         |> maybe_put(:generator_count, parsed[:generator_count])
+        |> maybe_put(:metrics_sample_rate, parsed[:metrics_sample_rate])
         |> maybe_put(:send_batch_timeout, parsed[:send_batch_timeout])
         |> maybe_put(:send_batch_size, parsed[:send_batch_size])
         |> Keyword.merge(cadence_bootstrap_opts(parsed))
@@ -777,7 +783,9 @@ defmodule CadenceSimulator.CLI do
     |> maybe_put_config(:vcid, config_frame_value(config_root, frame, "vcid"))
     |> maybe_put_config(:parallel, config_parallel_value(config_root))
     |> maybe_put_config(:tm_parallel_framing, fetch_config_value(config_root, ["tm_parallel_framing"]))
+    |> maybe_put_config(:tm_worker_fast_path, fetch_config_value(config_root, ["tm_worker_fast_path"]))
     |> maybe_put_config(:generator_count, fetch_config_value(config_root, ["generator_count"]))
+    |> maybe_put_config(:metrics_sample_rate, fetch_config_value(config_root, ["metrics_sample_rate"]))
     |> maybe_put_config(
       :send_batch_timeout,
       fetch_config_value(config_root, ["send_batch_timeout"])
@@ -947,13 +955,14 @@ defmodule CadenceSimulator.CLI do
        do: parse_integer(value) || value
 
   defp normalize_config_value(key, value)
-       when key in [:generator_count, :send_batch_timeout, :send_batch_size],
+       when key in [:generator_count, :metrics_sample_rate, :send_batch_timeout, :send_batch_size],
        do: parse_integer(value) || value
 
   defp normalize_config_value(:rate, value), do: parse_float(value) || value
   defp normalize_config_value(:noise_amplitude, value), do: parse_float(value) || value
   defp normalize_config_value(:parallel, value), do: parse_boolean(value)
   defp normalize_config_value(:tm_parallel_framing, value), do: parse_boolean(value)
+  defp normalize_config_value(:tm_worker_fast_path, value), do: parse_boolean(value)
   defp normalize_config_value(_key, value), do: value
 
   defp fetch_config_value(nil, _keys), do: nil

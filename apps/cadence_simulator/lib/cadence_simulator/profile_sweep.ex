@@ -29,6 +29,17 @@ defmodule CadenceSimulator.ProfileSweep do
           simulator_send_ms: float()
         }
 
+  @type simulator_summary :: %{
+          tx_per_sec: float(),
+          mbps: float(),
+          queue_depth: non_neg_integer(),
+          flushes_per_sec: float(),
+          kb_per_flush: float(),
+          generation_ms: float(),
+          framing_ms: float(),
+          send_ms: float()
+        }
+
   @spec parse_rates(binary()) :: {:ok, [float()]} | {:error, String.t()}
   def parse_rates(value) when is_binary(value) do
     rates =
@@ -49,7 +60,7 @@ defmodule CadenceSimulator.ProfileSweep do
       when is_number(rate_hz) and is_map(snapshot) and is_integer(duration_seconds) and
              duration_seconds > 0 do
     archive = get_in(snapshot, [:archive, :combined]) || %{}
-    simulator = simulator_summary(simulator_before, simulator_after, duration_seconds)
+    simulator = build_simulator_summary(simulator_before, simulator_after, duration_seconds)
 
     %{
       rate_hz: rate_hz * 1.0,
@@ -76,6 +87,12 @@ defmodule CadenceSimulator.ProfileSweep do
       simulator_framing_ms: simulator.framing_ms,
       simulator_send_ms: simulator.send_ms
     }
+  end
+
+  @spec build_simulator_summary(map() | nil, map() | nil, pos_integer()) :: simulator_summary()
+  def build_simulator_summary(simulator_before, simulator_after, duration_seconds)
+      when is_integer(duration_seconds) and duration_seconds > 0 do
+    simulator_summary(simulator_before, simulator_after, duration_seconds)
   end
 
   defp parse_rate(value) do
@@ -107,19 +124,29 @@ defmodule CadenceSimulator.ProfileSweep do
   defp simulator_summary(before_stats, after_stats, duration_seconds) do
     before_send_buffer = Map.get(before_stats, :send_buffer_stats, %{})
     after_send_buffer = Map.get(after_stats, :send_buffer_stats, %{})
+    before_simulator_metrics = Map.get(before_stats, :simulator_metrics, %{})
+    after_simulator_metrics = Map.get(after_stats, :simulator_metrics, %{})
     before_metrics = get_in(before_stats, [:simulator_metrics, :timing]) || %{}
     after_metrics = get_in(after_stats, [:simulator_metrics, :timing]) || %{}
 
     packets_sent =
-      non_negative_delta(
-        Map.get(after_send_buffer, :packets_sent, 0),
-        Map.get(before_send_buffer, :packets_sent, 0)
+      simulator_counter_delta(
+        before_simulator_metrics,
+        after_simulator_metrics,
+        :tx_packets,
+        before_send_buffer,
+        after_send_buffer,
+        :packets_sent
       )
 
     bytes_sent =
-      non_negative_delta(
-        Map.get(after_send_buffer, :bytes_sent, 0),
-        Map.get(before_send_buffer, :bytes_sent, 0)
+      simulator_counter_delta(
+        before_simulator_metrics,
+        after_simulator_metrics,
+        :tx_bytes,
+        before_send_buffer,
+        after_send_buffer,
+        :bytes_sent
       )
 
     flushes =
@@ -143,6 +170,27 @@ defmodule CadenceSimulator.ProfileSweep do
   defp non_negative_delta(after_value, before_value)
        when is_integer(after_value) and is_integer(before_value) do
     max(after_value - before_value, 0)
+  end
+
+  defp simulator_counter_delta(
+         before_simulator_metrics,
+         after_simulator_metrics,
+         metrics_key,
+         before_send_buffer,
+         after_send_buffer,
+         send_buffer_key
+       ) do
+    metrics_before = Map.get(before_simulator_metrics, metrics_key)
+    metrics_after = Map.get(after_simulator_metrics, metrics_key)
+
+    if is_integer(metrics_before) and is_integer(metrics_after) do
+      non_negative_delta(metrics_after, metrics_before)
+    else
+      non_negative_delta(
+        Map.get(after_send_buffer, send_buffer_key, 0),
+        Map.get(before_send_buffer, send_buffer_key, 0)
+      )
+    end
   end
 
   defp timing_delta_ms(before_metrics, after_metrics, stage) do
