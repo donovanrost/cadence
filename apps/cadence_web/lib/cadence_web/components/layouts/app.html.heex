@@ -1,0 +1,40 @@
+<div class="app-root">
+  <div class="app-root__mesh"></div>
+  <div class="app-root__grid"></div>
+
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <.link href={~p"/"} class="app-header__brand">
+          Cadence
+        </.link>
+        <p class="app-header__subhead">Ground data control plane</p>
+      </div>
+
+      <%= if @current_scope do %>
+        <div class="scope-summary">
+          <span class="scope-summary__label">Authenticated Scope</span>
+          <%= cond do %>
+            <% @current_scope.user -> %>
+              <strong>{@current_scope.user.display_name}</strong>
+              <span>{@current_scope.user.email}</span>
+            <% @current_scope.service_identity -> %>
+              <strong>{@current_scope.service_identity.display_name}</strong>
+              <span>{@current_scope.service_identity.service_identity_id}</span>
+            <% true -> %>
+              <strong>Authenticated</strong>
+          <% end %>
+        </div>
+      <% end %>
+    </header>
+
+    <main class="app-main">
+      {@inner_content}
+    </main>
+  </div>
+
+  <div class="flash-stack">
+    <p :if={info = Phoenix.Flash.get(@flash, :info)} class="flash flash--info">{info}</p>
+    <p :if={error = Phoenix.Flash.get(@flash, :error)} class="flash flash--error">{error}</p>
+  </div>
+</div>

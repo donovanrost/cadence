@@ -1,0 +1,47 @@
+<section id="sign-in-shell" class="panel panel--hero">
+  <div class="eyebrow">Shell Bootstrap</div>
+  <h1 class="hero-title">Cadence operator access now has a browser entrypoint.</h1>
+  <p class="hero-copy">
+    This first slice keeps the experience intentionally narrow: establish an authenticated browser
+    session, then hand control to the stable <code>/operator</code> route.
+  </p>
+
+  <%= if @bootstrap_admin_enabled? do %>
+    <.form for={@form} id="bootstrap-admin-sign-in-form" action={~p"/sign-in"} class="sign-in-form">
+      <.input
+        field={@form[:email]}
+        type="email"
+        label="Bootstrap Admin Email"
+        placeholder="bootstrap@example.com"
+        required
+        autocomplete="email"
+        autofocus
+      />
+      <.input
+        field={@form[:password]}
+        type="password"
+        label="Password"
+        placeholder="Enter the bootstrap admin password"
+        required
+        autocomplete="current-password"
+      />
+
+      <p :if={@error_message} id="sign-in-error" class="panel__error">{@error_message}</p>
+
+      <div class="sign-in-form__actions">
+        <button type="submit" class="button button--primary">Authenticate</button>
+        <p class="sign-in-form__note">
+          This path exists only while bootstrap-admin environment configuration is enabled.
+        </p>
+      </div>
+    </.form>
+  <% else %>
+    <div id="bootstrap-admin-disabled" class="status-card status-card--disabled">
+      <p class="status-card__label">Unavailable</p>
+      <p class="status-card__body">
+        Bootstrap-admin sign-in is disabled for this deployment. Browser access will remain closed
+        until another user-facing authentication flow is introduced.
+      </p>
+    </div>
+  <% end %>
+</section>

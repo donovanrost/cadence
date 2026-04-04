@@ -133,6 +133,11 @@ defmodule Cadence do
     Auth.ensure_bootstrap_admin()
   end
 
+  @spec revoke_bootstrap_admin_session(binary()) :: :ok
+  def revoke_bootstrap_admin_session(session_token) when is_binary(session_token) do
+    Auth.revoke_bootstrap_admin_session(session_token)
+  end
+
   @spec bootstrap_admin_enabled?() :: boolean()
   def bootstrap_admin_enabled? do
     Auth.bootstrap_admin_enabled?()

@@ -1,0 +1,61 @@
+<section id="operator-home" class="panel panel--hero">
+  <div class="eyebrow">Operator Route</div>
+  <h1 class="hero-title">Authenticated traffic now lands on a stable operator entrypoint.</h1>
+  <p class="hero-copy">
+    This page is intentionally spare. It proves the browser session, route shape, and
+    <code>current_scope</code> plumbing that the shell work will build on next.
+  </p>
+
+  <div class="summary-grid">
+    <article class="status-card">
+      <p class="status-card__label">Actor</p>
+      <%= cond do %>
+        <% @current_scope.user -> %>
+          <p class="status-card__title">{@current_scope.user.display_name}</p>
+          <p class="status-card__body">{@current_scope.user.email}</p>
+        <% @current_scope.service_identity -> %>
+          <p class="status-card__title">{@current_scope.service_identity.display_name}</p>
+          <p class="status-card__body">{@current_scope.service_identity.service_identity_id}</p>
+        <% true -> %>
+          <p class="status-card__title">Authenticated</p>
+      <% end %>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Scope</p>
+      <p class="status-card__title">
+        <%= cond do %>
+          <% @current_scope.mission -> %>
+            Mission-scoped
+          <% @current_scope.organization -> %>
+            Organization-scoped
+          <% true -> %>
+            Platform-scoped
+        <% end %>
+      </p>
+      <p class="status-card__body">
+        <%= cond do %>
+          <% @current_scope.mission -> %>
+            {@current_scope.mission.display_name}
+          <% @current_scope.organization -> %>
+            {@current_scope.organization.display_name}
+          <% true -> %>
+            No organization or mission context has been selected yet.
+        <% end %>
+      </p>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Next Shell Slices</p>
+      <p class="status-card__title">Layout, dashboard, and scoped URLs</p>
+      <p class="status-card__body">
+        The route is stable now. Subsequent work can add the reusable shell frame and mission-aware
+        navigation without revisiting browser auth plumbing.
+      </p>
+    </article>
+  </div>
+
+  <.form for={%{}} as={:session} id="sign-out-form" action={~p"/session"} method="delete">
+    <button type="submit" class="button button--secondary">Sign out</button>
+  </.form>
+</section>

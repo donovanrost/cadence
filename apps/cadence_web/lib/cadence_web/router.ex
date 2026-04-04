@@ -1,6 +1,24 @@
 defmodule CadenceWeb.Router do
   use CadenceWeb, :router
 
+  pipeline :browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_flash
+    plug :put_root_layout, html: {CadenceWeb.Layouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
+    plug CadenceWeb.Plugs.FetchBrowserCurrentScope
+  end
+
+  pipeline :redirect_if_authenticated_scope do
+    plug CadenceWeb.Plugs.RedirectIfAuthenticatedScope
+  end
+
+  pipeline :require_authenticated_scope do
+    plug CadenceWeb.Plugs.RequireAuthenticatedScope
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -8,6 +26,21 @@ defmodule CadenceWeb.Router do
   pipeline :authenticated_api do
     plug CadenceWeb.Plugs.FetchCurrentScope
     plug CadenceWeb.Plugs.RequireCurrentScope
+  end
+
+  scope "/", CadenceWeb do
+    pipe_through [:browser, :redirect_if_authenticated_scope]
+
+    get "/sign-in", UserSessionController, :new
+    post "/sign-in", UserSessionController, :create
+  end
+
+  scope "/", CadenceWeb do
+    pipe_through [:browser, :require_authenticated_scope]
+
+    get "/", OperatorEntryController, :show
+    get "/operator", OperatorHomeController, :show
+    delete "/session", UserSessionController, :delete
   end
 
   scope "/api", CadenceWeb do

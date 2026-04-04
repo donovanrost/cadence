@@ -33,7 +33,9 @@ defmodule CadenceWeb.MixProject do
       {:bandit, "~> 1.5"},
       {:cadence, in_umbrella: true},
       {:jason, "~> 1.4"},
-      {:phoenix, "~> 1.8.1"}
+      {:phoenix, "~> 1.8.1"},
+      {:phoenix_html, "~> 4.3"},
+      {:phoenix_live_view, "~> 1.1"}
     ]
   end
 end

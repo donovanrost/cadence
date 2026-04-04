@@ -120,6 +120,20 @@ defmodule Cadence.Accounts do
     end
   end
 
+  @spec revoke_bootstrap_admin_session(binary()) :: :ok
+  def revoke_bootstrap_admin_session(session_token) when is_binary(session_token) do
+    token_digest = digest_token(session_token)
+
+    UserSessionTokenRow
+    |> where(
+      [row],
+      row.context == ^@bootstrap_session_context and row.token_digest == ^token_digest
+    )
+    |> Repo.delete_all()
+
+    :ok
+  end
+
   @spec fetch_user(binary()) :: {:ok, User.t()} | {:error, term()}
   def fetch_user(user_id) when is_binary(user_id) do
     case Repo.get(UserRow, user_id) do
