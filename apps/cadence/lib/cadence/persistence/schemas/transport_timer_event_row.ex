@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.TransportTimerEventRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime.TransportTimerEvent
 
   @primary_key {:timer_event_id, :string, autogenerate: false}
@@ -54,7 +55,7 @@ defmodule Cadence.Persistence.Schemas.TransportTimerEventRow do
   def changeset(%TransportTimerEvent{} = timer_event) do
     %__MODULE__{}
     |> cast(domain_attrs(timer_event), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

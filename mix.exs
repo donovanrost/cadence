@@ -33,6 +33,7 @@ defmodule CadenceUmbrella.MixProject do
       precommit: [
         "format",
         "compile --warnings-as-errors",
+        "credo --strict",
         "test"
       ]
     ]

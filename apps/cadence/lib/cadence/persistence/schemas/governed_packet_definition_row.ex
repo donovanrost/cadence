@@ -5,6 +5,7 @@ defmodule Cadence.Persistence.Schemas.GovernedPacketDefinitionRow do
 
   import Ecto.Changeset
 
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Telemetry.PacketDefinition
 
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -40,7 +41,7 @@ defmodule Cadence.Persistence.Schemas.GovernedPacketDefinitionRow do
       },
       all_fields()
     )
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :packet_definition_id, :version],
       name: :governed_packet_definitions_scope_idx

@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLimitEventRow do
 
   alias Cadence.Limits.Event
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:limit_event_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -54,7 +55,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLimitEventRow do
   def changeset(%Event{} = event) do
     %__MODULE__{}
     |> cast(domain_attrs(event), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

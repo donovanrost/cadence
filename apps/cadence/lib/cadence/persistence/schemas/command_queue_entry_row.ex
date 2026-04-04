@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CommandQueueEntryRow do
 
   alias Cadence.Commanding.CommandQueueEntry
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:command_queue_entry_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -47,7 +48,7 @@ defmodule Cadence.Persistence.Schemas.CommandQueueEntryRow do
   def changeset(%CommandQueueEntry{} = command_queue_entry) do
     %__MODULE__{}
     |> cast(domain_attrs(command_queue_entry), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:queue_sequence, greater_than: 0)

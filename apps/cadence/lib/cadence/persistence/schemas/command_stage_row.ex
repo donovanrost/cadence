@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CommandStageRow do
 
   alias Cadence.Commanding.CommandStage
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:command_stage_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -38,7 +39,7 @@ defmodule Cadence.Persistence.Schemas.CommandStageRow do
   def changeset(%CommandStage{} = command_stage) do
     %__MODULE__{}
     |> cast(domain_attrs(command_stage), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :command_stage_id], name: :command_stages_scope_idx)
   end
@@ -47,7 +48,7 @@ defmodule Cadence.Persistence.Schemas.CommandStageRow do
   def update_changeset(%__MODULE__{} = row, %CommandStage{} = command_stage) do
     row
     |> cast(domain_attrs(command_stage), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.ContactTransportProfileRow do
 
   alias Cadence.Contacts.TransportProfile
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key false
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -40,7 +41,7 @@ defmodule Cadence.Persistence.Schemas.ContactTransportProfileRow do
   def changeset(%TransportProfile{} = transport_profile) do
     %__MODULE__{}
     |> cast(domain_attrs(transport_profile), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :transport_profile_id, :version],
       name: :contact_transport_profiles_scope_idx

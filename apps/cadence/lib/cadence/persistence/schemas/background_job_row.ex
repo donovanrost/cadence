@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.BackgroundJobRow do
 
   alias Cadence.Jobs.Job
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:job_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -37,7 +38,7 @@ defmodule Cadence.Persistence.Schemas.BackgroundJobRow do
   def changeset(%__MODULE__{} = background_job_row, %Job{} = job) do
     background_job_row
     |> cast(domain_attrs(job), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

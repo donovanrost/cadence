@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.TransferFrameRecordRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Protocol.TransferFrameRecord
 
   @primary_key {:frame_record_id, :string, autogenerate: false}
@@ -54,7 +55,7 @@ defmodule Cadence.Persistence.Schemas.TransferFrameRecordRow do
   def changeset(%TransferFrameRecord{} = frame_record) do
     %__MODULE__{}
     |> cast(domain_attrs(frame_record), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:evidence_id)
   end

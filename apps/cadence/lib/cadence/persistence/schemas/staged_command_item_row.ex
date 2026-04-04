@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.StagedCommandItemRow do
 
   alias Cadence.Commanding.StagedCommandItem
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:staged_command_item_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -49,7 +50,7 @@ defmodule Cadence.Persistence.Schemas.StagedCommandItemRow do
   def changeset(%StagedCommandItem{} = staged_command_item) do
     %__MODULE__{}
     |> cast(domain_attrs(staged_command_item), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:item_order, greater_than_or_equal_to: 0)
@@ -62,7 +63,7 @@ defmodule Cadence.Persistence.Schemas.StagedCommandItemRow do
   def update_changeset(%__MODULE__{} = row, %StagedCommandItem{} = staged_command_item) do
     row
     |> cast(domain_attrs(staged_command_item), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:item_order, greater_than_or_equal_to: 0)

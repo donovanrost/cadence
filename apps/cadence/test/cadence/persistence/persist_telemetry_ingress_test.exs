@@ -4,9 +4,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
+  alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive.FileSystem, as: IngressArchiveFileSystem
   alias Cadence.Persistence.Schemas.BindingSetRow
-  alias Cadence.Ingress.RawEvidence
   alias Cadence.Protocol.RecordArchive.FileSystem, as: ProtocolRecordArchiveFileSystem
 
   alias Cadence.Persistence.Schemas.{
@@ -19,8 +19,8 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     TransferFrameRecordRow
   }
 
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   test "persists raw evidence, packet records, and canonical telemetry samples without live dispatch rows" do

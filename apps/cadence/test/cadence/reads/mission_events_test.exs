@@ -14,8 +14,8 @@ defmodule Cadence.Reads.MissionEventsTest do
   alias Cadence.Persistence.Schemas.MissionEventRow
   alias Cadence.Repo
   alias Cadence.Runtime
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   setup do

@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRebuildRunRow d
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Projections.DerivedTelemetryLatestValues.Run
 
   @primary_key {:rebuild_run_id, :string, autogenerate: false}
@@ -33,7 +34,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRebuildRunRow d
   def changeset(%__MODULE__{} = rebuild_run_row, %Run{} = run) do
     rebuild_run_row
     |> cast(domain_attrs(run), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

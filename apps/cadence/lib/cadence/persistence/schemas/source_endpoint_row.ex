@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.SourceEndpointRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.SourceEndpoints.SourceEndpoint
 
   @primary_key {:source_endpoint_id, :string, autogenerate: false}
@@ -29,7 +30,7 @@ defmodule Cadence.Persistence.Schemas.SourceEndpointRow do
   def changeset(%SourceEndpoint{} = source_endpoint) do
     %__MODULE__{}
     |> cast(domain_attrs(source_endpoint), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :source_endpoint_id],
       name: :mission_source_endpoints_scope_idx

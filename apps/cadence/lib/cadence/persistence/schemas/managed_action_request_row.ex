@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ManagedActionRequestRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime.ManagedActionRequest
 
   @primary_key {:action_request_id, :string, autogenerate: false}
@@ -49,7 +50,7 @@ defmodule Cadence.Persistence.Schemas.ManagedActionRequestRow do
   def changeset(%ManagedActionRequest{} = action_request) do
     %__MODULE__{}
     |> cast(domain_attrs(action_request), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.MissionEventRebuildRunRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Projections.MissionEvents.Run
 
   @primary_key {:rebuild_run_id, :string, autogenerate: false}
@@ -35,7 +36,7 @@ defmodule Cadence.Persistence.Schemas.MissionEventRebuildRunRow do
   def changeset(%__MODULE__{} = run_row, %Run{} = run) do
     run_row
     |> cast(domain_attrs(run), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

@@ -3,8 +3,8 @@ defmodule Cadence.ProcessTelemetryIngressTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   test "processes raw evidence into canonical telemetry samples through governed dispatch" do

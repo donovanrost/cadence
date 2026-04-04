@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ReplayTelemetrySampleRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Telemetry.Sample
 
   @primary_key {:sample_id, :string, autogenerate: false}
@@ -52,7 +53,7 @@ defmodule Cadence.Persistence.Schemas.ReplayTelemetrySampleRow do
   def changeset(replay_run_id, %Sample{} = sample) when is_binary(replay_run_id) do
     %__MODULE__{}
     |> cast(domain_attrs(replay_run_id, sample), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:replay_run_id)
     |> foreign_key_constraint(:evidence_id)

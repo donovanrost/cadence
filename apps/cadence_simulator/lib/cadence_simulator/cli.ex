@@ -4,8 +4,8 @@ defmodule CadenceSimulator.CLI do
   """
 
   alias CadenceSimulator.CadenceRuntimeBootstrap
-  alias CadenceSimulator.SimulatorContactBootstrap
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
+  alias CadenceSimulator.SimulatorContactBootstrap
 
   @telemetry_switches [
     config: :string,

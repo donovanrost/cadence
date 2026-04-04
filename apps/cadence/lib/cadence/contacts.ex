@@ -12,8 +12,8 @@ defmodule Cadence.Contacts do
     ContactAction,
     Path,
     PathTemplate,
-    ProviderProfile,
     ProviderBinding,
+    ProviderProfile,
     RealizedContact,
     ScheduledContact,
     TransportBinding,
@@ -24,10 +24,10 @@ defmodule Cadence.Contacts do
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
 
   alias Cadence.Persistence.Schemas.{
+    ContactActionRow,
     ContactPathTemplateRow,
     ContactProviderProfileRow,
     ContactTransportProfileRow,
-    ContactActionRow,
     RealizedContactRow,
     ScheduledContactRow
   }

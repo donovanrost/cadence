@@ -3,8 +3,12 @@ defmodule Cadence.DataCase do
 
   use ExUnit.CaseTemplate
 
+  alias Ecto.Adapters.SQL.Sandbox
+
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
+  alias Cadence.Telemetry.CurrentValueStore
+  alias Cadence.Telemetry.CurrentValueStore.ETS
 
   using do
     quote do
@@ -26,11 +30,11 @@ defmodule Cadence.DataCase do
         Cadence.Runtime.stop_all_missions()
       end
 
-      if telemetry_current_value_store_module() == Cadence.Telemetry.CurrentValueStore.ETS do
-        Cadence.Telemetry.CurrentValueStore.reset()
+      if telemetry_current_value_store_module() == ETS do
+        CurrentValueStore.reset()
       end
 
-      Ecto.Adapters.SQL.Sandbox.stop_owner(pid)
+      Sandbox.stop_owner(pid)
     end)
 
     :ok
@@ -43,19 +47,13 @@ defmodule Cadence.DataCase do
   end
 
   defp start_owner_with_retry!(opts, attempts) do
-    try do
-      Ecto.Adapters.SQL.Sandbox.start_owner!(Cadence.Repo, opts)
-    rescue
-      MatchError ->
-        Process.sleep(50)
-        {:ok, _started_apps} = Application.ensure_all_started(:cadence)
-        start_owner_with_retry!(opts, attempts - 1)
-    catch
-      :exit, _reason ->
-        Process.sleep(50)
-        {:ok, _started_apps} = Application.ensure_all_started(:cadence)
-        start_owner_with_retry!(opts, attempts - 1)
-    end
+    Sandbox.start_owner!(Cadence.Repo, opts)
+  rescue
+    MatchError ->
+      retry_start_owner(opts, attempts)
+  catch
+    :exit, _reason ->
+      retry_start_owner(opts, attempts)
   end
 
   def persist_mission_scope(organization_id, mission_id, opts \\ []) do
@@ -83,5 +81,11 @@ defmodule Cadence.DataCase do
   defp telemetry_current_value_store_module do
     Application.get_env(:cadence, :telemetry_current_value_store, [])
     |> Keyword.get(:module)
+  end
+
+  defp retry_start_owner(opts, attempts) do
+    Process.sleep(50)
+    {:ok, _started_apps} = Application.ensure_all_started(:cadence)
+    start_owner_with_retry!(opts, attempts - 1)
   end
 end

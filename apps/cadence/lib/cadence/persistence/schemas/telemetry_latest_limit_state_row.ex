@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestLimitStateRow do
 
   alias Cadence.Limits.Event
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @mission_scope_key "__mission__"
   @timestamps_opts [type: :utc_datetime_usec]
@@ -57,7 +58,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestLimitStateRow do
   def changeset(%__MODULE__{} = latest_state_row, %Event{} = event) do
     latest_state_row
     |> cast(domain_attrs(event), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :spacecraft_scope_id, :point_id],
       name: :telemetry_latest_limit_states_scope_idx

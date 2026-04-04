@@ -5,7 +5,7 @@ defmodule Cadence.CommandingDispatcherTest do
 
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
-  alias Cadence.Commanding.CommandRequest
+  alias Cadence.Commanding.{CommandRequest, Dispatcher, DispatchSupervisor}
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Persistence.Schemas.TransportActionRequestRow
   alias Cadence.Repo
@@ -65,14 +65,14 @@ defmodule Cadence.CommandingDispatcherTest do
     _realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
 
     start_supervised!(
-      {Cadence.Commanding.DispatchSupervisor,
+      {DispatchSupervisor,
        poll_interval_ms: 1_000,
        lane_poll_interval_ms: 20,
        run_on_boot?: false,
        auto_schedule?: false}
     )
 
-    assert {:ok, _summary} = Cadence.Commanding.Dispatcher.reconcile_now()
+    assert {:ok, _summary} = Dispatcher.reconcile_now()
 
     release_attempts =
       wait_until(fn ->
@@ -132,14 +132,14 @@ defmodule Cadence.CommandingDispatcherTest do
              )
 
     start_supervised!(
-      {Cadence.Commanding.DispatchSupervisor,
+      {DispatchSupervisor,
        poll_interval_ms: 1_000,
        lane_poll_interval_ms: 20,
        run_on_boot?: false,
        auto_schedule?: false}
     )
 
-    assert {:ok, _summary} = Cadence.Commanding.Dispatcher.reconcile_now()
+    assert {:ok, _summary} = Dispatcher.reconcile_now()
 
     Process.sleep(80)
     assert Cadence.list_command_release_attempts(@organization_id, @mission_id) == []

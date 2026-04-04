@@ -6,6 +6,7 @@ defmodule Cadence.Organizations do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Organizations.Organization
   alias Cadence.Persistence.Schemas.OrganizationRow
   alias Cadence.Repo

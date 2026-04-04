@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
 
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:realized_contact_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -40,7 +41,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
   def changeset(%RealizedContact{} = realized_contact) do
     %__MODULE__{}
     |> cast(domain_attrs(realized_contact), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :realized_contact_id],
       name: :realized_contacts_scope_idx

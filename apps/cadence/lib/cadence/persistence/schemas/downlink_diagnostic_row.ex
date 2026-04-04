@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.DownlinkDiagnosticRow do
 
   alias Cadence.Contacts.DownlinkDiagnostic
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:diagnostic_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -44,7 +45,7 @@ defmodule Cadence.Persistence.Schemas.DownlinkDiagnosticRow do
   def changeset(%DownlinkDiagnostic{} = diagnostic) do
     %__MODULE__{}
     |> cast(domain_attrs(diagnostic), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

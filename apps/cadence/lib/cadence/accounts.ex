@@ -6,6 +6,7 @@ defmodule Cadence.Accounts do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Accounts.{Password, User}
   alias Cadence.Ids
 

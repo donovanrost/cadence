@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
 
   alias Cadence.Catalog.{Diagnostic, ImportRun}
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:import_run_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -51,7 +52,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
   def changeset(%__MODULE__{} = row, %ImportRun{} = run) do
     row
     |> cast(domain_attrs(run), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

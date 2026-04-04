@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Spacecraft
 
   @primary_key {:spacecraft_id, :string, autogenerate: false}
@@ -26,7 +27,7 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
   def changeset(%Spacecraft{} = spacecraft) do
     %__MODULE__{}
     |> cast(domain_attrs(spacecraft), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :spacecraft_id], name: :mission_spacecraft_scope_idx)
   end

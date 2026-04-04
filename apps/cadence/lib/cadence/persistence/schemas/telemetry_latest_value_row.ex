@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Telemetry.Sample
 
   @mission_scope_key "__mission__"
@@ -53,7 +54,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
   def changeset(%__MODULE__{} = latest_value_row, %Sample{} = sample) do
     latest_value_row
     |> cast(domain_attrs(sample), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:packet_id)
     |> foreign_key_constraint(:evidence_id)

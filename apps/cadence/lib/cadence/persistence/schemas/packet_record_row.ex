@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.PacketRecordRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Protocol.PacketRecord
 
   @primary_key {:packet_id, :string, autogenerate: false}
@@ -49,7 +50,7 @@ defmodule Cadence.Persistence.Schemas.PacketRecordRow do
   def changeset(%PacketRecord{} = packet_record) do
     %__MODULE__{}
     |> cast(domain_attrs(packet_record), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:evidence_id)
   end

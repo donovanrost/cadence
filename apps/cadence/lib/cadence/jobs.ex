@@ -7,15 +7,15 @@ defmodule Cadence.Jobs do
 
   alias Ecto.Changeset
 
-  alias Cadence.Jobs.Job
-  alias Cadence.Persistence.Schemas.BackgroundJobRow
   alias Cadence.Catalog
   alias Cadence.DerivedTelemetry
-  alias Cadence.Projections.DerivedTelemetryLatestValues
+  alias Cadence.Jobs.Job
   alias Cadence.Limits
+  alias Cadence.Persistence.Schemas.BackgroundJobRow
+  alias Cadence.Projections.DerivedTelemetryLatestValues
   alias Cadence.Projections.MissionEvents
-  alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Projections.TelemetryLatestLimitStates
+  alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Replay
   alias Cadence.Repo
 

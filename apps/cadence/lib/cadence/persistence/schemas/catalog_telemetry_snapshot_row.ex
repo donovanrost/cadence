@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CatalogTelemetrySnapshotRow do
 
   alias Cadence.Catalog.Telemetry.Snapshot
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:snapshot_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -56,7 +57,7 @@ defmodule Cadence.Persistence.Schemas.CatalogTelemetrySnapshotRow do
   def changeset(%__MODULE__{} = row, %Snapshot{} = snapshot) do
     row
     |> cast(domain_attrs(snapshot), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

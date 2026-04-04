@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ManagedCapabilityRecordRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime.ManagedCapabilityRecord
 
   @primary_key {:capability_record_id, :string, autogenerate: false}
@@ -58,7 +59,7 @@ defmodule Cadence.Persistence.Schemas.ManagedCapabilityRecordRow do
   def changeset(%ManagedCapabilityRecord{} = capability_record) do
     %__MODULE__{}
     |> cast(domain_attrs(capability_record), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

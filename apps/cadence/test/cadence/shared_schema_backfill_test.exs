@@ -3,8 +3,8 @@ defmodule Cadence.SharedSchemaBackfillTest do
 
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
 
   test "mission-owned inserts inherit organization scope from persisted missions" do
     %{organization: organization, mission: mission} = persist_org_and_mission()

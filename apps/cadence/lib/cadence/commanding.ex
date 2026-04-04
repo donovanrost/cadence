@@ -32,6 +32,8 @@ defmodule Cadence.Commanding do
     CommandRequest,
     CommandStage,
     CommandVerifierInstance,
+    Dispatcher,
+    DispatchSupervisor,
     Encoder,
     StagedCommandItem
   }
@@ -52,8 +54,8 @@ defmodule Cadence.Commanding do
     CommandStageRow,
     CommandVerifierInstanceRow,
     StagedCommandItemRow,
-    TransportCapabilityRecordRow,
-    TransportActionRequestRow
+    TransportActionRequestRow,
+    TransportCapabilityRecordRow
   }
 
   alias Cadence.Repo
@@ -1002,13 +1004,11 @@ defmodule Cadence.Commanding do
           requested_by: requested_by,
           source_command_stage_id: item_row.command_stage_id,
           source_staged_command_item_id: item_row.staged_command_item_id,
-          argument_values:
-            Cadence.Persistence.JsonDocument.unwrap_value(item_row.argument_values_document),
+          argument_values: JsonDocument.unwrap_value(item_row.argument_values_document),
           metadata: %{
             "notes" => item_row.notes,
             "stage_item_order" => item_row.item_order,
-            "stage_item_metadata" =>
-              Cadence.Persistence.JsonDocument.unwrap_value(item_row.metadata_document)
+            "stage_item_metadata" => JsonDocument.unwrap_value(item_row.metadata_document)
           }
         })
 
@@ -3053,16 +3053,12 @@ defmodule Cadence.Commanding do
 
   defp maybe_schedule_queue_lane_dispatch(organization_id, mission_id, queue_lane_key)
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
-    case Cadence.Commanding.DispatchSupervisor.lane_dispatcher(
-           organization_id,
-           mission_id,
-           queue_lane_key
-         ) do
+    case DispatchSupervisor.lane_dispatcher(organization_id, mission_id, queue_lane_key) do
       {:ok, lane_dispatcher} when lane_dispatcher == self() ->
         send(self(), :dispatch)
 
       _other ->
-        _ = Cadence.Commanding.Dispatcher.kick_lane(organization_id, mission_id, queue_lane_key)
+        _ = Dispatcher.kick_lane(organization_id, mission_id, queue_lane_key)
         :ok
     end
 

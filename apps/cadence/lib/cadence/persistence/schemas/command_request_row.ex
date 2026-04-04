@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CommandRequestRow do
 
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:command_request_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -66,7 +67,7 @@ defmodule Cadence.Persistence.Schemas.CommandRequestRow do
   def changeset(%CommandRequest{} = command_request) do
     %__MODULE__{}
     |> cast(domain_attrs(command_request), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> unique_constraint([:mission_id, :command_request_id], name: :command_requests_scope_idx)

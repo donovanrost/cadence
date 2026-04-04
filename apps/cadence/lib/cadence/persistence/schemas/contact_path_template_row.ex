@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.ContactPathTemplateRow do
 
   alias Cadence.Contacts.PathTemplate
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key false
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -50,7 +51,7 @@ defmodule Cadence.Persistence.Schemas.ContactPathTemplateRow do
   def changeset(%PathTemplate{} = path_template) do
     %__MODULE__{}
     |> cast(domain_attrs(path_template), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :path_template_id, :version],
       name: :contact_path_templates_scope_idx

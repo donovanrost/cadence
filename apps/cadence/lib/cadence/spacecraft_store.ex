@@ -6,6 +6,7 @@ defmodule Cadence.SpacecraftStore do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Missions
   alias Cadence.Persistence.Schemas.SpacecraftRow
   alias Cadence.Repo

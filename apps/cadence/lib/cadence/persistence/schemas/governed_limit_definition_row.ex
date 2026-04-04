@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.GovernedLimitDefinitionRow do
 
   alias Cadence.Limits.Definition
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 
@@ -47,7 +48,7 @@ defmodule Cadence.Persistence.Schemas.GovernedLimitDefinitionRow do
       },
       all_fields()
     )
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :limit_definition_id, :version],
       name: :governed_limit_definitions_scope_idx

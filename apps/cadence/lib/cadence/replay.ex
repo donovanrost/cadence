@@ -22,8 +22,8 @@ defmodule Cadence.Replay do
   }
 
   alias Cadence.Protocol.PacketRecord
-  alias Cadence.Replay.Scope
   alias Cadence.Replay.Run
+  alias Cadence.Replay.Scope
   alias Cadence.Repo
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
   alias Cadence.Runtime.{PartitionKey, PartitionOwner}

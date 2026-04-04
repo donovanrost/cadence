@@ -8,6 +8,7 @@ defmodule Cadence.Persistence.Schemas.CommandVerifierInstanceRow do
   alias Cadence.Catalog.Command.MatchCriteria
   alias Cadence.Commanding.CommandVerifierInstance
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:command_verifier_instance_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -58,7 +59,7 @@ defmodule Cadence.Persistence.Schemas.CommandVerifierInstanceRow do
   def changeset(%CommandVerifierInstance{} = command_verifier_instance) do
     %__MODULE__{}
     |> cast(domain_attrs(command_verifier_instance), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :command_verifier_instance_id],
       name: :command_verifier_instances_scope_idx
@@ -72,7 +73,7 @@ defmodule Cadence.Persistence.Schemas.CommandVerifierInstanceRow do
       ) do
     row
     |> cast(domain_attrs(command_verifier_instance), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

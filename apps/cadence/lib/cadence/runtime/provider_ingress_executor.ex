@@ -15,6 +15,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   alias Cadence.Runtime, as: RuntimeBoundary
   alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
   alias Cadence.SourceEndpoints
+  alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
   @max_drain_batch 512
@@ -515,9 +516,9 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     do: :ok
 
   defp maybe_record_current_values(mission_id, telemetry_samples) do
-    if Cadence.Telemetry.CurrentValueStore.hot_path_safe?() do
+    if CurrentValueStore.hot_path_safe?() do
       TelemetryProfiler.with_runtime_component(mission_id, :current_value_record, fn ->
-        Cadence.Telemetry.CurrentValueStore.record_samples(telemetry_samples)
+        CurrentValueStore.record_samples(telemetry_samples)
       end)
     else
       :ok
@@ -638,22 +639,20 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   defp maybe_demonitor_persistence_projector(state), do: state
 
   defp run_ingress(fun) when is_function(fun, 0) do
-    try do
-      {:ok, fun.()}
-    rescue
-      exception ->
-        stacktrace = __STACKTRACE__
+    {:ok, fun.()}
+  rescue
+    exception ->
+      stacktrace = __STACKTRACE__
 
-        Logger.error(Exception.format(:error, exception, stacktrace))
+      Logger.error(Exception.format(:error, exception, stacktrace))
 
-        {:crash, Exception.format_banner(:error, exception)}
-    catch
-      kind, reason ->
-        stacktrace = __STACKTRACE__
+      {:crash, Exception.format_banner(:error, exception)}
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
 
-        Logger.error(Exception.format(kind, reason, stacktrace))
+      Logger.error(Exception.format(kind, reason, stacktrace))
 
-        {:crash, Exception.format_banner(kind, reason)}
-    end
+      {:crash, Exception.format_banner(kind, reason)}
   end
 end

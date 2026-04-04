@@ -27,8 +27,8 @@ defmodule Cadence.ReplayTest do
     TelemetrySampleRow
   }
 
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   test "replays persisted evidence into replay tables without mutating live canonical data" do

@@ -16,6 +16,8 @@ defmodule Cadence.Telemetry.Profiler do
 
   alias Cadence.ApplicationDispatch.DispatchDecision
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive
+  alias Cadence.Protocol.RecordArchive
 
   @table_name :cadence_telemetry_profiler
   @repo_query_event [:cadence, :repo, :query]
@@ -330,8 +332,8 @@ defmodule Cadence.Telemetry.Profiler do
   def reset(mission_id) when is_binary(mission_id) do
     ensure_table()
     _ = :ets.delete(@table_name, mission_id)
-    :ok = Cadence.IngressArchive.reset_stats(mission_id)
-    :ok = Cadence.Protocol.RecordArchive.reset_stats(mission_id)
+    :ok = IngressArchive.reset_stats(mission_id)
+    :ok = RecordArchive.reset_stats(mission_id)
     :ok
   end
 
@@ -657,8 +659,8 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp archive_snapshot(mission_id) when is_binary(mission_id) do
-    ingress = Cadence.IngressArchive.stats(mission_id)
-    protocol = Cadence.Protocol.RecordArchive.stats(mission_id)
+    ingress = IngressArchive.stats(mission_id)
+    protocol = RecordArchive.stats(mission_id)
 
     %{
       ingress: ingress,

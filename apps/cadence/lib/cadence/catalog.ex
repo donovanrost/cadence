@@ -7,13 +7,14 @@ defmodule Cadence.Catalog do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Catalog.{Artifact, ImportResult, ImportRun, Registry}
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
-  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
+  alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Governance
-  alias Cadence.Missions
   alias Cadence.Jobs
+  alias Cadence.Missions
 
   alias Cadence.Persistence.Schemas.{
     CatalogArtifactRow,

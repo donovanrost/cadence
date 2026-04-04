@@ -13,7 +13,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Diagnostic, ImportResult, ImporterDescriptor}
+  alias Cadence.Catalog.{Artifact, Diagnostic, ImporterDescriptor, ImportResult}
   alias Cadence.Catalog.Command.Compiler, as: CommandCompiler
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
 
@@ -32,9 +32,9 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     Packet,
     PacketEntry,
     Point,
+    RuntimeArtifacts,
     Type,
-    Unit,
-    RuntimeArtifacts
+    Unit
   }
 
   alias Cadence.Governance

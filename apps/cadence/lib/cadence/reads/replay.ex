@@ -13,8 +13,8 @@ defmodule Cadence.Reads.Replay do
     ReplayTelemetrySampleRow
   }
 
-  alias Cadence.Repo
   alias Cadence.Replay.Run
+  alias Cadence.Repo
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
   alias Cadence.Telemetry.Sample
 

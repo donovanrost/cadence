@@ -8,10 +8,10 @@ defmodule Cadence.Persistence do
 
   alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
-
-  alias Cadence.Protocol.{RecordArchive, ProtocolAnomaly}
-
+  alias Cadence.Protocol.{ProtocolAnomaly, RecordArchive}
   alias Cadence.Repo
 
   alias Cadence.Runtime.{
@@ -23,7 +23,7 @@ defmodule Cadence.Persistence do
     TransportTimerEvent
   }
 
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Sample}
 
   alias Cadence.Persistence.Schemas.{
     CombinedDownlinkRecordRow,
@@ -63,13 +63,11 @@ defmodule Cadence.Persistence do
          telemetry_samples = telemetry_samples_from_prepared(prepared_results),
          :ok <- persist_canonical_processing_results(prepared_results),
          :ok <-
-           Cadence.IngressArchive.persist_raw_evidences(
-             Enum.map(prepared_results, & &1.raw_evidence)
-           ),
+           IngressArchive.persist_raw_evidences(Enum.map(prepared_results, & &1.raw_evidence)),
          :ok <-
            RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
          :ok <- maybe_record_current_values(telemetry_samples, opts) do
-      Cadence.Telemetry.HistoryStore.persist_samples(telemetry_samples)
+      HistoryStore.persist_samples(telemetry_samples)
     end
   end
 
@@ -187,7 +185,7 @@ defmodule Cadence.Persistence do
 
   defp maybe_record_current_values(telemetry_samples, opts) when is_list(opts) do
     if Keyword.get(opts, :record_current_values?, true) do
-      Cadence.Telemetry.CurrentValueStore.record_samples(telemetry_samples)
+      CurrentValueStore.record_samples(telemetry_samples)
     else
       :ok
     end
@@ -200,7 +198,7 @@ defmodule Cadence.Persistence do
     organization_id =
       case protocol_anomalies do
         [%ProtocolAnomaly{mission_id: mission_id} | _rest] ->
-          Cadence.Persistence.OrganizationScope.organization_id_for_mission(mission_id)
+          OrganizationScope.organization_id_for_mission(mission_id)
 
         _other ->
           nil

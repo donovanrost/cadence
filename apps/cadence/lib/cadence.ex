@@ -11,14 +11,16 @@ defmodule Cadence do
   5. canonical telemetry samples
   """
 
-  alias Cadence.ApplicationDispatch.BindingSet
-  alias Cadence.Activations
   alias Cadence.Accounts.User
+  alias Cadence.Activations
+  alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.ApplicationDispatch.DispatchDecision
+  alias Cadence.ApplicationDispatch.Dispatcher
   alias Cadence.Auth
   alias Cadence.Auth.Scope, as: CurrentScope
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, ImportRun, ImporterDescriptor}
+  alias Cadence.Catalog.{Artifact, ImporterDescriptor, ImportRun}
   alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
@@ -48,15 +50,13 @@ defmodule Cadence do
     TransportProfile
   }
 
-  alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.DerivedTelemetry, as: DerivedTelemetryService
-  alias Cadence.ApplicationDispatch.DispatchDecision
-  alias Cadence.ApplicationDispatch.Dispatcher
+  alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Governance
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Jobs
-  alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits, as: LimitsService
+  alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Missions
   alias Cadence.Missions.Mission
   alias Cadence.Organizations
@@ -64,10 +64,10 @@ defmodule Cadence do
   alias Cadence.Persistence
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.Runtime
-  alias Cadence.Spacecraft
-  alias Cadence.SpacecraftStore
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
+  alias Cadence.SpacecraftStore
 
   alias Cadence.Projections.DerivedTelemetryLatestValues,
     as: DerivedTelemetryLatestValueProjection
@@ -75,16 +75,16 @@ defmodule Cadence do
   alias Cadence.Projections.TelemetryLatestLimitStates, as: TelemetryLatestLimitStateProjection
   alias Cadence.Projections.TelemetryLatestValues, as: TelemetryLatestValueProjection
   alias Cadence.Protocol.{PacketRecord, ProtocolAnomaly, TMFrameIngress, TransferFrameRecord}
+  alias Cadence.Protocol.SpacePacketDecoder
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
   alias Cadence.Reads.Limits, as: LimitReads
-  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   alias Cadence.Reads.MissionEvents, as: MissionEventReads
+  alias Cadence.Reads.MissionHealth, as: MissionHealthReads
   alias Cadence.Reads.Replay, as: ReplayReads
-  alias Cadence.Protocol.SpacePacketDecoder
   alias Cadence.Reads.Telemetry, as: TelemetryReads
+  alias Cadence.Replay
   alias Cadence.Replay.Diff, as: ReplayDiff
   alias Cadence.Replay.Scope
-  alias Cadence.Replay
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 

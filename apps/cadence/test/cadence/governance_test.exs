@@ -8,8 +8,8 @@ defmodule Cadence.GovernanceTest do
     CapabilityInstance
   }
 
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   @organization_id "org-alpha"

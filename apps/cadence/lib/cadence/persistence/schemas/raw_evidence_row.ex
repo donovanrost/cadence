@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.RawEvidenceRow do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:evidence_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -40,7 +41,7 @@ defmodule Cadence.Persistence.Schemas.RawEvidenceRow do
   def changeset(%RawEvidence{} = raw_evidence) do
     %__MODULE__{}
     |> cast(domain_attrs(raw_evidence), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

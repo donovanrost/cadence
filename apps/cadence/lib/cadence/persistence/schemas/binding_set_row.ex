@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.BindingSetRow do
   import Ecto.Changeset
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Persistence.OrganizationScope
 
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 
@@ -32,7 +33,7 @@ defmodule Cadence.Persistence.Schemas.BindingSetRow do
       },
       all_fields()
     )
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :binding_set_id, :version],
       name: :governed_binding_sets_scope_idx

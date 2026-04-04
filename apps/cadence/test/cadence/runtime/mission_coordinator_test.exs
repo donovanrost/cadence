@@ -6,8 +6,8 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Runtime
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   setup do

@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ProtocolAnomalyRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Protocol.ProtocolAnomaly
 
   @primary_key {:anomaly_id, :string, autogenerate: false}
@@ -46,7 +47,7 @@ defmodule Cadence.Persistence.Schemas.ProtocolAnomalyRow do
   def changeset(%ProtocolAnomaly{} = anomaly) do
     %__MODULE__{}
     |> cast(row_attrs(anomaly), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

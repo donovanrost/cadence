@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.ContactProviderProfileRow do
 
   alias Cadence.Contacts.ProviderProfile
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key false
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -38,7 +39,7 @@ defmodule Cadence.Persistence.Schemas.ContactProviderProfileRow do
   def changeset(%ProviderProfile{} = provider_profile) do
     %__MODULE__{}
     |> cast(domain_attrs(provider_profile), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> unique_constraint([:mission_id, :provider_profile_id, :version],
       name: :contact_provider_profiles_scope_idx

@@ -6,6 +6,7 @@ defmodule Cadence.Missions do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Missions.Mission
   alias Cadence.Organizations
   alias Cadence.Persistence.Schemas.MissionRow

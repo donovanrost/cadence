@@ -10,8 +10,8 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   alias Cadence.Governance
   alias Cadence.Jobs
-  alias Cadence.Limits.Event
   alias Cadence.Limits
+  alias Cadence.Limits.Event
 
   alias Cadence.Persistence.Schemas.{
     DerivedTelemetryLatestValueRow,

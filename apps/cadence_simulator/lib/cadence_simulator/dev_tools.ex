@@ -4,7 +4,7 @@ defmodule CadenceSimulator.DevTools do
   """
 
   alias Cadence.DevProfile
-  alias CadenceSimulator.{CLI, CadenceRuntimeBootstrap, SimulatorContactBootstrap}
+  alias CadenceSimulator.{CadenceRuntimeBootstrap, CLI, SimulatorContactBootstrap}
 
   @type profile_runtime :: %{
           profile: Cadence.DevProfile.t(),

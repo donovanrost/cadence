@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetrySampleRow do
 
   alias Cadence.DerivedTelemetry.Sample
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:derived_sample_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -46,7 +47,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetrySampleRow do
   def changeset(%Sample{} = sample) do
     %__MODULE__{}
     |> cast(domain_attrs(sample), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:trigger_sample_id)
   end

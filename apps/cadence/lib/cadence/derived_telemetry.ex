@@ -14,8 +14,8 @@ defmodule Cadence.DerivedTelemetry do
   alias Cadence.Jobs
 
   alias Cadence.Persistence.Schemas.{
-    DerivedTelemetryLatestValueRow,
     DerivedTelemetryEvaluationRunRow,
+    DerivedTelemetryLatestValueRow,
     DerivedTelemetrySampleRow,
     TelemetrySampleRow
   }

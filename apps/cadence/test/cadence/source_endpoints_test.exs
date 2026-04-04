@@ -3,8 +3,8 @@ defmodule Cadence.SourceEndpointsTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   @organization_id "org-alpha"

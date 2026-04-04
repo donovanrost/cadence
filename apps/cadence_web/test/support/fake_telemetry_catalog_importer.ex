@@ -4,8 +4,8 @@ defmodule CadenceWeb.TestSupport.FakeTelemetryCatalogImporter do
   @behaviour Cadence.Catalog.Importer
 
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Diagnostic, ImportResult, ImporterDescriptor}
-  alias Cadence.Catalog.Telemetry.Snapshot
+  alias Cadence.Catalog.{Artifact, Diagnostic, ImporterDescriptor, ImportResult}
+  alias Cadence.Catalog.Telemetry.{Packet, Snapshot}
 
   @impl true
   def descriptor do
@@ -43,7 +43,7 @@ defmodule CadenceWeb.TestSupport.FakeTelemetryCatalogImporter do
         packets:
           Enum.with_index(packet_names)
           |> Enum.map(fn {packet_name, index} ->
-            Cadence.Catalog.Telemetry.Packet.new(%{
+            Packet.new(%{
               packet_id: "telemetry_snapshot:#{import_run_id}:packet:#{index}",
               snapshot_id: "telemetry_snapshot:" <> import_run_id,
               name: packet_name

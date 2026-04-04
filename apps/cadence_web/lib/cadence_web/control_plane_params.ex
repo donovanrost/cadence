@@ -29,8 +29,8 @@ defmodule CadenceWeb.ControlPlaneParams do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @command_stage_visibility_values [:private, :shared]

@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ReplayManagedActionRequestRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime.ManagedActionRequest
 
   @primary_key {:action_request_id, :string, autogenerate: false}
@@ -52,7 +53,7 @@ defmodule Cadence.Persistence.Schemas.ReplayManagedActionRequestRow do
       when is_binary(replay_run_id) do
     %__MODULE__{}
     |> cast(domain_attrs(replay_run_id, action_request), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:replay_run_id)
     |> foreign_key_constraint(:evidence_id)

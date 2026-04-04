@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.DownlinkObservationRow do
 
   alias Cadence.Contacts.DownlinkObservation
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:observation_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -42,7 +43,7 @@ defmodule Cadence.Persistence.Schemas.DownlinkObservationRow do
   def changeset(%DownlinkObservation{} = observation) do
     %__MODULE__{}
     |> cast(domain_attrs(observation), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

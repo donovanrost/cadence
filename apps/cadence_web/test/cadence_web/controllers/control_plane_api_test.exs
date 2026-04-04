@@ -4,12 +4,12 @@ defmodule CadenceWeb.ControlPlaneApiTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
-  alias Cadence.Jobs
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Jobs
   alias Cadence.Limits.Definition, as: LimitDefinition
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.PacketDefinition
 
   @bootstrap_admin_email "bootstrap-admin@example.com"

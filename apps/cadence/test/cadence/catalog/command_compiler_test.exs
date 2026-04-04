@@ -3,9 +3,9 @@ defmodule Cadence.Catalog.CommandCompilerTest do
 
   alias Cadence.Catalog.Command.{
     Compiler,
-    Compiler.Result,
     Compiler.ConstraintPlan,
     Compiler.OperationalBinding,
+    Compiler.Result,
     Compiler.RuntimeDefinition,
     Compiler.VerifierPlan,
     Snapshot

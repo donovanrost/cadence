@@ -5,6 +5,10 @@ defmodule Cadence.Application do
 
   use Application
 
+  alias Cadence.IngressArchive
+  alias Cadence.Protocol.RecordArchive
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore}
+
   @impl true
   def start(_type, _args) do
     children =
@@ -79,19 +83,19 @@ defmodule Cadence.Application do
 
   defp telemetry_backend_children do
     [
-      Cadence.Telemetry.CurrentValueStore.child_spec(),
-      Cadence.Telemetry.HistoryStore.child_spec()
+      CurrentValueStore.child_spec(),
+      HistoryStore.child_spec()
     ]
     |> Enum.reject(&is_nil/1)
   end
 
   defp ingress_archive_children do
-    [Cadence.IngressArchive.child_spec()]
+    [IngressArchive.child_spec()]
     |> Enum.reject(&is_nil/1)
   end
 
   defp protocol_record_archive_children do
-    [Cadence.Protocol.RecordArchive.child_spec()]
+    [RecordArchive.child_spec()]
     |> Enum.reject(&is_nil/1)
   end
 end

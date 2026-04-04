@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.CombinedDownlinkRecordRow do
 
   alias Cadence.Contacts.CombinedDownlinkRecord
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @primary_key {:merged_record_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
@@ -44,7 +45,7 @@ defmodule Cadence.Persistence.Schemas.CombinedDownlinkRecordRow do
   def changeset(%CombinedDownlinkRecord{} = combined_record) do
     %__MODULE__{}
     |> cast(domain_attrs(combined_record), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

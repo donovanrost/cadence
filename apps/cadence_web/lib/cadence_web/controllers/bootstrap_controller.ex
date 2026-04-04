@@ -3,9 +3,9 @@ defmodule CadenceWeb.BootstrapController do
 
   action_fallback CadenceWeb.FallbackController
 
+  alias Cadence.Auth.Policy
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Organizations.Organization
-  alias Cadence.Auth.Policy
   alias CadenceWeb.{ControlPlaneJSON, ControlPlaneParams}
 
   def create(conn, %{"bootstrap" => bootstrap_params}) do

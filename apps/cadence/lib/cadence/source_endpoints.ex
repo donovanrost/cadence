@@ -12,8 +12,8 @@ defmodule Cadence.SourceEndpoints do
   alias Cadence.Missions
   alias Cadence.Persistence.Schemas.SourceEndpointRow
   alias Cadence.Repo
-  alias Cadence.SpacecraftStore
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.SpacecraftStore
 
   @spec persist_source_endpoint(binary(), SourceEndpoint.t()) ::
           {:ok, SourceEndpoint.t()} | {:error, term()}

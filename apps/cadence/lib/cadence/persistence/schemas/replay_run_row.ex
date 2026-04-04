@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.ReplayRunRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Replay.Run
 
   @primary_key {:replay_run_id, :string, autogenerate: false}
@@ -49,7 +50,7 @@ defmodule Cadence.Persistence.Schemas.ReplayRunRow do
   def changeset(%__MODULE__{} = replay_run_row, %Run{} = run) do
     replay_run_row
     |> cast(domain_attrs(run), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
   end
 

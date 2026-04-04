@@ -1,8 +1,8 @@
 defmodule Cadence.SpacecraftStoreTest do
   use Cadence.DataCase, async: true
 
-  alias Cadence.Spacecraft
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
 
   test "persists and lists mission-owned spacecraft" do
     persist_mission_scope("org-spacecraft", "mission-spacecraft")

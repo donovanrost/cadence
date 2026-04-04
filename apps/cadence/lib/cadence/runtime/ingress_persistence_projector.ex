@@ -11,7 +11,9 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   require Logger
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Persistence
   alias Cadence.Runtime.ProcessedIngressBatch
+  alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
   @max_persist_batch_size 2_048
@@ -244,9 +246,9 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
 
   defp persist_processing_results_with_stage(processing_results) do
     TelemetryProfiler.with_stage(:persistence, fn ->
-      Cadence.Persistence.persist_processing_results(
+      Persistence.persist_processing_results(
         processing_results,
-        record_current_values?: not Cadence.Telemetry.CurrentValueStore.hot_path_safe?()
+        record_current_values?: not CurrentValueStore.hot_path_safe?()
       )
     end)
   end
@@ -255,23 +257,21 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     do: System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)
 
   defp run_persistence(fun) when is_function(fun, 0) do
-    try do
-      {:ok, fun.()}
-    rescue
-      exception ->
-        stacktrace = __STACKTRACE__
+    {:ok, fun.()}
+  rescue
+    exception ->
+      stacktrace = __STACKTRACE__
 
-        Logger.error(Exception.format(:error, exception, stacktrace))
+      Logger.error(Exception.format(:error, exception, stacktrace))
 
-        {:crash, Exception.format_banner(:error, exception)}
-    catch
-      kind, reason ->
-        stacktrace = __STACKTRACE__
+      {:crash, Exception.format_banner(:error, exception)}
+  catch
+    kind, reason ->
+      stacktrace = __STACKTRACE__
 
-        Logger.error(Exception.format(kind, reason, stacktrace))
+      Logger.error(Exception.format(kind, reason, stacktrace))
 
-        {:crash, Exception.format_banner(kind, reason)}
-    end
+      {:crash, Exception.format_banner(kind, reason)}
   end
 
   defp dequeue_persist_batch(state) do

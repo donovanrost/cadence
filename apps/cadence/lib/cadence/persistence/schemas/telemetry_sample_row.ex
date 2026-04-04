@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.Schemas.TelemetrySampleRow do
   import Ecto.Changeset
 
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Telemetry.Sample
 
   @primary_key {:sample_id, :string, autogenerate: false}
@@ -50,7 +51,7 @@ defmodule Cadence.Persistence.Schemas.TelemetrySampleRow do
   def changeset(%Sample{} = sample) do
     %__MODULE__{}
     |> cast(domain_attrs(sample), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:packet_id)
     |> foreign_key_constraint(:evidence_id)

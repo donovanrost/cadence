@@ -8,6 +8,7 @@ defmodule Cadence.Auth do
 
   alias Ecto.Changeset
   alias Ecto.Multi
+
   alias Cadence.Accounts
   alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Missions

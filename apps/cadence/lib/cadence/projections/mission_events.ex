@@ -7,6 +7,7 @@ defmodule Cadence.Projections.MissionEvents do
   import Ecto.Query
 
   alias Ecto.Changeset
+
   alias Cadence.Contacts.{CombinedDownlinkRecord, ContactAction, DownlinkDiagnostic}
   alias Cadence.Jobs
   alias Cadence.Limits.Event, as: LimitEvent

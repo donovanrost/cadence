@@ -7,6 +7,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRow do
 
   alias Cadence.DerivedTelemetry.Sample
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Persistence.OrganizationScope
 
   @mission_scope_key "__mission__"
   @timestamps_opts [type: :utc_datetime_usec]
@@ -49,7 +50,7 @@ defmodule Cadence.Persistence.Schemas.DerivedTelemetryLatestValueRow do
   def changeset(%__MODULE__{} = latest_value_row, %Sample{} = sample) do
     latest_value_row
     |> cast(domain_attrs(sample), all_fields())
-    |> Cadence.Persistence.OrganizationScope.put_organization_id()
+    |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:derived_sample_id)
     |> unique_constraint([:mission_id, :spacecraft_scope_id, :point_id],

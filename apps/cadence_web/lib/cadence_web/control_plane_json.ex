@@ -2,11 +2,11 @@ defmodule CadenceWeb.ControlPlaneJSON do
   @moduledoc false
 
   alias Cadence.Accounts.User
-  alias Cadence.Auth.Scope
-  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.{DispatchDecision, WorkItem}
-  alias Cadence.Catalog.{Artifact, ImportRun, ImporterDescriptor}
+  alias Cadence.Auth.Scope
+  alias Cadence.Auth.ServiceIdentity
+  alias Cadence.Catalog.{Artifact, ImporterDescriptor, ImportRun}
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.Compiler.Result, as: TelemetryCompilerResult
@@ -51,11 +51,11 @@ defmodule CadenceWeb.ControlPlaneJSON do
     TransportProfile
   }
 
-  alias Cadence.Reads.MissionHealth
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Spacecraft
+  alias Cadence.Reads.MissionHealth
   alias Cadence.SourceEndpoints.SourceEndpoint
+  alias Cadence.Spacecraft
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition, Sample}
 
   @spec bootstrap(map()) :: map()
