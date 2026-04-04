@@ -3,6 +3,7 @@ defmodule CadenceWeb.UserSessionController do
 
   import Phoenix.Component, only: [to_form: 2]
 
+  alias CadenceWeb.AuthenticatedEntry
   alias CadenceWeb.ControlPlaneParams
 
   def new(conn, _params) do
@@ -15,13 +16,13 @@ defmodule CadenceWeb.UserSessionController do
         form = sign_in_form(session_params)
 
         with {:ok, {email, password}} <-
-               ControlPlaneParams.bootstrap_admin_session(session_params),
+               ControlPlaneParams.setup_access_session(session_params),
              {:ok, issued_session} <- Cadence.login_bootstrap_admin(email, password) do
           conn
           |> renew_browser_session()
           |> put_session(:user_session_token, issued_session.session_token)
-          |> put_flash(:info, "Bootstrap admin session established.")
-          |> redirect(to: redirect_target(conn))
+          |> put_flash(:info, "Setup access session established.")
+          |> redirect(to: redirect_target(conn, issued_session.user))
         else
           {:error, reason} ->
             conn
@@ -49,38 +50,37 @@ defmodule CadenceWeb.UserSessionController do
     render(conn, :new,
       form: form,
       error_message: error_message,
-      bootstrap_admin_enabled?: Cadence.bootstrap_admin_enabled?()
+      setup_access_enabled?: Cadence.bootstrap_admin_enabled?()
     )
   end
 
   defp sign_in_form(params \\ %{}) do
-    to_form(params, as: :bootstrap_admin_session)
+    to_form(params, as: :setup_access_session)
   end
 
   defp session_params(params) do
-    case Map.get(params, "bootstrap_admin_session", %{}) do
+    case Map.get(params, "setup_access_session", Map.get(params, "bootstrap_admin_session", %{})) do
       nil -> {:ok, %{}}
       session_params when is_map(session_params) -> {:ok, session_params}
       _other -> {:error, :invalid_sign_in_payload}
     end
   end
 
-  defp redirect_target(conn) do
-    case get_session(conn, :user_return_to) do
-      path when is_binary(path) and path not in ["/", "/sign-in"] -> path
-      _other -> "/operator"
-    end
+  defp redirect_target(conn, user) do
+    conn
+    |> get_session(:user_return_to)
+    |> AuthenticatedEntry.redirect_path(user)
   end
 
   defp error_status(:bootstrap_admin_disabled), do: :forbidden
   defp error_status(_reason), do: :unprocessable_entity
 
   defp error_message(:invalid_sign_in_payload) do
-    "Submit a valid bootstrap admin sign-in form."
+    "Submit a valid setup access sign-in form."
   end
 
   defp error_message(:bootstrap_admin_disabled) do
-    "Bootstrap admin sign-in is disabled for this deployment."
+    "Temporary setup access is disabled for this deployment."
   end
 
   defp error_message(:invalid_credentials) do

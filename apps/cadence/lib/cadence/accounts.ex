@@ -50,7 +50,7 @@ defmodule Cadence.Accounts do
           display_name: display_name,
           capabilities: [:platform_admin],
           lifecycle_state: :active,
-          metadata: %{"bootstrap_admin" => true}
+          metadata: setup_access_metadata()
         })
 
       Repo.transaction(fn ->
@@ -180,7 +180,7 @@ defmodule Cadence.Accounts do
       token_digest: digest_token(session_token),
       token_hint: token_hint(session_token),
       expires_at: expires_at,
-      metadata: %{"bootstrap_admin" => true}
+      metadata: setup_access_metadata()
     }
 
     case Repo.insert(UserSessionTokenRow.changeset(attrs)) do
@@ -227,7 +227,7 @@ defmodule Cadence.Accounts do
       password_salt: password_document.password_salt,
       password_iterations: password_document.password_iterations,
       lifecycle_state: Atom.to_string(:active),
-      metadata: %{"bootstrap_admin" => true}
+      metadata: setup_access_metadata()
     }
 
     case Repo.get_by(UserLocalCredentialRow,
@@ -255,6 +255,10 @@ defmodule Cadence.Accounts do
 
   defp bootstrap_admin_config do
     Application.get_env(:cadence, :bootstrap_admin, [])
+  end
+
+  defp setup_access_metadata do
+    %{"bootstrap_admin" => true, "setup_access" => true}
   end
 
   defp session_ttl_seconds do

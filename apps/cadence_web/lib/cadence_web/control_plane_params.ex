@@ -75,6 +75,11 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
+  @spec setup_access_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
+  def setup_access_session(params) when is_map(params) do
+    bootstrap_admin_session(params)
+  end
+
   @spec organization(map()) :: {:ok, Organization.t()} | {:error, term()}
   def organization(params) when is_map(params) do
     with {:ok, slug} <- required_string(params, "slug"),

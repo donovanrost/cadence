@@ -65,4 +65,15 @@ defmodule Cadence.Accounts.User do
     |> String.trim()
     |> String.downcase()
   end
+
+  @spec temporary_setup_access?(t()) :: boolean()
+  def temporary_setup_access?(%__MODULE__{metadata: metadata}) when is_map(metadata) do
+    truthy_metadata?(metadata, "setup_access", :setup_access) or
+      truthy_metadata?(metadata, "bootstrap_admin", :bootstrap_admin)
+  end
+
+  defp truthy_metadata?(metadata, string_key, atom_key)
+       when is_map(metadata) and is_binary(string_key) and is_atom(atom_key) do
+    Map.get(metadata, string_key) == true or Map.get(metadata, atom_key, false) == true
+  end
 end

@@ -1,17 +1,17 @@
 <section id="sign-in-shell" class="panel panel--hero">
-  <div class="eyebrow">Shell Bootstrap</div>
-  <h1 class="hero-title">Cadence operator access now has a browser entrypoint.</h1>
+  <div class="eyebrow">First-Run Setup</div>
+  <h1 class="hero-title">Cadence setup access now has a browser entrypoint.</h1>
   <p class="hero-copy">
     This first slice keeps the experience intentionally narrow: establish an authenticated browser
-    session, then hand control to the stable <code>/operator</code> route.
+    session, then hand control to the protected <code>/setup</code> route for first-run work.
   </p>
 
-  <%= if @bootstrap_admin_enabled? do %>
-    <.form for={@form} id="bootstrap-admin-sign-in-form" action={~p"/sign-in"} class="sign-in-form">
+  <%= if @setup_access_enabled? do %>
+    <.form for={@form} id="setup-access-sign-in-form" action={~p"/sign-in"} class="sign-in-form">
       <.input
         field={@form[:email]}
         type="email"
-        label="Bootstrap Admin Email"
+        label="Setup Access Email"
         placeholder="bootstrap@example.com"
         required
         autocomplete="email"
@@ -21,7 +21,7 @@
         field={@form[:password]}
         type="password"
         label="Password"
-        placeholder="Enter the bootstrap admin password"
+        placeholder="Enter the temporary setup password"
         required
         autocomplete="current-password"
       />
@@ -31,16 +31,16 @@
       <div class="sign-in-form__actions">
         <button type="submit" class="button button--primary">Authenticate</button>
         <p class="sign-in-form__note">
-          This path exists only while bootstrap-admin environment configuration is enabled.
+          This path exists only while temporary setup access is enabled for the deployment.
         </p>
       </div>
     </.form>
   <% else %>
-    <div id="bootstrap-admin-disabled" class="status-card status-card--disabled">
+    <div id="setup-access-disabled" class="status-card status-card--disabled">
       <p class="status-card__label">Unavailable</p>
       <p class="status-card__body">
-        Bootstrap-admin sign-in is disabled for this deployment. Browser access will remain closed
-        until another user-facing authentication flow is introduced.
+        Temporary setup access is disabled for this deployment. Browser setup entry will remain
+        closed until another user-facing authentication flow is introduced.
       </p>
     </div>
   <% end %>

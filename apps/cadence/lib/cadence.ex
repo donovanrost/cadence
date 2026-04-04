@@ -143,6 +143,11 @@ defmodule Cadence do
     Auth.bootstrap_admin_enabled?()
   end
 
+  @spec initial_setup_pending?() :: boolean()
+  def initial_setup_pending? do
+    Organizations.count_organizations() == 0
+  end
+
   @spec persist_organization(Organization.t()) :: {:ok, Organization.t()} | {:error, term()}
   def persist_organization(%Organization{} = organization) do
     Organizations.persist_organization(organization)

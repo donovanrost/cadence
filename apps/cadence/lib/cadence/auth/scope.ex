@@ -79,4 +79,11 @@ defmodule Cadence.Auth.Scope do
         |> MapSet.new()
     }
   end
+
+  @spec temporary_setup_access?(t()) :: boolean()
+  def temporary_setup_access?(%__MODULE__{user: %User{} = user}) do
+    User.temporary_setup_access?(user)
+  end
+
+  def temporary_setup_access?(%__MODULE__{}), do: false
 end

@@ -1,0 +1,39 @@
+<section id="setup-home" class="panel panel--hero">
+  <div class="eyebrow">First-Run Setup</div>
+  <h1 class="hero-title">Cadence is ready for initial tenant and operator setup.</h1>
+  <p class="hero-copy">
+    This temporary setup surface is the first durable browser entrypoint for a fresh deployment.
+    It keeps setup traffic out of the generic operator shell while the first tenant and durable
+    admin handoff slices are still being built.
+  </p>
+
+  <div class="summary-grid">
+    <article class="status-card">
+      <p class="status-card__label">Access Mode</p>
+      <p class="status-card__title">Temporary setup access</p>
+      <p class="status-card__body">
+        This session exists only to complete first-run setup and should be retired once durable
+        user access is established.
+      </p>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Actor</p>
+      <p class="status-card__title">{@current_scope.user.display_name}</p>
+      <p class="status-card__body">{@current_scope.user.email}</p>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Next Setup Slices</p>
+      <p class="status-card__title">Tenant creation and durable admin handoff</p>
+      <p class="status-card__body">
+        Follow-on setup work will create the first organization, establish the first durable
+        platform admin, and retire this temporary access path.
+      </p>
+    </article>
+  </div>
+
+  <.form for={%{}} as={:session} id="setup-sign-out-form" action={~p"/session"} method="delete">
+    <button type="submit" class="button button--secondary">Sign out</button>
+  </.form>
+</section>
