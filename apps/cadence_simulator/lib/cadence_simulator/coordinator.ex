@@ -22,6 +22,7 @@ defmodule CadenceSimulator.Coordinator do
 
   alias Cadence.CCSDS.Core.SDUOctets
   alias Cadence.CCSDS.SDLP.TM.Segmentation
+
   alias CadenceSimulator.{
     GeneratorWorker,
     PacketEncoder,
@@ -30,6 +31,7 @@ defmodule CadenceSimulator.Coordinator do
     SimulatorMetrics,
     TMFramePlan
   }
+
   alias CadenceSimulator.Providers.{BasicDynamics, DatabaseDynamics, ScenarioProvider}
 
   @default_rate_hz 1.0
@@ -39,7 +41,6 @@ defmodule CadenceSimulator.Coordinator do
   @default_send_batch_size 65_536
   @default_metrics_sample_rate 100
   @default_in_flight_multiplier 4
-  @default_send_buffer_queue_floor 16
   @default_dispatch_batch_floor 4
   @default_dispatch_batch_ceiling 32
 
@@ -54,6 +55,7 @@ defmodule CadenceSimulator.Coordinator do
     :send_buffer,
     :metrics_id,
     :metrics_sample_rate,
+    :send_batch_size,
     :rate_hz,
     :interval_ms,
     :steps_per_tick,
@@ -69,6 +71,7 @@ defmodule CadenceSimulator.Coordinator do
     :dispatch_batch_ceiling,
     :send_buffer_queue_len,
     :send_buffer_backlog_bytes,
+    :send_buffer_backpressure_mode,
     :send_buffer_status_version,
     :send_buffer_packets_sent,
     :send_buffer_bytes_sent,
@@ -76,6 +79,7 @@ defmodule CadenceSimulator.Coordinator do
     :idle_workers,
     :completed_batches,
     :next_emit_step,
+    :max_send_buffer_backlog_bytes,
     in_flight_steps: 0,
     backpressure_events: 0,
     next_step: 0,
@@ -109,6 +113,8 @@ defmodule CadenceSimulator.Coordinator do
     frame = normalize_frame(Keyword.get(opts, :frame))
     requested_parallel_mode = Keyword.get(opts, :parallel_mode, :sequential)
     {provider_module, provider_config} = determine_provider(opts)
+    send_batch_timeout = Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout)
+    send_batch_size = Keyword.get(opts, :send_batch_size, @default_send_batch_size)
 
     generator_count = normalize_generator_count(opts[:generator_count])
 
@@ -132,8 +138,8 @@ defmodule CadenceSimulator.Coordinator do
         [
           output: output,
           runtime_resolver: Keyword.get(opts, :runtime_resolver),
-          batch_timeout: Keyword.get(opts, :send_batch_timeout, @default_send_batch_timeout),
-          batch_size: Keyword.get(opts, :send_batch_size, @default_send_batch_size),
+          batch_timeout: send_batch_timeout,
+          batch_size: send_batch_size,
           metrics_id: metrics_id,
           metrics_sample_rate: metrics_sample_rate,
           coordinator_pid: self()
@@ -155,6 +161,7 @@ defmodule CadenceSimulator.Coordinator do
           send_buffer: send_buffer,
           metrics_id: metrics_id,
           metrics_sample_rate: metrics_sample_rate,
+          send_batch_size: send_batch_size,
           rate_hz: rate_hz,
           interval_ms: interval_ms,
           steps_per_tick: steps_per_tick,
@@ -314,7 +321,9 @@ defmodule CadenceSimulator.Coordinator do
             dispatch_batch_ceiling: state.dispatch_batch_ceiling,
             pending_steps: state.pending_steps,
             next_step: state.next_step,
+            send_buffer_backpressure_mode: state.send_buffer_backpressure_mode,
             max_send_buffer_queue: state.max_send_buffer_queue,
+            max_send_buffer_backlog_bytes: state.max_send_buffer_backlog_bytes,
             send_buffer_queue_len: state.send_buffer_queue_len,
             send_buffer_backlog_bytes: state.send_buffer_backlog_bytes,
             backpressure_events: state.backpressure_events,
@@ -363,12 +372,17 @@ defmodule CadenceSimulator.Coordinator do
     :ok
   end
 
-  defp maybe_init_parallel_mode(%{parallel_mode: :parallel} = state, opts, provider_state, generator_count) do
+  defp maybe_init_parallel_mode(
+         %{parallel_mode: :parallel} = state,
+         opts,
+         provider_state,
+         generator_count
+       ) do
     max_in_flight_steps =
       normalize_max_in_flight_steps(opts, generator_count, state.steps_per_tick)
 
-    max_send_buffer_queue =
-      normalize_max_send_buffer_queue(opts, generator_count)
+    {send_buffer_backpressure_mode, max_send_buffer_queue, max_send_buffer_backlog_bytes} =
+      normalize_send_buffer_backpressure(opts, generator_count, state.send_batch_size)
 
     dispatch_batch_floor = normalize_dispatch_batch_floor(opts)
 
@@ -401,7 +415,9 @@ defmodule CadenceSimulator.Coordinator do
       | generator_pool: generator_pool,
         idle_workers: Enum.to_list(0..(generator_count - 1)),
         max_in_flight_steps: max_in_flight_steps,
+        send_buffer_backpressure_mode: send_buffer_backpressure_mode,
         max_send_buffer_queue: max_send_buffer_queue,
+        max_send_buffer_backlog_bytes: max_send_buffer_backlog_bytes,
         dispatch_batch_floor: dispatch_batch_floor,
         dispatch_batch_ceiling: dispatch_batch_ceiling,
         send_buffer_queue_len: 0,
@@ -472,7 +488,8 @@ defmodule CadenceSimulator.Coordinator do
         {:error, reason, next_generation_state} ->
           Logger.warning("Simulator provider error at step #{acc_state.step}: #{inspect(reason)}")
 
-          {outputs_acc, bytes_acc, %{next_generation_state | step: next_generation_state.step + 1}}
+          {outputs_acc, bytes_acc,
+           %{next_generation_state | step: next_generation_state.step + 1}}
       end
     end)
   end
@@ -646,7 +663,9 @@ defmodule CadenceSimulator.Coordinator do
     do: mode
 
   defp parallel_delivery_mode(:parallel, %{format: :tm}, opts) do
-    if Keyword.get(opts, :tm_parallel_framing, false), do: :ordered_frame_plan, else: :ordered_framer
+    if Keyword.get(opts, :tm_parallel_framing, false),
+      do: :ordered_frame_plan,
+      else: :ordered_framer
   end
 
   defp parallel_delivery_mode(:parallel, _frame, _opts), do: :send_buffer
@@ -678,7 +697,7 @@ defmodule CadenceSimulator.Coordinator do
   end
 
   defp dispatch_parallel_batches(state, worker_count) do
-    if state.send_buffer_queue_len >= state.max_send_buffer_queue do
+    if send_buffer_saturated?(state) do
       {increment_backpressure(state), 0}
     else
       dispatch_available_parallel_batches(state, worker_count)
@@ -688,7 +707,11 @@ defmodule CadenceSimulator.Coordinator do
   defp dispatch_available_parallel_batches(state, worker_count) do
     available_workers = length(state.idle_workers || [])
     available_steps = max(state.max_in_flight_steps - state.in_flight_steps, 0)
-    target_steps_per_worker = dispatch_target_steps_per_worker(state)
+    tentative_steps_to_dispatch = min(state.pending_steps, available_steps)
+
+    target_steps_per_worker =
+      dispatch_target_steps_per_worker(state, tentative_steps_to_dispatch, available_workers)
+
     dispatch_capacity = min(available_steps, available_workers * target_steps_per_worker)
     steps_to_dispatch = min(state.pending_steps, dispatch_capacity)
 
@@ -752,39 +775,67 @@ defmodule CadenceSimulator.Coordinator do
     base_batch_size + if(index < remainder, do: 1, else: 0)
   end
 
-  defp dispatch_target_steps_per_worker(state) do
+  defp dispatch_target_steps_per_worker(_state, _steps_to_dispatch, available_workers)
+       when available_workers <= 0,
+       do: 0
+
+  defp dispatch_target_steps_per_worker(state, steps_to_dispatch, available_workers) do
     floor = max(state.dispatch_batch_floor || @default_dispatch_batch_floor, 1)
     ceiling = max(state.dispatch_batch_ceiling || @default_dispatch_batch_ceiling, floor)
+    evenly_split_steps = max(ceil_div(max(steps_to_dispatch, 1), available_workers), 1)
 
     cond do
       send_buffer_utilization(state) >= 0.75 ->
         1
 
       send_buffer_utilization(state) >= 0.5 ->
-        max(div(floor, 2), 1)
-
-      state.pending_steps >= ceiling ->
-        ceiling
-
-      state.pending_steps >= floor ->
-        floor
-
-      state.pending_steps >= 2 ->
-        2
+        max(1, min(floor, evenly_split_steps))
 
       true ->
-        1
+        min(ceiling, evenly_split_steps)
     end
   end
 
-  defp send_buffer_utilization(%{max_send_buffer_queue: max_queue}) when max_queue in [nil, 0],
-    do: 0.0
+  defp send_buffer_saturated?(%{send_buffer_backpressure_mode: :queue} = state) do
+    state.send_buffer_queue_len >= max(state.max_send_buffer_queue || 0, 1)
+  end
+
+  defp send_buffer_saturated?(%{send_buffer_backpressure_mode: :bytes} = state) do
+    state.send_buffer_backlog_bytes >= max(state.max_send_buffer_backlog_bytes || 0, 1)
+  end
+
+  defp send_buffer_saturated?(_state), do: false
 
   defp send_buffer_utilization(%{
+         send_buffer_backpressure_mode: :queue,
+         max_send_buffer_queue: max_queue
+       })
+       when max_queue in [nil, 0],
+       do: 0.0
+
+  defp send_buffer_utilization(%{
+         send_buffer_backpressure_mode: :queue,
          send_buffer_queue_len: queue_len,
          max_send_buffer_queue: max_queue
        }) do
     queue_len / max(max_queue, 1)
+  end
+
+  defp send_buffer_utilization(%{
+         send_buffer_backpressure_mode: :bytes,
+         send_buffer_backlog_bytes: backlog_bytes,
+         max_send_buffer_backlog_bytes: max_backlog_bytes
+       })
+       when max_backlog_bytes in [nil, 0] do
+    if backlog_bytes > 0, do: 1.0, else: 0.0
+  end
+
+  defp send_buffer_utilization(%{
+         send_buffer_backpressure_mode: :bytes,
+         send_buffer_backlog_bytes: backlog_bytes,
+         max_send_buffer_backlog_bytes: max_backlog_bytes
+       }) do
+    backlog_bytes / max(max_backlog_bytes, 1)
   end
 
   defp increment_backpressure(state) do
@@ -847,11 +898,13 @@ defmodule CadenceSimulator.Coordinator do
     %{state | completed_batches: Map.put(completed_batches, start_step, batch)}
   end
 
-  defp emit_completed_parallel_batches(%{
-         parallel_delivery_mode: parallel_delivery_mode,
-         completed_batches: completed_batches,
-         next_emit_step: next_emit_step
-       } = state) do
+  defp emit_completed_parallel_batches(
+         %{
+           parallel_delivery_mode: parallel_delivery_mode,
+           completed_batches: completed_batches,
+           next_emit_step: next_emit_step
+         } = state
+       ) do
     if parallel_delivery_mode in [:ordered_framer, :ordered_frame_plan] do
       case Map.pop(completed_batches, next_emit_step) do
         {nil, _remaining_batches} ->
@@ -948,14 +1001,19 @@ defmodule CadenceSimulator.Coordinator do
     end)
   end
 
-  defp ordered_parallel_frame_plans(%{frame: %{format: :tm} = frame, frame_state: frame_state} = state, frame_plans, _total_bytes) do
+  defp ordered_parallel_frame_plans(
+         %{frame: %{format: :tm} = frame, frame_state: frame_state} = state,
+         frame_plans,
+         _total_bytes
+       ) do
     framing_sample? =
       SimulatorMetrics.sample_timing?(state.metrics_sample_rate, state.next_emit_step)
 
     framing_start =
       if framing_sample?, do: System.monotonic_time(:microsecond), else: nil
 
-    {outputs, output_bytes, next_frame_state} = TMFramePlan.encode_many(frame_plans, frame, frame_state)
+    {outputs, output_bytes, next_frame_state} =
+      TMFramePlan.encode_many(frame_plans, frame, frame_state)
 
     if framing_sample? do
       SimulatorMetrics.record_timing(
@@ -1021,13 +1079,19 @@ defmodule CadenceSimulator.Coordinator do
     end
   end
 
-  defp normalize_max_send_buffer_queue(opts, generator_count) do
+  defp normalize_send_buffer_backpressure(opts, generator_count, send_batch_size) do
     case Keyword.get(opts, :max_send_buffer_queue) do
       value when is_integer(value) and value > 0 ->
-        value
+        {:queue, value, nil}
 
       _ ->
-        max(generator_count * @default_in_flight_multiplier, @default_send_buffer_queue_floor)
+        max_backlog_bytes =
+          max(
+            send_batch_size * max(generator_count, 1),
+            send_batch_size * @default_in_flight_multiplier
+          )
+
+        {:bytes, nil, max_backlog_bytes}
     end
   end
 

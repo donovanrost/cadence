@@ -23,6 +23,26 @@ defmodule Cadence.Telemetry.Profiler do
   @context_key {__MODULE__, :context}
   @stage_key {__MODULE__, :stage}
   @stages [:resolve, :runtime, :persistence]
+  @runtime_components [
+    :runtime_boundary,
+    :telemetry_sample_extraction,
+    :current_value_record,
+    :partition_prepare,
+    :partition_decode,
+    :partition_dispatch,
+    :runtime_record_persistence
+  ]
+  @runtime_component_slot_pairs %{
+    runtime_boundary: {:runtime_boundary_count, :runtime_boundary_total_us},
+    telemetry_sample_extraction:
+      {:telemetry_sample_extraction_count, :telemetry_sample_extraction_total_us},
+    current_value_record: {:current_value_record_count, :current_value_record_total_us},
+    partition_prepare: {:partition_prepare_count, :partition_prepare_total_us},
+    partition_decode: {:partition_decode_count, :partition_decode_total_us},
+    partition_dispatch: {:partition_dispatch_count, :partition_dispatch_total_us},
+    runtime_record_persistence:
+      {:runtime_record_persistence_count, :runtime_record_persistence_total_us}
+  }
 
   @slots %{
     ingress_count: 1,
@@ -56,7 +76,21 @@ defmodule Cadence.Telemetry.Profiler do
     db_runtime_query_count: 29,
     db_runtime_query_total_us: 30,
     db_persistence_query_count: 31,
-    db_persistence_query_total_us: 32
+    db_persistence_query_total_us: 32,
+    runtime_boundary_count: 33,
+    runtime_boundary_total_us: 34,
+    telemetry_sample_extraction_count: 35,
+    telemetry_sample_extraction_total_us: 36,
+    current_value_record_count: 37,
+    current_value_record_total_us: 38,
+    partition_prepare_count: 39,
+    partition_prepare_total_us: 40,
+    partition_decode_count: 41,
+    partition_decode_total_us: 42,
+    partition_dispatch_count: 43,
+    partition_dispatch_total_us: 44,
+    runtime_record_persistence_count: 45,
+    runtime_record_persistence_total_us: 46
   }
 
   @slot_count map_size(@slots)
@@ -86,6 +120,43 @@ defmodule Cadence.Telemetry.Profiler do
               avg_us: float()
             },
             end_to_end: %{count: non_neg_integer(), total_us: non_neg_integer(), avg_us: float()}
+          },
+          runtime_components: %{
+            runtime_boundary: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            telemetry_sample_extraction: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            current_value_record: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            partition_prepare: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            partition_decode: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            partition_dispatch: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            },
+            runtime_record_persistence: %{
+              count: non_neg_integer(),
+              total_us: non_neg_integer(),
+              avg_us: float()
+            }
           },
           db: %{
             query_count: non_neg_integer(),
@@ -230,6 +301,18 @@ defmodule Cadence.Telemetry.Profiler do
     :ok
   end
 
+  @spec with_runtime_component(binary(), atom(), (-> result)) :: result when result: var
+  def with_runtime_component(mission_id, component, fun)
+      when is_binary(mission_id) and component in @runtime_components and is_function(fun, 0) do
+    started_at = System.monotonic_time()
+
+    try do
+      fun.()
+    after
+      record_runtime_component(mission_id, component, elapsed_since_us(started_at))
+    end
+  end
+
   @spec snapshot(binary()) :: snapshot()
   def snapshot(mission_id) when is_binary(mission_id) do
     ensure_table()
@@ -369,6 +452,7 @@ defmodule Cadence.Telemetry.Profiler do
           avg_us: average(slot_value(ref, :end_to_end_total_us), ingress_count)
         }
       },
+      runtime_components: runtime_component_snapshot(ref),
       db: %{
         query_count: db_query_count,
         query_total_us: slot_value(ref, :db_query_total_us),
@@ -433,6 +517,7 @@ defmodule Cadence.Telemetry.Profiler do
         persistence: %{count: 0, total_us: 0, avg_us: 0.0},
         end_to_end: %{count: 0, total_us: 0, avg_us: 0.0}
       },
+      runtime_components: empty_runtime_component_snapshot(),
       db: %{
         query_count: 0,
         query_total_us: 0,
@@ -480,6 +565,26 @@ defmodule Cadence.Telemetry.Profiler do
     }
   end
 
+  defp runtime_component_snapshot(ref) do
+    Enum.into(@runtime_component_slot_pairs, %{}, fn {component, {count_key, total_key}} ->
+      count = slot_value(ref, count_key)
+      total_us = slot_value(ref, total_key)
+
+      {component,
+       %{
+         count: count,
+         total_us: total_us,
+         avg_us: average(total_us, count)
+       }}
+    end)
+  end
+
+  defp empty_runtime_component_snapshot do
+    Enum.into(@runtime_components, %{}, fn component ->
+      {component, %{count: 0, total_us: 0, avg_us: 0.0}}
+    end)
+  end
+
   defp record_stage_timing(_ref, _stage, nil), do: :ok
 
   defp record_stage_timing(ref, stage, duration_us)
@@ -506,6 +611,16 @@ defmodule Cadence.Telemetry.Profiler do
   end
 
   defp record_stage_query(_ref, _stage, _duration_us), do: :ok
+
+  defp record_runtime_component(mission_id, component, duration_us)
+       when is_binary(mission_id) and component in @runtime_components and is_integer(duration_us) and
+              duration_us >= 0 do
+    ref = ensure_counter(mission_id)
+    {count_key, total_key} = Map.fetch!(@runtime_component_slot_pairs, component)
+    add(ref, count_key, 1)
+    add(ref, total_key, duration_us)
+    :ok
+  end
 
   defp record_operation(ref, :select), do: add(ref, :db_select_count, 1)
   defp record_operation(ref, :insert), do: add(ref, :db_insert_count, 1)
@@ -609,6 +724,9 @@ defmodule Cadence.Telemetry.Profiler do
     do: System.convert_time_unit(value, :native, :microsecond)
 
   defp native_to_us(_value), do: 0
+
+  defp elapsed_since_us(started_at) when is_integer(started_at),
+    do: System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)
 
   defp slot_value(ref, key) do
     :counters.get(ref, Map.fetch!(@slots, key))

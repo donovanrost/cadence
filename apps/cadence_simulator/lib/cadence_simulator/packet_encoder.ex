@@ -114,16 +114,22 @@ defmodule CadenceSimulator.PacketEncoder do
   @spec encode_packet_values_with_sequence(
           t(),
           String.t(),
-          [{String.t(), %{String.t() => any()}}],
+          [{String.t(), %{String.t() => any()} | [any()]}],
           (non_neg_integer() -> non_neg_integer())
         ) :: {:ok, [{String.t(), binary()}]} | {:error, term()}
   def encode_packet_values_with_sequence(encoder, _target_id, packet_values, sequence_fn)
       when is_list(packet_values) and is_function(sequence_fn, 1) do
     packets =
       Enum.reduce(packet_values, [], fn
-        {packet_name, item_values}, acc when is_binary(packet_name) and is_map(item_values) ->
+        {packet_name, item_values}, acc
+        when is_binary(packet_name) and (is_map(item_values) or is_list(item_values)) ->
           append_encoded_packet(
-            encode_packet_item_values_with_sequence(encoder, packet_name, item_values, sequence_fn),
+            encode_packet_item_values_with_sequence(
+              encoder,
+              packet_name,
+              item_values,
+              sequence_fn
+            ),
             packet_name,
             acc
           )
@@ -193,16 +199,17 @@ defmodule CadenceSimulator.PacketEncoder do
           end)
           |> Enum.unzip()
 
-        payload_size = payload_size(item_defs)
+        ordered_item_defs = Enum.sort_by(item_defs, & &1.bit_offset)
+        payload_size = payload_size(ordered_item_defs)
 
         %{strategy: strategy, pack_items: pack_items, tail_gap: tail_gap} =
-          build_packing_layout(item_defs, payload_size)
+          build_packing_layout(ordered_item_defs, payload_size)
 
         apid = packet_def.apid || 0
 
         packet_def = %{
           packet_def
-          | items: item_defs,
+          | items: ordered_item_defs,
             payload_size: payload_size,
             packet_id: build_packet_id(apid),
             data_length: max(payload_size - 1, 0),
@@ -211,7 +218,8 @@ defmodule CadenceSimulator.PacketEncoder do
             tail_gap: tail_gap
         }
 
-        new_items = Enum.into(item_defs, items, fn item -> {item.qualified_name, item} end)
+        new_items =
+          Enum.into(ordered_item_defs, items, fn item -> {item.qualified_name, item} end)
 
         new_conv_map =
           new_convs
@@ -354,7 +362,8 @@ defmodule CadenceSimulator.PacketEncoder do
     end)
   end
 
-  defp build_payload_from_item_values(%{packing_strategy: :sequential} = packet_def, item_values) do
+  defp build_payload_from_item_values(%{packing_strategy: :sequential} = packet_def, item_values)
+       when is_map(item_values) do
     iodata =
       Enum.reduce(packet_def.pack_items, [], fn {gap_before, item_def, empty_value}, acc ->
         value_binary =
@@ -380,7 +389,13 @@ defmodule CadenceSimulator.PacketEncoder do
     IO.iodata_to_binary([iodata, packet_def.tail_gap])
   end
 
-  defp build_payload_from_item_values(packet_def, item_values) do
+  defp build_payload_from_item_values(%{packing_strategy: :sequential} = packet_def, item_values)
+       when is_list(item_values) do
+    iodata = build_sequential_ordered_payload(packet_def.pack_items, item_values, [])
+    IO.iodata_to_binary([iodata, packet_def.tail_gap])
+  end
+
+  defp build_payload_from_item_values(packet_def, item_values) when is_map(item_values) do
     Enum.reduce(packet_def.items, zero_binary(packet_def.payload_size), fn item_def, acc ->
       case Map.get(item_values, item_def.name) do
         nil ->
@@ -390,6 +405,14 @@ defmodule CadenceSimulator.PacketEncoder do
           raw_value = reverse_convert(value, item_def.conversion)
           pack_value(acc, item_def, raw_value)
       end
+    end)
+  end
+
+  defp build_payload_from_item_values(packet_def, item_values) when is_list(item_values) do
+    Enum.zip(packet_def.items, item_values)
+    |> Enum.reduce(zero_binary(packet_def.payload_size), fn {item_def, value}, acc ->
+      raw_value = reverse_convert(value, item_def.conversion)
+      pack_value(acc, item_def, raw_value)
     end)
   end
 
@@ -457,7 +480,8 @@ defmodule CadenceSimulator.PacketEncoder do
     |> String.slice(0, byte_size)
   end
 
-  defp value_to_binary(value, "binary", _bit_size, byte_size, _endianness) when is_binary(value) do
+  defp value_to_binary(value, "binary", _bit_size, byte_size, _endianness)
+       when is_binary(value) do
     case byte_size(value) do
       ^byte_size -> value
       n when n < byte_size -> value <> :binary.copy(<<0>>, byte_size - n)
@@ -486,7 +510,7 @@ defmodule CadenceSimulator.PacketEncoder do
       0::3,
       0::1,
       0::1,
-      (packet_def.apid || 0)::11,
+      packet_def.apid || 0::11,
       3::2,
       sequence::14,
       packet_def.data_length::16,
@@ -567,9 +591,34 @@ defmodule CadenceSimulator.PacketEncoder do
   end
 
   defp build_packet_id(apid) do
-    (0 <<< 13) ||| (0 <<< 12) ||| apid
+    0 <<< 13 ||| 0 <<< 12 ||| apid
   end
 
   defp zero_binary(0), do: <<>>
   defp zero_binary(size), do: :binary.copy(<<0>>, size)
+
+  defp build_sequential_ordered_payload([], _item_values, acc), do: acc
+
+  defp build_sequential_ordered_payload(
+         [{gap_before, item_def, _empty_value} | rest],
+         [value | remaining],
+         acc
+       ) do
+    raw_value = reverse_convert(value, item_def.conversion)
+
+    value_binary =
+      value_to_binary(
+        raw_value,
+        item_def.data_type,
+        item_def.bit_size,
+        item_def.byte_size,
+        item_def.endianness
+      )
+
+    build_sequential_ordered_payload(rest, remaining, [acc, gap_before, value_binary])
+  end
+
+  defp build_sequential_ordered_payload([{gap_before, _item_def, empty_value} | rest], [], acc) do
+    build_sequential_ordered_payload(rest, [], [acc, gap_before, empty_value])
+  end
 end

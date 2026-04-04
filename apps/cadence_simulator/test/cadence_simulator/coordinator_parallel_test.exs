@@ -4,6 +4,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
   alias Cadence.CCSDS.SDLP.TM.FrameCodec
   alias CadenceSimulator.Coordinator
   alias CadenceSimulator.Providers.DatabaseDynamics
+  alias CadenceSimulator.TestSupport.SlowCounterProvider
 
   @definitions """
   version: "1.0.0"
@@ -37,6 +38,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
 
     assert_eventually(fn ->
       stats = Coordinator.stats(pid)
+
       stats.parallel_mode == :parallel and stats.packet_count > 0 and
         stats.send_buffer_stats.packets_buffered > 0
     end)
@@ -142,7 +144,8 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
     send_buffer_state = :sys.get_state(coordinator_state.send_buffer)
     buffered_frames = send_buffer_state.buffer |> Enum.reverse() |> IO.iodata_to_binary()
 
-    assert {:ok, frames, <<>>} = FrameCodec.decode(buffered_frames, frame_size: frame_size, ocf_length: 0)
+    assert {:ok, frames, <<>>} =
+             FrameCodec.decode(buffered_frames, frame_size: frame_size, ocf_length: 0)
 
     frame_seqs = Enum.map(frames, & &1.frame_seq)
     assert frame_seqs == Enum.to_list(0..(length(frame_seqs) - 1))
@@ -187,6 +190,33 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
 
     frame_seqs = Enum.map(frames, & &1.frame_seq)
     assert frame_seqs == Enum.to_list(0..(length(frame_seqs) - 1))
+  end
+
+  test "high-rate parallel dispatch engages multiple workers" do
+    {:ok, pid} =
+      Coordinator.start_link(
+        target_id: "SIM-1",
+        rate_hz: 100_000.0,
+        output: nil,
+        definitions_content: @definitions,
+        provider: SlowCounterProvider,
+        provider_config: %{sleep_ms: 25},
+        parallel_mode: :parallel,
+        generator_count: 4,
+        send_batch_timeout: 1_000
+      )
+
+    on_exit(fn ->
+      if Process.alive?(pid), do: Coordinator.stop(pid)
+    end)
+
+    assert_eventually(fn ->
+      state = :sys.get_state(pid)
+
+      state.parallel_mode == :parallel and
+        state.in_flight_steps > 0 and
+        length(state.idle_workers) <= 1
+    end)
   end
 
   defp buffered_frame_count(pid) do

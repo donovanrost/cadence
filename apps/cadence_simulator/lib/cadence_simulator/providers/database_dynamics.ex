@@ -104,36 +104,40 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
     packets = parsed["packets"] || []
 
     Enum.reduce(packets, {[], 0}, fn packet_data, {pkts, item_count} ->
-        packet_name = packet_data["name"]
+      packet_name = packet_data["name"]
 
-        packet_items =
-          (packet_data["items"] || [])
-          |> Enum.map(&build_item_spec(packet_name, &1))
+      packet_items =
+        (packet_data["items"] || [])
+        |> Enum.with_index()
+        |> Enum.map(fn {item_data, index} -> build_item_spec(packet_name, item_data, index) end)
+        |> Enum.sort_by(fn item -> {item.bit_offset, item.sort_index} end)
 
-        {
-          [
-            %{
-              name: packet_name,
-              apid: packet_data["apid"],
-              description: packet_data["description"],
-              items: packet_items
-            }
-            | pkts
-          ],
-          item_count + length(packet_items)
-        }
-      end)
+      {
+        [
+          %{
+            name: packet_name,
+            apid: packet_data["apid"],
+            description: packet_data["description"],
+            items: packet_items
+          }
+          | pkts
+        ],
+        item_count + length(packet_items)
+      }
+    end)
     |> then(fn {packet_defs, item_count} -> {Enum.reverse(packet_defs), item_count} end)
   end
 
-  defp build_item_spec(packet_name, item_data) do
+  defp build_item_spec(packet_name, item_data, sort_index) do
     item_name = item_data["name"]
     qualified_name = "#{packet_name}.#{item_name}"
     phase = :erlang.phash2(item_name) / 1000.0
 
     %{
+      bit_offset: item_data["bit_offset"] || 0,
       name: item_name,
       qualified_name: qualified_name,
+      sort_index: sort_index,
       generator: build_generator(packet_name, item_name, item_data, phase)
     }
   end
@@ -141,8 +145,8 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
   defp build_packet_values(packet_specs, step, noise_amplitude) do
     Enum.map(packet_specs, fn %{name: packet_name, items: item_specs} ->
       values =
-        Enum.reduce(item_specs, %{}, fn %{name: item_name, generator: generator}, acc ->
-          Map.put(acc, item_name, generate_item_value(generator, step, noise_amplitude))
+        Enum.map(item_specs, fn %{generator: generator} ->
+          generate_item_value(generator, step, noise_amplitude)
         end)
 
       {packet_name, values}
@@ -151,7 +155,8 @@ defmodule CadenceSimulator.Providers.DatabaseDynamics do
 
   defp build_flat_values(packet_specs, step, noise_amplitude) do
     Enum.reduce(packet_specs, %{}, fn %{items: item_specs}, acc ->
-      Enum.reduce(item_specs, acc, fn %{qualified_name: qualified_name, generator: generator}, item_acc ->
+      Enum.reduce(item_specs, acc, fn %{qualified_name: qualified_name, generator: generator},
+                                      item_acc ->
         Map.put(item_acc, qualified_name, generate_item_value(generator, step, noise_amplitude))
       end)
     end)

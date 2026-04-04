@@ -11,6 +11,9 @@ status: active
 This directory holds ADRs for the redesigned Cadence system in `apps/cadence`
 and `apps/cadence_web`.
 
+For the current implementation shape and developer workflow, start with the
+[Developer Architecture Guide](../developer-architecture-guide.md).
+
 Legacy ADRs remain under
 [`legacy/cadence_legacy/docs/decisions`](../../legacy/cadence_legacy/docs/decisions/_index.md).
 

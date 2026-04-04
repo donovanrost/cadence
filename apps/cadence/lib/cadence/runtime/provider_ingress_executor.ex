@@ -395,17 +395,33 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           runtime_started_at = System.monotonic_time()
 
           runtime_result =
-            TelemetryProfiler.with_stage(:runtime, fn ->
-              RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence)
-            end)
+            TelemetryProfiler.with_runtime_component(
+              resolved_raw_evidence.mission_id,
+              :runtime_boundary,
+              fn ->
+                TelemetryProfiler.with_stage(:runtime, fn ->
+                  RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence)
+                end)
+              end
+            )
 
           runtime_us = elapsed_us(runtime_started_at)
 
           case runtime_result do
             {:ok, processing_result} ->
               with {:ok, telemetry_samples} <-
-                     Cadence.Persistence.telemetry_samples(processing_result.outputs),
-                   :ok <- maybe_record_current_values(telemetry_samples) do
+                     TelemetryProfiler.with_runtime_component(
+                       resolved_raw_evidence.mission_id,
+                       :telemetry_sample_extraction,
+                       fn ->
+                         Cadence.Persistence.telemetry_samples(processing_result.outputs)
+                       end
+                     ),
+                   :ok <-
+                     maybe_record_current_values(
+                       resolved_raw_evidence.mission_id,
+                       telemetry_samples
+                     ) do
                 TelemetryProfiler.record_ingress_result(
                   resolved_raw_evidence,
                   resolve_us: resolve_us,
@@ -455,9 +471,14 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     end)
   end
 
-  defp maybe_record_current_values(telemetry_samples) do
+  defp maybe_record_current_values(_mission_id, telemetry_samples) when telemetry_samples == [],
+    do: :ok
+
+  defp maybe_record_current_values(mission_id, telemetry_samples) do
     if Cadence.Telemetry.CurrentValueStore.hot_path_safe?() do
-      Cadence.Telemetry.CurrentValueStore.record_samples(telemetry_samples)
+      TelemetryProfiler.with_runtime_component(mission_id, :current_value_record, fn ->
+        Cadence.Telemetry.CurrentValueStore.record_samples(telemetry_samples)
+      end)
     else
       :ok
     end

@@ -1,0 +1,4 @@
+[mcp_servers.fizzy]
+# Keep the token out of the repo. Export FIZZY_TOKEN before starting Codex.
+url = "https://api.fizzy.do/mcp"
+env_http_headers = { FIZZY_TOKEN = "FIZZY_TOKEN" }

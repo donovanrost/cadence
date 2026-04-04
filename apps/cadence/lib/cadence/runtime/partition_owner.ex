@@ -268,12 +268,33 @@ defmodule Cadence.Runtime.PartitionOwner do
       TelemetryProfiler.with_stage(:runtime, fn ->
         reply =
           with {:ok, prepared_state, pre_runtime_records} <-
-                 prepare_for_raw_evidence(state, raw_evidence),
-               :ok <- validate_partition(raw_evidence, prepared_state.partition_key),
+                 TelemetryProfiler.with_runtime_component(
+                   raw_evidence.mission_id,
+                   :partition_prepare,
+                   fn ->
+                     with {:ok, prepared_state, pre_runtime_records} <-
+                            prepare_for_raw_evidence(state, raw_evidence),
+                          :ok <- validate_partition(raw_evidence, prepared_state.partition_key) do
+                       {:ok, prepared_state, pre_runtime_records}
+                     end
+                   end
+                 ),
                {:ok, decode_result, next_state, decode_runtime_records} <-
-                 decode_packet_records(raw_evidence, prepared_state),
+                 TelemetryProfiler.with_runtime_component(
+                   raw_evidence.mission_id,
+                   :partition_decode,
+                   fn ->
+                     decode_packet_records(raw_evidence, prepared_state)
+                   end
+                 ),
                {:ok, dispatch_result, next_state, dispatch_runtime_records} <-
-                 execute_dispatches(decode_result, next_state),
+                 TelemetryProfiler.with_runtime_component(
+                   raw_evidence.mission_id,
+                   :partition_dispatch,
+                   fn ->
+                     execute_dispatches(decode_result, next_state)
+                   end
+                 ),
                all_runtime_records <-
                  merge_runtime_records(pre_runtime_records, decode_runtime_records),
                all_runtime_records <-
@@ -281,9 +302,15 @@ defmodule Cadence.Runtime.PartitionOwner do
                all_runtime_records <-
                  merge_runtime_records(all_runtime_records, dispatch_runtime_records),
                {:ok, pending_runtime_records} <-
-                 maybe_persist_runtime_records(
-                   next_state.persist_runtime_records?,
-                   all_runtime_records
+                 TelemetryProfiler.with_runtime_component(
+                   raw_evidence.mission_id,
+                   :runtime_record_persistence,
+                   fn ->
+                     maybe_persist_runtime_records(
+                       next_state.persist_runtime_records?,
+                       all_runtime_records
+                     )
+                   end
                  ) do
             outputs = Enum.flat_map(dispatch_result.dispatch_results, & &1.outputs)
 

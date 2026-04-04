@@ -88,6 +88,13 @@ defmodule Cadence.Telemetry.ProfilerTest do
     assert snapshot.stages.resolve.count == 1
     assert snapshot.stages.runtime.count == 1
     assert snapshot.stages.persistence.count == 1
+    assert snapshot.runtime_components.runtime_boundary.count == 0
+    assert snapshot.runtime_components.telemetry_sample_extraction.count == 0
+    assert snapshot.runtime_components.current_value_record.count == 0
+    assert snapshot.runtime_components.partition_prepare.count == 1
+    assert snapshot.runtime_components.partition_decode.count == 1
+    assert snapshot.runtime_components.partition_dispatch.count == 1
+    assert snapshot.runtime_components.runtime_record_persistence.count == 1
 
     assert snapshot.db.query_count > 0
     assert snapshot.db.operations.select_count > 0
@@ -103,6 +110,7 @@ defmodule Cadence.Telemetry.ProfilerTest do
 
     reset_snapshot = Profiler.snapshot(mission_id)
     assert reset_snapshot.ingress_count == 0
+    assert reset_snapshot.runtime_components.runtime_boundary.count == 0
     assert reset_snapshot.db.query_count == 0
     assert reset_snapshot.archive.combined.flush_count == 0
   end

@@ -10,8 +10,9 @@ defmodule CadenceSimulator.DynamicsProvider do
   encoding.
   """
 
-  @type telemetry_values :: %{String.t() => number() | String.t() | binary() | boolean()}
-  @type packet_item_values :: %{String.t() => number() | String.t() | binary() | boolean()}
+  @type telemetry_value :: number() | String.t() | binary() | boolean()
+  @type telemetry_values :: %{String.t() => telemetry_value()}
+  @type packet_item_values :: %{String.t() => telemetry_value()} | [telemetry_value()]
   @type packet_values :: [{String.t(), packet_item_values()}]
 
   @doc """
