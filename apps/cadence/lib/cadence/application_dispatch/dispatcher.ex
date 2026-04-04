@@ -53,15 +53,24 @@ defmodule Cadence.ApplicationDispatch.Dispatcher do
     Enum.reduce_while(decision.work_items, {:ok, []}, fn %WorkItem{} = work_item, {:ok, acc} ->
       case Registry.fetch(registry, work_item.handler_key) do
         {:ok, handler_module} ->
-          case handler_module.handle(packet_record, work_item) do
-            {:ok, outputs} -> {:cont, {:ok, acc ++ outputs}}
-            {:error, reason} -> {:halt, {:error, {work_item.handler_key, reason}}}
-          end
+          execute_work_item(handler_module, packet_record, work_item, acc)
 
         :error ->
           {:halt, {:error, {:unknown_handler, work_item.handler_key}}}
       end
     end)
+  end
+
+  defp execute_work_item(
+         handler_module,
+         %PacketRecord{} = packet_record,
+         %WorkItem{} = work_item,
+         acc
+       ) do
+    case handler_module.handle(packet_record, work_item) do
+      {:ok, outputs} -> {:cont, {:ok, acc ++ outputs}}
+      {:error, reason} -> {:halt, {:error, {work_item.handler_key, reason}}}
+    end
   end
 
   defp matches?(%BindingRule{} = rule, %PacketRecord{} = packet_record) do
@@ -194,18 +203,18 @@ defmodule Cadence.ApplicationDispatch.Dispatcher do
   end
 
   defp to_work_item(%BindingRule{} = rule, %BindingSet{} = binding_set) do
-    with {:ok, %CapabilityInstance{} = capability_instance} <-
-           BindingSet.fetch_capability_instance(
-             binding_set,
-             BindingRule.capability_instance_id(rule)
-           ) do
-      %WorkItem{
-        binding_rule_id: rule.binding_rule_id,
-        capability_instance_id: capability_instance.capability_instance_id,
-        handler_key: capability_instance.family_key,
-        handler_configuration: capability_instance.runtime_configuration
-      }
-    else
+    case BindingSet.fetch_capability_instance(
+           binding_set,
+           BindingRule.capability_instance_id(rule)
+         ) do
+      {:ok, %CapabilityInstance{} = capability_instance} ->
+        %WorkItem{
+          binding_rule_id: rule.binding_rule_id,
+          capability_instance_id: capability_instance.capability_instance_id,
+          handler_key: capability_instance.family_key,
+          handler_configuration: capability_instance.runtime_configuration
+        }
+
       :error ->
         %WorkItem{
           binding_rule_id: rule.binding_rule_id,

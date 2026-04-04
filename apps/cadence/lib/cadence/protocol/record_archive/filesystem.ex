@@ -363,11 +363,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
           selected_records =
             entries
-            |> Enum.filter(fn entry ->
-              Map.get(entry, "record_kind") == record_kind and
-                MapSet.member?(selected_ids, Map.get(entry, "record_id"))
-            end)
-            |> Enum.filter(&matches_metadata_scope?(&1, scope.metadata_match))
+            |> Enum.filter(
+              &selected_record_entry?(&1, record_kind, selected_ids, scope.metadata_match)
+            )
             |> Enum.map(&decode_record/1)
 
           {:cont, {:ok, selected_records ++ acc}}
@@ -393,6 +391,12 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     Enum.all?(metadata_match, fn {key, value} ->
       Map.get(metadata, to_string(key)) == value or Map.get(metadata, key) == value
     end)
+  end
+
+  defp selected_record_entry?(entry, record_kind, selected_ids, metadata_match) do
+    Map.get(entry, "record_kind") == record_kind and
+      MapSet.member?(selected_ids, Map.get(entry, "record_id")) and
+      matches_metadata_scope?(entry, metadata_match)
   end
 
   defp decode_record(%{"record_kind" => @packet_record_kind} = entry) do

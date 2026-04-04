@@ -42,19 +42,28 @@ defmodule Cadence.Commanding.Encoder do
 
       runtime_definition.encoding_steps
       |> Enum.sort_by(&{&1.bit_offset, &1.display_order || &1.bit_offset})
-      |> Enum.reduce_while({:ok, initial_buffer}, fn %EncodingStep{} = step, {:ok, buffer} ->
-        case encode_step(step, argument_specs_by_id, resolved_values) do
-          {:ok, encoded_value} ->
-            {:cont, {:ok, insert_bits(buffer, step.bit_offset, step.size_bits, encoded_value)}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-      end)
+      |> encode_layout_steps(argument_specs_by_id, resolved_values, initial_buffer)
       |> case do
         {:ok, encoded} -> {:ok, pad_to_bytes(encoded)}
         {:error, reason} -> {:error, reason}
       end
+    end
+  end
+
+  defp encode_layout_steps(encoding_steps, argument_specs_by_id, resolved_values, initial_buffer) do
+    Enum.reduce_while(encoding_steps, {:ok, initial_buffer}, fn %EncodingStep{} = step,
+                                                                {:ok, buffer} ->
+      reduce_encoded_step(step, argument_specs_by_id, resolved_values, buffer)
+    end)
+  end
+
+  defp reduce_encoded_step(step, argument_specs_by_id, resolved_values, buffer) do
+    case encode_step(step, argument_specs_by_id, resolved_values) do
+      {:ok, encoded_value} ->
+        {:cont, {:ok, insert_bits(buffer, step.bit_offset, step.size_bits, encoded_value)}}
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
     end
   end
 

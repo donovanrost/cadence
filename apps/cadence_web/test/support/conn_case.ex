@@ -1,4 +1,6 @@
 defmodule CadenceWeb.ConnCase do
+  @moduledoc false
+
   use ExUnit.CaseTemplate
 
   using do

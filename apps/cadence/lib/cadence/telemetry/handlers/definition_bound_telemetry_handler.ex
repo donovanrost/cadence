@@ -38,9 +38,8 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
         %PacketDefinition{} = packet_definition,
         %ValidationContext{} = validation_context
       ) do
-    with :ok <- validate_definition_mission(packet_definition, validation_context.mission_id),
-         :ok <- validate_definition_apid(packet_definition, validation_context) do
-      :ok
+    with :ok <- validate_definition_mission(packet_definition, validation_context.mission_id) do
+      validate_definition_apid(packet_definition, validation_context)
     end
   end
 

@@ -105,16 +105,16 @@ defmodule Cadence.Runtime.TransportRuntime do
     with {:ok, %Descriptor{kind: :transport_extension}} <-
            CapabilityRegistry.fetch_descriptor(family_key),
          execution_context <-
-           build_execution_context(
-             mission_id,
-             activation_id,
-             binding_set_id,
-             binding_set_version,
-             capability_instance_id,
-             scope_ref,
-             partition_key,
-             TimerService.current_time(timer_service)
-           ),
+           build_execution_context(%{
+             mission_id: mission_id,
+             activation_id: activation_id,
+             binding_set_id: binding_set_id,
+             binding_set_version: binding_set_version,
+             capability_instance_id: capability_instance_id,
+             scope_ref: scope_ref,
+             partition_key: partition_key,
+             current_time: TimerService.current_time(timer_service)
+           }),
          {:ok, %ExecutionResult{} = execution_result} <-
            CapabilityRegistry.init_transport_extension(
              family_key,
@@ -331,28 +331,26 @@ defmodule Cadence.Runtime.TransportRuntime do
                  timer_metadata: timer_entry.metadata
                }
              )
-           ),
-         {:ok, next_state} <-
-           apply_execution_result(
-             state,
-             :timer_handled,
-             execution_result,
-             %{
-               interaction: :timer,
-               timer_key: timer_key,
-               timer_due_at: timer_entry.due_at
-             }
-             |> Map.merge(timer_entry.metadata),
-             [
-               %{
-                 event_kind: :fired,
-                 timer_key: timer_key,
-                 due_at: timer_entry.due_at,
-                 metadata: timer_entry.metadata
-               }
-             ]
            ) do
-      {:ok, next_state}
+      apply_execution_result(
+        state,
+        :timer_handled,
+        execution_result,
+        %{
+          interaction: :timer,
+          timer_key: timer_key,
+          timer_due_at: timer_entry.due_at
+        }
+        |> Map.merge(timer_entry.metadata),
+        [
+          %{
+            event_kind: :fired,
+            timer_key: timer_key,
+            due_at: timer_entry.due_at,
+            metadata: timer_entry.metadata
+          }
+        ]
+      )
     end
   end
 
@@ -434,27 +432,31 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   defp execution_context(state, metadata \\ %{}) do
     build_execution_context(
-      state.mission_id,
-      state.activation_id,
-      state.binding_set_id,
-      state.binding_set_version,
-      state.capability_instance_id,
-      state.scope_ref,
-      state.partition_key,
-      current_time(state),
+      %{
+        mission_id: state.mission_id,
+        activation_id: state.activation_id,
+        binding_set_id: state.binding_set_id,
+        binding_set_version: state.binding_set_version,
+        capability_instance_id: state.capability_instance_id,
+        scope_ref: state.scope_ref,
+        partition_key: state.partition_key,
+        current_time: current_time(state)
+      },
       metadata
     )
   end
 
   defp build_execution_context(
-         mission_id,
-         activation_id,
-         binding_set_id,
-         binding_set_version,
-         capability_instance_id,
-         scope_ref,
-         partition_key,
-         current_time,
+         %{
+           mission_id: mission_id,
+           activation_id: activation_id,
+           binding_set_id: binding_set_id,
+           binding_set_version: binding_set_version,
+           capability_instance_id: capability_instance_id,
+           scope_ref: scope_ref,
+           partition_key: partition_key,
+           current_time: current_time
+         },
          metadata \\ %{}
        ) do
     ExecutionContext.new(%{

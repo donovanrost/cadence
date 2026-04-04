@@ -364,10 +364,12 @@ defmodule CadenceSimulator.CLI do
          "unexpected telemetry arguments: #{Enum.join(positional, " ")}\n\n" <> usage(:telemetry)}
 
       true ->
-        with {:ok, merged_parsed} <- merge_config(parsed, :telemetry, config_root) do
-          with_usage(build_telemetry_options(merged_parsed), :telemetry)
-        else
-          {:error, message} -> {:error, message <> "\n\n" <> usage(:telemetry)}
+        case merge_config(parsed, :telemetry, config_root) do
+          {:ok, merged_parsed} ->
+            with_usage(build_telemetry_options(merged_parsed), :telemetry)
+
+          {:error, message} ->
+            {:error, message <> "\n\n" <> usage(:telemetry)}
         end
     end
   end
@@ -391,10 +393,12 @@ defmodule CadenceSimulator.CLI do
            usage(:cop1_loopback)}
 
       true ->
-        with {:ok, merged_parsed} <- merge_config(parsed, :cop1_loopback, config_root) do
-          with_usage(build_loopback_options(merged_parsed), :cop1_loopback)
-        else
-          {:error, message} -> {:error, message <> "\n\n" <> usage(:cop1_loopback)}
+        case merge_config(parsed, :cop1_loopback, config_root) do
+          {:ok, merged_parsed} ->
+            with_usage(build_loopback_options(merged_parsed), :cop1_loopback)
+
+          {:error, message} ->
+            {:error, message <> "\n\n" <> usage(:cop1_loopback)}
         end
     end
   end
@@ -787,7 +791,10 @@ defmodule CadenceSimulator.CLI do
          fetch_config_value(config_root, ["scenario", "scenario_path"])
        )
        |> maybe_put_config(:noise_amplitude, fetch_config_value(config_root, ["noise_amplitude"]))
-       |> maybe_put_config(:tm_frame_size, config_frame_value(config_root, frame, "tm_frame_size"))
+       |> maybe_put_config(
+         :tm_frame_size,
+         config_frame_value(config_root, frame, "tm_frame_size")
+       )
        |> maybe_put_config(:scid, config_frame_value(config_root, frame, "scid"))
        |> maybe_put_config(:vcid, config_frame_value(config_root, frame, "vcid"))
        |> maybe_put_config(:parallel, config_parallel_value(config_root))
@@ -1063,10 +1070,7 @@ defmodule CadenceSimulator.CLI do
       {:error, "invalid --clcw-overrides entry: #{inspect(spec)}"}
     else
       Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, acc} ->
-        case parse_override_entry(entry) do
-          {:ok, {key, value}} -> {:cont, {:ok, Map.put(acc, key, value)}}
-          {:error, message} -> {:halt, {:error, message}}
-        end
+        reduce_override_entry(entry, acc)
       end)
     end
   end
@@ -1074,6 +1078,13 @@ defmodule CadenceSimulator.CLI do
   defp parse_override_spec(%{} = spec), do: {:ok, spec}
 
   defp parse_override_spec(spec), do: {:error, "invalid --clcw-overrides entry: #{inspect(spec)}"}
+
+  defp reduce_override_entry(entry, acc) do
+    case parse_override_entry(entry) do
+      {:ok, {key, value}} -> {:cont, {:ok, Map.put(acc, key, value)}}
+      {:error, message} -> {:halt, {:error, message}}
+    end
+  end
 
   defp parse_override_entry(entry) when is_binary(entry) do
     case String.split(entry, "=", parts: 2) do
@@ -1109,12 +1120,10 @@ defmodule CadenceSimulator.CLI do
   defp with_usage(result, _runtime_mode), do: result
 
   defp format_invalid_options(invalid) do
-    invalid
-    |> Enum.map(fn
+    Enum.map_join(invalid, ", ", fn
       {option, nil} -> option
       {option, value} -> "#{option}=#{value}"
     end)
-    |> Enum.join(", ")
   end
 
   defp parse_integer(nil), do: nil

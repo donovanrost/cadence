@@ -103,13 +103,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
   def handle_call({:flush, nil}, _from, state) do
     state = normalize_state(state)
 
-    case Enum.reduce_while(Map.keys(state.buffers), {:ok, state}, fn mission_id,
-                                                                     {:ok, acc_state} ->
-           case flush_mission(acc_state, mission_id) do
-             {:ok, next_state} -> {:cont, {:ok, next_state}}
-             {:error, reason, next_state} -> {:halt, {:error, mission_id, reason, next_state}}
-           end
-         end) do
+    case flush_all_missions(state) do
       {:ok, next_state} ->
         {:reply, :ok, next_state}
 
@@ -155,6 +149,19 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
          buffer_started_at_ms: %{},
          metrics: %{}
      }}
+  end
+
+  defp flush_all_missions(state) do
+    Enum.reduce_while(Map.keys(state.buffers), {:ok, state}, fn mission_id, {:ok, acc_state} ->
+      flush_mission_entry(acc_state, mission_id)
+    end)
+  end
+
+  defp flush_mission_entry(acc_state, mission_id) do
+    case flush_mission(acc_state, mission_id) do
+      {:ok, next_state} -> {:cont, {:ok, next_state}}
+      {:error, reason, next_state} -> {:halt, {:error, mission_id, reason, next_state}}
+    end
   end
 
   @impl true

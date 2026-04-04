@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

@@ -33,6 +33,40 @@ defmodule CadenceWeb.ControlPlaneParams do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
+  @command_stage_visibility_values [:private, :shared]
+  @command_stage_lifecycle_states [:draft, :in_review, :ready_to_submit, :submitted, :canceled]
+  @staged_command_item_lifecycle_states [:draft, :submitted, :canceled]
+  @command_request_lifecycle_states [
+    :draft,
+    :validated,
+    :approval_pending,
+    :approved,
+    :rejected,
+    :queued,
+    :released,
+    :canceled
+  ]
+  @command_approval_decisions [:approved, :rejected]
+  @command_queue_entry_lifecycle_states [:pending, :release_pending, :released, :canceled]
+  @command_release_attempt_lifecycle_states [
+    :release_pending,
+    :released,
+    :release_failed,
+    :canceled
+  ]
+  @command_verifier_instance_lifecycle_states [
+    :pending,
+    :satisfied,
+    :failed,
+    :timed_out,
+    :canceled
+  ]
+  @command_verifier_phases [:acceptance, :start, :completion, :custom]
+  @service_identity_lifecycle_states [:active, :disabled]
+  @direction_values [:uplink, :downlink]
+  @selection_role_values [:selected, :candidate, :contributing]
+  @transport_target_scope_values [:path, :transport]
+
   @spec bootstrap_admin_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
   def bootstrap_admin_session(params) when is_map(params) do
     with {:ok, email} <- required_string(params, "email"),
@@ -934,152 +968,55 @@ defmodule CadenceWeb.ControlPlaneParams do
   end
 
   defp command_stage_visibility(params, default) when is_map(params) do
-    case Map.get(params, "visibility", default) do
-      :private -> {:ok, :private}
-      "private" -> {:ok, :private}
-      :shared -> {:ok, :shared}
-      "shared" -> {:ok, :shared}
-      _other -> {:error, {:invalid_param, "visibility", :unknown_atom}}
-    end
+    allowed_atom_param(params, "visibility", default, @command_stage_visibility_values)
   end
 
   defp optional_command_stage_visibility(params) when is_map(params) do
-    case Map.get(params, "visibility") do
-      nil -> {:ok, nil}
-      value -> command_stage_visibility(%{"visibility" => value}, nil)
-    end
+    optional_allowed_atom_param(params, "visibility", @command_stage_visibility_values)
   end
 
   defp command_stage_lifecycle_state(params, default) when is_map(params) do
-    case Map.get(params, "lifecycle_state", default) do
-      :draft -> {:ok, :draft}
-      "draft" -> {:ok, :draft}
-      :in_review -> {:ok, :in_review}
-      "in_review" -> {:ok, :in_review}
-      :ready_to_submit -> {:ok, :ready_to_submit}
-      "ready_to_submit" -> {:ok, :ready_to_submit}
-      :submitted -> {:ok, :submitted}
-      "submitted" -> {:ok, :submitted}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    allowed_atom_param(params, "lifecycle_state", default, @command_stage_lifecycle_states)
   end
 
   defp optional_command_stage_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      value -> command_stage_lifecycle_state(%{"lifecycle_state" => value}, nil)
-    end
+    optional_allowed_atom_param(params, "lifecycle_state", @command_stage_lifecycle_states)
   end
 
   defp optional_staged_command_item_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      :draft -> {:ok, :draft}
-      "draft" -> {:ok, :draft}
-      :submitted -> {:ok, :submitted}
-      "submitted" -> {:ok, :submitted}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    optional_allowed_atom_param(params, "lifecycle_state", @staged_command_item_lifecycle_states)
   end
 
   defp optional_command_request_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      :draft -> {:ok, :draft}
-      "draft" -> {:ok, :draft}
-      :validated -> {:ok, :validated}
-      "validated" -> {:ok, :validated}
-      :approval_pending -> {:ok, :approval_pending}
-      "approval_pending" -> {:ok, :approval_pending}
-      :approved -> {:ok, :approved}
-      "approved" -> {:ok, :approved}
-      :rejected -> {:ok, :rejected}
-      "rejected" -> {:ok, :rejected}
-      :queued -> {:ok, :queued}
-      "queued" -> {:ok, :queued}
-      :released -> {:ok, :released}
-      "released" -> {:ok, :released}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    optional_allowed_atom_param(params, "lifecycle_state", @command_request_lifecycle_states)
   end
 
   defp optional_command_approval_decision(params) when is_map(params) do
-    case Map.get(params, "decision") do
-      nil -> {:ok, nil}
-      :approved -> {:ok, :approved}
-      "approved" -> {:ok, :approved}
-      :rejected -> {:ok, :rejected}
-      "rejected" -> {:ok, :rejected}
-      _other -> {:error, {:invalid_param, "decision", :unknown_atom}}
-    end
+    optional_allowed_atom_param(params, "decision", @command_approval_decisions)
   end
 
   defp optional_command_queue_entry_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      :pending -> {:ok, :pending}
-      "pending" -> {:ok, :pending}
-      :release_pending -> {:ok, :release_pending}
-      "release_pending" -> {:ok, :release_pending}
-      :released -> {:ok, :released}
-      "released" -> {:ok, :released}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    optional_allowed_atom_param(params, "lifecycle_state", @command_queue_entry_lifecycle_states)
   end
 
   defp optional_command_release_attempt_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      :release_pending -> {:ok, :release_pending}
-      "release_pending" -> {:ok, :release_pending}
-      :released -> {:ok, :released}
-      "released" -> {:ok, :released}
-      :release_failed -> {:ok, :release_failed}
-      "release_failed" -> {:ok, :release_failed}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    optional_allowed_atom_param(
+      params,
+      "lifecycle_state",
+      @command_release_attempt_lifecycle_states
+    )
   end
 
   defp optional_command_verifier_instance_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state") do
-      nil -> {:ok, nil}
-      :pending -> {:ok, :pending}
-      "pending" -> {:ok, :pending}
-      :satisfied -> {:ok, :satisfied}
-      "satisfied" -> {:ok, :satisfied}
-      :failed -> {:ok, :failed}
-      "failed" -> {:ok, :failed}
-      :timed_out -> {:ok, :timed_out}
-      "timed_out" -> {:ok, :timed_out}
-      :canceled -> {:ok, :canceled}
-      "canceled" -> {:ok, :canceled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    optional_allowed_atom_param(
+      params,
+      "lifecycle_state",
+      @command_verifier_instance_lifecycle_states
+    )
   end
 
   defp optional_command_verifier_phase(params) when is_map(params) do
-    case Map.get(params, "phase") do
-      nil -> {:ok, nil}
-      :acceptance -> {:ok, :acceptance}
-      "acceptance" -> {:ok, :acceptance}
-      :start -> {:ok, :start}
-      "start" -> {:ok, :start}
-      :completion -> {:ok, :completion}
-      "completion" -> {:ok, :completion}
-      :custom -> {:ok, :custom}
-      "custom" -> {:ok, :custom}
-      _other -> {:error, {:invalid_param, "phase", :unknown_atom}}
-    end
+    optional_allowed_atom_param(params, "phase", @command_verifier_phases)
   end
 
   defp contact_paths(params) do
@@ -1276,12 +1213,7 @@ defmodule CadenceWeb.ControlPlaneParams do
   defp capabilities(params, default) when is_map(params) and is_list(default) do
     case Map.get(params, "capabilities", default) do
       values when is_list(values) ->
-        Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->
-          case normalize_capability(value) do
-            {:ok, capability} -> {:cont, {:ok, acc ++ [capability]}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+        reduce_ok(values, &normalize_capability/1)
 
       _other ->
         {:error, {:invalid_param, "capabilities", :list}}
@@ -1289,11 +1221,7 @@ defmodule CadenceWeb.ControlPlaneParams do
   end
 
   defp service_identity_lifecycle_state(params) when is_map(params) do
-    case Map.get(params, "lifecycle_state", "active") do
-      "active" -> {:ok, :active}
-      "disabled" -> {:ok, :disabled}
-      _other -> {:error, {:invalid_param, "lifecycle_state", :unknown_atom}}
-    end
+    allowed_atom_param(params, "lifecycle_state", :active, @service_identity_lifecycle_states)
   end
 
   defp required_string(params, key) do
@@ -1433,6 +1361,44 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
+  defp allowed_atom_param(params, key, default, allowed)
+       when is_map(params) and is_binary(key) and is_list(allowed) do
+    parse_allowed_atom(Map.get(params, key, default), key, allowed)
+  end
+
+  defp optional_allowed_atom_param(params, key, allowed)
+       when is_map(params) and is_binary(key) and is_list(allowed) do
+    parse_allowed_atom(Map.get(params, key), key, allowed)
+  end
+
+  defp required_allowed_atom_param(params, key, allowed)
+       when is_map(params) and is_binary(key) and is_list(allowed) do
+    case Map.get(params, key) do
+      nil -> {:error, {:invalid_param, key, :required}}
+      value -> parse_allowed_atom(value, key, allowed)
+    end
+  end
+
+  defp parse_allowed_atom(nil, _key, _allowed), do: {:ok, nil}
+
+  defp parse_allowed_atom(value, key, allowed) when is_atom(value) do
+    if Enum.member?(allowed, value) do
+      {:ok, value}
+    else
+      {:error, {:invalid_param, key, :unknown_atom}}
+    end
+  end
+
+  defp parse_allowed_atom(value, key, allowed) when is_binary(value) do
+    case Enum.find(allowed, &(Atom.to_string(&1) == value)) do
+      nil -> {:error, {:invalid_param, key, :unknown_atom}}
+      atom -> {:ok, atom}
+    end
+  end
+
+  defp parse_allowed_atom(_value, key, _allowed),
+    do: {:error, {:invalid_param, key, :unknown_atom}}
+
   defp normalize_capability(value) do
     case value do
       :organization_admin -> {:ok, :organization_admin}
@@ -1545,77 +1511,27 @@ defmodule CadenceWeb.ControlPlaneParams do
   end
 
   defp direction(params) when is_map(params) do
-    case Map.get(params, "direction") do
-      :uplink -> {:ok, :uplink}
-      "uplink" -> {:ok, :uplink}
-      :downlink -> {:ok, :downlink}
-      "downlink" -> {:ok, :downlink}
-      nil -> {:error, {:invalid_param, "direction", :required}}
-      _other -> {:error, {:invalid_param, "direction", :unknown_atom}}
-    end
+    required_allowed_atom_param(params, "direction", @direction_values)
   end
 
   defp optional_direction(params, key) when is_map(params) and is_binary(key) do
-    case Map.get(params, key) do
-      nil -> {:ok, nil}
-      value -> direction(%{key => value})
-    end
+    optional_allowed_atom_param(params, key, @direction_values)
   end
 
   defp optional_selection_role(params, key) when is_map(params) and is_binary(key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, nil}
-
-      value ->
-        case value do
-          :selected -> {:ok, :selected}
-          "selected" -> {:ok, :selected}
-          :candidate -> {:ok, :candidate}
-          "candidate" -> {:ok, :candidate}
-          :contributing -> {:ok, :contributing}
-          "contributing" -> {:ok, :contributing}
-          _other -> {:error, {:invalid_param, key, :unknown_atom}}
-        end
-    end
+    optional_allowed_atom_param(params, key, @selection_role_values)
   end
 
   defp selection_role(params) when is_map(params) do
-    case Map.get(params, "selection_role", "candidate") do
-      :selected -> {:ok, :selected}
-      "selected" -> {:ok, :selected}
-      :candidate -> {:ok, :candidate}
-      "candidate" -> {:ok, :candidate}
-      :contributing -> {:ok, :contributing}
-      "contributing" -> {:ok, :contributing}
-      _other -> {:error, {:invalid_param, "selection_role", :unknown_atom}}
-    end
+    allowed_atom_param(params, "selection_role", :candidate, @selection_role_values)
   end
 
   defp transport_target_scope(params) when is_map(params) do
-    case Map.get(params, "target_scope", "path") do
-      :path -> {:ok, :path}
-      "path" -> {:ok, :path}
-      :transport -> {:ok, :transport}
-      "transport" -> {:ok, :transport}
-      _other -> {:error, {:invalid_param, "target_scope", :unknown_atom}}
-    end
+    allowed_atom_param(params, "target_scope", :path, @transport_target_scope_values)
   end
 
   defp optional_transport_target_scope(params, key) when is_map(params) and is_binary(key) do
-    case Map.get(params, key) do
-      nil ->
-        {:ok, nil}
-
-      value ->
-        case value do
-          :path -> {:ok, :path}
-          "path" -> {:ok, :path}
-          :transport -> {:ok, :transport}
-          "transport" -> {:ok, :transport}
-          _other -> {:error, {:invalid_param, key, :unknown_atom}}
-        end
-    end
+    optional_allowed_atom_param(params, key, @transport_target_scope_values)
   end
 
   defp transport_family_key(params) when is_map(params) do
@@ -1713,12 +1629,7 @@ defmodule CadenceWeb.ControlPlaneParams do
         {:ok, []}
 
       refs when is_list(refs) ->
-        Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-          case versioned_ref(ref, id_key) do
-            {:ok, normalized_ref} -> {:cont, {:ok, acc ++ [normalized_ref]}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+        reduce_ok(refs, &versioned_ref(&1, id_key))
 
       _other ->
         {:error, {:invalid_param, key, :list}}
@@ -1732,6 +1643,15 @@ defmodule CadenceWeb.ControlPlaneParams do
     else
       {:ok, nil}
     end
+  end
+
+  defp reduce_ok(values, mapper) when is_list(values) and is_function(mapper, 1) do
+    Enum.reduce_while(values, {:ok, []}, fn value, {:ok, acc} ->
+      case mapper.(value) do
+        {:ok, normalized_value} -> {:cont, {:ok, acc ++ [normalized_value]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp versioned_ref(ref, id_key) when is_map(ref) and is_binary(id_key) do

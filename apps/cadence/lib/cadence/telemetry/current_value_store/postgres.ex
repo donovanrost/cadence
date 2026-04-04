@@ -21,14 +21,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
 
   @impl true
   def record_samples(samples) when is_list(samples) do
-    case Repo.transaction(fn ->
-           Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
-             case persist_latest_value(sample) do
-               {:ok, _row} -> {:cont, :ok}
-               {:error, reason} -> Repo.rollback(reason)
-             end
-           end)
-         end) do
+    case persist_samples_transaction(samples) do
       {:ok, :ok} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -71,6 +64,21 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
       |> Repo.delete_all()
 
     :ok
+  end
+
+  defp persist_samples_transaction(samples) do
+    Repo.transaction(fn ->
+      Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
+        persist_sample_transaction_step(sample)
+      end)
+    end)
+  end
+
+  defp persist_sample_transaction_step(%Sample{} = sample) do
+    case persist_latest_value(sample) do
+      {:ok, _row} -> {:cont, :ok}
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp persist_latest_value(%Sample{} = sample) do

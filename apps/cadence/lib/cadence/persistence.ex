@@ -68,9 +68,8 @@ defmodule Cadence.Persistence do
            ),
          :ok <-
            RecordArchive.persist_records_many(archive_records_batch(prepared_results)),
-         :ok <- maybe_record_current_values(telemetry_samples, opts),
-         :ok <- Cadence.Telemetry.HistoryStore.persist_samples(telemetry_samples) do
-      :ok
+         :ok <- maybe_record_current_values(telemetry_samples, opts) do
+      Cadence.Telemetry.HistoryStore.persist_samples(telemetry_samples)
     end
   end
 
@@ -230,17 +229,20 @@ defmodule Cadence.Persistence do
       count_matches? = Keyword.get(opts, :on_conflict) == :nothing
 
       case repo.insert_all(schema, rows, opts) do
-        {count, _returned_rows} when count == length(rows) ->
-          {:ok, count}
-
         {count, _returned_rows} ->
-          if count_matches? do
-            {:ok, count}
-          else
-            {:error, {:insert_all_count_mismatch, operation, count}}
-          end
+          insert_all_result(count, rows, operation, count_matches?)
       end
     end)
+  end
+
+  defp insert_all_result(count, rows, _operation, _count_matches?) when count == length(rows) do
+    {:ok, count}
+  end
+
+  defp insert_all_result(count, _rows, _operation, true), do: {:ok, count}
+
+  defp insert_all_result(count, _rows, operation, false) do
+    {:error, {:insert_all_count_mismatch, operation, count}}
   end
 
   defp add_managed_capability_record_inserts(%Multi{} = multi, capability_records) do

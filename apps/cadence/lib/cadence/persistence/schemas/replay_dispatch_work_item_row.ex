@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.ReplayDispatchWorkItemRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

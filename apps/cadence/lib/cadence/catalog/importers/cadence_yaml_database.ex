@@ -73,9 +73,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
   def validate_artifact(%Artifact{} = artifact) do
     with :ok <- validate_format(artifact),
          {:ok, yaml_source} <- extract_yaml_source(artifact),
-         {:ok, parsed} <- parse_yaml(yaml_source),
-         :ok <- validate_root(parsed) do
-      :ok
+         {:ok, parsed} <- parse_yaml(yaml_source) do
+      validate_root(parsed)
     end
   end
 
@@ -190,9 +189,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         {:error, {:validation_error, "YAML must define a non-empty 'packets' or 'commands' list"}}
 
       _other ->
-        with :ok <- maybe_validate_packets(parsed["packets"], has_packets),
-             :ok <- maybe_validate_commands(parsed["commands"], has_commands) do
-          :ok
+        with :ok <- maybe_validate_packets(parsed["packets"], has_packets) do
+          maybe_validate_commands(parsed["commands"], has_commands)
         end
     end
   end
@@ -286,9 +284,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     with {:ok, _name} <- require_binary(command, "name", "command", command_index),
          {:ok, _opcode} <- optional_integer(command, "opcode"),
          :ok <- validate_hazard_shape(command, command_index),
-         :ok <- validate_command_parameters(command),
-         :ok <- validate_command_verifiers(command) do
-      :ok
+         :ok <- validate_command_parameters(command) do
+      validate_command_verifiers(command)
     end
   end
 
@@ -396,31 +393,14 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
     criteria_type = Map.get(criteria, "criteria_type", "comparison")
 
     cond do
-      criteria_type not in @supported_match_criteria_types ->
-        {:error, {:validation_error, "#{field} has unsupported criteria_type '#{criteria_type}'"}}
+      unsupported_match_criteria_type?(criteria_type) ->
+        invalid_match_criteria_type(field, criteria_type)
 
-      criteria_type == "comparison" and
-          Map.get(criteria, "comparison") not in @supported_match_comparisons ->
-        {:error,
-         {:validation_error,
-          "#{field} has unsupported comparison '#{Map.get(criteria, "comparison")}'"}}
-
-      criteria_type == "compound" and
-          Map.get(criteria, "operator") not in @supported_match_operators ->
-        {:error,
-         {:validation_error,
-          "#{field} has unsupported operator '#{Map.get(criteria, "operator")}'"}}
-
-      criteria_type == "compound" and not is_list(Map.get(criteria, "conditions", [])) ->
-        {:error, {:validation_error, "#{field} conditions must be a list"}}
+      criteria_type == "comparison" ->
+        validate_comparison_match_criteria(criteria, field)
 
       criteria_type == "compound" ->
-        Enum.reduce_while(Map.get(criteria, "conditions", []), :ok, fn nested_criteria, :ok ->
-          case validate_command_match_criteria(nested_criteria, field <> ".conditions") do
-            :ok -> {:cont, :ok}
-            {:error, _reason} = error -> {:halt, error}
-          end
-        end)
+        validate_compound_match_criteria(criteria, field)
 
       true ->
         :ok
@@ -429,6 +409,60 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
   defp validate_command_match_criteria(_criteria, field) do
     {:error, {:validation_error, "#{field} must be a map when present"}}
+  end
+
+  defp unsupported_match_criteria_type?(criteria_type) do
+    criteria_type not in @supported_match_criteria_types
+  end
+
+  defp invalid_match_criteria_type(field, criteria_type) do
+    {:error, {:validation_error, "#{field} has unsupported criteria_type '#{criteria_type}'"}}
+  end
+
+  defp validate_comparison_match_criteria(criteria, field) do
+    comparison = Map.get(criteria, "comparison")
+
+    if comparison in @supported_match_comparisons do
+      :ok
+    else
+      {:error, {:validation_error, "#{field} has unsupported comparison '#{comparison}'"}}
+    end
+  end
+
+  defp validate_compound_match_criteria(criteria, field) do
+    with :ok <- validate_compound_match_operator(criteria, field),
+         {:ok, conditions} <- validate_compound_match_conditions(criteria, field) do
+      Enum.reduce_while(conditions, :ok, fn nested_criteria, :ok ->
+        reduce_nested_match_criteria(nested_criteria, field)
+      end)
+    end
+  end
+
+  defp validate_compound_match_operator(criteria, field) do
+    operator = Map.get(criteria, "operator")
+
+    if operator in @supported_match_operators do
+      :ok
+    else
+      {:error, {:validation_error, "#{field} has unsupported operator '#{operator}'"}}
+    end
+  end
+
+  defp validate_compound_match_conditions(criteria, field) do
+    conditions = Map.get(criteria, "conditions", [])
+
+    if is_list(conditions) do
+      {:ok, conditions}
+    else
+      {:error, {:validation_error, "#{field} conditions must be a list"}}
+    end
+  end
+
+  defp reduce_nested_match_criteria(nested_criteria, field) do
+    case validate_command_match_criteria(nested_criteria, field <> ".conditions") do
+      :ok -> {:cont, :ok}
+      {:error, _reason} = error -> {:halt, error}
+    end
   end
 
   defp validate_command_parameter(command_name, parameter, parameter_index)

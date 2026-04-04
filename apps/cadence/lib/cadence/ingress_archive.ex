@@ -68,16 +68,7 @@ defmodule Cadence.IngressArchive do
         backend.persist_raw_evidences(raw_evidences)
 
       true ->
-        Enum.reduce_while(raw_evidences, :ok, fn
-          %RawEvidence{} = raw_evidence, :ok ->
-            case backend.persist_raw_evidence(raw_evidence) do
-              :ok -> {:cont, :ok}
-              {:error, reason} -> {:halt, {:error, reason}}
-            end
-
-          _other, :ok ->
-            {:halt, {:error, :invalid_raw_evidence_batch}}
-        end)
+        persist_raw_evidence_batch(backend, raw_evidences)
     end
   end
 
@@ -163,5 +154,18 @@ defmodule Cadence.IngressArchive do
       flushed_bytes_total: 0,
       avg_segment_bytes: 0.0
     }
+  end
+
+  defp persist_raw_evidence_batch(backend, raw_evidences) do
+    Enum.reduce_while(raw_evidences, :ok, fn
+      %RawEvidence{} = raw_evidence, :ok ->
+        case backend.persist_raw_evidence(raw_evidence) do
+          :ok -> {:cont, :ok}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+
+      _other, :ok ->
+        {:halt, {:error, :invalid_raw_evidence_batch}}
+    end)
   end
 end

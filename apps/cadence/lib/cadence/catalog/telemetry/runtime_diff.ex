@@ -108,24 +108,15 @@ defmodule Cadence.Catalog.Telemetry.RuntimeDiff do
                                                 {matching_count, mismatches, missing_existing} ->
         compiled_item = Map.fetch!(compiled_by_id, id)
 
-        case Map.get(existing_by_id, id) do
-          nil ->
-            {matching_count, mismatches, [normalize_fun.(compiled_item) | missing_existing]}
-
-          existing_item ->
-            compiled_normalized = normalize_fun.(compiled_item)
-            existing_normalized = normalize_fun.(existing_item)
-
-            if compiled_normalized == existing_normalized do
-              {matching_count + 1, mismatches, missing_existing}
-            else
-              {matching_count,
-               [
-                 %{id: id, compiled: compiled_normalized, existing: existing_normalized}
-                 | mismatches
-               ], missing_existing}
-            end
-        end
+        reduce_item_comparison(
+          id,
+          compiled_item,
+          existing_by_id,
+          normalize_fun,
+          matching_count,
+          mismatches,
+          missing_existing
+        )
       end)
 
     extra_existing =
@@ -140,6 +131,50 @@ defmodule Cadence.Catalog.Telemetry.RuntimeDiff do
       missing_existing: Enum.reverse(missing_existing),
       extra_existing: extra_existing
     }
+  end
+
+  defp reduce_item_comparison(
+         id,
+         compiled_item,
+         existing_by_id,
+         normalize_fun,
+         matching_count,
+         mismatches,
+         missing_existing
+       ) do
+    case Map.get(existing_by_id, id) do
+      nil ->
+        {matching_count, mismatches, [normalize_fun.(compiled_item) | missing_existing]}
+
+      existing_item ->
+        record_item_comparison(
+          id,
+          normalize_fun.(compiled_item),
+          normalize_fun.(existing_item),
+          matching_count,
+          mismatches,
+          missing_existing
+        )
+    end
+  end
+
+  defp record_item_comparison(
+         id,
+         compiled_normalized,
+         existing_normalized,
+         matching_count,
+         mismatches,
+         missing_existing
+       ) do
+    if compiled_normalized == existing_normalized do
+      {matching_count + 1, mismatches, missing_existing}
+    else
+      {matching_count,
+       [
+         %{id: id, compiled: compiled_normalized, existing: existing_normalized}
+         | mismatches
+       ], missing_existing}
+    end
   end
 
   defp binding_set_summary(%BindingSet{} = binding_set) do

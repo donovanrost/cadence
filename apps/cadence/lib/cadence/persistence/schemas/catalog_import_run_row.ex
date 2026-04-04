@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

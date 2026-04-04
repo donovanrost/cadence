@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.CommandQueueEntryRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

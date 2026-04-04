@@ -55,9 +55,8 @@ defmodule Cadence.Capabilities.Registry do
     with {:ok, family_module} <- fetch_or_error(registry, family_key),
          {:ok, descriptor} <- fetch_descriptor(registry, family_key),
          :ok <- validate_scope(descriptor, validation_context.target_scope),
-         :ok <- validate_input_stage(descriptor, validation_context.input_stage),
-         :ok <- family_module.validate_config(handler_configuration, validation_context) do
-      :ok
+         :ok <- validate_input_stage(descriptor, validation_context.input_stage) do
+      family_module.validate_config(handler_configuration, validation_context)
     end
   end
 
@@ -71,9 +70,8 @@ defmodule Cadence.Capabilities.Registry do
       when is_map(registry) and is_atom(family_key) do
     with {:ok, family_module} <- fetch_or_error(registry, family_key),
          {:ok, descriptor} <- fetch_descriptor(registry, family_key),
-         :ok <- validate_scope(descriptor, validation_context.target_scope),
-         :ok <- family_module.validate_config(runtime_configuration, validation_context) do
-      :ok
+         :ok <- validate_scope(descriptor, validation_context.target_scope) do
+      family_module.validate_config(runtime_configuration, validation_context)
     end
   end
 

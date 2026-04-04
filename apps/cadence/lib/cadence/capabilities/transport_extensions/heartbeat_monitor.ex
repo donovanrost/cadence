@@ -36,9 +36,8 @@ defmodule Cadence.Capabilities.TransportExtensions.HeartbeatMonitor do
 
   @impl true
   def validate_config(configuration, %ValidationContext{}) do
-    with {:ok, normalized_configuration} <- normalize_configuration(configuration),
-         :ok <- validate_interval(normalized_configuration.heartbeat_interval_ms) do
-      :ok
+    with {:ok, normalized_configuration} <- normalize_configuration(configuration) do
+      validate_interval(normalized_configuration.heartbeat_interval_ms)
     end
   end
 

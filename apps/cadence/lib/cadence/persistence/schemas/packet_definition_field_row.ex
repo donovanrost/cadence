@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

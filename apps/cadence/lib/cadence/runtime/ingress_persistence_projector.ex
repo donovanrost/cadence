@@ -148,41 +148,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
   def handle_info(:process_queue, state) do
     case dequeue_persist_batch(state) do
       {:ok, %ProcessedIngressBatch{} = batch, rest, batch_size} ->
-        case persist_batch(batch) do
-          :ok ->
-            next_state = %{
-              state
-              | queue: rest,
-                queue_depth: max(state.queue_depth - batch_size, 0),
-                persisted_count: state.persisted_count + batch_size,
-                last_completed_at: DateTime.utc_now(),
-                last_error: nil
-            }
-
-            if next_state.queue_depth > 0 do
-              send(self(), :process_queue)
-              {:noreply, %{next_state | processing?: true}}
-            else
-              {:noreply, %{next_state | processing?: false}}
-            end
-
-          {:error, reason} ->
-            Logger.warning(
-              "Ingress persistence projector failed for #{state.provider_binding_id}: #{inspect(reason)}"
-            )
-
-            next_state = %{
-              state
-              | queue: :queue.in_r(batch, rest),
-                failed_count: state.failed_count + 1,
-                last_completed_at: DateTime.utc_now(),
-                last_error: inspect(reason),
-                processing?: true
-            }
-
-            Process.send_after(self(), :process_queue, state.retry_delay_ms)
-            {:noreply, next_state}
-        end
+        handle_dequeued_persist_batch(state, batch, rest, batch_size)
 
       :empty ->
         {:noreply, %{state | queue_depth: 0, processing?: false}}
@@ -200,14 +166,7 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
       run_persistence(fn ->
         raw_evidence = first_raw_evidence(processing_results)
 
-        TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
-          TelemetryProfiler.with_stage(:persistence, fn ->
-            Cadence.Persistence.persist_processing_results(
-              processing_results,
-              record_current_values?: not Cadence.Telemetry.CurrentValueStore.hot_path_safe?()
-            )
-          end)
-        end)
+        persist_processing_results(raw_evidence, processing_results)
       end)
 
     case result do
@@ -234,6 +193,63 @@ defmodule Cadence.Runtime.IngressPersistenceProjector do
     do: raw_evidence
 
   defp first_raw_evidence([]), do: raise(ArgumentError, "processed ingress batch is empty")
+
+  defp handle_dequeued_persist_batch(state, %ProcessedIngressBatch{} = batch, rest, batch_size) do
+    case persist_batch(batch) do
+      :ok ->
+        next_state = %{
+          state
+          | queue: rest,
+            queue_depth: max(state.queue_depth - batch_size, 0),
+            persisted_count: state.persisted_count + batch_size,
+            last_completed_at: DateTime.utc_now(),
+            last_error: nil
+        }
+
+        continue_processing_queue(next_state)
+
+      {:error, reason} ->
+        Logger.warning(
+          "Ingress persistence projector failed for #{state.provider_binding_id}: #{inspect(reason)}"
+        )
+
+        next_state = %{
+          state
+          | queue: :queue.in_r(batch, rest),
+            failed_count: state.failed_count + 1,
+            last_completed_at: DateTime.utc_now(),
+            last_error: inspect(reason),
+            processing?: true
+        }
+
+        Process.send_after(self(), :process_queue, state.retry_delay_ms)
+        {:noreply, next_state}
+    end
+  end
+
+  defp continue_processing_queue(next_state) do
+    if next_state.queue_depth > 0 do
+      send(self(), :process_queue)
+      {:noreply, %{next_state | processing?: true}}
+    else
+      {:noreply, %{next_state | processing?: false}}
+    end
+  end
+
+  defp persist_processing_results(%RawEvidence{} = raw_evidence, processing_results) do
+    TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
+      persist_processing_results_with_stage(processing_results)
+    end)
+  end
+
+  defp persist_processing_results_with_stage(processing_results) do
+    TelemetryProfiler.with_stage(:persistence, fn ->
+      Cadence.Persistence.persist_processing_results(
+        processing_results,
+        record_current_values?: not Cadence.Telemetry.CurrentValueStore.hot_path_safe?()
+      )
+    end)
+  end
 
   defp elapsed_us(started_at),
     do: System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)

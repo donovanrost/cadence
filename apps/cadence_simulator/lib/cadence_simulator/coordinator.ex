@@ -288,55 +288,7 @@ defmodule CadenceSimulator.Coordinator do
 
   @impl true
   def handle_call(:stats, _from, state) do
-    base_stats = %{
-      target_id: state.target_id,
-      provider: state.provider_module,
-      rate_hz: state.rate_hz,
-      metrics_sample_rate: state.metrics_sample_rate,
-      interval_ms: state.interval_ms,
-      steps_per_tick: state.steps_per_tick,
-      step: state.step,
-      packet_count: state.packet_count,
-      frame: state.frame,
-      output: state.output,
-      parallel_mode: state.parallel_mode,
-      simulator_metrics: SimulatorMetrics.snapshot(state.metrics_id),
-      send_buffer_stats: %{
-        packets_buffered: state.send_buffer_queue_len || 0,
-        buffer_bytes: state.send_buffer_backlog_bytes || 0,
-        packets_sent: state.send_buffer_packets_sent || 0,
-        bytes_sent: state.send_buffer_bytes_sent || 0,
-        flushes: state.send_buffer_flushes || 0
-      }
-    }
-
-    stats =
-      case state.parallel_mode do
-        :parallel ->
-          Map.merge(base_stats, %{
-            generator_count: length(state.generator_pool || []),
-            in_flight_steps: state.in_flight_steps,
-            max_in_flight_steps: state.max_in_flight_steps,
-            dispatch_batch_floor: state.dispatch_batch_floor,
-            dispatch_batch_ceiling: state.dispatch_batch_ceiling,
-            pending_steps: state.pending_steps,
-            next_step: state.next_step,
-            send_buffer_backpressure_mode: state.send_buffer_backpressure_mode,
-            max_send_buffer_queue: state.max_send_buffer_queue,
-            max_send_buffer_backlog_bytes: state.max_send_buffer_backlog_bytes,
-            send_buffer_queue_len: state.send_buffer_queue_len,
-            send_buffer_backlog_bytes: state.send_buffer_backlog_bytes,
-            backpressure_events: state.backpressure_events,
-            parallel_delivery_mode: state.parallel_delivery_mode,
-            next_emit_step: state.next_emit_step,
-            completed_batch_count: map_size(state.completed_batches || %{})
-          })
-
-        :sequential ->
-          base_stats
-      end
-
-    {:reply, stats, state}
+    {:reply, stats_snapshot(state), state}
   end
 
   def handle_call({:set_rate, rate_hz}, _from, state) when is_number(rate_hz) do
@@ -357,6 +309,67 @@ defmodule CadenceSimulator.Coordinator do
     else
       {:reply, {:error, :invalid_rate_hz}, state}
     end
+  end
+
+  defp stats_snapshot(state) do
+    state
+    |> base_stats()
+    |> maybe_merge_parallel_stats(state)
+  end
+
+  defp base_stats(state) do
+    %{
+      target_id: state.target_id,
+      provider: state.provider_module,
+      rate_hz: state.rate_hz,
+      metrics_sample_rate: state.metrics_sample_rate,
+      interval_ms: state.interval_ms,
+      steps_per_tick: state.steps_per_tick,
+      step: state.step,
+      packet_count: state.packet_count,
+      frame: state.frame,
+      output: state.output,
+      parallel_mode: state.parallel_mode,
+      simulator_metrics: SimulatorMetrics.snapshot(state.metrics_id),
+      send_buffer_stats: send_buffer_stats(state)
+    }
+  end
+
+  defp send_buffer_stats(state) do
+    %{
+      packets_buffered: state.send_buffer_queue_len || 0,
+      buffer_bytes: state.send_buffer_backlog_bytes || 0,
+      packets_sent: state.send_buffer_packets_sent || 0,
+      bytes_sent: state.send_buffer_bytes_sent || 0,
+      flushes: state.send_buffer_flushes || 0
+    }
+  end
+
+  defp maybe_merge_parallel_stats(base_stats, %{parallel_mode: :parallel} = state) do
+    Map.merge(base_stats, parallel_stats(state))
+  end
+
+  defp maybe_merge_parallel_stats(base_stats, _state), do: base_stats
+
+  defp parallel_stats(state) do
+    %{
+      generator_count: length(state.generator_pool || []),
+      in_flight_steps: state.in_flight_steps,
+      max_in_flight_steps: state.max_in_flight_steps,
+      dispatch_batch_floor: state.dispatch_batch_floor,
+      dispatch_batch_ceiling: state.dispatch_batch_ceiling,
+      pending_steps: state.pending_steps,
+      next_step: state.next_step,
+      send_buffer_backpressure_mode: state.send_buffer_backpressure_mode,
+      max_send_buffer_queue: state.max_send_buffer_queue,
+      max_send_buffer_backlog_bytes: state.max_send_buffer_backlog_bytes,
+      send_buffer_queue_len: state.send_buffer_queue_len,
+      send_buffer_backlog_bytes: state.send_buffer_backlog_bytes,
+      backpressure_events: state.backpressure_events,
+      parallel_delivery_mode: state.parallel_delivery_mode,
+      next_emit_step: state.next_emit_step,
+      completed_batch_count: map_size(state.completed_batches || %{})
+    }
   end
 
   @impl true
@@ -443,47 +456,15 @@ defmodule CadenceSimulator.Coordinator do
 
       case generate_packets_for_step(acc_state, acc_state.step) do
         {:ok, packets, next_generation_state} ->
-          next_generation_state = %{next_generation_state | step: next_generation_state.step + 1}
-
-          if generation_sample? do
-            SimulatorMetrics.record_timing(
-              next_generation_state.metrics_id,
-              :generation,
-              System.monotonic_time(:microsecond) - generation_start
-            )
-          end
-
-          framing_start =
-            if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
-
-          {framed_outputs, framed_bytes, next_state} =
-            Enum.reduce(
-              packets,
-              {[], 0, next_generation_state},
-              fn {_name, packet}, {packet_acc, packet_bytes, packet_state} ->
-                {output_binary, updated_packet_state} = encode_output(packet_state, packet)
-
-                {[output_binary | packet_acc], packet_bytes + byte_size(output_binary),
-                 updated_packet_state}
-              end
-            )
-
-          if generation_sample? do
-            SimulatorMetrics.record_timing(
-              acc_state.metrics_id,
-              :framing,
-              System.monotonic_time(:microsecond) - framing_start
-            )
-          end
-
-          {
-            :lists.reverse(framed_outputs, outputs_acc),
-            bytes_acc + framed_bytes,
-            %{
-              next_state
-              | packet_count: next_state.packet_count + length(packets)
-            }
-          }
+          append_generated_step_outputs(
+            packets,
+            next_generation_state,
+            generation_sample?,
+            generation_start,
+            outputs_acc,
+            bytes_acc,
+            acc_state
+          )
 
         {:error, reason, next_generation_state} ->
           Logger.warning("Simulator provider error at step #{acc_state.step}: #{inspect(reason)}")
@@ -492,6 +473,70 @@ defmodule CadenceSimulator.Coordinator do
            %{next_generation_state | step: next_generation_state.step + 1}}
       end
     end)
+  end
+
+  defp append_generated_step_outputs(
+         packets,
+         next_generation_state,
+         generation_sample?,
+         generation_start,
+         outputs_acc,
+         bytes_acc,
+         acc_state
+       ) do
+    next_generation_state = %{next_generation_state | step: next_generation_state.step + 1}
+
+    maybe_record_generation_timing(
+      generation_sample?,
+      next_generation_state.metrics_id,
+      generation_start
+    )
+
+    framing_start =
+      if generation_sample?, do: System.monotonic_time(:microsecond), else: nil
+
+    {framed_outputs, framed_bytes, next_state} =
+      Enum.reduce(
+        packets,
+        {[], 0, next_generation_state},
+        fn {_name, packet}, {packet_acc, packet_bytes, packet_state} ->
+          {output_binary, updated_packet_state} = encode_output(packet_state, packet)
+
+          {[output_binary | packet_acc], packet_bytes + byte_size(output_binary),
+           updated_packet_state}
+        end
+      )
+
+    maybe_record_framing_timing(generation_sample?, acc_state.metrics_id, framing_start)
+
+    {
+      :lists.reverse(framed_outputs, outputs_acc),
+      bytes_acc + framed_bytes,
+      %{
+        next_state
+        | packet_count: next_state.packet_count + length(packets)
+      }
+    }
+  end
+
+  defp maybe_record_generation_timing(false, _metrics_id, _generation_start), do: :ok
+
+  defp maybe_record_generation_timing(true, metrics_id, generation_start) do
+    SimulatorMetrics.record_timing(
+      metrics_id,
+      :generation,
+      System.monotonic_time(:microsecond) - generation_start
+    )
+  end
+
+  defp maybe_record_framing_timing(false, _metrics_id, _framing_start), do: :ok
+
+  defp maybe_record_framing_timing(true, metrics_id, framing_start) do
+    SimulatorMetrics.record_timing(
+      metrics_id,
+      :framing,
+      System.monotonic_time(:microsecond) - framing_start
+    )
   end
 
   defp generate_packets_for_step(%{packet_value_provider?: true} = state, step) do

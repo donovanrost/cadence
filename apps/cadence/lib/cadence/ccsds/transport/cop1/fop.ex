@@ -104,23 +104,21 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
       state = update_flags(state, clcw)
 
       transition =
-        cond do
-          state.lockout ->
-            cancel_timeout_seqs =
-              current_release_frame_seqs(state.in_flight_release)
+        if state.lockout do
+          cancel_timeout_seqs =
+            current_release_frame_seqs(state.in_flight_release)
 
-            %{
-              state: %{state | in_flight_release: nil},
-              transmit_frames: [],
-              schedule_timeout_seqs: [],
-              cancel_timeout_seqs: cancel_timeout_seqs,
-              signal: nil
-            }
-
-          true ->
-            state
-            |> apply_report_value(clcw.report_value)
-            |> maybe_retransmit(clcw)
+          %{
+            state: %{state | in_flight_release: nil},
+            transmit_frames: [],
+            schedule_timeout_seqs: [],
+            cancel_timeout_seqs: cancel_timeout_seqs,
+            signal: nil
+          }
+        else
+          state
+          |> apply_report_value(clcw.report_value)
+          |> maybe_retransmit(clcw)
         end
 
       {:ok, transition}
@@ -134,51 +132,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
         {:ok, no_op(state)}
 
       %{frames: frames} = release ->
-        case Enum.find(frames, &(&1.seq == seq)) do
-          nil ->
-            {:ok, no_op(state)}
-
-          frame ->
-            cond do
-              state.wait ->
-                {:ok,
-                 %{
-                   state: state,
-                   transmit_frames: [],
-                   schedule_timeout_seqs: [seq],
-                   cancel_timeout_seqs: [],
-                   signal: nil
-                 }}
-
-              frame.retries >= state.max_retransmit ->
-                cancel_timeout_seqs = current_release_frame_seqs(release)
-
-                {:ok,
-                 %{
-                   state: %{state | lockout: true, in_flight_release: nil},
-                   transmit_frames: [],
-                   schedule_timeout_seqs: [],
-                   cancel_timeout_seqs: cancel_timeout_seqs,
-                   signal: nil
-                 }}
-
-              true ->
-                updated_release = update_release_frame_retry(release, seq)
-
-                retransmit_frame =
-                  updated_release.frames
-                  |> Enum.find(&(&1.seq == seq))
-
-                {:ok,
-                 %{
-                   state: %{state | in_flight_release: updated_release},
-                   transmit_frames: [retransmit_frame],
-                   schedule_timeout_seqs: [seq],
-                   cancel_timeout_seqs: [],
-                   signal: nil
-                 }}
-            end
-        end
+        handle_release_timeout(state, release, frames, seq)
     end
   end
 
@@ -205,31 +159,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
 
       %{frames: frames} = release ->
         if valid_report_value?(state, report_value) do
-          oldest = hd(frames)
-          ack_distance = seq_distance(oldest.seq, report_value)
-          {acked, remaining} = Enum.split(frames, ack_distance + 1)
-          updated_state = %{state | last_report_value: report_value}
-          cancel_timeout_seqs = Enum.map(acked, & &1.seq)
-
-          case remaining do
-            [] ->
-              %{
-                state: %{updated_state | in_flight_release: nil},
-                transmit_frames: [],
-                schedule_timeout_seqs: [],
-                cancel_timeout_seqs: cancel_timeout_seqs,
-                signal: {:completion, release.metadata}
-              }
-
-            _ ->
-              %{
-                state: %{updated_state | in_flight_release: %{release | frames: remaining}},
-                transmit_frames: [],
-                schedule_timeout_seqs: [],
-                cancel_timeout_seqs: cancel_timeout_seqs,
-                signal: nil
-              }
-          end
+          apply_valid_report_value(state, release, frames, report_value)
         else
           no_op(state)
         end
@@ -280,17 +210,107 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
   end
 
   defp update_release_frame_retry(%{frames: frames} = release, seq) do
-    updated_frames =
-      Enum.map(frames, fn frame ->
-        if frame.seq == seq do
-          Map.update!(frame, :retries, fn retries -> retries + 1 end)
-        else
-          frame
-        end
-      end)
+    updated_frames = Enum.map(frames, &increment_frame_retry(&1, seq))
 
     %{release | frames: updated_frames}
   end
+
+  defp handle_release_timeout(%__MODULE__{} = state, release, frames, seq) do
+    case Enum.find(frames, &(&1.seq == seq)) do
+      nil ->
+        {:ok, no_op(state)}
+
+      frame ->
+        handle_timeout_frame(state, release, frame, seq)
+    end
+  end
+
+  defp handle_timeout_frame(%__MODULE__{} = state, release, frame, seq) do
+    case timeout_frame_action(state, frame) do
+      :wait ->
+        {:ok,
+         %{
+           state: state,
+           transmit_frames: [],
+           schedule_timeout_seqs: [seq],
+           cancel_timeout_seqs: [],
+           signal: nil
+         }}
+
+      :lockout ->
+        cancel_timeout_seqs = current_release_frame_seqs(release)
+
+        {:ok,
+         %{
+           state: %{state | lockout: true, in_flight_release: nil},
+           transmit_frames: [],
+           schedule_timeout_seqs: [],
+           cancel_timeout_seqs: cancel_timeout_seqs,
+           signal: nil
+         }}
+
+      :retransmit ->
+        updated_release = update_release_frame_retry(release, seq)
+        retransmit_frame = Enum.find(updated_release.frames, &(&1.seq == seq))
+
+        {:ok,
+         %{
+           state: %{state | in_flight_release: updated_release},
+           transmit_frames: [retransmit_frame],
+           schedule_timeout_seqs: [seq],
+           cancel_timeout_seqs: [],
+           signal: nil
+         }}
+    end
+  end
+
+  defp timeout_frame_action(%__MODULE__{wait: true}, _frame), do: :wait
+
+  defp timeout_frame_action(%__MODULE__{max_retransmit: max_retransmit}, %{retries: retries})
+       when retries >= max_retransmit,
+       do: :lockout
+
+  defp timeout_frame_action(%__MODULE__{}, _frame), do: :retransmit
+
+  defp apply_valid_report_value(
+         %__MODULE__{} = state,
+         release,
+         [oldest | _] = frames,
+         report_value
+       ) do
+    ack_distance = seq_distance(oldest.seq, report_value)
+    {acked, remaining} = Enum.split(frames, ack_distance + 1)
+    updated_state = %{state | last_report_value: report_value}
+    cancel_timeout_seqs = Enum.map(acked, & &1.seq)
+
+    build_ack_transition(updated_state, release, remaining, cancel_timeout_seqs)
+  end
+
+  defp build_ack_transition(updated_state, release, [], cancel_timeout_seqs) do
+    %{
+      state: %{updated_state | in_flight_release: nil},
+      transmit_frames: [],
+      schedule_timeout_seqs: [],
+      cancel_timeout_seqs: cancel_timeout_seqs,
+      signal: {:completion, release.metadata}
+    }
+  end
+
+  defp build_ack_transition(updated_state, release, remaining, cancel_timeout_seqs) do
+    %{
+      state: %{updated_state | in_flight_release: %{release | frames: remaining}},
+      transmit_frames: [],
+      schedule_timeout_seqs: [],
+      cancel_timeout_seqs: cancel_timeout_seqs,
+      signal: nil
+    }
+  end
+
+  defp increment_frame_retry(%{seq: seq} = frame, seq) do
+    Map.update!(frame, :retries, fn retries -> retries + 1 end)
+  end
+
+  defp increment_frame_retry(frame, _seq), do: frame
 
   defp current_release_frame_seqs(nil), do: []
   defp current_release_frame_seqs(%{frames: frames}), do: Enum.map(frames, & &1.seq)

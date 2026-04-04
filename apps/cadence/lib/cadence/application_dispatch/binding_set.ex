@@ -95,17 +95,26 @@ defmodule Cadence.ApplicationDispatch.BindingSet do
             })
 
           updated_rule = %BindingRule{rule | capability_instance_id: capability_instance_id}
-
-          if MapSet.member?(seen_ids, capability_instance_id) do
-            {updated_rule, {seen_ids, acc}}
-          else
-            {updated_rule,
-             {MapSet.put(seen_ids, capability_instance_id), acc ++ [capability_instance]}}
-          end
+          maybe_add_implicit_capability_instance(updated_rule, capability_instance, seen_ids, acc)
       end
     end)
     |> then(fn {updated_rules, {_seen_ids, implicit_capability_instances}} ->
       {updated_rules, implicit_capability_instances}
     end)
+  end
+
+  defp maybe_add_implicit_capability_instance(
+         %BindingRule{} = updated_rule,
+         %CapabilityInstance{} = capability_instance,
+         seen_ids,
+         acc
+       ) do
+    capability_instance_id = capability_instance.capability_instance_id
+
+    if MapSet.member?(seen_ids, capability_instance_id) do
+      {updated_rule, {seen_ids, acc}}
+    else
+      {updated_rule, {MapSet.put(seen_ids, capability_instance_id), acc ++ [capability_instance]}}
+    end
   end
 end

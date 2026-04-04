@@ -375,17 +375,18 @@ defmodule Cadence.Runtime.PathCoordinator do
 
   defp collect_provider_runtime_snapshots(state) do
     Enum.reduce_while(state.path.provider_bindings, {:ok, []}, fn provider_binding, {:ok, acc} ->
-      with {:ok, snapshot} <-
-             ProviderAdapters.snapshot(
-               state.mission_id,
-               state.realized_contact_id,
-               state.path.path_id,
-               provider_binding.provider_binding_id,
-               provider_binding.adapter_key
-             ) do
-        {:cont, {:ok, acc ++ [snapshot]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
+      case ProviderAdapters.snapshot(
+             state.mission_id,
+             state.realized_contact_id,
+             state.path.path_id,
+             provider_binding.provider_binding_id,
+             provider_binding.adapter_key
+           ) do
+        {:ok, snapshot} ->
+          {:cont, {:ok, acc ++ [snapshot]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
   end

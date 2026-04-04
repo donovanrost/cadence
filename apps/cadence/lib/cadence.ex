@@ -639,9 +639,8 @@ defmodule Cadence do
   @spec process_telemetry_ingress(RawEvidence.t()) ::
           {:ok, processing_result()} | {:error, term()}
   def process_telemetry_ingress(%RawEvidence{} = raw_evidence) do
-    with {:ok, %RawEvidence{} = resolved_raw_evidence} <- resolve_raw_evidence(raw_evidence),
-         {:ok, processing_result} <- Runtime.process_telemetry_ingress(resolved_raw_evidence) do
-      {:ok, processing_result}
+    with {:ok, %RawEvidence{} = resolved_raw_evidence} <- resolve_raw_evidence(raw_evidence) do
+      Runtime.process_telemetry_ingress(resolved_raw_evidence)
     end
   end
 
@@ -651,9 +650,8 @@ defmodule Cadence do
         %RawEvidence{} = raw_evidence,
         %BindingSet{} = binding_set
       ) do
-    with {:ok, processing_result} <- process_telemetry_ingress(raw_evidence, binding_set),
-         {:ok, persisted_result} <- Persistence.persist_processing_result(processing_result) do
-      {:ok, persisted_result}
+    with {:ok, processing_result} <- process_telemetry_ingress(raw_evidence, binding_set) do
+      Persistence.persist_processing_result(processing_result)
     end
   end
 
@@ -661,9 +659,8 @@ defmodule Cadence do
           {:ok, processing_result()} | {:error, term()}
   def process_and_persist_telemetry_ingress(%RawEvidence{} = raw_evidence, binding_set_id)
       when is_binary(binding_set_id) do
-    with {:ok, processing_result} <- process_telemetry_ingress(raw_evidence, binding_set_id),
-         {:ok, persisted_result} <- Persistence.persist_processing_result(processing_result) do
-      {:ok, persisted_result}
+    with {:ok, processing_result} <- process_telemetry_ingress(raw_evidence, binding_set_id) do
+      Persistence.persist_processing_result(processing_result)
     end
   end
 
@@ -676,9 +673,8 @@ defmodule Cadence do
       )
       when is_binary(binding_set_id) and is_integer(version) and version > 0 do
     with {:ok, processing_result} <-
-           process_telemetry_ingress(raw_evidence, binding_set_id, version),
-         {:ok, persisted_result} <- Persistence.persist_processing_result(processing_result) do
-      {:ok, persisted_result}
+           process_telemetry_ingress(raw_evidence, binding_set_id, version) do
+      Persistence.persist_processing_result(processing_result)
     end
   end
 
@@ -697,53 +693,7 @@ defmodule Cadence do
 
       case resolve_result do
         {:ok, %RawEvidence{} = resolved_raw_evidence} ->
-          runtime_started_at = System.monotonic_time()
-
-          runtime_result =
-            TelemetryProfiler.with_stage(:runtime, fn ->
-              Runtime.process_telemetry_ingress(resolved_raw_evidence)
-            end)
-
-          runtime_us = elapsed_us(runtime_started_at)
-
-          case runtime_result do
-            {:ok, processing_result} ->
-              persistence_started_at = System.monotonic_time()
-
-              persistence_result =
-                TelemetryProfiler.with_stage(:persistence, fn ->
-                  Persistence.persist_processing_result(processing_result)
-                end)
-
-              persistence_us = elapsed_us(persistence_started_at)
-              end_to_end_us = elapsed_us(ingress_started_at)
-
-              TelemetryProfiler.record_ingress_result(
-                resolved_raw_evidence,
-                resolve_us: resolve_us,
-                runtime_us: runtime_us,
-                persistence_us: persistence_us,
-                end_to_end_us: end_to_end_us,
-                error?: match?({:error, _reason}, persistence_result),
-                processing_result: processing_result
-              )
-
-              case persistence_result do
-                {:ok, persisted_result} -> {:ok, persisted_result}
-                {:error, reason} -> {:error, reason}
-              end
-
-            {:error, reason} ->
-              TelemetryProfiler.record_ingress_result(
-                resolved_raw_evidence,
-                resolve_us: resolve_us,
-                runtime_us: runtime_us,
-                end_to_end_us: elapsed_us(ingress_started_at),
-                error?: true
-              )
-
-              {:error, reason}
-          end
+          handle_resolved_ingress(resolved_raw_evidence, ingress_started_at, resolve_us)
 
         {:error, reason} ->
           TelemetryProfiler.record_ingress_result(
@@ -757,6 +707,76 @@ defmodule Cadence do
       end
     end)
   end
+
+  defp handle_resolved_ingress(
+         %RawEvidence{} = resolved_raw_evidence,
+         ingress_started_at,
+         resolve_us
+       ) do
+    runtime_started_at = System.monotonic_time()
+
+    runtime_result =
+      TelemetryProfiler.with_stage(:runtime, fn ->
+        Runtime.process_telemetry_ingress(resolved_raw_evidence)
+      end)
+
+    runtime_us = elapsed_us(runtime_started_at)
+
+    case runtime_result do
+      {:ok, processing_result} ->
+        finalize_persisted_ingress(
+          resolved_raw_evidence,
+          processing_result,
+          ingress_started_at,
+          resolve_us,
+          runtime_us
+        )
+
+      {:error, reason} ->
+        TelemetryProfiler.record_ingress_result(
+          resolved_raw_evidence,
+          resolve_us: resolve_us,
+          runtime_us: runtime_us,
+          end_to_end_us: elapsed_us(ingress_started_at),
+          error?: true
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp finalize_persisted_ingress(
+         %RawEvidence{} = resolved_raw_evidence,
+         processing_result,
+         ingress_started_at,
+         resolve_us,
+         runtime_us
+       ) do
+    persistence_started_at = System.monotonic_time()
+
+    persistence_result =
+      TelemetryProfiler.with_stage(:persistence, fn ->
+        Persistence.persist_processing_result(processing_result)
+      end)
+
+    persistence_us = elapsed_us(persistence_started_at)
+    end_to_end_us = elapsed_us(ingress_started_at)
+
+    TelemetryProfiler.record_ingress_result(
+      resolved_raw_evidence,
+      resolve_us: resolve_us,
+      runtime_us: runtime_us,
+      persistence_us: persistence_us,
+      end_to_end_us: end_to_end_us,
+      error?: match?({:error, _reason}, persistence_result),
+      processing_result: processing_result
+    )
+
+    normalize_persistence_result(persistence_result)
+  end
+
+  defp normalize_persistence_result({:ok, persisted_result}), do: {:ok, persisted_result}
+  defp normalize_persistence_result({:error, reason}), do: {:error, reason}
 
   @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
           {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}

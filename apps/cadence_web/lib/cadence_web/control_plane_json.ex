@@ -762,46 +762,35 @@ defmodule CadenceWeb.ControlPlaneJSON do
   @spec realized_contact_runtime_snapshot(map()) :: map()
   def realized_contact_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{
-      realized_contact_id: snapshot[:realized_contact_id] || snapshot["realized_contact_id"],
-      mission_id: snapshot[:mission_id] || snapshot["mission_id"],
-      source_endpoint_refs:
-        snapshot[:source_endpoint_refs] || snapshot["source_endpoint_refs"] || [],
-      clock_mode: maybe_atom_to_string(snapshot[:clock_mode] || snapshot["clock_mode"]),
-      initial_time: iso8601(snapshot[:initial_time] || snapshot["initial_time"]),
-      metadata: json_value(snapshot[:metadata] || snapshot["metadata"] || %{}),
-      path_count: snapshot[:path_count] || snapshot["path_count"] || 0,
-      paths: Enum.map(snapshot[:paths] || snapshot["paths"] || [], &path_runtime_snapshot/1),
-      downlink_combiner:
-        json_value(snapshot[:downlink_combiner] || snapshot["downlink_combiner"] || %{})
+      realized_contact_id: snapshot_value(snapshot, :realized_contact_id),
+      mission_id: snapshot_value(snapshot, :mission_id),
+      source_endpoint_refs: snapshot_value(snapshot, :source_endpoint_refs, []),
+      clock_mode: snapshot_atom_string(snapshot, :clock_mode),
+      initial_time: snapshot_iso8601(snapshot, :initial_time),
+      metadata: snapshot_json(snapshot, :metadata, %{}),
+      path_count: snapshot_value(snapshot, :path_count, 0),
+      paths: snapshot_list(snapshot, :paths, &path_runtime_snapshot/1),
+      downlink_combiner: snapshot_json(snapshot, :downlink_combiner, %{})
     }
   end
 
   @spec path_runtime_snapshot(map()) :: map()
   def path_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{
-      realized_contact_id: snapshot[:realized_contact_id] || snapshot["realized_contact_id"],
-      mission_id: snapshot[:mission_id] || snapshot["mission_id"],
-      path_id: snapshot[:path_id] || snapshot["path_id"],
-      direction: maybe_atom_to_string(snapshot[:direction] || snapshot["direction"]),
-      selection_role:
-        maybe_atom_to_string(snapshot[:selection_role] || snapshot["selection_role"]),
-      source_endpoint_ref: snapshot[:source_endpoint_ref] || snapshot["source_endpoint_ref"],
-      provider_path_ref: snapshot[:provider_path_ref] || snapshot["provider_path_ref"],
-      metadata: json_value(snapshot[:metadata] || snapshot["metadata"] || %{}),
-      provider_runtime_count:
-        snapshot[:provider_runtime_count] || snapshot["provider_runtime_count"] || 0,
+      realized_contact_id: snapshot_value(snapshot, :realized_contact_id),
+      mission_id: snapshot_value(snapshot, :mission_id),
+      path_id: snapshot_value(snapshot, :path_id),
+      direction: snapshot_atom_string(snapshot, :direction),
+      selection_role: snapshot_atom_string(snapshot, :selection_role),
+      source_endpoint_ref: snapshot_value(snapshot, :source_endpoint_ref),
+      provider_path_ref: snapshot_value(snapshot, :provider_path_ref),
+      metadata: snapshot_json(snapshot, :metadata, %{}),
+      provider_runtime_count: snapshot_value(snapshot, :provider_runtime_count, 0),
       provider_runtimes:
-        Enum.map(
-          snapshot[:provider_runtimes] || snapshot["provider_runtimes"] || [],
-          &provider_runtime_snapshot/1
-        ),
-      transport_runtime_count:
-        snapshot[:transport_runtime_count] || snapshot["transport_runtime_count"] || 0,
+        snapshot_list(snapshot, :provider_runtimes, &provider_runtime_snapshot/1),
+      transport_runtime_count: snapshot_value(snapshot, :transport_runtime_count, 0),
       transport_runtimes:
-        Enum.map(
-          snapshot[:transport_runtimes] || snapshot["transport_runtimes"] || [],
-          &transport_runtime_snapshot/1
-        )
+        snapshot_list(snapshot, :transport_runtimes, &transport_runtime_snapshot/1)
     }
   end
 
@@ -1110,57 +1099,48 @@ defmodule CadenceWeb.ControlPlaneJSON do
 
   defp provider_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{
-      provider_binding_id: snapshot[:provider_binding_id] || snapshot["provider_binding_id"],
-      adapter_key: maybe_atom_to_string(snapshot[:adapter_key] || snapshot["adapter_key"]),
-      direction: maybe_atom_to_string(snapshot[:direction] || snapshot["direction"]),
-      mode: maybe_atom_to_string(snapshot[:mode] || snapshot["mode"]),
-      host: snapshot[:host] || snapshot["host"],
-      configured_port: snapshot[:configured_port] || snapshot["configured_port"],
-      port: snapshot[:port] || snapshot["port"],
-      connected?: snapshot[:connected?] || snapshot["connected?"] || false,
-      ingress_protocol_family:
-        maybe_atom_to_string(
-          snapshot[:ingress_protocol_family] || snapshot["ingress_protocol_family"]
-        ),
-      fixed_message_bytes: snapshot[:fixed_message_bytes] || snapshot["fixed_message_bytes"],
-      ingress_transport_binding_id:
-        snapshot[:ingress_transport_binding_id] || snapshot["ingress_transport_binding_id"],
-      source_ref: snapshot[:source_ref] || snapshot["source_ref"],
-      ingress_metadata:
-        json_value(snapshot[:ingress_metadata] || snapshot["ingress_metadata"] || %{}),
-      uplink_bytes_sent: snapshot[:uplink_bytes_sent] || snapshot["uplink_bytes_sent"] || 0,
-      uplink_payload_count:
-        snapshot[:uplink_payload_count] || snapshot["uplink_payload_count"] || 0,
-      downlink_bytes_received:
-        snapshot[:downlink_bytes_received] || snapshot["downlink_bytes_received"] || 0,
-      downlink_message_count:
-        snapshot[:downlink_message_count] || snapshot["downlink_message_count"] || 0,
-      last_delivery_at: iso8601(snapshot[:last_delivery_at] || snapshot["last_delivery_at"]),
-      last_ingress_at: iso8601(snapshot[:last_ingress_at] || snapshot["last_ingress_at"]),
-      last_ingress_error: snapshot[:last_ingress_error] || snapshot["last_ingress_error"]
+      provider_binding_id: snapshot_value(snapshot, :provider_binding_id),
+      adapter_key: snapshot_atom_string(snapshot, :adapter_key),
+      direction: snapshot_atom_string(snapshot, :direction),
+      mode: snapshot_atom_string(snapshot, :mode),
+      host: snapshot_value(snapshot, :host),
+      configured_port: snapshot_value(snapshot, :configured_port),
+      port: snapshot_value(snapshot, :port),
+      connected?: snapshot_value(snapshot, :connected?, false),
+      ingress_protocol_family: snapshot_atom_string(snapshot, :ingress_protocol_family),
+      fixed_message_bytes: snapshot_value(snapshot, :fixed_message_bytes),
+      ingress_transport_binding_id: snapshot_value(snapshot, :ingress_transport_binding_id),
+      source_ref: snapshot_value(snapshot, :source_ref),
+      ingress_metadata: snapshot_json(snapshot, :ingress_metadata, %{}),
+      uplink_bytes_sent: snapshot_value(snapshot, :uplink_bytes_sent, 0),
+      uplink_payload_count: snapshot_value(snapshot, :uplink_payload_count, 0),
+      downlink_bytes_received: snapshot_value(snapshot, :downlink_bytes_received, 0),
+      downlink_message_count: snapshot_value(snapshot, :downlink_message_count, 0),
+      last_delivery_at: snapshot_iso8601(snapshot, :last_delivery_at),
+      last_ingress_at: snapshot_iso8601(snapshot, :last_ingress_at),
+      last_ingress_error: snapshot_value(snapshot, :last_ingress_error)
     }
   end
 
   defp transport_runtime_snapshot(snapshot) when is_map(snapshot) do
     %{
-      mission_id: snapshot[:mission_id] || snapshot["mission_id"],
-      realized_contact_id: snapshot[:realized_contact_id] || snapshot["realized_contact_id"],
-      path_id: snapshot[:path_id] || snapshot["path_id"],
-      activation_id: snapshot[:activation_id] || snapshot["activation_id"],
-      binding_set_id: snapshot[:binding_set_id] || snapshot["binding_set_id"],
-      binding_set_version: snapshot[:binding_set_version] || snapshot["binding_set_version"],
-      capability_instance_id:
-        snapshot[:capability_instance_id] || snapshot["capability_instance_id"],
-      family_key: maybe_atom_to_string(snapshot[:family_key] || snapshot["family_key"]),
-      scope_ref: snapshot[:scope_ref] || snapshot["scope_ref"],
-      partition_key: snapshot[:partition_key] || snapshot["partition_key"],
-      clock_mode: maybe_atom_to_string(snapshot[:clock_mode] || snapshot["clock_mode"]),
-      current_time: iso8601(snapshot[:current_time] || snapshot["current_time"]),
-      timer_count: snapshot[:timer_count] || snapshot["timer_count"] || 0,
-      timers: json_value(snapshot[:timers] || snapshot["timers"] || []),
-      state: json_value(snapshot[:state] || snapshot["state"] || %{}),
-      output_count: snapshot[:output_count] || snapshot["output_count"] || 0,
-      outputs: json_value(snapshot[:outputs] || snapshot["outputs"] || [])
+      mission_id: snapshot_value(snapshot, :mission_id),
+      realized_contact_id: snapshot_value(snapshot, :realized_contact_id),
+      path_id: snapshot_value(snapshot, :path_id),
+      activation_id: snapshot_value(snapshot, :activation_id),
+      binding_set_id: snapshot_value(snapshot, :binding_set_id),
+      binding_set_version: snapshot_value(snapshot, :binding_set_version),
+      capability_instance_id: snapshot_value(snapshot, :capability_instance_id),
+      family_key: snapshot_atom_string(snapshot, :family_key),
+      scope_ref: snapshot_value(snapshot, :scope_ref),
+      partition_key: snapshot_value(snapshot, :partition_key),
+      clock_mode: snapshot_atom_string(snapshot, :clock_mode),
+      current_time: snapshot_iso8601(snapshot, :current_time),
+      timer_count: snapshot_value(snapshot, :timer_count, 0),
+      timers: snapshot_json(snapshot, :timers, []),
+      state: snapshot_json(snapshot, :state, %{}),
+      output_count: snapshot_value(snapshot, :output_count, 0),
+      outputs: snapshot_json(snapshot, :outputs, [])
     }
   end
 
@@ -1213,6 +1193,37 @@ defmodule CadenceWeb.ControlPlaneJSON do
   defp maybe_atom_to_string(nil), do: nil
   defp maybe_atom_to_string(value) when is_atom(value), do: Atom.to_string(value)
   defp maybe_atom_to_string(value), do: value
+
+  defp snapshot_value(snapshot, key, default \\ nil) when is_map(snapshot) and is_atom(key) do
+    case Map.fetch(snapshot, key) do
+      {:ok, value} -> value
+      :error -> Map.get(snapshot, Atom.to_string(key), default)
+    end
+  end
+
+  defp snapshot_atom_string(snapshot, key, default \\ nil) do
+    snapshot
+    |> snapshot_value(key, default)
+    |> maybe_atom_to_string()
+  end
+
+  defp snapshot_iso8601(snapshot, key, default \\ nil) do
+    snapshot
+    |> snapshot_value(key, default)
+    |> iso8601()
+  end
+
+  defp snapshot_json(snapshot, key, default) do
+    snapshot
+    |> snapshot_value(key, default)
+    |> json_value()
+  end
+
+  defp snapshot_list(snapshot, key, mapper, default \\ []) when is_function(mapper, 1) do
+    snapshot
+    |> snapshot_value(key, default)
+    |> Enum.map(mapper)
+  end
 
   defp json_value(%DateTime{} = datetime), do: iso8601(datetime)
 

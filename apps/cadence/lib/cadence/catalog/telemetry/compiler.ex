@@ -566,26 +566,9 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
   end
 
   defp diagnostic(severity, code, message, %Packet{} = packet, source, metadata \\ %{}) do
-    source_id =
-      case source do
-        %PacketEntry{packet_entry_id: packet_entry_id} -> packet_entry_id
-        %Point{point_id: point_id} -> point_id
-        %Packet{packet_id: packet_id} -> packet_id
-      end
-
-    source_kind =
-      case source do
-        %PacketEntry{} -> "packet_entry"
-        %Point{} -> "point"
-        %Packet{} -> "packet"
-      end
-
-    path =
-      case source do
-        %PacketEntry{} = entry -> ["packets", packet.packet_id, "entries", entry.packet_entry_id]
-        %Point{} = point -> ["packets", packet.packet_id, "points", point.point_id]
-        %Packet{} -> ["packets", packet.packet_id]
-      end
+    source_id = diagnostic_source_id(source)
+    source_kind = diagnostic_source_kind(source)
+    path = diagnostic_path(packet, source)
 
     Diagnostic.new(%{
       severity: severity,
@@ -602,5 +585,25 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
           metadata
         )
     })
+  end
+
+  defp diagnostic_source_id(%PacketEntry{packet_entry_id: packet_entry_id}), do: packet_entry_id
+  defp diagnostic_source_id(%Point{point_id: point_id}), do: point_id
+  defp diagnostic_source_id(%Packet{packet_id: packet_id}), do: packet_id
+
+  defp diagnostic_source_kind(%PacketEntry{}), do: "packet_entry"
+  defp diagnostic_source_kind(%Point{}), do: "point"
+  defp diagnostic_source_kind(%Packet{}), do: "packet"
+
+  defp diagnostic_path(%Packet{} = packet, %PacketEntry{} = entry) do
+    ["packets", packet.packet_id, "entries", entry.packet_entry_id]
+  end
+
+  defp diagnostic_path(%Packet{} = packet, %Point{} = point) do
+    ["packets", packet.packet_id, "points", point.point_id]
+  end
+
+  defp diagnostic_path(%Packet{} = packet, %Packet{}) do
+    ["packets", packet.packet_id]
   end
 end

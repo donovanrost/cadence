@@ -34,17 +34,7 @@ defmodule Mix.Tasks.Cadence.Profile do
   @impl true
   def run(args) do
     {profile_identifier, option_args} = extract_profile_identifier(args)
-
-    profile_defaults =
-      case profile_identifier do
-        nil ->
-          %{node: nil, mission_id: nil}
-
-        identifier ->
-          identifier
-          |> DevProfile.load!()
-          |> DevProfile.profiler_defaults()
-      end
+    profile_defaults = profile_defaults(profile_identifier)
 
     {opts, remaining, invalid} =
       OptionParser.parse(
@@ -67,24 +57,49 @@ defmodule Mix.Tasks.Cadence.Profile do
         ]
       )
 
-    if opts[:help] || invalid != [] || remaining != [] do
-      print_help()
-
-      if invalid != [] do
-        Mix.raise("Invalid options: #{inspect(invalid)}")
-      end
-
-      if remaining != [] do
-        Mix.raise("Unexpected arguments: #{inspect(remaining)}")
-      end
-
-      System.halt(0)
-    end
+    maybe_handle_help_or_invalid_opts(opts, remaining, invalid)
 
     node_name = validate_node!(opts, profile_defaults.node)
     mission_id = validate_mission_id!(opts, profile_defaults.mission_id)
+    config = build_profile_config(node_name, mission_id, opts)
 
-    config = %{
+    start_distribution()
+    connect_to_node(config.node)
+    maybe_reset_profiler(config)
+    run_profile_mode(config)
+  end
+
+  defp profile_defaults(nil), do: %{node: nil, mission_id: nil}
+
+  defp profile_defaults(identifier) do
+    identifier
+    |> DevProfile.load!()
+    |> DevProfile.profiler_defaults()
+  end
+
+  defp maybe_handle_help_or_invalid_opts(opts, remaining, invalid) do
+    if opts[:help] || invalid != [] || remaining != [] do
+      print_help()
+      maybe_raise_invalid_opts(invalid)
+      maybe_raise_remaining_args(remaining)
+      System.halt(0)
+    end
+  end
+
+  defp maybe_raise_invalid_opts([]), do: :ok
+
+  defp maybe_raise_invalid_opts(invalid) do
+    Mix.raise("Invalid options: #{inspect(invalid)}")
+  end
+
+  defp maybe_raise_remaining_args([]), do: :ok
+
+  defp maybe_raise_remaining_args(remaining) do
+    Mix.raise("Unexpected arguments: #{inspect(remaining)}")
+  end
+
+  defp build_profile_config(node_name, mission_id, opts) do
+    %{
       node: node_name,
       mission_id: mission_id,
       duration_seconds: opts[:duration] || @default_duration,
@@ -92,27 +107,28 @@ defmodule Mix.Tasks.Cadence.Profile do
       snapshot?: opts[:snapshot] || false,
       reset?: opts[:reset] || false
     }
+  end
 
-    start_distribution()
-    connect_to_node(config.node)
+  defp maybe_reset_profiler(%{reset?: false}), do: :ok
 
-    if config.reset? do
-      case rpc_call(config.node, Cadence.Telemetry.Profiler, :reset, [config.mission_id]) do
-        :ok ->
-          Mix.shell().info("Reset profiler counters for #{config.mission_id}.\n")
+  defp maybe_reset_profiler(config) do
+    case rpc_call(config.node, Cadence.Telemetry.Profiler, :reset, [config.mission_id]) do
+      :ok ->
+        Mix.shell().info("Reset profiler counters for #{config.mission_id}.\n")
 
-        {:badrpc, reason} ->
-          Mix.raise("Failed to reset profiler counters: #{inspect(reason)}")
-      end
+      {:badrpc, reason} ->
+        Mix.raise("Failed to reset profiler counters: #{inspect(reason)}")
     end
+  end
 
-    if config.snapshot? do
-      config
-      |> fetch_snapshot!()
-      |> print_snapshot()
-    else
-      run_watch(config)
-    end
+  defp run_profile_mode(%{snapshot?: true} = config) do
+    config
+    |> fetch_snapshot!()
+    |> print_snapshot()
+  end
+
+  defp run_profile_mode(config) do
+    run_watch(config)
   end
 
   defp validate_node!(opts, default) do

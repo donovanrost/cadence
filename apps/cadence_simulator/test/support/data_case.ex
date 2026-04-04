@@ -1,4 +1,6 @@
 defmodule CadenceSimulator.DataCase do
+  @moduledoc false
+
   use ExUnit.CaseTemplate
 
   alias Cadence.Missions.Mission

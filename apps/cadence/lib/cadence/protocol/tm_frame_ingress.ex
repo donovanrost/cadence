@@ -83,30 +83,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets) when is_list(sdu_octets) do
     Enum.reduce_while(sdu_octets, {:ok, []}, fn sdu, {:ok, acc} ->
-      if sdu.sdu_kind_hint != :space_packet do
-        {:halt, {:error, {:unsupported_tm_sdu_kind, sdu.sdu_kind_hint}}}
-      else
-        case SpacePacketDecoder.decode_packet(raw_evidence, sdu.octets,
-               protocol_family: raw_evidence.protocol_family,
-               source_time: sdu.timestamp || raw_evidence.source_time,
-               provenance: %{
-                 tm: %{
-                   scid: sdu.scid,
-                   vcid: sdu.vcid,
-                   map_id: sdu.map_id,
-                   quality: sdu.quality,
-                   source_frames: sdu.source_frames,
-                   metadata: sdu.meta
-                 }
-               }
-             ) do
-          {:ok, %PacketRecord{} = packet_record} ->
-            {:cont, {:ok, acc ++ [packet_record]}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-      end
+      reduce_packet_record(raw_evidence, sdu, acc)
     end)
   end
 
@@ -171,48 +148,121 @@ defmodule Cadence.Protocol.TMFrameIngress do
        when is_list(frame_infos) and is_map(continuity_state) do
     frame_infos
     |> Enum.reduce({continuity_state, []}, fn frame_info, {acc_state, acc} ->
-      frame = frame_info.frame
-      key = {frame.scid, frame.vcid}
-
-      case Map.fetch(acc_state, key) do
-        {:ok, previous_frame_seq} ->
-          expected_frame_seq = rem(previous_frame_seq + 1, 256)
-          next_state = Map.put(acc_state, key, frame.frame_seq)
-
-          if expected_frame_seq == frame.frame_seq do
-            {next_state, acc}
-          else
-            anomaly =
-              ProtocolAnomaly.new(%{
-                evidence_id: raw_evidence.evidence_id,
-                mission_id: raw_evidence.mission_id,
-                source_endpoint_ref: raw_evidence.source_endpoint_ref,
-                spacecraft_id: raw_evidence.spacecraft_id,
-                protocol_family: raw_evidence.protocol_family,
-                direction: raw_evidence.direction,
-                anomaly_kind: :frame_sequence_discontinuity,
-                scid: frame.scid,
-                vcid: frame.vcid,
-                map_id: frame.map_id,
-                frame_seq: frame.frame_seq,
-                raw_frame_offset_bytes: frame_info.raw_frame_offset_bytes,
-                raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
-                recorded_at: raw_evidence.receipt_time,
-                metadata: %{
-                  previous_frame_seq: previous_frame_seq,
-                  expected_frame_seq: expected_frame_seq,
-                  observed_frame_seq: frame.frame_seq
-                }
-              })
-
-            {next_state, acc ++ [anomaly]}
-          end
-
-        :error ->
-          {Map.put(acc_state, key, frame.frame_seq), acc}
-      end
+      reduce_continuity_anomaly(raw_evidence, frame_info, acc_state, acc)
     end)
     |> elem(1)
+  end
+
+  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, acc) do
+    with :ok <- validate_tm_sdu_kind(sdu),
+         {:ok, %PacketRecord{} = packet_record} <- decode_tm_packet_record(raw_evidence, sdu) do
+      {:cont, {:ok, acc ++ [packet_record]}}
+    else
+      {:error, reason} ->
+        {:halt, {:error, reason}}
+    end
+  end
+
+  defp validate_tm_sdu_kind(%{sdu_kind_hint: :space_packet}), do: :ok
+
+  defp validate_tm_sdu_kind(sdu) do
+    {:error, {:unsupported_tm_sdu_kind, sdu.sdu_kind_hint}}
+  end
+
+  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu) do
+    SpacePacketDecoder.decode_packet(raw_evidence, sdu.octets,
+      protocol_family: raw_evidence.protocol_family,
+      source_time: sdu.timestamp || raw_evidence.source_time,
+      provenance: %{
+        tm: %{
+          scid: sdu.scid,
+          vcid: sdu.vcid,
+          map_id: sdu.map_id,
+          quality: sdu.quality,
+          source_frames: sdu.source_frames,
+          metadata: sdu.meta
+        }
+      }
+    )
+  end
+
+  defp reduce_continuity_anomaly(%RawEvidence{} = raw_evidence, frame_info, acc_state, acc) do
+    frame = frame_info.frame
+    key = {frame.scid, frame.vcid}
+
+    case Map.fetch(acc_state, key) do
+      {:ok, previous_frame_seq} ->
+        continue_or_record_anomaly(
+          raw_evidence,
+          frame_info,
+          acc_state,
+          acc,
+          key,
+          previous_frame_seq
+        )
+
+      :error ->
+        {Map.put(acc_state, key, frame.frame_seq), acc}
+    end
+  end
+
+  defp continue_or_record_anomaly(
+         %RawEvidence{} = raw_evidence,
+         frame_info,
+         acc_state,
+         acc,
+         key,
+         previous_frame_seq
+       ) do
+    frame = frame_info.frame
+    expected_frame_seq = rem(previous_frame_seq + 1, 256)
+    next_state = Map.put(acc_state, key, frame.frame_seq)
+
+    if expected_frame_seq == frame.frame_seq do
+      {next_state, acc}
+    else
+      {next_state,
+       acc ++
+         [
+           build_continuity_anomaly(
+             raw_evidence,
+             frame_info,
+             previous_frame_seq,
+             expected_frame_seq
+           )
+         ]}
+    end
+  end
+
+  defp build_continuity_anomaly(
+         %RawEvidence{} = raw_evidence,
+         frame_info,
+         previous_frame_seq,
+         expected_frame_seq
+       ) do
+    frame = frame_info.frame
+
+    ProtocolAnomaly.new(%{
+      evidence_id: raw_evidence.evidence_id,
+      mission_id: raw_evidence.mission_id,
+      source_endpoint_ref: raw_evidence.source_endpoint_ref,
+      spacecraft_id: raw_evidence.spacecraft_id,
+      protocol_family: raw_evidence.protocol_family,
+      direction: raw_evidence.direction,
+      anomaly_kind: :frame_sequence_discontinuity,
+      scid: frame.scid,
+      vcid: frame.vcid,
+      map_id: frame.map_id,
+      frame_seq: frame.frame_seq,
+      raw_frame_offset_bytes: frame_info.raw_frame_offset_bytes,
+      raw_frame_length_bytes: frame_info.raw_frame_length_bytes,
+      recorded_at: raw_evidence.receipt_time,
+      metadata: %{
+        previous_frame_seq: previous_frame_seq,
+        expected_frame_seq: expected_frame_seq,
+        observed_frame_seq: frame.frame_seq
+      }
+    })
   end
 
   defp next_continuity_state(frame_infos, continuity_state) when is_list(frame_infos) do

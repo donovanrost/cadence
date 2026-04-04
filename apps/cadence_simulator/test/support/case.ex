@@ -1,4 +1,6 @@
 defmodule CadenceSimulator.Case do
+  @moduledoc false
+
   use ExUnit.CaseTemplate
 
   using opts do

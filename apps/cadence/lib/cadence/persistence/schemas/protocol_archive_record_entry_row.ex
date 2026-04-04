@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.ProtocolArchiveRecordEntryRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   @primary_key {:entry_id, :string, autogenerate: false}

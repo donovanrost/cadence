@@ -56,11 +56,18 @@ defmodule CadenceSimulator.ProfileSweep do
   end
 
   @spec build_summary(float(), map(), pos_integer(), map() | nil, map() | nil) :: summary()
-  def build_summary(rate_hz, snapshot, duration_seconds, simulator_before \\ nil, simulator_after \\ nil)
+  def build_summary(
+        rate_hz,
+        snapshot,
+        duration_seconds,
+        simulator_before \\ nil,
+        simulator_after \\ nil
+      )
       when is_number(rate_hz) and is_map(snapshot) and is_integer(duration_seconds) and
              duration_seconds > 0 do
     archive = get_in(snapshot, [:archive, :combined]) || %{}
     simulator = build_simulator_summary(simulator_before, simulator_after, duration_seconds)
+    archive_summary = archive_summary(archive)
 
     %{
       rate_hz: rate_hz * 1.0,
@@ -73,11 +80,11 @@ defmodule CadenceSimulator.ProfileSweep do
       e2e_ms: us_to_ms(get_in(snapshot, [:stages, :end_to_end, :avg_us])),
       db_queries_per_ingress: get_in(snapshot, [:db, :queries_per_ingress]) * 1.0,
       db_ms_per_ingress: us_to_ms(get_in(snapshot, [:db, :query_time_per_ingress_us])),
-      archive_queue_depth: archive[:queue_depth] || 0,
-      archive_oldest_buffered_age_ms: archive[:oldest_buffered_age_ms] || 0,
-      archive_avg_flush_ms: us_to_ms(archive[:avg_flush_us] || 0.0),
-      archive_avg_segment_kb: (archive[:avg_segment_bytes] || 0.0) / 1024.0,
-      archive_flush_failures: archive[:flush_failure_count] || 0,
+      archive_queue_depth: archive_summary.queue_depth,
+      archive_oldest_buffered_age_ms: archive_summary.oldest_buffered_age_ms,
+      archive_avg_flush_ms: archive_summary.avg_flush_ms,
+      archive_avg_segment_kb: archive_summary.avg_segment_kb,
+      archive_flush_failures: archive_summary.flush_failures,
       simulator_tx_per_sec: simulator.tx_per_sec,
       simulator_mbps: simulator.mbps,
       simulator_queue_depth: simulator.queue_depth,
@@ -93,6 +100,20 @@ defmodule CadenceSimulator.ProfileSweep do
   def build_simulator_summary(simulator_before, simulator_after, duration_seconds)
       when is_integer(duration_seconds) and duration_seconds > 0 do
     simulator_summary(simulator_before, simulator_after, duration_seconds)
+  end
+
+  defp archive_summary(archive) do
+    %{
+      queue_depth: archive_metric(archive, :queue_depth),
+      oldest_buffered_age_ms: archive_metric(archive, :oldest_buffered_age_ms),
+      avg_flush_ms: us_to_ms(archive_metric(archive, :avg_flush_us, 0.0)),
+      avg_segment_kb: archive_metric(archive, :avg_segment_bytes, 0.0) / 1024.0,
+      flush_failures: archive_metric(archive, :flush_failure_count)
+    }
+  end
+
+  defp archive_metric(archive, key, default \\ 0) do
+    Map.get(archive, key, default)
   end
 
   defp parse_rate(value) do
@@ -196,7 +217,10 @@ defmodule CadenceSimulator.ProfileSweep do
   defp timing_delta_ms(before_metrics, after_metrics, stage) do
     before_stage = Map.get(before_metrics, stage, %{})
     after_stage = Map.get(after_metrics, stage, %{})
-    total_us = non_negative_delta(Map.get(after_stage, :total_us, 0), Map.get(before_stage, :total_us, 0))
+
+    total_us =
+      non_negative_delta(Map.get(after_stage, :total_us, 0), Map.get(before_stage, :total_us, 0))
+
     count = non_negative_delta(Map.get(after_stage, :count, 0), Map.get(before_stage, :count, 0))
 
     if count > 0 do

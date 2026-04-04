@@ -103,17 +103,7 @@ defmodule Cadence.Projections.TelemetryLatestValues do
         key =
           {sample_row.mission_id, sample_row.spacecraft_id || "__mission__", sample_row.point_id}
 
-        case Map.fetch(acc, key) do
-          :error ->
-            Map.put(acc, key, sample_row)
-
-          {:ok, %TelemetrySampleRow{} = existing_row} ->
-            if sample_row_newer?(sample_row, existing_row) do
-              Map.put(acc, key, sample_row)
-            else
-              acc
-            end
-        end
+        Map.update(acc, key, sample_row, &latest_sample_row(sample_row, &1))
       end)
       |> Map.values()
       |> Enum.map(&TelemetrySampleRow.to_domain/1)
@@ -190,6 +180,10 @@ defmodule Cadence.Projections.TelemetryLatestValues do
 
   defp maybe_filter_latest_spacecraft(query, spacecraft_id) do
     where(query, [latest_value_row], latest_value_row.spacecraft_scope_id == ^spacecraft_id)
+  end
+
+  defp latest_sample_row(%TelemetrySampleRow{} = sample_row, %TelemetrySampleRow{} = existing_row) do
+    if sample_row_newer?(sample_row, existing_row), do: sample_row, else: existing_row
   end
 
   defp sample_row_newer?(%TelemetrySampleRow{} = sample_row, %TelemetrySampleRow{} = existing_row) do

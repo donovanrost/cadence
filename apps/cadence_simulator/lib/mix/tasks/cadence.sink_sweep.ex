@@ -42,8 +42,18 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
     end
 
     rates = validate_rates!(opts)
-    settle_seconds = validate_positive_integer!(opts[:settle_seconds] || @default_settle_seconds, "--settle-seconds")
-    sample_seconds = validate_positive_integer!(opts[:sample_seconds] || @default_sample_seconds, "--sample-seconds")
+
+    settle_seconds =
+      validate_positive_integer!(
+        opts[:settle_seconds] || @default_settle_seconds,
+        "--settle-seconds"
+      )
+
+    sample_seconds =
+      validate_positive_integer!(
+        opts[:sample_seconds] || @default_sample_seconds,
+        "--sample-seconds"
+      )
 
     {:ok, _started} = Application.ensure_all_started(:cadence_simulator)
 
@@ -124,7 +134,9 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
   end
 
   defp validate_positive_integer!(value, _label) when is_integer(value) and value > 0, do: value
-  defp validate_positive_integer!(_value, label), do: Mix.raise("#{label} must be a positive integer")
+
+  defp validate_positive_integer!(_value, label),
+    do: Mix.raise("#{label} must be a positive integer")
 
   defp resolve_simulator_runtime_opts(nil, simulator_args) do
     {:ok, validate_simulator_opts!(simulator_args)}
@@ -132,9 +144,8 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
 
   defp resolve_simulator_runtime_opts(profile_identifier, simulator_args)
        when is_binary(profile_identifier) do
-    with {:ok, profile} <- DevProfile.load(profile_identifier),
-         {:ok, parsed_runtime_opts} <- parse_profile_runtime_opts(profile, simulator_args) do
-      {:ok, parsed_runtime_opts}
+    with {:ok, profile} <- DevProfile.load(profile_identifier) do
+      parse_profile_runtime_opts(profile, simulator_args)
     end
   end
 
@@ -146,7 +157,8 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
         if opts[:runtime_mode] == :telemetry do
           {:ok, DevProfile.resolve_runtime_opts(profile, opts)}
         else
-          {:error, "profile #{profile.name} resolves to #{inspect(opts[:runtime_mode])} mode, but :telemetry is required"}
+          {:error,
+           "profile #{profile.name} resolves to #{inspect(opts[:runtime_mode])} mode, but :telemetry is required"}
         end
 
       {:help, usage} ->
@@ -160,24 +172,27 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
   defp resolve_tcp_output(runtime_opts, opts) do
     sink_host = opts[:sink_host]
     sink_port = opts[:sink_port]
+    resolved_runtime_opts = apply_tcp_output_overrides(runtime_opts, sink_host, sink_port)
+    normalize_tcp_output_runtime_opts(resolved_runtime_opts)
+  end
 
-    resolved_runtime_opts =
-      case Keyword.get(runtime_opts, :output) do
-        {:tcp, host, port} ->
-          host = sink_host || host
-          port = sink_port || port
-          Keyword.put(runtime_opts, :output, {:tcp, host, port})
+  defp apply_tcp_output_overrides(runtime_opts, sink_host, sink_port) do
+    case Keyword.get(runtime_opts, :output) do
+      {:tcp, host, port} ->
+        Keyword.put(runtime_opts, :output, {:tcp, sink_host || host, sink_port || port})
 
-        nil when is_binary(sink_host) and is_integer(sink_port) ->
-          Keyword.put(runtime_opts, :output, {:tcp, sink_host, sink_port})
+      nil when is_binary(sink_host) and is_integer(sink_port) ->
+        Keyword.put(runtime_opts, :output, {:tcp, sink_host, sink_port})
 
-        nil when is_integer(sink_port) ->
-          Keyword.put(runtime_opts, :output, {:tcp, "127.0.0.1", sink_port})
+      nil when is_integer(sink_port) ->
+        Keyword.put(runtime_opts, :output, {:tcp, "127.0.0.1", sink_port})
 
-        _other ->
-          runtime_opts
-      end
+      _other ->
+        runtime_opts
+    end
+  end
 
+  defp normalize_tcp_output_runtime_opts(resolved_runtime_opts) do
     case Keyword.get(resolved_runtime_opts, :output) do
       {:tcp, host, port} when is_binary(host) and is_integer(port) and port > 0 ->
         {:ok, Keyword.put(resolved_runtime_opts, :output, {:tcp, host, port})}
@@ -192,9 +207,14 @@ defmodule Mix.Tasks.Cadence.SinkSweep do
     {:tcp, host, port} = Keyword.fetch!(runtime_opts, :output)
 
     case DrainSink.start_link(host: host, port: port) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, {:already_started, pid}} -> {:ok, pid}
-      {:error, reason} -> {:error, "Failed to start TCP drain sink on #{host}:#{port}: #{inspect(reason)}"}
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        {:ok, pid}
+
+      {:error, reason} ->
+        {:error, "Failed to start TCP drain sink on #{host}:#{port}: #{inspect(reason)}"}
     end
   end
 

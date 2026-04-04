@@ -155,17 +155,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
       |> Enum.reduce(%{}, fn %TelemetryLimitEventRow{} = event_row, acc ->
         key = {event_row.mission_id, event_row.spacecraft_id || "__mission__", event_row.point_id}
 
-        case Map.fetch(acc, key) do
-          :error ->
-            Map.put(acc, key, event_row)
-
-          {:ok, %TelemetryLimitEventRow{} = existing_row} ->
-            if event_row_newer?(event_row, existing_row) do
-              Map.put(acc, key, event_row)
-            else
-              acc
-            end
-        end
+        Map.update(acc, key, event_row, &latest_event_row(event_row, &1))
       end)
       |> Map.values()
       |> Enum.map(&TelemetryLimitEventRow.to_domain/1)
@@ -307,6 +297,13 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   defp maybe_filter_latest_spacecraft(query, spacecraft_id),
     do: where(query, [state_row], state_row.spacecraft_scope_id == ^spacecraft_id)
+
+  defp latest_event_row(
+         %TelemetryLimitEventRow{} = event_row,
+         %TelemetryLimitEventRow{} = existing_row
+       ) do
+    if event_row_newer?(event_row, existing_row), do: event_row, else: existing_row
+  end
 
   defp event_row_newer?(event_row, existing_row) do
     compare_sort_keys(

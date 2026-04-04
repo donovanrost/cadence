@@ -48,9 +48,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   @impl true
   def validate_config(configuration, %ValidationContext{}) do
-    with {:ok, normalized_configuration} <- normalize_configuration(configuration),
-         :ok <- validate_configuration(normalized_configuration) do
-      :ok
+    with {:ok, normalized_configuration} <- normalize_configuration(configuration) do
+      validate_configuration(normalized_configuration)
     end
   end
 
@@ -210,27 +209,43 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
          normalize_transport_profile(
            config_value(configuration, :transport_profile, "transport_profile")
          ),
-       frame_size:
-         config_value(configuration, :frame_size, "frame_size") ||
-           config_value(configuration, :tc_frame_size, "tc_frame_size") ||
-           @default_frame_size,
-       scid: config_value(configuration, :scid, "scid") || 0,
-       vcid: config_value(configuration, :vcid, "vcid") || 0,
-       bypass_flag: config_value(configuration, :bypass_flag, "bypass_flag") || 0,
+       frame_size: configured_frame_size(configuration),
+       scid: config_value_or_default(configuration, :scid, "scid", 0),
+       vcid: config_value_or_default(configuration, :vcid, "vcid", 0),
+       bypass_flag: config_value_or_default(configuration, :bypass_flag, "bypass_flag", 0),
        control_command_flag:
-         config_value(configuration, :control_command_flag, "control_command_flag") || 0,
+         config_value_or_default(
+           configuration,
+           :control_command_flag,
+           "control_command_flag",
+           0
+         ),
        segment_header_flag:
-         config_value(configuration, :segment_header_flag, "segment_header_flag") || 0,
+         config_value_or_default(
+           configuration,
+           :segment_header_flag,
+           "segment_header_flag",
+           0
+         ),
        initial_frame_seq:
-         config_value(configuration, :initial_frame_seq, "initial_frame_seq") || 0,
+         config_value_or_default(configuration, :initial_frame_seq, "initial_frame_seq", 0),
        cop1_mode: normalize_cop1_mode(config_value(configuration, :cop1_mode, "cop1_mode")),
        cop1_timeout_ms:
-         config_value(configuration, :cop1_timeout_ms, "cop1_timeout_ms") ||
-           @default_cop1_timeout_ms,
+         config_value_or_default(
+           configuration,
+           :cop1_timeout_ms,
+           "cop1_timeout_ms",
+           @default_cop1_timeout_ms
+         ),
        cop1_max_retransmit:
-         config_value(configuration, :cop1_max_retransmit, "cop1_max_retransmit") ||
-           @default_cop1_max_retransmit,
-       cop1_window_size: config_value(configuration, :cop1_window_size, "cop1_window_size") || 1,
+         config_value_or_default(
+           configuration,
+           :cop1_max_retransmit,
+           "cop1_max_retransmit",
+           @default_cop1_max_retransmit
+         ),
+       cop1_window_size:
+         config_value_or_default(configuration, :cop1_window_size, "cop1_window_size", 1),
        simulated_start_delay_ms:
          config_value(
            configuration,
@@ -254,6 +269,16 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp normalize_configuration(configuration) do
     {:error, {:unsupported_uplink_gateway_configuration, configuration}}
+  end
+
+  defp configured_frame_size(configuration) do
+    config_value(configuration, :frame_size, "frame_size") ||
+      config_value(configuration, :tc_frame_size, "tc_frame_size") ||
+      @default_frame_size
+  end
+
+  defp config_value_or_default(configuration, atom_key, string_key, default) do
+    config_value(configuration, atom_key, string_key) || default
   end
 
   defp validate_configuration(normalized_configuration) when is_map(normalized_configuration) do
@@ -289,13 +314,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            ),
          :ok <- validate_cop1_window_size(normalized_configuration.cop1_window_size),
          :ok <- validate_optional_delay(normalized_configuration.simulated_start_delay_ms),
-         :ok <- validate_optional_delay(normalized_configuration.simulated_completion_delay_ms),
-         :ok <-
-           validate_provider_configuration(
-             normalized_configuration.provider_binding_id,
-             normalized_configuration.provider_adapter_key
-           ) do
-      :ok
+         :ok <- validate_optional_delay(normalized_configuration.simulated_completion_delay_ms) do
+      validate_provider_configuration(
+        normalized_configuration.provider_binding_id,
+        normalized_configuration.provider_adapter_key
+      )
     end
   end
 
@@ -558,23 +581,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   defp build_cop1_execution_result(app_state, transition, current_time, next_frame_seq \\ nil) do
     state = transition.state
     transition_metadata = transition_signal_metadata(transition.signal)
-
-    release_metadata =
-      current_cop1_release_metadata(state) || current_cop1_release_metadata(app_state.cop1)
-
-    metadata = Map.merge(release_metadata || %{}, transition_metadata)
-
-    started_increment =
-      case transition.signal do
-        {:start, _metadata} -> 1
-        _other -> 0
-      end
-
-    completed_increment =
-      case transition.signal do
-        {:completion, _metadata} -> 1
-        _other -> 0
-      end
+    metadata = cop1_transition_metadata(app_state, state, transition.signal, transition_metadata)
+    started_increment = cop1_signal_increment(transition.signal, :start)
+    completed_increment = cop1_signal_increment(transition.signal, :completion)
 
     %ExecutionResult{
       state: %{
@@ -601,6 +610,20 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       metadata: metadata
     }
   end
+
+  defp cop1_transition_metadata(app_state, state, signal, transition_metadata) do
+    release_metadata =
+      current_cop1_release_metadata(state) || current_cop1_release_metadata(app_state.cop1)
+
+    signal
+    |> case do
+      nil -> release_metadata || %{}
+      _other -> Map.merge(release_metadata || %{}, transition_metadata)
+    end
+  end
+
+  defp cop1_signal_increment({signal_phase, _metadata}, signal_phase), do: 1
+  defp cop1_signal_increment(_signal, _signal_phase), do: 0
 
   defp build_direct_execution_result(
          %UplinkRequest{} = framed_uplink_request,

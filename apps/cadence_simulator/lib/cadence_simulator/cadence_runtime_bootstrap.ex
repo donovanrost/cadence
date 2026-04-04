@@ -30,7 +30,8 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
   ]
 
   @spec resolve_runtime_opts(keyword(), keyword()) :: {:ok, keyword()} | {:error, term()}
-  def resolve_runtime_opts(runtime_opts, opts \\ []) when is_list(runtime_opts) and is_list(opts) do
+  def resolve_runtime_opts(runtime_opts, opts \\ [])
+      when is_list(runtime_opts) and is_list(opts) do
     case bootstrap_request(runtime_opts) do
       nil ->
         {:ok, strip_bootstrap_keys(runtime_opts)}
@@ -72,9 +73,8 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
         http_client: http_client
       })
       when is_map(bootstrap_request) and is_atom(http_client) do
-    with {:ok, path_snapshot} <- fetch_path_runtime_snapshot(http_client, bootstrap_request),
-         {:ok, runtime_opts} <- derive_runtime_opts(runtime_mode, bootstrap_request, path_snapshot) do
-      {:ok, runtime_opts}
+    with {:ok, path_snapshot} <- fetch_path_runtime_snapshot(http_client, bootstrap_request) do
+      derive_runtime_opts(runtime_mode, bootstrap_request, path_snapshot)
     end
   end
 
@@ -125,9 +125,8 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
     values = Map.new(@bootstrap_keys, fn key -> {key, Keyword.get(runtime_opts, key)} end)
 
     if Enum.any?(@bootstrap_keys, &present?(Map.get(values, &1))) do
-      with :ok <- validate_bootstrap_request(values) do
-        values
-      else
+      case validate_bootstrap_request(values) do
+        :ok -> values
         {:error, _reason} = error -> error
       end
     else
@@ -229,7 +228,8 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
     end
   end
 
-  defp ensure_connectable_provider(provider_runtime, runtime_mode) when is_map(provider_runtime) do
+  defp ensure_connectable_provider(provider_runtime, runtime_mode)
+       when is_map(provider_runtime) do
     case provider_runtime["mode"] do
       "listen" ->
         :ok
@@ -279,7 +279,13 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrap do
 
   defp runtime_resolver_spec(runtime_mode, bootstrap_request, http_client) do
     {__MODULE__, :refresh_runtime_opts,
-     [[runtime_mode: runtime_mode, bootstrap_request: bootstrap_request, http_client: http_client]]}
+     [
+       [
+         runtime_mode: runtime_mode,
+         bootstrap_request: bootstrap_request,
+         http_client: http_client
+       ]
+     ]}
   end
 
   defp strip_bootstrap_keys(runtime_opts) do

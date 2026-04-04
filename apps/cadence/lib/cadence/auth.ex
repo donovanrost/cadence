@@ -77,17 +77,7 @@ defmodule Cadence.Auth do
     api_token = generate_api_token()
 
     with :ok <- validate_service_identity_scope(service_identity) do
-      case Repo.transaction(fn ->
-             with {:ok, persisted_service_identity} <-
-                    insert_service_identity(Repo, service_identity, api_token) do
-               %{service_identity: persisted_service_identity, api_token: api_token}
-             else
-               {:error, reason} -> Repo.rollback(reason)
-             end
-           end) do
-        {:ok, result} -> {:ok, result}
-        {:error, reason} -> {:error, reason}
-      end
+      persist_service_identity(service_identity, api_token)
     end
   end
 
@@ -149,8 +139,25 @@ defmodule Cadence.Auth do
          user: user,
          role: :platform_admin
        })}
-    else
+    end
+  end
+
+  defp persist_service_identity(%ServiceIdentity{} = service_identity, api_token) do
+    case Repo.transaction(fn ->
+           insert_service_identity_or_rollback(service_identity, api_token)
+         end) do
+      {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp insert_service_identity_or_rollback(%ServiceIdentity{} = service_identity, api_token) do
+    case insert_service_identity(Repo, service_identity, api_token) do
+      {:ok, persisted_service_identity} ->
+        %{service_identity: persisted_service_identity, api_token: api_token}
+
+      {:error, reason} ->
+        Repo.rollback(reason)
     end
   end
 

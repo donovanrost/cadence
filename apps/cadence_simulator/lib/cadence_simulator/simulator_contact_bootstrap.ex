@@ -9,6 +9,51 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
   @default_base_url "http://127.0.0.1:4001"
   @default_downlink_provider_port 4100
   @bootstrap_admin_session_path "/bootstrap_admin/login"
+  @canonical_option_keys %{
+    :cadence_url => :base_url,
+    "cadence_url" => :base_url,
+    "base_url" => :base_url,
+    "api_token" => :api_token,
+    "organization_id" => :organization_id,
+    "organization_slug" => :organization_slug,
+    "organization_display_name" => :organization_display_name,
+    "mission_id" => :mission_id,
+    "mission_slug" => :mission_slug,
+    "mission_display_name" => :mission_display_name,
+    "service_identity_id" => :service_identity_id,
+    "service_identity_display_name" => :service_identity_display_name,
+    "mission_service_identity_id" => :mission_service_identity_id,
+    "mission_service_identity_display_name" => :mission_service_identity_display_name,
+    "spacecraft_id" => :spacecraft_id,
+    "spacecraft_display_name" => :spacecraft_display_name,
+    "source_endpoint_id" => :source_endpoint_id,
+    "source_ref" => :source_ref,
+    "source_endpoint_display_name" => :source_endpoint_display_name,
+    "definitions_path" => :definitions_path,
+    "provider_profile_id" => :provider_profile_id,
+    "transport_profile_id" => :transport_profile_id,
+    "downlink_path_template_id" => :downlink_path_template_id,
+    "uplink_path_template_id" => :uplink_path_template_id,
+    "downlink_path_id" => :downlink_path_id,
+    "uplink_path_id" => :uplink_path_id,
+    "scheduled_contact_id" => :scheduled_contact_id,
+    "provider_contact_ref" => :provider_contact_ref,
+    "bootstrap_admin_email" => :bootstrap_admin_email,
+    "bootstrap_admin_password" => :bootstrap_admin_password,
+    "downlink_provider_port" => :downlink_provider_port,
+    "contact_start_delay_seconds" => :contact_start_delay_seconds,
+    "contact_duration_seconds" => :contact_duration_seconds,
+    "profile_name" => :profile_name,
+    :issue_mission_token => :issue_mission_token?,
+    "issue_mission_token" => :issue_mission_token?,
+    "issue_mission_token?" => :issue_mission_token?,
+    :realize_contact => :realize_contact?,
+    "realize_contact" => :realize_contact?,
+    "realize_contact?" => :realize_contact?,
+    :reuse_active_contact => :reuse_active_contact?,
+    "reuse_active_contact" => :reuse_active_contact?,
+    "reuse_active_contact?" => :reuse_active_contact?
+  }
 
   @spec run_from_env(keyword()) :: map()
   def run_from_env(opts \\ []) when is_list(opts) do
@@ -144,7 +189,9 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
           }
 
         nil ->
-          starts_at = DateTime.add(DateTime.utc_now(), config.contact_start_delay_seconds, :second)
+          starts_at =
+            DateTime.add(DateTime.utc_now(), config.contact_start_delay_seconds, :second)
+
           ends_at = DateTime.add(starts_at, config.contact_duration_seconds, :second)
           scheduled_contact_id = generated_scheduled_contact_id(config)
 
@@ -280,9 +327,14 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
         }
       )
       |> case do
-        {:ok, service_identity} -> service_identity
-        {:error, 409, _body} -> nil
-        {:error, status, body} -> raise "service identity request failed with status #{status}: #{inspect(body)}"
+        {:ok, service_identity} ->
+          service_identity
+
+        {:error, 409, _body} ->
+          nil
+
+        {:error, status, body} ->
+          raise "service identity request failed with status #{status}: #{inspect(body)}"
       end
     else
       nil
@@ -572,7 +624,10 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
   defp maybe_active_realized_contact(req_client, req, organization_id, mission_id, config) do
     if config.reuse_active_contact? do
       req_client
-      |> get_json!(req, "/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts")
+      |> get_json!(
+        req,
+        "/organizations/#{organization_id}/missions/#{mission_id}/realized_contacts"
+      )
       |> Enum.filter(&realized_contact_active?/1)
       |> Enum.find(fn realized_contact ->
         realized_contact_matches_profile?(realized_contact, config) &&
@@ -777,54 +832,7 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
 
   defp canonicalize_option_keys(opts) when is_map(opts) do
     Enum.reduce(opts, %{}, fn {key, value}, acc ->
-      canonical_key =
-        case key do
-          :cadence_url -> :base_url
-          "cadence_url" -> :base_url
-          "base_url" -> :base_url
-          "api_token" -> :api_token
-          "organization_id" -> :organization_id
-          "organization_slug" -> :organization_slug
-          "organization_display_name" -> :organization_display_name
-          "mission_id" -> :mission_id
-          "mission_slug" -> :mission_slug
-          "mission_display_name" -> :mission_display_name
-          "service_identity_id" -> :service_identity_id
-          "service_identity_display_name" -> :service_identity_display_name
-          "mission_service_identity_id" -> :mission_service_identity_id
-          "mission_service_identity_display_name" -> :mission_service_identity_display_name
-          "spacecraft_id" -> :spacecraft_id
-          "spacecraft_display_name" -> :spacecraft_display_name
-          "source_endpoint_id" -> :source_endpoint_id
-          "source_ref" -> :source_ref
-          "source_endpoint_display_name" -> :source_endpoint_display_name
-          "definitions_path" -> :definitions_path
-          "provider_profile_id" -> :provider_profile_id
-          "transport_profile_id" -> :transport_profile_id
-          "downlink_path_template_id" -> :downlink_path_template_id
-          "uplink_path_template_id" -> :uplink_path_template_id
-          "downlink_path_id" -> :downlink_path_id
-          "uplink_path_id" -> :uplink_path_id
-          "scheduled_contact_id" -> :scheduled_contact_id
-          "provider_contact_ref" -> :provider_contact_ref
-          "bootstrap_admin_email" -> :bootstrap_admin_email
-          "bootstrap_admin_password" -> :bootstrap_admin_password
-          "downlink_provider_port" -> :downlink_provider_port
-          "contact_start_delay_seconds" -> :contact_start_delay_seconds
-          "contact_duration_seconds" -> :contact_duration_seconds
-          "profile_name" -> :profile_name
-          :issue_mission_token -> :issue_mission_token?
-          "issue_mission_token" -> :issue_mission_token?
-          "issue_mission_token?" -> :issue_mission_token?
-          :realize_contact -> :realize_contact?
-          "realize_contact" -> :realize_contact?
-          "realize_contact?" -> :realize_contact?
-          :reuse_active_contact -> :reuse_active_contact?
-          "reuse_active_contact" -> :reuse_active_contact?
-          "reuse_active_contact?" -> :reuse_active_contact?
-          atom when is_atom(atom) -> atom
-          _other -> nil
-        end
+      canonical_key = canonical_option_key(key)
 
       if is_nil(canonical_key) do
         acc
@@ -832,6 +840,19 @@ defmodule CadenceSimulator.SimulatorContactBootstrap do
         Map.put(acc, canonical_key, value)
       end
     end)
+  end
+
+  defp canonical_option_key(key) do
+    case Map.fetch(@canonical_option_keys, key) do
+      {:ok, canonical_key} ->
+        canonical_key
+
+      :error when is_atom(key) ->
+        key
+
+      :error ->
+        nil
+    end
   end
 
   defp default_definitions_path do

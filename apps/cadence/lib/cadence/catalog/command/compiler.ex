@@ -242,9 +242,6 @@ defmodule Cadence.Catalog.Command.Compiler do
          hazardous_values: argument.hazardous_values,
          metadata: %{"display_unit" => argument_type.display_unit}
        })}
-    else
-      {:error, compile_diagnostics} ->
-        {:error, compile_diagnostics}
     end
   end
 

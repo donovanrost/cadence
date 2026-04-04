@@ -51,17 +51,14 @@ defmodule Cadence.Replay.Diff do
       Enum.reduce(replay_keys, {0, [], []}, fn key, {matching_count, mismatches, missing_live} ->
         replay_row = Map.fetch!(replay_by_key, key)
 
-        case Map.get(live_by_key, key) do
-          nil ->
-            {matching_count, mismatches, [missing_live_entry(replay_row) | missing_live]}
-
-          live_row ->
-            if equivalent_sample_rows?(replay_row, live_row) do
-              {matching_count + 1, mismatches, missing_live}
-            else
-              {matching_count, [mismatch_entry(replay_row, live_row) | mismatches], missing_live}
-            end
-        end
+        reduce_replay_row_comparison(
+          key,
+          replay_row,
+          live_by_key,
+          matching_count,
+          mismatches,
+          missing_live
+        )
       end)
 
     extra_live =
@@ -85,6 +82,43 @@ defmodule Cadence.Replay.Diff do
       missing_live: Enum.reverse(missing_live),
       extra_live: extra_live
     }
+  end
+
+  defp reduce_replay_row_comparison(
+         key,
+         replay_row,
+         live_by_key,
+         matching_count,
+         mismatches,
+         missing_live
+       ) do
+    case Map.get(live_by_key, key) do
+      nil ->
+        {matching_count, mismatches, [missing_live_entry(replay_row) | missing_live]}
+
+      live_row ->
+        record_replay_row_comparison(
+          replay_row,
+          live_row,
+          matching_count,
+          mismatches,
+          missing_live
+        )
+    end
+  end
+
+  defp record_replay_row_comparison(
+         replay_row,
+         live_row,
+         matching_count,
+         mismatches,
+         missing_live
+       ) do
+    if equivalent_sample_rows?(replay_row, live_row) do
+      {matching_count + 1, mismatches, missing_live}
+    else
+      {matching_count, [mismatch_entry(replay_row, live_row) | mismatches], missing_live}
+    end
   end
 
   defp sample_key(sample_row), do: {sample_row.evidence_id, sample_row.point_id}

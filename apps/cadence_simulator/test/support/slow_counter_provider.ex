@@ -1,4 +1,6 @@
 defmodule CadenceSimulator.TestSupport.SlowCounterProvider do
+  @moduledoc false
+
   @behaviour CadenceSimulator.DynamicsProvider
 
   @impl true

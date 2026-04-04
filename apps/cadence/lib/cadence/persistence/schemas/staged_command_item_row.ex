@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.StagedCommandItemRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

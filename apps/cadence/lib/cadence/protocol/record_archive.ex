@@ -111,14 +111,28 @@ defmodule Cadence.Protocol.RecordArchive do
         Enum.reduce_while(records_batch, :ok, fn
           {%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records}, :ok
           when is_list(transfer_frame_records) and is_list(packet_records) ->
-            case backend.persist_records(raw_evidence, transfer_frame_records, packet_records) do
-              :ok -> {:cont, :ok}
-              {:error, reason} -> {:halt, {:error, reason}}
-            end
+            persist_record_batch_entry(
+              backend,
+              raw_evidence,
+              transfer_frame_records,
+              packet_records
+            )
 
           _other, :ok ->
             {:halt, {:error, :invalid_protocol_record_batch}}
         end)
+    end
+  end
+
+  defp persist_record_batch_entry(
+         backend,
+         %RawEvidence{} = raw_evidence,
+         transfer_frame_records,
+         packet_records
+       ) do
+    case backend.persist_records(raw_evidence, transfer_frame_records, packet_records) do
+      :ok -> {:cont, :ok}
+      {:error, reason} -> {:halt, {:error, reason}}
     end
   end
 

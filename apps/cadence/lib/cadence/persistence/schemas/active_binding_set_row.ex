@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.ActiveBindingSetRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

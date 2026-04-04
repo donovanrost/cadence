@@ -98,14 +98,18 @@ defmodule Cadence.Jobs do
 
   @spec run_job(binary()) :: {:ok, Job.t()} | {:error, term()}
   def run_job(job_id) when is_binary(job_id) do
-    with {:ok, %Job{status: :running} = job} <- fetch_job(job_id) do
-      case safe_dispatch(job) do
-        {:ok, _result} -> complete_job(job)
-        {:error, reason} -> fail_job(job, reason)
-      end
-    else
-      {:ok, %Job{} = job} -> fail_job(job, {:job_not_running, job.status})
-      {:error, reason} -> {:error, reason}
+    case fetch_job(job_id) do
+      {:ok, %Job{status: :running} = job} ->
+        case safe_dispatch(job) do
+          {:ok, _result} -> complete_job(job)
+          {:error, reason} -> fail_job(job, reason)
+        end
+
+      {:ok, %Job{} = job} ->
+        fail_job(job, {:job_not_running, job.status})
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

@@ -39,7 +39,12 @@ defmodule CadenceSimulator.DevTools do
   end
 
   @spec profiler_defaults(String.t()) ::
-          {:ok, %{profile: Cadence.DevProfile.t(), node: String.t() | nil, mission_id: String.t() | nil}}
+          {:ok,
+           %{
+             profile: Cadence.DevProfile.t(),
+             node: String.t() | nil,
+             mission_id: String.t() | nil
+           }}
           | {:error, String.t()}
   def profiler_defaults(profile_identifier) when is_binary(profile_identifier) do
     with {:ok, profile} <- DevProfile.load(profile_identifier) do
@@ -68,14 +73,12 @@ defmodule CadenceSimulator.DevTools do
       {:ok, opts} ->
         runtime_mode = opts[:runtime_mode]
 
-        cond do
-          is_nil(expected_runtime_mode) or runtime_mode == expected_runtime_mode ->
-            {:ok, DevProfile.resolve_runtime_opts(profile, opts)}
-
-          true ->
-            {:error,
-             "profile #{profile.name} resolves to #{inspect(runtime_mode)} mode, " <>
-               "but #{inspect(expected_runtime_mode)} is required"}
+        if is_nil(expected_runtime_mode) or runtime_mode == expected_runtime_mode do
+          {:ok, DevProfile.resolve_runtime_opts(profile, opts)}
+        else
+          {:error,
+           "profile #{profile.name} resolves to #{inspect(runtime_mode)} mode, " <>
+             "but #{inspect(expected_runtime_mode)} is required"}
         end
 
       {:help, usage} ->

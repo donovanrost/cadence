@@ -18,26 +18,10 @@ defmodule Cadence.Commanding.DispatchSupervisor do
   def ensure_lane_dispatcher_started(organization_id, mission_id, queue_lane_key, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) and
              is_list(opts) do
-    if is_nil(Process.whereis(@lane_supervisor)) or is_nil(Process.whereis(@registry)) do
+    if supervisor_dependencies_missing?() do
       :ok
     else
-      child_spec =
-        Supervisor.child_spec(
-          {LaneDispatcher,
-           Keyword.merge(opts,
-             organization_id: organization_id,
-             mission_id: mission_id,
-             queue_lane_key: queue_lane_key
-           )},
-          id: {:command_lane_dispatcher, organization_id, mission_id, queue_lane_key}
-        )
-
-      case DynamicSupervisor.start_child(@lane_supervisor, child_spec) do
-        {:ok, _pid} -> :ok
-        {:error, {:already_started, _pid}} -> :ok
-        {:error, {:already_present, _child_spec}} -> :ok
-        {:error, reason} -> {:error, reason}
-      end
+      start_lane_dispatcher_child(organization_id, mission_id, queue_lane_key, opts)
     end
   end
 
@@ -53,6 +37,30 @@ defmodule Cadence.Commanding.DispatchSupervisor do
       end
     end
   end
+
+  defp supervisor_dependencies_missing? do
+    is_nil(Process.whereis(@lane_supervisor)) or is_nil(Process.whereis(@registry))
+  end
+
+  defp start_lane_dispatcher_child(organization_id, mission_id, queue_lane_key, opts) do
+    child_spec =
+      Supervisor.child_spec(
+        {LaneDispatcher,
+         Keyword.merge(opts,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           queue_lane_key: queue_lane_key
+         )},
+        id: {:command_lane_dispatcher, organization_id, mission_id, queue_lane_key}
+      )
+
+    normalize_start_child_result(DynamicSupervisor.start_child(@lane_supervisor, child_spec))
+  end
+
+  defp normalize_start_child_result({:ok, _pid}), do: :ok
+  defp normalize_start_child_result({:error, {:already_started, _pid}}), do: :ok
+  defp normalize_start_child_result({:error, {:already_present, _child_spec}}), do: :ok
+  defp normalize_start_child_result({:error, reason}), do: {:error, reason}
 
   @impl true
   def init(opts) do

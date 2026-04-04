@@ -7,9 +7,8 @@ defmodule CadenceWeb.ControlPlaneAccess do
   @spec authorize_organization(Scope.t(), binary(), atom()) :: {:ok, term()} | {:error, term()}
   def authorize_organization(%Scope{} = current_scope, organization_id, action)
       when is_binary(organization_id) and is_atom(action) do
-    with :ok <- Policy.authorize(current_scope, action, %{organization_id: organization_id}),
-         {:ok, organization} <- Cadence.fetch_organization(organization_id) do
-      {:ok, organization}
+    with :ok <- Policy.authorize(current_scope, action, %{organization_id: organization_id}) do
+      Cadence.fetch_organization(organization_id)
     end
   end
 
@@ -20,9 +19,8 @@ defmodule CadenceWeb.ControlPlaneAccess do
            Policy.authorize(current_scope, :manage_mission, %{
              organization_id: organization_id,
              mission_id: mission_id
-           }),
-         {:ok, mission} <- Cadence.fetch_mission(organization_id, mission_id) do
-      {:ok, mission}
+           }) do
+      Cadence.fetch_mission(organization_id, mission_id)
     end
   end
 
@@ -30,9 +28,8 @@ defmodule CadenceWeb.ControlPlaneAccess do
           {:ok, term()} | {:error, term()}
   def authorize_spacecraft(%Scope{} = current_scope, organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    with {:ok, _mission} <- authorize_mission(current_scope, organization_id, mission_id),
-         {:ok, spacecraft} <- Cadence.fetch_spacecraft(organization_id, mission_id, spacecraft_id) do
-      {:ok, spacecraft}
+    with {:ok, _mission} <- authorize_mission(current_scope, organization_id, mission_id) do
+      Cadence.fetch_spacecraft(organization_id, mission_id, spacecraft_id)
     end
   end
 

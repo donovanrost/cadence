@@ -168,21 +168,9 @@ defmodule Cadence.Governance do
   def fetch_binding_set(organization_id, mission_id, binding_set_id, version)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
              is_integer(version) and version > 0 do
-    binding_set_row =
-      BindingSetRow
-      |> where(
-        [binding_set_row],
-        binding_set_row.organization_id == ^organization_id and
-          binding_set_row.mission_id == ^mission_id and
-          binding_set_row.binding_set_id == ^binding_set_id and
-          binding_set_row.version == ^version
-      )
-      |> Repo.one()
-
-    case binding_set_row do
-      nil -> {:error, :binding_set_not_found}
-      %BindingSetRow{} = row -> hydrate_binding_set(row)
-    end
+    organization_id
+    |> binding_set_row_for_org(mission_id, binding_set_id, version)
+    |> hydrate_binding_set_row()
   end
 
   @spec fetch_latest_binding_set(binary(), binary()) :: {:ok, BindingSet.t()} | {:error, term()}
@@ -294,38 +282,65 @@ defmodule Cadence.Governance do
              mission_id,
              capability_instances_by_id,
              capability_registry
-           ),
-         :ok <- validate_binding_set_instances(binding_set, capability_instances_by_id) do
-      :ok
+           ) do
+      validate_binding_set_instances(binding_set, capability_instances_by_id)
     end
   end
 
   defp validate_binding_set(%BindingSet{}), do: {:error, :missing_mission_id}
 
+  defp binding_set_row_for_org(organization_id, mission_id, binding_set_id, version) do
+    BindingSetRow
+    |> where(
+      [binding_set_row],
+      binding_set_row.organization_id == ^organization_id and
+        binding_set_row.mission_id == ^mission_id and
+        binding_set_row.binding_set_id == ^binding_set_id and
+        binding_set_row.version == ^version
+    )
+    |> Repo.one()
+  end
+
+  defp hydrate_binding_set_row(nil), do: {:error, :binding_set_not_found}
+  defp hydrate_binding_set_row(%BindingSetRow{} = row), do: hydrate_binding_set(row)
+
   defp validate_capability_instances(capability_instances, mission_id, capability_registry)
        when is_list(capability_instances) do
     Enum.reduce_while(capability_instances, {:ok, %{}}, fn
       %CapabilityInstance{} = capability_instance, {:ok, acc} ->
-        if Map.has_key?(acc, capability_instance.capability_instance_id) do
-          {:halt,
-           {:error,
-            {:duplicate_capability_instance_id, capability_instance.capability_instance_id}}}
-        else
-          case validate_capability_instance(capability_instance, mission_id, capability_registry) do
-            {:ok, %CapabilityInstance{} = resolved_capability_instance} ->
-              {:cont,
-               {:ok,
-                Map.put(
-                  acc,
-                  resolved_capability_instance.capability_instance_id,
-                  resolved_capability_instance
-                )}}
-
-            {:error, reason} ->
-              {:halt, {:error, reason}}
-          end
-        end
+        reduce_capability_instance_validation(
+          capability_instance,
+          mission_id,
+          capability_registry,
+          acc
+        )
     end)
+  end
+
+  defp reduce_capability_instance_validation(
+         %CapabilityInstance{} = capability_instance,
+         mission_id,
+         capability_registry,
+         acc
+       ) do
+    if Map.has_key?(acc, capability_instance.capability_instance_id) do
+      {:halt,
+       {:error, {:duplicate_capability_instance_id, capability_instance.capability_instance_id}}}
+    else
+      case validate_capability_instance(capability_instance, mission_id, capability_registry) do
+        {:ok, %CapabilityInstance{} = resolved_capability_instance} ->
+          {:cont,
+           {:ok,
+            Map.put(
+              acc,
+              resolved_capability_instance.capability_instance_id,
+              resolved_capability_instance
+            )}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end
   end
 
   defp validate_capability_instance(
@@ -521,19 +536,20 @@ defmodule Cadence.Governance do
   defp persist_binding_set_row(repo, %BindingSet{} = binding_set) do
     changeset = BindingSetRow.changeset(binding_set)
 
-    with {:ok, _row} <-
-           repo.insert(changeset,
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :binding_set_id, :version]
-           ) do
-      {:ok,
-       repo.get_by!(BindingSetRow,
-         mission_id: binding_set.mission_id,
-         binding_set_id: binding_set.binding_set_id,
-         version: binding_set.version
-       )}
-    else
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
+    case repo.insert(changeset,
+           on_conflict: :nothing,
+           conflict_target: [:mission_id, :binding_set_id, :version]
+         ) do
+      {:ok, _row} ->
+        {:ok,
+         repo.get_by!(BindingSetRow,
+           mission_id: binding_set.mission_id,
+           binding_set_id: binding_set.binding_set_id,
+           version: binding_set.version
+         )}
+
+      {:error, %Changeset{} = changeset} ->
+        {:error, changeset}
     end
   end
 

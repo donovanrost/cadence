@@ -1,4 +1,6 @@
 defmodule CadenceWeb.TestSupport.FakeTelemetryCatalogImporter do
+  @moduledoc false
+
   @behaviour Cadence.Catalog.Importer
 
   alias Cadence.Catalog

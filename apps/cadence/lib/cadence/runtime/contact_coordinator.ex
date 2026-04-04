@@ -302,9 +302,8 @@ defmodule Cadence.Runtime.ContactCoordinator do
   defp validate_realized_contact(%RealizedContact{paths: paths}) do
     with :ok <- validate_unique_path_ids(paths),
          :ok <- validate_uplink_selection(paths),
-         :ok <- validate_downlink_selection(paths),
-         :ok <- validate_transport_binding_ids(paths) do
-      :ok
+         :ok <- validate_downlink_selection(paths) do
+      validate_transport_binding_ids(paths)
     end
   end
 

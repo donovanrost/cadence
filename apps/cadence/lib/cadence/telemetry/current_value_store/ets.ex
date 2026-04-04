@@ -48,15 +48,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     samples
     |> latest_per_key()
     |> Enum.each(fn {key, sample} ->
-      case :ets.lookup(table, key) do
-        [{^key, existing_sample}] ->
-          if sample_newer?(sample, existing_sample) do
-            true = :ets.insert(table, {key, sample})
-          end
-
-        [] ->
-          true = :ets.insert(table, {key, sample})
-      end
+      maybe_store_sample(table, key, sample)
     end)
 
     :ok
@@ -122,10 +114,28 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     Enum.reduce(samples, %{}, fn %Sample{} = sample, acc ->
       key = key(sample)
 
-      Map.update(acc, key, sample, fn existing_sample ->
-        if sample_newer?(sample, existing_sample), do: sample, else: existing_sample
-      end)
+      Map.update(acc, key, sample, &latest_sample(sample, &1))
     end)
+  end
+
+  defp maybe_store_sample(table, key, %Sample{} = sample) do
+    case :ets.lookup(table, key) do
+      [{^key, existing_sample}] ->
+        maybe_insert_newer_sample(table, key, sample, existing_sample)
+
+      [] ->
+        true = :ets.insert(table, {key, sample})
+    end
+  end
+
+  defp maybe_insert_newer_sample(table, key, %Sample{} = sample, %Sample{} = existing_sample) do
+    if sample_newer?(sample, existing_sample) do
+      true = :ets.insert(table, {key, sample})
+    end
+  end
+
+  defp latest_sample(%Sample{} = sample, %Sample{} = existing_sample) do
+    if sample_newer?(sample, existing_sample), do: sample, else: existing_sample
   end
 
   defp key(%Sample{} = sample) do

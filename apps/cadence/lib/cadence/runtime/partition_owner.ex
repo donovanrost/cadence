@@ -266,78 +266,73 @@ defmodule Cadence.Runtime.PartitionOwner do
   def handle_call({:process_raw_evidence, %RawEvidence{} = raw_evidence}, _from, state) do
     TelemetryProfiler.with_ingress_context(raw_evidence, fn ->
       TelemetryProfiler.with_stage(:runtime, fn ->
-        reply =
-          with {:ok, prepared_state, pre_runtime_records} <-
-                 TelemetryProfiler.with_runtime_component(
-                   raw_evidence.mission_id,
-                   :partition_prepare,
-                   fn ->
-                     with {:ok, prepared_state, pre_runtime_records} <-
-                            prepare_for_raw_evidence(state, raw_evidence),
-                          :ok <- validate_partition(raw_evidence, prepared_state.partition_key) do
-                       {:ok, prepared_state, pre_runtime_records}
-                     end
-                   end
-                 ),
-               {:ok, decode_result, next_state, decode_runtime_records} <-
-                 TelemetryProfiler.with_runtime_component(
-                   raw_evidence.mission_id,
-                   :partition_decode,
-                   fn ->
-                     decode_packet_records(raw_evidence, prepared_state)
-                   end
-                 ),
-               {:ok, dispatch_result, next_state, dispatch_runtime_records} <-
-                 TelemetryProfiler.with_runtime_component(
-                   raw_evidence.mission_id,
-                   :partition_dispatch,
-                   fn ->
-                     execute_dispatches(decode_result, next_state)
-                   end
-                 ),
-               all_runtime_records <-
-                 merge_runtime_records(pre_runtime_records, decode_runtime_records),
-               all_runtime_records <-
-                 merge_runtime_records(all_runtime_records, next_state.pending_runtime_records),
-               all_runtime_records <-
-                 merge_runtime_records(all_runtime_records, dispatch_runtime_records),
-               {:ok, pending_runtime_records} <-
-                 TelemetryProfiler.with_runtime_component(
-                   raw_evidence.mission_id,
-                   :runtime_record_persistence,
-                   fn ->
-                     maybe_persist_runtime_records(
-                       next_state.persist_runtime_records?,
-                       all_runtime_records
-                     )
-                   end
-                 ) do
-            outputs = Enum.flat_map(dispatch_result.dispatch_results, & &1.outputs)
-
-            dispatch_decisions =
-              Enum.map(dispatch_result.dispatch_results, & &1.dispatch_decision)
-
-            {:ok,
-             %{
-               raw_evidence: raw_evidence,
-               packet_records: decode_result.packet_records,
-               transfer_frame_records: decode_result.transfer_frame_records,
-               protocol_anomalies: decode_result.protocol_anomalies,
-               dispatch_decisions: dispatch_decisions,
-               outputs: outputs,
-               runtime_records: all_runtime_records
-             }, %{next_state | pending_runtime_records: pending_runtime_records}}
-          end
-
-        case reply do
-          {:ok, processing_result, next_state} ->
-            {:reply, {:ok, processing_result}, next_state}
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
+        raw_evidence
+        |> process_raw_evidence_reply(state)
+        |> handle_processing_reply(state)
       end)
     end)
+  end
+
+  defp process_raw_evidence_reply(%RawEvidence{} = raw_evidence, state) do
+    with {:ok, prepared_state, pre_runtime_records} <-
+           TelemetryProfiler.with_runtime_component(
+             raw_evidence.mission_id,
+             :partition_prepare,
+             fn ->
+               with {:ok, prepared_state, pre_runtime_records} <-
+                      prepare_for_raw_evidence(state, raw_evidence),
+                    :ok <- validate_partition(raw_evidence, prepared_state.partition_key) do
+                 {:ok, prepared_state, pre_runtime_records}
+               end
+             end
+           ),
+         {:ok, decode_result, next_state, decode_runtime_records} <-
+           TelemetryProfiler.with_runtime_component(
+             raw_evidence.mission_id,
+             :partition_decode,
+             fn ->
+               decode_packet_records(raw_evidence, prepared_state)
+             end
+           ),
+         {:ok, dispatch_result, next_state, dispatch_runtime_records} <-
+           TelemetryProfiler.with_runtime_component(
+             raw_evidence.mission_id,
+             :partition_dispatch,
+             fn ->
+               execute_dispatches(decode_result, next_state)
+             end
+           ),
+         all_runtime_records <-
+           merge_runtime_records(pre_runtime_records, decode_runtime_records),
+         all_runtime_records <-
+           merge_runtime_records(all_runtime_records, next_state.pending_runtime_records),
+         all_runtime_records <-
+           merge_runtime_records(all_runtime_records, dispatch_runtime_records),
+         {:ok, pending_runtime_records} <-
+           TelemetryProfiler.with_runtime_component(
+             raw_evidence.mission_id,
+             :runtime_record_persistence,
+             fn ->
+               maybe_persist_runtime_records(
+                 next_state.persist_runtime_records?,
+                 all_runtime_records
+               )
+             end
+           ) do
+      outputs = Enum.flat_map(dispatch_result.dispatch_results, & &1.outputs)
+      dispatch_decisions = Enum.map(dispatch_result.dispatch_results, & &1.dispatch_decision)
+
+      {:ok,
+       %{
+         raw_evidence: raw_evidence,
+         packet_records: decode_result.packet_records,
+         transfer_frame_records: decode_result.transfer_frame_records,
+         protocol_anomalies: decode_result.protocol_anomalies,
+         dispatch_decisions: dispatch_decisions,
+         outputs: outputs,
+         runtime_records: all_runtime_records
+       }, %{next_state | pending_runtime_records: pending_runtime_records}}
+    end
   end
 
   @impl true
@@ -349,33 +344,58 @@ defmodule Cadence.Runtime.PartitionOwner do
 
     case TimerService.fire(state.timer_service, capability_instance_id, timer_key, timer_id) do
       {:ok, timer_service, timer_entry} ->
-        case execute_timer(
-               capability_instance_id,
-               timer_key,
-               timer_entry,
-               %{state | timer_service: timer_service}
-             ) do
-          {:ok, next_state, runtime_records} ->
-            all_runtime_records =
-              merge_runtime_records(next_state.pending_runtime_records, runtime_records)
-
-            case maybe_persist_runtime_records(
-                   next_state.persist_runtime_records?,
-                   all_runtime_records
-                 ) do
-              {:ok, pending_runtime_records} ->
-                {:noreply, %{next_state | pending_runtime_records: pending_runtime_records}}
-
-              {:error, reason} ->
-                {:stop, reason, state}
-            end
-
-          {:error, reason} ->
-            {:stop, reason, state}
-        end
+        handle_fired_managed_application_timer(
+          capability_instance_id,
+          timer_key,
+          timer_entry,
+          timer_service,
+          state
+        )
 
       {:error, :stale_timer} ->
         {:noreply, state}
+    end
+  end
+
+  defp handle_fired_managed_application_timer(
+         capability_instance_id,
+         timer_key,
+         timer_entry,
+         %TimerService{} = timer_service,
+         state
+       ) do
+    case execute_timer(
+           capability_instance_id,
+           timer_key,
+           timer_entry,
+           %{state | timer_service: timer_service}
+         ) do
+      {:ok, next_state, runtime_records} ->
+        persist_timer_runtime_records(next_state, runtime_records, state)
+
+      {:error, reason} ->
+        {:stop, reason, state}
+    end
+  end
+
+  defp handle_processing_reply({:ok, processing_result, next_state}, _state) do
+    {:reply, {:ok, processing_result}, next_state}
+  end
+
+  defp handle_processing_reply({:error, reason}, state) do
+    {:reply, {:error, reason}, state}
+  end
+
+  defp persist_timer_runtime_records(next_state, runtime_records, state) do
+    all_runtime_records =
+      merge_runtime_records(next_state.pending_runtime_records, runtime_records)
+
+    case maybe_persist_runtime_records(next_state.persist_runtime_records?, all_runtime_records) do
+      {:ok, pending_runtime_records} ->
+        {:noreply, %{next_state | pending_runtime_records: pending_runtime_records}}
+
+      {:error, reason} ->
+        {:stop, reason, state}
     end
   end
 
@@ -434,69 +454,138 @@ defmodule Cadence.Runtime.PartitionOwner do
     |> Enum.reduce_while(
       {:ok, %{}, TimerService.new(mode: clock_mode, current_time: current_time),
        empty_runtime_records()},
-      fn %CapabilityInstance{} = capability_instance,
-         {:ok, acc, timer_service, runtime_records} ->
-        with {:ok, %Descriptor{} = descriptor} <-
-               CapabilityRegistry.fetch_descriptor(capability_instance.family_key) do
-          if descriptor.kind == :managed_application do
-            execution_context =
-              build_execution_context(
-                activation,
-                runtime_binding_set,
-                partition_key,
-                capability_instance,
-                TimerService.current_time(timer_service)
-              )
-
-            case CapabilityRegistry.init_managed_application(
-                   capability_instance.family_key,
-                   capability_instance.runtime_configuration,
-                   execution_context
-                 ) do
-              {:ok, %ExecutionResult{} = execution_result} ->
-                case ActionExecutor.execute_many(
-                       execution_result.action_requests,
-                       capability_instance.capability_instance_id,
-                       timer_service
-                     ) do
-                  {:ok, %{timer_service: next_timer_service, timer_events: timer_events}} ->
-                    {:cont,
-                     {:ok,
-                      Map.put(
-                        acc,
-                        capability_instance.capability_instance_id,
-                        execution_result.state
-                      ), next_timer_service,
-                      merge_runtime_records(
-                        runtime_records,
-                        managed_execution_runtime_records(
-                          :initialized,
-                          capability_instance,
-                          execution_context,
-                          execution_result,
-                          execution_result.action_requests,
-                          timer_events
-                        )
-                      )}}
-
-                  {:error, reason} ->
-                    _ = TimerService.cancel_all(timer_service)
-                    {:halt, {:error, {capability_instance.capability_instance_id, reason}}}
-                end
-
-              {:error, reason} ->
-                _ = TimerService.cancel_all(timer_service)
-                {:halt, {:error, {capability_instance.capability_instance_id, reason}}}
-            end
-          else
-            {:cont, {:ok, acc, timer_service, runtime_records}}
-          end
-        else
-          {:error, reason} ->
-            _ = TimerService.cancel_all(timer_service)
-            {:halt, {:error, reason}}
-        end
+      fn %CapabilityInstance{} = capability_instance, reduce_state ->
+        reduce_managed_application_initialization(
+          capability_instance,
+          reduce_state,
+          activation,
+          runtime_binding_set,
+          partition_key
+        )
       end
+    )
+  end
+
+  defp reduce_managed_application_initialization(
+         %CapabilityInstance{} = capability_instance,
+         {:ok, acc, timer_service, runtime_records},
+         %BindingSetActivation{} = activation,
+         %BindingSet{} = runtime_binding_set,
+         %PartitionKey{} = partition_key
+       ) do
+    case CapabilityRegistry.fetch_descriptor(capability_instance.family_key) do
+      {:ok, %Descriptor{} = descriptor} ->
+        maybe_initialize_managed_application_instance(
+          descriptor,
+          activation,
+          runtime_binding_set,
+          partition_key,
+          capability_instance,
+          timer_service,
+          acc,
+          runtime_records
+        )
+
+      {:error, reason} ->
+        _ = TimerService.cancel_all(timer_service)
+        {:halt, {:error, reason}}
+    end
+  end
+
+  defp maybe_initialize_managed_application_instance(
+         %Descriptor{kind: :managed_application},
+         %BindingSetActivation{} = activation,
+         %BindingSet{} = runtime_binding_set,
+         %PartitionKey{} = partition_key,
+         %CapabilityInstance{} = capability_instance,
+         %TimerService{} = timer_service,
+         acc,
+         runtime_records
+       ) do
+    initialize_managed_application_instance(
+      activation,
+      runtime_binding_set,
+      partition_key,
+      capability_instance,
+      timer_service,
+      acc,
+      runtime_records
+    )
+  end
+
+  defp maybe_initialize_managed_application_instance(
+         %Descriptor{},
+         %BindingSetActivation{},
+         %BindingSet{},
+         %PartitionKey{},
+         %CapabilityInstance{},
+         %TimerService{} = timer_service,
+         acc,
+         runtime_records
+       ) do
+    {:cont, {:ok, acc, timer_service, runtime_records}}
+  end
+
+  defp initialize_managed_application_instance(
+         %BindingSetActivation{} = activation,
+         %BindingSet{} = runtime_binding_set,
+         %PartitionKey{} = partition_key,
+         %CapabilityInstance{} = capability_instance,
+         %TimerService{} = timer_service,
+         acc,
+         runtime_records
+       ) do
+    execution_context =
+      build_execution_context(
+        activation,
+        runtime_binding_set,
+        partition_key,
+        capability_instance,
+        TimerService.current_time(timer_service)
+      )
+
+    with {:ok, %ExecutionResult{} = execution_result} <-
+           CapabilityRegistry.init_managed_application(
+             capability_instance.family_key,
+             capability_instance.runtime_configuration,
+             execution_context
+           ),
+         {:ok, %{timer_service: next_timer_service, timer_events: timer_events}} <-
+           execute_managed_application_init_actions(
+             execution_result,
+             capability_instance,
+             timer_service
+           ) do
+      {:cont,
+       {:ok, Map.put(acc, capability_instance.capability_instance_id, execution_result.state),
+        next_timer_service,
+        merge_runtime_records(
+          runtime_records,
+          managed_execution_runtime_records(
+            :initialized,
+            capability_instance,
+            execution_context,
+            execution_result,
+            execution_result.action_requests,
+            timer_events
+          )
+        )}}
+    else
+      {:error, reason} ->
+        _ = TimerService.cancel_all(timer_service)
+        {:halt, {:error, {capability_instance.capability_instance_id, reason}}}
+    end
+  end
+
+  defp execute_managed_application_init_actions(
+         %ExecutionResult{} = execution_result,
+         %CapabilityInstance{} = capability_instance,
+         %TimerService{} = timer_service
+       ) do
+    ActionExecutor.execute_many(
+      execution_result.action_requests,
+      capability_instance.capability_instance_id,
+      timer_service
     )
   end
 
@@ -514,31 +603,35 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp decode_packet_records(%RawEvidence{protocol_family: protocol_family} = raw_evidence, state)
        when protocol_family in [:tm, :tm_transfer_frame] do
-    with {:ok, decode_result, rest, next_tm_pipeline_state, next_tm_continuity_state} <-
-           TMFrameIngress.process(
-             raw_evidence,
-             state.tm_pipeline_state,
-             state.tm_continuity_state,
-             state.tm_frame_remainder
-           ) do
-      {:ok, decode_result,
-       %{
-         state
-         | tm_pipeline_state: next_tm_pipeline_state,
-           tm_continuity_state: next_tm_continuity_state,
-           tm_frame_remainder: rest
-       }, empty_runtime_records()}
-    else
+    decode_tm_packet_records(protocol_family, raw_evidence, state)
+  end
+
+  defp decode_packet_records(%RawEvidence{protocol_family: protocol_family}, _state) do
+    {:error, {:unsupported_ingress_protocol_family, protocol_family}}
+  end
+
+  defp decode_tm_packet_records(protocol_family, %RawEvidence{} = raw_evidence, state) do
+    case TMFrameIngress.process(
+           raw_evidence,
+           state.tm_pipeline_state,
+           state.tm_continuity_state,
+           state.tm_frame_remainder
+         ) do
+      {:ok, decode_result, rest, next_tm_pipeline_state, next_tm_continuity_state} ->
+        {:ok, decode_result,
+         %{
+           state
+           | tm_pipeline_state: next_tm_pipeline_state,
+             tm_continuity_state: next_tm_continuity_state,
+             tm_frame_remainder: rest
+         }, empty_runtime_records()}
+
       {:error, reason, _next_tm_pipeline_state, _next_tm_continuity_state} ->
         {:error, {protocol_family, reason}}
 
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp decode_packet_records(%RawEvidence{protocol_family: protocol_family}, _state) do
-    {:error, {:unsupported_ingress_protocol_family, protocol_family}}
   end
 
   defp execute_dispatches(
@@ -752,50 +845,46 @@ defmodule Cadence.Runtime.PartitionOwner do
   defp snapshot_managed_applications(state) do
     state.runtime_binding_set.capability_instances
     |> Enum.reduce_while({:ok, []}, fn %CapabilityInstance{} = capability_instance, {:ok, acc} ->
-      with {:ok, %Descriptor{} = descriptor} <-
-             CapabilityRegistry.fetch_descriptor(capability_instance.family_key) do
-        if descriptor.kind == :managed_application do
-          with {:ok, application_state} <-
-                 fetch_managed_application_state(
-                   state,
-                   capability_instance.capability_instance_id
-                 ),
-               {:ok, snapshot_state} <-
-                 CapabilityRegistry.snapshot_managed_state(
-                   capability_instance.family_key,
-                   application_state,
-                   build_execution_context(
-                     state.active_activation,
-                     state.runtime_binding_set,
-                     state.partition_key,
-                     capability_instance,
-                     current_runtime_time(state)
-                   )
-                 ) do
-            {:cont,
-             {:ok,
-              acc ++
-                [
-                  %{
-                    capability_instance_id: capability_instance.capability_instance_id,
-                    family_key: capability_instance.family_key,
-                    target_scope: capability_instance.target_scope,
-                    source_endpoint_ref: capability_instance.source_endpoint_ref,
-                    state: snapshot_state
-                  }
-                ]}}
-          else
-            {:error, reason} ->
-              {:halt, {:error, reason}}
-          end
-        else
-          {:cont, {:ok, acc}}
-        end
-      else
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
+      reduce_managed_application_snapshot(capability_instance, acc, state)
     end)
+  end
+
+  defp reduce_managed_application_snapshot(
+         %CapabilityInstance{} = capability_instance,
+         acc,
+         state
+       ) do
+    case snapshot_managed_application(state, capability_instance) do
+      {:ok, snapshot} -> {:cont, {:ok, acc ++ [snapshot]}}
+      :skip -> {:cont, {:ok, acc}}
+      {:error, reason} -> {:halt, {:error, reason}}
+    end
+  end
+
+  defp snapshot_managed_application(state, %CapabilityInstance{} = capability_instance) do
+    with {:ok, %Descriptor{} = descriptor} <-
+           CapabilityRegistry.fetch_descriptor(capability_instance.family_key),
+         :ok <- ensure_managed_application_descriptor(descriptor),
+         {:ok, application_state} <-
+           fetch_managed_application_state(state, capability_instance.capability_instance_id),
+         {:ok, snapshot_state} <-
+           CapabilityRegistry.snapshot_managed_state(
+             capability_instance.family_key,
+             application_state,
+             snapshot_execution_context(state, capability_instance)
+           ) do
+      {:ok,
+       %{
+         capability_instance_id: capability_instance.capability_instance_id,
+         family_key: capability_instance.family_key,
+         target_scope: capability_instance.target_scope,
+         source_endpoint_ref: capability_instance.source_endpoint_ref,
+         state: snapshot_state
+       }}
+    else
+      :skip -> :skip
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp build_runtime_rules(
@@ -818,12 +907,12 @@ defmodule Cadence.Runtime.PartitionOwner do
 
       runtime_rules =
         rules
-        |> Enum.filter(&rule_applies_to_partition?(&1, partition_key))
         |> Enum.filter(fn %BindingRule{} = rule ->
-          MapSet.member?(
-            runtime_capability_instance_ids,
-            BindingRule.capability_instance_id(rule)
-          )
+          rule_applies_to_partition?(rule, partition_key) and
+            MapSet.member?(
+              runtime_capability_instance_ids,
+              BindingRule.capability_instance_id(rule)
+            )
         end)
 
       {:ok, {runtime_capability_instances, runtime_rules}}
@@ -839,37 +928,67 @@ defmodule Cadence.Runtime.PartitionOwner do
     Enum.reduce_while(capability_instances, {:ok, []}, fn %CapabilityInstance{} =
                                                             capability_instance,
                                                           {:ok, acc} ->
-      with {:ok, %Descriptor{} = descriptor} <-
-             CapabilityRegistry.fetch_descriptor(capability_instance.family_key) do
-        if descriptor.partition_affinity == partition_key.affinity and
-             capability_instance_applies_to_partition?(capability_instance, partition_key) do
-          case CapabilityRegistry.build_instance(
-                 capability_instance.family_key,
-                 capability_instance.runtime_configuration,
-                 activation_context
-               ) do
-            {:ok, instance_configuration} ->
-              {:cont,
-               {:ok,
-                acc ++
-                  [
-                    %CapabilityInstance{
-                      capability_instance
-                      | runtime_configuration: instance_configuration
-                    }
-                  ]}}
-
-            {:error, reason} ->
-              {:halt, {:error, {capability_instance.family_key, reason}}}
-          end
-        else
-          {:cont, {:ok, acc}}
-        end
-      else
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
+      reduce_runtime_capability_instance(
+        capability_instance,
+        acc,
+        partition_key,
+        activation_context
+      )
     end)
+  end
+
+  defp reduce_runtime_capability_instance(
+         %CapabilityInstance{} = capability_instance,
+         acc,
+         %PartitionKey{} = partition_key,
+         %ActivationContext{} = activation_context
+       ) do
+    case build_runtime_capability_instance(
+           capability_instance,
+           partition_key,
+           activation_context
+         ) do
+      {:ok, runtime_capability_instance} ->
+        {:cont, {:ok, acc ++ [runtime_capability_instance]}}
+
+      :skip ->
+        {:cont, {:ok, acc}}
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
+    end
+  end
+
+  defp build_runtime_capability_instance(
+         %CapabilityInstance{} = capability_instance,
+         %PartitionKey{} = partition_key,
+         %ActivationContext{} = activation_context
+       ) do
+    with {:ok, %Descriptor{} = descriptor} <-
+           CapabilityRegistry.fetch_descriptor(capability_instance.family_key),
+         :ok <-
+           validate_runtime_capability_partition(
+             descriptor,
+             capability_instance,
+             partition_key
+           ),
+         {:ok, instance_configuration} <-
+           build_runtime_capability_instance_configuration(
+             capability_instance,
+             activation_context
+           ) do
+      {:ok,
+       %CapabilityInstance{capability_instance | runtime_configuration: instance_configuration}}
+    else
+      :skip ->
+        :skip
+
+      {:error, {:build_runtime_instance, reason}} ->
+        {:error, {capability_instance.family_key, reason}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp validate_partition(%RawEvidence{} = raw_evidence, %PartitionKey{} = partition_key) do
@@ -964,6 +1083,49 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp store_async_outputs(state, outputs) when is_list(outputs) do
     %{state | async_outputs: Enum.take(state.async_outputs ++ outputs, -@max_async_outputs)}
+  end
+
+  defp ensure_managed_application_descriptor(%Descriptor{kind: :managed_application}), do: :ok
+  defp ensure_managed_application_descriptor(%Descriptor{}), do: :skip
+
+  defp snapshot_execution_context(state, %CapabilityInstance{} = capability_instance) do
+    build_execution_context(
+      state.active_activation,
+      state.runtime_binding_set,
+      state.partition_key,
+      capability_instance,
+      current_runtime_time(state)
+    )
+  end
+
+  defp validate_runtime_capability_partition(
+         %Descriptor{} = descriptor,
+         %CapabilityInstance{} = capability_instance,
+         %PartitionKey{} = partition_key
+       ) do
+    if descriptor.partition_affinity == partition_key.affinity and
+         capability_instance_applies_to_partition?(capability_instance, partition_key) do
+      :ok
+    else
+      :skip
+    end
+  end
+
+  defp build_runtime_capability_instance_configuration(
+         %CapabilityInstance{} = capability_instance,
+         %ActivationContext{} = activation_context
+       ) do
+    case CapabilityRegistry.build_instance(
+           capability_instance.family_key,
+           capability_instance.runtime_configuration,
+           activation_context
+         ) do
+      {:ok, instance_configuration} ->
+        {:ok, instance_configuration}
+
+      {:error, reason} ->
+        {:error, {:build_runtime_instance, reason}}
+    end
   end
 
   defp empty_runtime_records do

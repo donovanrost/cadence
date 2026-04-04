@@ -174,40 +174,13 @@ defmodule Cadence.DerivedTelemetry do
       impacted_definitions,
       {:ok, {latest_by_point, []}},
       fn %Definition{} = definition, {:ok, {current_latest_by_point, emitted_samples_rev}} ->
-        case source_samples_for_definition(
-               current_latest_by_point,
-               telemetry_source_sample.scope_id,
-               definition.source_point_ids
-             ) do
-          :missing ->
-            {:cont, {:ok, {current_latest_by_point, emitted_samples_rev}}}
-
-          {:ok, source_samples} ->
-            bindings =
-              Map.new(source_samples, fn source_sample ->
-                {source_sample.point_id, source_sample.value}
-              end)
-
-            case ExpressionEvaluator.evaluate(definition.expression, bindings) do
-              {:ok, value} ->
-                derived_sample =
-                  build_derived_sample(definition, telemetry_sample, source_samples, value)
-
-                updated_latest_by_point =
-                  put_latest_source_sample(
-                    current_latest_by_point,
-                    derived_source_sample(derived_sample)
-                  )
-
-                {:cont, {:ok, {updated_latest_by_point, [derived_sample | emitted_samples_rev]}}}
-
-              {:error, reason} ->
-                {:halt,
-                 {:error,
-                  {:derived_evaluation_failed, definition.derived_definition_id,
-                   telemetry_sample.sample_id, reason}}}
-            end
-        end
+        reduce_emitted_definition_sample(
+          definition,
+          telemetry_sample,
+          telemetry_source_sample,
+          current_latest_by_point,
+          emitted_samples_rev
+        )
       end
     )
     |> case do
@@ -398,16 +371,12 @@ defmodule Cadence.DerivedTelemetry do
     dependent_points_by_source =
       Enum.reduce(definitions, %{}, fn %Definition{} = definition, acc ->
         Enum.reduce(definition.source_point_ids, acc, fn source_point_id, source_acc ->
-          if Map.has_key?(definitions_by_output_point, source_point_id) do
-            Map.update(
-              source_acc,
-              source_point_id,
-              [definition.point_id],
-              &[definition.point_id | &1]
-            )
-          else
+          maybe_add_dependent_point(
+            definitions_by_output_point,
+            source_point_id,
+            definition.point_id,
             source_acc
-          end
+          )
         end)
       end)
 
@@ -423,6 +392,78 @@ defmodule Cadence.DerivedTelemetry do
 
       {:error, cycle_points} ->
         {:error, {:derived_dependency_cycle, cycle_points}}
+    end
+  end
+
+  defp reduce_emitted_definition_sample(
+         %Definition{} = definition,
+         telemetry_sample,
+         telemetry_source_sample,
+         current_latest_by_point,
+         emitted_samples_rev
+       ) do
+    case source_samples_for_definition(
+           current_latest_by_point,
+           telemetry_source_sample.scope_id,
+           definition.source_point_ids
+         ) do
+      :missing ->
+        {:cont, {:ok, {current_latest_by_point, emitted_samples_rev}}}
+
+      {:ok, source_samples} ->
+        emit_definition_sample(
+          definition,
+          telemetry_sample,
+          source_samples,
+          current_latest_by_point,
+          emitted_samples_rev
+        )
+    end
+  end
+
+  defp emit_definition_sample(
+         %Definition{} = definition,
+         telemetry_sample,
+         source_samples,
+         current_latest_by_point,
+         emitted_samples_rev
+       ) do
+    bindings =
+      Map.new(source_samples, fn source_sample ->
+        {source_sample.point_id, source_sample.value}
+      end)
+
+    case ExpressionEvaluator.evaluate(definition.expression, bindings) do
+      {:ok, value} ->
+        derived_sample =
+          build_derived_sample(definition, telemetry_sample, source_samples, value)
+
+        updated_latest_by_point =
+          put_latest_source_sample(
+            current_latest_by_point,
+            derived_source_sample(derived_sample)
+          )
+
+        {:cont, {:ok, {updated_latest_by_point, [derived_sample | emitted_samples_rev]}}}
+
+      {:error, reason} ->
+        {:halt,
+         {:error,
+          {:derived_evaluation_failed, definition.derived_definition_id,
+           telemetry_sample.sample_id, reason}}}
+    end
+  end
+
+  defp maybe_add_dependent_point(
+         definitions_by_output_point,
+         source_point_id,
+         dependent_point_id,
+         source_acc
+       ) do
+    if Map.has_key?(definitions_by_output_point, source_point_id) do
+      Map.update(source_acc, source_point_id, [dependent_point_id], &[dependent_point_id | &1])
+    else
+      source_acc
     end
   end
 

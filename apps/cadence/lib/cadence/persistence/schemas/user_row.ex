@@ -1,4 +1,6 @@
 defmodule Cadence.Persistence.Schemas.UserRow do
+  @moduledoc false
+
   use Ecto.Schema
 
   import Ecto.Changeset

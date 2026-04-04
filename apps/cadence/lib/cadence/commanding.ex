@@ -787,64 +787,20 @@ defmodule Cadence.Commanding do
              request_basis.runtime_definition,
              JsonDocument.unwrap_value(request_row.resolved_argument_values_document)
            ) do
-      case claim_queue_entry_for_release(queue_entry_row) do
-        {:ok, %CommandQueueEntryRow{} = claimed_queue_entry_row} ->
-          pending_attempt =
-            build_release_attempt(
-              organization_id,
-              claimed_queue_entry_row,
-              request_row,
-              realized_contact,
-              path,
-              transport_binding,
-              request_basis.runtime_definition,
-              encoded_command,
-              released_by,
-              attempted_at,
-              Keyword.get(opts, :metadata, %{})
-            )
-
-          case persist_command_release_attempt(organization_id, pending_attempt) do
-            {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
-              uplink_request = build_uplink_request(persisted_attempt)
-
-              case Runtime.handle_path_control_input(
-                     mission_id,
-                     realized_contact.realized_contact_id,
-                     path.path_id,
-                     transport_binding.transport_binding_id,
-                     uplink_request,
-                     occurred_at: attempted_at
-                   ) do
-                {:ok, _transport_outputs} ->
-                  complete_release_success(
-                    claimed_queue_entry_row,
-                    request_row,
-                    persisted_attempt,
-                    request_basis.verifier_plans,
-                    attempted_at
-                  )
-
-                {:error, reason} ->
-                  complete_release_failure(claimed_queue_entry_row, persisted_attempt, reason)
-                  {:error, reason}
-              end
-
-            {:error, reason} ->
-              restore_queue_entry_pending(claimed_queue_entry_row)
-
-              maybe_schedule_queue_lane_dispatch(
-                claimed_queue_entry_row.organization_id,
-                claimed_queue_entry_row.mission_id,
-                claimed_queue_entry_row.queue_lane_key
-              )
-
-              {:error, reason}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      execute_release_attempt(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        queue_entry_row: queue_entry_row,
+        request_row: request_row,
+        realized_contact: realized_contact,
+        path: path,
+        transport_binding: transport_binding,
+        request_basis: request_basis,
+        encoded_command: encoded_command,
+        released_by: released_by,
+        attempted_at: attempted_at,
+        metadata: Keyword.get(opts, :metadata, %{})
+      })
     else
       {:error, reason} ->
         {:error, reason}
@@ -855,6 +811,91 @@ defmodule Cadence.Commanding do
   rescue
     error in [ArgumentError] ->
       {:error, {:command_release_encoding_failed, Exception.message(error)}}
+  end
+
+  defp execute_release_attempt(release_context) when is_map(release_context) do
+    with {:ok, %CommandQueueEntryRow{} = claimed_queue_entry_row} <-
+           claim_queue_entry_for_release(release_context.queue_entry_row),
+         claimed_release_context = %{release_context | queue_entry_row: claimed_queue_entry_row},
+         release_attempt_context =
+           release_attempt_context(claimed_release_context),
+         pending_attempt <-
+           build_release_attempt(
+             release_attempt_context,
+             claimed_release_context.encoded_command,
+             claimed_release_context.released_by,
+             claimed_release_context.attempted_at,
+             claimed_release_context.metadata
+           ),
+         {:ok, %CommandReleaseAttempt{} = persisted_attempt} <-
+           persist_or_restore_release_attempt(
+             claimed_release_context.organization_id,
+             pending_attempt,
+             claimed_queue_entry_row
+           ) do
+      dispatch_release_attempt(claimed_release_context, persisted_attempt)
+    end
+  end
+
+  defp release_attempt_context(release_context) when is_map(release_context) do
+    %{
+      organization_id: release_context.organization_id,
+      queue_entry_row: release_context.queue_entry_row,
+      request_row: release_context.request_row,
+      realized_contact: release_context.realized_contact,
+      path: release_context.path,
+      transport_binding: release_context.transport_binding,
+      runtime_definition: release_context.request_basis.runtime_definition
+    }
+  end
+
+  defp persist_or_restore_release_attempt(
+         organization_id,
+         %CommandReleaseAttempt{} = pending_attempt,
+         %CommandQueueEntryRow{} = claimed_queue_entry_row
+       ) do
+    case persist_command_release_attempt(organization_id, pending_attempt) do
+      {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
+        {:ok, persisted_attempt}
+
+      {:error, reason} ->
+        restore_queue_entry_pending(claimed_queue_entry_row)
+
+        maybe_schedule_queue_lane_dispatch(
+          claimed_queue_entry_row.organization_id,
+          claimed_queue_entry_row.mission_id,
+          claimed_queue_entry_row.queue_lane_key
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
+       when is_map(release_context) do
+    uplink_request = build_uplink_request(persisted_attempt)
+
+    case Runtime.handle_path_control_input(
+           release_context.mission_id,
+           release_context.realized_contact.realized_contact_id,
+           release_context.path.path_id,
+           release_context.transport_binding.transport_binding_id,
+           uplink_request,
+           occurred_at: release_context.attempted_at
+         ) do
+      {:ok, _transport_outputs} ->
+        complete_release_success(
+          release_context.queue_entry_row,
+          release_context.request_row,
+          persisted_attempt,
+          release_context.request_basis.verifier_plans,
+          release_context.attempted_at
+        )
+
+      {:error, reason} ->
+        complete_release_failure(release_context.queue_entry_row, persisted_attempt, reason)
+        {:error, reason}
+    end
   end
 
   @spec submit_staged_command_items(binary(), binary(), binary(), [binary()], map()) ::
@@ -1126,55 +1167,68 @@ defmodule Cadence.Commanding do
     else
       runtime_definition.argument_specs
       |> Enum.reduce_while({:ok, %{}}, fn %ArgumentSpec{} = argument_spec, {:ok, acc} ->
-        case resolve_argument_value(argument_spec, normalized_values) do
-          {:ok, :skip} ->
-            {:cont, {:ok, acc}}
-
-          {:ok, value} ->
-            {:cont, {:ok, Map.put(acc, argument_spec.name, value)}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
+        append_resolved_argument_value(argument_spec, normalized_values, acc)
       end)
+    end
+  end
+
+  defp append_resolved_argument_value(
+         %ArgumentSpec{} = argument_spec,
+         normalized_values,
+         acc
+       ) do
+    case resolve_argument_value(argument_spec, normalized_values) do
+      {:ok, :skip} ->
+        {:cont, {:ok, acc}}
+
+      {:ok, value} ->
+        {:cont, {:ok, Map.put(acc, argument_spec.name, value)}}
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
     end
   end
 
   defp resolve_argument_value(%ArgumentSpec{} = argument_spec, normalized_values) do
     case Map.fetch(normalized_values, argument_spec.name) do
-      {:ok, provided_value} ->
-        cond do
-          not is_nil(argument_spec.fixed_value) and provided_value != argument_spec.fixed_value ->
-            {:error,
-             {:command_argument_fixed_value_conflict, argument_spec.name,
-              argument_spec.fixed_value, provided_value}}
+      {:ok, provided_value} -> resolve_provided_argument_value(argument_spec, provided_value)
+      :error -> resolve_missing_argument_value(argument_spec)
+    end
+  end
 
-          not valid_argument_value?(provided_value, argument_spec) ->
-            {:error,
-             {:invalid_command_argument_type, argument_spec.name, argument_spec.base_type,
-              provided_value}}
+  defp resolve_provided_argument_value(%ArgumentSpec{} = argument_spec, provided_value) do
+    cond do
+      not is_nil(argument_spec.fixed_value) and provided_value != argument_spec.fixed_value ->
+        {:error,
+         {:command_argument_fixed_value_conflict, argument_spec.name, argument_spec.fixed_value,
+          provided_value}}
 
-          not is_nil(argument_spec.fixed_value) ->
-            {:ok, argument_spec.fixed_value}
+      not valid_argument_value?(provided_value, argument_spec) ->
+        {:error,
+         {:invalid_command_argument_type, argument_spec.name, argument_spec.base_type,
+          provided_value}}
 
-          true ->
-            {:ok, provided_value}
-        end
+      not is_nil(argument_spec.fixed_value) ->
+        {:ok, argument_spec.fixed_value}
 
-      :error ->
-        cond do
-          not is_nil(argument_spec.fixed_value) ->
-            {:ok, argument_spec.fixed_value}
+      true ->
+        {:ok, provided_value}
+    end
+  end
 
-          not is_nil(argument_spec.default_value) ->
-            {:ok, argument_spec.default_value}
+  defp resolve_missing_argument_value(%ArgumentSpec{} = argument_spec) do
+    cond do
+      not is_nil(argument_spec.fixed_value) ->
+        {:ok, argument_spec.fixed_value}
 
-          argument_spec.required ->
-            {:error, {:missing_required_command_argument, argument_spec.name}}
+      not is_nil(argument_spec.default_value) ->
+        {:ok, argument_spec.default_value}
 
-          true ->
-            {:ok, :skip}
-        end
+      argument_spec.required ->
+        {:error, {:missing_required_command_argument, argument_spec.name}}
+
+      true ->
+        {:ok, :skip}
     end
   end
 
@@ -1357,9 +1411,8 @@ defmodule Cadence.Commanding do
          %CommandQueueEntryRow{lifecycle_state: "pending"} = queue_entry_row,
          %DateTime{} = attempted_at
        ) do
-    with :ok <- ensure_queue_entry_not_before_elapsed(queue_entry_row, attempted_at),
-         :ok <- ensure_queue_entry_not_expired(queue_entry_row, attempted_at) do
-      :ok
+    with :ok <- ensure_queue_entry_not_before_elapsed(queue_entry_row, attempted_at) do
+      ensure_queue_entry_not_expired(queue_entry_row, attempted_at)
     end
   end
 
@@ -1449,14 +1502,7 @@ defmodule Cadence.Commanding do
          %DateTime{} = attempted_at
        )
        when is_binary(organization_id) and is_binary(mission_id) and is_binary(queue_lane_key) do
-    CommandQueueEntryRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.queue_lane_key == ^queue_lane_key and row.lifecycle_state == "pending" and
-        (is_nil(row.not_before) or row.not_before <= ^attempted_at) and
-        (is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
-    )
+    pending_release_candidates_query(organization_id, mission_id, queue_lane_key, attempted_at)
     |> order_by([row],
       asc: row.priority,
       asc: row.queue_sequence,
@@ -1477,21 +1523,7 @@ defmodule Cadence.Commanding do
         {:ok, queue_entry_row}
 
       nil ->
-        next_pending_not_before =
-          CommandQueueEntryRow
-          |> where(
-            [row],
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.queue_lane_key == ^queue_lane_key and row.lifecycle_state == "pending" and
-              not is_nil(row.not_before) and row.not_before > ^attempted_at and
-              (is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
-          )
-          |> order_by([row], asc: row.not_before, asc: row.queue_sequence)
-          |> select([row], row.not_before)
-          |> limit(1)
-          |> Repo.one()
-
-        case next_pending_not_before do
+        case next_pending_not_before(organization_id, mission_id, queue_lane_key, attempted_at) do
           %DateTime{} = not_before ->
             {:error, {:command_queue_lane_waiting_for_not_before, queue_lane_key, not_before}}
 
@@ -1499,6 +1531,40 @@ defmodule Cadence.Commanding do
             {:error, :command_queue_lane_empty}
         end
     end
+  end
+
+  defp pending_release_candidates_query(
+         organization_id,
+         mission_id,
+         queue_lane_key,
+         %DateTime{} = attempted_at
+       ) do
+    CommandQueueEntryRow
+    |> where([row], row.organization_id == ^organization_id)
+    |> where([row], row.mission_id == ^mission_id)
+    |> where([row], row.queue_lane_key == ^queue_lane_key)
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], is_nil(row.not_before) or row.not_before <= ^attempted_at)
+    |> where([row], is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
+  end
+
+  defp next_pending_not_before(
+         organization_id,
+         mission_id,
+         queue_lane_key,
+         %DateTime{} = attempted_at
+       ) do
+    CommandQueueEntryRow
+    |> where([row], row.organization_id == ^organization_id)
+    |> where([row], row.mission_id == ^mission_id)
+    |> where([row], row.queue_lane_key == ^queue_lane_key)
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], not is_nil(row.not_before) and row.not_before > ^attempted_at)
+    |> where([row], is_nil(row.expires_at) or row.expires_at >= ^attempted_at)
+    |> order_by([row], asc: row.not_before, asc: row.queue_sequence)
+    |> select([row], row.not_before)
+    |> limit(1)
+    |> Repo.one()
   end
 
   defp fetch_realized_contact_for_release(organization_id, mission_id, realized_contact_id) do
@@ -1804,20 +1870,22 @@ defmodule Cadence.Commanding do
   end
 
   defp build_release_attempt(
-         organization_id,
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %CommandRequestRow{} = request_row,
-         %RealizedContact{} = realized_contact,
-         %Path{} = path,
-         %TransportBinding{} = transport_binding,
-         %RuntimeDefinition{} = runtime_definition,
+         release_attempt_context,
          encoded_command,
          released_by,
          attempted_at,
          metadata
-       ) do
+       )
+       when is_map(release_attempt_context) do
+    queue_entry_row = release_attempt_context.queue_entry_row
+    request_row = release_attempt_context.request_row
+    realized_contact = release_attempt_context.realized_contact
+    path = release_attempt_context.path
+    transport_binding = release_attempt_context.transport_binding
+    runtime_definition = release_attempt_context.runtime_definition
+
     CommandReleaseAttempt.new(%{
-      organization_id: organization_id,
+      organization_id: release_attempt_context.organization_id,
       mission_id: queue_entry_row.mission_id,
       command_queue_entry_id: queue_entry_row.command_queue_entry_id,
       command_request_id: request_row.command_request_id,
@@ -1843,6 +1911,9 @@ defmodule Cadence.Commanding do
       metadata: metadata
     })
   end
+
+  defp initial_verification_state([]), do: :not_required
+  defp initial_verification_state(_verifier_plans), do: :pending
 
   defp build_uplink_request(%CommandReleaseAttempt{} = command_release_attempt) do
     UplinkRequest.new(%{
@@ -1897,11 +1968,7 @@ defmodule Cadence.Commanding do
              command_release_attempt.mission_id,
              command_release_attempt.command_release_attempt_id
            ) do
-      initial_verification_state =
-        case verifier_plans do
-          [] -> :not_required
-          _plans -> :pending
-        end
+      initial_verification_state = initial_verification_state(verifier_plans)
 
       completed_release_attempt =
         %CommandReleaseAttempt{
@@ -1921,91 +1988,128 @@ defmodule Cadence.Commanding do
           attempted_at
         )
 
-      multi =
-        Multi.new()
-        |> Multi.update(
-          :command_release_attempt,
-          CommandReleaseAttemptRow.update_changeset(
-            release_attempt_row,
-            completed_release_attempt
-          )
-        )
-        |> Multi.update(
-          :command_queue_entry,
-          CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :released)
-        )
-        |> Multi.update(
-          :command_request,
-          request_row
-          |> CommandRequestRow.lifecycle_changeset(:released)
-          |> Ecto.Changeset.put_change(
-            :verification_state,
-            Atom.to_string(initial_verification_state)
-          )
-        )
-        |> add_command_verifier_instance_inserts(verifier_instances)
-        |> Multi.run(:transport_command_verifier_evaluations, fn repo, _changes ->
-          evaluate_transport_command_verifiers_for_release_attempt(
-            repo,
-            queue_entry_row.organization_id,
-            queue_entry_row.mission_id,
-            command_release_attempt.command_release_attempt_id
-          )
-        end)
-        |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
-          case repo.get_by(CommandReleaseAttemptRow,
-                 organization_id: queue_entry_row.organization_id,
-                 mission_id: queue_entry_row.mission_id,
-                 command_release_attempt_id: command_release_attempt.command_release_attempt_id
-               ) do
-            %CommandReleaseAttemptRow{} = final_release_attempt_row ->
-              {:ok, final_release_attempt_row}
-
-            nil ->
-              {:error, :command_release_attempt_not_found}
-          end
-        end)
-        |> Multi.run(:final_command_request, fn repo, _changes ->
-          case repo.get_by(CommandRequestRow,
-                 organization_id: queue_entry_row.organization_id,
-                 mission_id: queue_entry_row.mission_id,
-                 command_request_id: request_row.command_request_id
-               ) do
-            %CommandRequestRow{} = final_request_row ->
-              {:ok, final_request_row}
-
-            nil ->
-              {:error, :command_request_not_found}
-          end
-        end)
-
-      case Repo.transaction(multi) do
-        {:ok,
-         %{
-           final_command_release_attempt: release_attempt_row,
-           command_queue_entry: queue_entry_row,
-           final_command_request: request_row
-         }} ->
-          maybe_schedule_queue_lane_dispatch(
-            queue_entry_row.organization_id,
-            queue_entry_row.mission_id,
-            queue_entry_row.queue_lane_key
-          )
-
-          {:ok,
-           %{
-             release_attempt: CommandReleaseAttemptRow.to_domain(release_attempt_row),
-             queue_entry: CommandQueueEntryRow.to_domain(queue_entry_row),
-             command_request: CommandRequestRow.to_domain(request_row)
-           }}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
-      end
+      release_attempt_row
+      |> release_success_multi(
+        queue_entry_row,
+        request_row,
+        completed_release_attempt,
+        verifier_instances,
+        initial_verification_state
+      )
+      |> Repo.transaction()
+      |> handle_complete_release_success_result()
     end
+  end
+
+  defp release_success_multi(
+         %CommandReleaseAttemptRow{} = release_attempt_row,
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandRequestRow{} = request_row,
+         %CommandReleaseAttempt{} = completed_release_attempt,
+         verifier_instances,
+         initial_verification_state
+       ) do
+    Multi.new()
+    |> Multi.update(
+      :command_release_attempt,
+      CommandReleaseAttemptRow.update_changeset(release_attempt_row, completed_release_attempt)
+    )
+    |> Multi.update(
+      :command_queue_entry,
+      CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :released)
+    )
+    |> Multi.update(
+      :command_request,
+      request_row
+      |> CommandRequestRow.lifecycle_changeset(:released)
+      |> Ecto.Changeset.put_change(
+        :verification_state,
+        Atom.to_string(initial_verification_state)
+      )
+    )
+    |> add_command_verifier_instance_inserts(verifier_instances)
+    |> Multi.run(:transport_command_verifier_evaluations, fn repo, _changes ->
+      evaluate_transport_command_verifiers_for_release_attempt(
+        repo,
+        queue_entry_row.organization_id,
+        queue_entry_row.mission_id,
+        completed_release_attempt.command_release_attempt_id
+      )
+    end)
+    |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
+      fetch_final_command_release_attempt_row(repo, queue_entry_row, completed_release_attempt)
+    end)
+    |> Multi.run(:final_command_request, fn repo, _changes ->
+      fetch_final_command_request_row(repo, queue_entry_row, request_row)
+    end)
+  end
+
+  defp fetch_final_command_release_attempt_row(
+         repo,
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandReleaseAttempt{} = command_release_attempt
+       ) do
+    case repo.get_by(CommandReleaseAttemptRow,
+           organization_id: queue_entry_row.organization_id,
+           mission_id: queue_entry_row.mission_id,
+           command_release_attempt_id: command_release_attempt.command_release_attempt_id
+         ) do
+      %CommandReleaseAttemptRow{} = final_release_attempt_row ->
+        {:ok, final_release_attempt_row}
+
+      nil ->
+        {:error, :command_release_attempt_not_found}
+    end
+  end
+
+  defp fetch_final_command_request_row(
+         repo,
+         %CommandQueueEntryRow{} = queue_entry_row,
+         %CommandRequestRow{} = request_row
+       ) do
+    case repo.get_by(CommandRequestRow,
+           organization_id: queue_entry_row.organization_id,
+           mission_id: queue_entry_row.mission_id,
+           command_request_id: request_row.command_request_id
+         ) do
+      %CommandRequestRow{} = final_request_row ->
+        {:ok, final_request_row}
+
+      nil ->
+        {:error, :command_request_not_found}
+    end
+  end
+
+  defp handle_complete_release_success_result(
+         {:ok,
+          %{
+            final_command_release_attempt: release_attempt_row,
+            command_queue_entry: queue_entry_row,
+            final_command_request: request_row
+          }}
+       ) do
+    maybe_schedule_queue_lane_dispatch(
+      queue_entry_row.organization_id,
+      queue_entry_row.mission_id,
+      queue_entry_row.queue_lane_key
+    )
+
+    {:ok,
+     %{
+       release_attempt: CommandReleaseAttemptRow.to_domain(release_attempt_row),
+       queue_entry: CommandQueueEntryRow.to_domain(queue_entry_row),
+       command_request: CommandRequestRow.to_domain(request_row)
+     }}
+  end
+
+  defp handle_complete_release_success_result(
+         {:error, _operation, %Changeset{} = changeset, _changes_so_far}
+       ) do
+    {:error, changeset}
+  end
+
+  defp handle_complete_release_success_result({:error, _operation, reason, _changes_so_far}) do
+    {:error, reason}
   end
 
   defp complete_release_failure(
@@ -2013,40 +2117,40 @@ defmodule Cadence.Commanding do
          %CommandReleaseAttempt{} = command_release_attempt,
          reason
        ) do
-    with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
-           fetch_command_release_attempt_row(
-             command_release_attempt.organization_id,
-             command_release_attempt.mission_id,
-             command_release_attempt.command_release_attempt_id
-           ) do
-      failed_release_attempt =
-        %CommandReleaseAttempt{
-          command_release_attempt
-          | lifecycle_state: :release_failed,
-            failure_reason: inspect(reason),
-            released_at: nil
-        }
+    case fetch_command_release_attempt_row(
+           command_release_attempt.organization_id,
+           command_release_attempt.mission_id,
+           command_release_attempt.command_release_attempt_id
+         ) do
+      {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} ->
+        failed_release_attempt =
+          %CommandReleaseAttempt{
+            command_release_attempt
+            | lifecycle_state: :release_failed,
+              failure_reason: inspect(reason),
+              released_at: nil
+          }
 
-      _ =
-        Multi.new()
-        |> Multi.update(
-          :command_release_attempt,
-          CommandReleaseAttemptRow.update_changeset(release_attempt_row, failed_release_attempt)
+        _ =
+          Multi.new()
+          |> Multi.update(
+            :command_release_attempt,
+            CommandReleaseAttemptRow.update_changeset(release_attempt_row, failed_release_attempt)
+          )
+          |> Multi.update(
+            :command_queue_entry,
+            CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :pending)
+          )
+          |> Repo.transaction()
+
+        maybe_schedule_queue_lane_dispatch(
+          queue_entry_row.organization_id,
+          queue_entry_row.mission_id,
+          queue_entry_row.queue_lane_key
         )
-        |> Multi.update(
-          :command_queue_entry,
-          CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :pending)
-        )
-        |> Repo.transaction()
 
-      maybe_schedule_queue_lane_dispatch(
-        queue_entry_row.organization_id,
-        queue_entry_row.mission_id,
-        queue_entry_row.queue_lane_key
-      )
+        :ok
 
-      :ok
-    else
       {:error, _reason} ->
         :ok
     end
@@ -2102,34 +2206,31 @@ defmodule Cadence.Commanding do
         {:ok, []}
 
       organization_id ->
-        pending_rows =
-          CommandVerifierInstanceRow
-          |> where(
-            [row],
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.lifecycle_state == "pending"
-          )
-          |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-          |> repo.all()
-
-        updates =
+        do_evaluate_command_verifiers_for_mission(
+          repo,
+          organization_id,
+          mission_id,
           telemetry_samples
-          |> Enum.sort_by(&sample_sort_key/1, DateTime)
-          |> then(fn sorted_samples ->
-            Enum.reduce(pending_rows, [], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
-              case evaluate_command_verifier_instance(verifier_row, sorted_samples) do
-                nil ->
-                  acc
-
-                %CommandVerifierInstance{} = updated_instance ->
-                  [{verifier_row, updated_instance} | acc]
-              end
-            end)
-            |> Enum.reverse()
-          end)
-
-        apply_command_verifier_updates(repo, updates)
+        )
     end
+  end
+
+  defp do_evaluate_command_verifiers_for_mission(
+         repo,
+         organization_id,
+         mission_id,
+         telemetry_samples
+       ) do
+    pending_rows = pending_command_verifier_rows(repo, organization_id, mission_id)
+    sorted_samples = Enum.sort_by(telemetry_samples, &sample_sort_key/1, DateTime)
+
+    updates =
+      build_verifier_updates(
+        pending_rows,
+        &evaluate_command_verifier_instance(&1, sorted_samples)
+      )
+
+    apply_command_verifier_updates(repo, updates)
   end
 
   defp evaluate_transport_command_verifiers_for_mission(repo, mission_id, transport_signals)
@@ -2139,56 +2240,96 @@ defmodule Cadence.Commanding do
         {:ok, []}
 
       organization_id ->
-        command_release_attempt_ids =
+        do_evaluate_transport_command_verifiers_for_mission(
+          repo,
+          organization_id,
+          mission_id,
           transport_signals
-          |> Enum.map(& &1.command_release_attempt_id)
-          |> Enum.filter(&is_binary/1)
-          |> Enum.uniq()
-
-        if command_release_attempt_ids == [] do
-          {:ok, []}
-        else
-          pending_rows =
-            CommandVerifierInstanceRow
-            |> where(
-              [row],
-              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-                row.lifecycle_state == "pending" and
-                row.command_release_attempt_id in ^command_release_attempt_ids
-            )
-            |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
-            |> repo.all()
-
-          sorted_transport_signals = Enum.sort_by(transport_signals, &transport_signal_sort_key/1)
-
-          transport_signals_by_release_attempt_id =
-            Enum.group_by(sorted_transport_signals, & &1.command_release_attempt_id)
-
-          updates =
-            Enum.reduce(pending_rows, [], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
-              relevant_signals =
-                Map.get(
-                  transport_signals_by_release_attempt_id,
-                  verifier_row.command_release_attempt_id,
-                  []
-                )
-
-              case evaluate_command_verifier_instance_against_transport_signals(
-                     verifier_row,
-                     relevant_signals
-                   ) do
-                nil ->
-                  acc
-
-                %CommandVerifierInstance{} = updated_instance ->
-                  [{verifier_row, updated_instance} | acc]
-              end
-            end)
-            |> Enum.reverse()
-
-          apply_command_verifier_updates(repo, updates)
-        end
+        )
     end
+  end
+
+  defp do_evaluate_transport_command_verifiers_for_mission(
+         repo,
+         organization_id,
+         mission_id,
+         transport_signals
+       ) do
+    command_release_attempt_ids = transport_command_release_attempt_ids(transport_signals)
+
+    if command_release_attempt_ids == [] do
+      {:ok, []}
+    else
+      pending_rows =
+        pending_transport_command_verifier_rows(
+          repo,
+          organization_id,
+          mission_id,
+          command_release_attempt_ids
+        )
+
+      transport_signals_by_release_attempt_id =
+        transport_signals
+        |> Enum.sort_by(&transport_signal_sort_key/1)
+        |> Enum.group_by(& &1.command_release_attempt_id)
+
+      updates =
+        build_verifier_updates(pending_rows, fn %CommandVerifierInstanceRow{} = verifier_row ->
+          relevant_signals =
+            Map.get(
+              transport_signals_by_release_attempt_id,
+              verifier_row.command_release_attempt_id,
+              []
+            )
+
+          evaluate_command_verifier_instance_against_transport_signals(
+            verifier_row,
+            relevant_signals
+          )
+        end)
+
+      apply_command_verifier_updates(repo, updates)
+    end
+  end
+
+  defp pending_command_verifier_rows(repo, organization_id, mission_id) do
+    CommandVerifierInstanceRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.lifecycle_state == "pending")
+    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+    |> repo.all()
+  end
+
+  defp pending_transport_command_verifier_rows(
+         repo,
+         organization_id,
+         mission_id,
+         command_release_attempt_ids
+       ) do
+    CommandVerifierInstanceRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], row.command_release_attempt_id in ^command_release_attempt_ids)
+    |> order_by([row], asc: row.inserted_at, asc: row.command_verifier_instance_id)
+    |> repo.all()
+  end
+
+  defp transport_command_release_attempt_ids(transport_signals) when is_list(transport_signals) do
+    transport_signals
+    |> Enum.map(& &1.command_release_attempt_id)
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+  end
+
+  defp build_verifier_updates(rows, evaluator) when is_list(rows) and is_function(evaluator, 1) do
+    rows
+    |> Enum.reduce([], fn %CommandVerifierInstanceRow{} = verifier_row, acc ->
+      case evaluator.(verifier_row) do
+        nil -> acc
+        %CommandVerifierInstance{} = updated_instance -> [{verifier_row, updated_instance} | acc]
+      end
+    end)
+    |> Enum.reverse()
   end
 
   defp evaluate_transport_command_verifiers_for_release_attempt(

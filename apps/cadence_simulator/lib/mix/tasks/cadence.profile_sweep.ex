@@ -25,18 +25,7 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
   @impl true
   def run(args) do
     {profile_identifier, option_args} = extract_profile_identifier(args)
-
-    profile_defaults =
-      case profile_identifier do
-        nil ->
-          %{node: nil, mission_id: nil}
-
-        identifier ->
-          case DevTools.profiler_defaults(identifier) do
-            {:ok, defaults} -> defaults
-            {:error, message} -> Mix.raise(message)
-          end
-      end
+    profile_defaults = profile_defaults(profile_identifier)
 
     {opts, simulator_args, invalid} =
       OptionParser.parse(
@@ -56,6 +45,44 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
         ]
       )
 
+    maybe_handle_help_or_invalid_opts(opts, invalid)
+
+    node_name = validate_node!(opts, profile_defaults.node)
+    mission_id = validate_mission_id!(opts, profile_defaults.mission_id)
+    rates = validate_rates!(opts)
+
+    settle_seconds =
+      sweep_duration_option(opts, :settle_seconds, @default_settle_seconds, "--settle-seconds")
+
+    sample_seconds =
+      sweep_duration_option(opts, :sample_seconds, @default_sample_seconds, "--sample-seconds")
+
+    start_distribution()
+    connect_to_node(node_name)
+
+    {:ok, _started} = Application.ensure_all_started(:cadence_simulator)
+
+    run_profile_sweep(
+      profile_identifier,
+      simulator_args,
+      node_name,
+      mission_id,
+      rates,
+      settle_seconds,
+      sample_seconds
+    )
+  end
+
+  defp profile_defaults(nil), do: %{node: nil, mission_id: nil}
+
+  defp profile_defaults(identifier) do
+    case DevTools.profiler_defaults(identifier) do
+      {:ok, defaults} -> defaults
+      {:error, message} -> Mix.raise(message)
+    end
+  end
+
+  defp maybe_handle_help_or_invalid_opts(opts, invalid) do
     if opts[:help] || invalid != [] do
       print_help()
 
@@ -65,18 +92,21 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
 
       System.halt(0)
     end
+  end
 
-    node_name = validate_node!(opts, profile_defaults.node)
-    mission_id = validate_mission_id!(opts, profile_defaults.mission_id)
-    rates = validate_rates!(opts)
-    settle_seconds = validate_positive_integer!(opts[:settle_seconds] || @default_settle_seconds, "--settle-seconds")
-    sample_seconds = validate_positive_integer!(opts[:sample_seconds] || @default_sample_seconds, "--sample-seconds")
+  defp sweep_duration_option(opts, key, default, label) do
+    validate_positive_integer!(opts[key] || default, label)
+  end
 
-    start_distribution()
-    connect_to_node(node_name)
-
-    {:ok, _started} = Application.ensure_all_started(:cadence_simulator)
-
+  defp run_profile_sweep(
+         profile_identifier,
+         simulator_args,
+         node_name,
+         mission_id,
+         rates,
+         settle_seconds,
+         sample_seconds
+       ) do
     with {:ok, resolved_runtime_opts} <-
            resolve_simulator_runtime_opts(profile_identifier, simulator_args),
          {:ok, simulator_pid} <-
@@ -85,22 +115,13 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
         print_header()
 
         Enum.each(rates, fn rate_hz ->
-          :ok = CadenceSimulator.set_simulator_rate(simulator_pid, rate_hz)
-          Process.sleep(settle_seconds * 1000)
-          simulator_before = CadenceSimulator.simulator_stats(simulator_pid)
-          :ok = rpc_call!(node_name, Cadence.Telemetry.Profiler, :reset, [mission_id])
-          Process.sleep(sample_seconds * 1000)
-          snapshot = rpc_call!(node_name, Cadence.Telemetry.Profiler, :snapshot, [mission_id])
-          simulator_after = CadenceSimulator.simulator_stats(simulator_pid)
-
-          print_summary(
-            ProfileSweep.build_summary(
-              rate_hz,
-              snapshot,
-              sample_seconds,
-              simulator_before,
-              simulator_after
-            )
+          run_profile_sweep_sample(
+            simulator_pid,
+            rate_hz,
+            settle_seconds,
+            sample_seconds,
+            node_name,
+            mission_id
           )
         end)
       after
@@ -110,6 +131,33 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
       {:error, reason} ->
         Mix.raise("Failed to start sweep simulator: #{inspect(reason)}")
     end
+  end
+
+  defp run_profile_sweep_sample(
+         simulator_pid,
+         rate_hz,
+         settle_seconds,
+         sample_seconds,
+         node_name,
+         mission_id
+       ) do
+    :ok = CadenceSimulator.set_simulator_rate(simulator_pid, rate_hz)
+    Process.sleep(settle_seconds * 1000)
+    simulator_before = CadenceSimulator.simulator_stats(simulator_pid)
+    :ok = rpc_call!(node_name, Cadence.Telemetry.Profiler, :reset, [mission_id])
+    Process.sleep(sample_seconds * 1000)
+    snapshot = rpc_call!(node_name, Cadence.Telemetry.Profiler, :snapshot, [mission_id])
+    simulator_after = CadenceSimulator.simulator_stats(simulator_pid)
+
+    print_summary(
+      ProfileSweep.build_summary(
+        rate_hz,
+        snapshot,
+        sample_seconds,
+        simulator_before,
+        simulator_after
+      )
+    )
   end
 
   defp validate_simulator_opts!(simulator_args) do
@@ -158,7 +206,9 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
   end
 
   defp validate_positive_integer!(value, _label) when is_integer(value) and value > 0, do: value
-  defp validate_positive_integer!(_value, label), do: Mix.raise("#{label} must be a positive integer")
+
+  defp validate_positive_integer!(_value, label),
+    do: Mix.raise("#{label} must be a positive integer")
 
   defp print_header do
     Mix.shell().info(
@@ -227,7 +277,8 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
     Mix.shell().info("Connecting to #{target_node}...")
 
     case Node.connect(target_node) do
-      true -> Mix.shell().info("Connected successfully.\n")
+      true ->
+        Mix.shell().info("Connected successfully.\n")
 
       false ->
         Mix.raise("""
@@ -240,7 +291,8 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
         same cookie in `CADENCE_NODE_COOKIE` before running this task.
         """)
 
-      :ignored -> Mix.raise("Local sweep node is not alive.")
+      :ignored ->
+        Mix.raise("Local sweep node is not alive.")
     end
   end
 
@@ -290,7 +342,9 @@ defmodule Mix.Tasks.Cadence.ProfileSweep do
 
   defp resolve_simulator_runtime_opts(profile_identifier, simulator_args)
        when is_binary(profile_identifier) do
-    case DevTools.resolve_profile_runtime(profile_identifier, simulator_args, runtime_mode: :telemetry) do
+    case DevTools.resolve_profile_runtime(profile_identifier, simulator_args,
+           runtime_mode: :telemetry
+         ) do
       {:ok, %{runtime_opts: runtime_opts}} ->
         {:ok, runtime_opts}
 

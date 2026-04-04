@@ -266,8 +266,7 @@ defmodule Cadence.IngressArchive.FileSystem do
 
           selected_raw_evidences =
             raw_evidences
-            |> Enum.filter(&MapSet.member?(selected_ids, &1.evidence_id))
-            |> Enum.filter(&matches_metadata_scope?(&1, scope.metadata_match))
+            |> Enum.filter(&selected_raw_evidence?(&1, selected_ids, scope.metadata_match))
 
           {:cont, {:ok, selected_raw_evidences ++ acc}}
 
@@ -356,6 +355,11 @@ defmodule Cadence.IngressArchive.FileSystem do
     Enum.sort_by(raw_evidences, fn %RawEvidence{} = raw_evidence ->
       Map.fetch!(evidence_order, raw_evidence.evidence_id)
     end)
+  end
+
+  defp selected_raw_evidence?(%RawEvidence{} = raw_evidence, selected_ids, metadata_match) do
+    MapSet.member?(selected_ids, raw_evidence.evidence_id) and
+      matches_metadata_scope?(raw_evidence, metadata_match)
   end
 
   defp backend_opts do

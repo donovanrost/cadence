@@ -196,21 +196,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       {:ok, ready_state} ->
         case maybe_gate_on_projector_pressure(ready_state) do
           {:ok, schedulable_state} ->
-            {next_state, persistence_batches} =
-              drain_batch(schedulable_state, @max_drain_batch, [], [])
-
-            case enqueue_persistence_batches(next_state, persistence_batches) do
-              {:ok, persisted_state} ->
-                if persisted_state.queue_depth > 0 do
-                  send(self(), :process_queue)
-                  {:noreply, %{persisted_state | processing?: true}}
-                else
-                  {:noreply, %{persisted_state | processing?: false}}
-                end
-
-              {:error, retry_state} ->
-                {:noreply, %{retry_state | processing?: true}}
-            end
+            process_schedulable_queue_state(schedulable_state)
 
           {:blocked, blocked_state} ->
             Process.send_after(self(), :process_queue, 10)
@@ -392,71 +378,11 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
       case resolve_result do
         {:ok, %RawEvidence{} = resolved_raw_evidence} ->
-          runtime_started_at = System.monotonic_time()
-
-          runtime_result =
-            TelemetryProfiler.with_runtime_component(
-              resolved_raw_evidence.mission_id,
-              :runtime_boundary,
-              fn ->
-                TelemetryProfiler.with_stage(:runtime, fn ->
-                  RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence)
-                end)
-              end
-            )
-
-          runtime_us = elapsed_us(runtime_started_at)
-
-          case runtime_result do
-            {:ok, processing_result} ->
-              with {:ok, telemetry_samples} <-
-                     TelemetryProfiler.with_runtime_component(
-                       resolved_raw_evidence.mission_id,
-                       :telemetry_sample_extraction,
-                       fn ->
-                         Cadence.Persistence.telemetry_samples(processing_result.outputs)
-                       end
-                     ),
-                   :ok <-
-                     maybe_record_current_values(
-                       resolved_raw_evidence.mission_id,
-                       telemetry_samples
-                     ) do
-                TelemetryProfiler.record_ingress_result(
-                  resolved_raw_evidence,
-                  resolve_us: resolve_us,
-                  runtime_us: runtime_us,
-                  end_to_end_us: elapsed_us(ingress_started_at),
-                  error?: false,
-                  processing_result: processing_result
-                )
-
-                {:ok, processing_result}
-              else
-                {:error, reason} ->
-                  TelemetryProfiler.record_ingress_result(
-                    resolved_raw_evidence,
-                    resolve_us: resolve_us,
-                    runtime_us: runtime_us,
-                    end_to_end_us: elapsed_us(ingress_started_at),
-                    error?: true,
-                    processing_result: processing_result
-                  )
-
-                  {:error, reason}
-              end
-
-            {:error, reason} ->
-              TelemetryProfiler.record_ingress_result(
-                resolved_raw_evidence,
-                resolve_us: resolve_us,
-                runtime_us: runtime_us,
-                end_to_end_us: elapsed_us(ingress_started_at),
-                error?: true
-              )
-
-              {:error, reason}
-          end
+          handle_resolved_telemetry_item(
+            resolved_raw_evidence,
+            ingress_started_at,
+            resolve_us
+          )
 
         {:error, reason} ->
           TelemetryProfiler.record_ingress_result(
@@ -469,6 +395,120 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           {:error, reason}
       end
     end)
+  end
+
+  defp process_schedulable_queue_state(schedulable_state) do
+    {next_state, persistence_batches} = drain_batch(schedulable_state, @max_drain_batch, [], [])
+
+    case enqueue_persistence_batches(next_state, persistence_batches) do
+      {:ok, persisted_state} ->
+        continue_processing_queue(persisted_state)
+
+      {:error, retry_state} ->
+        {:noreply, %{retry_state | processing?: true}}
+    end
+  end
+
+  defp continue_processing_queue(persisted_state) do
+    if persisted_state.queue_depth > 0 do
+      send(self(), :process_queue)
+      {:noreply, %{persisted_state | processing?: true}}
+    else
+      {:noreply, %{persisted_state | processing?: false}}
+    end
+  end
+
+  defp handle_resolved_telemetry_item(
+         %RawEvidence{} = resolved_raw_evidence,
+         ingress_started_at,
+         resolve_us
+       ) do
+    runtime_started_at = System.monotonic_time()
+    runtime_result = process_telemetry_runtime(resolved_raw_evidence)
+    runtime_us = elapsed_us(runtime_started_at)
+
+    case runtime_result do
+      {:ok, processing_result} ->
+        finalize_processed_telemetry_item(
+          resolved_raw_evidence,
+          processing_result,
+          ingress_started_at,
+          resolve_us,
+          runtime_us
+        )
+
+      {:error, reason} ->
+        TelemetryProfiler.record_ingress_result(
+          resolved_raw_evidence,
+          resolve_us: resolve_us,
+          runtime_us: runtime_us,
+          end_to_end_us: elapsed_us(ingress_started_at),
+          error?: true
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp process_telemetry_runtime(%RawEvidence{} = resolved_raw_evidence) do
+    TelemetryProfiler.with_runtime_component(
+      resolved_raw_evidence.mission_id,
+      :runtime_boundary,
+      fn ->
+        TelemetryProfiler.with_stage(:runtime, fn ->
+          RuntimeBoundary.process_telemetry_ingress(resolved_raw_evidence)
+        end)
+      end
+    )
+  end
+
+  defp finalize_processed_telemetry_item(
+         %RawEvidence{} = resolved_raw_evidence,
+         processing_result,
+         ingress_started_at,
+         resolve_us,
+         runtime_us
+       ) do
+    with {:ok, telemetry_samples} <-
+           extract_telemetry_samples(resolved_raw_evidence.mission_id, processing_result),
+         :ok <-
+           maybe_record_current_values(
+             resolved_raw_evidence.mission_id,
+             telemetry_samples
+           ) do
+      TelemetryProfiler.record_ingress_result(
+        resolved_raw_evidence,
+        resolve_us: resolve_us,
+        runtime_us: runtime_us,
+        end_to_end_us: elapsed_us(ingress_started_at),
+        error?: false,
+        processing_result: processing_result
+      )
+
+      {:ok, processing_result}
+    else
+      {:error, reason} ->
+        TelemetryProfiler.record_ingress_result(
+          resolved_raw_evidence,
+          resolve_us: resolve_us,
+          runtime_us: runtime_us,
+          end_to_end_us: elapsed_us(ingress_started_at),
+          error?: true,
+          processing_result: processing_result
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp extract_telemetry_samples(mission_id, processing_result) do
+    TelemetryProfiler.with_runtime_component(
+      mission_id,
+      :telemetry_sample_extraction,
+      fn ->
+        Cadence.Persistence.telemetry_samples(processing_result.outputs)
+      end
+    )
   end
 
   defp maybe_record_current_values(_mission_id, telemetry_samples) when telemetry_samples == [],

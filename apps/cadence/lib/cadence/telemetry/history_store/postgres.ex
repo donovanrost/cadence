@@ -16,14 +16,7 @@ defmodule Cadence.Telemetry.HistoryStore.Postgres do
 
   @impl true
   def persist_samples(samples) when is_list(samples) do
-    case Repo.transaction(fn ->
-           Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
-             case Repo.insert(TelemetrySampleRow.changeset(sample)) do
-               {:ok, _row} -> {:cont, :ok}
-               {:error, reason} -> Repo.rollback(reason)
-             end
-           end)
-         end) do
+    case persist_samples_transaction(samples) do
       {:ok, :ok} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -55,6 +48,21 @@ defmodule Cadence.Telemetry.HistoryStore.Postgres do
   def reset do
     _ = Repo.delete_all(TelemetrySampleRow)
     :ok
+  end
+
+  defp persist_samples_transaction(samples) do
+    Repo.transaction(fn ->
+      Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
+        persist_sample_transaction_step(sample)
+      end)
+    end)
+  end
+
+  defp persist_sample_transaction_step(%Sample{} = sample) do
+    case Repo.insert(TelemetrySampleRow.changeset(sample)) do
+      {:ok, _row} -> {:cont, :ok}
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp maybe_filter_spacecraft(query, nil), do: query

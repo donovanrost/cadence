@@ -855,103 +855,24 @@ defmodule Cadence.Contacts do
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do
     {expired_scheduled_contact_ids, expiration_errors} =
-      reference_time
-      |> list_expired_scheduled_contacts()
-      |> Enum.reduce({[], []}, fn %ScheduledContact{} = scheduled_contact, {ids, errors} ->
-        case expire_scheduled_contact(scheduled_contact, %{
-               expired_at: reference_time,
-               expired_from_schedule: true
-             }) do
-          {:ok, %ScheduledContact{} = expired_scheduled_contact} ->
-            {[expired_scheduled_contact.scheduled_contact_id | ids], errors}
-
-          {:error, reason} ->
-            {ids,
-             [reconcile_error(:scheduled_contact_expiration, scheduled_contact, reason) | errors]}
-        end
-      end)
+      list_expired_scheduled_contacts(reference_time)
+      |> collect_reconcile_results(&expire_scheduled_contact_for_reconcile(&1, reference_time))
 
     {completed_scheduled_contact_ids, scheduled_completion_errors} =
-      reference_time
-      |> list_completed_scheduled_contacts()
-      |> Enum.reduce({[], []}, fn %ScheduledContact{} = scheduled_contact, {ids, errors} ->
-        case complete_scheduled_contact(scheduled_contact, %{
-               completed_at: reference_time,
-               completed_from_schedule: true
-             }) do
-          {:ok, %ScheduledContact{} = completed_scheduled_contact} ->
-            {[completed_scheduled_contact.scheduled_contact_id | ids], errors}
-
-          {:error, reason} ->
-            {ids,
-             [reconcile_error(:scheduled_contact_completion, scheduled_contact, reason) | errors]}
-        end
-      end)
+      list_completed_scheduled_contacts(reference_time)
+      |> collect_reconcile_results(&complete_scheduled_contact_for_reconcile(&1, reference_time))
 
     {realized_scheduled_contact_ids, realization_errors} =
-      reference_time
-      |> list_due_scheduled_contacts()
-      |> Enum.reduce({[], []}, fn %ScheduledContact{} = scheduled_contact, {ids, errors} ->
-        case realize_scheduled_contact(
-               scheduled_contact.mission_id,
-               scheduled_contact.scheduled_contact_id,
-               clock_mode: :live,
-               initial_time: reference_time,
-               realized_at: reference_time,
-               transition_time: reference_time,
-               metadata: %{scheduler_realized?: true}
-             ) do
-          {:ok, %RealizedContact{} = realized_contact} ->
-            {[realized_contact.realized_contact_id | ids], errors}
-
-          {:error, :scheduled_contact_already_realized} ->
-            {ids, errors}
-
-          {:error, reason} ->
-            {ids,
-             [reconcile_error(:scheduled_contact_realization, scheduled_contact, reason) | errors]}
-        end
-      end)
+      list_due_scheduled_contacts(reference_time)
+      |> collect_reconcile_results(&realize_scheduled_contact_for_reconcile(&1, reference_time))
 
     {completed_realized_contact_ids, completion_errors} =
-      reference_time
-      |> list_expired_active_realized_contacts()
-      |> Enum.reduce({[], []}, fn %RealizedContact{} = realized_contact, {ids, errors} ->
-        case complete_realized_contact(realized_contact, %{
-               completed_at: reference_time,
-               completed_from_schedule: true
-             }) do
-          {:ok, %RealizedContact{} = completed_realized_contact} ->
-            {[completed_realized_contact.realized_contact_id | ids], errors}
-
-          {:error, reason} ->
-            {ids,
-             [reconcile_error(:realized_contact_completion, realized_contact, reason) | errors]}
-        end
-      end)
+      list_expired_active_realized_contacts(reference_time)
+      |> collect_reconcile_results(&complete_realized_contact_for_reconcile(&1, reference_time))
 
     {restarted_realized_contact_ids, restart_errors} =
       list_active_realized_contacts()
-      |> Enum.reduce({[], []}, fn %RealizedContact{} = realized_contact, {ids, errors} ->
-        if Runtime.realized_contact_running?(
-             realized_contact.mission_id,
-             realized_contact.realized_contact_id
-           ) do
-          {ids, errors}
-        else
-          case start_runtime_and_mark_active(realized_contact, %{
-                 reconciled_at: reference_time,
-                 started_at: reference_time
-               }) do
-            {:ok, _pid} ->
-              {[realized_contact.realized_contact_id | ids], errors}
-
-            {:error, reason} ->
-              {ids,
-               [reconcile_error(:realized_contact_restart, realized_contact, reason) | errors]}
-          end
-        end
-      end)
+      |> collect_reconcile_results(&restart_realized_contact_for_reconcile(&1, reference_time))
 
     {:ok,
      %{
@@ -967,6 +888,112 @@ defmodule Cadence.Contacts do
            Enum.reverse(realization_errors) ++
            Enum.reverse(completion_errors) ++ Enum.reverse(restart_errors)
      }}
+  end
+
+  defp collect_reconcile_results(contacts, action)
+       when is_list(contacts) and is_function(action, 1) do
+    Enum.reduce(contacts, {[], []}, fn contact, {ids, errors} ->
+      case action.(contact) do
+        {:ok, contact_id} -> {[contact_id | ids], errors}
+        :skip -> {ids, errors}
+        {:error, error} -> {ids, [error | errors]}
+      end
+    end)
+  end
+
+  defp expire_scheduled_contact_for_reconcile(
+         %ScheduledContact{} = scheduled_contact,
+         reference_time
+       ) do
+    case expire_scheduled_contact(scheduled_contact, %{
+           expired_at: reference_time,
+           expired_from_schedule: true
+         }) do
+      {:ok, %ScheduledContact{} = expired_scheduled_contact} ->
+        {:ok, expired_scheduled_contact.scheduled_contact_id}
+
+      {:error, reason} ->
+        {:error, reconcile_error(:scheduled_contact_expiration, scheduled_contact, reason)}
+    end
+  end
+
+  defp complete_scheduled_contact_for_reconcile(
+         %ScheduledContact{} = scheduled_contact,
+         reference_time
+       ) do
+    case complete_scheduled_contact(scheduled_contact, %{
+           completed_at: reference_time,
+           completed_from_schedule: true
+         }) do
+      {:ok, %ScheduledContact{} = completed_scheduled_contact} ->
+        {:ok, completed_scheduled_contact.scheduled_contact_id}
+
+      {:error, reason} ->
+        {:error, reconcile_error(:scheduled_contact_completion, scheduled_contact, reason)}
+    end
+  end
+
+  defp realize_scheduled_contact_for_reconcile(
+         %ScheduledContact{} = scheduled_contact,
+         reference_time
+       ) do
+    case realize_scheduled_contact(
+           scheduled_contact.mission_id,
+           scheduled_contact.scheduled_contact_id,
+           clock_mode: :live,
+           initial_time: reference_time,
+           realized_at: reference_time,
+           transition_time: reference_time,
+           metadata: %{scheduler_realized?: true}
+         ) do
+      {:ok, %RealizedContact{} = realized_contact} ->
+        {:ok, realized_contact.realized_contact_id}
+
+      {:error, :scheduled_contact_already_realized} ->
+        :skip
+
+      {:error, reason} ->
+        {:error, reconcile_error(:scheduled_contact_realization, scheduled_contact, reason)}
+    end
+  end
+
+  defp complete_realized_contact_for_reconcile(
+         %RealizedContact{} = realized_contact,
+         reference_time
+       ) do
+    case complete_realized_contact(realized_contact, %{
+           completed_at: reference_time,
+           completed_from_schedule: true
+         }) do
+      {:ok, %RealizedContact{} = completed_realized_contact} ->
+        {:ok, completed_realized_contact.realized_contact_id}
+
+      {:error, reason} ->
+        {:error, reconcile_error(:realized_contact_completion, realized_contact, reason)}
+    end
+  end
+
+  defp restart_realized_contact_for_reconcile(
+         %RealizedContact{} = realized_contact,
+         reference_time
+       ) do
+    if Runtime.realized_contact_running?(
+         realized_contact.mission_id,
+         realized_contact.realized_contact_id
+       ) do
+      :skip
+    else
+      case start_runtime_and_mark_active(realized_contact, %{
+             reconciled_at: reference_time,
+             started_at: reference_time
+           }) do
+        {:ok, _pid} ->
+          {:ok, realized_contact.realized_contact_id}
+
+        {:error, reason} ->
+          {:error, reconcile_error(:realized_contact_restart, realized_contact, reason)}
+      end
+    end
   end
 
   @spec realize_scheduled_contact(binary(), binary(), keyword()) ::
@@ -1106,9 +1133,8 @@ defmodule Cadence.Contacts do
     with :ok <- validate_mission_id(scheduled_contact.mission_id),
          :ok <- validate_starts_before_end(scheduled_contact.starts_at, scheduled_contact.ends_at),
          {:ok, resolved_paths} <- resolve_scheduled_contact_paths(scheduled_contact),
-         :ok <- validate_non_empty_paths(resolved_paths),
-         :ok <- validate_unique_path_ids(resolved_paths) do
-      :ok
+         :ok <- validate_non_empty_paths(resolved_paths) do
+      validate_unique_path_ids(resolved_paths)
     end
   end
 
@@ -1637,26 +1663,27 @@ defmodule Cadence.Contacts do
       end
 
     Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %ProviderProfile{} = provider_profile} <-
-             fetch_provider_profile_ref_for_scope(
-               path_template.organization_id,
-               path_template.mission_id,
-               ref
-             ) do
-        provider_binding =
-          ProviderBinding.new(%{
-            provider_binding_id: provider_profile.provider_profile_id,
-            adapter_key: provider_profile.adapter_key,
-            configuration: provider_profile.configuration,
-            metadata:
-              provider_profile.metadata
-              |> Map.put("provider_profile_id", provider_profile.provider_profile_id)
-              |> Map.put("provider_profile_version", provider_profile.version)
-          })
+      case fetch_provider_profile_ref_for_scope(
+             path_template.organization_id,
+             path_template.mission_id,
+             ref
+           ) do
+        {:ok, %ProviderProfile{} = provider_profile} ->
+          provider_binding =
+            ProviderBinding.new(%{
+              provider_binding_id: provider_profile.provider_profile_id,
+              adapter_key: provider_profile.adapter_key,
+              configuration: provider_profile.configuration,
+              metadata:
+                provider_profile.metadata
+                |> Map.put("provider_profile_id", provider_profile.provider_profile_id)
+                |> Map.put("provider_profile_version", provider_profile.version)
+            })
 
-        {:cont, {:ok, acc ++ [provider_binding]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
+          {:cont, {:ok, acc ++ [provider_binding]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
   end
@@ -1670,27 +1697,28 @@ defmodule Cadence.Contacts do
       end
 
     Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %TransportProfile{} = transport_profile} <-
-             fetch_transport_profile_ref_for_scope(
-               path_template.organization_id,
-               path_template.mission_id,
-               ref
-             ) do
-        transport_binding =
-          TransportBinding.new(%{
-            transport_binding_id: transport_profile.transport_profile_id,
-            family_key: transport_profile.family_key,
-            target_scope: transport_profile.target_scope,
-            configuration: transport_profile.configuration,
-            metadata:
-              transport_profile.metadata
-              |> Map.put("transport_profile_id", transport_profile.transport_profile_id)
-              |> Map.put("transport_profile_version", transport_profile.version)
-          })
+      case fetch_transport_profile_ref_for_scope(
+             path_template.organization_id,
+             path_template.mission_id,
+             ref
+           ) do
+        {:ok, %TransportProfile{} = transport_profile} ->
+          transport_binding =
+            TransportBinding.new(%{
+              transport_binding_id: transport_profile.transport_profile_id,
+              family_key: transport_profile.family_key,
+              target_scope: transport_profile.target_scope,
+              configuration: transport_profile.configuration,
+              metadata:
+                transport_profile.metadata
+                |> Map.put("transport_profile_id", transport_profile.transport_profile_id)
+                |> Map.put("transport_profile_version", transport_profile.version)
+            })
 
-        {:cont, {:ok, acc ++ [transport_binding]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
+          {:cont, {:ok, acc ++ [transport_binding]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
   end
@@ -1705,37 +1733,16 @@ defmodule Cadence.Contacts do
   end
 
   defp fetch_provider_profile_ref_for_scope(organization_id, mission_id, ref) do
-    provider_profile_id = Map.get(ref, "provider_profile_id")
-    version = Map.get(ref, "version")
-
-    provider_profile_result =
-      cond do
-        is_integer(version) and version > 0 and is_binary(organization_id) and
-            organization_id != "" ->
-          fetch_provider_profile_version(
-            organization_id,
-            mission_id,
-            provider_profile_id,
-            version
-          )
-
-        is_integer(version) and version > 0 ->
-          fetch_provider_profile_version(mission_id, provider_profile_id, version)
-
-        true ->
-          fetch_provider_profile_for_scope(organization_id, mission_id, provider_profile_id)
-      end
-
-    case provider_profile_result do
-      {:ok, %ProviderProfile{lifecycle_state: :deleted}} ->
-        {:error, :contact_provider_profile_not_found}
-
-      {:ok, %ProviderProfile{} = provider_profile} ->
-        {:ok, provider_profile}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    fetch_versioned_ref_for_scope(
+      organization_id,
+      mission_id,
+      ref,
+      "provider_profile_id",
+      :contact_provider_profile_not_found,
+      &fetch_provider_profile_for_scope/3,
+      &fetch_provider_profile_version/4,
+      &fetch_provider_profile_version/3
+    )
   end
 
   defp fetch_transport_profile_for_scope(organization_id, mission_id, transport_profile_id)
@@ -1748,66 +1755,29 @@ defmodule Cadence.Contacts do
   end
 
   defp fetch_transport_profile_ref_for_scope(organization_id, mission_id, ref) do
-    transport_profile_id = Map.get(ref, "transport_profile_id")
-    version = Map.get(ref, "version")
-
-    transport_profile_result =
-      cond do
-        is_integer(version) and version > 0 and is_binary(organization_id) and
-            organization_id != "" ->
-          fetch_transport_profile_version(
-            organization_id,
-            mission_id,
-            transport_profile_id,
-            version
-          )
-
-        is_integer(version) and version > 0 ->
-          fetch_transport_profile_version(mission_id, transport_profile_id, version)
-
-        true ->
-          fetch_transport_profile_for_scope(organization_id, mission_id, transport_profile_id)
-      end
-
-    case transport_profile_result do
-      {:ok, %TransportProfile{lifecycle_state: :deleted}} ->
-        {:error, :contact_transport_profile_not_found}
-
-      {:ok, %TransportProfile{} = transport_profile} ->
-        {:ok, transport_profile}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    fetch_versioned_ref_for_scope(
+      organization_id,
+      mission_id,
+      ref,
+      "transport_profile_id",
+      :contact_transport_profile_not_found,
+      &fetch_transport_profile_for_scope/3,
+      &fetch_transport_profile_version/4,
+      &fetch_transport_profile_version/3
+    )
   end
 
   defp fetch_path_template_ref_for_scope(organization_id, mission_id, ref) do
-    path_template_id = Map.get(ref, "path_template_id")
-    version = Map.get(ref, "version")
-
-    path_template_result =
-      cond do
-        is_integer(version) and version > 0 and is_binary(organization_id) and
-            organization_id != "" ->
-          fetch_path_template_version(organization_id, mission_id, path_template_id, version)
-
-        is_integer(version) and version > 0 ->
-          fetch_path_template_version(mission_id, path_template_id, version)
-
-        true ->
-          fetch_path_template_for_scope(organization_id, mission_id, path_template_id)
-      end
-
-    case path_template_result do
-      {:ok, %PathTemplate{lifecycle_state: :deleted}} ->
-        {:error, :contact_path_template_not_found}
-
-      {:ok, %PathTemplate{} = path_template} ->
-        {:ok, path_template}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    fetch_versioned_ref_for_scope(
+      organization_id,
+      mission_id,
+      ref,
+      "path_template_id",
+      :contact_path_template_not_found,
+      &fetch_path_template_for_scope/3,
+      &fetch_path_template_version/4,
+      &fetch_path_template_version/3
+    )
   end
 
   defp prepare_path_template(%PathTemplate{} = path_template) do
@@ -1897,9 +1867,8 @@ defmodule Cadence.Contacts do
       end
 
     with :ok <- validate_ref_list(requested_refs, id_key),
-         :ok <- validate_ref_id_alignment(ids, requested_refs, id_key),
-         {:ok, resolved_refs} <- resolve_versioned_refs(requested_refs, id_key, fetch_ref) do
-      {:ok, resolved_refs}
+         :ok <- validate_ref_id_alignment(ids, requested_refs, id_key) do
+      resolve_versioned_refs(requested_refs, id_key, fetch_ref)
     end
   end
 
@@ -1931,20 +1900,78 @@ defmodule Cadence.Contacts do
     Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
       case fetch_ref.(ref) do
         {:ok, resource} ->
-          resource_id =
-            case id_key do
-              "provider_profile_id" -> resource.provider_profile_id
-              "transport_profile_id" -> resource.transport_profile_id
-              "path_template_id" -> resource.path_template_id
-            end
-
-          {:cont, {:ok, acc ++ [%{id_key => resource_id, "version" => resource.version}]}}
+          {:cont, {:ok, acc ++ [versioned_ref_from_resource(resource, id_key)]}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
       end
     end)
   end
+
+  defp fetch_versioned_ref_for_scope(
+         organization_id,
+         mission_id,
+         ref,
+         id_key,
+         not_found_reason,
+         fetch_scope,
+         fetch_version_with_org,
+         fetch_version_without_org
+       ) do
+    resource_id = Map.get(ref, id_key)
+    version = Map.get(ref, "version")
+
+    resource_result =
+      if is_integer(version) and version > 0 do
+        fetch_versioned_resource(
+          organization_id,
+          mission_id,
+          resource_id,
+          version,
+          fetch_version_with_org,
+          fetch_version_without_org
+        )
+      else
+        fetch_scope.(organization_id, mission_id, resource_id)
+      end
+
+    normalize_versioned_ref_result(resource_result, not_found_reason)
+  end
+
+  defp fetch_versioned_resource(
+         organization_id,
+         mission_id,
+         resource_id,
+         version,
+         fetch_version_with_org,
+         fetch_version_without_org
+       ) do
+    if is_binary(organization_id) and organization_id != "" do
+      fetch_version_with_org.(organization_id, mission_id, resource_id, version)
+    else
+      fetch_version_without_org.(mission_id, resource_id, version)
+    end
+  end
+
+  defp normalize_versioned_ref_result({:ok, %{lifecycle_state: :deleted}}, not_found_reason) do
+    {:error, not_found_reason}
+  end
+
+  defp normalize_versioned_ref_result({:ok, resource}, _not_found_reason), do: {:ok, resource}
+  defp normalize_versioned_ref_result({:error, reason}, _not_found_reason), do: {:error, reason}
+
+  defp versioned_ref_from_resource(resource, id_key) do
+    %{id_key => versioned_ref_resource_id(resource, id_key), "version" => resource.version}
+  end
+
+  defp versioned_ref_resource_id(resource, "provider_profile_id"),
+    do: resource.provider_profile_id
+
+  defp versioned_ref_resource_id(resource, "transport_profile_id"),
+    do: resource.transport_profile_id
+
+  defp versioned_ref_resource_id(resource, "path_template_id"),
+    do: resource.path_template_id
 
   defp ids_from_refs(refs, id_key) when is_list(refs) and is_binary(id_key) do
     Enum.map(refs, &Map.get(&1, id_key))

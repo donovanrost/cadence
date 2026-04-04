@@ -116,38 +116,41 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       reads_paused?: false
     }
 
-    with {:ok, base_state} <- ensure_ingress_executor(base_state) do
-      case configuration.mode do
-        :connect ->
-          case connect_socket(configuration.host, configuration.port) do
-            {:ok, socket} ->
-              state =
-                base_state
-                |> Map.put(:socket, socket)
-                |> start_socket_receiver!(socket)
+    case ensure_ingress_executor(base_state) do
+      {:ok, base_state} ->
+        start_socket_provider(configuration, base_state, provider_binding_id)
 
-              log_provider_started(state)
-              {:ok, state}
-
-            {:error, reason} ->
-              {:stop, {:tcp_provider_connect_failed, provider_binding_id, reason}}
-          end
-
-        :listen ->
-          case :gen_tcp.listen(configuration.port, listen_opts(configuration.host)) do
-            {:ok, listener} ->
-              port = listener_port(listener, configuration.port)
-              state = %{base_state | listener: listener, port: port}
-              log_provider_started(state)
-              {:ok, schedule_accept(state)}
-
-            {:error, reason} ->
-              {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
-          end
-      end
-    else
       {:error, reason} ->
         {:stop, {:tcp_provider_missing_ingress_executor, provider_binding_id, reason}}
+    end
+  end
+
+  defp start_socket_provider(%{mode: :connect} = configuration, base_state, provider_binding_id) do
+    case connect_socket(configuration.host, configuration.port) do
+      {:ok, socket} ->
+        state =
+          base_state
+          |> Map.put(:socket, socket)
+          |> start_socket_receiver!(socket)
+
+        log_provider_started(state)
+        {:ok, state}
+
+      {:error, reason} ->
+        {:stop, {:tcp_provider_connect_failed, provider_binding_id, reason}}
+    end
+  end
+
+  defp start_socket_provider(%{mode: :listen} = configuration, base_state, provider_binding_id) do
+    case :gen_tcp.listen(configuration.port, listen_opts(configuration.host)) do
+      {:ok, listener} ->
+        port = listener_port(listener, configuration.port)
+        state = %{base_state | listener: listener, port: port}
+        log_provider_started(state)
+        {:ok, schedule_accept(state)}
+
+      {:error, reason} ->
+        {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
     end
   end
 
