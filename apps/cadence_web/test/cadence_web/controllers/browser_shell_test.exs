@@ -2,6 +2,9 @@ defmodule CadenceWeb.BrowserShellTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Organizations.Organization
+  alias Cadence.Persistence.Schemas.SetupWorkflowRow
+  alias Cadence.Repo
+  alias Cadence.Setup.Workflow
 
   @bootstrap_admin_email "bootstrap-admin@example.com"
   @bootstrap_admin_password "bootstrap-password-123"
@@ -71,8 +74,125 @@ defmodule CadenceWeb.BrowserShellTest do
     response = html_response(conn, 200)
 
     assert response =~ "setup-home"
+    assert response =~ "first-tenant-form"
     assert response =~ "Bootstrap Admin"
     assert response =~ @bootstrap_admin_email
+  end
+
+  test "setup access can create the first tenant and keep setup context active", %{conn: conn} do
+    session_token = bootstrap_admin_session_token()
+
+    conn =
+      conn
+      |> init_test_session(%{user_session_token: session_token})
+      |> post("/setup/organizations", %{
+        "organization" => %{
+          "display_name" => "Cadence Operations",
+          "slug" => "cadence-operations"
+        }
+      })
+
+    assert redirected_to(conn) == "/setup"
+
+    setup_conn =
+      build_conn()
+      |> init_test_session(%{user_session_token: session_token})
+      |> get("/setup")
+
+    response = html_response(setup_conn, 200)
+
+    assert response =~ "Cadence Operations"
+    assert response =~ "setup-active-organization"
+    assert response =~ "Durable admin handoff still pending"
+    refute response =~ "first-tenant-form"
+
+    root_conn =
+      build_conn()
+      |> init_test_session(%{user_session_token: session_token})
+      |> get("/")
+
+    assert redirected_to(root_conn) == "/setup"
+  end
+
+  test "first tenant creation requires both tenant name and slug", %{conn: conn} do
+    conn =
+      conn
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> post("/setup/organizations", %{
+        "organization" => %{
+          "display_name" => "Cadence Operations"
+        }
+      })
+
+    response = html_response(conn, 422)
+
+    assert response =~ "Enter both the tenant name and slug."
+    assert response =~ "first-tenant-form"
+  end
+
+  test "duplicate tenant creation returns a predictable error in partial setup state", %{
+    conn: conn
+  } do
+    persist_first_tenant!(organization_id: "org-existing", slug: "cadence-operations")
+    persist_pending_tenant_creation_workflow!()
+
+    conn =
+      conn
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> post("/setup/organizations", %{
+        "organization" => %{
+          "display_name" => "Cadence Operations Duplicate",
+          "slug" => "cadence-operations"
+        }
+      })
+
+    response = html_response(conn, 422)
+
+    assert response =~ "Tenant slug has already been taken"
+    assert response =~ "first-tenant-form"
+  end
+
+  test "invalid inferred setup state keeps setup traffic on the setup route", %{conn: conn} do
+    persist_first_tenant!(organization_id: "org-alpha", slug: "org-alpha")
+    persist_first_tenant!(organization_id: "org-bravo", slug: "org-bravo")
+
+    root_conn =
+      conn
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> get("/")
+
+    assert redirected_to(root_conn) == "/setup"
+
+    setup_conn =
+      build_conn()
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> get("/setup")
+
+    response = html_response(setup_conn, 200)
+
+    assert response =~ "Cadence setup needs operator attention"
+    assert response =~ "Cadence found an invalid first-run setup state."
+    refute response =~ "first-tenant-form"
+  end
+
+  test "legacy single-tenant installs without workflow state route setup access to operator", %{
+    conn: conn
+  } do
+    persist_first_tenant!(organization_id: "org-cadence", slug: "cadence-inc")
+
+    root_conn =
+      conn
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> get("/")
+
+    assert redirected_to(root_conn) == "/operator"
+
+    setup_conn =
+      build_conn()
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> get("/setup")
+
+    assert redirected_to(setup_conn) == "/operator"
   end
 
   test "setup access is redirected away from the generic operator shell", %{conn: conn} do
@@ -176,13 +296,32 @@ defmodule CadenceWeb.BrowserShellTest do
   end
 
   defp persist_completed_setup! do
-    assert {:ok, _organization} =
-             Cadence.persist_organization(
-               Organization.new(%{
-                 organization_id: "org-cadence",
-                 slug: "cadence-inc",
-                 display_name: "Cadence Inc."
-               })
-             )
+    persisted_organization =
+      persist_first_tenant!(organization_id: "org-cadence", slug: "cadence-inc")
+
+    assert {:ok, _workflow} =
+             Cadence.complete_initial_setup(persisted_organization.organization_id)
+  end
+
+  defp persist_first_tenant!(opts) when is_list(opts) do
+    organization =
+      Organization.new(%{
+        organization_id: Keyword.get(opts, :organization_id, "org-cadence"),
+        slug: Keyword.get(opts, :slug, "cadence-inc"),
+        display_name: Keyword.get(opts, :display_name, "Cadence Inc.")
+      })
+
+    assert {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    persisted_organization
+  end
+
+  defp persist_pending_tenant_creation_workflow! do
+    workflow =
+      Workflow.new(%{
+        setup_workflow_id: Workflow.initial_workflow_id(),
+        current_step: :pending_tenant_creation
+      })
+
+    assert {:ok, _row} = Repo.insert(SetupWorkflowRow.changeset(workflow))
   end
 end

@@ -40,6 +40,7 @@ defmodule CadenceWeb.Router do
 
     get "/", OperatorEntryController, :show
     get "/setup", SetupController, :show
+    post "/setup/organizations", SetupController, :create
     get "/operator", OperatorHomeController, :show
     delete "/session", UserSessionController, :delete
   end

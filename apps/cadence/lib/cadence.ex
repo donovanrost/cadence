@@ -85,6 +85,8 @@ defmodule Cadence do
   alias Cadence.Replay
   alias Cadence.Replay.Diff, as: ReplayDiff
   alias Cadence.Replay.Scope
+  alias Cadence.Setup, as: SetupService
+  alias Cadence.Setup.Workflow, as: SetupWorkflow
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
 
@@ -145,7 +147,31 @@ defmodule Cadence do
 
   @spec initial_setup_pending?() :: boolean()
   def initial_setup_pending? do
-    Organizations.count_organizations() == 0
+    case SetupService.fetch_initial_workflow() do
+      {:ok, workflow} -> SetupService.active?(workflow)
+      {:error, :invalid_setup_state} -> true
+    end
+  end
+
+  @spec fetch_initial_setup_workflow() :: {:ok, SetupWorkflow.t()} | {:error, term()}
+  def fetch_initial_setup_workflow do
+    SetupService.fetch_initial_workflow()
+  end
+
+  @spec create_initial_setup_organization(CurrentScope.t(), Organization.t()) ::
+          {:ok, %{organization: Organization.t(), workflow: SetupWorkflow.t()}} | {:error, term()}
+  def create_initial_setup_organization(
+        %CurrentScope{} = current_scope,
+        %Organization{} = organization
+      ) do
+    SetupService.create_initial_organization(current_scope, organization)
+  end
+
+  @spec complete_initial_setup(binary(), keyword()) ::
+          {:ok, SetupWorkflow.t()} | {:error, term()}
+  def complete_initial_setup(active_organization_id, opts \\ [])
+      when is_binary(active_organization_id) and is_list(opts) do
+    SetupService.complete_initial_workflow(active_organization_id, opts)
   end
 
   @spec persist_organization(Organization.t()) :: {:ok, Organization.t()} | {:error, term()}

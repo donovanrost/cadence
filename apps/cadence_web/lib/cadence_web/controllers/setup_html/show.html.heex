@@ -1,11 +1,34 @@
 <section id="setup-home" class="panel panel--hero">
   <div class="eyebrow">First-Run Setup</div>
-  <h1 class="hero-title">Cadence is ready for initial tenant and operator setup.</h1>
+  <h1 class="hero-title">
+    <%= cond do %>
+      <% @invalid_setup_state? -> %>
+        Cadence setup needs operator attention before first-run work can continue.
+      <% @show_tenant_form? -> %>
+        Create the first tenant for this Cadence deployment.
+      <% @active_organization -> %>
+        First tenant created. Continue the durable platform handoff.
+      <% true -> %>
+        Cadence is ready for the next first-run setup step.
+    <% end %>
+  </h1>
   <p class="hero-copy">
-    This temporary setup surface is the first durable browser entrypoint for a fresh deployment.
-    It keeps setup traffic out of the generic operator shell while the first tenant and durable
-    admin handoff slices are still being built.
+    <%= cond do %>
+      <% @invalid_setup_state? -> %>
+        This temporary setup surface remains isolated from the normal operator shell so invalid
+        first-run state can be corrected without pretending setup has completed cleanly.
+      <% @show_tenant_form? -> %>
+        Temporary setup access can create the first durable organization tenant from the product.
+        This keeps platform-scoped setup explicit while durable membership and handoff work are
+        still pending.
+      <% true -> %>
+        The first durable tenant now exists and is the active setup context. Cadence keeps setup
+        traffic out of the generic operator shell until durable admin handoff and completion work
+        are finished.
+    <% end %>
   </p>
+
+  <p :if={@error_message} id="first-tenant-error" class="panel__error">{@error_message}</p>
 
   <div class="summary-grid">
     <article class="status-card">
@@ -24,14 +47,74 @@
     </article>
 
     <article class="status-card">
-      <p class="status-card__label">Next Setup Slices</p>
-      <p class="status-card__title">Tenant creation and durable admin handoff</p>
-      <p class="status-card__body">
-        Follow-on setup work will create the first organization, establish the first durable
-        platform admin, and retire this temporary access path.
-      </p>
+      <p class="status-card__label">Setup Step</p>
+      <p class="status-card__title">{@setup_step_title}</p>
+      <p class="status-card__body">{@setup_step_body}</p>
+    </article>
+
+    <article id="setup-active-organization" class="status-card">
+      <p class="status-card__label">Active Setup Tenant</p>
+
+      <%= cond do %>
+        <% @active_organization -> %>
+          <p class="status-card__title">{@active_organization.display_name}</p>
+          <p class="status-card__body">Slug: {@active_organization.slug}</p>
+        <% @invalid_setup_state? -> %>
+          <p class="status-card__title">Unavailable</p>
+          <p class="status-card__body">
+            Cadence could not resolve the active setup tenant from the current workflow state.
+          </p>
+        <% true -> %>
+          <p class="status-card__title">Not created yet</p>
+          <p class="status-card__body">
+            The first durable tenant has not been created yet for this deployment.
+          </p>
+      <% end %>
     </article>
   </div>
+
+  <%= if @show_tenant_form? do %>
+    <.form
+      for={@form}
+      id="first-tenant-form"
+      action={~p"/setup/organizations"}
+      class="sign-in-form"
+    >
+      <.input
+        field={@form[:display_name]}
+        type="text"
+        label="Tenant Name"
+        placeholder="Cadence Operations"
+        required
+        autofocus
+      />
+      <.input
+        field={@form[:slug]}
+        type="text"
+        label="Tenant Slug"
+        placeholder="cadence-operations"
+        required
+        autocomplete="off"
+      />
+
+      <div class="sign-in-form__actions">
+        <button type="submit" class="button button--primary">Create Tenant</button>
+        <p class="sign-in-form__note">
+          This step creates the first durable organization tenant only. It does not create human
+          membership or durable admin ownership yet.
+        </p>
+      </div>
+    </.form>
+  <% else %>
+    <article id="setup-next-step" class="status-card">
+      <p class="status-card__label">Next Slice</p>
+      <p class="status-card__title">Durable admin handoff still pending</p>
+      <p class="status-card__body">
+        Cadence will keep this tenant as the active setup context until the next setup slice
+        establishes durable human ownership and explicit tenant membership.
+      </p>
+    </article>
+  <% end %>
 
   <.form for={%{}} as={:session} id="setup-sign-out-form" action={~p"/session"} method="delete">
     <button type="submit" class="button button--secondary">Sign out</button>
