@@ -43,7 +43,7 @@ config :cadence_web, CadenceWeb.Endpoint,
 config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 
 config :tailwind,
-  version: "4.0.9",
+  version: "4.1.12",
   cadence_web: [
     args: ~w(
       --input=assets/css/app.css
@@ -58,7 +58,7 @@ config :esbuild,
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
     cd: Path.expand("../apps/cadence_web/assets", __DIR__),
-    env: %{"NODE_PATH" => Path.expand("../apps/cadence_web/deps", __DIR__)}
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
 import_config "#{config_env()}.exs"
