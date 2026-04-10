@@ -5,8 +5,9 @@
 
 /* Cadence "Tokyo Night / Vaporwave / HUD" theme. Color values are ported
    from the hand-rolled palette in the pre-Tailwind priv/static/assets/app.css
-   (near-black blue bases, cyan primary, purple secondary, hot-pink accent).
-   Sharp corners are intentional for the HUD aesthetic. */
+   (near-black blue bases, cyan primary, purple secondary, warm-orange accent).
+   Soft corners (1rem for panels/fields, pill buttons) match the legacy
+   hand-rolled look. */
 @theme {
   --color-base-100: #09111b;
   --color-base-200: #0f1b2a;
@@ -23,6 +24,10 @@
   --color-info-content: #0a1020;
   --color-success: #93f2c8;
   --color-success-content: #062018;
+  /* NOTE: --color-warning currently shares --color-accent's value. The
+     legacy hand-rolled palette did not define a distinct warning color.
+     This is a known collision that should be resolved in design review
+     before UI components use both tokens. */
   --color-warning: #f5b66f;
   --color-warning-content: #1c1208;
   --color-error: #ff8e85;
@@ -52,9 +57,17 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(134, 214, 255, 0.18), transparent 28rem),
-    radial-gradient(circle at bottom right, rgba(245, 182, 111, 0.16), transparent 26rem),
-    linear-gradient(180deg, #09111b 0%, #04080f 100%);
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--color-primary) 18%, transparent),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at bottom right,
+      color-mix(in srgb, var(--color-accent) 16%, transparent),
+      transparent 26rem
+    ),
+    linear-gradient(180deg, var(--color-base-100) 0%, #04080f 100%);
   color: var(--color-base-content);
 }
 
