@@ -1,0 +1,73 @@
+@import "tailwindcss" source(none);
+@source "../../lib/cadence_web";
+@source "../js";
+@plugin "../vendor/heroicons";
+
+/* Cadence "Tokyo Night / Vaporwave / HUD" theme. Color values are ported
+   from the hand-rolled palette in the pre-Tailwind priv/static/assets/app.css
+   (near-black blue bases, cyan primary, purple secondary, hot-pink accent).
+   Sharp corners are intentional for the HUD aesthetic. */
+@theme {
+  --color-base-100: #09111b;
+  --color-base-200: #0f1b2a;
+  --color-base-300: #1a2638;
+  --color-base-content: #edf4ff;
+  --color-muted: #9cafc5;
+  --color-primary: #86d6ff;
+  --color-primary-content: #041019;
+  --color-secondary: #bb9af7;
+  --color-secondary-content: #15101f;
+  --color-accent: #f5b66f;
+  --color-accent-content: #1c1208;
+  --color-info: #7aa2f7;
+  --color-info-content: #0a1020;
+  --color-success: #93f2c8;
+  --color-success-content: #062018;
+  --color-warning: #f5b66f;
+  --color-warning-content: #1c1208;
+  --color-error: #ff8e85;
+  --color-error-content: #200606;
+
+  --color-panel: rgba(10, 18, 29, 0.88);
+  --color-panel-strong: rgba(15, 27, 42, 0.96);
+  --color-line: rgba(138, 173, 212, 0.18);
+  --color-line-strong: rgba(138, 173, 212, 0.32);
+
+  --radius-box: 1rem;
+  --radius-field: 1rem;
+  --radius-selector: 999px;
+
+  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+/* Page-level styles that are cleaner as raw CSS than utility classes. */
+:root {
+  color-scheme: dark;
+  font-family: var(--font-sans);
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(134, 214, 255, 0.18), transparent 28rem),
+    radial-gradient(circle at bottom right, rgba(245, 182, 111, 0.16), transparent 26rem),
+    linear-gradient(180deg, #09111b 0%, #04080f 100%);
+  color: var(--color-base-content);
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+code {
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+}
