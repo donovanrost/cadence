@@ -154,7 +154,7 @@ Edit `config/config.exs`. Append the following after the existing `config :caden
 
 ```elixir
 config :tailwind,
-  version: "4.0.9",
+  version: "4.1.12",
   cadence_web: [
     args: ~w(
       --input=assets/css/app.css
@@ -169,8 +169,13 @@ config :esbuild,
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
     cd: Path.expand("../apps/cadence_web/assets", __DIR__),
-    env: %{"NODE_PATH" => Path.expand("../apps/cadence_web/deps", __DIR__)}
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
+
+# NOTE: `NODE_PATH` must resolve to the umbrella-root `deps/` directory,
+# not a per-app `apps/cadence_web/deps/` — Elixir umbrella projects share
+# a single `deps/` at the root (see `deps_path: "../../deps"` in each app's
+# `mix.exs`). Earlier drafts of this plan had the wrong path; fixed here.
 ```
 
 - [ ] **Step 2: Verify the config compiles**
@@ -582,7 +587,7 @@ code {
 - [ ] **Step 2: Install Tailwind and esbuild binaries**
 
 Run: `mix assets.setup`
-Expected: downloads the Tailwind 4.0.9 and esbuild 0.21.5 binaries into `_build`. First run is slow; subsequent runs are instant.
+Expected: downloads the Tailwind 4.1.12 and esbuild 0.21.5 binaries into `_build`. First run is slow; subsequent runs are instant.
 
 - [ ] **Step 3: Build assets to verify the Tailwind v4 entry is valid**
 
