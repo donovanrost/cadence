@@ -12,7 +12,8 @@ defmodule CadenceWeb.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases()
     ]
   end
 
@@ -46,6 +47,18 @@ defmodule CadenceWeb.MixProject do
       {:phoenix_live_view, "~> 1.1"},
       {:swoosh, "~> 1.17"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev}
+    ]
+  end
+
+  defp aliases do
+    [
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.build": ["tailwind cadence_web", "esbuild cadence_web"],
+      "assets.deploy": [
+        "tailwind cadence_web --minify",
+        "esbuild cadence_web --minify",
+        "phx.digest"
+      ]
     ]
   end
 end
