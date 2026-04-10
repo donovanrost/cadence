@@ -32,11 +32,20 @@ defmodule CadenceWeb.MixProject do
     [
       {:bandit, "~> 1.5"},
       {:cadence, in_umbrella: true},
+      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
+      {:heroicons,
+       github: "tailwindlabs/heroicons",
+       tag: "v2.2.0",
+       sparse: "optimized",
+       app: false,
+       compile: false,
+       depth: 1},
       {:jason, "~> 1.4"},
       {:phoenix, "~> 1.8.1"},
       {:phoenix_html, "~> 4.3"},
       {:phoenix_live_view, "~> 1.1"},
-      {:swoosh, "~> 1.17"}
+      {:swoosh, "~> 1.17"},
+      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev}
     ]
   end
 end
