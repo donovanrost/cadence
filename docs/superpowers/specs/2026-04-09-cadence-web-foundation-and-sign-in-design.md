@@ -49,7 +49,7 @@ The following decisions are inputs to this design and are not re-litigated here:
 - **Frontend stack:** pure Phoenix LiveView + Tailwind. No daisyUI, no LiveSvelte, no LiveVue. Rich-interactivity surfaces will use targeted Phoenix JS hooks (the legacy pattern with `scichart`, `gridstack`, `dagre`, `@tanstack/table-core`) when they're needed; LiveSvelte revisits only if hooks concretely fail.
 - **Aesthetic:** carry forward the legacy "Tokyo Night / Vaporwave / HUD mission control" look — sharp corners, dark base with subtle grid/mesh background, cyan primary, purple secondary, pink accent, hover-glow cards. The legacy CSS under `legacy/cadence_legacy/assets/css/` is visual reference, not code to port.
 - **Page shape:** prefer focused pages per responsibility. No single page should accumulate multiple unrelated forms and status cards.
-- **Single login form on `/sign-in`:** the parallel durable/setup-access forms go away. Setup-access becomes an invisible server-side fallback.
+- **Single login form on `/sign-in`:** the parallel durable/setup-access forms go away. The server dispatches to the right credential kind based on the email's active credentials; setup-access is invisible to the user.
 
 ## Foundation
 
@@ -143,53 +143,102 @@ New `CadenceWeb.UserSessionLive` at `lib/cadence_web/live/user_session_live.ex`:
 - On error, the controller redirects back to `/sign-in` with a `:error` flash; the LiveView picks that up on re-mount and displays it through `<.form_error>`.
 - No parallel second form. No setup-access-specific UI.
 
+### Credential dispatch strategy
+
+The controller does **not** cascade login attempts. Cascading (try durable first, fall back to bootstrap on `:invalid_credentials`) has three drawbacks:
+
+1. It does two password verifications in the fallback case (expensive and creates a timing side-channel distinguishing "wrong durable password" from "wrong bootstrap password").
+2. It leaks bootstrap/setup-access knowledge into the controller layer.
+3. It makes the controller responsible for coordinating two Accounts-layer calls with different error handling, which is exactly the kind of business logic that belongs in the Accounts context.
+
+Instead, the dispatch is moved into the Accounts context via a new `Accounts.sign_in/2` function that looks up the user's active credentials first, picks which credential kind applies, and calls exactly one password verification path. This keeps the controller trivially thin and keeps the "what counts as a valid login" decision where the credential schema lives.
+
+### Accounts layer — new `sign_in/2`
+
+New function `Cadence.Accounts.sign_in/2`:
+
+```
+@spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
+def sign_in(email, password) when is_binary(email) and is_binary(password) do
+  normalized_email = User.normalize_email(email)
+
+  with %UserRow{} = user_row <-
+         Repo.get_by(UserRow,
+           email: normalized_email,
+           lifecycle_state: Atom.to_string(:active)
+         ),
+       %User{} = user <- UserRow.to_domain(user_row),
+       {:ok, credential_kind} <- resolve_credential_kind(user) do
+    case credential_kind do
+      :durable -> login_user_with_user(user, password)
+      :bootstrap_admin -> login_bootstrap_admin_with_user(user, password)
+    end
+  else
+    nil -> {:error, :invalid_credentials}
+    {:error, _reason} = error -> error
+  end
+end
+
+defp resolve_credential_kind(%User{user_id: user_id}) do
+  has_password = active_credential?(user_id, @password_provider_key)
+  has_bootstrap = active_credential?(user_id, @bootstrap_provider_key)
+
+  cond do
+    has_password ->
+      {:ok, :durable}
+
+    has_bootstrap and bootstrap_admin_enabled?() and setup_pending?() ->
+      {:ok, :bootstrap_admin}
+
+    true ->
+      {:error, :invalid_credentials}
+  end
+end
+
+defp setup_pending? do
+  # Mirrors `Cadence.initial_setup_pending?/0` on the facade, but lives as a
+  # private helper inside Accounts to avoid reaching back through the root
+  # Cadence module from a context. Calls `Cadence.Setup.fetch_initial_workflow/0`
+  # and `Cadence.Setup.active?/1` directly; treats `:invalid_setup_state` as
+  # "pending" to match the facade's defensive default.
+end
+```
+
+**Precedence rules, explicit:**
+
+- **Durable wins if present.** If a user has an active `password` credential, `sign_in/2` always dispatches to the durable login path — even if they also have a `bootstrap_env` credential and setup is still pending. A durable credential is the canonical login method once it exists; the bootstrap credential becomes dead data that can be garbage-collected later.
+- **Bootstrap admin only during first-run setup.** If a user has only a `bootstrap_env` credential, `sign_in/2` dispatches to the bootstrap login path only if `bootstrap_admin_enabled?()` **and** `setup_pending?()` (the private helper that checks `Cadence.Setup.fetch_initial_workflow/0` + `Cadence.Setup.active?/1`) are both true. Once first-run setup is marked complete, the bootstrap credential is no longer usable through `sign_in/2` — even though it still exists in the database — and the user gets `:invalid_credentials`. This matches the current UI's "setup access form disappears after setup completes" behavior but tightens it: previously the current server accepted bootstrap logins even after setup completed (because `login_bootstrap_admin/2` itself only gates on `bootstrap_admin_enabled?`), the UI just hid the form. The new unified `sign_in/2` enforces the tighter gate.
+- **Neither credential present or unusable.** Returns `:invalid_credentials`. No timing distinction between "email not found," "email found but no credentials," and "email found with wrong password" — all three paths fail with the same error.
+
+**Preserving existing functions:** `Accounts.login_user/2` and `Accounts.login_bootstrap_admin/2` are **not deleted**. They still exist and still have their current callers: `BootstrapAdminSessionController` uses `login_bootstrap_admin/2` directly (the API still wants an explicit "bootstrap admin login" endpoint for service/simulator use), and the `cadence_simulator` app uses one of them for its own bootstrap purposes. They may be internally refactored to share the `login_user_with_user/2` / `login_bootstrap_admin_with_user/2` helpers with `sign_in/2`, but their public shape stays.
+
+**Cadence facade:** new `Cadence.sign_in/2` delegates to `Auth.sign_in/2`, which delegates to `Accounts.sign_in/2`. Matches the existing `Cadence.login_user/2` / `Cadence.login_bootstrap_admin/2` delegation chain.
+
 ### Controller
 
-`CadenceWeb.UserSessionController.create/2` is refactored to a unified cascading auth flow. Param validation uses the existing `CadenceWeb.ControlPlaneParams` helpers without modifying them — `durable_session/1` normalizes the primary path, `setup_access_session/1` normalizes the fallback path, both expecting the shape `%{"email" => ..., "password" => ...}`.
-
-Schematic (not final code — the implementation plan will flesh this out):
+With the dispatch in the Accounts layer, `CadenceWeb.UserSessionController.create/2` collapses to:
 
 ```
 def create(conn, %{"user" => credentials}) do
-  with {:ok, {email, password}} <- ControlPlaneParams.durable_session(credentials) do
-    case Cadence.login_user(email, password) do
-      {:ok, session} ->
-        finalize_sign_in(conn, session, "Signed in.")
-
-      {:error, :invalid_credentials} ->
-        if setup_access_fallback_enabled?() do
-          attempt_setup_access_fallback(conn, credentials)
-        else
-          redirect_with_error(conn, :invalid_credentials)
-        end
-
-      {:error, reason} ->
-        redirect_with_error(conn, reason)
-    end
+  with {:ok, {email, password}} <- ControlPlaneParams.durable_session(credentials),
+       {:ok, session} <- Cadence.sign_in(email, password) do
+    finalize_sign_in(conn, session, "Signed in.")
   else
-    {:error, reason} -> redirect_with_error(conn, reason)
+    {:error, reason} ->
+      conn
+      |> put_flash(:error, human_message(reason))
+      |> redirect(to: ~p"/sign-in")
   end
-end
-
-defp attempt_setup_access_fallback(conn, credentials) do
-  with {:ok, {email, password}} <- ControlPlaneParams.setup_access_session(credentials),
-       {:ok, session} <- Cadence.login_bootstrap_admin(email, password) do
-    finalize_sign_in(conn, session, "Setup access session established.")
-  else
-    {:error, _reason} -> redirect_with_error(conn, :invalid_credentials)
-  end
-end
-
-defp setup_access_fallback_enabled? do
-  Cadence.initial_setup_pending?() and Cadence.bootstrap_admin_enabled?()
 end
 ```
 
-`setup_access_fallback_enabled?/0` is a private helper in `UserSessionController` and does not need to be exposed from the `Cadence` facade. The setup-access path is invisible to the user: they type a single set of credentials, the server tries durable login first, and falls back to bootstrap login only during first-run setup when the bootstrap admin is enabled. Once setup is complete, the fallback path is gone and only durable credentials work.
+Param validation uses the existing `CadenceWeb.ControlPlaneParams.durable_session/1` helper — it accepts the same `%{"email" => ..., "password" => ...}` shape the new unified flow needs, and no `ControlPlaneParams` changes are required. `setup_access_session/1` stays for `BootstrapAdminSessionController` but is no longer called from `UserSessionController`.
 
-Error handling uses `put_flash(:error, human_message(reason)) |> redirect(to: ~p"/sign-in")`, not re-rendering with form assigns, because the form lives in a LiveView and flash is the cleanest handoff for a controller action to pass error state back to it. The `error_message/1` private helper (existing) maps reason atoms to human messages and is simplified to drop the dual-error-field distinction.
+No `setup_access_fallback_enabled?/0` helper. No bootstrap admin knowledge in the controller. No dual branching. The `"Setup access session established."` flash message is gone — sign-ins are all labeled the same way from the user's perspective, since the dispatch is invisible.
 
-`redirect_target/2` is unchanged: setup-access sessions still land on `/setup`, durable sessions on `/operator` (or the pre-login `user_return_to`).
+Error handling uses `put_flash(:error, human_message(reason)) |> redirect(to: ~p"/sign-in")`, not re-rendering with form assigns, because the form lives in a LiveView and flash is the cleanest handoff for a controller action to pass error state back to it. The `human_message/1` private helper replaces the old `error_message/1` — it maps reason atoms to human strings and drops the dual-error-field distinction.
+
+`finalize_sign_in/3`, `maybe_put_current_organization/2`, `renew_browser_session/1`, `revoke_session_token/1`, and `redirect_target/2` all stay unchanged. Setup-access sessions still land on `/setup` (because `Cadence.authenticate_api_token` still marks them as `temporary_setup_access`), and durable sessions still land on `/operator` (or the pre-login `user_return_to`).
 
 ### Deleted / simplified
 
@@ -197,12 +246,19 @@ From `UserSessionController`:
 - `render_sign_in/5` and its two-form plumbing
 - `setup_access_available?/0`
 - `durable_form/0,1` and `setup_access_form/0,1`
-- The `create_durable_session/2` and `create_setup_access_session/2` branches
+- The `create_durable_session/2` and `create_setup_access_session/2` branches and their `Map.has_key?` dispatching in `create/2`
 - Parallel `durable_error_message` / `setup_access_error_message` assigns
+- `error_status/1` simplified (or removed if unused) — a single error path means we no longer need to distinguish bootstrap-disabled status codes from generic invalid credential codes for UI purposes
 
 From `lib/cadence_web/controllers/user_session_html/new.html.heex` and `lib/cadence_web/controllers/user_session_html.ex`: deleted entirely, replaced by `CadenceWeb.UserSessionLive`.
 
-From `lib/cadence_web/control_plane_params.ex`: `setup_access_session/1` stays (the controller still calls it in the fallback), `durable_session/1` stays (the controller still calls it in the primary path). No `ControlPlaneParams` changes in this slice.
+From `lib/cadence_web/control_plane_params.ex`: **no changes.** `durable_session/1` stays (the new unified controller calls it). `setup_access_session/1` stays (`BootstrapAdminSessionController` still calls it).
+
+From `apps/cadence/lib/cadence/accounts.ex`: **no deletions.** `login_user/2` and `login_bootstrap_admin/2` stay as-is (still used by `BootstrapAdminSessionController` and `cadence_simulator`). The new `sign_in/2` is additive.
+
+From `apps/cadence/lib/cadence/auth.ex`: **no deletions.** Adds `sign_in/2` as a thin delegator to `Accounts.sign_in/2`.
+
+From `apps/cadence/lib/cadence.ex`: **no deletions.** Adds `sign_in/2` as a thin delegator to `Auth.sign_in/2`.
 
 ### Router update
 
@@ -221,6 +277,22 @@ The `GET /sign-in` is now a `live` route; `POST /sign-in` stays on the controlle
 
 ## Tests
 
+### New: `Accounts.sign_in/2` unit tests
+
+Add unit tests for `Accounts.sign_in/2` in the appropriate existing accounts test file (`apps/cadence/test/cadence/accounts_test.exs` or equivalent). Cover the full dispatch matrix:
+
+- **Durable credential only, correct password** → `{:ok, session}` with `session.temporary_setup_access? == false`.
+- **Durable credential only, wrong password** → `{:error, :invalid_credentials}`.
+- **Durable credential only, user unconfirmed** → `{:error, :invalid_credentials}`.
+- **Durable credential only, user inactive** → `{:error, :invalid_credentials}`.
+- **Bootstrap credential only, `bootstrap_admin_enabled?` true, setup pending, correct password** → `{:ok, session}` with `temporary_setup_access? == true`.
+- **Bootstrap credential only, `bootstrap_admin_enabled?` true, setup pending, wrong password** → `{:error, :invalid_credentials}`.
+- **Bootstrap credential only, `bootstrap_admin_enabled?` false** → `{:error, :invalid_credentials}` (gate rejects).
+- **Bootstrap credential only, `bootstrap_admin_enabled?` true, setup complete** → `{:error, :invalid_credentials}` (tighter gate than the existing `login_bootstrap_admin/2`).
+- **Both credentials present, correct durable password** → `{:ok, session}` via durable path (`temporary_setup_access? == false`). Verifies durable precedence.
+- **Both credentials present, wrong durable password, correct bootstrap password** → `{:error, :invalid_credentials}`. Verifies no fallback from durable to bootstrap when durable is present.
+- **Email not found** → `{:error, :invalid_credentials}`.
+
 ### Existing: `apps/cadence_web/test/cadence_web/controllers/browser_shell_test.exs`
 
 Update assertions to match the new single-form shape:
@@ -230,8 +302,8 @@ Update assertions to match the new single-form shape:
 - **Keep:** durable login success → redirect to `/operator`.
 - **Keep:** durable login failure → error flash, rerender `/sign-in`.
 - **Keep:** sign-out test, invitation acceptance test.
-- **Add:** during first-run setup with bootstrap admin enabled, submitting the configured bootstrap admin credentials on `/sign-in` signs the user in via the fallback and redirects to `/setup`.
-- **Add:** after first-run setup completes, submitting the bootstrap admin credentials fails with `:invalid_credentials` (fallback is no longer enabled).
+- **Add:** during first-run setup with bootstrap admin enabled, submitting the configured bootstrap admin credentials on `/sign-in` signs the user in and redirects to `/setup`. (Same POST endpoint, no separate form.)
+- **Add:** after first-run setup completes, submitting the bootstrap admin credentials fails with `:invalid_credentials`.
 
 ### New: `apps/cadence_web/test/cadence_web/live/user_session_live_test.exs`
 
@@ -278,7 +350,7 @@ The old `priv/static/assets/app.css` (the static hand-rolled file) is deleted in
 - The slice should land in three commits, not one monolith:
   1. **Asset pipeline foundation.** Add `phoenix_live_view`, `tailwind`, `esbuild`, `heroicons` to `apps/cadence_web/mix.exs`. Add `config :tailwind` and `config :esbuild` to `config/config.exs`. Wire dev watchers in `config/dev.exs`. No template changes. No LiveView runtime wiring yet. After this commit, the tree compiles and all existing tests pass (new deps are not yet used).
   2. **Asset sources, layouts, and compat shim.** Create `apps/cadence_web/assets/{css,js,vendor}/` with `app.css`, `app.js`, and `heroicons.js`. Port the Tokyo Night palette into the `@theme` block and write the legacy compat shim for the existing class names. Add `CadenceWeb.Layouts` module with `root.html.heex` and an `app/1` function component. Wire `CadenceWeb.Endpoint` with the LiveView socket and `CadenceWeb.Router` with `fetch_live_flash` and the new root layout. Update `lib/cadence_web.ex` with a `live_view` helper. Delete the hand-rolled static `apps/cadence_web/priv/static/assets/app.css` (the Tailwind build will overwrite the same path). After this commit, `/sign-in`, `/setup`, `/operator`, and `/invitations/:token` all still render via their existing controllers, styled by the compat shim. All existing tests pass.
-  3. **Primitive component set, `/sign-in` LiveView, and test updates.** Add `CadenceWeb.UI` with the initial primitives. Add `CadenceWeb.UserSessionLive`. Refactor `UserSessionController.create/2` to the unified cascading auth flow. Update the router to make `GET /sign-in` a `live` route. Delete `user_session_html.ex` and `user_session_html/new.html.heex`. Update `browser_shell_test.exs` assertions to match the single-form shape. Add `user_session_live_test.exs`. After this commit, `/sign-in` is served by the LiveView and all tests pass.
+  3. **Unified `sign_in/2`, primitive component set, `/sign-in` LiveView, and test updates.** In `cadence`: add `Accounts.sign_in/2` with the credential-kind dispatch and precedence rules, add `Auth.sign_in/2` and `Cadence.sign_in/2` delegators, add the unit tests for `Accounts.sign_in/2`. In `cadence_web`: add `CadenceWeb.UI` with the initial primitives, add `CadenceWeb.UserSessionLive`, collapse `UserSessionController.create/2` to the single `Cadence.sign_in/2` call, update the router to make `GET /sign-in` a `live` route, delete `user_session_html.ex` and `user_session_html/new.html.heex`, update `browser_shell_test.exs` assertions to match the single-form shape, add `user_session_live_test.exs`. After this commit, `/sign-in` is served by the LiveView, dispatched through `Accounts.sign_in/2`, and all tests pass.
 - Each commit must leave the tree compiling and all tests passing. The commits are sized so that no intermediate state has broken tests.
 
 ## Open questions
