@@ -13,4 +13,8 @@ config :cadence_web, CadenceWeb.Endpoint,
   url: [host: "localhost"],
   http: [ip: {127, 0, 0, 1}, port: 4001],
   code_reloader: true,
-  debug_errors: true
+  debug_errors: true,
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:cadence_web, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:cadence_web, ~w(--watch)]}
+  ]
