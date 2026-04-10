@@ -13,6 +13,7 @@ defmodule Cadence.Accounts.User do
           email: binary(),
           display_name: binary(),
           capabilities: [capability()],
+          confirmed_at: DateTime.t() | nil,
           lifecycle_state: lifecycle_state(),
           metadata: map()
         }
@@ -22,6 +23,7 @@ defmodule Cadence.Accounts.User do
     :email,
     :display_name,
     capabilities: [],
+    confirmed_at: nil,
     lifecycle_state: :active,
     metadata: %{}
   ]
@@ -39,6 +41,7 @@ defmodule Cadence.Accounts.User do
         attrs
         |> Map.get(:capabilities, Map.get(attrs, "capabilities", []))
         |> Enum.map(&normalize_capability/1),
+      confirmed_at: Map.get(attrs, :confirmed_at, Map.get(attrs, "confirmed_at")),
       lifecycle_state:
         attrs
         |> Map.get(:lifecycle_state, Map.get(attrs, "lifecycle_state", :active))
@@ -65,6 +68,10 @@ defmodule Cadence.Accounts.User do
     |> String.trim()
     |> String.downcase()
   end
+
+  @spec confirmed?(t()) :: boolean()
+  def confirmed?(%__MODULE__{confirmed_at: %DateTime{}}), do: true
+  def confirmed?(%__MODULE__{}), do: false
 
   @spec temporary_setup_access?(t()) :: boolean()
   def temporary_setup_access?(%__MODULE__{metadata: metadata}) when is_map(metadata) do

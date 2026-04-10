@@ -1,0 +1,119 @@
+<section id="organization-invitation" class="panel panel--hero">
+  <div class="eyebrow">Cadence Invitation</div>
+  <h1 class="hero-title">
+    <%= if @invitation_available? do %>
+      Accept your invitation and establish durable operator access.
+    <% else %>
+      This invitation is no longer available.
+    <% end %>
+  </h1>
+  <p class="hero-copy">
+    <%= if @invitation_available? do %>
+      Invitation acceptance creates or finishes the durable human account, establishes tenant
+      membership, and then signs you into the operator shell.
+    <% else %>
+      Invitation links are single-use handoff artifacts. Ask a Cadence platform administrator to
+      issue a fresh invitation if you still need access.
+    <% end %>
+  </p>
+
+  <p :if={@error_message} id="organization-invitation-error" class="panel__error">
+    {@error_message}
+  </p>
+
+  <div class="summary-grid">
+    <article class="status-card">
+      <p class="status-card__label">Organization</p>
+      <p class="status-card__title">
+        <%= if @organization do %>
+          {@organization.display_name}
+        <% else %>
+          Unavailable
+        <% end %>
+      </p>
+      <p class="status-card__body">
+        <%= if @organization do %>
+          Slug: {@organization.slug}
+        <% else %>
+          Cadence could not resolve the invitation target from this link.
+        <% end %>
+      </p>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Email</p>
+      <p class="status-card__title">
+        <%= if @invitation do %>
+          {@invitation.email}
+        <% else %>
+          Unavailable
+        <% end %>
+      </p>
+      <p class="status-card__body">
+        This invitation is bound to a specific email address and establishes the durable user
+        identity for that operator.
+      </p>
+    </article>
+
+    <article class="status-card">
+      <p class="status-card__label">Access</p>
+      <p class="status-card__title">
+        <%= if @invitation do %>
+          {Phoenix.Naming.humanize(@invitation.membership_role)}
+        <% else %>
+          Pending new invitation
+        <% end %>
+      </p>
+      <p class="status-card__body">
+        <%= if @invitation do %>
+          Platform Admin:
+          {if(@invitation.grant_platform_admin, do: " Yes", else: " No")}
+        <% else %>
+          The original invitation details are no longer available from this link.
+        <% end %>
+      </p>
+    </article>
+  </div>
+
+  <%= if @invitation_available? do %>
+    <.form
+      for={@form}
+      id="organization-invitation-acceptance-form"
+      action={~p"/invitations/#{@invitation_token}"}
+      class="sign-in-form"
+    >
+      <.input
+        field={@form[:display_name]}
+        type="text"
+        label="Display Name"
+        placeholder="Flight Operator"
+        required
+        autofocus
+      />
+      <.input
+        field={@form[:password]}
+        type="password"
+        label="Password"
+        placeholder="Create a durable account password"
+        required
+        autocomplete="new-password"
+      />
+      <.input
+        field={@form[:password_confirmation]}
+        type="password"
+        label="Confirm Password"
+        placeholder="Re-enter your password"
+        required
+        autocomplete="new-password"
+      />
+
+      <div class="sign-in-form__actions">
+        <button type="submit" class="button button--primary">Accept Invitation</button>
+        <p class="sign-in-form__note">
+          Passwords must be at least 12 characters. Accepting this invitation signs you into the
+          durable operator session immediately.
+        </p>
+      </div>
+    </.form>
+  <% end %>
+</section>

@@ -35,7 +35,8 @@ defmodule CadenceWeb.MixProject do
       {:jason, "~> 1.4"},
       {:phoenix, "~> 1.8.1"},
       {:phoenix_html, "~> 4.3"},
-      {:phoenix_live_view, "~> 1.1"}
+      {:phoenix_live_view, "~> 1.1"},
+      {:swoosh, "~> 1.17"}
     ]
   end
 end

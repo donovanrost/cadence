@@ -3,6 +3,8 @@ defmodule Cadence.Setup do
   First-run setup workflow state and transitions.
   """
 
+  alias Cadence.Accounts
+  alias Cadence.Accounts.{OrganizationInvitation, OrganizationMembership, User}
   alias Ecto.Multi
 
   alias Cadence.Auth.Scope
@@ -82,6 +84,66 @@ defmodule Cadence.Setup do
     end
   end
 
+  @spec establish_initial_admin_handoff(Scope.t(), binary(), keyword()) ::
+          {:ok, %{workflow: Workflow.t(), access_result: Accounts.organization_access_result()}}
+          | {:error, term()}
+  def establish_initial_admin_handoff(%Scope{} = current_scope, email, opts \\ [])
+      when is_binary(email) and is_list(opts) do
+    with :ok <- authorize_setup_access(current_scope) do
+      membership_role = Keyword.get(opts, :membership_role, :organization_admin)
+      display_name = Keyword.get(opts, :display_name)
+
+      Multi.new()
+      |> Multi.run(:setup_lock, fn repo, _changes ->
+        lock_initial_workflow(repo)
+      end)
+      |> Multi.run(:current_workflow, fn repo, _changes ->
+        with {:ok, workflow} <- fetch_initial_workflow(repo),
+             :ok <- ensure_pending_durable_admin_handoff(workflow) do
+          {:ok, workflow}
+        end
+      end)
+      |> Multi.run(:access_result, fn _repo, %{current_workflow: %Workflow{} = workflow} ->
+        Accounts.establish_organization_access(email, workflow.active_organization_id,
+          membership_role: membership_role,
+          grant_platform_admin: true,
+          invited_by_user_id: current_scope.user.user_id,
+          display_name: display_name,
+          membership_metadata: %{"granted_via" => "initial_setup_handoff"},
+          invitation_metadata: %{
+            "created_via" => "initial_setup_handoff",
+            "setup_workflow_id" => workflow.setup_workflow_id
+          }
+        )
+      end)
+      |> Multi.run(:workflow, fn repo,
+                                 %{
+                                   current_workflow: %Workflow{} = workflow,
+                                   access_result: access_result
+                                 } ->
+        persist_workflow(
+          repo,
+          Workflow.new(%{
+            setup_workflow_id: workflow.setup_workflow_id,
+            current_step: handoff_workflow_step(access_result),
+            active_organization_id: workflow.active_organization_id,
+            created_by_user_id: workflow.created_by_user_id,
+            completed_at: workflow.completed_at,
+            metadata: handoff_workflow_metadata(workflow.metadata, access_result)
+          })
+        )
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{workflow: workflow, access_result: access_result}} ->
+          {:ok, %{workflow: workflow, access_result: access_result}}
+
+        {:error, _operation, reason, _changes_so_far} ->
+          {:error, reason}
+      end
+    end
+  end
+
   @spec complete_initial_workflow(binary(), keyword()) :: {:ok, Workflow.t()} | {:error, term()}
   def complete_initial_workflow(active_organization_id, opts \\ [])
       when is_binary(active_organization_id) and is_list(opts) do
@@ -120,6 +182,13 @@ defmodule Cadence.Setup do
       {:error, :setup_tenant_already_created}
     end
   end
+
+  defp ensure_pending_durable_admin_handoff(%Workflow{
+         current_step: :pending_durable_admin_handoff
+       }),
+       do: :ok
+
+  defp ensure_pending_durable_admin_handoff(%Workflow{}), do: {:error, :setup_handoff_unavailable}
 
   defp infer_initial_workflow(repo) do
     case list_organizations(repo) do
@@ -219,6 +288,54 @@ defmodule Cadence.Setup do
     OrganizationRow
     |> repo.all()
     |> Enum.map(&OrganizationRow.to_domain/1)
+  end
+
+  defp handoff_workflow_step(%{mode: :granted}), do: :pending_completion
+  defp handoff_workflow_step(%{mode: :invited}), do: :pending_durable_admin_handoff
+
+  defp handoff_workflow_metadata(existing_metadata, %{
+         mode: :granted,
+         user: user,
+         membership: membership
+       })
+       when is_map(existing_metadata) do
+    Map.merge(existing_metadata, %{
+      "durable_admin_handoff" => granted_handoff_metadata(user, membership)
+    })
+  end
+
+  defp handoff_workflow_metadata(existing_metadata, %{mode: :invited, invitation: invitation})
+       when is_map(existing_metadata) do
+    Map.merge(existing_metadata, %{
+      "durable_admin_handoff" => invited_handoff_metadata(invitation)
+    })
+  end
+
+  defp granted_handoff_metadata(%User{} = user, %OrganizationMembership{} = membership) do
+    %{
+      "status" => "granted",
+      "mode" => "direct_grant",
+      "email" => user.email,
+      "user_id" => user.user_id,
+      "organization_membership_id" => membership.organization_membership_id,
+      "organization_role" => Atom.to_string(membership.role),
+      "platform_admin" => :platform_admin in user.capabilities,
+      "completed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
+
+  defp invited_handoff_metadata(%OrganizationInvitation{} = invitation) do
+    %{
+      "status" => "invited",
+      "mode" => "invitation",
+      "email" => invitation.email,
+      "display_name" => invitation.display_name,
+      "invitation_id" => invitation.organization_invitation_id,
+      "organization_role" => Atom.to_string(invitation.membership_role),
+      "platform_admin" => invitation.grant_platform_admin,
+      "invited_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "expires_at" => DateTime.to_iso8601(invitation.expires_at)
+    }
   end
 
   defp validate_workflow(

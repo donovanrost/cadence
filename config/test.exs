@@ -25,4 +25,6 @@ config :cadence_web, CadenceWeb.Endpoint,
   server: false,
   secret_key_base: String.duplicate("1", 64)
 
+config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Test
+
 config :logger, level: :warning

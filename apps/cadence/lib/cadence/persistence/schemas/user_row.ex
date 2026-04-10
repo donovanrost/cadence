@@ -15,6 +15,7 @@ defmodule Cadence.Persistence.Schemas.UserRow do
     field(:email, :string)
     field(:display_name, :string)
     field(:capabilities, {:array, :string}, default: [])
+    field(:confirmed_at, :utc_datetime_usec)
     field(:lifecycle_state, :string)
     field(:metadata, :map, default: %{})
 
@@ -34,7 +35,14 @@ defmodule Cadence.Persistence.Schemas.UserRow do
   @spec update_changeset(struct(), map()) :: Ecto.Changeset.t()
   def update_changeset(%__MODULE__{} = row, attrs) when is_map(attrs) do
     row
-    |> cast(attrs, [:email, :display_name, :capabilities, :lifecycle_state, :metadata])
+    |> cast(attrs, [
+      :email,
+      :display_name,
+      :capabilities,
+      :confirmed_at,
+      :lifecycle_state,
+      :metadata
+    ])
     |> validate_required(@required_fields -- [:user_id])
     |> unique_constraint([:email], name: :users_email_index)
   end
@@ -46,6 +54,7 @@ defmodule Cadence.Persistence.Schemas.UserRow do
       email: row.email,
       display_name: row.display_name,
       capabilities: Enum.map(row.capabilities, &User.normalize_capability/1),
+      confirmed_at: row.confirmed_at,
       lifecycle_state: row.lifecycle_state,
       metadata: JsonDocument.unwrap_value(row.metadata)
     })
@@ -57,12 +66,13 @@ defmodule Cadence.Persistence.Schemas.UserRow do
       email: user.email,
       display_name: user.display_name,
       capabilities: Enum.map(user.capabilities, &Atom.to_string/1),
+      confirmed_at: user.confirmed_at,
       lifecycle_state: Atom.to_string(user.lifecycle_state),
       metadata: JsonDocument.wrap_value(user.metadata)
     }
   end
 
   defp all_fields do
-    [:user_id, :email, :display_name, :capabilities, :lifecycle_state, :metadata]
+    [:user_id, :email, :display_name, :capabilities, :confirmed_at, :lifecycle_state, :metadata]
   end
 end

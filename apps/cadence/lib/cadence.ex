@@ -117,9 +117,9 @@ defmodule Cadence do
     Auth.bootstrap(organization, service_identity, mission)
   end
 
-  @spec authenticate_api_token(binary()) :: {:ok, CurrentScope.t()} | {:error, term()}
-  def authenticate_api_token(api_token) when is_binary(api_token) do
-    Auth.authenticate_api_token(api_token)
+  @spec authenticate_api_token(binary(), keyword()) :: {:ok, CurrentScope.t()} | {:error, term()}
+  def authenticate_api_token(api_token, opts \\ []) when is_binary(api_token) and is_list(opts) do
+    Auth.authenticate_api_token(api_token, opts)
   end
 
   @spec login_bootstrap_admin(binary(), binary()) ::
@@ -130,6 +130,13 @@ defmodule Cadence do
     Auth.login_bootstrap_admin(email, password)
   end
 
+  @spec login_user(binary(), binary()) ::
+          {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
+          | {:error, term()}
+  def login_user(email, password) when is_binary(email) and is_binary(password) do
+    Auth.login_user(email, password)
+  end
+
   @spec ensure_bootstrap_admin() :: {:ok, User.t()} | {:error, term()}
   def ensure_bootstrap_admin do
     Auth.ensure_bootstrap_admin()
@@ -138,6 +145,23 @@ defmodule Cadence do
   @spec revoke_bootstrap_admin_session(binary()) :: :ok
   def revoke_bootstrap_admin_session(session_token) when is_binary(session_token) do
     Auth.revoke_bootstrap_admin_session(session_token)
+  end
+
+  @spec revoke_user_session(binary()) :: :ok
+  def revoke_user_session(session_token) when is_binary(session_token) do
+    Auth.revoke_user_session(session_token)
+  end
+
+  @spec fetch_organization_invitation(binary()) ::
+          {:ok, Cadence.Accounts.OrganizationInvitation.t()} | {:error, term()}
+  def fetch_organization_invitation(invitation_token) when is_binary(invitation_token) do
+    Auth.fetch_organization_invitation(invitation_token)
+  end
+
+  @spec accept_organization_invitation(binary(), map()) :: {:ok, map()} | {:error, term()}
+  def accept_organization_invitation(invitation_token, attrs)
+      when is_binary(invitation_token) and is_map(attrs) do
+    Auth.accept_organization_invitation(invitation_token, attrs)
   end
 
   @spec bootstrap_admin_enabled?() :: boolean()
@@ -165,6 +189,13 @@ defmodule Cadence do
         %Organization{} = organization
       ) do
     SetupService.create_initial_organization(current_scope, organization)
+  end
+
+  @spec establish_initial_setup_admin_handoff(CurrentScope.t(), binary(), keyword()) ::
+          {:ok, %{workflow: SetupWorkflow.t(), access_result: map()}} | {:error, term()}
+  def establish_initial_setup_admin_handoff(%CurrentScope{} = current_scope, email, opts \\ [])
+      when is_binary(email) and is_list(opts) do
+    SetupService.establish_initial_admin_handoff(current_scope, email, opts)
   end
 
   @spec complete_initial_setup(binary(), keyword()) ::

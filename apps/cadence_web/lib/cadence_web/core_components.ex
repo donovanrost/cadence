@@ -9,6 +9,7 @@ defmodule CadenceWeb.CoreComponents do
   attr :type, :string, default: "text"
   attr :label, :string, default: nil
   attr :placeholder, :string, default: nil
+  attr :options, :list, default: []
   attr :required, :boolean, default: false
   attr :class, :string, default: nil
   attr :rest, :global, include: ~w(autocomplete autofocus disabled maxlength minlength pattern)
@@ -27,16 +28,35 @@ defmodule CadenceWeb.CoreComponents do
       <label :if={@label} class="field__label" for={@field.id}>
         {@label}
       </label>
-      <input
-        id={@field.id}
-        name={@field.name}
-        type={@type}
-        value={@value}
-        placeholder={@placeholder}
-        required={@required}
-        class={["field__input", @class]}
-        {@rest}
-      />
+      <%= if @type == "select" do %>
+        <select
+          id={@field.id}
+          name={@field.name}
+          required={@required}
+          class={["field__input", @class]}
+          {@rest}
+        >
+          <option :if={@placeholder} value="">{@placeholder}</option>
+          <option
+            :for={{label, option_value} <- @options}
+            value={option_value}
+            selected={to_string(@value) == to_string(option_value)}
+          >
+            {label}
+          </option>
+        </select>
+      <% else %>
+        <input
+          id={@field.id}
+          name={@field.name}
+          type={@type}
+          value={@value}
+          placeholder={@placeholder}
+          required={@required}
+          class={["field__input", @class]}
+          {@rest}
+        />
+      <% end %>
     </div>
     """
   end

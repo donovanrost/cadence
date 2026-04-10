@@ -1,6 +1,7 @@
 import Config
 
 config :phoenix, :json_library, Jason
+config :swoosh, :api_client, false
 
 config :cadence,
   ecto_repos: [Cadence.Repo],
@@ -38,5 +39,7 @@ config :cadence_web, CadenceWeb.Endpoint,
   ],
   pubsub_server: CadenceWeb.PubSub,
   secret_key_base: String.duplicate("0", 64)
+
+config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 
 import_config "#{config_env()}.exs"
