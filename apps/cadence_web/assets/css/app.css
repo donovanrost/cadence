@@ -80,101 +80,6 @@ code {
 }
 
 @layer legacy-compat {
-  /* App shell — used by layouts/app.html.heex. */
-  .app-root {
-    position: relative;
-    min-height: 100vh;
-    overflow: hidden;
-  }
-
-  .app-root__mesh,
-  .app-root__grid {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .app-root__mesh {
-    background:
-      linear-gradient(125deg, rgba(134, 214, 255, 0.06), transparent 42%),
-      linear-gradient(305deg, rgba(245, 182, 111, 0.08), transparent 38%);
-  }
-
-  .app-root__grid {
-    background-image:
-      linear-gradient(rgba(134, 214, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(134, 214, 255, 0.05) 1px, transparent 1px);
-    background-size: 4rem 4rem;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 92%);
-  }
-
-  .app-shell {
-    position: relative;
-    z-index: 1;
-    width: min(72rem, calc(100vw - 2.5rem));
-    margin: 0 auto;
-    padding: 2rem 0 3rem;
-  }
-
-  .app-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 1.5rem;
-    align-items: flex-start;
-    margin-bottom: 2rem;
-  }
-
-  .app-header__brand {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: 0.88rem;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: var(--color-primary);
-  }
-
-  .app-header__subhead {
-    margin: 0.55rem 0 0;
-    color: var(--color-muted);
-    max-width: 28rem;
-    line-height: 1.5;
-  }
-
-  .app-main {
-    position: relative;
-  }
-
-  /* Scope summary — used by layouts/app.html.heex for authenticated users. */
-  .scope-summary {
-    min-width: 15rem;
-    padding: 0.95rem 1rem;
-    border: 1px solid var(--color-line);
-    border-radius: 1rem;
-    background: rgba(9, 17, 27, 0.68);
-    backdrop-filter: blur(18px);
-    text-align: right;
-  }
-
-  .scope-summary__label {
-    display: block;
-    margin-bottom: 0.4rem;
-    color: var(--color-accent);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-  }
-
-  .scope-summary strong,
-  .scope-summary span {
-    display: block;
-  }
-
-  .scope-summary span {
-    margin-top: 0.2rem;
-    color: var(--color-muted);
-    font-size: 0.92rem;
-  }
-
   /* Panels — used by /setup, /operator, /invitations. */
   .panel {
     position: relative;
@@ -357,50 +262,7 @@ code {
     line-height: 1.35;
   }
 
-  /* Flash stack — used by layouts/app.html.heex. */
-  .flash-stack {
-    position: fixed;
-    top: 1.25rem;
-    right: 1.25rem;
-    z-index: 3;
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .flash {
-    margin: 0;
-    min-width: 16rem;
-    max-width: min(24rem, calc(100vw - 2rem));
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--color-line);
-    border-radius: 1rem;
-    background: rgba(6, 12, 19, 0.92);
-    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
-  }
-
-  .flash--info {
-    border-color: rgba(147, 242, 200, 0.24);
-  }
-
-  .flash--error {
-    border-color: rgba(255, 142, 133, 0.32);
-  }
-
   @media (max-width: 840px) {
-    .app-shell {
-      width: min(100vw - 1.5rem, 72rem);
-      padding-top: 1.5rem;
-    }
-
-    .app-header {
-      flex-direction: column;
-    }
-
-    .scope-summary {
-      width: 100%;
-      text-align: left;
-    }
-
     .summary-grid {
       grid-template-columns: 1fr;
     }
@@ -408,17 +270,6 @@ code {
     .panel {
       padding: 1.35rem;
       border-radius: 1.2rem;
-    }
-
-    .flash-stack {
-      left: 0.75rem;
-      right: 0.75rem;
-      top: auto;
-      bottom: 0.75rem;
-    }
-
-    .flash {
-      min-width: 0;
     }
   }
 }
