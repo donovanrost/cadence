@@ -118,6 +118,11 @@ defmodule Cadence.Auth do
     end
   end
 
+  @spec sign_in(binary(), binary()) :: {:ok, Accounts.issued_user_session()} | {:error, term()}
+  def sign_in(email, password) when is_binary(email) and is_binary(password) do
+    Accounts.sign_in(email, password)
+  end
+
   @spec login_bootstrap_admin(binary(), binary()) ::
           {:ok, Accounts.issued_bootstrap_admin_session()} | {:error, term()}
   def login_bootstrap_admin(email, password)

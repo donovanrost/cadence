@@ -122,6 +122,13 @@ defmodule Cadence do
     Auth.authenticate_api_token(api_token, opts)
   end
 
+  @spec sign_in(binary(), binary()) ::
+          {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
+          | {:error, term()}
+  def sign_in(email, password) when is_binary(email) and is_binary(password) do
+    Auth.sign_in(email, password)
+  end
+
   @spec login_bootstrap_admin(binary(), binary()) ::
           {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
           | {:error, term()}
