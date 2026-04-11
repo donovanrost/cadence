@@ -22,11 +22,9 @@ defmodule CadenceWeb.UserSessionLive do
     ~H"""
     <.panel variant={:hero}>
       <.eyebrow>Cadence Access</.eyebrow>
-      <.hero_title>Sign in to Cadence.</.hero_title>
+      <.hero_title>Sign in to Cadence</.hero_title>
       <.hero_copy>
-        Enter the credentials for your Cadence operator account. During first-run setup,
-        the same form accepts the temporary setup-access credentials configured for this
-        deployment.
+        Enter your operator credentials to access the control plane.
       </.hero_copy>
 
       <.form_error message={Phoenix.Flash.get(@flash, :error)} />
@@ -56,12 +54,7 @@ defmodule CadenceWeb.UserSessionLive do
           autocomplete="current-password"
         />
 
-        <div class="flex items-center justify-between gap-4 flex-wrap">
-          <.button variant={:primary} kind={:submit}>Sign In</.button>
-          <p class="m-0 text-muted leading-[1.6] text-sm">
-            Invitation acceptance creates the durable account. Public self-signup remains closed.
-          </p>
-        </div>
+        <.button variant={:primary} kind={:submit} class="w-full">Sign In</.button>
       </.form>
     </.panel>
     """
