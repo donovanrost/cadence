@@ -123,8 +123,7 @@ defmodule Cadence do
   end
 
   @spec sign_in(binary(), binary()) ::
-          {:ok, %{user: User.t(), session_token: binary(), expires_at: DateTime.t()}}
-          | {:error, term()}
+          {:ok, Cadence.Accounts.issued_user_session()} | {:error, term()}
   def sign_in(email, password) when is_binary(email) and is_binary(password) do
     Auth.sign_in(email, password)
   end
