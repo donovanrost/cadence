@@ -1,40 +1,15 @@
-<div class="app-root">
-  <div class="app-root__mesh"></div>
-  <div class="app-root__grid"></div>
+<div class="relative min-h-screen overflow-hidden">
+  <div class="absolute inset-0 pointer-events-none bg-[linear-gradient(125deg,rgba(134,214,255,0.06),transparent_42%),linear-gradient(305deg,rgba(245,182,111,0.08),transparent_38%)]">
+  </div>
+  <div class="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(134,214,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(134,214,255,0.05)_1px,transparent_1px)] bg-[length:4rem_4rem] [mask-image:linear-gradient(180deg,rgba(0,0,0,0.6),transparent_92%)]">
+  </div>
 
-  <div class="app-shell">
-    <header class="app-header">
-      <div>
-        <.link href={~p"/"} class="app-header__brand">
-          Cadence
-        </.link>
-        <p class="app-header__subhead">Ground data control plane</p>
-      </div>
-
-      <%= if @current_scope do %>
-        <div class="scope-summary">
-          <span class="scope-summary__label">Authenticated Scope</span>
-          <%= cond do %>
-            <% @current_scope.user -> %>
-              <strong>{@current_scope.user.display_name}</strong>
-              <span>{@current_scope.user.email}</span>
-            <% @current_scope.service_identity -> %>
-              <strong>{@current_scope.service_identity.display_name}</strong>
-              <span>{@current_scope.service_identity.service_identity_id}</span>
-            <% true -> %>
-              <strong>Authenticated</strong>
-          <% end %>
-        </div>
-      <% end %>
-    </header>
-
-    <main class="app-main">
+  <div class="relative z-10 w-[min(72rem,calc(100vw-2.5rem))] mx-auto py-8 pb-12 max-md:py-6 max-md:pb-10">
+    <.app_header current_scope={@current_scope} />
+    <main class="relative">
       {@inner_content}
     </main>
   </div>
 
-  <div class="flash-stack">
-    <p :if={info = Phoenix.Flash.get(@flash, :info)} class="flash flash--info">{info}</p>
-    <p :if={error = Phoenix.Flash.get(@flash, :error)} class="flash flash--error">{error}</p>
-  </div>
+  <.flash_stack flash={@flash} />
 </div>
