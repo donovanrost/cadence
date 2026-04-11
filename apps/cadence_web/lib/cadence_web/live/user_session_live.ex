@@ -36,7 +36,6 @@ defmodule CadenceWeb.UserSessionLive do
         id="sign-in-form"
         action={~p"/sign-in"}
         phx-change="validate"
-        phx-trigger-action={false}
         class="grid gap-4"
       >
         <.text_field
