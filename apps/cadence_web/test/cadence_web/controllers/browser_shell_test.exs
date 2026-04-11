@@ -40,17 +40,21 @@ defmodule CadenceWeb.BrowserShellTest do
     assert get_session(conn, :user_return_to) == "/"
   end
 
-  test "sign-in page shows durable and setup access forms while setup is pending", %{conn: conn} do
+  test "sign-in page renders a single unified sign-in form", %{conn: conn} do
     response = conn |> get("/sign-in") |> html_response(200)
 
-    assert response =~ "durable-sign-in-form"
-    assert response =~ "setup-access-sign-in-form"
+    assert response =~ "Cadence Access"
+    assert response =~ "Sign in to Cadence"
+    assert response =~ ~s(id="sign-in-form")
+    refute response =~ "setup-access-sign-in-form"
+    refute response =~ "durable-sign-in-form"
   end
 
-  test "setup access can establish a browser session and reach setup home", %{conn: conn} do
+  test "bootstrap credentials on /sign-in during setup establish a session and reach setup home",
+       %{conn: conn} do
     conn =
       post(conn, "/sign-in", %{
-        "setup_access_session" => %{
+        "user" => %{
           "email" => @bootstrap_admin_email,
           "password" => @bootstrap_admin_password
         }
@@ -121,7 +125,7 @@ defmodule CadenceWeb.BrowserShellTest do
     durable_conn =
       build_conn()
       |> post("/sign-in", %{
-        "durable_session" => %{
+        "user" => %{
           "email" => "ops-lead@example.com",
           "password" => durable_password
         }
@@ -206,19 +210,17 @@ defmodule CadenceWeb.BrowserShellTest do
     assert workflow.current_step == :pending_completion
   end
 
-  test "invalid bootstrap credentials keep the user on the sign-in page", %{conn: conn} do
+  test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do
     conn =
       post(conn, "/sign-in", %{
-        "setup_access_session" => %{
+        "user" => %{
           "email" => @bootstrap_admin_email,
           "password" => "definitely-wrong"
         }
       })
 
-    response = html_response(conn, 422)
-
-    assert response =~ "setup-access-sign-in-form"
-    assert response =~ "The supplied email or password was rejected."
+    assert redirected_to(conn) == "/sign-in"
+    assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
   end
 
   test "logout revokes the issued bootstrap session token", %{conn: conn} do
@@ -240,13 +242,23 @@ defmodule CadenceWeb.BrowserShellTest do
     assert {:error, :unauthenticated} = Cadence.authenticate_api_token(session_token)
   end
 
-  test "completed setup hides the temporary setup sign-in form and keeps durable sign-in available",
+  test "completed setup rejects bootstrap credentials via the tightened sign_in/2 gate",
        %{conn: conn} do
     persist_completed_setup!()
 
-    response = conn |> get("/sign-in") |> html_response(200)
+    conn =
+      post(conn, "/sign-in", %{
+        "user" => %{
+          "email" => @bootstrap_admin_email,
+          "password" => @bootstrap_admin_password
+        }
+      })
 
-    assert response =~ "durable-sign-in-form"
+    assert redirected_to(conn) == "/sign-in"
+    assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
+
+    response = build_conn() |> get("/sign-in") |> html_response(200)
+    assert response =~ ~s(id="sign-in-form")
     refute response =~ "setup-access-sign-in-form"
   end
 

@@ -38,7 +38,8 @@ config :cadence_web, CadenceWeb.Endpoint,
     layout: false
   ],
   pubsub_server: CadenceWeb.PubSub,
-  secret_key_base: String.duplicate("0", 64)
+  secret_key_base: String.duplicate("0", 64),
+  live_view: [signing_salt: "cadence-live-view"]
 
 config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 

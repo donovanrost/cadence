@@ -4,7 +4,7 @@ defmodule CadenceWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
-    plug :fetch_flash
+    plug :fetch_live_flash
     plug :put_root_layout, html: {CadenceWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
@@ -31,7 +31,7 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through [:browser, :redirect_if_authenticated_scope]
 
-    get "/sign-in", UserSessionController, :new
+    live "/sign-in", UserSessionLive, :new
     post "/sign-in", UserSessionController, :create
   end
 

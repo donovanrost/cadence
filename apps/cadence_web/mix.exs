@@ -42,6 +42,7 @@ defmodule CadenceWeb.MixProject do
        compile: false,
        depth: 1},
       {:jason, "~> 1.4"},
+      {:lazy_html, ">= 0.1.0", only: :test},
       {:phoenix, "~> 1.8.1"},
       {:phoenix_html, "~> 4.3"},
       {:phoenix_live_view, "~> 1.1"},
