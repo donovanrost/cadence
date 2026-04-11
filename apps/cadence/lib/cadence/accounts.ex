@@ -93,6 +93,17 @@ defmodule Cadence.Accounts do
     end
   end
 
+  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
+  def sign_in(email, password) when is_binary(email) and is_binary(password) do
+    with {:ok, user} <- fetch_active_user_by_email(email),
+         {:ok, credential_kind} <- resolve_credential_kind(user) do
+      case credential_kind do
+        :durable -> login_user(email, password)
+        :bootstrap_admin -> login_bootstrap_admin(email, password)
+      end
+    end
+  end
+
   @spec login_bootstrap_admin(binary(), binary()) ::
           {:ok, issued_user_session()} | {:error, term()}
   def login_bootstrap_admin(email, password)
@@ -123,17 +134,6 @@ defmodule Cadence.Accounts do
       nil -> {:error, :invalid_credentials}
       false -> {:error, :invalid_credentials}
       {:error, _reason} = error -> error
-    end
-  end
-
-  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
-  def sign_in(email, password) when is_binary(email) and is_binary(password) do
-    with {:ok, user} <- fetch_active_user_by_email(email),
-         {:ok, credential_kind} <- resolve_credential_kind(user) do
-      case credential_kind do
-        :durable -> login_user(email, password)
-        :bootstrap_admin -> login_bootstrap_admin(email, password)
-      end
     end
   end
 
