@@ -24,12 +24,6 @@
   --color-info-content: #0a1020;
   --color-success: #93f2c8;
   --color-success-content: #062018;
-  /* NOTE: --color-warning currently shares --color-accent's value. The
-     legacy hand-rolled palette did not define a distinct warning color.
-     This is a known collision that should be resolved in design review
-     before UI components use both tokens. */
-  --color-warning: #f5b66f;
-  --color-warning-content: #1c1208;
   --color-error: #ff8e85;
   --color-error-content: #200606;
 
