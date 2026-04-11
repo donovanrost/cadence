@@ -175,8 +175,8 @@ defmodule CadenceWeb.UI do
 
   def scope_summary(assigns) do
     ~H"""
-    <aside class="min-w-[15rem] p-4 border border-line rounded-[1rem] bg-[rgba(9,17,27,0.68)] backdrop-blur-lg text-right">
-      <p class="block mb-[0.4rem] text-accent text-[0.72rem] tracking-[0.18em] uppercase font-mono">
+    <aside class="min-w-[15rem] py-[0.95rem] px-4 border border-line rounded-[1rem] bg-[rgba(9,17,27,0.68)] backdrop-blur-[18px] text-right">
+      <p class="block mb-[0.4rem] text-accent text-[0.72rem] tracking-[0.18em] uppercase">
         Authenticated Scope
       </p>
       <%= cond do %>
