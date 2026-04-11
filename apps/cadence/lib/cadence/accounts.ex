@@ -126,6 +126,17 @@ defmodule Cadence.Accounts do
     end
   end
 
+  @spec sign_in(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
+  def sign_in(email, password) when is_binary(email) and is_binary(password) do
+    with {:ok, user} <- fetch_active_user_by_email(email),
+         {:ok, credential_kind} <- resolve_credential_kind(user) do
+      case credential_kind do
+        :durable -> login_user(email, password)
+        :bootstrap_admin -> login_bootstrap_admin(email, password)
+      end
+    end
+  end
+
   @spec login_user(binary(), binary()) :: {:ok, issued_user_session()} | {:error, term()}
   def login_user(email, password) when is_binary(email) and is_binary(password) do
     with normalized_email <- User.normalize_email(email),
@@ -480,6 +491,50 @@ defmodule Cadence.Accounts do
       provider_key: @password_provider_key,
       lifecycle_state: Atom.to_string(:active)
     ) != nil
+  end
+
+  defp fetch_active_user_by_email(email) when is_binary(email) do
+    normalized_email = User.normalize_email(email)
+
+    case Repo.get_by(UserRow,
+           email: normalized_email,
+           lifecycle_state: Atom.to_string(:active)
+         ) do
+      %UserRow{} = row -> {:ok, UserRow.to_domain(row)}
+      nil -> {:error, :invalid_credentials}
+    end
+  end
+
+  defp resolve_credential_kind(%User{user_id: user_id}) do
+    has_password = active_credential?(user_id, @password_provider_key)
+    has_bootstrap = active_credential?(user_id, @bootstrap_provider_key)
+
+    cond do
+      has_password ->
+        {:ok, :durable}
+
+      has_bootstrap and bootstrap_admin_enabled?() and setup_pending?() ->
+        {:ok, :bootstrap_admin}
+
+      true ->
+        {:error, :invalid_credentials}
+    end
+  end
+
+  defp active_credential?(user_id, provider_key)
+       when is_binary(user_id) and is_binary(provider_key) do
+    Repo.get_by(UserLocalCredentialRow,
+      user_id: user_id,
+      provider_key: provider_key,
+      lifecycle_state: Atom.to_string(:active)
+    ) != nil
+  end
+
+  defp setup_pending? do
+    case Cadence.Setup.fetch_initial_workflow() do
+      {:ok, workflow} -> Cadence.Setup.active?(workflow)
+      {:error, _reason} -> true
+    end
   end
 
   defp upsert_user(repo, %User{} = user) do
