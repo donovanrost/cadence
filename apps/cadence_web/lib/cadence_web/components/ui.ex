@@ -84,8 +84,7 @@ defmodule CadenceWeb.UI do
   attr :label, :string, required: true
   attr :placeholder, :string, default: nil
   attr :required, :boolean, default: false
-  attr :autocomplete, :string, default: nil
-  attr :autofocus, :boolean, default: false
+  attr :rest, :global, include: ~w(autocomplete autofocus)
 
   def text_field(assigns) do
     assigns =
@@ -106,9 +105,8 @@ defmodule CadenceWeb.UI do
         value={@value}
         placeholder={@placeholder}
         required={@required}
-        autocomplete={@autocomplete}
-        autofocus={@autofocus}
         class="w-full border border-line rounded-[1rem] px-4 py-[0.95rem] bg-[rgba(5,11,18,0.86)] text-base-content font-sans transition-[border-color,box-shadow,transform] duration-150 focus:outline-none focus:border-primary focus:shadow-[0_0_0_0.2rem_rgba(134,214,255,0.12)] focus:-translate-y-px placeholder:text-[rgba(156,175,197,0.56)]"
+        {@rest}
       />
     </div>
     """
