@@ -229,44 +229,6 @@ a {
     line-height: 1.6;
   }
 
-  .field {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .field__label {
-    font-family: var(--font-mono);
-    font-size: 0.76rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  .field__input {
-    width: 100%;
-    border: 1px solid var(--color-line);
-    border-radius: 1rem;
-    padding: 0.95rem 1rem;
-    background: rgba(5, 11, 18, 0.86);
-    color: var(--color-base-content);
-    font: inherit;
-    transition:
-      border-color 160ms ease,
-      box-shadow 160ms ease,
-      transform 160ms ease;
-  }
-
-  .field__input:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 0.2rem rgba(134, 214, 255, 0.12);
-    transform: translateY(-1px);
-  }
-
-  .field__input::placeholder {
-    color: rgba(156, 175, 197, 0.56);
-  }
-
   .button {
     border: 0;
     border-radius: 999px;
