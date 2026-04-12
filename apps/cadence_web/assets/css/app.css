@@ -1,71 +1,134 @@
 @import "tailwindcss" source(none);
 @source "../../lib/cadence_web";
 @source "../js";
+@source "../css";
+
 @plugin "../vendor/heroicons";
 
-/* Cadence "Tokyo Night / Vaporwave / HUD" theme. Color values are ported
-   from the hand-rolled palette in the pre-Tailwind priv/static/assets/app.css
-   (near-black blue bases, cyan primary, purple secondary, warm-orange accent).
-   Soft corners (1rem for panels/fields, pill buttons) match the legacy
-   hand-rolled look. */
+/* daisyUI component library — provides btn, input, card, alert, toast,
+   divider, fieldset, dropdown, modal, tabs, badge, and more. The theme
+   is registered separately below; `themes: false` disables daisyUI's
+   built-in themes so only ours applies. */
+@plugin "../vendor/daisyui" {
+  themes: false;
+}
+
+/* Tokyo Night / Vaporwave Dark Theme — ported from
+   legacy/cadence_legacy/assets/css/app.css. Every visual token is overridden
+   so daisyUI's default look is invisible; what renders is the Cadence HUD
+   aesthetic with hot-pink accent, sharp 2px corners, and Tokyo Night bases. */
+@plugin "../vendor/daisyui-theme" {
+  name: "dark";
+  default: true;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: oklch(12% 0.02 265);
+  --color-base-200: oklch(15% 0.02 260);
+  --color-base-300: oklch(18% 0.02 258);
+  --color-base-content: oklch(85% 0.02 250);
+  --color-primary: oklch(80% 0.12 210);
+  --color-primary-content: oklch(15% 0.02 210);
+  --color-secondary: oklch(72% 0.15 285);
+  --color-secondary-content: oklch(15% 0.02 285);
+  --color-accent: oklch(60% 0.25 340);
+  --color-accent-content: oklch(98% 0.01 340);
+  --color-neutral: oklch(30% 0.03 260);
+  --color-neutral-content: oklch(85% 0.02 250);
+  --color-info: oklch(70% 0.14 250);
+  --color-info-content: oklch(15% 0.02 250);
+  --color-success: oklch(78% 0.10 185);
+  --color-success-content: oklch(15% 0.02 185);
+  --color-warning: oklch(72% 0.15 50);
+  --color-warning-content: oklch(15% 0.02 50);
+  --color-error: oklch(68% 0.20 10);
+  --color-error-content: oklch(15% 0.02 10);
+  --radius-selector: 2px;
+  --radius-field: 2px;
+  --radius-box: 2px;
+  --size-selector: 0.21875rem;
+  --size-field: 0.21875rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* LiveView custom variants */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* LiveView wrapper transparency */
+[data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* Extension tokens — tokens our current primitives and compat shim reference
+   that aren't in daisyUI's standard vocabulary. These bridge the gap until
+   the primitives are migrated to use daisyUI's class vocabulary directly. */
 @theme {
-  --color-base-100: #09111b;
-  --color-base-200: #0f1b2a;
-  --color-base-300: #1a2638;
-  --color-base-content: #edf4ff;
-  --color-muted: #9cafc5;
-  --color-primary: #86d6ff;
-  --color-primary-content: #041019;
-  --color-secondary: #bb9af7;
-  --color-secondary-content: #15101f;
-  --color-accent: #f5b66f;
-  --color-accent-content: #1c1208;
-  --color-info: #7aa2f7;
-  --color-info-content: #0a1020;
-  --color-success: #93f2c8;
-  --color-success-content: #062018;
-  --color-error: #ff8e85;
-  --color-error-content: #200606;
-
-  --color-panel: rgba(10, 18, 29, 0.88);
-  --color-panel-strong: rgba(15, 27, 42, 0.96);
-  --color-line: rgba(138, 173, 212, 0.18);
-  --color-line-strong: rgba(138, 173, 212, 0.32);
-
-  --radius-box: 1rem;
-  --radius-field: 1rem;
-  --radius-selector: 999px;
-
-  --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --color-muted: oklch(55% 0.02 250);
+  --color-line: oklch(80% 0.12 210 / 0.18);
+  --color-line-strong: oklch(80% 0.12 210 / 0.32);
+  --color-panel: oklch(15% 0.02 260 / 0.88);
+  --color-panel-strong: oklch(15% 0.02 260 / 0.96);
 }
 
-/* Page-level styles that are cleaner as raw CSS than utility classes. */
+/* Cadence design tokens (CSS custom properties for HUD utilities).
+   These feed the HUD system utilities below; they are NOT Tailwind theme
+   tokens and don't generate utility classes. */
 :root {
+  --brand-primary: oklch(80% 0.12 210);
+  --brand-secondary: oklch(72% 0.15 285);
+  --brand-accent: oklch(60% 0.25 340);
+
+  --glow-cyan: var(--brand-primary);
+  --glow-purple: var(--brand-secondary);
+  --glow-pink: var(--brand-accent);
+
+  --surface-overlay: oklch(8% 0.02 265);
+  --surface-inset: oklch(10% 0.015 265);
+  --surface-base: oklch(12% 0.02 265);
+  --surface-input: oklch(14% 0.015 265);
+  --surface-raised: oklch(15% 0.02 260);
+  --surface-elevated: oklch(18% 0.02 258);
+  --surface-hover: oklch(22% 0.02 265);
+
+  --status-critical: oklch(62% 0.25 25);
+  --status-warning: oklch(70% 0.20 50);
+  --status-success: oklch(78% 0.10 185);
+  --status-info: oklch(70% 0.14 250);
+
+  --text-muted: oklch(55% 0.02 250);
+  --text-subtle: oklch(65% 0.02 250);
+  --text-bright: oklch(85% 0.02 250);
+
+  --neutral-darker: oklch(15% 0.01 265);
+  --neutral-dark: oklch(20% 0.01 265);
+  --neutral-mid: oklch(25% 0.02 265);
+  --neutral-border: oklch(35% 0.03 265);
+  --neutral-text: oklch(50% 0.02 265);
+  --neutral-text-light: oklch(70% 0.02 265);
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --pulse-duration: 2s;
+
   color-scheme: dark;
-  font-family: var(--font-sans);
 }
 
-html,
-body {
+/* Page-level base */
+html, body {
   margin: 0;
-  min-height: 100%;
-  background:
-    radial-gradient(
-      circle at top left,
-      color-mix(in srgb, var(--color-primary) 18%, transparent),
-      transparent 28rem
-    ),
-    radial-gradient(
-      circle at bottom right,
-      color-mix(in srgb, var(--color-accent) 16%, transparent),
-      transparent 26rem
-    ),
-    linear-gradient(180deg, var(--color-base-100) 0%, #04080f 100%);
-  color: var(--color-base-content);
-}
-
-body {
   min-height: 100vh;
 }
 
@@ -74,13 +137,16 @@ a {
   text-decoration: none;
 }
 
-code {
-  font-family: var(--font-mono);
-  color: var(--color-primary);
-}
+/* HUD Design System — core utilities */
+@import "./components/hud-system.css";
 
+/* daisyUI Component Overrides — restyles daisyUI primitives for HUD aesthetic */
+@import "./components/component-overrides.css";
+
+/* Legacy content compat shim — keeps /setup, /operator, /invitations/:token
+   rendering while those pages haven't been ported to daisyUI/primitives yet.
+   Shrinks as each page is ported. */
 @layer legacy-compat {
-  /* Panels — used by /setup, /operator, /invitations. */
   .panel {
     position: relative;
     overflow: hidden;
@@ -163,7 +229,6 @@ code {
     line-height: 1.6;
   }
 
-  /* Form fields — used by CoreComponents.input. */
   .field {
     display: grid;
     gap: 0.55rem;
@@ -202,7 +267,6 @@ code {
     color: rgba(156, 175, 197, 0.56);
   }
 
-  /* Buttons. */
   .button {
     border: 0;
     border-radius: 999px;
@@ -235,7 +299,6 @@ code {
     border: 1px solid var(--color-line-strong);
   }
 
-  /* Status cards — used by /setup. */
   .status-card {
     padding: 1.15rem;
     border: 1px solid var(--color-line);
