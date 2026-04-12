@@ -1,98 +1,110 @@
-<section id="setup-home" class="panel panel--hero">
-  <div class="eyebrow">First-Run Setup</div>
-  <h1 class="hero-title">
-    <%= cond do %>
-      <% @invalid_setup_state? -> %>
-        Cadence setup needs operator attention before first-run work can continue.
-      <% @show_tenant_form? -> %>
-        Create the first tenant for this Cadence deployment.
-      <% @show_handoff_form? -> %>
-        Establish the first durable human handoff.
-      <% @active_organization -> %>
-        Durable handoff established. Setup is waiting on completion.
-      <% true -> %>
-        Cadence is ready for the next first-run setup step.
-    <% end %>
-  </h1>
-  <p class="hero-copy">
-    <%= cond do %>
-      <% @invalid_setup_state? -> %>
-        This temporary setup surface remains isolated from the normal operator shell so invalid
-        first-run state can be corrected without pretending setup has completed cleanly.
-      <% @show_tenant_form? -> %>
-        Temporary setup access can create the first durable organization tenant from the product.
-        Durable human membership and handoff work remain intentionally separate.
-      <% @show_handoff_form? -> %>
-        The first tenant now exists. Use this step to either grant an existing durable user their
-        first tenant membership directly or invite a new durable human into Cadence.
-      <% true -> %>
-        Durable operator access has been established separately from temporary setup access. Cadence
-        can now retire the bootstrap-only setup path once setup completion work is finished.
-    <% end %>
-  </p>
-
-  <p :if={@error_message} id="setup-error" class="panel__error">{@error_message}</p>
-
-  <div class="summary-grid">
-    <article class="status-card">
-      <p class="status-card__label">Access Mode</p>
-      <p class="status-card__title">Temporary setup access</p>
-      <p class="status-card__body">
-        This session exists only to complete first-run setup and should be retired once durable
-        operator ownership is fully established.
-      </p>
-    </article>
-
-    <article class="status-card">
-      <p class="status-card__label">Actor</p>
-      <p class="status-card__title">{@current_scope.user.display_name}</p>
-      <p class="status-card__body">{@current_scope.user.email}</p>
-    </article>
-
-    <article class="status-card">
-      <p class="status-card__label">Setup Step</p>
-      <p class="status-card__title">{@setup_step_title}</p>
-      <p class="status-card__body">{@setup_step_body}</p>
-    </article>
-
-    <article id="setup-active-organization" class="status-card">
-      <p class="status-card__label">Active Setup Tenant</p>
-
+<section id="setup-home" class="space-y-6">
+  <div>
+    <p class="hud-label">First-Run Setup</p>
+    <h1 class="text-2xl font-bold text-base-content">
       <%= cond do %>
-        <% @active_organization -> %>
-          <p class="status-card__title">{@active_organization.display_name}</p>
-          <p class="status-card__body">Slug: {@active_organization.slug}</p>
         <% @invalid_setup_state? -> %>
-          <p class="status-card__title">Unavailable</p>
-          <p class="status-card__body">
-            Cadence could not resolve the active setup tenant from the current workflow state.
-          </p>
+          Cadence setup needs operator attention before first-run work can continue.
+        <% @show_tenant_form? -> %>
+          Create the first tenant for this Cadence deployment.
+        <% @show_handoff_form? -> %>
+          Establish the first durable human handoff.
+        <% @active_organization -> %>
+          Durable handoff established. Setup is waiting on completion.
         <% true -> %>
-          <p class="status-card__title">Not created yet</p>
-          <p class="status-card__body">
-            The first durable tenant has not been created yet for this deployment.
-          </p>
+          Cadence is ready for the next first-run setup step.
       <% end %>
-    </article>
+    </h1>
+    <p class="mt-2 text-sm text-base-content/50 max-w-2xl">
+      <%= cond do %>
+        <% @invalid_setup_state? -> %>
+          This temporary setup surface remains isolated from the normal operator shell so invalid
+          first-run state can be corrected without pretending setup has completed cleanly.
+        <% @show_tenant_form? -> %>
+          Temporary setup access can create the first durable organization tenant from the product.
+          Durable human membership and handoff work remain intentionally separate.
+        <% @show_handoff_form? -> %>
+          The first tenant now exists. Use this step to either grant an existing durable user their
+          first tenant membership directly or invite a new durable human into Cadence.
+        <% true -> %>
+          Durable operator access has been established separately from temporary setup access. Cadence
+          can now retire the bootstrap-only setup path once setup completion work is finished.
+      <% end %>
+    </p>
+  </div>
 
-    <article id="durable-admin-handoff-status" class="status-card">
-      <p class="status-card__label">Durable Handoff</p>
-      <%= if @durable_admin_handoff do %>
-        <p class="status-card__title">{@durable_admin_handoff["status"] |> Phoenix.Naming.humanize()}</p>
-        <p class="status-card__body">
-          {@durable_admin_handoff["email"] || "Pending email"}
-          <%= if @durable_admin_handoff["organization_role"] do %>
-            , role:
-            {Phoenix.Naming.humanize(@durable_admin_handoff["organization_role"])}
-          <% end %>
+  <div :if={@error_message} id="setup-error" class="alert alert-error">{@error_message}</div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Access Mode</p>
+        <p class="font-semibold">Temporary setup access</p>
+        <p class="text-sm text-base-content/60">
+          This session exists only to complete first-run setup and should be retired once durable
+          operator ownership is fully established.
         </p>
-      <% else %>
-        <p class="status-card__title">Not started</p>
-        <p class="status-card__body">
-          No durable user has been granted or invited yet for this first tenant.
-        </p>
-      <% end %>
-    </article>
+      </div>
+    </div>
+
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Actor</p>
+        <p class="font-semibold">{@current_scope.user.display_name}</p>
+        <p class="text-sm text-base-content/60">{@current_scope.user.email}</p>
+      </div>
+    </div>
+
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Setup Step</p>
+        <p class="font-semibold">{@setup_step_title}</p>
+        <p class="text-sm text-base-content/60">{@setup_step_body}</p>
+      </div>
+    </div>
+
+    <div id="setup-active-organization" class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Active Setup Tenant</p>
+
+        <%= cond do %>
+          <% @active_organization -> %>
+            <p class="font-semibold">{@active_organization.display_name}</p>
+            <p class="text-sm text-base-content/60">Slug: {@active_organization.slug}</p>
+          <% @invalid_setup_state? -> %>
+            <p class="font-semibold">Unavailable</p>
+            <p class="text-sm text-base-content/60">
+              Cadence could not resolve the active setup tenant from the current workflow state.
+            </p>
+          <% true -> %>
+            <p class="font-semibold">Not created yet</p>
+            <p class="text-sm text-base-content/60">
+              The first durable tenant has not been created yet for this deployment.
+            </p>
+        <% end %>
+      </div>
+    </div>
+
+    <div id="durable-admin-handoff-status" class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Durable Handoff</p>
+        <%= if @durable_admin_handoff do %>
+          <p class="font-semibold">{@durable_admin_handoff["status"] |> Phoenix.Naming.humanize()}</p>
+          <p class="text-sm text-base-content/60">
+            {@durable_admin_handoff["email"] || "Pending email"}
+            <%= if @durable_admin_handoff["organization_role"] do %>
+              , role:
+              {Phoenix.Naming.humanize(@durable_admin_handoff["organization_role"])}
+            <% end %>
+          </p>
+        <% else %>
+          <p class="font-semibold">Not started</p>
+          <p class="text-sm text-base-content/60">
+            No durable user has been granted or invited yet for this first tenant.
+          </p>
+        <% end %>
+      </div>
+    </div>
   </div>
 
   <%= cond do %>
@@ -101,7 +113,7 @@
         for={@form}
         id="first-tenant-form"
         action={~p"/setup/organizations"}
-        class="sign-in-form"
+        class="space-y-4"
       >
         <.input
           field={@form[:display_name]}
@@ -120,9 +132,9 @@
           autocomplete="off"
         />
 
-        <div class="sign-in-form__actions">
-          <button type="submit" class="button button--primary">Create Tenant</button>
-          <p class="sign-in-form__note">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <button type="submit" class="btn btn-primary">Create Tenant</button>
+          <p class="text-sm text-base-content/50">
             This step creates the first durable organization tenant only. Human membership and
             durable admin ownership are established separately.
           </p>
@@ -134,7 +146,7 @@
         for={@handoff_form}
         id="initial-admin-handoff-form"
         action={~p"/setup/handoff"}
-        class="sign-in-form"
+        class="space-y-4"
       >
         <.input
           field={@handoff_form[:email]}
@@ -160,9 +172,9 @@
           ]}
         />
 
-        <div class="sign-in-form__actions">
-          <button type="submit" class="button button--primary">Establish Handoff</button>
-          <p class="sign-in-form__note">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <button type="submit" class="btn btn-primary">Establish Handoff</button>
+          <p class="text-sm text-base-content/50">
             Existing durable users are granted tenant access directly. New or non-durable users are
             invited by email and the setup workflow stays pending until the invitation is accepted.
           </p>
@@ -170,17 +182,19 @@
       </.form>
 
     <% true -> %>
-      <article id="setup-next-step" class="status-card">
-        <p class="status-card__label">Next Slice</p>
-        <p class="status-card__title">Temporary setup retirement still pending</p>
-        <p class="status-card__body">
-          Cadence has established durable operator ownership. The remaining setup completion slice
-          can now retire temporary setup access cleanly.
-        </p>
-      </article>
+      <div id="setup-next-step" class="card bg-base-200">
+        <div class="card-body p-4">
+          <p class="hud-label">Next Slice</p>
+          <p class="font-semibold">Temporary setup retirement still pending</p>
+          <p class="text-sm text-base-content/60">
+            Cadence has established durable operator ownership. The remaining setup completion slice
+            can now retire temporary setup access cleanly.
+          </p>
+        </div>
+      </div>
   <% end %>
 
   <.form for={%{}} as={:session} id="setup-sign-out-form" action={~p"/session"} method="delete">
-    <button type="submit" class="button button--secondary">Sign out</button>
+    <button type="submit" class="btn btn-ghost">Sign out</button>
   </.form>
 </section>

@@ -1,78 +1,86 @@
-<section id="organization-invitation" class="panel panel--hero">
-  <div class="eyebrow">Cadence Invitation</div>
-  <h1 class="hero-title">
-    <%= if @invitation_available? do %>
-      Accept your invitation and establish durable operator access.
-    <% else %>
-      This invitation is no longer available.
-    <% end %>
-  </h1>
-  <p class="hero-copy">
-    <%= if @invitation_available? do %>
-      Invitation acceptance creates or finishes the durable human account, establishes tenant
-      membership, and then signs you into the operator shell.
-    <% else %>
-      Invitation links are single-use handoff artifacts. Ask a Cadence platform administrator to
-      issue a fresh invitation if you still need access.
-    <% end %>
-  </p>
+<section id="organization-invitation" class="space-y-6">
+  <div>
+    <p class="hud-label">Cadence Invitation</p>
+    <h1 class="text-2xl font-bold text-base-content">
+      <%= if @invitation_available? do %>
+        Accept your invitation and establish durable operator access.
+      <% else %>
+        This invitation is no longer available.
+      <% end %>
+    </h1>
+    <p class="mt-2 text-sm text-base-content/50 max-w-2xl">
+      <%= if @invitation_available? do %>
+        Invitation acceptance creates or finishes the durable human account, establishes tenant
+        membership, and then signs you into the operator shell.
+      <% else %>
+        Invitation links are single-use handoff artifacts. Ask a Cadence platform administrator to
+        issue a fresh invitation if you still need access.
+      <% end %>
+    </p>
+  </div>
 
-  <p :if={@error_message} id="organization-invitation-error" class="panel__error">
+  <div :if={@error_message} id="organization-invitation-error" class="alert alert-error">
     {@error_message}
-  </p>
+  </div>
 
-  <div class="summary-grid">
-    <article class="status-card">
-      <p class="status-card__label">Organization</p>
-      <p class="status-card__title">
-        <%= if @organization do %>
-          {@organization.display_name}
-        <% else %>
-          Unavailable
-        <% end %>
-      </p>
-      <p class="status-card__body">
-        <%= if @organization do %>
-          Slug: {@organization.slug}
-        <% else %>
-          Cadence could not resolve the invitation target from this link.
-        <% end %>
-      </p>
-    </article>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Organization</p>
+        <p class="font-semibold">
+          <%= if @organization do %>
+            {@organization.display_name}
+          <% else %>
+            Unavailable
+          <% end %>
+        </p>
+        <p class="text-sm text-base-content/60">
+          <%= if @organization do %>
+            Slug: {@organization.slug}
+          <% else %>
+            Cadence could not resolve the invitation target from this link.
+          <% end %>
+        </p>
+      </div>
+    </div>
 
-    <article class="status-card">
-      <p class="status-card__label">Email</p>
-      <p class="status-card__title">
-        <%= if @invitation do %>
-          {@invitation.email}
-        <% else %>
-          Unavailable
-        <% end %>
-      </p>
-      <p class="status-card__body">
-        This invitation is bound to a specific email address and establishes the durable user
-        identity for that operator.
-      </p>
-    </article>
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Email</p>
+        <p class="font-semibold">
+          <%= if @invitation do %>
+            {@invitation.email}
+          <% else %>
+            Unavailable
+          <% end %>
+        </p>
+        <p class="text-sm text-base-content/60">
+          This invitation is bound to a specific email address and establishes the durable user
+          identity for that operator.
+        </p>
+      </div>
+    </div>
 
-    <article class="status-card">
-      <p class="status-card__label">Access</p>
-      <p class="status-card__title">
-        <%= if @invitation do %>
-          {Phoenix.Naming.humanize(@invitation.membership_role)}
-        <% else %>
-          Pending new invitation
-        <% end %>
-      </p>
-      <p class="status-card__body">
-        <%= if @invitation do %>
-          Platform Admin:
-          {if(@invitation.grant_platform_admin, do: " Yes", else: " No")}
-        <% else %>
-          The original invitation details are no longer available from this link.
-        <% end %>
-      </p>
-    </article>
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <p class="hud-label">Access</p>
+        <p class="font-semibold">
+          <%= if @invitation do %>
+            {Phoenix.Naming.humanize(@invitation.membership_role)}
+          <% else %>
+            Pending new invitation
+          <% end %>
+        </p>
+        <p class="text-sm text-base-content/60">
+          <%= if @invitation do %>
+            Platform Admin:
+            {if(@invitation.grant_platform_admin, do: " Yes", else: " No")}
+          <% else %>
+            The original invitation details are no longer available from this link.
+          <% end %>
+        </p>
+      </div>
+    </div>
   </div>
 
   <%= if @invitation_available? do %>
@@ -80,7 +88,7 @@
       for={@form}
       id="organization-invitation-acceptance-form"
       action={~p"/invitations/#{@invitation_token}"}
-      class="sign-in-form"
+      class="space-y-4"
     >
       <.input
         field={@form[:display_name]}
@@ -107,9 +115,9 @@
         autocomplete="new-password"
       />
 
-      <div class="sign-in-form__actions">
-        <button type="submit" class="button button--primary">Accept Invitation</button>
-        <p class="sign-in-form__note">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <button type="submit" class="btn btn-primary">Accept Invitation</button>
+        <p class="text-sm text-base-content/50">
           Passwords must be at least 12 characters. Accepting this invitation signs you into the
           durable operator session immediately.
         </p>
