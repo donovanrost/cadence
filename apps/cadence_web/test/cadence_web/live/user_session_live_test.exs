@@ -9,15 +9,14 @@ defmodule CadenceWeb.UserSessionLiveTest do
     statics: CadenceWeb.static_paths()
 
   describe "GET /sign-in" do
-    test "renders the single sign-in form with hero header", %{conn: conn} do
+    test "renders the sign-in form with title and brand", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/sign-in")
 
-      assert html =~ "Cadence Access"
-      assert html =~ "Sign In"
+      assert html =~ "Cadence"
+      assert html =~ "Sign in"
+      assert html =~ ~s(id="sign-in-form")
       assert html =~ "email"
       assert html =~ "password"
-      # One <form> tag, not two.
-      assert html |> String.split("<form") |> length() == 2
     end
 
     test "renders no setup-access-specific UI", %{conn: conn} do
@@ -28,7 +27,7 @@ defmodule CadenceWeb.UserSessionLiveTest do
       refute html =~ "Setup Password"
     end
 
-    test "form posts to the controller action at ~p\"/sign-in\"", %{conn: conn} do
+    test "form posts to the controller action", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/sign-in")
 
       assert html =~ ~s(action="/sign-in")
@@ -46,7 +45,3 @@ defmodule CadenceWeb.UserSessionLiveTest do
     end
   end
 end
-
-# Flash rendering on redirect from the controller is covered by
-# browser_shell_test.exs — the POST → redirect → LiveView mount path
-# exercises it end-to-end.

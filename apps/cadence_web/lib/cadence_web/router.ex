@@ -31,7 +31,10 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through [:browser, :redirect_if_authenticated_scope]
 
-    live "/sign-in", UserSessionLive, :new
+    live_session :auth, layout: {CadenceWeb.Layouts, :auth} do
+      live "/sign-in", UserSessionLive, :new
+    end
+
     post "/sign-in", UserSessionController, :create
   end
 

@@ -43,8 +43,7 @@ defmodule CadenceWeb.BrowserShellTest do
   test "sign-in page renders a single unified sign-in form", %{conn: conn} do
     response = conn |> get("/sign-in") |> html_response(200)
 
-    assert response =~ "Cadence Access"
-    assert response =~ "Sign in to Cadence"
+    assert response =~ "Sign in"
     assert response =~ ~s(id="sign-in-form")
     refute response =~ "setup-access-sign-in-form"
     refute response =~ "durable-sign-in-form"

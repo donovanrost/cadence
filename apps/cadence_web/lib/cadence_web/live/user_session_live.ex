@@ -20,23 +20,21 @@ defmodule CadenceWeb.UserSessionLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.panel variant={:hero}>
-      <.eyebrow>Cadence Access</.eyebrow>
-      <.hero_title>Sign in to Cadence</.hero_title>
-      <.hero_copy>
-        Enter your operator credentials to access the control plane.
-      </.hero_copy>
-
-      <.form_error message={Phoenix.Flash.get(@flash, :error)} />
+    <div class="space-y-4">
+      <div class="text-center">
+        <h1 class="text-xl font-bold text-base-content">Sign in</h1>
+        <p class="text-xs text-base-content/50 mt-0.5">
+          Enter your operator credentials to access the control plane.
+        </p>
+      </div>
 
       <.form
         for={@form}
         id="sign-in-form"
         action={~p"/sign-in"}
         phx-change="validate"
-        class="grid gap-4"
       >
-        <.text_field
+        <.input
           field={@form[:email]}
           type="email"
           label="Email"
@@ -45,7 +43,7 @@ defmodule CadenceWeb.UserSessionLive do
           autocomplete="email"
           autofocus
         />
-        <.text_field
+        <.input
           field={@form[:password]}
           type="password"
           label="Password"
@@ -54,9 +52,11 @@ defmodule CadenceWeb.UserSessionLive do
           autocomplete="current-password"
         />
 
-        <.button variant={:primary} kind={:submit} class="w-full">Sign In</.button>
+        <button type="submit" class="btn btn-primary w-full mt-2">
+          Sign In
+        </button>
       </.form>
-    </.panel>
+    </div>
     """
   end
 end
