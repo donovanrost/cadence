@@ -54,6 +54,16 @@ defmodule CadenceWeb.Router do
     post "/setup/handoff", SetupController, :handoff
     get "/operator", OperatorHomeController, :show
     delete "/session", UserSessionController, :delete
+
+    live_session :admin,
+      on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],
+      layout: {CadenceWeb.Layouts, :app} do
+      live "/admin", AdminHomeLive, :index
+      live "/admin/organizations", AdminOrganizationListLive, :index
+      live "/admin/organizations/new", AdminOrganizationNewLive, :new
+      live "/admin/organizations/:org_id", AdminOrganizationShowLive, :show
+      live "/admin/organizations/:org_id/invite", AdminOrganizationInviteLive, :invite
+    end
   end
 
   scope "/api", CadenceWeb do
