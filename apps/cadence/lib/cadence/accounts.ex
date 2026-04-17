@@ -35,8 +35,7 @@ defmodule Cadence.Accounts do
           user: User.t(),
           session_token: binary(),
           expires_at: DateTime.t(),
-          current_organization_id: binary() | nil,
-          temporary_setup_access?: boolean()
+          current_organization_id: binary() | nil
         }
 
   @type issued_bootstrap_admin_session :: issued_user_session()
@@ -377,8 +376,7 @@ defmodule Cadence.Accounts do
              invitation: OrganizationInvitation.t(),
              session_token: binary(),
              expires_at: DateTime.t(),
-             current_organization_id: binary(),
-             temporary_setup_access?: false
+             current_organization_id: binary()
            }}
           | {:error, term()}
   def accept_organization_invitation(invitation_token, attrs)
@@ -421,8 +419,7 @@ defmodule Cadence.Accounts do
             invitation: accepted_invitation,
             session_token: issued_session.session_token,
             expires_at: issued_session.expires_at,
-            current_organization_id: membership.organization_id,
-            temporary_setup_access?: false
+            current_organization_id: membership.organization_id
           }
         else
           {:error, reason} -> Repo.rollback(reason)
@@ -925,8 +922,7 @@ defmodule Cadence.Accounts do
            user: user,
            session_token: session_token,
            expires_at: expires_at,
-           current_organization_id: current_organization_id,
-           temporary_setup_access?: session_context == @bootstrap_session_context
+           current_organization_id: current_organization_id
          }}
 
       {:error, %Changeset{} = changeset} ->

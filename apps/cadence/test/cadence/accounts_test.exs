@@ -26,7 +26,6 @@ defmodule Cadence.AccountsTest do
       persist_durable_user!(email: "ops@example.com", password: password)
 
       assert {:ok, session} = Accounts.sign_in("ops@example.com", password)
-      assert session.temporary_setup_access? == false
       assert is_binary(session.session_token)
     end
 
@@ -52,14 +51,13 @@ defmodule Cadence.AccountsTest do
       assert {:error, :invalid_credentials} = Accounts.sign_in("ops@example.com", "pw-123")
     end
 
-    test "bootstrap admin with enabled config and pending setup can sign in" do
+    test "bootstrap admin with enabled config can sign in" do
       enable_bootstrap_admin!()
       assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
 
       assert {:ok, session} =
                Accounts.sign_in(@bootstrap_admin_email, @bootstrap_admin_password)
 
-      assert session.temporary_setup_access? == true
       assert is_binary(session.session_token)
     end
 
@@ -90,7 +88,7 @@ defmodule Cadence.AccountsTest do
       attach_password_credential!(@bootstrap_admin_email, durable_password)
 
       assert {:ok, session} = Accounts.sign_in(@bootstrap_admin_email, durable_password)
-      assert session.temporary_setup_access? == false
+      assert is_binary(session.session_token)
     end
 
     test "user with both credentials does not fall back to bootstrap when durable password is wrong" do

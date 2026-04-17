@@ -1,13 +1,7 @@
 defmodule CadenceWeb.OperatorHomeController do
   use CadenceWeb, :controller
 
-  alias CadenceWeb.AuthenticatedEntry
-
   def show(conn, _params) do
-    if AuthenticatedEntry.setup_access?(conn.assigns.current_scope) do
-      redirect(conn, to: AuthenticatedEntry.entry_path(conn.assigns.current_scope))
-    else
-      render(conn, :show)
-    end
+    render(conn, :show)
   end
 end

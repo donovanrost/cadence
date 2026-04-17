@@ -168,7 +168,7 @@ defmodule Cadence.Setup do
   end
 
   defp authorize_setup_access(%Scope{} = current_scope) do
-    if Scope.temporary_setup_access?(current_scope) do
+    if MapSet.member?(current_scope.capabilities, :platform_admin) do
       :ok
     else
       {:error, :forbidden}

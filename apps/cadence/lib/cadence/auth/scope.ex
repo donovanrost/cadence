@@ -23,8 +23,7 @@ defmodule Cadence.Auth.Scope do
           organization_membership: OrganizationMembership.t() | nil,
           service_identity: ServiceIdentity.t() | nil,
           role: atom() | nil,
-          capabilities: MapSet.t(capability()),
-          temporary_setup_access: boolean()
+          capabilities: MapSet.t(capability())
         }
 
   defstruct [
@@ -37,8 +36,7 @@ defmodule Cadence.Auth.Scope do
     :organization_membership,
     :service_identity,
     :role,
-    capabilities: MapSet.new(),
-    temporary_setup_access: false
+    capabilities: MapSet.new()
   ]
 
   @spec new(map()) :: t()
@@ -89,9 +87,7 @@ defmodule Cadence.Auth.Scope do
       capabilities:
         user.capabilities
         |> MapSet.new()
-        |> MapSet.union(MapSet.new(OrganizationMembership.capabilities(organization_membership))),
-      temporary_setup_access:
-        Map.get(attrs, :temporary_setup_access, User.temporary_setup_access?(user))
+        |> MapSet.union(MapSet.new(OrganizationMembership.capabilities(organization_membership)))
     }
   end
 
@@ -102,10 +98,4 @@ defmodule Cadence.Auth.Scope do
   defp default_user_role(_user, %OrganizationMembership{} = organization_membership) do
     organization_membership.role
   end
-
-  @spec temporary_setup_access?(t()) :: boolean()
-  def temporary_setup_access?(%__MODULE__{temporary_setup_access: temporary_setup_access}),
-    do: temporary_setup_access
-
-  def temporary_setup_access?(%__MODULE__{}), do: false
 end

@@ -168,7 +168,7 @@ defmodule Cadence.Auth do
   end
 
   defp authenticate_user_session_token(api_token, opts) do
-    with {:ok, %{user: user, session_context: session_context}} <-
+    with {:ok, %{user: user, session_context: _session_context}} <-
            Accounts.authenticate_user_session(api_token),
          {:ok, organization_membership} <-
            Accounts.preferred_organization_membership(
@@ -182,8 +182,7 @@ defmodule Cadence.Auth do
          organization_id: organization && organization.organization_id,
          organization: organization,
          organization_membership: organization_membership,
-         role: scope_role(user, organization_membership),
-         temporary_setup_access: session_context == :bootstrap_admin
+         role: scope_role(user, organization_membership)
        })}
     end
   end

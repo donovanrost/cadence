@@ -3,7 +3,6 @@ defmodule CadenceWeb.BrowserShellTest do
 
   alias Cadence.Accounts.{Password, User}
   alias Cadence.Ids
-  alias Cadence.Organizations.Organization
   alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
@@ -49,7 +48,7 @@ defmodule CadenceWeb.BrowserShellTest do
     refute response =~ "durable-sign-in-form"
   end
 
-  test "bootstrap credentials on /sign-in during setup establish a session and reach setup home",
+  test "bootstrap credentials on /sign-in route to admin dashboard",
        %{conn: conn} do
     conn =
       post(conn, "/sign-in", %{
@@ -59,18 +58,7 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    assert redirected_to(conn) == "/setup"
-
-    response =
-      conn
-      |> recycle()
-      |> get("/setup")
-      |> html_response(200)
-
-    assert response =~ "setup-home"
-    assert response =~ "first-tenant-form"
-    assert response =~ "Bootstrap Admin"
-    assert response =~ @bootstrap_admin_email
+    assert redirected_to(conn) == "/admin"
   end
 
   test "creating the first tenant surfaces the durable admin handoff form", %{conn: conn} do
@@ -130,25 +118,8 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    assert redirected_to(durable_conn) == "/operator"
-
-    response =
-      durable_conn
-      |> recycle()
-      |> get("/operator")
-      |> html_response(200)
-
-    assert response =~ "operator-home"
-    assert response =~ "ops-lead@example.com"
-    assert response =~ "Cadence Operations"
-
-    setup_response =
-      build_conn()
-      |> init_test_session(%{user_session_token: session_token})
-      |> get("/setup")
-      |> html_response(200)
-
-    assert setup_response =~ "Temporary setup retirement still pending"
+    # Handoff grants platform_admin, so the durable user routes to /admin
+    assert redirected_to(durable_conn) == "/admin"
   end
 
   test "setup handoff invites a new durable user and invitation acceptance creates the durable session",
@@ -193,17 +164,8 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    assert redirected_to(accepted_conn) == "/operator"
-
-    operator_response =
-      accepted_conn
-      |> recycle()
-      |> get("/operator")
-      |> html_response(200)
-
-    assert operator_response =~ "operator-home"
-    assert operator_response =~ "New Admin"
-    assert operator_response =~ "Cadence Operations"
+    # Handoff grants platform_admin, so the accepted invitation routes to /admin
+    assert redirected_to(accepted_conn) == "/admin"
   end
 
   test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do
@@ -254,26 +216,13 @@ defmodule CadenceWeb.BrowserShellTest do
     assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
   end
 
-  test "invalid inferred setup state keeps setup traffic on the setup route", %{conn: conn} do
-    persist_first_tenant!(organization_id: "org-alpha", slug: "org-alpha")
-    persist_first_tenant!(organization_id: "org-bravo", slug: "org-bravo")
-
+  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
     root_conn =
       conn
       |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
       |> get("/")
 
-    assert redirected_to(root_conn) == "/setup"
-
-    response =
-      build_conn()
-      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
-      |> get("/setup")
-      |> html_response(200)
-
-    assert response =~ "Cadence setup needs operator attention"
-    assert response =~ "Cadence found an invalid first-run setup state."
-    refute response =~ "first-tenant-form"
+    assert redirected_to(root_conn) == "/admin"
   end
 
   defp bootstrap_admin_session_token do
@@ -295,18 +244,6 @@ defmodule CadenceWeb.BrowserShellTest do
       })
 
     assert redirected_to(conn) == "/setup"
-  end
-
-  defp persist_first_tenant!(opts) when is_list(opts) do
-    organization =
-      Organization.new(%{
-        organization_id: Keyword.get(opts, :organization_id, "org-cadence"),
-        slug: Keyword.get(opts, :slug, "cadence-inc"),
-        display_name: Keyword.get(opts, :display_name, "Cadence Inc.")
-      })
-
-    assert {:ok, persisted_organization} = Cadence.persist_organization(organization)
-    persisted_organization
   end
 
   defp persist_durable_user!(opts) when is_list(opts) do

@@ -12,7 +12,7 @@ defmodule CadenceWeb.SetupController do
   alias CadenceWeb.UserNotifier
 
   def show(conn, _params) do
-    if AuthenticatedEntry.setup_access?(conn.assigns.current_scope) do
+    if platform_admin?(conn.assigns.current_scope) do
       render_setup(conn, organization_form(), handoff_form(), nil)
     else
       redirect(conn, to: AuthenticatedEntry.entry_path(conn.assigns.current_scope))
@@ -20,7 +20,7 @@ defmodule CadenceWeb.SetupController do
   end
 
   def create(conn, params) do
-    if AuthenticatedEntry.setup_access?(conn.assigns.current_scope) do
+    if platform_admin?(conn.assigns.current_scope) do
       case organization_params(params) do
         {:ok, organization_params} ->
           form = organization_form(organization_params)
@@ -55,7 +55,7 @@ defmodule CadenceWeb.SetupController do
   end
 
   def handoff(conn, params) do
-    if AuthenticatedEntry.setup_access?(conn.assigns.current_scope) do
+    if platform_admin?(conn.assigns.current_scope) do
       case handoff_params(params) do
         {:ok, handoff_params} ->
           form = handoff_form(handoff_params)
@@ -299,4 +299,8 @@ defmodule CadenceWeb.SetupController do
   defp field_label(:email), do: "Email"
   defp field_label(:membership_role), do: "Organization role"
   defp field_label(field), do: Phoenix.Naming.humanize(field)
+
+  defp platform_admin?(%Cadence.Auth.Scope{} = scope) do
+    MapSet.member?(scope.capabilities, :platform_admin)
+  end
 end
