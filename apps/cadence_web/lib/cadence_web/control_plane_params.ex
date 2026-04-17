@@ -1,7 +1,6 @@
 defmodule CadenceWeb.ControlPlaneParams do
   @moduledoc false
 
-  alias Cadence.Accounts.OrganizationMembership
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog.Artifact
 
@@ -64,7 +63,6 @@ defmodule CadenceWeb.ControlPlaneParams do
   ]
   @command_verifier_phases [:acceptance, :start, :completion, :custom]
   @service_identity_lifecycle_states [:active, :disabled]
-  @organization_membership_role_values OrganizationMembership.roles()
   @direction_values [:uplink, :downlink]
   @selection_role_values [:selected, :candidate, :contributing]
   @transport_target_scope_values [:path, :transport]
@@ -77,37 +75,11 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
-  @spec setup_access_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
-  def setup_access_session(params) when is_map(params) do
-    bootstrap_admin_session(params)
-  end
-
   @spec durable_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
   def durable_session(params) when is_map(params) do
     with {:ok, email} <- required_string(params, "email"),
          {:ok, password} <- required_string(params, "password") do
       {:ok, {email, password}}
-    end
-  end
-
-  @spec initial_admin_handoff(map()) ::
-          {:ok, %{email: binary(), display_name: binary() | nil, membership_role: atom()}}
-          | {:error, term()}
-  def initial_admin_handoff(params) when is_map(params) do
-    with {:ok, email} <- required_string(params, "email"),
-         {:ok, membership_role} <-
-           allowed_atom_param(
-             params,
-             "membership_role",
-             :organization_admin,
-             @organization_membership_role_values
-           ) do
-      {:ok,
-       %{
-         email: email,
-         display_name: string_value(params, "display_name"),
-         membership_role: membership_role
-       }}
     end
   end
 

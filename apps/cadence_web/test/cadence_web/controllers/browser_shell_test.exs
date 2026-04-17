@@ -3,6 +3,7 @@ defmodule CadenceWeb.BrowserShellTest do
 
   alias Cadence.Accounts.{Password, User}
   alias Cadence.Ids
+  alias Cadence.Organizations.Organization
   alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
@@ -61,53 +62,29 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(conn) == "/admin"
   end
 
-  test "creating the first tenant surfaces the durable admin handoff form", %{conn: conn} do
-    session_token = bootstrap_admin_session_token()
-
-    conn =
+  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
+    root_conn =
       conn
-      |> init_test_session(%{user_session_token: session_token})
-      |> post("/setup/organizations", %{
-        "organization" => %{
-          "display_name" => "Cadence Operations",
-          "slug" => "cadence-operations"
-        }
-      })
+      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
+      |> get("/")
 
-    assert redirected_to(conn) == "/setup"
-
-    response =
-      build_conn()
-      |> init_test_session(%{user_session_token: session_token})
-      |> get("/setup")
-      |> html_response(200)
-
-    assert response =~ "initial-admin-handoff-form"
-    assert response =~ "Cadence Operations"
-    refute response =~ "first-tenant-form"
+    assert redirected_to(root_conn) == "/admin"
   end
 
-  test "setup handoff grants an existing durable user directly and durable sign-in reaches operator home",
-       %{conn: conn} do
+  test "durable user sign-in reaches operator home", %{conn: conn} do
     durable_password = "durable-password-123"
     persist_durable_user!(email: "ops-lead@example.com", password: durable_password)
-    session_token = bootstrap_admin_session_token()
 
-    create_first_tenant_via_setup!(session_token)
+    org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
+    assert {:ok, persisted_org} = Cadence.persist_organization(org)
 
-    conn =
-      conn
-      |> init_test_session(%{user_session_token: session_token})
-      |> post("/setup/handoff", %{
-        "initial_admin_handoff" => %{
-          "email" => "ops-lead@example.com",
-          "display_name" => "Ops Lead",
-          "membership_role" => "organization_admin"
-        }
-      })
-
-    assert redirected_to(conn) == "/setup"
-    refute_received {:email, _email}
+    assert {:ok, _result} =
+             Cadence.Accounts.establish_organization_access(
+               "ops-lead@example.com",
+               persisted_org.organization_id,
+               membership_role: :organization_admin,
+               invited_by_user_id: "user_bootstrap_admin"
+             )
 
     durable_conn =
       build_conn()
@@ -118,33 +95,43 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    # Handoff grants platform_admin, so the durable user routes to /admin
-    assert redirected_to(durable_conn) == "/admin"
+    assert redirected_to(durable_conn) == "/operator"
+
+    response =
+      durable_conn
+      |> recycle()
+      |> get("/operator")
+      |> html_response(200)
+
+    assert response =~ "operator-home"
+    assert response =~ "ops-lead@example.com"
+    assert response =~ "Cadence Operations"
   end
 
-  test "setup handoff invites a new durable user and invitation acceptance creates the durable session",
-       %{conn: conn} do
-    session_token = bootstrap_admin_session_token()
-    create_first_tenant_via_setup!(session_token)
+  test "invitation acceptance creates a durable session and routes to operator", %{conn: conn} do
+    org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
+    assert {:ok, persisted_org} = Cadence.persist_organization(org)
 
-    conn =
-      conn
-      |> init_test_session(%{user_session_token: session_token})
-      |> post("/setup/handoff", %{
-        "initial_admin_handoff" => %{
-          "email" => "new-admin@example.com",
-          "display_name" => "New Admin",
-          "membership_role" => "organization_admin"
-        }
-      })
+    assert {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} =
+             Cadence.Accounts.establish_organization_access(
+               "new-admin@example.com",
+               persisted_org.organization_id,
+               membership_role: :organization_admin,
+               invited_by_user_id: "user_bootstrap_admin",
+               display_name: "New Admin"
+             )
 
-    assert redirected_to(conn) == "/setup"
+    assert {:ok, email} =
+             CadenceWeb.UserNotifier.deliver_organization_invitation(
+               invitation,
+               persisted_org,
+               "http://localhost:4002/invitations/#{token}"
+             )
 
-    assert_received {:email, email}
     assert email.subject == "Cadence invitation for Cadence Operations"
     assert email.to == [{"", "new-admin@example.com"}]
 
-    invitation_path = extract_invitation_path!(email.text_body)
+    invitation_path = "/invitations/#{token}"
 
     invitation_response =
       build_conn()
@@ -164,8 +151,17 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    # Handoff grants platform_admin, so the accepted invitation routes to /admin
-    assert redirected_to(accepted_conn) == "/admin"
+    assert redirected_to(accepted_conn) == "/operator"
+
+    operator_response =
+      accepted_conn
+      |> recycle()
+      |> get("/operator")
+      |> html_response(200)
+
+    assert operator_response =~ "operator-home"
+    assert operator_response =~ "New Admin"
+    assert operator_response =~ "Cadence Operations"
   end
 
   test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do
@@ -194,7 +190,7 @@ defmodule CadenceWeb.BrowserShellTest do
     copied_conn =
       build_conn()
       |> init_test_session(%{user_session_token: session_token})
-      |> get("/setup")
+      |> get("/")
 
     assert redirected_to(copied_conn) == "/sign-in"
     assert {:error, :unauthenticated} = Cadence.authenticate_api_token(session_token)
@@ -216,34 +212,11 @@ defmodule CadenceWeb.BrowserShellTest do
     assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
   end
 
-  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
-    root_conn =
-      conn
-      |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
-      |> get("/")
-
-    assert redirected_to(root_conn) == "/admin"
-  end
-
   defp bootstrap_admin_session_token do
     assert {:ok, issued_session} =
              Cadence.login_bootstrap_admin(@bootstrap_admin_email, @bootstrap_admin_password)
 
     issued_session.session_token
-  end
-
-  defp create_first_tenant_via_setup!(session_token) do
-    conn =
-      build_conn()
-      |> init_test_session(%{user_session_token: session_token})
-      |> post("/setup/organizations", %{
-        "organization" => %{
-          "display_name" => "Cadence Operations",
-          "slug" => "cadence-operations"
-        }
-      })
-
-    assert redirected_to(conn) == "/setup"
   end
 
   defp persist_durable_user!(opts) when is_list(opts) do
@@ -280,18 +253,6 @@ defmodule CadenceWeb.BrowserShellTest do
              )
 
     user
-  end
-
-  defp extract_invitation_path!(body) when is_binary(body) do
-    case Regex.run(~r{https?://[^\s]+/invitations/[^\s]+}, body) do
-      [url] ->
-        url
-        |> URI.parse()
-        |> Map.fetch!(:path)
-
-      _other ->
-        flunk("Expected invitation URL in email body:\n#{body}")
-    end
   end
 
   defp flush_mailbox do

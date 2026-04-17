@@ -49,9 +49,6 @@ defmodule CadenceWeb.Router do
     pipe_through [:browser, :require_authenticated_scope]
 
     get "/", OperatorEntryController, :show
-    get "/setup", SetupController, :show
-    post "/setup/organizations", SetupController, :create
-    post "/setup/handoff", SetupController, :handoff
     get "/operator", OperatorHomeController, :show
     delete "/session", UserSessionController, :delete
 
