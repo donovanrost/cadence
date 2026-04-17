@@ -143,3 +143,6 @@ a {
 /* daisyUI Component Overrides — restyles daisyUI primitives for HUD aesthetic */
 @import "./components/component-overrides.css";
 
+/* Collapsible Sidebar */
+@import "./components/sidebar.css";
+

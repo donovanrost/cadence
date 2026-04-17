@@ -1,0 +1,101 @@
+<div class="drawer lg:drawer-open">
+  <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
+
+  <div class="drawer-content flex flex-col">
+    <div class="lg:hidden flex items-center justify-between p-4 border-b border-base-300">
+      <label for="sidebar-drawer" class="btn btn-ghost btn-sm">
+        <span class="hero-bars-3 h-5 w-5"></span>
+      </label>
+      <div class="flex-1 text-center font-semibold text-sm tracking-wider uppercase">Cadence</div>
+      <div class="flex items-center gap-2">
+        <%= if @current_scope && @current_scope.user do %>
+          <span class="text-xs text-base-content/60">{@current_scope.user.email}</span>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
+      <%= if @current_scope && @current_scope.user do %>
+        <span class="text-xs text-base-content/60">{@current_scope.user.display_name}</span>
+        <span class="text-xs text-base-content/40">({@current_scope.user.email})</span>
+      <% end %>
+    </div>
+
+    <main class="flex-1 overflow-y-auto bg-base-100">
+      <div class="p-6">
+        {@inner_content}
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-side">
+    <label for="sidebar-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+    <div
+      data-sidebar-collapsible
+      class="sidebar-collapsible sidebar-expanded min-h-full bg-base-200 flex flex-col border-r border-primary/20 hud-grid relative"
+    >
+      <div class="px-3 h-10 flex items-center border-b border-primary/20">
+        <.link navigate="/" class="flex items-center gap-2">
+          <span class="text-primary font-bold text-sm">◆</span>
+          <span class="text-xs font-bold tracking-[0.15em] text-primary sidebar-label">
+            CADENCE
+          </span>
+        </.link>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto py-2">
+        <%= if @current_scope && MapSet.member?(@current_scope.capabilities, :platform_admin) do %>
+          <div class="px-3 mb-2 sidebar-expanded-only">
+            <span class="hud-label text-base-content/30">Administration</span>
+          </div>
+          <ul class="menu menu-sm space-y-0.5">
+            <li>
+              <.link navigate={~p"/admin"} class="flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/60 border-l-2 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30">
+                <span class="hero-chart-bar-square h-4 w-4 opacity-80 flex-shrink-0"></span>
+                <span class="sidebar-label">Dashboard</span>
+              </.link>
+            </li>
+            <li>
+              <.link navigate={~p"/admin/organizations"} class="flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/60 border-l-2 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30">
+                <span class="hero-building-office h-4 w-4 opacity-80 flex-shrink-0"></span>
+                <span class="sidebar-label">Organizations</span>
+              </.link>
+            </li>
+          </ul>
+        <% end %>
+
+        <div class="px-3 mb-2 mt-4 sidebar-expanded-only">
+          <span class="hud-label text-base-content/30">Operator</span>
+        </div>
+        <ul class="menu menu-sm space-y-0.5">
+          <li>
+            <.link navigate={~p"/operator"} class="flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/60 border-l-2 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30">
+              <span class="hero-home h-4 w-4 opacity-80 flex-shrink-0"></span>
+              <span class="sidebar-label">Home</span>
+            </.link>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="px-2 py-2 border-t border-primary/20">
+        <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
+          <button type="submit" class="btn btn-ghost btn-sm w-full justify-start gap-2 text-xs uppercase tracking-wide text-base-content/60">
+            <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+            <span class="sidebar-label">Sign out</span>
+          </button>
+        </.form>
+      </div>
+
+      <button
+        type="button"
+        class="sidebar-toggle-btn hidden lg:flex"
+        onclick="document.querySelectorAll('[data-sidebar-collapsible]').forEach(function(el){el.classList.toggle('sidebar-expanded');el.classList.toggle('sidebar-collapsed')})"
+        title="Toggle sidebar"
+      >
+        <span class="hero-chevron-left h-3 w-3 toggle-chevron transition-transform"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<.flash_stack flash={@flash} />

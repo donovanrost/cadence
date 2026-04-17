@@ -54,7 +54,7 @@ defmodule CadenceWeb.Router do
 
     live_session :admin,
       on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],
-      layout: {CadenceWeb.Layouts, :app} do
+      layout: {CadenceWeb.Layouts, :sidebar} do
       live "/admin", AdminHomeLive, :index
       live "/admin/organizations", AdminOrganizationListLive, :index
       live "/admin/organizations/new", AdminOrganizationNewLive, :new

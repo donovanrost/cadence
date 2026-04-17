@@ -2,6 +2,8 @@ defmodule CadenceWeb.OperatorHomeController do
   use CadenceWeb, :controller
 
   def show(conn, _params) do
-    render(conn, :show)
+    conn
+    |> put_layout(html: {CadenceWeb.Layouts, :sidebar})
+    |> render(:show)
   end
 end
