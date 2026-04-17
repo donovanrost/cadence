@@ -204,9 +204,6 @@ defmodule CadenceWeb.BrowserShellTest do
     assert operator_response =~ "operator-home"
     assert operator_response =~ "New Admin"
     assert operator_response =~ "Cadence Operations"
-
-    assert {:ok, workflow} = Cadence.fetch_initial_setup_workflow()
-    assert workflow.current_step == :pending_completion
   end
 
   test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do
@@ -241,9 +238,9 @@ defmodule CadenceWeb.BrowserShellTest do
     assert {:error, :unauthenticated} = Cadence.authenticate_api_token(session_token)
   end
 
-  test "completed setup rejects bootstrap credentials via the tightened sign_in/2 gate",
+  test "disabled bootstrap config rejects bootstrap credentials",
        %{conn: conn} do
-    persist_completed_setup!()
+    Application.put_env(:cadence, :bootstrap_admin, enabled: false)
 
     conn =
       post(conn, "/sign-in", %{
@@ -255,10 +252,6 @@ defmodule CadenceWeb.BrowserShellTest do
 
     assert redirected_to(conn) == "/sign-in"
     assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "rejected"
-
-    response = build_conn() |> get("/sign-in") |> html_response(200)
-    assert response =~ ~s(id="sign-in-form")
-    refute response =~ "setup-access-sign-in-form"
   end
 
   test "invalid inferred setup state keeps setup traffic on the setup route", %{conn: conn} do
@@ -302,14 +295,6 @@ defmodule CadenceWeb.BrowserShellTest do
       })
 
     assert redirected_to(conn) == "/setup"
-  end
-
-  defp persist_completed_setup! do
-    persisted_organization =
-      persist_first_tenant!(organization_id: "org-cadence", slug: "cadence-inc")
-
-    assert {:ok, _workflow} =
-             Cadence.complete_initial_setup(persisted_organization.organization_id)
   end
 
   defp persist_first_tenant!(opts) when is_list(opts) do

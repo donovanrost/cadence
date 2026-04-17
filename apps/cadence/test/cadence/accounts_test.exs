@@ -4,7 +4,6 @@ defmodule Cadence.AccountsTest do
   alias Cadence.Accounts
   alias Cadence.Accounts.{Password, User}
   alias Cadence.Ids
-  alias Cadence.Organizations.Organization
   alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
@@ -77,15 +76,6 @@ defmodule Cadence.AccountsTest do
       assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
 
       Application.put_env(:cadence, :bootstrap_admin, enabled: false)
-
-      assert {:error, :invalid_credentials} =
-               Accounts.sign_in(@bootstrap_admin_email, @bootstrap_admin_password)
-    end
-
-    test "bootstrap admin after setup complete fails with :invalid_credentials" do
-      enable_bootstrap_admin!()
-      assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
-      persist_completed_setup!()
 
       assert {:error, :invalid_credentials} =
                Accounts.sign_in(@bootstrap_admin_email, @bootstrap_admin_password)
@@ -195,19 +185,5 @@ defmodule Cadence.AccountsTest do
 
     # Ensure the bootstrap admin user is confirmed for the durable path.
     Repo.update!(UserRow.update_changeset(user_row, %{confirmed_at: DateTime.utc_now()}))
-  end
-
-  defp persist_completed_setup! do
-    organization =
-      Organization.new(%{
-        organization_id: "org-cadence",
-        slug: "cadence-inc",
-        display_name: "Cadence Inc."
-      })
-
-    assert {:ok, persisted_organization} = Cadence.persist_organization(organization)
-
-    assert {:ok, _workflow} =
-             Cadence.complete_initial_setup(persisted_organization.organization_id)
   end
 end

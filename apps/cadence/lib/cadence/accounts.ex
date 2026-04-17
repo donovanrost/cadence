@@ -13,14 +13,12 @@ defmodule Cadence.Accounts do
   alias Cadence.Persistence.Schemas.{
     OrganizationInvitationRow,
     OrganizationMembershipRow,
-    SetupWorkflowRow,
     UserLocalCredentialRow,
     UserRow,
     UserSessionTokenRow
   }
 
   alias Cadence.Repo
-  alias Cadence.Setup.Workflow
 
   @bootstrap_provider_key "bootstrap_env"
   @password_provider_key "password"
@@ -414,8 +412,6 @@ defmodule Cadence.Accounts do
                ),
              {:ok, accepted_invitation} <-
                mark_invitation_accepted(Repo, invitation_row, user.user_id),
-             :ok <-
-               maybe_record_setup_handoff_acceptance(Repo, accepted_invitation, user, membership),
              :ok <- revoke_all_user_sessions(Repo, user.user_id),
              {:ok, issued_session} <-
                issue_user_session(user, @browser_session_context, membership.organization_id) do
@@ -553,7 +549,7 @@ defmodule Cadence.Accounts do
       has_password ->
         {:ok, :durable}
 
-      has_bootstrap and bootstrap_admin_enabled?() and setup_pending?() ->
+      has_bootstrap and bootstrap_admin_enabled?() ->
         {:ok, :bootstrap_admin}
 
       true ->
@@ -568,13 +564,6 @@ defmodule Cadence.Accounts do
       provider_key: provider_key,
       lifecycle_state: Atom.to_string(:active)
     ) != nil
-  end
-
-  defp setup_pending? do
-    case Cadence.Setup.fetch_initial_workflow() do
-      {:ok, workflow} -> Cadence.Setup.active?(workflow)
-      {:error, _reason} -> true
-    end
   end
 
   defp upsert_user(repo, %User{} = user) do
@@ -858,21 +847,6 @@ defmodule Cadence.Accounts do
     end
   end
 
-  defp maybe_record_setup_handoff_acceptance(
-         repo,
-         %OrganizationInvitation{} = invitation,
-         %User{} = user,
-         %OrganizationMembership{} = membership
-       ) do
-    case invitation.metadata["setup_workflow_id"] do
-      workflow_id when is_binary(workflow_id) ->
-        update_setup_handoff_workflow(repo, workflow_id, invitation, user, membership)
-
-      _other ->
-        :ok
-    end
-  end
-
   defp expire_invitation(%OrganizationInvitationRow{} = row) do
     Repo.update(
       OrganizationInvitationRow.update_changeset(row, %{
@@ -899,70 +873,6 @@ defmodule Cadence.Accounts do
          ) do
       {:ok, _row} -> {:error, :organization_invitation_expired}
       {:error, %Changeset{} = changeset} -> {:error, changeset}
-    end
-  end
-
-  defp update_setup_handoff_workflow(
-         repo,
-         workflow_id,
-         %OrganizationInvitation{} = invitation,
-         %User{} = user,
-         %OrganizationMembership{} = membership
-       ) do
-    case repo.get(SetupWorkflowRow, workflow_id) do
-      %SetupWorkflowRow{} = workflow_row ->
-        workflow_row
-        |> accepted_setup_workflow(invitation, user, membership)
-        |> persist_setup_workflow_update(repo, workflow_row)
-
-      nil ->
-        :ok
-    end
-  end
-
-  defp accepted_setup_workflow(
-         %SetupWorkflowRow{} = workflow_row,
-         %OrganizationInvitation{} = invitation,
-         %User{} = user,
-         %OrganizationMembership{} = membership
-       ) do
-    workflow = SetupWorkflowRow.to_domain(workflow_row)
-
-    Workflow.new(%{
-      setup_workflow_id: workflow.setup_workflow_id,
-      current_step:
-        if(workflow.current_step == :pending_durable_admin_handoff,
-          do: :pending_completion,
-          else: workflow.current_step
-        ),
-      active_organization_id: workflow.active_organization_id,
-      created_by_user_id: workflow.created_by_user_id,
-      completed_at: workflow.completed_at,
-      metadata:
-        Map.merge(workflow.metadata, %{
-          "durable_admin_handoff" => %{
-            "status" => "accepted",
-            "mode" => "invitation",
-            "email" => invitation.email,
-            "user_id" => user.user_id,
-            "organization_membership_id" => membership.organization_membership_id,
-            "organization_role" => Atom.to_string(membership.role),
-            "platform_admin" => invitation.grant_platform_admin,
-            "invitation_id" => invitation.organization_invitation_id,
-            "accepted_at" => iso8601(invitation.accepted_at)
-          }
-        })
-    })
-  end
-
-  defp persist_setup_workflow_update(
-         %Workflow{} = workflow,
-         repo,
-         %SetupWorkflowRow{} = workflow_row
-       ) do
-    case repo.update(SetupWorkflowRow.update_changeset(workflow_row, workflow)) do
-      {:ok, _updated_row} -> :ok
-      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -1062,9 +972,6 @@ defmodule Cadence.Accounts do
   end
 
   defp present_string(_other), do: nil
-
-  defp iso8601(nil), do: nil
-  defp iso8601(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
 
   defp generate_token do
     32
