@@ -248,6 +248,46 @@ defmodule Cadence.Accounts do
     end
   end
 
+  @spec list_organization_members(binary()) :: [
+          %{membership: OrganizationMembership.t(), user: User.t()}
+        ]
+  def list_organization_members(organization_id) when is_binary(organization_id) do
+    OrganizationMembershipRow
+    |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
+    |> where([m, _u], m.organization_id == ^organization_id and m.lifecycle_state == "active")
+    |> order_by([m, _u], asc: m.inserted_at)
+    |> select([m, u], {m, u})
+    |> Repo.all()
+    |> Enum.map(fn {membership_row, user_row} ->
+      %{
+        membership: OrganizationMembershipRow.to_domain(membership_row),
+        user: UserRow.to_domain(user_row)
+      }
+    end)
+  end
+
+  @spec list_pending_invitations(binary()) :: [OrganizationInvitation.t()]
+  def list_pending_invitations(organization_id) when is_binary(organization_id) do
+    now = DateTime.utc_now()
+
+    OrganizationInvitationRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.status == "pending" and
+        row.expires_at > ^now
+    )
+    |> order_by([row], asc: row.inserted_at)
+    |> Repo.all()
+    |> Enum.map(&OrganizationInvitationRow.to_domain/1)
+  end
+
+  @spec count_users() :: non_neg_integer()
+  def count_users do
+    UserRow
+    |> where([row], row.lifecycle_state == "active")
+    |> Repo.aggregate(:count, :user_id)
+  end
+
   @spec establish_organization_access(binary(), binary(), keyword()) ::
           {:ok, organization_access_result()} | {:error, term()}
   def establish_organization_access(email, organization_id, opts \\ [])

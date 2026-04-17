@@ -11,6 +11,7 @@ defmodule Cadence do
   5. canonical telemetry samples
   """
 
+  alias Cadence.Accounts
   alias Cadence.Accounts.User
   alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
@@ -224,6 +225,26 @@ defmodule Cadence do
   @spec list_organizations() :: [Organization.t()]
   def list_organizations do
     Organizations.list_organizations()
+  end
+
+  @spec count_organizations() :: non_neg_integer()
+  def count_organizations do
+    Organizations.count_organizations()
+  end
+
+  @spec list_organization_members(binary()) :: [map()]
+  def list_organization_members(organization_id) when is_binary(organization_id) do
+    Accounts.list_organization_members(organization_id)
+  end
+
+  @spec list_pending_invitations(binary()) :: [map()]
+  def list_pending_invitations(organization_id) when is_binary(organization_id) do
+    Accounts.list_pending_invitations(organization_id)
+  end
+
+  @spec count_users() :: non_neg_integer()
+  def count_users do
+    Accounts.count_users()
   end
 
   @spec persist_mission(Mission.t()) :: {:ok, Mission.t()} | {:error, term()}
