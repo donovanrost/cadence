@@ -71,7 +71,7 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(root_conn) == "/admin"
   end
 
-  test "durable user sign-in reaches operator home", %{conn: conn} do
+  test "durable user sign-in reaches operator home", %{conn: _conn} do
     durable_password = "durable-password-123"
     persist_durable_user!(email: "ops-lead@example.com", password: durable_password)
 
@@ -108,7 +108,7 @@ defmodule CadenceWeb.BrowserShellTest do
     assert response =~ "Cadence Operations"
   end
 
-  test "invitation acceptance creates a durable session and routes to operator", %{conn: conn} do
+  test "invitation acceptance creates a durable session and routes to operator", %{conn: _conn} do
     org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
     assert {:ok, persisted_org} = Cadence.persist_organization(org)
 
