@@ -23,11 +23,7 @@ defmodule CadenceWeb.AdminAuth do
   end
 
   defp authenticate_scope(socket, session) do
-    if connected?(socket) do
-      assign_scope_from_session(socket, session)
-    else
-      socket
-    end
+    assign_scope_from_session(socket, session)
   end
 
   defp assign_scope_from_session(socket, session) do
