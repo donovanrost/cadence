@@ -323,4 +323,61 @@ defmodule CadenceWeb.CoreComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders a resizable two-panel split layout with a drag handle between them.
+
+  Uses the `ResizablePanel` LiveView JS hook for drag-to-resize with localStorage
+  persistence. The left panel width is controlled; the right panel fills remaining space.
+
+  ## Examples
+
+      <.resizable_split id="cmd-panels" default_width="40%">
+        <:left>
+          <.panel_header label="Targets" />
+          <!-- target list -->
+        </:left>
+        <:right>
+          <.panel_header label="Commands" />
+          <!-- command browser -->
+        </:right>
+      </.resizable_split>
+  """
+  attr :id, :string, required: true
+  attr :default_width, :string, default: "40%"
+  attr :min_width, :integer, default: 150
+  attr :max_width_percent, :integer, default: 60
+  attr :class, :string, default: nil
+  slot :left, required: true
+  slot :right, required: true
+
+  def resizable_split(assigns) do
+    ~H"""
+    <div id={@id} class={["flex h-full overflow-hidden", @class]}>
+      <div
+        id={"#{@id}-left"}
+        class="flex flex-col overflow-hidden flex-shrink-0"
+        style={"flex: 0 0 #{@default_width}"}
+      >
+        {render_slot(@left)}
+      </div>
+      <div
+        id={"#{@id}-handle"}
+        phx-hook="ResizablePanel"
+        phx-update="ignore"
+        data-panel-id={"#{@id}-left"}
+        data-storage-key={"cadence:panel:#{@id}"}
+        data-min-width={@min_width}
+        data-max-width-pct={@max_width_percent}
+        class="w-2 flex-shrink-0 cursor-col-resize flex items-center justify-center relative z-10 group"
+      >
+        <div class="w-0.5 h-10 rounded-full transition-all bg-base-content/20 group-hover:bg-primary/60 group-hover:h-16 group-hover:shadow-[0_0_8px_rgba(125,207,255,0.3)]">
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col overflow-hidden">
+        {render_slot(@right)}
+      </div>
+    </div>
+    """
+  end
 end
