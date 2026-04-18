@@ -106,4 +106,221 @@ defmodule CadenceWeb.CoreComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders a colored status indicator dot.
+
+  ## Examples
+
+      <.status_dot status={:online} />
+      <.status_dot status={:fault} size={:sm} />
+  """
+  attr :status, :atom,
+    required: true,
+    values: [:online, :offline, :standby, :fault, :critical, :warning, :info, :success, :nominal]
+
+  attr :size, :atom, values: [:sm, :md], default: :md
+  attr :class, :string, default: nil
+
+  def status_dot(assigns) do
+    ~H"""
+    <span class={[
+      "rounded-full flex-shrink-0",
+      size_class(@size),
+      status_color(@status),
+      @class
+    ]}>
+    </span>
+    """
+  end
+
+  defp size_class(:sm), do: "w-1.5 h-1.5"
+  defp size_class(:md), do: "w-2 h-2"
+
+  defp status_color(:online), do: "bg-success"
+  defp status_color(:nominal), do: "bg-success"
+  defp status_color(:success), do: "bg-success"
+  defp status_color(:standby), do: "bg-warning"
+  defp status_color(:warning), do: "bg-warning"
+  defp status_color(:fault), do: "bg-error"
+  defp status_color(:critical), do: "bg-error"
+  defp status_color(:info), do: "bg-info"
+  defp status_color(:offline), do: "bg-base-content/30"
+
+  @doc """
+  Renders a key-value detail row. Wrap multiple rows in a `divide-y divide-base-300`
+  container for dividers between them.
+
+  ## Examples
+
+      <div class="divide-y divide-base-300">
+        <.detail_row label="Slug" value={@org.slug} mono />
+        <.detail_row label="Status" value="Active" />
+      </div>
+  """
+  attr :label, :string, required: true
+  attr :value, :string, default: nil
+  attr :mono, :boolean, default: false
+  slot :inner_block
+
+  def detail_row(assigns) do
+    ~H"""
+    <div class="py-3 flex justify-between">
+      <span class="text-base-content/60">{@label}</span>
+      <span class={[@mono && "font-mono text-sm"]}>
+        <%= if @inner_block != [] do %>
+          {render_slot(@inner_block)}
+        <% else %>
+          {@value || "—"}
+        <% end %>
+      </span>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders an empty state placeholder for lists and tables with no data.
+
+  ## Examples
+
+      <.empty_state
+        icon="hero-building-office"
+        title="No organizations"
+        description="Create your first organization to get started."
+        action_label="Create Organization"
+        action_navigate={~p"/admin/organizations/new"}
+      />
+  """
+  attr :icon, :string, required: true
+  attr :title, :string, required: true
+  attr :description, :string, default: nil
+  attr :action_label, :string, default: nil
+  attr :action_navigate, :string, default: nil
+  attr :action_patch, :string, default: nil
+
+  def empty_state(assigns) do
+    ~H"""
+    <div class="text-center py-12 border border-dashed border-base-300 rounded-sm bg-base-200/30">
+      <span class={[@icon, "mx-auto h-12 w-12 text-base-content/30"]}></span>
+      <h3 class="mt-2 text-sm font-semibold text-base-content">{@title}</h3>
+      <p :if={@description} class="mt-1 text-sm text-base-content/60">{@description}</p>
+      <div :if={@action_label} class="mt-6">
+        <.link
+          navigate={@action_navigate}
+          patch={@action_patch}
+          class="btn btn-primary btn-sm"
+        >
+          <span class="hero-plus -ml-0.5 mr-1.5 h-5 w-5"></span>
+          {@action_label}
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders an inline severity badge with a status dot, optional count, and label.
+
+  ## Examples
+
+      <.severity_badge severity={:critical} count={3} />
+      <.severity_badge severity={:warning} count={12} />
+      <.severity_badge severity={:info} />
+  """
+  attr :severity, :atom, required: true, values: [:critical, :warning, :info, :nominal]
+  attr :count, :integer, default: nil
+  attr :label, :string, default: nil
+  attr :class, :string, default: nil
+
+  def severity_badge(assigns) do
+    assigns =
+      assign_new(assigns, :resolved_label, fn ->
+        assigns.label || severity_label(assigns.severity)
+      end)
+
+    ~H"""
+    <span class={[
+      "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+      severity_badge_class(@severity),
+      @class
+    ]}>
+      <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+      <span :if={@count} class="font-mono">{@count}</span>
+      <span class="uppercase text-[0.65rem]">{@resolved_label}</span>
+    </span>
+    """
+  end
+
+  defp severity_badge_class(:critical), do: "bg-error/20 text-error"
+  defp severity_badge_class(:warning), do: "bg-warning/20 text-warning"
+  defp severity_badge_class(:info), do: "bg-info/20 text-info"
+  defp severity_badge_class(:nominal), do: "bg-success/20 text-success"
+
+  defp severity_label(:critical), do: "CRIT"
+  defp severity_label(:warning), do: "WARN"
+  defp severity_label(:info), do: "INFO"
+  defp severity_label(:nominal), do: "NOM"
+
+  @doc """
+  Renders a panel/section header bar with an uppercase label and optional right-side controls.
+
+  ## Examples
+
+      <.panel_header label="Active Alarms" count={5}>
+        <:controls>
+          <button class="btn btn-ghost btn-xs">Filter</button>
+        </:controls>
+      </.panel_header>
+  """
+  attr :label, :string, required: true
+  attr :count, :integer, default: nil
+  attr :class, :string, default: nil
+  slot :controls
+
+  def panel_header(assigns) do
+    ~H"""
+    <div class={["flex items-center justify-between px-2 py-1.5 border-b border-base-300", @class]}>
+      <div class="flex items-center gap-2">
+        <span class="hud-label text-base-content/40">{@label}</span>
+        <span :if={@count} class="text-xs text-base-content/60">({@count})</span>
+      </div>
+      <div :if={@controls != []} class="flex items-center gap-1">
+        {render_slot(@controls)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Renders a list item row with a status dot, name, detail text, and optional right-side info.
+
+  ## Examples
+
+      <.list_item
+        name={target.name}
+        detail={target.identifier}
+        status={:online}
+        badge={target.type}
+      />
+  """
+  attr :name, :string, required: true
+  attr :detail, :string, default: nil
+  attr :status, :atom, default: nil
+  attr :badge, :string, default: nil
+  attr :class, :string, default: nil
+
+  def list_item(assigns) do
+    ~H"""
+    <div class={["flex items-center justify-between py-2", @class]}>
+      <div class="flex items-center gap-3">
+        <.status_dot :if={@status} status={@status} />
+        <div>
+          <p class="font-medium text-sm">{@name}</p>
+          <p :if={@detail} class="text-xs text-base-content/50">{@detail}</p>
+        </div>
+      </div>
+      <span :if={@badge} class="text-xs text-base-content/50">{@badge}</span>
+    </div>
+    """
+  end
 end
