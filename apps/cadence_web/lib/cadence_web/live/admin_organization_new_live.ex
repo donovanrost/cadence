@@ -11,6 +11,7 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
     {:ok,
      socket
      |> assign(:page_title, "New Organization")
+     |> assign(:nav_item, :admin_organizations)
      |> assign(:form, form)}
   end
 

@@ -9,6 +9,7 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
         {:ok,
          socket
          |> assign(:page_title, "Invite to #{organization.display_name}")
+         |> assign(:nav_item, :admin_organizations)
          |> assign(:organization, organization)
          |> assign(:form, to_form(default_invite_params(), as: :invite))}
 

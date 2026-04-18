@@ -7,6 +7,7 @@ defmodule CadenceWeb.AdminOrganizationListLive do
     {:ok,
      socket
      |> assign(:page_title, "Organizations")
+     |> assign(:nav_item, :admin_organizations)
      |> assign(:organizations, Cadence.list_organizations())}
   end
 

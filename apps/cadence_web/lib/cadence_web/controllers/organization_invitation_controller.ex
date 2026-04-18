@@ -82,7 +82,9 @@ defmodule CadenceWeb.OrganizationInvitationController do
   end
 
   defp render_invitation(conn, assigns, error_message) do
-    render(conn, :show, Map.merge(assigns, %{error_message: error_message}))
+    conn
+    |> put_layout(html: {CadenceWeb.Layouts, :auth})
+    |> render(:show, Map.merge(assigns, %{error_message: error_message}))
   end
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do

@@ -1,13 +1,8 @@
 <section id="operator-home" class="space-y-6">
   <div>
-    <p class="hud-label">Operator Home</p>
-    <h1 class="text-2xl font-bold text-base-content">
-      Authenticated traffic now lands on a stable operator entrypoint.
-    </h1>
-    <p class="mt-2 text-sm text-base-content/50 max-w-2xl">
-      This page is intentionally spare. It proves the browser session, route shape, and
-      <code class="text-primary">current_scope</code>
-      plumbing that the shell work will build on next.
+    <h1 class="text-2xl font-bold text-base-content">Operator Home</h1>
+    <p class="mt-1 text-sm text-base-content/50">
+      Welcome to the Cadence control plane.
     </p>
   </div>
 
@@ -56,17 +51,14 @@
 
     <div class="card bg-base-200">
       <div class="card-body p-4">
-        <p class="hud-label">Next Shell Slices</p>
-        <p class="font-semibold">Layout, dashboard, and scoped URLs</p>
+        <p class="hud-label">Coming Soon</p>
+        <p class="font-semibold">Missions, telemetry, and commanding</p>
         <p class="text-sm text-base-content/60">
-          The route is stable now. Subsequent work can add the reusable shell frame and mission-aware
-          navigation without revisiting browser auth plumbing.
+          Mission management, real-time telemetry, and spacecraft commanding surfaces are coming
+          in upcoming releases.
         </p>
       </div>
     </div>
   </div>
 
-  <.form for={%{}} as={:session} id="sign-out-form" action={~p"/session"} method="delete">
-    <button type="submit" class="btn btn-ghost">Sign out</button>
-  </.form>
 </section>

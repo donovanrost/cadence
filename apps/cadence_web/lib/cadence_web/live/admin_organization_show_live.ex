@@ -12,6 +12,7 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
         {:ok,
          socket
          |> assign(:page_title, organization.display_name)
+         |> assign(:nav_item, :admin_organizations)
          |> assign(:organization, organization)
          |> assign(:members, members)
          |> assign(:invitations, invitations)}
