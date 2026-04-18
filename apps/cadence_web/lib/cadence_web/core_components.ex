@@ -68,4 +68,42 @@ defmodule CadenceWeb.CoreComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders a vertical ellipsis action menu for table rows and card actions.
+
+  Uses daisyUI's dropdown pattern with the HUD-styled dropdown-content
+  (sharp corners, cyan border, backdrop blur — from component-overrides.css).
+  Each action is a slot that receives the row item and renders as a menu item.
+
+  ## Examples
+
+      <.action_menu>
+        <:action>
+          <.link navigate={~p"/things/\#{thing.id}"}>View</.link>
+        </:action>
+        <:action>
+          <button phx-click="delete" phx-value-id={thing.id}
+            data-confirm="Are you sure?">Delete</button>
+        </:action>
+      </.action_menu>
+  """
+  attr :class, :string, default: nil
+  slot :action, required: true
+
+  def action_menu(assigns) do
+    ~H"""
+    <div class={["dropdown dropdown-end", @class]}>
+      <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
+        <span class="hero-ellipsis-vertical h-5 w-5"></span>
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu bg-base-200 z-[100] w-52 p-2 shadow-lg border border-primary/20"
+      >
+        <li :for={action <- @action}>{render_slot(action)}</li>
+      </ul>
+    </div>
+    """
+  end
 end

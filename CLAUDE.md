@@ -20,6 +20,8 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 5. **No file over 400 lines.** If approaching this, split by concern before continuing.
 
+6. **Table row actions use `<.action_menu>`, not inline buttons.** The component renders a vertical ellipsis that opens a dropdown menu. Never put multiple action buttons directly in a table cell.
+
 ## Architecture quick reference
 
 **Domain layering:** `Cadence` facade → `Cadence.Auth` → `Cadence.Accounts`. Controllers/LiveViews call the facade.
