@@ -2,9 +2,10 @@ defmodule Cadence.AccountsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Accounts
-  alias Cadence.Accounts.{Password, User}
+  alias Cadence.Accounts.{OrganizationMembership, Password, User}
   alias Cadence.Ids
-  alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
+  alias Cadence.Organizations.Organization
+  alias Cadence.Persistence.Schemas.{OrganizationMembershipRow, UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
 
   @bootstrap_admin_email "bootstrap-admin@example.com"
@@ -110,6 +111,45 @@ defmodule Cadence.AccountsTest do
     end
   end
 
+  describe "list_user_memberships/1" do
+    test "returns active memberships with organizations, ordered by organization display_name" do
+      user = persist_user!()
+      org_b = persist_organization!(display_name: "Beta Space")
+      org_a = persist_organization!(display_name: "Alpha Space")
+      grant_membership!(user, org_a)
+      grant_membership!(user, org_b)
+
+      result = Cadence.Accounts.list_user_memberships(user.user_id)
+
+      assert [
+               %{membership: m1, organization: %{display_name: "Alpha Space"}},
+               %{membership: m2, organization: %{display_name: "Beta Space"}}
+             ] = result
+
+      assert m1.user_id == user.user_id
+      assert m2.user_id == user.user_id
+      assert m1.lifecycle_state == :active
+      assert m2.lifecycle_state == :active
+    end
+
+    test "excludes revoked memberships" do
+      user = persist_user!()
+      org_active = persist_organization!(display_name: "Active Co")
+      org_revoked = persist_organization!(display_name: "Revoked Co")
+      grant_membership!(user, org_active)
+      grant_membership!(user, org_revoked, lifecycle_state: :revoked)
+
+      result = Cadence.Accounts.list_user_memberships(user.user_id)
+
+      assert [%{organization: %{display_name: "Active Co"}}] = result
+    end
+
+    test "returns empty list for a user with no memberships" do
+      user = persist_user!()
+      assert Cadence.Accounts.list_user_memberships(user.user_id) == []
+    end
+  end
+
   ## Fixtures
 
   defp enable_bootstrap_admin! do
@@ -183,5 +223,52 @@ defmodule Cadence.AccountsTest do
 
     # Ensure the bootstrap admin user is confirmed for the durable path.
     Repo.update!(UserRow.update_changeset(user_row, %{confirmed_at: DateTime.utc_now()}))
+  end
+
+  defp persist_user!(opts \\ []) do
+    email = Keyword.get(opts, :email, "user-#{System.unique_integer([:positive])}@example.com")
+    display_name = Keyword.get(opts, :display_name, "Test User")
+
+    user =
+      User.new(%{
+        email: email,
+        display_name: display_name,
+        confirmed_at: DateTime.utc_now(),
+        lifecycle_state: :active
+      })
+
+    {:ok, _row} = Repo.insert(UserRow.changeset(user))
+
+    user
+  end
+
+  defp persist_organization!(opts) when is_list(opts) do
+    display_name = Keyword.fetch!(opts, :display_name)
+
+    slug =
+      Keyword.get(opts, :slug, "org-#{System.unique_integer([:positive])}")
+
+    organization =
+      Organization.new(%{
+        display_name: display_name,
+        slug: slug
+      })
+
+    {:ok, persisted_organization} = Cadence.persist_organization(organization)
+    persisted_organization
+  end
+
+  defp grant_membership!(user, organization, opts \\ []) do
+    membership =
+      OrganizationMembership.new(%{
+        user_id: user.user_id,
+        organization_id: organization.organization_id,
+        role: Keyword.get(opts, :role, :member),
+        lifecycle_state: Keyword.get(opts, :lifecycle_state, :active)
+      })
+
+    {:ok, _row} = Repo.insert(OrganizationMembershipRow.changeset(membership))
+
+    membership
   end
 end

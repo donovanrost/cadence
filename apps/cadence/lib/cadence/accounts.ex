@@ -17,6 +17,7 @@ defmodule Cadence.Accounts do
   alias Cadence.Persistence.Schemas.{
     OrganizationInvitationRow,
     OrganizationMembershipRow,
+    OrganizationRow,
     UserLocalCredentialRow,
     UserRow,
     UserSessionTokenRow
@@ -247,6 +248,33 @@ defmodule Cadence.Accounts do
           nil -> {:ok, nil}
         end
     end
+  end
+
+  @spec list_user_memberships(binary()) :: [
+          %{
+            membership: OrganizationMembership.t(),
+            organization: Cadence.Organizations.Organization.t()
+          }
+        ]
+  def list_user_memberships(user_id) when is_binary(user_id) do
+    OrganizationMembershipRow
+    |> where(
+      [membership_row],
+      membership_row.user_id == ^user_id and
+        membership_row.lifecycle_state == ^Atom.to_string(:active)
+    )
+    |> join(:inner, [membership_row], organization_row in OrganizationRow,
+      on: membership_row.organization_id == organization_row.organization_id
+    )
+    |> order_by([_membership_row, organization_row], asc: organization_row.display_name)
+    |> select([membership_row, organization_row], {membership_row, organization_row})
+    |> Repo.all()
+    |> Enum.map(fn {membership_row, organization_row} ->
+      %{
+        membership: OrganizationMembershipRow.to_domain(membership_row),
+        organization: OrganizationRow.to_domain(organization_row)
+      }
+    end)
   end
 
   @spec list_organization_members(binary()) :: [
