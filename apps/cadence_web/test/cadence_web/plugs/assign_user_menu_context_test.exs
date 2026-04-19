@@ -2,6 +2,7 @@ defmodule CadenceWeb.Plugs.AssignUserMenuContextTest do
   use CadenceWeb.ConnCase, async: false
 
   alias CadenceWeb.Plugs.AssignUserMenuContext
+  alias CadenceWeb.Plugs.FetchBrowserCurrentScope
   alias CadenceWeb.TestFixtures
 
   describe "call/2" do
@@ -19,7 +20,7 @@ defmodule CadenceWeb.Plugs.AssignUserMenuContextTest do
       _ = TestFixtures.grant_membership!(user, org)
 
       conn = TestFixtures.member_conn(user)
-      conn = CadenceWeb.Plugs.FetchBrowserCurrentScope.call(conn, [])
+      conn = FetchBrowserCurrentScope.call(conn, [])
 
       updated = AssignUserMenuContext.call(conn, [])
 
@@ -32,7 +33,7 @@ defmodule CadenceWeb.Plugs.AssignUserMenuContextTest do
       user = TestFixtures.persist_user!(capabilities: [:platform_admin])
 
       conn = TestFixtures.member_conn(user)
-      conn = CadenceWeb.Plugs.FetchBrowserCurrentScope.call(conn, [])
+      conn = FetchBrowserCurrentScope.call(conn, [])
 
       updated = AssignUserMenuContext.call(conn, [])
 

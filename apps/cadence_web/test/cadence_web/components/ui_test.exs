@@ -3,6 +3,8 @@ defmodule CadenceWeb.UITest do
 
   import Phoenix.LiveViewTest
 
+  alias Cadence.Accounts.User
+  alias Cadence.Organizations.Organization
   alias CadenceWeb.UI
 
   defp scope(user, organization \\ nil) do
@@ -10,7 +12,7 @@ defmodule CadenceWeb.UITest do
   end
 
   defp user_fixture(attrs \\ %{}) do
-    Cadence.Accounts.User.new(
+    User.new(
       Map.merge(
         %{
           email: "jane@example.com",
@@ -22,7 +24,7 @@ defmodule CadenceWeb.UITest do
   end
 
   defp org_fixture(attrs) do
-    Cadence.Organizations.Organization.new(
+    Organization.new(
       Map.merge(
         %{
           display_name: "Acme Space",
