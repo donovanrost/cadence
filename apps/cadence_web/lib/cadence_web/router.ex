@@ -48,10 +48,15 @@ defmodule CadenceWeb.Router do
   scope "/", CadenceWeb do
     pipe_through [:browser, :require_authenticated_scope]
 
-    get "/", OperatorEntryController, :show
     get "/operator", OperatorHomeController, :show
     delete "/session", UserSessionController, :delete
     get "/no-organization", NoOrganizationController, :show
+
+    live_session :organization,
+      on_mount: [{CadenceWeb.OrganizationAuth, :require_organization_scope}],
+      layout: {CadenceWeb.Layouts, :sidebar} do
+      live "/", OrganizationHomeLive, :show
+    end
 
     live_session :admin,
       on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],

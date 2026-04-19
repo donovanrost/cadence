@@ -5,19 +5,19 @@ defmodule CadenceWeb.AuthenticatedEntry do
   alias Cadence.Auth.Scope
 
   @admin_path "/admin"
-  @operator_path "/operator"
+  @organization_path "/"
 
   @spec entry_path(Scope.t() | User.t()) :: binary()
   def entry_path(%Scope{} = scope) do
     if MapSet.member?(scope.capabilities, :platform_admin),
       do: @admin_path,
-      else: @operator_path
+      else: @organization_path
   end
 
   def entry_path(%User{} = user) do
     if :platform_admin in user.capabilities,
       do: @admin_path,
-      else: @operator_path
+      else: @organization_path
   end
 
   @spec redirect_path(binary() | nil, Scope.t() | User.t()) :: binary()
@@ -30,7 +30,6 @@ defmodule CadenceWeb.AuthenticatedEntry do
   defp entry_route?(path) when is_binary(path) do
     exact_or_query_path?(path, "/") or
       exact_or_query_path?(path, "/sign-in") or
-      exact_or_query_path?(path, @operator_path) or
       exact_or_query_path?(path, @admin_path)
   end
 

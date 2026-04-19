@@ -62,16 +62,17 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(conn) == "/admin"
   end
 
-  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
+  test "platform admin without org membership visiting / is redirected to /no-organization",
+       %{conn: conn} do
     root_conn =
       conn
       |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
       |> get("/")
 
-    assert redirected_to(root_conn) == "/admin"
+    assert redirected_to(root_conn) == "/no-organization"
   end
 
-  test "durable user sign-in reaches operator home", %{conn: _conn} do
+  test "durable user sign-in reaches the organization home", %{conn: _conn} do
     durable_password = "durable-password-123"
     persist_durable_user!(email: "ops-lead@example.com", password: durable_password)
 
@@ -95,20 +96,10 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    assert redirected_to(durable_conn) == "/operator"
-
-    response =
-      durable_conn
-      |> recycle()
-      |> get("/operator")
-      |> html_response(200)
-
-    assert response =~ "operator-home"
-    assert response =~ "ops-lead@example.com"
-    assert response =~ "Cadence Operations"
+    assert redirected_to(durable_conn) == "/"
   end
 
-  test "invitation acceptance creates a durable session and routes to operator", %{conn: _conn} do
+  test "invitation acceptance creates a durable session and routes to org home", %{conn: _conn} do
     org = Organization.new(%{display_name: "Cadence Operations", slug: "cadence-operations"})
     assert {:ok, persisted_org} = Cadence.persist_organization(org)
 
@@ -151,17 +142,7 @@ defmodule CadenceWeb.BrowserShellTest do
         }
       })
 
-    assert redirected_to(accepted_conn) == "/operator"
-
-    operator_response =
-      accepted_conn
-      |> recycle()
-      |> get("/operator")
-      |> html_response(200)
-
-    assert operator_response =~ "operator-home"
-    assert operator_response =~ "New Admin"
-    assert operator_response =~ "Cadence Operations"
+    assert redirected_to(accepted_conn) == "/"
   end
 
   test "invalid credentials redirect back to /sign-in with a flash error", %{conn: conn} do

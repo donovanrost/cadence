@@ -45,7 +45,7 @@ defmodule CadenceWeb.AdminLiveTest do
       assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), ~p"/admin")
     end
 
-    test "non-admin user is redirected to /operator" do
+    test "non-admin user is redirected to /" do
       durable_password = "durable-password-123"
 
       persist_durable_user!(
@@ -57,7 +57,7 @@ defmodule CadenceWeb.AdminLiveTest do
       {:ok, session} = Cadence.sign_in("regular@example.com", durable_password)
       conn = build_conn() |> init_test_session(%{user_session_token: session.session_token})
 
-      assert {:error, {:redirect, %{to: "/operator"}}} = live(conn, ~p"/admin")
+      assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin")
     end
 
     test "platform admin can access the dashboard" do

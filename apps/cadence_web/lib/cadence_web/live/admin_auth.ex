@@ -14,7 +14,7 @@ defmodule CadenceWeb.AdminAuth do
         if MapSet.member?(scope.capabilities, :platform_admin) do
           {:cont, assign(socket, :nav_context, :admin)}
         else
-          {:halt, redirect(socket, to: "/operator")}
+          {:halt, redirect(socket, to: "/")}
         end
 
       _other ->
