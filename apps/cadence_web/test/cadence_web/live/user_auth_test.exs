@@ -37,4 +37,53 @@ defmodule CadenceWeb.UserAuthTest do
       assert socket.redirected == {:redirect, %{to: "/sign-in", status: 302}}
     end
   end
+
+  describe "on_mount(:attach_user_menu, ...)" do
+    test "assigns empty memberships and platform_admin? false when no user in scope" do
+      socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_scope: nil}}
+
+      assert {:cont, updated} =
+               CadenceWeb.UserAuth.on_mount(:attach_user_menu, %{}, %{}, socket)
+
+      assert updated.assigns.user_menu_memberships == []
+      assert updated.assigns.user_menu_platform_admin? == false
+    end
+
+    test "assigns memberships for an authenticated user" do
+      user = CadenceWeb.TestFixtures.persist_user!()
+      org = CadenceWeb.TestFixtures.persist_org!(display_name: "Memberships Co")
+      _ = CadenceWeb.TestFixtures.grant_membership!(user, org)
+
+      {:ok, scope} =
+        Cadence.authenticate_api_token(CadenceWeb.TestFixtures.member_session_token!(user))
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, current_scope: scope}
+      }
+
+      assert {:cont, updated} =
+               CadenceWeb.UserAuth.on_mount(:attach_user_menu, %{}, %{}, socket)
+
+      assert [%{membership: membership, organization: loaded_org}] =
+               updated.assigns.user_menu_memberships
+
+      assert membership.user_id == user.user_id
+      assert loaded_org.organization_id == org.organization_id
+      assert updated.assigns.user_menu_platform_admin? == false
+    end
+
+    test "sets platform_admin? true when user scope includes :platform_admin capability" do
+      user = CadenceWeb.TestFixtures.persist_user!(capabilities: [:platform_admin])
+
+      {:ok, scope} =
+        Cadence.authenticate_api_token(CadenceWeb.TestFixtures.member_session_token!(user))
+
+      socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_scope: scope}}
+
+      assert {:cont, updated} =
+               CadenceWeb.UserAuth.on_mount(:attach_user_menu, %{}, %{}, socket)
+
+      assert updated.assigns.user_menu_platform_admin? == true
+    end
+  end
 end
