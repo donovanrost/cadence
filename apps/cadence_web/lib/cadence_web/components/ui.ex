@@ -132,41 +132,7 @@ defmodule CadenceWeb.UI do
           <p class="text-xs text-base-content/50 truncate">{@scope.user.email}</p>
         </li>
 
-        <%= if @scope.organization do %>
-          <li role="presentation" class="border-t border-primary/10 mt-1 pt-1">
-            <span class="hud-label text-base-content/60 px-3 py-1 block">ORGANIZATION</span>
-            <%= if length(@memberships) > 1 do %>
-              <details class="group">
-                <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-sm text-base-content list-none">
-                  <span class="truncate">{@scope.organization.display_name}</span>
-                  <span class="hero-chevron-down h-3 w-3 opacity-60 transition-transform group-open:rotate-180"></span>
-                </summary>
-                <ul class="mt-1 space-y-0.5">
-                  <li
-                    :for={%{organization: other} <- @memberships}
-                    :if={other.organization_id != @scope.organization.organization_id}
-                    role="presentation"
-                  >
-                    <.form for={%{}} as={:session} action={~p"/session/organization"} method="put">
-                      <input type="hidden" name="organization_id" value={other.organization_id} />
-                      <button
-                        type="submit"
-                        role="menuitem"
-                        class="flex w-full items-center gap-2 px-3 py-2 text-xs text-base-content/70 hover:text-primary"
-                      >
-                        <span class="truncate">{other.display_name}</span>
-                      </button>
-                    </.form>
-                  </li>
-                </ul>
-              </details>
-            <% else %>
-              <p class="px-3 py-2 text-sm text-base-content truncate">
-                {@scope.organization.display_name}
-              </p>
-            <% end %>
-          </li>
-        <% end %>
+        <.user_menu_org_block scope={@scope} memberships={@memberships} />
 
         <li role="presentation" class="border-t border-primary/10 mt-1 pt-1">
           <.form for={%{}} as={:session} action={~p"/session"} method="delete">
@@ -182,6 +148,47 @@ defmodule CadenceWeb.UI do
         </li>
       </div>
     </div>
+    """
+  end
+
+  attr :scope, :any, required: true
+  attr :memberships, :list, required: true
+
+  defp user_menu_org_block(assigns) do
+    ~H"""
+    <li :if={@scope.organization} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
+      <span class="hud-label text-base-content/60 px-3 py-1 block">ORGANIZATION</span>
+      <%= if length(@memberships) > 1 do %>
+        <details class="group">
+          <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-sm text-base-content list-none">
+            <span class="truncate">{@scope.organization.display_name}</span>
+            <span class="hero-chevron-down h-3 w-3 opacity-60 transition-transform group-open:rotate-180"></span>
+          </summary>
+          <ul class="mt-1 space-y-0.5">
+            <li
+              :for={%{organization: other} <- @memberships}
+              :if={other.organization_id != @scope.organization.organization_id}
+              role="presentation"
+            >
+              <.form for={%{}} as={:session} action={~p"/session/organization"} method="put">
+                <input type="hidden" name="organization_id" value={other.organization_id} />
+                <button
+                  type="submit"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2 px-3 py-2 text-xs text-base-content/70 hover:text-primary"
+                >
+                  <span class="truncate">{other.display_name}</span>
+                </button>
+              </.form>
+            </li>
+          </ul>
+        </details>
+      <% else %>
+        <p class="px-3 py-2 text-sm text-base-content truncate">
+          {@scope.organization.display_name}
+        </p>
+      <% end %>
+    </li>
     """
   end
 end

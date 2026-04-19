@@ -21,7 +21,7 @@ defmodule CadenceWeb.UITest do
     )
   end
 
-  defp org_fixture(attrs \\ %{}) do
+  defp org_fixture(attrs) do
     Cadence.Organizations.Organization.new(
       Map.merge(
         %{
