@@ -9,6 +9,7 @@ defmodule CadenceWeb.Router do
     plug :protect_from_forgery
     plug :put_secure_browser_headers
     plug CadenceWeb.Plugs.FetchBrowserCurrentScope
+    plug CadenceWeb.Plugs.AssignUserMenuContext
   end
 
   pipeline :redirect_if_authenticated_scope do
@@ -53,7 +54,10 @@ defmodule CadenceWeb.Router do
     get "/no-organization", NoOrganizationController, :show
 
     live_session :organization,
-      on_mount: [{CadenceWeb.OrganizationAuth, :require_organization_scope}],
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
       layout: {CadenceWeb.Layouts, :sidebar} do
       live "/", OrganizationHomeLive, :show
       live "/missions", MissionListLive, :index
@@ -63,7 +67,8 @@ defmodule CadenceWeb.Router do
     live_session :mission,
       on_mount: [
         {CadenceWeb.OrganizationAuth, :require_organization_scope},
-        {CadenceWeb.MissionAuth, :load_mission}
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.UserAuth, :attach_user_menu}
       ],
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id", MissionShowLive, :show
@@ -72,14 +77,18 @@ defmodule CadenceWeb.Router do
     live_session :user,
       on_mount: [
         {CadenceWeb.UserAuth, :require_user_scope},
-        {CadenceWeb.UserAuth, :attach_notifications_bell}
+        {CadenceWeb.UserAuth, :attach_notifications_bell},
+        {CadenceWeb.UserAuth, :attach_user_menu}
       ],
       layout: {CadenceWeb.Layouts, :user_shell} do
       live "/notifications", NotificationsLive, :index
     end
 
     live_session :admin,
-      on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],
+      on_mount: [
+        {CadenceWeb.AdminAuth, :require_platform_admin},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
       layout: {CadenceWeb.Layouts, :sidebar} do
       live "/admin", AdminHomeLive, :index
       live "/admin/organizations", AdminOrganizationListLive, :index
