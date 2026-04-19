@@ -58,6 +58,14 @@ defmodule CadenceWeb.Router do
       live "/", OrganizationHomeLive, :show
       live "/missions", MissionListLive, :index
       live "/missions/new", MissionNewLive, :new
+    end
+
+    live_session :mission,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission}
+      ],
+      layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id", MissionShowLive, :show
     end
 

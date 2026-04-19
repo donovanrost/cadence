@@ -1,9 +1,12 @@
 defmodule CadenceWeb.MissionNewLive do
-  @moduledoc false
+  @moduledoc """
+  LiveView for creating a new mission.
 
-  # TODO(authz): Any active organization member can create a mission. This gate
-  # should tighten once platform-wide authorization is defined (likely to the
-  # :organization_admin role, possibly a finer capability).
+  Authorization note: any active organization member can currently create a
+  mission. This gate should tighten once platform-wide authorization is defined
+  (likely to the :organization_admin role, possibly a finer capability).
+  """
+
   use CadenceWeb, :live_view
 
   alias Cadence.Missions.Mission
