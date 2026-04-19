@@ -206,6 +206,23 @@ defmodule Cadence do
     Accounts.list_organization_members(organization_id)
   end
 
+  @spec list_user_memberships(binary()) :: [
+          %{
+            membership: Cadence.Accounts.OrganizationMembership.t(),
+            organization: Cadence.Organizations.Organization.t()
+          }
+        ]
+  def list_user_memberships(user_id) when is_binary(user_id) do
+    Accounts.list_user_memberships(user_id)
+  end
+
+  @spec fetch_user_membership(binary(), binary()) ::
+          {:ok, Cadence.Accounts.OrganizationMembership.t()} | {:error, :not_found}
+  def fetch_user_membership(user_id, organization_id)
+      when is_binary(user_id) and is_binary(organization_id) do
+    Accounts.fetch_user_membership(user_id, organization_id)
+  end
+
   @spec list_pending_invitations(binary()) :: [map()]
   def list_pending_invitations(organization_id) when is_binary(organization_id) do
     Accounts.list_pending_invitations(organization_id)
