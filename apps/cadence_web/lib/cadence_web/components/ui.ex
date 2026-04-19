@@ -100,4 +100,52 @@ defmodule CadenceWeb.UI do
 
   defp format_count(n) when n > 9, do: "9+"
   defp format_count(n), do: Integer.to_string(n)
+
+  @doc """
+  Top-right user menu — trigger plus popover panel with identity, org context,
+  platform-admin shortcut (when applicable), and sign out.
+
+  Attrs:
+    * `scope` — `%Cadence.Auth.Scope{}` with `:user` and optional `:organization`
+    * `memberships` — list of `%{membership: OrganizationMembership.t(), organization: Organization.t()}`
+    * `platform_admin?` — boolean
+  """
+  attr :scope, :any, required: true
+  attr :memberships, :list, default: []
+  attr :platform_admin?, :boolean, default: false
+
+  def user_menu(assigns) do
+    ~H"""
+    <div class="dropdown dropdown-end">
+      <button type="button" tabindex="0" class="btn btn-ghost btn-sm gap-1" aria-haspopup="menu">
+        <span class="text-xs text-base-content/60">{@scope.user.display_name}</span>
+        <span class="hero-chevron-down h-3 w-3 opacity-60 transition-transform"></span>
+      </button>
+
+      <div
+        tabindex="0"
+        role="menu"
+        class="dropdown-content menu bg-base-200 z-[100] w-72 p-2 shadow-lg border border-primary/20"
+      >
+        <li role="presentation" class="px-3 py-2">
+          <p class="text-sm font-semibold text-base-content">{@scope.user.display_name}</p>
+          <p class="text-xs text-base-content/50 truncate">{@scope.user.email}</p>
+        </li>
+
+        <li role="presentation" class="border-t border-primary/10 mt-1 pt-1">
+          <.form for={%{}} as={:session} action={~p"/session"} method="delete">
+            <button
+              type="submit"
+              role="menuitem"
+              class="flex w-full items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/70 hover:text-primary"
+            >
+              <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+              Sign out
+            </button>
+          </.form>
+        </li>
+      </div>
+    </div>
+    """
+  end
 end
