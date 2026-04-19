@@ -45,6 +45,28 @@ defmodule CadenceWeb.OrganizationAuthTest do
       assert socket.redirected == {:redirect, %{to: "/no-organization", status: 302}}
     end
 
+    test "redirects platform admin to /admin even without org membership" do
+      user =
+        CadenceWeb.TestFixtures.persist_user!(
+          email: "admin-#{System.unique_integer([:positive])}@example.com",
+          capabilities: [:platform_admin]
+        )
+
+      token = CadenceWeb.TestFixtures.member_session_token!(user)
+
+      session = %{"user_session_token" => token}
+
+      assert {:halt, socket} =
+               CadenceWeb.OrganizationAuth.on_mount(
+                 :require_organization_scope,
+                 %{},
+                 session,
+                 %Phoenix.LiveView.Socket{}
+               )
+
+      assert socket.redirected == {:redirect, %{to: "/admin", status: 302}}
+    end
+
     test "redirects to /sign-in when there is no session token" do
       session = %{}
 

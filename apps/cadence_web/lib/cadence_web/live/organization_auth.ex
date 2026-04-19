@@ -10,11 +10,17 @@ defmodule CadenceWeb.OrganizationAuth do
     socket = assign_scope_from_session(socket, session)
 
     case socket.assigns[:current_scope] do
-      %Scope{organization_membership: %_{} = _membership} ->
-        {:cont, assign(socket, :nav_context, :organization)}
+      %Scope{capabilities: capabilities} = scope ->
+        cond do
+          MapSet.member?(capabilities, :platform_admin) ->
+            {:halt, redirect(socket, to: "/admin")}
 
-      %Scope{} ->
-        {:halt, redirect(socket, to: "/no-organization")}
+          scope.organization_membership != nil ->
+            {:cont, assign(socket, :nav_context, :organization)}
+
+          true ->
+            {:halt, redirect(socket, to: "/no-organization")}
+        end
 
       _other ->
         {:halt, redirect(socket, to: "/sign-in")}

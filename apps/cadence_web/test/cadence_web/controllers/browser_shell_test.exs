@@ -62,14 +62,13 @@ defmodule CadenceWeb.BrowserShellTest do
     assert redirected_to(conn) == "/admin"
   end
 
-  test "platform admin without org membership visiting / is redirected to /no-organization",
-       %{conn: conn} do
+  test "platform admin root redirect routes to admin dashboard", %{conn: conn} do
     root_conn =
       conn
       |> init_test_session(%{user_session_token: bootstrap_admin_session_token()})
       |> get("/")
 
-    assert redirected_to(root_conn) == "/no-organization"
+    assert redirected_to(root_conn) == "/admin"
   end
 
   test "durable user sign-in reaches the organization home", %{conn: _conn} do

@@ -46,5 +46,17 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
 
       assert {:error, {:redirect, %{to: "/no-organization"}}} = live(conn, ~p"/")
     end
+
+    test "redirects platform admin to /admin even from /" do
+      user =
+        TestFixtures.persist_user!(
+          email: "admin-root@example.com",
+          capabilities: [:platform_admin]
+        )
+
+      conn = TestFixtures.member_conn(user)
+
+      assert {:error, {:redirect, %{to: "/admin"}}} = live(conn, ~p"/")
+    end
   end
 end
