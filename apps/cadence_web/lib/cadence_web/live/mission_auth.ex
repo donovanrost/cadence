@@ -12,7 +12,8 @@ defmodule CadenceWeb.MissionAuth do
         {:cont,
          socket
          |> assign(:current_mission, mission)
-         |> assign(:nav_context, :mission)}
+         |> assign(:nav_context, :mission)
+         |> CadenceWeb.NotificationsBell.attach()}
 
       {:error, _reason} ->
         {:halt,

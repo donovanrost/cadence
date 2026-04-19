@@ -26,6 +26,8 @@ defmodule CadenceWeb.OrganizationAuthTest do
 
       assert socket.assigns.nav_context == :organization
       assert %Scope{organization: %{slug: "cadence-ops"}} = socket.assigns.current_scope
+      assert socket.assigns.unread_notifications_count == 0
+      assert socket.assigns.recent_notifications == []
     end
 
     test "redirects to /no-organization when the scope has no membership" do

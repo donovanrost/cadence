@@ -13,7 +13,10 @@ defmodule CadenceWeb.AdminAuth do
     case socket.assigns[:current_scope] do
       %Scope{} = scope ->
         if MapSet.member?(scope.capabilities, :platform_admin) do
-          {:cont, assign(socket, :nav_context, :admin)}
+          {:cont,
+           socket
+           |> assign(:nav_context, :admin)
+           |> CadenceWeb.NotificationsBell.attach()}
         else
           {:halt, redirect(socket, to: "/")}
         end

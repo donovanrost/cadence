@@ -18,18 +18,22 @@ defmodule CadenceWeb.NotificationsBell do
   @spec attach(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def attach(%{assigns: %{current_scope: %{user: %{user_id: user_id}}}} = socket)
       when is_binary(user_id) do
-    if Phoenix.LiveView.connected?(socket) do
-      Notifications.subscribe(user_id)
-
+    if already_attached?(socket) do
       socket
-      |> assign_counts(user_id)
-      |> Phoenix.LiveView.attach_hook(
-        :notifications_bell,
-        :handle_info,
-        &handle_notifications_event/2
-      )
     else
-      assign_counts(socket, user_id)
+      if Phoenix.LiveView.connected?(socket) do
+        Notifications.subscribe(user_id)
+
+        socket
+        |> assign_counts(user_id)
+        |> Phoenix.LiveView.attach_hook(
+          :notifications_bell,
+          :handle_info,
+          &handle_notifications_event/2
+        )
+      else
+        assign_counts(socket, user_id)
+      end
     end
   end
 
@@ -37,6 +41,10 @@ defmodule CadenceWeb.NotificationsBell do
     socket
     |> assign(:unread_notifications_count, 0)
     |> assign(:recent_notifications, [])
+  end
+
+  defp already_attached?(socket) do
+    Map.has_key?(socket.assigns, :unread_notifications_count)
   end
 
   defp assign_counts(socket, user_id) do

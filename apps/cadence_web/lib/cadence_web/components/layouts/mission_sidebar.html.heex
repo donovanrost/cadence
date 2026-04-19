@@ -9,6 +9,10 @@
       <div class="flex-1 text-center font-semibold text-sm tracking-wider uppercase">Cadence</div>
       <div class="flex items-center gap-2">
         <%= if @current_scope && @current_scope.user do %>
+          <.notifications_bell
+            count={assigns[:unread_notifications_count] || 0}
+            notifications={assigns[:recent_notifications] || []}
+          />
           <span class="text-xs text-base-content/60">{@current_scope.user.email}</span>
         <% end %>
       </div>
@@ -16,6 +20,10 @@
 
     <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
       <%= if @current_scope && @current_scope.user do %>
+        <.notifications_bell
+          count={assigns[:unread_notifications_count] || 0}
+          notifications={assigns[:recent_notifications] || []}
+        />
         <span class="text-xs text-base-content/60">{@current_scope.user.display_name}</span>
         <span class="text-xs text-base-content/40">({@current_scope.user.email})</span>
       <% end %>
