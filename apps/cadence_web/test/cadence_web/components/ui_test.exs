@@ -123,5 +123,28 @@ defmodule CadenceWeb.UITest do
       assert html =~ ~s|value="#{other_org.organization_id}"|
       refute html =~ ~s|value="#{current_org.organization_id}"|
     end
+
+    test "does not render the system administration link when platform_admin? is false" do
+      html =
+        render_component(&UI.user_menu/1,
+          scope: scope(user_fixture()),
+          memberships: [],
+          platform_admin?: false
+        )
+
+      refute html =~ "System administration"
+    end
+
+    test "renders the system administration link when platform_admin? is true" do
+      html =
+        render_component(&UI.user_menu/1,
+          scope: scope(user_fixture()),
+          memberships: [],
+          platform_admin?: true
+        )
+
+      assert html =~ "System administration"
+      assert html =~ ~s|href="/admin"|
+    end
   end
 end

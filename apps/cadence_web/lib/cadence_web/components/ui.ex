@@ -134,6 +134,17 @@ defmodule CadenceWeb.UI do
 
         <.user_menu_org_block scope={@scope} memberships={@memberships} />
 
+        <li :if={@platform_admin?} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
+          <.link
+            navigate={~p"/admin"}
+            role="menuitem"
+            class="flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase text-base-content/70 hover:text-primary"
+          >
+            <span class="hero-cog-6-tooth h-4 w-4 opacity-80"></span>
+            System administration
+          </.link>
+        </li>
+
         <li role="presentation" class="border-t border-primary/10 mt-1 pt-1">
           <.form for={%{}} as={:session} action={~p"/session"} method="delete">
             <button
