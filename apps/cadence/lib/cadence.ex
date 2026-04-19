@@ -60,6 +60,8 @@ defmodule Cadence do
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Missions
   alias Cadence.Missions.Mission
+  alias Cadence.Notifications
+  alias Cadence.Notifications.Notification
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.Persistence
@@ -224,6 +226,27 @@ defmodule Cadence do
   def list_missions(organization_id) when is_binary(organization_id) do
     Missions.list_missions(organization_id)
   end
+
+  @spec persist_notification(Notification.t()) :: {:ok, Notification.t()} | {:error, term()}
+  def persist_notification(%Notification{} = n), do: Notifications.persist_notification(n)
+
+  @spec fetch_notification(binary()) :: {:ok, Notification.t()} | {:error, :not_found}
+  def fetch_notification(notification_id) when is_binary(notification_id),
+    do: Notifications.fetch_notification(notification_id)
+
+  @spec list_notifications(binary(), keyword()) :: [Notification.t()]
+  def list_notifications(user_id, opts \\ []) when is_binary(user_id),
+    do: Notifications.list_notifications(user_id, opts)
+
+  @spec count_unread_notifications(binary()) :: non_neg_integer()
+  def count_unread_notifications(user_id) when is_binary(user_id),
+    do: Notifications.count_unread_notifications(user_id)
+
+  @spec mark_notification_read(binary(), binary()) ::
+          {:ok, Notification.t()} | {:error, term()}
+  def mark_notification_read(notification_id, user_id)
+      when is_binary(notification_id) and is_binary(user_id),
+      do: Notifications.mark_notification_read(notification_id, user_id)
 
   @spec persist_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def persist_spacecraft(organization_id, %Spacecraft{} = spacecraft)

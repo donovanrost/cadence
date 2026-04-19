@@ -34,6 +34,7 @@ defmodule Cadence.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
+      {:phoenix_pubsub, "~> 2.1"},
       {:postgrex, ">= 0.0.0"},
       {:req, "~> 0.5"},
       {:yaml_elixir, "~> 2.12"}

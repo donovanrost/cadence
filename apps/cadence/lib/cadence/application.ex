@@ -12,7 +12,7 @@ defmodule Cadence.Application do
   @impl true
   def start(_type, _args) do
     children =
-      [Cadence.Repo, Cadence.Telemetry.Profiler] ++
+      [Cadence.Repo, {Phoenix.PubSub, name: Cadence.PubSub}, Cadence.Telemetry.Profiler] ++
         ingress_archive_children() ++
         protocol_record_archive_children() ++
         telemetry_backend_children() ++
