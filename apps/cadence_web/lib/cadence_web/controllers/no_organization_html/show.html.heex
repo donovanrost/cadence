@@ -1,0 +1,13 @@
+<div class="space-y-4 text-center">
+  <h1 class="text-xl font-bold text-base-content">No organization access</h1>
+  <p class="text-sm text-base-content/70">
+    You don&#39;t have access to any organization yet.
+    Ask an administrator for an invitation.
+  </p>
+  <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
+    <button type="submit" class="btn btn-ghost btn-sm w-full gap-2 text-xs uppercase tracking-wide">
+      <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+      Sign out
+    </button>
+  </.form>
+</div>

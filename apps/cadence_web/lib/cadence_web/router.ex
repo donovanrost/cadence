@@ -51,6 +51,7 @@ defmodule CadenceWeb.Router do
     get "/", OperatorEntryController, :show
     get "/operator", OperatorHomeController, :show
     delete "/session", UserSessionController, :delete
+    get "/no-organization", NoOrganizationController, :show
 
     live_session :admin,
       on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],
