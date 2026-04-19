@@ -118,7 +118,7 @@ defmodule CadenceWeb.UI do
     ~H"""
     <div class="dropdown dropdown-end">
       <button type="button" tabindex="0" class="btn btn-ghost btn-sm gap-1" aria-haspopup="menu">
-        <span class="text-xs text-base-content/60">{@scope.user.display_name}</span>
+        <span class="text-xs text-base-content/60">{display_label(@scope.user)}</span>
         <span class="hero-chevron-down h-3 w-3 opacity-60 transition-transform"></span>
       </button>
 
@@ -128,8 +128,13 @@ defmodule CadenceWeb.UI do
         class="dropdown-content menu bg-base-200 z-[100] w-72 p-2 shadow-lg border border-primary/20"
       >
         <li role="presentation" class="px-3 py-2">
-          <p class="text-sm font-semibold text-base-content">{@scope.user.display_name}</p>
-          <p class="text-xs text-base-content/50 truncate">{@scope.user.email}</p>
+          <p class="text-sm font-semibold text-base-content">{display_label(@scope.user)}</p>
+          <p
+            :if={@scope.user.display_name not in [nil, ""]}
+            class="text-xs text-base-content/50 truncate"
+          >
+            {@scope.user.email}
+          </p>
         </li>
 
         <.user_menu_org_block scope={@scope} memberships={@memberships} />
@@ -202,4 +207,7 @@ defmodule CadenceWeb.UI do
     </li>
     """
   end
+
+  defp display_label(%{display_name: name, email: email}) when name in [nil, ""], do: email
+  defp display_label(%{display_name: name}), do: name
 end

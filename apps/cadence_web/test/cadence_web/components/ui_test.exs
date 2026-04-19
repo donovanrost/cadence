@@ -148,5 +148,30 @@ defmodule CadenceWeb.UITest do
       assert html =~ "System administration"
       assert html =~ ~s|href="/admin"|
     end
+
+    test "identity block falls back to email when display_name is blank" do
+      html =
+        render_component(&UI.user_menu/1,
+          scope: scope(user_fixture(%{display_name: ""})),
+          memberships: [],
+          platform_admin?: false
+        )
+
+      # Email appears in the identity block's primary slot.
+      assert html =~ "jane@example.com"
+      # No stray empty primary name paragraph.
+      refute html =~ ~r|<p class="text-sm font-semibold text-base-content">\s*</p>|
+      # The secondary email <p> is suppressed when display_name is blank — so
+      # email renders exactly once in the identity block (no duplicate line).
+      refute html =~ ~r|<p class="text-xs text-base-content/50 truncate">\s*</p>|
+
+      assert html
+             |> String.split("jane@example.com")
+             |> length()
+             |> Kernel.-(1) == 2
+
+      # Trigger also falls back to email rather than showing an empty span.
+      refute html =~ ~r|<span class="text-xs text-base-content/60">\s*</span>|
+    end
   end
 end
