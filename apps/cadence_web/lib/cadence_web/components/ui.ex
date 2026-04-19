@@ -127,7 +127,7 @@ defmodule CadenceWeb.UI do
         role="menu"
         class="dropdown-content menu bg-base-200 z-[100] w-72 p-2 shadow-lg border border-primary/20"
       >
-        <li role="presentation" class="px-3 py-2">
+        <div role="presentation" class="px-3 py-2">
           <p class="text-sm font-semibold text-base-content">{display_label(@scope.user)}</p>
           <p
             :if={@scope.user.display_name not in [nil, ""]}
@@ -135,7 +135,7 @@ defmodule CadenceWeb.UI do
           >
             {@scope.user.email}
           </p>
-        </li>
+        </div>
 
         <.user_menu_org_block scope={@scope} memberships={@memberships} />
 
@@ -172,7 +172,7 @@ defmodule CadenceWeb.UI do
 
   defp user_menu_org_block(assigns) do
     ~H"""
-    <li :if={@scope.organization} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
+    <div :if={@scope.organization} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
       <span class="hud-label text-base-content/60 px-3 py-1 block">ORGANIZATION</span>
       <%= if length(@memberships) > 1 do %>
         <details class="group">
@@ -204,7 +204,7 @@ defmodule CadenceWeb.UI do
           {@scope.organization.display_name}
         </p>
       <% end %>
-    </li>
+    </div>
     """
   end
 

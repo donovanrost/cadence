@@ -149,6 +149,35 @@ defmodule CadenceWeb.UITest do
       assert html =~ ~s|href="/admin"|
     end
 
+    test "identity block wrapper is a div so it doesn't trigger menu hover" do
+      html =
+        render_component(&UI.user_menu/1,
+          scope: scope(user_fixture()),
+          memberships: [],
+          platform_admin?: false
+        )
+
+      # The identity block lives inside a <div role="presentation"> (not <li>),
+      # so daisyUI's .menu > li > * hover selector doesn't reach the name/email.
+      assert html =~ ~r|<div role="presentation"[^>]*>\s*<p[^>]*>\s*Jane Rost|
+    end
+
+    test "organization block wrapper is a div so it doesn't trigger menu hover" do
+      org = org_fixture(%{display_name: "Acme Space"})
+
+      html =
+        render_component(&UI.user_menu/1,
+          scope: scope(user_fixture(), org),
+          memberships: [%{membership: %{}, organization: org}],
+          platform_admin?: false
+        )
+
+      # The org block lives inside a <div role="presentation"> (not <li>),
+      # so daisyUI's hover selector doesn't reach the ORGANIZATION label or the
+      # single-org display name.
+      assert html =~ ~r|<div role="presentation"[^>]*>\s*<span class="hud-label|
+    end
+
     test "identity block falls back to email when display_name is blank" do
       html =
         render_component(&UI.user_menu/1,
