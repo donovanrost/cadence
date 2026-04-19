@@ -49,6 +49,7 @@ defmodule CadenceWeb.Router do
     pipe_through [:browser, :require_authenticated_scope]
 
     delete "/session", UserSessionController, :delete
+    put "/session/organization", UserSessionController, :update
     get "/no-organization", NoOrganizationController, :show
 
     live_session :organization,

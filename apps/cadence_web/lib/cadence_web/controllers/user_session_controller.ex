@@ -32,6 +32,28 @@ defmodule CadenceWeb.UserSessionController do
     |> redirect(to: ~p"/sign-in")
   end
 
+  def update(conn, %{"organization_id" => organization_id}) when is_binary(organization_id) do
+    user_id = conn.assigns.current_scope.user.user_id
+
+    case Cadence.fetch_user_membership(user_id, organization_id) do
+      {:ok, _membership} ->
+        conn
+        |> put_session(:current_organization_id, organization_id)
+        |> redirect(to: ~p"/")
+
+      {:error, :not_found} ->
+        conn
+        |> put_flash(:error, "You do not have access to that organization.")
+        |> redirect(to: ~p"/")
+    end
+  end
+
+  def update(conn, _params) do
+    conn
+    |> put_flash(:error, "Select a valid organization.")
+    |> redirect(to: ~p"/")
+  end
+
   defp finalize_sign_in(conn, issued_session) do
     conn
     |> renew_browser_session()
