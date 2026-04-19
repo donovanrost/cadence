@@ -17,4 +17,8 @@ defmodule CadenceWeb.UserAuth do
         {:halt, redirect(socket, to: "/sign-in")}
     end
   end
+
+  def on_mount(:attach_notifications_bell, _params, _session, socket) do
+    {:cont, CadenceWeb.NotificationsBell.attach(socket)}
+  end
 end

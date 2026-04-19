@@ -9,6 +9,11 @@ defmodule CadenceWeb.UI do
 
   use Phoenix.Component
 
+  use Phoenix.VerifiedRoutes,
+    endpoint: CadenceWeb.Endpoint,
+    router: CadenceWeb.Router,
+    statics: CadenceWeb.static_paths()
+
   @doc """
   Fixed-position flash stack. Renders :info and :error entries from the
   controller/LiveView flash map. Emits nothing when both are absent.
@@ -73,20 +78,20 @@ defmodule CadenceWeb.UI do
           </li>
         <% else %>
           <li :for={n <- @notifications}>
-            <a href="/notifications" class="flex items-start gap-2 px-3 py-2">
+            <.link navigate={~p"/notifications"} class="flex items-start gap-2 px-3 py-2">
               <span :if={is_nil(n.read_at)} class="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"></span>
               <span :if={n.read_at} class="mt-1.5 w-1.5 h-1.5 flex-shrink-0"></span>
               <span class="flex-1 min-w-0">
                 <span class="block text-xs font-semibold text-base-content truncate">{n.title}</span>
                 <span :if={n.body} class="block text-xs text-base-content/50 truncate">{n.body}</span>
               </span>
-            </a>
+            </.link>
           </li>
         <% end %>
         <li class="border-t border-primary/10 mt-1 pt-1">
-          <a href="/notifications" class="text-xs text-primary uppercase tracking-wide">
+          <.link navigate={~p"/notifications"} class="text-xs text-primary uppercase tracking-wide">
             See all notifications
-          </a>
+          </.link>
         </li>
       </div>
     </div>

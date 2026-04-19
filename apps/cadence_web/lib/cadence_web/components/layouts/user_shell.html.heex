@@ -1,0 +1,31 @@
+<div class="min-h-screen flex flex-col bg-base-100">
+  <header class="flex items-center justify-between px-4 h-12 border-b border-primary/20 bg-base-200 hud-grid">
+    <.link navigate={~p"/"} class="flex items-center gap-2">
+      <span class="text-primary font-bold text-sm">◆</span>
+      <span class="text-xs font-bold tracking-[0.15em] text-primary">CADENCE</span>
+    </.link>
+    <div class="flex items-center gap-3">
+      <.notifications_bell
+        count={assigns[:unread_notifications_count] || 0}
+        notifications={assigns[:recent_notifications] || []}
+      />
+      <%= if @current_scope && @current_scope.user do %>
+        <span class="text-xs text-base-content/60">{@current_scope.user.email}</span>
+      <% end %>
+      <.form for={%{}} as={:session} action={~p"/session"} method="delete">
+        <button type="submit" class="btn btn-ghost btn-xs gap-1 text-xs uppercase tracking-wide text-base-content/60">
+          <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
+          Sign out
+        </button>
+      </.form>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto">
+    <div class="p-6">
+      {@inner_content}
+    </div>
+  </main>
+
+  <.flash_stack flash={@flash} />
+</div>

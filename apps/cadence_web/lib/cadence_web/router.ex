@@ -68,6 +68,15 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id", MissionShowLive, :show
     end
 
+    live_session :user,
+      on_mount: [
+        {CadenceWeb.UserAuth, :require_user_scope},
+        {CadenceWeb.UserAuth, :attach_notifications_bell}
+      ],
+      layout: {CadenceWeb.Layouts, :user_shell} do
+      live "/notifications", NotificationsLive, :index
+    end
+
     live_session :admin,
       on_mount: [{CadenceWeb.AdminAuth, :require_platform_admin}],
       layout: {CadenceWeb.Layouts, :sidebar} do
