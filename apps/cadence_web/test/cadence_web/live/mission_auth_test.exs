@@ -9,7 +9,10 @@ defmodule CadenceWeb.MissionAuthTest do
     user = TestFixtures.persist_user!()
     _ = TestFixtures.grant_membership!(user, org)
     {:ok, scope} = Cadence.authenticate_api_token(TestFixtures.member_session_token!(user))
-    %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, current_scope: scope}}
+
+    %Phoenix.LiveView.Socket{
+      assigns: %{__changed__: %{}, current_scope: scope, flash: %{}}
+    }
   end
 
   defp persist_mission!(org, slug) do

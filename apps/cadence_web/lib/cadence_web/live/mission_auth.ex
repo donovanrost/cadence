@@ -15,7 +15,10 @@ defmodule CadenceWeb.MissionAuth do
          |> assign(:nav_context, :mission)}
 
       {:error, _reason} ->
-        {:halt, redirect(socket, to: "/missions")}
+        {:halt,
+         socket
+         |> put_flash(:error, "Mission not found.")
+         |> redirect(to: "/missions")}
     end
   end
 end
