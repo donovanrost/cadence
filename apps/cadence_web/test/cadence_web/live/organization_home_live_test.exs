@@ -8,6 +8,7 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Missions.Mission
   alias CadenceWeb.TestFixtures
 
   describe "mount" do
@@ -32,6 +33,27 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
       {:ok, _view, html} = live(TestFixtures.member_conn(user), ~p"/")
 
       assert html =~ ~r/border-primary[^"]*".*Home/s
+    end
+
+    test "shows the current mission count and link to /missions" do
+      user = TestFixtures.persist_user!()
+      org = TestFixtures.persist_org!()
+      _ = TestFixtures.grant_membership!(user, org)
+
+      mission =
+        Mission.new(%{
+          organization_id: org.organization_id,
+          slug: "alpha",
+          display_name: "Alpha"
+        })
+
+      assert {:ok, _} = Cadence.persist_mission(mission)
+
+      {:ok, _view, html} = live(TestFixtures.member_conn(user), ~p"/")
+
+      assert html =~ "View Missions"
+      assert html =~ ~s(href="/missions")
+      assert html =~ ~r/>\s*1\s*</
     end
   end
 
