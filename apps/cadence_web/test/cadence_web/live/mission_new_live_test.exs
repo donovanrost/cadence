@@ -8,6 +8,7 @@ defmodule CadenceWeb.MissionNewLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Missions.Mission
   alias CadenceWeb.TestFixtures
 
   defp signed_in_conn do
@@ -90,6 +91,28 @@ defmodule CadenceWeb.MissionNewLiveTest do
         |> render_submit()
 
       assert html =~ "required"
+    end
+
+    test "flashes a humanized error when slug is already taken" do
+      {conn, org} = signed_in_conn()
+
+      existing =
+        Mission.new(%{
+          organization_id: org.organization_id,
+          slug: "alpha",
+          display_name: "Alpha"
+        })
+
+      assert {:ok, _} = Cadence.persist_mission(existing)
+
+      {:ok, view, _html} = live(conn, ~p"/missions/new")
+
+      html =
+        view
+        |> form("#mission-form", mission: %{display_name: "Alpha Two", slug: "alpha"})
+        |> render_submit()
+
+      assert html =~ "has already been taken"
     end
   end
 
