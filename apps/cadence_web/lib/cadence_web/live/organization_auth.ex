@@ -13,14 +13,14 @@ defmodule CadenceWeb.OrganizationAuth do
     case socket.assigns[:current_scope] do
       %Scope{capabilities: capabilities} = scope ->
         cond do
-          MapSet.member?(capabilities, :platform_admin) ->
-            {:halt, redirect(socket, to: "/admin")}
-
           scope.organization_membership != nil ->
             {:cont,
              socket
              |> assign(:nav_context, :organization)
              |> CadenceWeb.NotificationsBell.attach()}
+
+          MapSet.member?(capabilities, :platform_admin) ->
+            {:halt, redirect(socket, to: "/admin")}
 
           true ->
             {:halt, redirect(socket, to: "/no-organization")}

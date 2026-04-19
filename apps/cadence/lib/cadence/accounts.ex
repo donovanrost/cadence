@@ -345,16 +345,29 @@ defmodule Cadence.Accounts do
           end
 
         {:not_found, _} ->
-          invited_path(
-            Repo,
-            normalized_email,
-            organization_id,
-            membership_role,
-            grant_platform_admin,
-            invited_by_user_id,
-            display_name,
-            invitation_metadata
-          )
+          result =
+            invited_path(
+              Repo,
+              normalized_email,
+              organization_id,
+              membership_role,
+              grant_platform_admin,
+              invited_by_user_id,
+              display_name,
+              invitation_metadata
+            )
+
+          with {:ok, %{mode: :invited, invitation: invitation} = success} <- result do
+            case fetch_user_by_email(normalized_email) do
+              {:ok, user} ->
+                _ = dispatch_invitation_notification(user, invitation, organization_id)
+
+              _ ->
+                :ok
+            end
+
+            {:ok, success}
+          end
       end
     end
   end

@@ -123,6 +123,36 @@ defmodule Cadence.AccountsNotificationDispatchTest do
 
       assert Repo.all(Cadence.Persistence.Schemas.NotificationRow) == []
     end
+
+    test ":invited with existing non-durable user (e.g. bootstrap admin) still dispatches",
+         %{inviter: admin, org: org} do
+      email = "bootstrap-#{System.unique_integer([:positive])}@example.com"
+
+      user =
+        User.new(%{
+          user_id: Ids.new("user"),
+          email: email,
+          display_name: "Bootstrap",
+          capabilities: [:platform_admin],
+          confirmed_at: DateTime.utc_now(),
+          lifecycle_state: :active,
+          metadata: %{}
+        })
+
+      {:ok, _} = Repo.insert(UserRow.changeset(user))
+
+      assert {:ok, %{mode: :invited, invitation: invitation}} =
+               Accounts.establish_organization_access(email, org.organization_id,
+                 membership_role: :organization_admin,
+                 invited_by_user_id: admin.user_id
+               )
+
+      [notification] = Cadence.list_notifications(user.user_id)
+      assert notification.kind == :organization_invitation
+
+      assert notification.metadata["organization_invitation_id"] ==
+               invitation.organization_invitation_id
+    end
   end
 
   describe "accept_invitation_as_user/2" do
