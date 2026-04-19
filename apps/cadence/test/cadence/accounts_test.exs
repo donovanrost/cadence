@@ -192,6 +192,55 @@ defmodule Cadence.AccountsTest do
     end
   end
 
+  describe "preferred_organization_membership/2 with multiple active memberships" do
+    test "returns the oldest active membership when current_organization_id is nil" do
+      user = persist_user!()
+      org_later = persist_organization!(display_name: "Later Org")
+      org_earlier = persist_organization!(display_name: "Earlier Org")
+
+      # Grant the earlier membership first so inserted_at orders it first.
+      _ = grant_membership!(user, org_earlier)
+      _ = grant_membership!(user, org_later)
+
+      assert {:ok, membership} =
+               Cadence.Accounts.preferred_organization_membership(user.user_id, nil)
+
+      assert membership.organization_id == org_earlier.organization_id
+    end
+
+    test "returns the passed current_organization_id's membership when present and active" do
+      user = persist_user!()
+      org_a = persist_organization!(display_name: "Org A")
+      org_b = persist_organization!(display_name: "Org B")
+      _ = grant_membership!(user, org_a)
+      _ = grant_membership!(user, org_b)
+
+      assert {:ok, membership} =
+               Cadence.Accounts.preferred_organization_membership(
+                 user.user_id,
+                 org_b.organization_id
+               )
+
+      assert membership.organization_id == org_b.organization_id
+    end
+
+    test "falls back to any active membership when the passed organization_id is not a match" do
+      user = persist_user!()
+      org_active = persist_organization!(display_name: "Active Org")
+      _ = grant_membership!(user, org_active)
+
+      other_org = persist_organization!(display_name: "Other")
+
+      assert {:ok, membership} =
+               Cadence.Accounts.preferred_organization_membership(
+                 user.user_id,
+                 other_org.organization_id
+               )
+
+      assert membership.organization_id == org_active.organization_id
+    end
+  end
+
   ## Fixtures
 
   defp enable_bootstrap_admin! do

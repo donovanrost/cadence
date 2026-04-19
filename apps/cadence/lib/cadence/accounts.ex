@@ -243,7 +243,7 @@ defmodule Cadence.Accounts do
         {:ok, OrganizationMembershipRow.to_domain(row)}
 
       nil ->
-        case active_membership_query(user_id) |> Repo.one() do
+        case active_membership_query(user_id) |> limit(1) |> Repo.one() do
           %OrganizationMembershipRow{} = row -> {:ok, OrganizationMembershipRow.to_domain(row)}
           nil -> {:ok, nil}
         end
