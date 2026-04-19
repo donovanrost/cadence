@@ -171,6 +171,11 @@ defmodule Cadence do
     Auth.accept_organization_invitation(invitation_token, attrs)
   end
 
+  @spec accept_invitation_as_user(binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def accept_invitation_as_user(user_id, invitation_id)
+      when is_binary(user_id) and is_binary(invitation_id),
+      do: Accounts.accept_invitation_as_user(user_id, invitation_id)
+
   @spec bootstrap_admin_enabled?() :: boolean()
   def bootstrap_admin_enabled? do
     Auth.bootstrap_admin_enabled?()

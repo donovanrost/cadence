@@ -38,7 +38,8 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
         membership_role: normalize_role(params["membership_role"]),
         grant_platform_admin: params["grant_platform_admin"] == "true",
         invited_by_user_id: scope.user.user_id,
-        display_name: params["display_name"]
+        display_name: params["display_name"],
+        force_invitation: true
       )
 
     case result do
@@ -78,8 +79,8 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
         </.link>
         <h1 class="text-2xl font-bold text-base-content mt-1">Invite User</h1>
         <p class="mt-1 text-sm text-base-content/50">
-          Invite a user to {@organization.display_name}. Existing durable users are granted access
-          directly; new users receive an invitation email.
+          Invite a user to {@organization.display_name}. The invited user will see a
+          notification and must accept the invitation to gain access.
         </p>
       </div>
 

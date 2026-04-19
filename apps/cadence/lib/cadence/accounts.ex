@@ -3,12 +3,16 @@ defmodule Cadence.Accounts do
   Platform users, local credentials, memberships, invitations, and browser sessions.
   """
 
+  require Logger
+
   import Ecto.Query
 
   alias Ecto.Changeset
 
   alias Cadence.Accounts.{OrganizationInvitation, OrganizationMembership, Password, User}
   alias Cadence.Ids
+  alias Cadence.Notifications.Notification
+  alias Cadence.Organizations
 
   alias Cadence.Persistence.Schemas.{
     OrganizationInvitationRow,
@@ -295,51 +299,115 @@ defmodule Cadence.Accounts do
     display_name = Keyword.get(opts, :display_name)
     membership_metadata = Keyword.get(opts, :membership_metadata, %{})
     invitation_metadata = Keyword.get(opts, :invitation_metadata, %{})
+    force_invitation = Keyword.get(opts, :force_invitation, false)
 
     with {:ok, normalized_email} <- normalize_required_email(email),
          :ok <- validate_membership_role(membership_role) do
-      case durable_user_by_email(normalized_email) do
-        {:ok, %User{} = user} ->
-          Repo.transaction(fn ->
-            with {:ok, granted_user} <-
-                   grant_platform_admin_if_requested(Repo, user, grant_platform_admin),
-                 {:ok, membership} <-
-                   upsert_membership(
-                     Repo,
-                     granted_user.user_id,
-                     organization_id,
-                     membership_role,
-                     membership_metadata
-                   ) do
-              %{mode: :granted, user: granted_user, membership: membership}
-            else
-              {:error, reason} -> Repo.rollback(reason)
-            end
-          end)
-          |> unwrap_transaction_result()
+      case {durable_user_by_email(normalized_email), force_invitation} do
+        {{:ok, %User{} = user}, false} ->
+          result =
+            grant_path(
+              Repo,
+              user,
+              organization_id,
+              membership_role,
+              grant_platform_admin,
+              membership_metadata
+            )
 
-        :not_found ->
-          Repo.transaction(fn ->
-            with :ok <- revoke_pending_invitations(Repo, normalized_email, organization_id),
-                 {:ok, %{invitation: invitation, invitation_token: invitation_token}} <-
-                   insert_invitation(
-                     Repo,
-                     normalized_email,
-                     organization_id,
-                     membership_role,
-                     grant_platform_admin,
-                     invited_by_user_id,
-                     display_name,
-                     invitation_metadata
-                   ) do
-              %{mode: :invited, invitation: invitation, invitation_token: invitation_token}
-            else
-              {:error, reason} -> Repo.rollback(reason)
-            end
-          end)
-          |> unwrap_transaction_result()
+          with {:ok, %{mode: :granted, user: granted_user} = success} <- result do
+            _ =
+              dispatch_access_granted_notification(
+                granted_user,
+                organization_id,
+                membership_role
+              )
+
+            {:ok, success}
+          end
+
+        {{:ok, %User{} = user}, true} ->
+          result =
+            invited_path(
+              Repo,
+              normalized_email,
+              organization_id,
+              membership_role,
+              grant_platform_admin,
+              invited_by_user_id,
+              display_name,
+              invitation_metadata
+            )
+
+          with {:ok, %{mode: :invited, invitation: invitation} = success} <- result do
+            _ = dispatch_invitation_notification(user, invitation, organization_id)
+            {:ok, success}
+          end
+
+        {:not_found, _} ->
+          invited_path(
+            Repo,
+            normalized_email,
+            organization_id,
+            membership_role,
+            grant_platform_admin,
+            invited_by_user_id,
+            display_name,
+            invitation_metadata
+          )
       end
     end
+  end
+
+  defp grant_path(repo, user, organization_id, membership_role, grant_platform_admin, metadata) do
+    repo.transaction(fn ->
+      with {:ok, granted_user} <-
+             grant_platform_admin_if_requested(repo, user, grant_platform_admin),
+           {:ok, membership} <-
+             upsert_membership(
+               repo,
+               granted_user.user_id,
+               organization_id,
+               membership_role,
+               metadata
+             ) do
+        %{mode: :granted, user: granted_user, membership: membership}
+      else
+        {:error, reason} -> repo.rollback(reason)
+      end
+    end)
+    |> unwrap_transaction_result()
+  end
+
+  defp invited_path(
+         repo,
+         normalized_email,
+         organization_id,
+         membership_role,
+         grant_platform_admin,
+         invited_by_user_id,
+         display_name,
+         invitation_metadata
+       ) do
+    repo.transaction(fn ->
+      with :ok <- revoke_pending_invitations(repo, normalized_email, organization_id),
+           {:ok, %{invitation: invitation, invitation_token: invitation_token}} <-
+             insert_invitation(
+               repo,
+               normalized_email,
+               organization_id,
+               membership_role,
+               grant_platform_admin,
+               invited_by_user_id,
+               display_name,
+               invitation_metadata
+             ) do
+        %{mode: :invited, invitation: invitation, invitation_token: invitation_token}
+      else
+        {:error, reason} -> repo.rollback(reason)
+      end
+    end)
+    |> unwrap_transaction_result()
   end
 
   @spec fetch_organization_invitation(binary()) ::
@@ -426,6 +494,184 @@ defmodule Cadence.Accounts do
         end
       end)
       |> unwrap_transaction_result()
+    end
+  end
+
+  @spec accept_invitation_as_user(binary(), binary()) ::
+          {:ok,
+           %{
+             membership: OrganizationMembership.t(),
+             invitation: OrganizationInvitation.t()
+           }}
+          | {:error,
+             :user_not_found
+             | :invitation_not_found
+             | :invitation_not_pending
+             | :invitation_expired
+             | :email_mismatch
+             | term()}
+  def accept_invitation_as_user(user_id, organization_invitation_id)
+      when is_binary(user_id) and is_binary(organization_invitation_id) do
+    result =
+      Repo.transaction(fn ->
+        with {:ok, user} <- fetch_user(user_id),
+             {:ok, invitation_row, invitation} <-
+               lock_pending_invitation_by_id(Repo, organization_invitation_id),
+             :ok <- validate_email_match(user, invitation),
+             {:ok, membership} <-
+               upsert_membership(
+                 Repo,
+                 user.user_id,
+                 invitation.organization_id,
+                 invitation.membership_role,
+                 %{
+                   "accepted_via" => "organization_invitation_as_user",
+                   "organization_invitation_id" => invitation.organization_invitation_id
+                 }
+               ),
+             {:ok, accepted_invitation} <-
+               mark_invitation_accepted(Repo, invitation_row, user.user_id) do
+          %{membership: membership, invitation: accepted_invitation}
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+      |> unwrap_transaction_result()
+
+    case result do
+      {:ok, %{invitation: invitation}} = success ->
+        _ = mark_related_notifications_read(user_id, invitation.organization_invitation_id)
+
+        Cadence.Notifications.broadcast(user_id, {:invitation_accepted, invitation})
+
+        success
+
+      error ->
+        error
+    end
+  end
+
+  defp lock_pending_invitation_by_id(repo, invitation_id) when is_binary(invitation_id) do
+    row =
+      OrganizationInvitationRow
+      |> where([row], row.organization_invitation_id == ^invitation_id)
+      |> lock("FOR UPDATE")
+      |> repo.one()
+
+    case row do
+      nil ->
+        {:error, :invitation_not_found}
+
+      %OrganizationInvitationRow{} = invitation_row ->
+        invitation = OrganizationInvitationRow.to_domain(invitation_row)
+
+        cond do
+          invitation.status != :pending ->
+            {:error, :invitation_not_pending}
+
+          OrganizationInvitation.expired?(invitation) ->
+            expire_locked_invitation(repo, invitation_row, invitation)
+            {:error, :invitation_expired}
+
+          true ->
+            {:ok, invitation_row, invitation}
+        end
+    end
+  end
+
+  defp validate_email_match(%User{email: user_email}, %OrganizationInvitation{email: inv_email}) do
+    if User.normalize_email(user_email) == User.normalize_email(inv_email) do
+      :ok
+    else
+      {:error, :email_mismatch}
+    end
+  end
+
+  defp mark_related_notifications_read(user_id, organization_invitation_id) do
+    user_id
+    |> Cadence.Notifications.list_notifications(only_unread: true)
+    |> Enum.filter(fn n ->
+      n.kind == :organization_invitation and
+        n.metadata["organization_invitation_id"] == organization_invitation_id
+    end)
+    |> Enum.each(fn n ->
+      Cadence.Notifications.mark_notification_read(n.notification_id, user_id)
+    end)
+  end
+
+  defp dispatch_access_granted_notification(%User{} = user, organization_id, role) do
+    case Organizations.fetch_organization(organization_id) do
+      {:ok, organization} ->
+        notification =
+          Notification.new(%{
+            user_id: user.user_id,
+            kind: :organization_access_granted,
+            title: "You were added to #{organization.display_name}",
+            body: "As #{humanize_role(role)}",
+            metadata: %{
+              "organization_id" => organization_id,
+              "organization_display_name" => organization.display_name,
+              "membership_role" => Atom.to_string(role)
+            }
+          })
+
+        case Cadence.Notifications.persist_notification(notification) do
+          {:ok, _} = ok ->
+            ok
+
+          {:error, reason} = error ->
+            Logger.warning(
+              "failed to dispatch :organization_access_granted notification: #{inspect(reason)}"
+            )
+
+            error
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "failed to dispatch :organization_access_granted notification: org not found: #{inspect(reason)}"
+        )
+
+        {:error, reason}
+    end
+  end
+
+  defp dispatch_invitation_notification(%User{} = user, invitation, organization_id) do
+    case Organizations.fetch_organization(organization_id) do
+      {:ok, organization} ->
+        notification =
+          Notification.new(%{
+            user_id: user.user_id,
+            kind: :organization_invitation,
+            title: "Invitation to join #{organization.display_name}",
+            body: "As #{humanize_role(invitation.membership_role)}",
+            metadata: %{
+              "organization_invitation_id" => invitation.organization_invitation_id,
+              "organization_id" => organization_id,
+              "organization_display_name" => organization.display_name,
+              "membership_role" => Atom.to_string(invitation.membership_role),
+              "expires_at" => DateTime.to_iso8601(invitation.expires_at)
+            }
+          })
+
+        case Cadence.Notifications.persist_notification(notification) do
+          {:ok, _} = ok ->
+            ok
+
+          {:error, reason} = error ->
+            Logger.warning(
+              "failed to dispatch :organization_invitation notification: #{inspect(reason)}"
+            )
+
+            error
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "failed to dispatch :organization_invitation notification: org not found: #{inspect(reason)}"
+        )
+
+        {:error, reason}
     end
   end
 
@@ -959,6 +1205,14 @@ defmodule Cadence.Accounts do
 
   defp unwrap_transaction_result({:ok, result}), do: {:ok, result}
   defp unwrap_transaction_result({:error, reason}), do: {:error, reason}
+
+  defp humanize_role(role) when is_atom(role) do
+    role
+    |> Atom.to_string()
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
 
   defp present_string(nil), do: nil
 
