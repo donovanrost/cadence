@@ -13,7 +13,11 @@
             count={assigns[:unread_notifications_count] || 0}
             notifications={assigns[:recent_notifications] || []}
           />
-          <span class="text-xs text-base-content/60">{@current_scope.user.email}</span>
+          <.user_menu
+            scope={@current_scope}
+            memberships={assigns[:user_menu_memberships] || []}
+            platform_admin?={assigns[:user_menu_platform_admin?] || false}
+          />
         <% end %>
       </div>
     </div>
@@ -24,8 +28,11 @@
           count={assigns[:unread_notifications_count] || 0}
           notifications={assigns[:recent_notifications] || []}
         />
-        <span class="text-xs text-base-content/60">{@current_scope.user.display_name}</span>
-        <span class="text-xs text-base-content/40">({@current_scope.user.email})</span>
+        <.user_menu
+          scope={@current_scope}
+          memberships={assigns[:user_menu_memberships] || []}
+          platform_admin?={assigns[:user_menu_platform_admin?] || false}
+        />
       <% end %>
     </div>
 
