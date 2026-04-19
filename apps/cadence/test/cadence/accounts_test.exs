@@ -150,6 +150,48 @@ defmodule Cadence.AccountsTest do
     end
   end
 
+  describe "fetch_user_membership/2" do
+    test "returns {:ok, membership} for an active membership" do
+      user = persist_user!()
+      org = persist_organization!(display_name: "Fetch Co")
+      _ = grant_membership!(user, org)
+
+      assert {:ok, membership} =
+               Cadence.Accounts.fetch_user_membership(user.user_id, org.organization_id)
+
+      assert membership.user_id == user.user_id
+      assert membership.organization_id == org.organization_id
+      assert membership.lifecycle_state == :active
+    end
+
+    test "returns {:error, :not_found} for a revoked membership" do
+      user = persist_user!()
+      org = persist_organization!(display_name: "Revoked")
+      _ = grant_membership!(user, org, lifecycle_state: :revoked)
+
+      assert {:error, :not_found} =
+               Cadence.Accounts.fetch_user_membership(user.user_id, org.organization_id)
+    end
+
+    test "returns {:error, :not_found} when the user is not a member" do
+      user = persist_user!()
+      org = persist_organization!(display_name: "Empty")
+
+      assert {:error, :not_found} =
+               Cadence.Accounts.fetch_user_membership(user.user_id, org.organization_id)
+    end
+
+    test "returns {:error, :not_found} for a mismatched user_id" do
+      user_a = persist_user!()
+      user_b = persist_user!()
+      org = persist_organization!(display_name: "Cross User")
+      _ = grant_membership!(user_a, org)
+
+      assert {:error, :not_found} =
+               Cadence.Accounts.fetch_user_membership(user_b.user_id, org.organization_id)
+    end
+  end
+
   ## Fixtures
 
   defp enable_bootstrap_admin! do

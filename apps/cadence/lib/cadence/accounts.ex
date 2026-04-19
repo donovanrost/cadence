@@ -277,6 +277,20 @@ defmodule Cadence.Accounts do
     end)
   end
 
+  @spec fetch_user_membership(binary(), binary()) ::
+          {:ok, OrganizationMembership.t()} | {:error, :not_found}
+  def fetch_user_membership(user_id, organization_id)
+      when is_binary(user_id) and is_binary(organization_id) do
+    user_id
+    |> active_membership_query()
+    |> where([row], row.organization_id == ^organization_id)
+    |> Repo.one()
+    |> case do
+      %OrganizationMembershipRow{} = row -> {:ok, OrganizationMembershipRow.to_domain(row)}
+      nil -> {:error, :not_found}
+    end
+  end
+
   @spec list_organization_members(binary()) :: [
           %{membership: OrganizationMembership.t(), user: User.t()}
         ]
