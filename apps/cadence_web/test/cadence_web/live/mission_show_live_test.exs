@@ -48,22 +48,20 @@ defmodule CadenceWeb.MissionShowLiveTest do
   end
 
   describe "authorization" do
-    test "404s when mission id is unknown" do
+    test "redirects to /missions when mission id is unknown" do
       {conn, _org} = signed_in_conn()
 
-      assert_raise UndefinedFunctionError, fn ->
-        live(conn, ~p"/missions/mission_unknown")
-      end
+      assert {:error, {:redirect, %{to: "/missions"}}} =
+               live(conn, ~p"/missions/mission_unknown")
     end
 
-    test "404s when mission belongs to another org" do
+    test "redirects to /missions when mission belongs to another org" do
       {conn, _mine} = signed_in_conn()
       other = TestFixtures.persist_org!(slug: "other-org")
       their_mission = persist_mission!(other, "theirs", "Their Mission")
 
-      assert_raise UndefinedFunctionError, fn ->
-        live(conn, ~p"/missions/#{their_mission.mission_id}")
-      end
+      assert {:error, {:redirect, %{to: "/missions"}}} =
+               live(conn, ~p"/missions/#{their_mission.mission_id}")
     end
 
     test "unauthenticated request redirects to /sign-in", %{conn: conn} do

@@ -2,6 +2,7 @@ defmodule CadenceWeb.MissionAuth do
   @moduledoc false
 
   import Phoenix.Component
+  import Phoenix.LiveView
 
   def on_mount(:load_mission, %{"mission_id" => mission_id}, _session, socket) do
     organization_id = socket.assigns.current_scope.organization_id
@@ -14,9 +15,7 @@ defmodule CadenceWeb.MissionAuth do
          |> assign(:nav_context, :mission)}
 
       {:error, _reason} ->
-        raise Phoenix.Router.NoRouteError,
-          conn: %Plug.Conn{},
-          router: CadenceWeb.Router
+        {:halt, redirect(socket, to: "/missions")}
     end
   end
 end
