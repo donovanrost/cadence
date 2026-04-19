@@ -10,7 +10,11 @@
         notifications={assigns[:recent_notifications] || []}
       />
       <%= if @current_scope && @current_scope.user do %>
-        <span class="text-xs text-base-content/60">{@current_scope.user.email}</span>
+        <.user_menu
+          scope={@current_scope}
+          memberships={assigns[:user_menu_memberships] || []}
+          platform_admin?={assigns[:user_menu_platform_admin?] || false}
+        />
       <% end %>
       <.form for={%{}} as={:session} action={~p"/session"} method="delete">
         <button type="submit" class="btn btn-ghost btn-xs gap-1 text-xs uppercase tracking-wide text-base-content/60">
