@@ -134,8 +134,8 @@ The no-membership branch is handled downstream by the `:organization` live sessi
 
 - Reads `mission_id` from params and `organization_id` from the scope.
 - Calls `Cadence.Missions.fetch_mission(organization_id, mission_id)`.
-- On `{:ok, mission}`: assigns `:current_mission`, returns `{:cont, socket}`.
-- On `{:error, :not_found}`: `raise Phoenix.Router.NoRouteError` so Phoenix renders a 404 (matches existing codebase behavior for missing resources).
+- On `{:ok, mission}`: assigns `:current_mission` + `:nav_context, :mission`, returns `{:cont, socket}`.
+- On `{:error, _reason}`: halts and redirects to `/missions` with a `:error` flash "Mission not found." — matches the halt-and-redirect pattern already used by `OrganizationAuth`, avoids fabricating a `%Plug.Conn{}` to reach the 404 path, and gives a stale bookmark a recoverable landing rather than a dead-end error page.
 
 ### Layouts
 
@@ -271,7 +271,7 @@ Both layouts compose existing daisyUI + HUD utility classes (`hud-label`, `hover
 ## Error Handling
 
 - **No active membership** → `/no-organization` (see above).
-- **Missing mission** (`/missions/:mission_id` with bad id, or an id belonging to another org) → `MissionAuth.load_mission` raises `Phoenix.Router.NoRouteError` → Phoenix 404.
+- **Missing mission** (`/missions/:mission_id` with bad id, or an id belonging to another org) → `MissionAuth.load_mission` halts and redirects to `/missions` with an `:error` flash "Mission not found."
 - **Mission create validation failure** → form re-renders with errors inline via `<.input>`'s built-in error display.
 - **Persistence error** (e.g., unique slug conflict) → `persist_mission/1` returns `{:error, changeset}`, form re-renders with errors.
 
