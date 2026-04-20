@@ -158,6 +158,23 @@ defmodule Cadence.Catalog do
     |> Enum.map(&CatalogImportRunRow.to_domain/1)
   end
 
+  @spec latest_import_run_by_artifact(binary(), binary()) ::
+          %{optional(binary()) => ImportRun.t()}
+  def latest_import_run_by_artifact(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    CatalogImportRunRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id
+    )
+    |> order_by([row], desc: row.started_at, desc: row.import_run_id)
+    |> Repo.all()
+    |> Enum.map(&CatalogImportRunRow.to_domain/1)
+    |> Enum.reduce(%{}, fn %ImportRun{artifact_id: artifact_id} = run, acc ->
+      Map.put_new(acc, artifact_id, run)
+    end)
+  end
+
   @spec persist_telemetry_snapshot(binary(), TelemetryCatalogSnapshot.t()) ::
           {:ok, TelemetryCatalogSnapshot.t()} | {:error, term()}
   def persist_telemetry_snapshot(organization_id, %TelemetryCatalogSnapshot{} = snapshot)

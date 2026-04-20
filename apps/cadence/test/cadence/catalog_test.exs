@@ -128,4 +128,90 @@ defmodule Cadence.CatalogTest do
 
     assert listed_run.import_run_id == completed_run.import_run_id
   end
+
+  describe "latest_import_run_by_artifact/2" do
+    test "returns empty map when there are no runs" do
+      persist_mission_scope(@organization_id, @mission_id)
+
+      assert Cadence.Catalog.latest_import_run_by_artifact(
+               @organization_id,
+               @mission_id
+             ) == %{}
+    end
+
+    test "returns the most recent run per artifact" do
+      persist_mission_scope(@organization_id, @mission_id)
+
+      artifact_a = persist_artifact!("artifact-a")
+      artifact_b = persist_artifact!("artifact-b")
+
+      {:ok, older_a} = start_import_run!(artifact_a.artifact_id)
+      # Ensure monotonic started_at even on fast clocks.
+      Process.sleep(10)
+      {:ok, newer_a} = start_import_run!(artifact_a.artifact_id)
+      Process.sleep(10)
+      {:ok, only_b} = start_import_run!(artifact_b.artifact_id)
+
+      result =
+        Cadence.Catalog.latest_import_run_by_artifact(@organization_id, @mission_id)
+
+      assert result[artifact_a.artifact_id].import_run_id == newer_a.import_run_id
+      assert result[artifact_b.artifact_id].import_run_id == only_b.import_run_id
+      refute result[artifact_a.artifact_id].import_run_id == older_a.import_run_id
+    end
+
+    test "scopes by mission" do
+      %{organization: _org, mission: mission_a} =
+        persist_mission_scope(@organization_id, @mission_id)
+
+      other_mission_id = "#{@mission_id}-other"
+
+      # Persist the other mission under the same org.
+      {:ok, _} =
+        Cadence.persist_mission(
+          Cadence.Missions.Mission.new(%{
+            mission_id: other_mission_id,
+            organization_id: @organization_id,
+            slug: other_mission_id,
+            display_name: other_mission_id
+          })
+        )
+
+      artifact = persist_artifact!("artifact-scope", mission_id: mission_a.mission_id)
+      {:ok, _} = start_import_run!(artifact.artifact_id)
+
+      assert Cadence.Catalog.latest_import_run_by_artifact(
+               @organization_id,
+               other_mission_id
+             ) == %{}
+    end
+  end
+
+  defp persist_artifact!(artifact_id, opts \\ []) do
+    artifact =
+      Cadence.Catalog.Artifact.new(%{
+        artifact_id: artifact_id,
+        organization_id: @organization_id,
+        mission_id: Keyword.get(opts, :mission_id, @mission_id),
+        catalog_family: :telemetry,
+        artifact_name: "#{artifact_id}.json",
+        format_key: "fake_tm_json",
+        media_type: "application/json",
+        source_artifact: %{"packets" => [%{"name" => "HK_#{artifact_id}"}]},
+        uploaded_by: %{"service_identity_id" => "svc-test"}
+      })
+
+    {:ok, persisted} = Cadence.persist_catalog_artifact(@organization_id, artifact)
+    persisted
+  end
+
+  defp start_import_run!(artifact_id) do
+    Cadence.start_catalog_import_run(
+      @organization_id,
+      @mission_id,
+      artifact_id,
+      "fake_tm_json",
+      requested_by: %{"service_identity_id" => "svc-test"}
+    )
+  end
 end
