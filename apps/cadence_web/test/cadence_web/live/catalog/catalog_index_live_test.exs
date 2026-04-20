@@ -90,4 +90,65 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
       assert render(view) =~ "Completed"
     end
   end
+
+  describe "upload flow" do
+    test "shows a friendly banner when no importer matches the file" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
+
+      uploads =
+        file_input(view, "#catalog-upload-form", :artifact, [
+          %{
+            name: "mission.bin",
+            content: "anything",
+            type: "application/octet-stream",
+            last_modified: 1_700_000_000_000
+          }
+        ])
+
+      _ = render_upload(uploads, "mission.bin")
+
+      html = render(view)
+      assert html =~ "No importer supports"
+      assert html =~ "mission.bin"
+    end
+
+    test "uploading a valid YAML file creates an artifact, starts a run, and navigates to the run" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
+
+      yaml = """
+      packets:
+        - name: HEALTH
+          items:
+            - name: mode
+              data_type: uint
+              bit_offset: 0
+              bit_size: 8
+      commands: []
+      """
+
+      uploads =
+        file_input(view, "#catalog-upload-form", :artifact, [
+          %{
+            name: "mission.yaml",
+            content: yaml,
+            type: "application/yaml",
+            last_modified: 1_700_000_000_000
+          }
+        ])
+
+      _ = render_upload(uploads, "mission.yaml")
+
+      # After validate: detected importer is shown, submit enabled
+      assert render(view) =~ "Cadence YAML Database"
+
+      result = render_submit(view, "save", %{})
+
+      assert {:error, {:live_redirect, %{to: to}}} = result
+      assert to =~ ~r"/missions/.+/catalog/imports/"
+    end
+  end
 end

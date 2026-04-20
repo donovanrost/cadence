@@ -90,6 +90,126 @@ defmodule CadenceWeb.Catalog.Components do
   defp severity_heading(:warning), do: "Warnings"
   defp severity_heading(:info), do: "Info"
 
+  alias Cadence.Catalog.Registry
+
+  @doc "Upload card with importer auto-detection."
+  attr :uploads, :map, required: true
+
+  def upload_card(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :detected_importer,
+        detect_importer_from_entries(assigns.uploads.artifact.entries)
+      )
+
+    ~H"""
+    <div class="card bg-base-200">
+      <div class="card-body p-6 space-y-4">
+        <p class="hud-label">Upload command &amp; telemetry database</p>
+
+        <.form
+          id="catalog-upload-form"
+          for={%{}}
+          phx-change="validate"
+          phx-submit="save"
+          class="space-y-4"
+        >
+          <label class="block">
+            <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
+          </label>
+
+          <ul :if={@uploads.artifact.entries != []} class="space-y-1">
+            <li
+              :for={entry <- @uploads.artifact.entries}
+              class="flex items-center justify-between text-sm"
+            >
+              <span class="font-mono">{entry.client_name} ({entry.client_type || "unknown"})</span>
+              <button
+                type="button"
+                phx-click="cancel_upload"
+                phx-value-ref={entry.ref}
+                class="btn btn-ghost btn-xs"
+              >
+                Remove
+              </button>
+            </li>
+          </ul>
+
+          <.upload_error_alert :for={err <- upload_errors(@uploads.artifact)} error={err} />
+
+          <.detected_preview detected={@detected_importer} />
+
+          <div class="flex items-center gap-3">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              disabled={!importer_detected?(@detected_importer)}
+            >
+              Upload &amp; import
+            </button>
+          </div>
+        </.form>
+      </div>
+    </div>
+    """
+  end
+
+  @doc "Error alert for a LiveView upload entry error."
+  attr :error, :atom, required: true
+
+  def upload_error_alert(assigns) do
+    ~H"""
+    <div class="alert alert-error text-sm">
+      {upload_error_message(@error)}
+    </div>
+    """
+  end
+
+  @doc "Preview of a detected importer or a no-match error message."
+  attr :detected, :any, required: true
+
+  def detected_preview(assigns) do
+    ~H"""
+    <%= case @detected do %>
+      <% {:ok, %{descriptor: descriptor}} -> %>
+        <div class="flex items-center gap-2 text-sm text-base-content/80">
+          <span class="hero-check-circle h-4 w-4 text-success"></span>
+          Detected importer:
+          <span class="font-medium">{descriptor.display_name}</span>
+          <.catalog_family_badge family={descriptor.catalog_family} />
+        </div>
+      <% {:error, :no_matching_importer} -> %>
+        <div class="alert alert-error text-sm">
+          <p>
+            No importer supports this file. Accepted formats: YAML (<code>.yaml</code>, <code>.yml</code>).
+          </p>
+        </div>
+      <% _ -> %>
+        <div class="text-xs text-base-content/50">
+          Select a file to see the detected importer.
+        </div>
+    <% end %>
+    """
+  end
+
+  @doc "Returns true when a detected importer result is `{:ok, _}`."
+  def importer_detected?({:ok, _registration}), do: true
+  def importer_detected?(_), do: false
+
+  @doc "Detects an importer from a list of LiveView upload entries."
+  def detect_importer_from_entries([%{client_name: name, client_type: type} | _]) do
+    Registry.detect_importer(name, type)
+  end
+
+  def detect_importer_from_entries(_), do: nil
+
+  @doc "Human-readable message for a LiveView upload error atom."
+  def upload_error_message(:too_large), do: "File exceeds the 50 MB limit."
+  def upload_error_message(:not_accepted), do: "File type is not accepted."
+  def upload_error_message(:too_many_files), do: "Only one file at a time."
+  def upload_error_message(other), do: "Upload failed: #{inspect(other)}"
+
   @doc "Summary count card for a snapshot (telemetry or command)."
   attr :title, :string, required: true
   attr :icon, :string, required: true
