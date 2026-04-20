@@ -128,4 +128,59 @@ defmodule CadenceWeb.TestFixtures do
     assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)
     persisted
   end
+
+  alias Cadence.Catalog
+  alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog.ImportRun
+
+  @spec persist_catalog_artifact!(Mission.t(), keyword()) :: Artifact.t()
+  def persist_catalog_artifact!(%Mission{} = mission, opts \\ []) do
+    artifact =
+      Artifact.new(%{
+        mission_id: mission.mission_id,
+        catalog_family: Keyword.get(opts, :catalog_family, :combined),
+        artifact_name: Keyword.get(opts, :artifact_name, "mission.yaml"),
+        format_key: Keyword.get(opts, :format_key, "cadence_yaml"),
+        media_type: Keyword.get(opts, :media_type, "application/yaml"),
+        source_artifact: Keyword.get(opts, :source_artifact, sample_yaml_source()),
+        uploaded_by: Keyword.get(opts, :uploaded_by, %{}),
+        metadata: Keyword.get(opts, :metadata, %{})
+      })
+
+    assert {:ok, persisted} = Catalog.persist_artifact(mission.organization_id, artifact)
+    persisted
+  end
+
+  @spec persist_catalog_import_run!(Artifact.t(), keyword()) :: ImportRun.t()
+  def persist_catalog_import_run!(%Artifact{} = artifact, opts \\ []) do
+    assert {:ok, run} =
+             Catalog.start_import_run(
+               artifact.organization_id,
+               artifact.mission_id,
+               artifact.artifact_id,
+               Keyword.get(opts, :importer_key, "cadence_yaml"),
+               requested_by: Keyword.get(opts, :requested_by, %{})
+             )
+
+    run
+  end
+
+  @spec complete_catalog_import_run!(ImportRun.t()) :: ImportRun.t()
+  def complete_catalog_import_run!(%ImportRun{} = run) do
+    assert {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
+    completed
+  end
+
+  defp sample_yaml_source do
+    """
+    packets:
+      - name: HEALTH
+        items:
+          - name: mode
+            data_type: uint
+            bit_offset: 0
+            bit_size: 8
+    commands: []
+    """
+  end
 end
