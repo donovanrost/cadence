@@ -135,7 +135,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
         <div class="flex items-center gap-3 pt-2">
           <a
             href={
-              "/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}/download"
+              ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}/download"
             }
             class="btn btn-ghost btn-sm"
           >

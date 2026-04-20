@@ -53,6 +53,10 @@ defmodule CadenceWeb.Router do
     put "/session/organization", UserSessionController, :update
     get "/no-organization", NoOrganizationController, :show
 
+    get "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
+        CatalogArtifactDownloadController,
+        :show
+
     live_session :organization,
       on_mount: [
         {CadenceWeb.OrganizationAuth, :require_organization_scope},
