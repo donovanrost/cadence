@@ -96,6 +96,32 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/spacecraft/:spacecraft_id", SpacecraftShowLive, :show
     end
 
+    live_session :catalog,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
+      layout: {CadenceWeb.Layouts, :mission_sidebar} do
+      live "/missions/:mission_id/catalog", CatalogIndexLive, :index
+
+      live "/missions/:mission_id/catalog/artifacts/:artifact_id",
+           CatalogArtifactShowLive,
+           :show
+
+      live "/missions/:mission_id/catalog/imports/:import_run_id",
+           CatalogImportRunShowLive,
+           :show
+
+      live "/missions/:mission_id/catalog/telemetry_snapshots/:snapshot_id",
+           CatalogTelemetrySnapshotShowLive,
+           :show
+
+      live "/missions/:mission_id/catalog/command_snapshots/:snapshot_id",
+           CatalogCommandSnapshotShowLive,
+           :show
+    end
+
     live_session :user,
       on_mount: [
         {CadenceWeb.UserAuth, :require_user_scope},
