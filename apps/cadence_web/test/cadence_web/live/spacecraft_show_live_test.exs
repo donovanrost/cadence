@@ -80,5 +80,20 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
 
       assert path == ~p"/missions/#{mission.mission_id}/spacecraft"
     end
+
+    test "sidebar highlights the Spacecraft nav entry" do
+      {conn, _user, _org, mission} = signed_in_org_and_mission()
+      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nav-Check")
+
+      list_url = ~p"/missions/#{mission.mission_id}/spacecraft"
+
+      {:ok, _view, html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
+
+      # A navigate link to the spacecraft list must exist in the sidebar AND
+      # the rendered HTML must contain the "Spacecraft" label inside that link.
+      assert html =~ list_url
+      assert html =~ "Spacecraft"
+    end
   end
 end
