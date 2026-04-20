@@ -89,6 +89,12 @@
               <span class="sidebar-label">Spacecraft</span>
             </.link>
           </li>
+          <li :if={assigns[:current_mission]}>
+            <.link navigate={~p"/missions/#{@current_mission.mission_id}/catalog"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :catalog, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
+              <span class="hero-circle-stack h-4 w-4 opacity-80 flex-shrink-0"></span>
+              <span class="sidebar-label">Catalog</span>
+            </.link>
+          </li>
         </ul>
       </nav>
 

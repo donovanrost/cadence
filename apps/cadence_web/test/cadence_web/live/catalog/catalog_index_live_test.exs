@@ -26,6 +26,16 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
     assert html =~ "Catalog"
   end
 
+  test "mission sidebar marks Catalog as the active nav item" do
+    {conn, _org, mission} = signed_in_org_and_mission()
+
+    {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
+
+    assert html =~ "Catalog"
+    assert html =~ "hero-circle-stack"
+    assert html =~ "bg-primary/10"
+  end
+
   describe "authorization" do
     test "unauthenticated request redirects to /sign-in", %{conn: conn} do
       assert {:error, {:redirect, %{to: "/sign-in"}}} =
