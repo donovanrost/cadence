@@ -4,7 +4,7 @@ defmodule Cadence.Catalog.EventsTest do
   alias Cadence.Catalog.Events
   alias Cadence.Catalog.ImportRun
 
-  defp run(overrides \\ %{}) do
+  defp run(overrides) do
     ImportRun.new(
       Map.merge(
         %{
