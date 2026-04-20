@@ -43,7 +43,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
         {:ok, persisted} ->
           {:noreply,
            push_navigate(socket,
-             to: "/missions/#{mission.mission_id}/spacecraft/#{persisted.spacecraft_id}"
+             to: ~p"/missions/#{mission.mission_id}/spacecraft/#{persisted.spacecraft_id}"
            )}
 
         {:error, :mission_not_found} ->

@@ -85,6 +85,17 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/spacecraft/new", SpacecraftNewLive, :new
     end
 
+    live_session :spacecraft_show,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.SpacecraftAuth, :load_spacecraft},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
+      layout: {CadenceWeb.Layouts, :mission_sidebar} do
+      live "/missions/:mission_id/spacecraft/:spacecraft_id", SpacecraftShowLive, :show
+    end
+
     live_session :user,
       on_mount: [
         {CadenceWeb.UserAuth, :require_user_scope},

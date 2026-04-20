@@ -64,7 +64,7 @@ defmodule CadenceWeb.SpacecraftListLive do
                   <.action_menu>
                     <:action>
                       <.link navigate={
-                        "/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+                        ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
                       }>
                         View
                       </.link>
