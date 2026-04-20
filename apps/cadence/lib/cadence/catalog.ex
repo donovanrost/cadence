@@ -8,7 +8,7 @@ defmodule Cadence.Catalog do
 
   alias Ecto.Changeset
 
-  alias Cadence.Catalog.{Artifact, ImportResult, ImportRun, Registry}
+  alias Cadence.Catalog.{Artifact, Events, ImportResult, ImportRun, Registry}
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
@@ -392,9 +392,16 @@ defmodule Cadence.Catalog do
 
   defp insert_run(%ImportRun{} = run) do
     case Repo.insert(CatalogImportRunRow.changeset(run)) do
-      {:ok, %CatalogImportRunRow{} = row} -> {:ok, CatalogImportRunRow.to_domain(row)}
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-      {:error, reason} -> {:error, reason}
+      {:ok, %CatalogImportRunRow{} = row} ->
+        domain_run = CatalogImportRunRow.to_domain(row)
+        Events.broadcast_started(domain_run)
+        {:ok, domain_run}
+
+      {:error, %Changeset{} = changeset} ->
+        {:error, changeset}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -406,7 +413,9 @@ defmodule Cadence.Catalog do
       %CatalogImportRunRow{} = row ->
         case Repo.update(CatalogImportRunRow.changeset(row, run)) do
           {:ok, %CatalogImportRunRow{} = updated_row} ->
-            {:ok, CatalogImportRunRow.to_domain(updated_row)}
+            domain_run = CatalogImportRunRow.to_domain(updated_row)
+            broadcast_for_status(domain_run)
+            {:ok, domain_run}
 
           {:error, %Changeset{} = changeset} ->
             {:error, changeset}
@@ -416,6 +425,15 @@ defmodule Cadence.Catalog do
         end
     end
   end
+
+  defp broadcast_for_status(%ImportRun{status: :completed} = run),
+    do: Events.broadcast_completed(run)
+
+  defp broadcast_for_status(%ImportRun{status: :failed} = run),
+    do: Events.broadcast_failed(run)
+
+  defp broadcast_for_status(%ImportRun{} = run),
+    do: Events.broadcast_updated(run)
 
   defp fetch_import_run_by_id(import_run_id) do
     case Repo.get(CatalogImportRunRow, import_run_id) do
