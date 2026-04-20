@@ -47,7 +47,7 @@ defmodule CadenceWeb.SpacecraftListLive do
           action_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
         />
       <% else %>
-        <div class="card bg-base-200 overflow-hidden">
+        <div class="card bg-base-200">
           <table class="table">
             <thead>
               <tr>
