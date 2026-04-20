@@ -7,6 +7,13 @@ defmodule Cadence.Catalog.Registry do
 
   @type importer_registration :: %{module: module(), descriptor: ImporterDescriptor.t()}
 
+  @extension_by_media_type %{
+    "application/yaml" => [".yaml", ".yml"],
+    "application/x-yaml" => [".yaml", ".yml"],
+    "text/yaml" => [".yaml", ".yml"],
+    "text/x-yaml" => [".yaml", ".yml"]
+  }
+
   @spec list_importers(keyword()) :: [importer_registration()]
   def list_importers(opts \\ []) when is_list(opts) do
     catalog_family = Keyword.get(opts, :catalog_family)
@@ -28,6 +35,52 @@ defmodule Cadence.Catalog.Registry do
       nil -> {:error, :catalog_importer_not_found}
       importer -> {:ok, importer}
     end
+  end
+
+  @spec detect_importer(binary(), binary() | nil) ::
+          {:ok, importer_registration()} | {:error, :no_matching_importer}
+  def detect_importer(filename, media_type)
+      when is_binary(filename) and (is_binary(media_type) or is_nil(media_type)) do
+    importers = list_importers()
+
+    with :error <- find_by_media_type(importers, media_type),
+         :error <- find_by_extension(importers, filename) do
+      {:error, :no_matching_importer}
+    else
+      {:ok, registration} -> {:ok, registration}
+    end
+  end
+
+  defp find_by_media_type(_importers, nil), do: :error
+
+  defp find_by_media_type(importers, media_type) do
+    normalized = String.downcase(media_type)
+
+    case Enum.find(importers, fn %{descriptor: descriptor} ->
+           Enum.any?(descriptor.media_types, &(String.downcase(&1) == normalized))
+         end) do
+      nil -> :error
+      registration -> {:ok, registration}
+    end
+  end
+
+  defp find_by_extension(importers, filename) do
+    extension = filename |> Path.extname() |> String.downcase()
+
+    if extension == "" do
+      :error
+    else
+      case Enum.find(importers, &matches_extension?(&1, extension)) do
+        nil -> :error
+        registration -> {:ok, registration}
+      end
+    end
+  end
+
+  defp matches_extension?(%{descriptor: descriptor}, extension) do
+    Enum.any?(descriptor.media_types, fn media_type ->
+      extension in Map.get(@extension_by_media_type, media_type, [])
+    end)
   end
 
   defp configured_importers do
