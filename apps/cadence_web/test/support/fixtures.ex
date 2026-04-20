@@ -5,7 +5,9 @@ defmodule CadenceWeb.TestFixtures do
 
   alias Cadence.Accounts.{OrganizationMembership, Password, User}
   alias Cadence.Ids
+  alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
+  alias Cadence.Spacecraft
 
   alias Cadence.Persistence.Schemas.{
     OrganizationMembershipRow,
@@ -94,5 +96,36 @@ defmodule CadenceWeb.TestFixtures do
   def member_conn(%User{} = user) do
     token = member_session_token!(user)
     Phoenix.ConnTest.build_conn() |> Plug.Test.init_test_session(%{user_session_token: token})
+  end
+
+  @spec persist_mission!(Cadence.Organizations.Organization.t(), keyword()) :: Mission.t()
+  def persist_mission!(org, opts \\ []) do
+    slug = Keyword.get(opts, :slug, "mission-#{System.unique_integer([:positive])}")
+    display_name = Keyword.get(opts, :display_name, "Fixture Mission")
+
+    mission =
+      Mission.new(%{
+        organization_id: org.organization_id,
+        slug: slug,
+        display_name: display_name
+      })
+
+    assert {:ok, persisted} = Cadence.persist_mission(mission)
+    persisted
+  end
+
+  @spec persist_spacecraft!(Mission.t(), keyword()) :: Spacecraft.t()
+  def persist_spacecraft!(%Mission{} = mission, opts \\ []) do
+    display_name =
+      Keyword.get(opts, :display_name, "Spacecraft-#{System.unique_integer([:positive])}")
+
+    spacecraft =
+      Spacecraft.new(%{
+        mission_id: mission.mission_id,
+        display_name: display_name
+      })
+
+    assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)
+    persisted
   end
 end
