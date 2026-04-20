@@ -1,7 +1,7 @@
 defmodule CadenceWeb.CatalogIndexLive do
   @moduledoc false
 
-  # Authz note: Catalog upload currently permitted for any active org member.
+  # TODO(authz): Catalog upload currently permitted for any active org member.
   # Tighten once finer-grained catalog capability is defined.
   use CadenceWeb, :live_view
 
