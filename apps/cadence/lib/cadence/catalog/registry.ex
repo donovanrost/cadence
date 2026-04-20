@@ -37,6 +37,14 @@ defmodule Cadence.Catalog.Registry do
     end
   end
 
+  @doc """
+  Detects the importer for an upload.
+
+  Media type is matched first (case-insensitive, exact against each descriptor's
+  `media_types`). Filename extension is consulted only when no importer claims
+  the media type. Returns `{:error, :no_matching_importer}` when neither step
+  finds a match.
+  """
   @spec detect_importer(binary(), binary() | nil) ::
           {:ok, importer_registration()} | {:error, :no_matching_importer}
   def detect_importer(filename, media_type)
@@ -46,8 +54,6 @@ defmodule Cadence.Catalog.Registry do
     with :error <- find_by_media_type(importers, media_type),
          :error <- find_by_extension(importers, filename) do
       {:error, :no_matching_importer}
-    else
-      {:ok, registration} -> {:ok, registration}
     end
   end
 
