@@ -112,11 +112,11 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
 
     assert Enum.map(
              packet_definition.fields,
-             &{&1.name, &1.offset_bits, &1.size_bits, &1.data_type}
+             &{&1.name, &1.offset_bits, &1.size_bits, &1.data_type, &1.byte_order}
            ) == [
-             {"counter", 0, 16, :uint},
-             {"enabled", 16, 1, :bool},
-             {"temperature_c", 32, 32, :float}
+             {"counter", 0, 16, :uint, :big_endian},
+             {"enabled", 16, 1, :bool, :big_endian},
+             {"temperature_c", 32, 32, :float, :big_endian}
            ]
 
     assert %SelectorInput{} = selector_input
@@ -203,7 +203,7 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
     assert "telemetry_compiler.nested_packet_unsupported" in diagnostic_codes
   end
 
-  test "emits diagnostics and skips little-endian float fields that current runtime cannot compile" do
+  test "compiles byte-aligned little-endian integer and float fields into runtime packet definitions" do
     snapshot =
       Snapshot.new(%{
         snapshot_id: "snapshot-gamma",
@@ -214,19 +214,58 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
         snapshot_name: "Mission Alpha TM Little Endian",
         types: [
           %{
-            type_id: "type-temperature",
+            type_id: "type-counter-16",
             snapshot_id: "snapshot-gamma",
-            name: "TemperatureType",
+            name: "Counter16Type",
+            base_type: :integer,
+            encoding: %{encoding_type: :integer, size_bits: 16, byte_order: :little_endian}
+          },
+          %{
+            type_id: "type-counter-32",
+            snapshot_id: "snapshot-gamma",
+            name: "Counter32Type",
+            base_type: :integer,
+            encoding: %{encoding_type: :integer, size_bits: 32, byte_order: :little_endian}
+          },
+          %{
+            type_id: "type-temperature-32",
+            snapshot_id: "snapshot-gamma",
+            name: "Temperature32Type",
             base_type: :float,
             encoding: %{encoding_type: :float, size_bits: 32, byte_order: :little_endian}
+          },
+          %{
+            type_id: "type-temperature-64",
+            snapshot_id: "snapshot-gamma",
+            name: "Temperature64Type",
+            base_type: :float,
+            encoding: %{encoding_type: :float, size_bits: 64, byte_order: :little_endian}
           }
         ],
         points: [
           %{
-            point_id: "point-temperature",
+            point_id: "point-counter-16",
+            snapshot_id: "snapshot-gamma",
+            name: "counter_16",
+            type_ref: "type-counter-16"
+          },
+          %{
+            point_id: "point-counter-32",
+            snapshot_id: "snapshot-gamma",
+            name: "counter_32",
+            type_ref: "type-counter-32"
+          },
+          %{
+            point_id: "point-temperature-32",
             snapshot_id: "snapshot-gamma",
             name: "temperature_c",
-            type_ref: "type-temperature"
+            type_ref: "type-temperature-32"
+          },
+          %{
+            point_id: "point-temperature-64",
+            snapshot_id: "snapshot-gamma",
+            name: "temperature_k",
+            type_ref: "type-temperature-64"
           }
         ],
         packets: [
@@ -237,10 +276,28 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
             apid: 91,
             entries: [
               %{
-                packet_entry_id: "entry-temperature",
+                packet_entry_id: "entry-counter-16",
                 entry_kind: :point_ref,
-                point_ref: "point-temperature",
+                point_ref: "point-counter-16",
                 bit_offset: 0
+              },
+              %{
+                packet_entry_id: "entry-counter-32",
+                entry_kind: :point_ref,
+                point_ref: "point-counter-32",
+                bit_offset: 16
+              },
+              %{
+                packet_entry_id: "entry-temperature-32",
+                entry_kind: :point_ref,
+                point_ref: "point-temperature-32",
+                bit_offset: 48
+              },
+              %{
+                packet_entry_id: "entry-temperature-64",
+                entry_kind: :point_ref,
+                point_ref: "point-temperature-64",
+                bit_offset: 80
               }
             ]
           }
@@ -248,18 +305,23 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
       })
 
     assert %Result{
-             packet_definitions: [],
-             selector_inputs: [],
-             diagnostics: diagnostics
+             packet_definitions: [packet_definition],
+             selector_inputs: [_selector_input],
+             diagnostics: []
            } = Compiler.compile(snapshot)
 
-    assert "telemetry_compiler.float_little_endian_unsupported" in Enum.map(
-             diagnostics,
-             & &1.code
-           )
+    assert Enum.map(
+             packet_definition.fields,
+             &{&1.name, &1.offset_bits, &1.size_bits, &1.data_type, &1.byte_order}
+           ) == [
+             {"counter_16", 0, 16, :uint, :little_endian},
+             {"counter_32", 16, 32, :uint, :little_endian},
+             {"temperature_c", 48, 32, :float, :little_endian},
+             {"temperature_k", 80, 64, :float, :little_endian}
+           ]
   end
 
-  test "emits diagnostics and skips little-endian multi-byte integers that current runtime cannot compile" do
+  test "emits narrowed diagnostics for little-endian fields outside the executable runtime subset" do
     snapshot =
       Snapshot.new(%{
         snapshot_id: "snapshot-delta",
@@ -267,14 +329,21 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
         artifact_id: "artifact-delta",
         import_run_id: "import-run-delta",
         importer_key: "cadence_yaml_telemetry",
-        snapshot_name: "Mission Alpha TM Little Endian Integer",
+        snapshot_name: "Mission Alpha TM Unsupported Little Endian Layouts",
         types: [
           %{
             type_id: "type-counter",
             snapshot_id: "snapshot-delta",
             name: "CounterType",
             base_type: :integer,
-            encoding: %{encoding_type: :integer, size_bits: 16, byte_order: :little_endian}
+            encoding: %{encoding_type: :integer, size_bits: 12, byte_order: :little_endian}
+          },
+          %{
+            type_id: "type-temperature",
+            snapshot_id: "snapshot-delta",
+            name: "TemperatureType",
+            base_type: :float,
+            encoding: %{encoding_type: :float, size_bits: 32, byte_order: :little_endian}
           }
         ],
         points: [
@@ -283,6 +352,12 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
             snapshot_id: "snapshot-delta",
             name: "counter",
             type_ref: "type-counter"
+          },
+          %{
+            point_id: "point-temperature",
+            snapshot_id: "snapshot-delta",
+            name: "temperature_c",
+            type_ref: "type-temperature"
           }
         ],
         packets: [
@@ -299,6 +374,20 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
                 bit_offset: 0
               }
             ]
+          },
+          %{
+            packet_id: "packet-thermal",
+            snapshot_id: "snapshot-delta",
+            name: "THERMAL",
+            apid: 43,
+            entries: [
+              %{
+                packet_entry_id: "entry-temperature",
+                entry_kind: :point_ref,
+                point_ref: "point-temperature",
+                bit_offset: 4
+              }
+            ]
           }
         ]
       })
@@ -309,10 +398,11 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
              diagnostics: diagnostics
            } = Compiler.compile(snapshot)
 
-    assert "telemetry_compiler.integer_little_endian_unsupported" in Enum.map(
-             diagnostics,
-             & &1.code
-           )
+    diagnostic_codes = Enum.map(diagnostics, & &1.code)
+
+    assert "telemetry_compiler.integer_little_endian_non_byte_aligned_unsupported" in diagnostic_codes
+
+    assert "telemetry_compiler.float_little_endian_non_byte_aligned_unsupported" in diagnostic_codes
   end
 
   test "emits diagnostics and skips multi-bit booleans that current runtime cannot compile" do
@@ -366,5 +456,64 @@ defmodule Cadence.Catalog.TelemetryCompilerTest do
            } = Compiler.compile(snapshot)
 
     assert "telemetry_compiler.bool_size_unsupported" in Enum.map(diagnostics, & &1.code)
+  end
+
+  test "marks binary packet content as preserved for custom application binding" do
+    snapshot =
+      Snapshot.new(%{
+        snapshot_id: "snapshot-zeta",
+        mission_id: "mission-alpha",
+        artifact_id: "artifact-zeta",
+        import_run_id: "import-run-zeta",
+        importer_key: "cadence_yaml_telemetry",
+        snapshot_name: "Mission Alpha TM Binary Payload",
+        types: [
+          %{
+            type_id: "type-data-block",
+            snapshot_id: "snapshot-zeta",
+            name: "DataBlockType",
+            base_type: :binary,
+            encoding: %{encoding_type: :binary, size_bits: 32_672}
+          }
+        ],
+        points: [
+          %{
+            point_id: "point-data-block",
+            snapshot_id: "snapshot-zeta",
+            name: "data_block",
+            type_ref: "type-data-block"
+          }
+        ],
+        packets: [
+          %{
+            packet_id: "packet-science",
+            snapshot_id: "snapshot-zeta",
+            name: "SCIENCE_FRAME",
+            apid: 42,
+            entries: [
+              %{
+                packet_entry_id: "entry-data-block",
+                entry_kind: :point_ref,
+                point_ref: "point-data-block",
+                bit_offset: 96
+              }
+            ]
+          }
+        ]
+      })
+
+    assert %Result{
+             packet_definitions: [],
+             selector_inputs: [],
+             diagnostics: [diagnostic]
+           } = Compiler.compile(snapshot)
+
+    assert diagnostic.severity == :warning
+    assert diagnostic.code == "telemetry_compiler.available_for_custom_application_binding"
+    assert diagnostic.metadata["base_type"] == "binary"
+    assert diagnostic.metadata["diagnostic_stage"] == "built_in_telemetry_binding"
+
+    assert diagnostic.metadata["consumption_status"] ==
+             "available_for_custom_application_binding"
   end
 end

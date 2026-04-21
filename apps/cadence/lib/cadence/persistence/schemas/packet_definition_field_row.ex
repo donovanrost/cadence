@@ -16,6 +16,7 @@ defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
     field(:offset_bits, :integer)
     field(:size_bits, :integer)
     field(:data_type, :string)
+    field(:byte_order, :string)
     field(:engineering_unit, :string)
 
     timestamps()
@@ -27,7 +28,8 @@ defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
     :name,
     :offset_bits,
     :size_bits,
-    :data_type
+    :data_type,
+    :byte_order
   ]
 
   @spec changeset(pos_integer(), FieldDefinition.t()) :: Ecto.Changeset.t()
@@ -42,6 +44,7 @@ defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
         offset_bits: field_definition.offset_bits,
         size_bits: field_definition.size_bits,
         data_type: Atom.to_string(field_definition.data_type),
+        byte_order: Atom.to_string(field_definition.byte_order),
         engineering_unit: field_definition.engineering_unit
       },
       all_fields()
@@ -61,6 +64,7 @@ defmodule Cadence.Persistence.Schemas.PacketDefinitionFieldRow do
       :offset_bits,
       :size_bits,
       :data_type,
+      :byte_order,
       :engineering_unit
     ]
   end

@@ -324,6 +324,78 @@ defmodule Cadence.Catalog.CadenceYamlTelemetryImporterTest do
     assert length(telemetry_snapshot.packets) > 5
   end
 
+  test "summarizes packets preserved for custom application binding when telemetry contains binary payload content" do
+    persist_mission_scope(@organization_id, @mission_id)
+
+    artifact =
+      Artifact.new(%{
+        artifact_id: "artifact-yaml-binary-payload",
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        catalog_family: :combined,
+        artifact_name: "science-payload.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: """
+        packets:
+          - name: SCIENCE_FRAME
+            apid: 42
+            items:
+              - name: data_block
+                bit_offset: 96
+                bit_size: 32672
+                data_type: binary
+                description: "Raw science data (~4KB)"
+        """
+      })
+
+    assert {:ok, persisted_artifact} =
+             Cadence.persist_catalog_artifact(@organization_id, artifact)
+
+    assert {:ok, queued_run} =
+             Cadence.start_catalog_import_run(
+               @organization_id,
+               @mission_id,
+               persisted_artifact.artifact_id,
+               "cadence_yaml"
+             )
+
+    assert {:ok, queued_job} =
+             Cadence.Jobs.fetch_job_for_run(:catalog_import_run, queued_run.import_run_id)
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == queued_job.job_id
+    assert {:ok, completed_job} = Cadence.Jobs.run_job(queued_job.job_id)
+    assert completed_job.status == :completed
+
+    assert {:ok, completed_run} =
+             Cadence.fetch_catalog_import_run(
+               @organization_id,
+               @mission_id,
+               queued_run.import_run_id
+             )
+
+    assert completed_run.status == :completed
+
+    assert "telemetry_compiler.available_for_custom_application_binding" in Enum.map(
+             completed_run.diagnostics,
+             & &1.code
+           )
+
+    telemetry_runtime = completed_run.result_document["telemetry_runtime"]
+    assert telemetry_runtime["packet_count"] == 1
+    assert telemetry_runtime["built_in_telemetry_packet_count"] == 0
+    assert telemetry_runtime["custom_application_candidate_packet_count"] == 1
+
+    assert telemetry_runtime["custom_application_candidate_packets"] == [
+             %{
+               "packet_id" => "telemetry_snapshot:#{queued_run.import_run_id}:packet:0",
+               "packet_name" => "SCIENCE_FRAME",
+               "reason" => "binary_payload_field"
+             }
+           ]
+  end
+
   defp build_space_packet(apid, sequence_count, packet_data) do
     packet_length = byte_size(packet_data) - 1
 

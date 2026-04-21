@@ -53,7 +53,8 @@ defmodule Cadence.GovernanceTest do
             name: "temperature_raw",
             offset_bits: 0,
             size_bits: 16,
-            data_type: :uint
+            data_type: :uint,
+            byte_order: :little_endian
           },
           %{
             field_id: "heater",
@@ -117,6 +118,7 @@ defmodule Cadence.GovernanceTest do
     assert packet_definition.packet_definition_id == "hk-packet"
     assert packet_definition.version == 2
     assert Enum.map(packet_definition.fields, & &1.name) == ["temperature_raw", "heater_enabled"]
+    assert Enum.map(packet_definition.fields, & &1.byte_order) == [:little_endian, :big_endian]
 
     assert {:ok, latest_binding_set} =
              Cadence.fetch_latest_binding_set(

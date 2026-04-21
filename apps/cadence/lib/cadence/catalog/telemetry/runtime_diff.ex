@@ -203,6 +203,7 @@ defmodule Cadence.Catalog.Telemetry.RuntimeDiff do
       offset_bits: field_definition.offset_bits,
       size_bits: field_definition.size_bits,
       data_type: field_definition.data_type,
+      byte_order: field_definition.byte_order,
       engineering_unit: field_definition.engineering_unit
     }
   end

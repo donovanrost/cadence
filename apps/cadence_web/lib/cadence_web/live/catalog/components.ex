@@ -67,6 +67,12 @@ defmodule CadenceWeb.Catalog.Components do
             <li :for={diagnostic <- items} class="text-sm">
               <span class="font-mono text-xs text-base-content/60">{diagnostic.code}</span>
               <span class="ml-2">{diagnostic.message}</span>
+              <p
+                :if={diagnostic_detail(diagnostic) != nil}
+                class="text-xs text-base-content/70 mt-1"
+              >
+                {diagnostic_detail(diagnostic)}
+              </p>
               <p :if={diagnostic.path != []} class="text-xs text-base-content/50 font-mono mt-1">
                 {Enum.join(diagnostic.path, " / ")}
               </p>
@@ -89,6 +95,34 @@ defmodule CadenceWeb.Catalog.Components do
   defp severity_heading(:error), do: "Errors"
   defp severity_heading(:warning), do: "Warnings"
   defp severity_heading(:info), do: "Info"
+
+  defp diagnostic_detail(diagnostic) do
+    metadata = Map.get(diagnostic, :metadata, %{}) || %{}
+
+    [
+      metadata_value(metadata, "consumption_summary", "Built-in telemetry"),
+      metadata_value(metadata, "consumption_status", "Status"),
+      metadata_value(metadata, "packet_name", "Packet"),
+      metadata_value(metadata, "entry_name", "Entry"),
+      metadata_value(metadata, "point_name", "Point"),
+      metadata_value(metadata, "type_name", "Type"),
+      metadata_value(metadata, "base_type", "Base type"),
+      metadata_value(metadata, "point_id", "Point ID"),
+      metadata_value(metadata, "type_id", "Type ID")
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      parts -> Enum.join(parts, " | ")
+    end
+  end
+
+  defp metadata_value(metadata, key, label) do
+    case Map.get(metadata, key) do
+      value when is_binary(value) and value != "" -> "#{label}: #{value}"
+      _ -> nil
+    end
+  end
 
   alias Cadence.Catalog.Registry
 

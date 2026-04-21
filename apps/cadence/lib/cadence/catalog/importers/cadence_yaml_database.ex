@@ -1179,6 +1179,8 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
         telemetry_snapshot_summary(telemetry_snapshot) ||
           command_snapshot_summary(command_snapshot),
       "telemetry_snapshot" => telemetry_snapshot_summary(telemetry_snapshot),
+      "telemetry_runtime" =>
+        telemetry_runtime_summary(telemetry_snapshot, telemetry_runtime_artifacts),
       "packet_definitions" => telemetry_packet_definitions(telemetry_runtime_artifacts),
       "selector_input_count" => telemetry_selector_input_count(telemetry_runtime_artifacts),
       "binding_set" =>
@@ -1269,6 +1271,62 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
        do: length(selector_inputs)
 
   defp telemetry_selector_input_count(_other), do: 0
+
+  defp telemetry_runtime_summary(nil, _telemetry_runtime_artifacts), do: nil
+
+  defp telemetry_runtime_summary(
+         %TelemetrySnapshot{} = snapshot,
+         %{compiler_result: %{packet_definitions: packet_definitions, diagnostics: diagnostics}}
+       )
+       when is_list(packet_definitions) and is_list(diagnostics) do
+    custom_application_candidate_packets =
+      custom_application_candidate_packets(snapshot, diagnostics)
+
+    %{
+      "packet_count" => length(snapshot.packets),
+      "built_in_telemetry_packet_count" => length(packet_definitions),
+      "compiler_diagnostic_count" => length(diagnostics),
+      "custom_application_candidate_packet_count" => length(custom_application_candidate_packets),
+      "custom_application_candidate_packets" => custom_application_candidate_packets
+    }
+  end
+
+  defp telemetry_runtime_summary(%TelemetrySnapshot{} = snapshot, _other) do
+    %{
+      "packet_count" => length(snapshot.packets),
+      "built_in_telemetry_packet_count" => 0,
+      "compiler_diagnostic_count" => 0,
+      "custom_application_candidate_packet_count" => 0,
+      "custom_application_candidate_packets" => []
+    }
+  end
+
+  defp custom_application_candidate_packets(%TelemetrySnapshot{} = snapshot, diagnostics) do
+    packet_names_by_id = Map.new(snapshot.packets, &{&1.packet_id, &1.name})
+
+    diagnostics
+    |> Enum.filter(fn diagnostic ->
+      diagnostic.metadata["consumption_status"] == "available_for_custom_application_binding"
+    end)
+    |> Enum.reduce(%{}, fn diagnostic, acc ->
+      packet_id = diagnostic.metadata["packet_id"]
+      packet_name = Map.get(packet_names_by_id, packet_id)
+
+      if is_binary(packet_id) do
+        Map.put_new(acc, packet_id, %{
+          "packet_id" => packet_id,
+          "packet_name" => packet_name,
+          "reason" =>
+            diagnostic.metadata["custom_application_candidate_reason"] ||
+              "custom_application_candidate"
+        })
+      else
+        acc
+      end
+    end)
+    |> Map.values()
+    |> Enum.sort_by(&{&1["packet_name"] || "", &1["packet_id"]})
+  end
 
   defp command_snapshot_summary(nil), do: nil
 

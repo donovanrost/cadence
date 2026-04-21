@@ -179,6 +179,81 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     assert Repo.aggregate(TelemetrySampleRow, :count, :sample_id) == 1
   end
 
+  test "loads persisted little-endian packet definitions and decodes samples correctly" do
+    packet_definition =
+      PacketDefinition.new(%{
+        mission_id: "mission-alpha",
+        packet_name: "THERM",
+        apid: 42,
+        fields: [
+          %{
+            name: "counter",
+            offset_bits: 0,
+            size_bits: 16,
+            data_type: :uint,
+            byte_order: :little_endian
+          },
+          %{
+            name: "temperature_c",
+            offset_bits: 16,
+            size_bits: 32,
+            data_type: :float,
+            byte_order: :little_endian
+          }
+        ]
+      })
+
+    binding_set =
+      BindingSet.new(%{
+        mission_id: "mission-alpha",
+        binding_set_id: "mission-alpha-little-endian",
+        version: 1,
+        rules: [
+          BindingRule.new(%{
+            handler_key: :definition_bound_telemetry,
+            packet_kind: :space_packet,
+            apid: 42,
+            handler_configuration: packet_definition
+          })
+        ]
+      })
+
+    assert {:ok, _binding_set} = Cadence.persist_binding_set(binding_set)
+
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: "mission-alpha",
+        raw:
+          build_space_packet(
+            42,
+            13,
+            <<500::little-unsigned-integer-size(16), 12.5::little-float-32>>
+          )
+      })
+
+    assert {:ok, result} =
+             Cadence.process_and_persist_telemetry_ingress(
+               raw_evidence,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    assert Enum.map(result.outputs, &{&1.point_name, &1.raw_value}) == [
+             {"THERM.counter", 500},
+             {"THERM.temperature_c", 12.5}
+           ]
+
+    telemetry_samples =
+      TelemetrySampleRow
+      |> order_by(asc: :point_name)
+      |> Repo.all()
+
+    assert Enum.map(telemetry_samples, &{&1.point_name, &1.raw_value}) == [
+             {"THERM.counter", %{"value" => 500}},
+             {"THERM.temperature_c", %{"value" => 12.5}}
+           ]
+  end
+
   test "does not persist dispatch decisions when packet and raw evidence rows are archived outside Postgres" do
     previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
     previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])

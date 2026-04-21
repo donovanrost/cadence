@@ -167,6 +167,63 @@ defmodule Cadence.ProcessTelemetryIngressTest do
              result.outputs
   end
 
+  test "extracts byte-aligned little-endian integer and float fields through the runtime" do
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: "mission-alpha",
+        raw:
+          build_space_packet(
+            42,
+            12,
+            <<500::little-unsigned-integer-size(16), 12.5::little-float-32>>
+          )
+      })
+
+    packet_definition =
+      PacketDefinition.new(%{
+        mission_id: "mission-alpha",
+        packet_name: "THERM",
+        apid: 42,
+        fields: [
+          %{
+            name: "counter",
+            offset_bits: 0,
+            size_bits: 16,
+            data_type: :uint,
+            byte_order: :little_endian
+          },
+          %{
+            name: "temperature_c",
+            offset_bits: 16,
+            size_bits: 32,
+            data_type: :float,
+            byte_order: :little_endian
+          }
+        ]
+      })
+
+    binding_set =
+      BindingSet.new(%{
+        mission_id: "mission-alpha",
+        version: 1,
+        rules: [
+          BindingRule.new(%{
+            handler_key: :definition_bound_telemetry,
+            packet_kind: :space_packet,
+            apid: 42,
+            handler_configuration: packet_definition
+          })
+        ]
+      })
+
+    assert {:ok, result} = Cadence.process_telemetry_ingress(raw_evidence, binding_set)
+
+    assert Enum.map(result.outputs, &{&1.point_name, &1.raw_value}) == [
+             {"THERM.counter", 500},
+             {"THERM.temperature_c", 12.5}
+           ]
+  end
+
   test "rejects a binding set from a different mission" do
     raw_evidence =
       RawEvidence.new(%{

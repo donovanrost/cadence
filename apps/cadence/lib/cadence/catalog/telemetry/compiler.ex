@@ -196,7 +196,9 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
          {:ok, %Point{} = point} <- fetch_point(packet, entry, point_by_id),
          {:ok, %Type{} = point_type} <- fetch_type(packet, point, type_by_id),
          {:ok, field_data_type} <- compile_field_data_type(packet, entry, point, point_type),
-         {:ok, size_bits} <- compile_field_size(packet, entry, point_type) do
+         {:ok, size_bits} <- compile_field_size(packet, entry, point_type),
+         {:ok, byte_order} <-
+           compile_field_byte_order(packet, entry, point, point_type, size_bits) do
       field =
         FieldDefinition.new(%{
           field_id: point.point_id,
@@ -204,6 +206,7 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
           offset_bits: entry.bit_offset,
           size_bits: size_bits,
           data_type: field_data_type,
+          byte_order: byte_order,
           engineering_unit: point.unit_id
         })
 
@@ -311,6 +314,9 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
       :boolean ->
         compile_boolean_data_type(packet, source, point, point_type)
 
+      :binary ->
+        {:error, [custom_application_candidate_diagnostic(packet, source, point, point_type)]}
+
       unsupported_base_type ->
         {:error,
          [
@@ -323,7 +329,8 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
              %{
                "point_id" => point.point_id,
                "type_id" => point.type_id,
-               "base_type" => Atom.to_string(unsupported_base_type)
+               "base_type" => Atom.to_string(unsupported_base_type),
+               "diagnostic_stage" => "built_in_telemetry_binding"
              }
            )
          ]}
@@ -331,38 +338,12 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
   end
 
   defp compile_integer_data_type(
-         %Packet{} = packet,
-         source,
-         %Point{} = point,
+         %Packet{},
+         _source,
+         %Point{},
          %Type{} = point_type
-       ) do
-    encoding = point_type.encoding
-
-    cond do
-      is_nil(encoding) ->
-        {:ok, integer_data_type(point_type)}
-
-      encoding.byte_order == :little_endian and integer_encoding_requires_byte_order?(encoding) ->
-        {:error,
-         [
-           diagnostic(
-             :error,
-             "telemetry_compiler.integer_little_endian_unsupported",
-             "Current runtime packet definition compilation only supports big-endian multi-byte integer encodings",
-             packet,
-             source,
-             %{
-               "point_id" => point.point_id,
-               "type_id" => point.type_id,
-               "size_bits" => encoding.size_bits
-             }
-           )
-         ]}
-
-      true ->
-        {:ok, integer_data_type(point_type)}
-    end
-  end
+       ),
+       do: {:ok, integer_data_type(point_type)}
 
   defp compile_float_data_type(%Packet{} = packet, source, %Point{} = point, %Type{} = point_type) do
     encoding = point_type.encoding
@@ -370,22 +351,6 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
     cond do
       is_nil(encoding) ->
         {:ok, :float}
-
-      encoding.byte_order == :little_endian ->
-        {:error,
-         [
-           diagnostic(
-             :error,
-             "telemetry_compiler.float_little_endian_unsupported",
-             "Current runtime packet definition compilation only supports big-endian float encodings",
-             packet,
-             source,
-             %{
-               "point_id" => point.point_id,
-               "type_id" => point.type_id
-             }
-           )
-         ]}
 
       encoding.size_bits in [32, 64] ->
         {:ok, :float}
@@ -409,6 +374,30 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
 
       true ->
         {:ok, :float}
+    end
+  end
+
+  defp compile_field_byte_order(
+         %Packet{} = packet,
+         source,
+         %Point{} = point,
+         %Type{} = point_type,
+         size_bits
+       ) do
+    encoding = point_type.encoding
+
+    cond do
+      is_nil(encoding) ->
+        {:ok, :big_endian}
+
+      point_type.base_type in [:integer, :enumerated] ->
+        compile_integer_byte_order(packet, source, point, point_type, size_bits)
+
+      point_type.base_type == :float ->
+        compile_float_byte_order(packet, source, point, point_type, size_bits)
+
+      true ->
+        {:ok, encoding.byte_order}
     end
   end
 
@@ -489,6 +478,78 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
        do: true
 
   defp integer_encoding_requires_byte_order?(_encoding), do: false
+
+  defp compile_integer_byte_order(
+         %Packet{} = packet,
+         source,
+         %Point{} = point,
+         %Type{} = point_type,
+         size_bits
+       ) do
+    encoding = point_type.encoding
+
+    if encoding.byte_order == :little_endian and
+         integer_encoding_requires_byte_order?(encoding) and
+         not little_endian_field_byte_aligned?(source, size_bits) do
+      {:error,
+       [
+         diagnostic(
+           :error,
+           "telemetry_compiler.integer_little_endian_non_byte_aligned_unsupported",
+           "Current runtime packet definition compilation only supports byte-aligned little-endian multi-byte integer fields",
+           packet,
+           source,
+           %{
+             "point_id" => point.point_id,
+             "type_id" => point.type_id,
+             "bit_offset" => source.bit_offset,
+             "size_bits" => size_bits
+           }
+         )
+       ]}
+    else
+      {:ok, encoding.byte_order}
+    end
+  end
+
+  defp compile_float_byte_order(
+         %Packet{} = packet,
+         source,
+         %Point{} = point,
+         %Type{} = point_type,
+         size_bits
+       ) do
+    encoding = point_type.encoding
+
+    if encoding.byte_order == :little_endian and
+         not little_endian_field_byte_aligned?(source, size_bits) do
+      {:error,
+       [
+         diagnostic(
+           :error,
+           "telemetry_compiler.float_little_endian_non_byte_aligned_unsupported",
+           "Current runtime packet definition compilation only supports byte-aligned little-endian float fields",
+           packet,
+           source,
+           %{
+             "point_id" => point.point_id,
+             "type_id" => point.type_id,
+             "bit_offset" => source.bit_offset,
+             "size_bits" => size_bits
+           }
+         )
+       ]}
+    else
+      {:ok, encoding.byte_order}
+    end
+  end
+
+  defp little_endian_field_byte_aligned?(%PacketEntry{} = entry, size_bits)
+       when is_integer(entry.bit_offset) and is_integer(size_bits) do
+    rem(entry.bit_offset, 8) == 0 and rem(size_bits, 8) == 0
+  end
+
+  defp little_endian_field_byte_aligned?(_entry, _size_bits), do: false
 
   defp packet_runtime_diagnostics(%Packet{} = packet) do
     []
@@ -605,5 +666,29 @@ defmodule Cadence.Catalog.Telemetry.Compiler do
 
   defp diagnostic_path(%Packet{} = packet, %Packet{}) do
     ["packets", packet.packet_id]
+  end
+
+  defp custom_application_candidate_diagnostic(
+         %Packet{} = packet,
+         source,
+         %Point{} = point,
+         %Type{} = point_type
+       ) do
+    diagnostic(
+      :warning,
+      "telemetry_compiler.available_for_custom_application_binding",
+      "Binary packet content is preserved in the imported catalog but is not compiled into built-in telemetry; this packet remains available for custom application binding",
+      packet,
+      source,
+      %{
+        "point_id" => point.point_id,
+        "type_id" => point.type_id,
+        "base_type" => Atom.to_string(point_type.base_type),
+        "diagnostic_stage" => "built_in_telemetry_binding",
+        "consumption_status" => "available_for_custom_application_binding",
+        "consumption_summary" => "Preserved in catalog, not compiled into built-in telemetry",
+        "custom_application_candidate_reason" => "binary_payload_field"
+      }
+    )
   end
 end

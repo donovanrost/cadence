@@ -903,6 +903,7 @@ defmodule Cadence.Governance do
           offset_bits: field_row.offset_bits,
           size_bits: field_row.size_bits,
           data_type: String.to_existing_atom(field_row.data_type),
+          byte_order: String.to_existing_atom(field_row.byte_order),
           engineering_unit: field_row.engineering_unit
         }
       end)
