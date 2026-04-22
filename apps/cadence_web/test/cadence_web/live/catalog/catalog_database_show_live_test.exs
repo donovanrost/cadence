@@ -35,6 +35,8 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
     assert html =~ "Payload 7"
     assert html =~ "Completed"
     assert html =~ "No runtime bindings yet"
+    refute html =~ ">Family<"
+    refute html =~ "Combined"
   end
 
   test "missing database redirects to catalog index" do

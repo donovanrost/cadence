@@ -36,6 +36,7 @@ defmodule CadenceWeb.CatalogRevisionShowLiveTest do
     assert html =~ "Telemetry snapshot"
     assert html =~ "Command snapshot"
     assert html =~ "No runtime bindings yet"
+    refute html =~ "Combined"
   end
 
   test "missing revision redirects to catalog index" do

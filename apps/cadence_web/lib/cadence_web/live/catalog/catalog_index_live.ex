@@ -234,7 +234,6 @@ defmodule CadenceWeb.CatalogIndexLive do
           <thead>
             <tr>
               <th class="hud-label">Database</th>
-              <th class="hud-label">Family</th>
               <th class="hud-label">Latest revision</th>
               <th class="hud-label">Latest import</th>
               <th class="hud-label">Runtime usage</th>
@@ -254,7 +253,6 @@ defmodule CadenceWeb.CatalogIndexLive do
                 </.link>
                 <p class="font-mono text-xs text-base-content/50">{database.slug}</p>
               </td>
-              <td><.catalog_family_badge family={database.catalog_family} /></td>
               <td>
                 <.latest_revision_cell
                   revision={Map.get(@latest_revisions, database.catalog_database_id)}

@@ -122,8 +122,6 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
           <div class="contents">
             <dt class="text-base-content/60">Format</dt>
             <dd class="font-mono">{@artifact.format_key}</dd>
-            <dt class="text-base-content/60">Family</dt>
-            <dd><.catalog_family_badge family={@artifact.catalog_family} /></dd>
             <dt class="text-base-content/60">Media type</dt>
             <dd class="font-mono">{@artifact.media_type || "—"}</dd>
             <dt class="text-base-content/60">Content SHA-256</dt>

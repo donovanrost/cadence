@@ -2,32 +2,6 @@ defmodule CadenceWeb.Catalog.Components do
   @moduledoc false
   use CadenceWeb, :html
 
-  @doc "Colored badge for a catalog family atom (`:telemetry | :command | :combined`)."
-  attr :family, :atom, required: true
-
-  def catalog_family_badge(assigns) do
-    ~H"""
-    <span class={[
-      "badge badge-sm",
-      family_badge_class(@family)
-    ]}>
-      {family_label(@family)}
-    </span>
-    """
-  end
-
-  defp family_badge_class(:telemetry), do: "badge-info"
-  defp family_badge_class(:command), do: "badge-warning"
-  defp family_badge_class(:combined), do: "badge-primary"
-  defp family_badge_class(_), do: "badge-ghost"
-
-  defp family_label(:telemetry), do: "Telemetry"
-  defp family_label(:command), do: "Command"
-  defp family_label(:combined), do: "Combined"
-
-  defp family_label(other) when is_atom(other),
-    do: other |> Atom.to_string() |> String.capitalize()
-
   @doc "Colored badge for an import run status."
   attr :status, :atom, required: true
 
@@ -222,7 +196,6 @@ defmodule CadenceWeb.Catalog.Components do
           <span class="hero-check-circle h-4 w-4 text-success"></span>
           Detected importer:
           <span class="font-medium">{descriptor.display_name}</span>
-          <.catalog_family_badge family={descriptor.catalog_family} />
         </div>
       <% {:error, :no_matching_importer} -> %>
         <div class="alert alert-error text-sm">

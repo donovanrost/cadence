@@ -40,6 +40,8 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
       assert html =~ "Bus Catalog"
       assert html =~ "FSW 3.7"
       assert html =~ "Completed"
+      refute html =~ ">Family<"
+      refute html =~ "Combined"
     end
 
     test "only shows databases in this mission" do

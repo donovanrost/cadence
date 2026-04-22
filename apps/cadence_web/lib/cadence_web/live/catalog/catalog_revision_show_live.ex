@@ -83,7 +83,6 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
               Revision {@revision.revision_number}
             </p>
           </div>
-          <.catalog_family_badge family={@revision.catalog_family} />
         </div>
       </div>
 

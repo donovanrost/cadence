@@ -170,7 +170,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
             <h1 class="text-2xl font-bold text-base-content">{@database.name}</h1>
             <p class="font-mono text-sm text-base-content/50">{@database.slug}</p>
           </div>
-          <.catalog_family_badge family={@database.catalog_family} />
         </div>
       </div>
 
@@ -254,7 +253,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
             <thead>
               <tr>
                 <th class="hud-label">Revision</th>
-                <th class="hud-label">Family</th>
                 <th class="hud-label">Telemetry</th>
                 <th class="hud-label">Command</th>
                 <th class="hud-label text-right">Actions</th>
@@ -266,7 +264,6 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
                   <p class="font-medium">{revision.revision_label}</p>
                   <p class="font-mono text-xs text-base-content/50">{"#" <> Integer.to_string(revision.revision_number)}</p>
                 </td>
-                <td><.catalog_family_badge family={revision.catalog_family} /></td>
                 <td>{if revision.telemetry_snapshot_id, do: "Present", else: "—"}</td>
                 <td>{if revision.command_snapshot_id, do: "Present", else: "—"}</td>
                 <td class="text-right">
