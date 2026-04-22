@@ -76,13 +76,11 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
         >
           &larr; Catalog database
         </.link>
-        <div class="mt-1 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content">{@revision.revision_label}</h1>
-            <p class="font-mono text-sm text-base-content/50">
-              Revision {@revision.revision_number}
-            </p>
-          </div>
+        <div class="mt-1">
+          <h1 class="text-2xl font-bold text-base-content">{@revision.revision_label}</h1>
+          <p class="font-mono text-sm text-base-content/50">
+            Revision {@revision.revision_number}
+          </p>
         </div>
       </div>
 
