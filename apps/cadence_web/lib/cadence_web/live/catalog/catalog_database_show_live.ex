@@ -191,7 +191,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
             id="add-revision-toggle"
             type="button"
             phx-click="toggle_revision_form"
-            class={[if(@show_revision_form, do: "btn btn-ghost", else: "btn btn-primary")]}
+            class={["btn", if(@show_revision_form, do: "btn-ghost", else: "btn-primary")]}
           >
             {if @show_revision_form, do: "Cancel", else: "+ Add revision"}
           </button>
