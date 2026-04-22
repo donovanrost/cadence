@@ -24,6 +24,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
          |> assign(:nav_item, :catalog)
          |> assign(:database, database)
          |> assign(:revision_form, empty_revision_form())
+         |> assign(:show_revision_form, false)
          |> assign_database_details(organization_id, mission.mission_id, catalog_database_id)
          |> allow_upload(:artifact,
            accept: :any,
@@ -61,6 +62,22 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     else
       {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_event("toggle_revision_form", _params, socket) do
+    toggled = !socket.assigns.show_revision_form
+
+    socket =
+      if toggled do
+        socket
+      else
+        socket
+        |> cancel_active_uploads(:artifact)
+        |> assign(:revision_form, empty_revision_form())
+      end
+
+    {:noreply, assign(socket, :show_revision_form, toggled)}
   end
 
   @impl true
@@ -170,6 +187,14 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
             <h1 class="text-2xl font-bold text-base-content">{@database.name}</h1>
             <p class="font-mono text-sm text-base-content/50">{@database.slug}</p>
           </div>
+          <button
+            id="add-revision-toggle"
+            type="button"
+            phx-click="toggle_revision_form"
+            class={[if(@show_revision_form, do: "btn btn-ghost", else: "btn btn-primary")]}
+          >
+            {if @show_revision_form, do: "Cancel", else: "+ Add revision"}
+          </button>
         </div>
       </div>
 
@@ -192,7 +217,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
         </div>
       </div>
 
-      <.revision_upload_card uploads={@uploads} form={@revision_form} />
+      <.revision_upload_card :if={@show_revision_form} uploads={@uploads} form={@revision_form} />
 
       <.revision_history current_mission={@current_mission} revisions={@revisions} />
 
@@ -336,6 +361,20 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
       %{user: %{id: id, email: email}} -> %{user_id: id, email: email}
       %{user: %{email: email}} -> %{email: email}
       _ -> %{}
+    end
+  end
+
+  defp cancel_active_uploads(socket, name) do
+    socket.assigns.uploads
+    |> Map.get(name)
+    |> case do
+      nil ->
+        socket
+
+      upload ->
+        Enum.reduce(upload.entries, socket, fn entry, acc ->
+          cancel_upload(acc, name, entry.ref)
+        end)
     end
   end
 

@@ -47,4 +47,49 @@ defmodule CadenceWeb.CatalogDatabaseShowLiveTest do
 
     assert to == ~p"/missions/#{mission.mission_id}/catalog"
   end
+
+  test "add-revision form is hidden by default and shown on toggle" do
+    {conn, _org, mission} = signed_in_org_and_mission()
+    database = TestFixtures.persist_catalog_database!(mission, name: "Payload Catalog")
+
+    {:ok, view, html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+      )
+
+    refute html =~ "catalog-revision-upload-form"
+    assert html =~ "id=\"add-revision-toggle\""
+    assert html =~ "Add revision"
+
+    html_after_open =
+      view
+      |> element("#add-revision-toggle")
+      |> render_click()
+
+    assert html_after_open =~ "catalog-revision-upload-form"
+    assert html_after_open =~ "Cancel"
+  end
+
+  test "cancelling the add-revision reveal hides the form" do
+    {conn, _org, mission} = signed_in_org_and_mission()
+    database = TestFixtures.persist_catalog_database!(mission, name: "Payload Catalog")
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+      )
+
+    _ = view |> element("#add-revision-toggle") |> render_click()
+    assert render(view) =~ "catalog-revision-upload-form"
+
+    html_after_cancel =
+      view
+      |> element("#add-revision-toggle")
+      |> render_click()
+
+    refute html_after_cancel =~ "catalog-revision-upload-form"
+    assert html_after_cancel =~ "Add revision"
+  end
 end
