@@ -86,18 +86,11 @@ defmodule CadenceWeb.CatalogIndexLive do
     ~H"""
     <%= if @databases == [] do %>
       <div class="card bg-base-200" id="catalog-database-list">
-        <div class="card-body p-6 text-center space-y-3">
+        <div class="card-body p-6 text-center">
           <p class="hud-label text-base-content/60">No catalog databases yet</p>
-          <p class="text-sm text-base-content/50">
-            Upload a command and telemetry database to create the first immutable revision.
+          <p class="text-sm text-base-content/50 mt-1">
+            Use <span class="font-medium text-base-content">+ New database</span> above to import the first revision.
           </p>
-          <.link
-            id="new-database-link"
-            navigate={~p"/missions/#{@current_mission.mission_id}/catalog/new"}
-            class="btn btn-primary btn-sm"
-          >
-            + New database
-          </.link>
         </div>
       </div>
     <% else %>
