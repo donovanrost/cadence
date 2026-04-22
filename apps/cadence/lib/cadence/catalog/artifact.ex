@@ -12,6 +12,7 @@ defmodule Cadence.Catalog.Artifact do
           artifact_id: binary(),
           organization_id: binary() | nil,
           mission_id: binary(),
+          catalog_database_id: binary() | nil,
           catalog_family: catalog_family(),
           artifact_name: binary(),
           format_key: binary(),
@@ -28,6 +29,7 @@ defmodule Cadence.Catalog.Artifact do
     :artifact_id,
     :organization_id,
     :mission_id,
+    :catalog_database_id,
     :catalog_family,
     :artifact_name,
     :format_key,
@@ -48,6 +50,8 @@ defmodule Cadence.Catalog.Artifact do
       artifact_id: Map.get(attrs, :artifact_id, Ids.new("catalog_artifact")),
       organization_id: Map.get(attrs, :organization_id, Map.get(attrs, "organization_id")),
       mission_id: Map.fetch!(attrs, :mission_id),
+      catalog_database_id:
+        Map.get(attrs, :catalog_database_id, Map.get(attrs, "catalog_database_id")),
       catalog_family: Map.fetch!(attrs, :catalog_family),
       artifact_name: Map.fetch!(attrs, :artifact_name),
       format_key: Map.fetch!(attrs, :format_key),
@@ -96,6 +100,7 @@ defmodule Cadence.Catalog.Artifact do
     new(%{
       mission_id: mission_id,
       catalog_family: descriptor.catalog_family,
+      catalog_database_id: Keyword.get(opts, :catalog_database_id),
       artifact_name: filename,
       format_key: descriptor.importer_key,
       media_type: resolve_media_type(descriptor, client_type),

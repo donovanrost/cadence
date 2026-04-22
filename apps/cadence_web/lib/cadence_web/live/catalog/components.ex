@@ -128,6 +128,7 @@ defmodule CadenceWeb.Catalog.Components do
 
   @doc "Upload card with importer auto-detection."
   attr :uploads, :map, required: true
+  attr :form, Phoenix.HTML.Form, required: true
 
   def upload_card(assigns) do
     assigns =
@@ -140,15 +141,25 @@ defmodule CadenceWeb.Catalog.Components do
     ~H"""
     <div class="card bg-base-200">
       <div class="card-body p-6 space-y-4">
-        <p class="hud-label">Upload command &amp; telemetry database</p>
+        <p class="hud-label">Create catalog database revision</p>
+        <p class="text-sm text-base-content/60">
+          Save the upload as an immutable revision in the mission catalog library. Runtime
+          usage is chosen separately.
+        </p>
 
         <.form
           id="catalog-upload-form"
-          for={%{}}
+          for={@form}
           phx-change="validate"
           phx-submit="save"
           class="space-y-4"
         >
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <.input field={@form[:name]} type="text" label="Catalog database name" />
+            <.input field={@form[:revision_label]} type="text" label="Revision label" />
+          </div>
+          <.input field={@form[:revision_notes]} type="textarea" label="Revision notes" />
+
           <label class="block">
             <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
           </label>

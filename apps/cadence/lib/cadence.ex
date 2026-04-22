@@ -21,7 +21,7 @@ defmodule Cadence do
   alias Cadence.Auth.Scope, as: CurrentScope
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, ImporterDescriptor, ImportRun}
+  alias Cadence.Catalog.{Artifact, Database, ImporterDescriptor, ImportRun, Revision}
   alias Cadence.Catalog.Command.Compiler, as: CommandCatalogCompiler
   alias Cadence.Catalog.Command.Compiler.Result, as: CommandCompilerResult
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
@@ -315,6 +315,41 @@ defmodule Cadence do
         ]
   def list_catalog_importers(opts \\ []) when is_list(opts) do
     Catalog.list_importers(opts)
+  end
+
+  @spec create_catalog_database(binary(), binary(), map()) ::
+          {:ok, Database.t()} | {:error, term()}
+  def create_catalog_database(organization_id, mission_id, attrs)
+      when is_binary(organization_id) and is_binary(mission_id) and is_map(attrs) do
+    Catalog.create_database(organization_id, mission_id, attrs)
+  end
+
+  @spec fetch_catalog_database(binary(), binary(), binary()) ::
+          {:ok, Database.t()} | {:error, term()}
+  def fetch_catalog_database(organization_id, mission_id, catalog_database_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(catalog_database_id) do
+    Catalog.fetch_database(organization_id, mission_id, catalog_database_id)
+  end
+
+  @spec list_catalog_databases(binary(), binary(), keyword()) :: [Database.t()]
+  def list_catalog_databases(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    Catalog.list_databases(organization_id, mission_id, opts)
+  end
+
+  @spec list_catalog_revisions(binary(), binary(), binary() | nil, keyword()) :: [Revision.t()]
+  def list_catalog_revisions(organization_id, mission_id, catalog_database_id \\ nil, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    Catalog.list_revisions(organization_id, mission_id, catalog_database_id, opts)
+  end
+
+  @spec fetch_catalog_revision(binary(), binary(), binary()) ::
+          {:ok, Revision.t()} | {:error, term()}
+  def fetch_catalog_revision(organization_id, mission_id, catalog_revision_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(catalog_revision_id) do
+    Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id)
   end
 
   @spec persist_catalog_artifact(binary(), Artifact.t()) ::

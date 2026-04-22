@@ -1,8 +1,6 @@
 defmodule CadenceWeb.CatalogIndexLive do
   @moduledoc false
 
-  # TODO(authz): Catalog upload currently permitted for any active org member.
-  # Tighten once finer-grained catalog capability is defined.
   use CadenceWeb, :live_view
 
   import CadenceWeb.Catalog.Components
@@ -22,7 +20,8 @@ defmodule CadenceWeb.CatalogIndexLive do
      socket
      |> assign(:page_title, "Catalog")
      |> assign(:nav_item, :catalog)
-     |> assign_artifacts(organization_id, mission.mission_id)
+     |> assign(:database_form, empty_database_form())
+     |> assign_databases(organization_id, mission.mission_id)
      |> allow_upload(:artifact,
        accept: :any,
        max_entries: 1,
@@ -31,17 +30,24 @@ defmodule CadenceWeb.CatalogIndexLive do
   end
 
   @impl true
-  def handle_info({event, run}, socket)
+  def handle_info({event, _run}, socket)
       when event in [
              :import_run_started,
              :import_run_updated,
              :import_run_completed,
              :import_run_failed
            ] do
-    {:noreply, apply_run_to_latest_map(socket, run)}
+    mission = socket.assigns.current_mission
+    organization_id = socket.assigns.current_scope.organization_id
+
+    {:noreply, assign_databases(socket, organization_id, mission.mission_id)}
   end
 
   @impl true
+  def handle_event("validate", %{"catalog_database" => params}, socket) do
+    {:noreply, assign(socket, :database_form, to_form(params, as: :catalog_database))}
+  end
+
   def handle_event("validate", _params, socket) do
     {:noreply, socket}
   end
@@ -50,10 +56,12 @@ defmodule CadenceWeb.CatalogIndexLive do
     {:noreply, cancel_upload(socket, :artifact, ref)}
   end
 
-  def handle_event("save", _params, socket) do
+  def handle_event("save", params, socket) do
+    form_params = Map.get(params, "catalog_database", %{})
+
     case detect_from_uploads(socket) do
       {:ok, registration} ->
-        perform_upload(socket, registration)
+        perform_upload(socket, registration, form_params)
 
       _ ->
         {:noreply,
@@ -65,7 +73,7 @@ defmodule CadenceWeb.CatalogIndexLive do
     end
   end
 
-  defp perform_upload(socket, %{descriptor: descriptor}) do
+  defp perform_upload(socket, %{descriptor: descriptor}, form_params) do
     mission = socket.assigns.current_mission
     organization_id = socket.assigns.current_scope.organization_id
     uploaded_by = uploader_identity(socket)
@@ -80,10 +88,7 @@ defmodule CadenceWeb.CatalogIndexLive do
               client_type: entry.client_type
             }
 
-            {:ok,
-             Artifact.build_from_upload(mission.mission_id, descriptor, upload,
-               uploaded_by: uploaded_by
-             )}
+            {:ok, {upload, descriptor}}
 
           {:error, reason} ->
             {:ok, {:error, {:file_read_failed, reason}}}
@@ -91,13 +96,39 @@ defmodule CadenceWeb.CatalogIndexLive do
       end)
 
     case artifact_or_error do
-      %Artifact{} = artifact ->
-        case Catalog.persist_artifact(organization_id, artifact) do
-          {:ok, persisted} ->
-            start_import_and_redirect(socket, persisted, descriptor)
-
+      {%{filename: filename} = upload, descriptor} ->
+        with {:ok, database} <-
+               create_catalog_database(
+                 organization_id,
+                 mission.mission_id,
+                 descriptor,
+                 form_params,
+                 filename,
+                 uploaded_by
+               ),
+             artifact <-
+               Artifact.build_from_upload(mission.mission_id, descriptor, upload,
+                 uploaded_by: uploaded_by,
+                 catalog_database_id: database.catalog_database_id
+               ),
+             {:ok, run} <-
+               Catalog.start_revision_import(
+                 organization_id,
+                 mission.mission_id,
+                 database.catalog_database_id,
+                 artifact,
+                 descriptor.importer_key,
+                 requested_by: uploaded_by,
+                 metadata: revision_metadata(form_params)
+               ) do
+          {:noreply,
+           push_navigate(socket,
+             to: ~p"/missions/#{mission.mission_id}/catalog/imports/#{run.import_run_id}"
+           )}
+        else
           {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to save artifact: #{inspect(reason)}")}
+            {:noreply,
+             put_flash(socket, :error, "Failed to start revision import: #{inspect(reason)}")}
         end
 
       {:error, reason} ->
@@ -105,32 +136,32 @@ defmodule CadenceWeb.CatalogIndexLive do
     end
   end
 
-  defp start_import_and_redirect(socket, artifact, descriptor) do
-    organization_id = socket.assigns.current_scope.organization_id
-    mission = socket.assigns.current_mission
-    uploaded_by = uploader_identity(socket)
+  defp create_catalog_database(
+         organization_id,
+         mission_id,
+         descriptor,
+         form_params,
+         filename,
+         uploaded_by
+       ) do
+    name = normalize(form_params["name"]) || filename |> Path.rootname() |> String.trim()
+    revision_label = normalize(form_params["revision_label"]) || "Revision 1"
 
-    case Catalog.start_import_run(
-           organization_id,
-           mission.mission_id,
-           artifact.artifact_id,
-           descriptor.importer_key,
-           requested_by: uploaded_by
-         ) do
-      {:ok, run} ->
-        {:noreply,
-         push_navigate(socket,
-           to: ~p"/missions/#{mission.mission_id}/catalog/imports/#{run.import_run_id}"
-         )}
+    Catalog.create_database(organization_id, mission_id, %{
+      name: name,
+      slug: slugify(name),
+      catalog_family: descriptor.catalog_family,
+      default_importer_key: descriptor.importer_key,
+      created_by: uploaded_by,
+      metadata: %{"initial_revision_label" => revision_label}
+    })
+  end
 
-      {:error, reason} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Import run failed to start: #{inspect(reason)}")
-         |> push_navigate(
-           to: ~p"/missions/#{mission.mission_id}/catalog/artifacts/#{artifact.artifact_id}"
-         )}
-    end
+  defp revision_metadata(form_params) do
+    %{
+      "revision_label" => normalize(form_params["revision_label"]) || "Revision 1",
+      "revision_notes" => normalize(form_params["revision_notes"]) || ""
+    }
   end
 
   defp detect_from_uploads(socket) do
@@ -145,46 +176,36 @@ defmodule CadenceWeb.CatalogIndexLive do
     end
   end
 
-  defp assign_artifacts(socket, organization_id, mission_id) do
-    artifacts = Catalog.list_artifacts(organization_id, mission_id)
-    latest = Catalog.latest_import_run_by_artifact(organization_id, mission_id)
+  defp assign_databases(socket, organization_id, mission_id) do
+    databases = Catalog.list_databases(organization_id, mission_id)
+    latest_revisions = Catalog.latest_revision_by_database(organization_id, mission_id)
+    latest_runs = Catalog.latest_import_run_by_database(organization_id, mission_id)
 
     socket
-    |> assign(:artifacts, artifacts)
-    |> assign(:latest_runs, latest)
-  end
-
-  defp apply_run_to_latest_map(socket, run) do
-    update(socket, :latest_runs, &merge_run(&1, run))
-  end
-
-  defp merge_run(latest, run) do
-    case Map.get(latest, run.artifact_id) do
-      nil ->
-        Map.put(latest, run.artifact_id, run)
-
-      %{started_at: existing_started} ->
-        if DateTime.compare(run.started_at, existing_started) in [:eq, :gt] do
-          Map.put(latest, run.artifact_id, run)
-        else
-          latest
-        end
-    end
+    |> assign(:databases, databases)
+    |> assign(:latest_revisions, latest_revisions)
+    |> assign(:latest_runs, latest_runs)
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-base-content">Catalog</h1>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-base-content">Catalog</h1>
+          <p class="text-sm text-base-content/60 mt-1">
+            Mission database library. Revisions are imported here; runtime usage is selected later.
+          </p>
+        </div>
       </div>
 
-      <.upload_card uploads={@uploads} />
+      <.upload_card uploads={@uploads} form={@database_form} />
 
-      <.artifacts_table
+      <.databases_table
         current_mission={@current_mission}
-        artifacts={@artifacts}
+        databases={@databases}
+        latest_revisions={@latest_revisions}
         latest_runs={@latest_runs}
       />
     </div>
@@ -192,53 +213,75 @@ defmodule CadenceWeb.CatalogIndexLive do
   end
 
   attr :current_mission, :map, required: true
-  attr :artifacts, :list, required: true
+  attr :databases, :list, required: true
+  attr :latest_revisions, :map, required: true
   attr :latest_runs, :map, required: true
 
-  defp artifacts_table(assigns) do
+  defp databases_table(assigns) do
     ~H"""
-    <%= if @artifacts == [] do %>
-      <div class="card bg-base-200">
+    <%= if @databases == [] do %>
+      <div class="card bg-base-200" id="catalog-database-list">
         <div class="card-body p-6 text-center">
-          <p class="hud-label text-base-content/60">No catalog artifacts yet</p>
+          <p class="hud-label text-base-content/60">No catalog databases yet</p>
           <p class="text-sm text-base-content/50 mt-1">
-            Uploading will appear here once the upload form lands.
+            Upload a command and telemetry database to create the first immutable revision.
           </p>
         </div>
       </div>
     <% else %>
-      <div class="card bg-base-200">
+      <div class="card bg-base-200" id="catalog-database-list">
         <table class="table">
           <thead>
             <tr>
-              <th class="hud-label">Name</th>
-              <th class="hud-label">Format</th>
+              <th class="hud-label">Database</th>
               <th class="hud-label">Family</th>
-              <th class="hud-label">Uploaded</th>
-              <th class="hud-label">Latest run</th>
+              <th class="hud-label">Latest revision</th>
+              <th class="hud-label">Latest import</th>
+              <th class="hud-label">Runtime usage</th>
               <th class="hud-label text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr :for={artifact <- @artifacts}>
-              <td class="font-medium">{artifact.artifact_name}</td>
-              <td class="font-mono text-sm text-base-content/70">{artifact.format_key}</td>
-              <td><.catalog_family_badge family={artifact.catalog_family} /></td>
-              <td class="text-sm text-base-content/70">
-                {Calendar.strftime(artifact.uploaded_at, "%Y-%m-%d %H:%M")}
+            <tr :for={database <- @databases}>
+              <td>
+                <.link
+                  navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+                  }
+                  class="font-medium hover:underline"
+                >
+                  {database.name}
+                </.link>
+                <p class="font-mono text-xs text-base-content/50">{database.slug}</p>
+              </td>
+              <td><.catalog_family_badge family={database.catalog_family} /></td>
+              <td>
+                <.latest_revision_cell
+                  revision={Map.get(@latest_revisions, database.catalog_database_id)}
+                  current_mission={@current_mission}
+                />
               </td>
               <td>
-                <.artifact_run_cell
-                  run={Map.get(@latest_runs, artifact.artifact_id)}
+                <.latest_run_cell
+                  run={Map.get(@latest_runs, database.catalog_database_id)}
                   current_mission={@current_mission}
                 />
               </td>
+              <td>
+                <span class="badge badge-ghost badge-sm" id="catalog-runtime-usage-summary">
+                  No runtime bindings yet
+                </span>
+              </td>
               <td class="text-right">
-                <.artifact_row_actions
-                  artifact={artifact}
-                  latest_runs={@latest_runs}
-                  current_mission={@current_mission}
-                />
+                <.action_menu>
+                  <:action>
+                    <.link navigate={
+                      ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+                    }>
+                      View database
+                    </.link>
+                  </:action>
+                </.action_menu>
               </td>
             </tr>
           </tbody>
@@ -248,21 +291,41 @@ defmodule CadenceWeb.CatalogIndexLive do
     """
   end
 
+  attr :revision, :map, default: nil
+  attr :current_mission, :map, required: true
+
+  defp latest_revision_cell(%{revision: nil} = assigns) do
+    ~H"""
+    <span class="text-base-content/40 text-xs">No revisions</span>
+    """
+  end
+
+  defp latest_revision_cell(assigns) do
+    ~H"""
+    <.link
+      navigate={
+        ~p"/missions/#{@current_mission.mission_id}/catalog/revisions/#{@revision.catalog_revision_id}"
+      }
+      class="font-mono text-sm hover:underline"
+    >
+      {@revision.revision_label}
+    </.link>
+    """
+  end
+
   attr :run, :map, default: nil
   attr :current_mission, :map, required: true
 
-  defp artifact_run_cell(%{run: nil} = assigns) do
+  defp latest_run_cell(%{run: nil} = assigns) do
     ~H"""
     <span class="text-base-content/40 text-xs">—</span>
     """
   end
 
-  defp artifact_run_cell(assigns) do
+  defp latest_run_cell(assigns) do
     ~H"""
     <.link
-      navigate={
-        ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@run.import_run_id}"
-      }
+      navigate={~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@run.import_run_id}"}
       class="inline-flex"
     >
       <.import_run_status_badge status={@run.status} />
@@ -270,28 +333,25 @@ defmodule CadenceWeb.CatalogIndexLive do
     """
   end
 
-  attr :artifact, :map, required: true
-  attr :latest_runs, :map, required: true
-  attr :current_mission, :map, required: true
+  defp empty_database_form do
+    to_form(%{"name" => "", "revision_label" => "", "revision_notes" => ""},
+      as: :catalog_database
+    )
+  end
 
-  defp artifact_row_actions(assigns) do
-    ~H"""
-    <.action_menu>
-      <:action>
-        <.link navigate={
-          ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}"
-        }>
-          View artifact
-        </.link>
-      </:action>
-      <:action :if={Map.has_key?(@latest_runs, @artifact.artifact_id)}>
-        <.link navigate={
-          ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@latest_runs[@artifact.artifact_id].import_run_id}"
-        }>
-          View latest run
-        </.link>
-      </:action>
-    </.action_menu>
-    """
+  defp normalize(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize(_other), do: nil
+
+  defp slugify(value) when is_binary(value) do
+    value
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
   end
 end

@@ -256,6 +256,7 @@ defmodule CadenceWeb.ControlPlaneParams do
          artifact_id: string_value(params, "artifact_id"),
          organization_id: organization_id,
          mission_id: mission_id,
+         catalog_database_id: string_value(params, "catalog_database_id"),
          catalog_family: catalog_family,
          artifact_name: artifact_name,
          format_key: format_key,
@@ -284,6 +285,7 @@ defmodule CadenceWeb.ControlPlaneParams do
        {artifact_id, importer_key,
         []
         |> Keyword.put(:requested_by, Keyword.get(opts, :requested_by, %{}))
+        |> maybe_put_opt(:catalog_database_id, string_value(params, "catalog_database_id"))
         |> Keyword.put(:metadata, map_value(params, "metadata"))}}
     end
   end

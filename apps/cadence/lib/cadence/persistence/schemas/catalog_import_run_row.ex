@@ -16,6 +16,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
     field(:snapshot_id, :string)
     field(:organization_id, :string)
     field(:mission_id, :string)
+    field(:catalog_database_id, :string)
     field(:artifact_id, :string)
     field(:catalog_family, :string)
     field(:importer_key, :string)
@@ -63,6 +64,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
       snapshot_id: row.snapshot_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,
+      catalog_database_id: row.catalog_database_id,
       artifact_id: row.artifact_id,
       catalog_family: catalog_family(row.catalog_family),
       importer_key: row.importer_key,
@@ -87,6 +89,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
       snapshot_id: run.snapshot_id,
       organization_id: run.organization_id,
       mission_id: run.mission_id,
+      catalog_database_id: run.catalog_database_id,
       artifact_id: run.artifact_id,
       catalog_family: Atom.to_string(run.catalog_family),
       importer_key: run.importer_key,
@@ -108,6 +111,7 @@ defmodule Cadence.Persistence.Schemas.CatalogImportRunRow do
       :snapshot_id,
       :organization_id,
       :mission_id,
+      :catalog_database_id,
       :artifact_id,
       :catalog_family,
       :importer_key,

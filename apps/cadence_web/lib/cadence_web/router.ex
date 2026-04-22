@@ -109,6 +109,14 @@ defmodule CadenceWeb.Router do
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id/catalog", CatalogIndexLive, :index
 
+      live "/missions/:mission_id/catalog/databases/:catalog_database_id",
+           CatalogDatabaseShowLive,
+           :show
+
+      live "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
+           CatalogRevisionShowLive,
+           :show
+
       live "/missions/:mission_id/catalog/artifacts/:artifact_id",
            CatalogArtifactShowLive,
            :show

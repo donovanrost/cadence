@@ -18,42 +18,43 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
     {TestFixtures.member_conn(user), org, mission}
   end
 
-  describe "artifacts table" do
-    test "shows empty state when no artifacts exist" do
+  describe "catalog database list" do
+    test "shows empty state when no catalog databases exist" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
       {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
 
-      assert html =~ "No catalog artifacts"
+      assert html =~ "No catalog databases"
+      assert html =~ "Create catalog database revision"
     end
 
-    test "lists persisted artifacts with their latest run status" do
+    test "lists persisted catalog databases with latest revision and import status" do
       {conn, _org, mission} = signed_in_org_and_mission()
-      artifact = TestFixtures.persist_catalog_artifact!(mission, artifact_name: "mission.yaml")
-      run = TestFixtures.persist_catalog_import_run!(artifact)
-      _ = TestFixtures.complete_catalog_import_run!(run)
+      database = TestFixtures.persist_catalog_database!(mission, name: "Bus Catalog")
+      run = TestFixtures.start_catalog_revision_import!(database, revision_label: "FSW 3.7")
+      completed = TestFixtures.complete_catalog_import_run!(run)
+      _revision = TestFixtures.fetch_catalog_revision_for_run!(completed)
 
       {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
 
-      assert html =~ "mission.yaml"
+      assert html =~ "Bus Catalog"
+      assert html =~ "FSW 3.7"
       assert html =~ "Completed"
     end
 
-    test "only shows artifacts in this mission" do
+    test "only shows databases in this mission" do
       {conn, org, mission} = signed_in_org_and_mission()
 
       other_mission =
         TestFixtures.persist_mission!(org, slug: "other", display_name: "Other Mission")
 
-      _mine = TestFixtures.persist_catalog_artifact!(mission, artifact_name: "mine.yaml")
-
-      _theirs =
-        TestFixtures.persist_catalog_artifact!(other_mission, artifact_name: "theirs.yaml")
+      _mine = TestFixtures.persist_catalog_database!(mission, name: "Mine Catalog")
+      _theirs = TestFixtures.persist_catalog_database!(other_mission, name: "Theirs Catalog")
 
       {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
 
-      assert html =~ "mine.yaml"
-      refute html =~ "theirs.yaml"
+      assert html =~ "Mine Catalog"
+      refute html =~ "Theirs Catalog"
     end
   end
 
@@ -76,10 +77,10 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
   end
 
   describe "pubsub updates" do
-    test "re-renders latest run status when an import run completes" do
+    test "re-renders latest run status when a revision import completes" do
       {conn, _org, mission} = signed_in_org_and_mission()
-      artifact = TestFixtures.persist_catalog_artifact!(mission, artifact_name: "mission.yaml")
-      run = TestFixtures.persist_catalog_import_run!(artifact)
+      database = TestFixtures.persist_catalog_database!(mission, name: "Live Catalog")
+      run = TestFixtures.start_catalog_revision_import!(database)
 
       {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
 
@@ -114,7 +115,7 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
       assert html =~ "mission.bin"
     end
 
-    test "uploading a valid YAML file creates an artifact, starts a run, and navigates to the run" do
+    test "uploading a valid YAML file creates a database revision import and navigates to the run" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/catalog")
@@ -142,13 +143,20 @@ defmodule CadenceWeb.CatalogIndexLiveTest do
 
       _ = render_upload(uploads, "mission.yaml")
 
-      # After validate: detected importer is shown, submit enabled
       assert render(view) =~ "Cadence YAML Database"
 
-      result = render_submit(view, "save", %{})
+      result =
+        render_submit(view, "save", %{
+          "catalog_database" => %{"name" => "Mission DB", "revision_label" => "Rev A"}
+        })
 
       assert {:error, {:live_redirect, %{to: to}}} = result
       assert to =~ ~r"/missions/.+/catalog/imports/"
+
+      assert [database] =
+               Cadence.Catalog.list_databases(mission.organization_id, mission.mission_id)
+
+      assert database.name == "Mission DB"
     end
   end
 end

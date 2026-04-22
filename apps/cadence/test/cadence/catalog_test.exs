@@ -1,7 +1,9 @@
 defmodule Cadence.CatalogTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog
+  alias Cadence.Catalog.{Artifact, Database}
+  alias Cadence.Missions.Mission
 
   @organization_id "org-alpha"
   @mission_id "mission-alpha"
@@ -133,7 +135,7 @@ defmodule Cadence.CatalogTest do
     test "returns empty map when there are no runs" do
       persist_mission_scope(@organization_id, @mission_id)
 
-      assert Cadence.Catalog.latest_import_run_by_artifact(
+      assert Catalog.latest_import_run_by_artifact(
                @organization_id,
                @mission_id
              ) == %{}
@@ -153,7 +155,7 @@ defmodule Cadence.CatalogTest do
       {:ok, only_b} = start_import_run!(artifact_b.artifact_id)
 
       result =
-        Cadence.Catalog.latest_import_run_by_artifact(@organization_id, @mission_id)
+        Catalog.latest_import_run_by_artifact(@organization_id, @mission_id)
 
       assert result[artifact_a.artifact_id].import_run_id == newer_a.import_run_id
       assert result[artifact_b.artifact_id].import_run_id == only_b.import_run_id
@@ -169,7 +171,7 @@ defmodule Cadence.CatalogTest do
       # Persist the other mission under the same org.
       {:ok, _} =
         Cadence.persist_mission(
-          Cadence.Missions.Mission.new(%{
+          Mission.new(%{
             mission_id: other_mission_id,
             organization_id: @organization_id,
             slug: other_mission_id,
@@ -180,16 +182,127 @@ defmodule Cadence.CatalogTest do
       artifact = persist_artifact!("artifact-scope", mission_id: mission_a.mission_id)
       {:ok, _} = start_import_run!(artifact.artifact_id)
 
-      assert Cadence.Catalog.latest_import_run_by_artifact(
+      assert Catalog.latest_import_run_by_artifact(
                @organization_id,
                other_mission_id
              ) == %{}
     end
   end
 
+  describe "catalog database revisions" do
+    test "creates a database and revision from a successful revision import" do
+      persist_mission_scope(@organization_id, @mission_id)
+
+      assert {:ok, %Database{} = database} =
+               Catalog.create_database(@organization_id, @mission_id, %{
+                 name: "Bus Catalog",
+                 slug: "bus-catalog",
+                 catalog_family: :telemetry,
+                 default_importer_key: "fake_tm_json",
+                 created_by: %{"service_identity_id" => "svc-bootstrap"}
+               })
+
+      artifact =
+        Artifact.new(%{
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          catalog_database_id: database.catalog_database_id,
+          catalog_family: :telemetry,
+          artifact_name: "bus.json",
+          format_key: "fake_tm_json",
+          media_type: "application/json",
+          source_artifact: %{"packets" => [%{"name" => "HK_PACKET"}]}
+        })
+
+      assert {:ok, run} =
+               Catalog.start_revision_import(
+                 @organization_id,
+                 @mission_id,
+                 database.catalog_database_id,
+                 artifact,
+                 "fake_tm_json",
+                 metadata: %{"revision_label" => "FSW 3.7"},
+                 requested_by: %{"service_identity_id" => "svc-bootstrap"}
+               )
+
+      assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
+      assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+      assert claimed_job.job_id == job.job_id
+      assert {:ok, _completed_job} = Cadence.Jobs.run_job(job.job_id)
+
+      assert {:ok, completed_run} =
+               Cadence.fetch_catalog_import_run(@organization_id, @mission_id, run.import_run_id)
+
+      assert completed_run.status == :completed
+      assert completed_run.catalog_database_id == database.catalog_database_id
+
+      assert %{"catalog_revision_id" => revision_id} =
+               completed_run.result_document["catalog_revision"]
+
+      assert {:ok, revision} =
+               Catalog.fetch_revision(@organization_id, @mission_id, revision_id)
+
+      assert revision.catalog_database_id == database.catalog_database_id
+      assert revision.revision_number == 1
+      assert revision.revision_label == "FSW 3.7"
+      assert revision.import_run_id == completed_run.import_run_id
+      assert revision.telemetry_snapshot_id == completed_run.snapshot_id
+      assert revision.command_snapshot_id == nil
+
+      assert {:ok, latest} =
+               Catalog.latest_revision(
+                 @organization_id,
+                 @mission_id,
+                 database.catalog_database_id
+               )
+
+      assert latest.catalog_revision_id == revision.catalog_revision_id
+    end
+
+    test "does not create a revision for a failed revision import" do
+      persist_mission_scope(@organization_id, @mission_id)
+
+      {:ok, database} =
+        Catalog.create_database(@organization_id, @mission_id, %{
+          name: "Bus Catalog",
+          slug: "bus-catalog",
+          catalog_family: :telemetry
+        })
+
+      artifact =
+        Artifact.new(%{
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          catalog_database_id: database.catalog_database_id,
+          catalog_family: :telemetry,
+          artifact_name: "invalid.json",
+          format_key: "fake_tm_json",
+          media_type: "application/json",
+          source_artifact: %{"not_packets" => []}
+        })
+
+      assert {:error, :invalid_fake_tm_json} =
+               Catalog.start_revision_import(
+                 @organization_id,
+                 @mission_id,
+                 database.catalog_database_id,
+                 artifact,
+                 "fake_tm_json",
+                 metadata: %{"revision_label" => "Bad"}
+               )
+
+      assert [] =
+               Catalog.list_revisions(
+                 @organization_id,
+                 @mission_id,
+                 database.catalog_database_id
+               )
+    end
+  end
+
   defp persist_artifact!(artifact_id, opts \\ []) do
     artifact =
-      Cadence.Catalog.Artifact.new(%{
+      Catalog.Artifact.new(%{
         artifact_id: artifact_id,
         organization_id: @organization_id,
         mission_id: Keyword.get(opts, :mission_id, @mission_id),

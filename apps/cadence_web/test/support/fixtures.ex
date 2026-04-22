@@ -131,13 +131,32 @@ defmodule CadenceWeb.TestFixtures do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
+  alias Cadence.Catalog.Database, as: CatalogDatabase
   alias Cadence.Catalog.ImportRun
+  alias Cadence.Catalog.Revision, as: CatalogRevision
+
+  @spec persist_catalog_database!(Mission.t(), keyword()) :: CatalogDatabase.t()
+  def persist_catalog_database!(%Mission{} = mission, opts \\ []) do
+    assert {:ok, database} =
+             Catalog.create_database(mission.organization_id, mission.mission_id, %{
+               name: Keyword.get(opts, :name, "Mission Database"),
+               slug: Keyword.get(opts, :slug, "mission-database"),
+               description: Keyword.get(opts, :description),
+               catalog_family: Keyword.get(opts, :catalog_family, :combined),
+               default_importer_key: Keyword.get(opts, :default_importer_key, "cadence_yaml"),
+               created_by: Keyword.get(opts, :created_by, %{}),
+               metadata: Keyword.get(opts, :metadata, %{})
+             })
+
+    database
+  end
 
   @spec persist_catalog_artifact!(Mission.t(), keyword()) :: Artifact.t()
   def persist_catalog_artifact!(%Mission{} = mission, opts \\ []) do
     artifact =
       Artifact.new(%{
         mission_id: mission.mission_id,
+        catalog_database_id: Keyword.get(opts, :catalog_database_id),
         catalog_family: Keyword.get(opts, :catalog_family, :combined),
         artifact_name: Keyword.get(opts, :artifact_name, "mission.yaml"),
         format_key: Keyword.get(opts, :format_key, "cadence_yaml"),
@@ -159,7 +178,43 @@ defmodule CadenceWeb.TestFixtures do
                artifact.mission_id,
                artifact.artifact_id,
                Keyword.get(opts, :importer_key, "cadence_yaml"),
-               requested_by: Keyword.get(opts, :requested_by, %{})
+               requested_by: Keyword.get(opts, :requested_by, %{}),
+               catalog_database_id:
+                 Keyword.get(opts, :catalog_database_id, artifact.catalog_database_id),
+               metadata: Keyword.get(opts, :metadata, %{})
+             )
+
+    run
+  end
+
+  @spec start_catalog_revision_import!(CatalogDatabase.t(), keyword()) :: ImportRun.t()
+  def start_catalog_revision_import!(%CatalogDatabase{} = database, opts \\ []) do
+    artifact =
+      Artifact.new(%{
+        mission_id: database.mission_id,
+        catalog_database_id: database.catalog_database_id,
+        catalog_family: Keyword.get(opts, :catalog_family, database.catalog_family),
+        artifact_name: Keyword.get(opts, :artifact_name, "mission.yaml"),
+        format_key:
+          Keyword.get(opts, :format_key, database.default_importer_key || "cadence_yaml"),
+        media_type: Keyword.get(opts, :media_type, "application/yaml"),
+        source_artifact: Keyword.get(opts, :source_artifact, sample_yaml_source()),
+        uploaded_by: Keyword.get(opts, :uploaded_by, %{}),
+        metadata: Keyword.get(opts, :artifact_metadata, %{})
+      })
+
+    assert {:ok, run} =
+             Catalog.start_revision_import(
+               database.organization_id,
+               database.mission_id,
+               database.catalog_database_id,
+               artifact,
+               Keyword.get(opts, :importer_key, database.default_importer_key || "cadence_yaml"),
+               requested_by: Keyword.get(opts, :requested_by, %{}),
+               metadata: %{
+                 "revision_label" => Keyword.get(opts, :revision_label, "Revision 1"),
+                 "revision_notes" => Keyword.get(opts, :revision_notes, "")
+               }
              )
 
     run
@@ -169,6 +224,18 @@ defmodule CadenceWeb.TestFixtures do
   def complete_catalog_import_run!(%ImportRun{} = run) do
     assert {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
     completed
+  end
+
+  @spec fetch_catalog_revision_for_run!(ImportRun.t()) :: CatalogRevision.t()
+  def fetch_catalog_revision_for_run!(%ImportRun{} = run) do
+    assert {:ok, revision} =
+             Catalog.fetch_revision_by_import_run(
+               run.organization_id,
+               run.mission_id,
+               run.import_run_id
+             )
+
+    revision
   end
 
   defp sample_yaml_source do
