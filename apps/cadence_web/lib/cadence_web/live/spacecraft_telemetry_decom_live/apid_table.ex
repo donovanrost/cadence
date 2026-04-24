@@ -12,6 +12,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
   attr :expanded_defs, :any, required: true
   attr :expanded_entries, :any, required: true
   attr :filter, :string, default: ""
+  attr :points_by_id, :map, default: %{}
 
   def table(assigns) do
     assigns = assign(assigns, :visible_rows, filter_rows(assigns.rows, assigns.filter))
@@ -74,9 +75,46 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                     <span class="font-mono text-xs text-base-content/60">
                       apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits || "—"} b
                     </span>
-                    <span class="ml-auto text-xs text-base-content/60">
-                      {packet_entries_label(packet)}
-                    </span>
+                    <button
+                      type="button"
+                      id={"telemetry-decom-entries-toggle-#{packet.packet_id}"}
+                      class="ml-auto text-xs text-primary hover:underline"
+                      phx-click="toggle_entries"
+                      phx-value-packet-id={packet.packet_id}
+                    >
+                      <%= if MapSet.member?(@expanded_entries, packet.packet_id) do %>
+                        ▾ hide entries ({length(packet.entries)})
+                      <% else %>
+                        ▸ show entries ({length(packet.entries)})
+                      <% end %>
+                    </button>
+                  </div>
+                  <div
+                    :if={MapSet.member?(@expanded_entries, packet.packet_id)}
+                    class="px-3 py-2 font-mono text-xs"
+                    id={"telemetry-decom-entries-#{packet.packet_id}"}
+                  >
+                    <table class="w-full">
+                      <thead>
+                        <tr class="text-base-content/60">
+                          <th class="text-left py-1">name</th>
+                          <th class="text-left py-1">kind</th>
+                          <th class="text-right py-1">offset</th>
+                          <th class="text-left py-1 pl-3">notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr :for={entry <- Enum.take(packet.entries, 20)} class="border-t border-base-300/40">
+                          <td class="py-1 text-primary">{entry_name(entry, @points_by_id)}</td>
+                          <td class="py-1 text-base-content/70">{entry.entry_kind}</td>
+                          <td class="py-1 text-right text-base-content/60">{entry.bit_offset || "—"}</td>
+                          <td class="py-1 pl-3 text-base-content/60">{entry_notes(entry)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/60">
+                      {length(packet.entries) - 20} more omitted.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -135,9 +173,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
     end
   end
 
-  defp packet_entries_label(%{entries: []}), do: "no entries"
-  defp packet_entries_label(%{entries: entries}), do: "#{length(entries)} entries"
-  defp packet_entries_label(_), do: ""
+  defp entry_name(%{point_id: id} = _entry, points_by_id) when is_binary(id) do
+    case Map.get(points_by_id, id) do
+      %{name: name} when is_binary(name) -> name
+      _ -> id
+    end
+  end
+
+  defp entry_name(%{nested_packet_id: id} = _entry, _points_by_id) when is_binary(id), do: id
+  defp entry_name(%{fixed_value: value}, _points_by_id) when is_binary(value), do: "(fixed)"
+  defp entry_name(_, _), do: "—"
+
+  defp entry_notes(%{fixed_value: value}) when is_binary(value), do: "fixed=#{value}"
+  defp entry_notes(%{array_size: size}) when is_integer(size), do: "array[#{size}]"
+  defp entry_notes(_), do: ""
 
   # status_dot is imported for use in later tasks (Level 2 expansion).
   _ = &status_dot/1

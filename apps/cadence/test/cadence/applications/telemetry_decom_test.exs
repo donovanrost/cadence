@@ -456,7 +456,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     test "groups snapshot packets by APID and sorts by APID" do
       {_spacecraft, revision, _endpoint} = setup_mission()
 
-      assert {:ok, rows} =
+      assert {:ok, %{rows: rows, points_by_id: points_by_id}} =
                TelemetryDecom.list_revision_apid_rows(
                  @organization_id,
                  @mission_id,
@@ -465,6 +465,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
 
       assert [%{apid: 42, packets: packets, def_count: 1} | _] = rows
       assert [%Cadence.Catalog.Telemetry.Packet{name: "HEALTH", apid: 42}] = packets
+      assert is_map(points_by_id)
     end
 
     test "returns an error tuple when the revision does not exist" do

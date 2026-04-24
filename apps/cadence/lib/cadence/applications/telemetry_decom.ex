@@ -349,6 +349,11 @@ defmodule Cadence.Applications.TelemetryDecom do
           short_description: String.t() | nil
         }
 
+  @type apid_row_result :: %{
+          rows: [apid_row()],
+          points_by_id: %{optional(binary()) => Cadence.Catalog.Telemetry.Point.t()}
+        }
+
   @doc """
   Return one row per APID present in the revision's telemetry snapshot.
 
@@ -356,9 +361,12 @@ defmodule Cadence.Applications.TelemetryDecom do
   a primary rate (from the first packet's `expected_rate_hz`) and a short
   description derived from the first packet's `short_description` or a
   truncated `description`. Rows are sorted by APID ascending.
+
+  Also returns a `points_by_id` map keyed by `point_id` for looking up
+  human-readable point names in the UI.
   """
   @spec list_revision_apid_rows(binary(), binary(), binary()) ::
-          {:ok, [apid_row()]} | {:error, term()}
+          {:ok, apid_row_result()} | {:error, term()}
   def list_revision_apid_rows(organization_id, mission_id, catalog_revision_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(catalog_revision_id) do
@@ -386,7 +394,9 @@ defmodule Cadence.Applications.TelemetryDecom do
           }
         end)
 
-      {:ok, rows}
+      points_by_id = Map.new(snapshot.points, &{&1.point_id, &1})
+
+      {:ok, %{rows: rows, points_by_id: points_by_id}}
     end
   end
 

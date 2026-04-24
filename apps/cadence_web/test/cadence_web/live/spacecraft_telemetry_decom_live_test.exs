@@ -311,4 +311,24 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     assert html =~ "apid=42 · type="
   end
+
+  test "expanding a packet definition shows its entries" do
+    {conn, org, mission, spacecraft} = setup_session()
+    _revision = persist_revision!(org, mission)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+      )
+
+    view |> element("#apid-row-42-toggle") |> render_click()
+
+    html =
+      view
+      |> element("[id^='telemetry-decom-entries-toggle-']")
+      |> render_click()
+
+    assert html =~ "py-1 text-primary"
+  end
 end

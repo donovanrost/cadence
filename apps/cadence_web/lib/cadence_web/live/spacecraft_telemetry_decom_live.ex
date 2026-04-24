@@ -23,7 +23,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     revisions = list_telemetry_revisions(organization_id, mission_id)
     selected_revision_id = (config && config.catalog_revision_id) || first_option_value(revisions)
 
-    apid_rows = load_apid_rows(organization_id, mission_id, selected_revision_id)
+    {apid_rows, points_by_id} = load_apid_rows(organization_id, mission_id, selected_revision_id)
     conflicts = TelemetryDecom.list_apid_conflicts(organization_id, mission_id, spacecraft_id)
     selection = selection_from_config(config)
 
@@ -35,6 +35,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:revisions, revisions)
      |> assign(:selected_revision_id, selected_revision_id)
      |> assign(:apid_rows, apid_rows)
+     |> assign(:points_by_id, points_by_id)
      |> assign(:conflicts, conflicts)
      |> assign(:selection, selection)
      |> assign(:expanded_apids, MapSet.new())
@@ -47,12 +48,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:saved_at, config && DateTime.utc_now())}
   end
 
-  defp load_apid_rows(_organization_id, _mission_id, nil), do: []
+  defp load_apid_rows(_organization_id, _mission_id, nil), do: {[], %{}}
 
   defp load_apid_rows(organization_id, mission_id, revision_id) do
     case TelemetryDecom.list_revision_apid_rows(organization_id, mission_id, revision_id) do
-      {:ok, rows} -> rows
-      {:error, _} -> []
+      {:ok, %{rows: rows, points_by_id: points_by_id}} -> {rows, points_by_id}
+      {:error, _} -> {[], %{}}
     end
   end
 
@@ -74,7 +75,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   def handle_event("change_revision", %{"catalog_revision_id" => revision_id}, socket) do
     %{current_scope: scope, current_mission: mission, current_spacecraft: _sc} = socket.assigns
 
-    apid_rows =
+    {apid_rows, points_by_id} =
       load_apid_rows(scope.organization_id, mission.mission_id, revision_id)
 
     {selection, dropped} =
@@ -84,6 +85,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
       socket
       |> assign(:selected_revision_id, revision_id)
       |> assign(:apid_rows, apid_rows)
+      |> assign(:points_by_id, points_by_id)
       |> assign(:dropped_unknowns, dropped)
 
     save_and_refresh(socket, selection, revision_id: revision_id)
@@ -116,6 +118,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     apid = String.to_integer(apid_string)
     expanded = toggle_member(socket.assigns.expanded_apids, apid)
     {:noreply, assign(socket, :expanded_apids, expanded)}
+  end
+
+  def handle_event("toggle_entries", %{"packet-id" => packet_id}, socket) do
+    expanded = toggle_member(socket.assigns.expanded_entries, packet_id)
+    {:noreply, assign(socket, :expanded_entries, expanded)}
   end
 
   def handle_event(
@@ -262,6 +269,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
               expanded_defs={@expanded_defs}
               expanded_entries={@expanded_entries}
               filter={@filter}
+              points_by_id={@points_by_id}
             />
             <div class="border-t border-dashed border-base-300/60"></div>
 
@@ -328,6 +336,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   attr :expanded_defs, :any, required: true
   attr :expanded_entries, :any, required: true
   attr :filter, :string, required: true
+  attr :points_by_id, :map, required: true
 
   defp apid_section(assigns) do
     ~H"""
@@ -373,6 +382,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
         expanded_defs={@expanded_defs}
         expanded_entries={@expanded_entries}
         filter={@filter}
+        points_by_id={@points_by_id}
       />
     </div>
     """

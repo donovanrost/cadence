@@ -43,12 +43,11 @@ Append this describe block at the end of the file, before the final `end` and be
     test "returns an empty map today — no other applications exist" do
       {spacecraft, _revision, _endpoint} = setup_mission()
 
-      assert %{} =
-               TelemetryDecom.list_apid_conflicts(
-                 @organization_id,
-                 @mission_id,
-                 spacecraft.spacecraft_id
-               )
+      assert TelemetryDecom.list_apid_conflicts(
+               @organization_id,
+               @mission_id,
+               spacecraft.spacecraft_id
+             ) == %{}
     end
   end
 ```
