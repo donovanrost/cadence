@@ -6,6 +6,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Catalog
+  alias CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable
 
   @impl true
   def mount(_params, _session, socket) do
@@ -157,202 +158,306 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
         </.link>
         <h1 class="text-2xl font-bold text-base-content mt-1">Telemetry Decom</h1>
         <p class="text-sm text-base-content/60 mt-1">
-          Choose the catalog revision and handled APIDs used to decode telemetry for
-          <span class="font-semibold text-base-content"> {@current_spacecraft.display_name}</span>.
+          Packet routing configuration for
+          <span class="font-semibold text-base-content">{@current_spacecraft.display_name}</span>.
         </p>
       </div>
 
-      <.status_card config={@config} active={@active_binding_set_summary} />
-
-      <div class="card bg-base-200" id="telemetry-decom-config-card">
+      <div class="card bg-base-200" id="telemetry-decom-card">
         <div class="card-body p-6 space-y-4">
-          <p class="hud-label">Configuration</p>
+          <.status_section config={@config} active={@active_binding_set_summary} saved_at={@saved_at} />
+          <div class="border-t border-dashed border-base-300/60"></div>
 
           <%= if @revisions == [] do %>
-            <p class="text-sm text-base-content/60">
-              No telemetry catalog revisions available for this mission yet. Import a catalog
-              revision first.
-            </p>
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-              class="btn btn-ghost btn-sm self-start"
-            >
-              Go to catalog
-            </.link>
+            <.no_revisions_notice current_mission={@current_mission} />
           <% else %>
-            <.form for={@config_form} phx-change="validate" phx-submit="save" id="telemetry-decom-config-form">
-              <.input
-                field={@config_form[:catalog_revision_id]}
-                type="select"
-                label="Catalog Revision"
-                options={@revisions}
-                required
-              />
-              <.input
-                field={@config_form[:handled_apids]}
-                type="text"
-                label="Handled APIDs"
-                placeholder="1, 2, 5-8, 42"
-                required
-              />
-              <p class="text-sm text-base-content/60 -mt-2">
-                Enter a comma-separated list of APIDs and ranges. Example:
-                <span class="font-mono"> 1, 2, 5-8</span>
-              </p>
+            <.revision_section
+              revisions={@revisions}
+              selected_revision_id={@selected_revision_id}
+            />
+            <div class="border-t border-dashed border-base-300/60"></div>
 
-              <button
-                type="submit"
-                class="btn btn-primary btn-sm"
-                id="telemetry-decom-save-button"
-              >
-                Save configuration
-              </button>
-            </.form>
+            <.dropped_unknowns_banner dropped={@dropped_unknowns} />
+
+            <.apid_section
+              rows={@apid_rows}
+              selection={@selection}
+              conflicts={@conflicts}
+              expanded_apids={@expanded_apids}
+              expanded_defs={@expanded_defs}
+              expanded_entries={@expanded_entries}
+              filter={@filter}
+            />
+            <div class="border-t border-dashed border-base-300/60"></div>
+
+            <.preview_section preview={@preview} />
+            <div class="border-t border-dashed border-base-300/60"></div>
+
+            <.apply_section config={@config} />
           <% end %>
         </div>
       </div>
-
-      <.preview_card preview={@preview} current_mission={@current_mission} />
-
-      <.actions_card config={@config} />
     </div>
     """
   end
 
   attr :config, :any, default: nil
   attr :active, :any, default: nil
+  attr :saved_at, :any, default: nil
 
-  defp status_card(assigns) do
+  defp status_section(assigns) do
     assigns = assign(assigns, :status, TelemetryDecom.status(assigns.config, assigns.active))
 
     ~H"""
-    <div class="card bg-base-200" id="telemetry-decom-status-card">
-      <div class="card-body p-6">
-        <p class="hud-label">Status</p>
-        <div class="flex items-center gap-2 mt-3">
-          <.status_dot status={dot_status(@status)} />
-          <span class="text-base-content font-semibold">{status_label(@status)}</span>
-        </div>
-        <p class="text-sm text-base-content/60 mt-2">{status_description(@status)}</p>
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <.status_dot status={dot_status(@status)} />
+        <span class="font-semibold text-base-content">{status_label(@status)}</span>
+        <span class="text-sm text-base-content/60">— {status_description(@status)}</span>
       </div>
+      <span :if={@saved_at} class="hud-label">Saved {format_relative(@saved_at)}</span>
+    </div>
+    """
+  end
+
+  attr :revisions, :list, required: true
+  attr :selected_revision_id, :any, default: nil
+
+  defp revision_section(assigns) do
+    ~H"""
+    <div>
+      <p class="hud-label mb-2">Catalog revision</p>
+      <form phx-change="change_revision" id="telemetry-decom-revision-form" class="max-w-sm">
+        <select
+          name="catalog_revision_id"
+          id="telemetry-decom-revision-select"
+          class="select w-full"
+        >
+          <option
+            :for={{label, value} <- @revisions}
+            value={value}
+            selected={to_string(@selected_revision_id) == to_string(value)}
+          >
+            {label}
+          </option>
+        </select>
+      </form>
+    </div>
+    """
+  end
+
+  attr :rows, :list, required: true
+  attr :selection, :any, required: true
+  attr :conflicts, :map, required: true
+  attr :expanded_apids, :any, required: true
+  attr :expanded_defs, :any, required: true
+  attr :expanded_entries, :any, required: true
+  attr :filter, :string, required: true
+
+  defp apid_section(assigns) do
+    ~H"""
+    <div>
+      <div class="flex items-center justify-between gap-2">
+        <p class="hud-label">
+          Handled APIDs · {MapSet.size(@selection)} / {length(@rows)}
+        </p>
+        <div class="flex items-center gap-2">
+          <form phx-change="filter_apids" id="telemetry-decom-filter-form">
+            <input
+              type="text"
+              name="filter"
+              value={@filter}
+              placeholder="Filter…"
+              class="input input-sm"
+              id="telemetry-decom-filter-input"
+            />
+          </form>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            phx-click="select_all_unclaimed"
+            id="telemetry-decom-select-all"
+          >
+            Select all unclaimed
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            phx-click="clear_selection"
+            id="telemetry-decom-clear"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <APIDTable.table
+        rows={@rows}
+        selection={@selection}
+        conflicts={@conflicts}
+        expanded_apids={@expanded_apids}
+        expanded_defs={@expanded_defs}
+        expanded_entries={@expanded_entries}
+        filter={@filter}
+      />
     </div>
     """
   end
 
   attr :preview, :any, default: nil
-  attr :current_mission, :map, required: true
 
-  defp preview_card(%{preview: nil} = assigns), do: ~H""
-
-  defp preview_card(assigns) do
+  defp preview_section(%{preview: nil} = assigns) do
     ~H"""
-    <div class="card bg-base-200" id="telemetry-decom-preview-card">
-      <div class="card-body p-6 space-y-4">
-        <p class="hud-label">Packet Definitions</p>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div>
-            <div class="text-base-content/60">Handled APIDs</div>
-            <div class="text-xl font-semibold">{length(@preview.config.handled_apids)}</div>
-          </div>
-          <div>
-            <div class="text-base-content/60">Matched Packets</div>
-            <div class="text-xl font-semibold">{length(@preview.selected_packets)}</div>
-          </div>
-          <div>
-            <div class="text-base-content/60">Compiled</div>
-            <div class="text-xl font-semibold">
-              {length(@preview.compilation.compiler_result.packet_definitions)}
-            </div>
-          </div>
-          <div>
-            <div class="text-base-content/60">Unassigned APIDs</div>
-            <div class="text-xl font-semibold">{length(@preview.unassigned_apids)}</div>
+    <div>
+      <p class="hud-label mb-2">Preview</p>
+      <p class="text-sm text-base-content/60">
+        Select one or more APIDs to preview matched packets.
+      </p>
+    </div>
+    """
+  end
+
+  defp preview_section(assigns) do
+    ~H"""
+    <div>
+      <p class="hud-label mb-2">Preview</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div>
+          <div class="text-base-content/60">Matched packets</div>
+          <div class="text-xl font-semibold">{length(@preview.selected_packets)}</div>
+        </div>
+        <div>
+          <div class="text-base-content/60">Compiled defs</div>
+          <div class="text-xl font-semibold">
+            {length(@preview.compilation.compiler_result.packet_definitions)}
           </div>
         </div>
-
-        <div class="text-sm space-y-2">
-          <p>
-            <span class="text-base-content/60">Handled APIDs:</span>
-            <span class="font-mono">{format_apids(@preview.config.handled_apids)}</span>
-          </p>
-          <p :if={@preview.unassigned_apids != []}>
-            <span class="text-base-content/60">Unassigned APIDs in this revision:</span>
-            <span class="font-mono">{format_apids(@preview.unassigned_apids)}</span>
-          </p>
+        <div>
+          <div class="text-base-content/60">Unassigned APIDs</div>
+          <div class="text-xl font-semibold">{length(@preview.unassigned_apids)}</div>
         </div>
-
-        <.diagnostics_list diagnostics={@preview.compilation.compiler_result.diagnostics} />
+        <div>
+          <div class="text-base-content/60">Notices</div>
+          <div class="text-xl font-semibold">
+            {length(@preview.compilation.compiler_result.diagnostics)}
+          </div>
+        </div>
       </div>
+      <.diagnostics_list diagnostics={@preview.compilation.compiler_result.diagnostics} />
     </div>
     """
   end
 
   attr :diagnostics, :list, default: []
 
-  defp diagnostics_list(%{diagnostics: []} = assigns) do
-    ~H"""
-    <p class="text-sm text-base-content/60">No warnings or unsupported definitions.</p>
-    """
-  end
+  defp diagnostics_list(%{diagnostics: []} = assigns), do: ~H""
 
   defp diagnostics_list(assigns) do
     ~H"""
-    <div>
-      <p class="hud-label mb-2">Notices</p>
-      <ul class="space-y-1 text-sm" id="telemetry-decom-diagnostics">
-        <li
-          :for={d <- Enum.take(@diagnostics, 20)}
-          class="flex items-start gap-2"
-        >
-          <.status_dot status={diagnostic_dot(d.severity)} size={:sm} class="mt-1.5" />
-          <span>
-            <span class="font-mono text-xs text-base-content/60">{d.code}</span>
-            <span class="ml-1">{d.message}</span>
-          </span>
-        </li>
-      </ul>
-      <p :if={length(@diagnostics) > 20} class="text-xs text-base-content/60 mt-2">
+    <ul class="space-y-1 text-sm mt-3" id="telemetry-decom-diagnostics">
+      <li :for={d <- Enum.take(@diagnostics, 20)} class="flex items-start gap-2">
+        <.status_dot status={diagnostic_dot(d.severity)} size={:sm} class="mt-1.5" />
+        <span>
+          <span class="font-mono text-xs text-base-content/60">{d.code}</span>
+          <span class="ml-1">{d.message}</span>
+        </span>
+      </li>
+      <li :if={length(@diagnostics) > 20} class="text-xs text-base-content/60 mt-2">
         {length(@diagnostics) - 20} more omitted.
-      </p>
-    </div>
+      </li>
+    </ul>
     """
   end
 
   attr :config, :any, default: nil
 
-  defp actions_card(%{config: nil} = assigns), do: ~H""
-
-  defp actions_card(assigns) do
+  defp apply_section(%{config: nil} = assigns) do
     ~H"""
-    <div class="card bg-base-200" id="telemetry-decom-actions-card">
-      <div class="card-body p-6 space-y-3">
-        <p class="hud-label">Apply</p>
-        <p class="text-sm text-base-content/60">
-          Applies all enabled Telemetry Decom spacecraft configurations for this mission, including this one.
-        </p>
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            phx-click="enable"
-            id="telemetry-decom-enable-button"
-          >
-            Apply Mission Changes
-          </button>
-          <button
-            :if={@config.enabled}
-            type="button"
-            class="btn btn-ghost btn-sm"
-            phx-click="disable"
-            id="telemetry-decom-disable-button"
-            data-confirm="Disable Telemetry Decom for this spacecraft?"
-          >
-            Disable
-          </button>
-        </div>
-      </div>
+    <div class="flex justify-end">
+      <p class="text-sm text-base-content/60">
+        Select at least one APID to save and apply.
+      </p>
     </div>
     """
+  end
+
+  defp apply_section(assigns) do
+    ~H"""
+    <div class="flex justify-end gap-2">
+      <button
+        :if={@config.enabled}
+        type="button"
+        class="btn btn-ghost btn-sm"
+        phx-click="disable"
+        id="telemetry-decom-disable-button"
+        data-confirm="Disable Telemetry Decom for this spacecraft?"
+      >
+        Disable
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        phx-click="enable"
+        id="telemetry-decom-enable-button"
+      >
+        Apply mission changes
+      </button>
+    </div>
+    """
+  end
+
+  attr :dropped, :list, default: []
+
+  defp dropped_unknowns_banner(%{dropped: []} = assigns), do: ~H""
+
+  defp dropped_unknowns_banner(assigns) do
+    ~H"""
+    <div class="alert alert-warning text-sm" id="telemetry-decom-dropped-unknowns">
+      <span>
+        {length(@dropped)} previously selected {if length(@dropped) == 1, do: "APID is", else: "APIDs are"}
+        not in this revision:
+        <span class="font-mono">{Enum.join(@dropped, ", ")}</span>.
+      </span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        phx-click="drop_unknown_apids"
+        id="telemetry-decom-drop-unknowns"
+      >
+        Drop them
+      </button>
+    </div>
+    """
+  end
+
+  attr :current_mission, :map, required: true
+
+  defp no_revisions_notice(assigns) do
+    ~H"""
+    <div>
+      <p class="text-sm text-base-content/60">
+        No telemetry catalog revisions available for this mission yet. Import a catalog
+        revision first.
+      </p>
+      <.link
+        navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
+        class="btn btn-ghost btn-sm mt-3"
+      >
+        Go to catalog
+      </.link>
+    </div>
+    """
+  end
+
+  defp format_relative(%DateTime{} = dt) do
+    diff = DateTime.diff(DateTime.utc_now(), dt, :second)
+
+    cond do
+      diff < 5 -> "just now"
+      diff < 60 -> "#{diff}s ago"
+      diff < 3600 -> "#{div(diff, 60)}m ago"
+      diff < 86_400 -> "#{div(diff, 3600)}h ago"
+      true -> "#{div(diff, 86_400)}d ago"
+    end
   end
 
   defp assign_config_form(socket, params) when is_map(params) do
