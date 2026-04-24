@@ -39,7 +39,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:conflicts, conflicts)
      |> assign(:selection, selection)
      |> assign(:expanded_apids, MapSet.new())
-     |> assign(:expanded_defs, MapSet.new())
      |> assign(:expanded_entries, MapSet.new())
      |> assign(:filter, "")
      |> assign(:dropped_unknowns, [])
@@ -87,8 +86,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
       |> assign(:apid_rows, apid_rows)
       |> assign(:points_by_id, points_by_id)
       |> assign(:dropped_unknowns, dropped)
+      |> assign(:selection, selection)
 
-    save_and_refresh(socket, selection, revision_id: revision_id)
+    if dropped == [] do
+      save_and_refresh(socket, selection, revision_id: revision_id)
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("filter_apids", %{"filter" => filter}, socket) do
@@ -270,7 +274,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
               selection={@selection}
               conflicts={@conflicts}
               expanded_apids={@expanded_apids}
-              expanded_defs={@expanded_defs}
               expanded_entries={@expanded_entries}
               filter={@filter}
               points_by_id={@points_by_id}

@@ -3,13 +3,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
 
   use Phoenix.Component
 
-  import CadenceWeb.CoreComponents, only: [status_dot: 1]
-
   attr :rows, :list, required: true
   attr :selection, :any, required: true
   attr :conflicts, :map, required: true
   attr :expanded_apids, :any, required: true
-  attr :expanded_defs, :any, required: true
   attr :expanded_entries, :any, required: true
   attr :filter, :string, default: ""
   attr :points_by_id, :map, default: %{}
@@ -187,7 +184,4 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
   defp entry_notes(%{fixed_value: value}) when is_binary(value), do: "fixed=#{value}"
   defp entry_notes(%{array_size: size}) when is_integer(size), do: "array[#{size}]"
   defp entry_notes(_), do: ""
-
-  # status_dot is imported for use in later tasks (Level 2 expansion).
-  _ = &status_dot/1
 end

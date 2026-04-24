@@ -31,6 +31,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   attr :selected_revision_id, :any, default: nil
 
   def revision_section(assigns) do
+    # Intentional UI-rule deviation: <.input> requires a FormField binding,
+    # which is awkward for this standalone phx-change form. Raw <select>
+    # uses the same daisyUI tokens as <.input>.
     ~H"""
     <div>
       <p class="hud-label mb-2">Catalog revision</p>
@@ -57,7 +60,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   attr :selection, :any, required: true
   attr :conflicts, :map, required: true
   attr :expanded_apids, :any, required: true
-  attr :expanded_defs, :any, required: true
   attr :expanded_entries, :any, required: true
   attr :filter, :string, required: true
   attr :points_by_id, :map, required: true
@@ -71,6 +73,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         </p>
         <div class="flex items-center gap-2">
           <form phx-change="filter_apids" id="telemetry-decom-filter-form">
+            <%!-- Intentional UI-rule deviation: see revision_section/1. Raw <input>
+            for the same FormField-binding reason. --%>
             <input
               type="text"
               name="filter"
@@ -103,7 +107,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         selection={@selection}
         conflicts={@conflicts}
         expanded_apids={@expanded_apids}
-        expanded_defs={@expanded_defs}
         expanded_entries={@expanded_entries}
         filter={@filter}
         points_by_id={@points_by_id}
