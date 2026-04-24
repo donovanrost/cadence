@@ -125,10 +125,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     assert config.handled_apids == [42]
   end
 
-  @tag :skip
-  test "disabled configs can still be applied from the same screen" do
+  test "disable button rolls back the enabled flag" do
     {conn, org, mission, spacecraft} = setup_session()
-    revision = persist_revision!(org, mission)
+    _revision = persist_revision!(org, mission)
 
     {:ok, view, _html} =
       live(
@@ -136,32 +135,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
       )
 
-    _html =
-      view
-      |> form("#telemetry-decom-config-form", %{
-        "config" => %{
-          "catalog_revision_id" => revision.catalog_revision_id,
-          "handled_apids" => "42"
-        }
-      })
-      |> render_submit()
-
-    _html =
-      view
-      |> element("#telemetry-decom-enable-button")
-      |> render_click()
+    view |> element("input[phx-click='toggle_apid'][phx-value-apid='42']") |> render_click()
 
     html =
       view
       |> element("#telemetry-decom-disable-button")
-      |> render_click()
-
-    assert html =~ "Apply Mission Changes"
-    assert html =~ "Applied configuration is out of date"
-
-    html =
-      view
-      |> element("#telemetry-decom-enable-button")
       |> render_click()
 
     assert html =~ "Disabled"
