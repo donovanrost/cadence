@@ -44,8 +44,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
-     |> assign(:saved_at, config && DateTime.utc_now())
-     |> assign_config_form(defaults_for(config, revisions))}
+     |> assign(:saved_at, config && DateTime.utc_now())}
   end
 
   defp load_apid_rows(_organization_id, _mission_id, nil), do: []
@@ -61,36 +60,56 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   defp selection_from_config(%{handled_apids: apids}), do: MapSet.new(apids)
 
   @impl true
-  def handle_event("validate", %{"config" => params}, socket) do
-    {:noreply, assign_config_form(socket, params)}
+  def handle_event("toggle_apid", %{"apid" => apid_string}, socket) do
+    apid = String.to_integer(apid_string)
+
+    if Map.has_key?(socket.assigns.conflicts, apid) do
+      {:noreply, socket}
+    else
+      selection = toggle_member(socket.assigns.selection, apid)
+      save_and_refresh(socket, selection)
+    end
   end
 
-  def handle_event(
-        "save",
-        %{"config" => params},
-        %{assigns: %{current_scope: scope, current_mission: mission, current_spacecraft: sc}} =
-          socket
-      ) do
-    case TelemetryDecom.configure(scope.organization_id, mission.mission_id, sc.spacecraft_id,
-           catalog_revision_id: params["catalog_revision_id"],
-           handled_apids: params["handled_apids"]
-         ) do
-      {:ok, config} ->
-        preview = preview_for(scope.organization_id, mission.mission_id, config)
+  def handle_event("change_revision", %{"catalog_revision_id" => revision_id}, socket) do
+    %{current_scope: scope, current_mission: mission, current_spacecraft: _sc} = socket.assigns
 
-        {:noreply,
-         socket
-         |> assign(:config, config)
-         |> assign(:preview, preview)
-         |> assign_config_form(defaults_for(config, socket.assigns.revisions))
-         |> put_flash(:info, "Telemetry Decom configuration saved.")}
+    apid_rows =
+      load_apid_rows(scope.organization_id, mission.mission_id, revision_id)
 
-      {:error, reason} ->
-        {:noreply,
-         socket
-         |> assign_config_form(params)
-         |> put_flash(:error, "Could not save configuration: #{humanize_error(reason)}")}
-    end
+    {selection, dropped} =
+      prune_selection_against_rows(socket.assigns.selection, apid_rows)
+
+    socket =
+      socket
+      |> assign(:selected_revision_id, revision_id)
+      |> assign(:apid_rows, apid_rows)
+      |> assign(:dropped_unknowns, dropped)
+
+    save_and_refresh(socket, selection, revision_id: revision_id)
+  end
+
+  def handle_event("filter_apids", %{"filter" => filter}, socket) do
+    {:noreply, assign(socket, :filter, filter)}
+  end
+
+  def handle_event("select_all_unclaimed", _params, socket) do
+    selection =
+      socket.assigns.apid_rows
+      |> Enum.reject(&Map.has_key?(socket.assigns.conflicts, &1.apid))
+      |> Enum.map(& &1.apid)
+      |> MapSet.new()
+
+    save_and_refresh(socket, selection)
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    save_and_refresh(socket, MapSet.new())
+  end
+
+  def handle_event("drop_unknown_apids", _params, socket) do
+    socket = assign(socket, :dropped_unknowns, [])
+    save_and_refresh(socket, socket.assigns.selection)
   end
 
   def handle_event(
@@ -140,6 +159,56 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Could not disable: #{humanize_error(reason)}")}
+    end
+  end
+
+  defp toggle_member(set, value) do
+    if MapSet.member?(set, value),
+      do: MapSet.delete(set, value),
+      else: MapSet.put(set, value)
+  end
+
+  defp prune_selection_against_rows(selection, rows) do
+    available = MapSet.new(rows, & &1.apid)
+    kept = MapSet.intersection(selection, available)
+    dropped = selection |> MapSet.difference(available) |> Enum.sort()
+    {kept, dropped}
+  end
+
+  defp save_and_refresh(socket, selection, opts \\ []) do
+    %{current_scope: scope, current_mission: mission, current_spacecraft: sc} = socket.assigns
+    revision_id = Keyword.get(opts, :revision_id, socket.assigns.selected_revision_id)
+
+    apids = selection |> Enum.sort()
+
+    socket = assign(socket, :selection, selection)
+
+    if revision_id == nil or (apids == [] and socket.assigns.config == nil) do
+      {:noreply, assign(socket, :preview, nil)}
+    else
+      configure_result =
+        TelemetryDecom.configure(
+          scope.organization_id,
+          mission.mission_id,
+          sc.spacecraft_id,
+          catalog_revision_id: revision_id,
+          handled_apids: apids
+        )
+
+      case configure_result do
+        {:ok, config} ->
+          preview = preview_for(scope.organization_id, mission.mission_id, config)
+
+          {:noreply,
+           socket
+           |> assign(:config, config)
+           |> assign(:preview, preview)
+           |> assign(:saved_at, DateTime.utc_now())}
+
+        {:error, reason} ->
+          {:noreply,
+           put_flash(socket, :error, "Could not save configuration: #{humanize_error(reason)}")}
+      end
     end
   end
 
@@ -458,28 +527,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
       diff < 86_400 -> "#{div(diff, 3600)}h ago"
       true -> "#{div(diff, 86_400)}d ago"
     end
-  end
-
-  defp assign_config_form(socket, params) when is_map(params) do
-    assign(socket, :config_form, to_form(params, as: "config"))
-  end
-
-  defp assign_config_form(socket, params) when is_list(params) do
-    assign_config_form(socket, Map.new(params, fn {k, v} -> {to_string(k), v} end))
-  end
-
-  defp defaults_for(nil, revisions) do
-    %{
-      "catalog_revision_id" => first_option_value(revisions),
-      "handled_apids" => ""
-    }
-  end
-
-  defp defaults_for(config, _revisions) do
-    %{
-      "catalog_revision_id" => config.catalog_revision_id,
-      "handled_apids" => APIDSelection.format(config.handled_apids)
-    }
   end
 
   defp first_option_value([]), do: nil

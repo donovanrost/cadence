@@ -90,10 +90,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     assert html =~ spacecraft.display_name
   end
 
-  @tag :skip
-  test "configures and enables telemetry decom end-to-end" do
+  test "toggling an APID autosaves and updates the preview count" do
     {conn, org, mission, spacecraft} = setup_session()
-    revision = persist_revision!(org, mission)
+    _revision = persist_revision!(org, mission)
 
     {:ok, view, _html} =
       live(
@@ -103,26 +102,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
 
     html =
       view
-      |> form("#telemetry-decom-config-form", %{
-        "config" => %{
-          "catalog_revision_id" => revision.catalog_revision_id,
-          "handled_apids" => "42"
-        }
-      })
-      |> render_submit()
-
-    assert html =~ "Configuration saved" or html =~ "configuration saved"
-    assert html =~ "Packet Definitions"
-    assert html =~ "Handled APIDs"
-    assert html =~ "42"
-    refute html =~ "Data Source"
-
-    html =
-      view
-      |> element("#telemetry-decom-enable-button")
+      |> element("input[phx-click='toggle_apid'][phx-value-apid='42']")
       |> render_click()
 
-    assert html =~ "mission changes applied" or html =~ "Applied"
+    assert html =~ "Matched packets"
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -131,7 +114,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
                spacecraft.spacecraft_id
              )
 
-    assert config.applied_binding_set_id == TelemetryDecom.binding_set_id(mission.mission_id)
+    assert config.handled_apids == [42]
   end
 
   @tag :skip
