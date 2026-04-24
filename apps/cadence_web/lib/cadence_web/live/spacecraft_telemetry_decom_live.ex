@@ -20,7 +20,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
       end
 
     revisions = list_telemetry_revisions(organization_id, mission_id)
-    defaults = defaults_for(config, revisions)
+    selected_revision_id = (config && config.catalog_revision_id) || first_option_value(revisions)
+
+    apid_rows = load_apid_rows(organization_id, mission_id, selected_revision_id)
+    conflicts = TelemetryDecom.list_apid_conflicts(organization_id, mission_id, spacecraft_id)
+    selection = selection_from_config(config)
 
     {:ok,
      socket
@@ -28,10 +32,32 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:nav_item, :spacecraft)
      |> assign(:config, config)
      |> assign(:revisions, revisions)
+     |> assign(:selected_revision_id, selected_revision_id)
+     |> assign(:apid_rows, apid_rows)
+     |> assign(:conflicts, conflicts)
+     |> assign(:selection, selection)
+     |> assign(:expanded_apids, MapSet.new())
+     |> assign(:expanded_defs, MapSet.new())
+     |> assign(:expanded_entries, MapSet.new())
+     |> assign(:filter, "")
+     |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
-     |> assign_config_form(defaults)}
+     |> assign(:saved_at, config && DateTime.utc_now())
+     |> assign_config_form(defaults_for(config, revisions))}
   end
+
+  defp load_apid_rows(_organization_id, _mission_id, nil), do: []
+
+  defp load_apid_rows(organization_id, mission_id, revision_id) do
+    case TelemetryDecom.list_revision_apid_rows(organization_id, mission_id, revision_id) do
+      {:ok, rows} -> rows
+      {:error, _} -> []
+    end
+  end
+
+  defp selection_from_config(nil), do: MapSet.new()
+  defp selection_from_config(%{handled_apids: apids}), do: MapSet.new(apids)
 
   @impl true
   def handle_event("validate", %{"config" => params}, socket) do
