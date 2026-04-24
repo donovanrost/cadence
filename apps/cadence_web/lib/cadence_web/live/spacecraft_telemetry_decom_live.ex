@@ -112,6 +112,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     save_and_refresh(socket, socket.assigns.selection)
   end
 
+  def handle_event("toggle_apid_expand", %{"apid" => apid_string}, socket) do
+    apid = String.to_integer(apid_string)
+    expanded = toggle_member(socket.assigns.expanded_apids, apid)
+    {:noreply, assign(socket, :expanded_apids, expanded)}
+  end
+
   def handle_event(
         "enable",
         _params,

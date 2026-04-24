@@ -30,24 +30,59 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
         </tr>
       </thead>
       <tbody>
-        <tr :for={row <- @visible_rows} id={"apid-row-#{row.apid}"} class="border-t border-base-300/40">
-          <td class="py-2">
-            <input
-              type="checkbox"
-              class="checkbox checkbox-sm checkbox-primary"
-              checked={MapSet.member?(@selection, row.apid)}
-              disabled={Map.has_key?(@conflicts, row.apid)}
-              phx-click="toggle_apid"
-              phx-value-apid={row.apid}
-            />
-          </td>
-          <td class="py-2 text-base-content/50">›</td>
-          <td class="py-2 font-mono">{row.apid}</td>
-          <td class="py-2">{packets_label(row)}</td>
-          <td class="py-2 text-base-content/60">{row.def_count}</td>
-          <td class="py-2 text-base-content/60">{rate_label(row.rate_hz)}</td>
-          <td class="py-2 text-base-content/60">{conflict_label(@conflicts, row.apid)}</td>
-        </tr>
+        <%= for row <- @visible_rows do %>
+          <tr id={"apid-row-#{row.apid}"} class="border-t border-base-300/40">
+            <td class="py-2">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm checkbox-primary"
+                checked={MapSet.member?(@selection, row.apid)}
+                disabled={Map.has_key?(@conflicts, row.apid)}
+                phx-click="toggle_apid"
+                phx-value-apid={row.apid}
+              />
+            </td>
+            <td class="py-2">
+              <button
+                type="button"
+                id={"apid-row-#{row.apid}-toggle"}
+                class={["text-base-content/50 transition-transform",
+                        MapSet.member?(@expanded_apids, row.apid) && "rotate-90 text-primary"]}
+                phx-click="toggle_apid_expand"
+                phx-value-apid={row.apid}
+                aria-label="Toggle row details"
+              >›</button>
+            </td>
+            <td class="py-2 font-mono">{row.apid}</td>
+            <td class="py-2">{packets_label(row)}</td>
+            <td class="py-2 text-base-content/60">{row.def_count}</td>
+            <td class="py-2 text-base-content/60">{rate_label(row.rate_hz)}</td>
+            <td class="py-2 text-base-content/60">{conflict_label(@conflicts, row.apid)}</td>
+          </tr>
+          <tr :if={MapSet.member?(@expanded_apids, row.apid)}>
+            <td colspan="7" class="p-0">
+              <div
+                class="pl-4 pr-2 py-3 border-l-2 border-primary bg-base-300/40"
+                id={"apid-row-#{row.apid}-detail"}
+              >
+                <p :if={row.short_description} class="text-sm text-base-content/80 mb-3">
+                  {row.short_description}
+                </p>
+                <div :for={packet <- row.packets} class="bg-base-200 border border-base-300/60 mb-2">
+                  <div class="flex items-center gap-3 px-3 py-2 border-b border-base-300/60">
+                    <span class="font-semibold text-base-content">{packet.name}</span>
+                    <span class="font-mono text-xs text-base-content/60">
+                      apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits || "—"} b
+                    </span>
+                    <span class="ml-auto text-xs text-base-content/60">
+                      {packet_entries_label(packet)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        <% end %>
         <tr :if={@visible_rows == []}>
           <td colspan="7" class="py-4 text-center text-base-content/60">
             No APIDs match the filter.
@@ -99,6 +134,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
       name -> name
     end
   end
+
+  defp packet_entries_label(%{entries: []}), do: "no entries"
+  defp packet_entries_label(%{entries: entries}), do: "#{length(entries)} entries"
+  defp packet_entries_label(_), do: ""
 
   # status_dot is imported for use in later tasks (Level 2 expansion).
   _ = &status_dot/1
