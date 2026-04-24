@@ -36,7 +36,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
               MapSet.member?(@expanded_apids, row.apid) && "bg-base-300/15"
             ]}
           >
-            <td class="py-1.5">
+            <td class="py-1.5 align-top">
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm checkbox-primary"
@@ -46,7 +46,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                 phx-value-apid={row.apid}
               />
             </td>
-            <td class="py-1.5">
+            <td class="py-1.5 align-top">
               <button
                 type="button"
                 id={"apid-row-#{row.apid}-toggle"}
@@ -59,11 +59,16 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                 aria-label="Toggle row details"
               >›</button>
             </td>
-            <td class="py-1.5 font-mono text-base-content/90">{row.apid}</td>
-            <td class="py-1.5">{packets_label(row)}</td>
-            <td class="py-1.5 text-base-content/50">{row.def_count}</td>
-            <td class="py-1.5 text-base-content/50">{rate_label(row.rate_hz)}</td>
-            <td class="py-1.5 text-base-content/50">{conflict_label(@conflicts, row.apid)}</td>
+            <td class="py-1.5 font-mono text-base-content/90 align-top">{row.apid}</td>
+            <td class="py-1.5">
+              <div>{packets_label(row)}</div>
+              <div :if={row.short_description} class="text-xs text-base-content/50 mt-0.5">
+                {row.short_description}
+              </div>
+            </td>
+            <td class="py-1.5 text-base-content/50 align-top">{row.def_count}</td>
+            <td class="py-1.5 text-base-content/50 align-top">{rate_label(row.rate_hz)}</td>
+            <td class="py-1.5 text-base-content/50 align-top">{conflict_label(@conflicts, row.apid)}</td>
           </tr>
           <tr :if={MapSet.member?(@expanded_apids, row.apid)}>
             <td colspan="7" class="p-0">
@@ -71,19 +76,25 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                 class="pl-5 pr-2 py-3 border-l border-primary/40 bg-base-300/15"
                 id={"apid-row-#{row.apid}-detail"}
               >
-                <p :if={row.short_description} class="text-sm text-base-content/70 mb-3">
-                  {row.short_description}
-                </p>
-                <div :for={packet <- row.packets} class="mb-2 last:mb-0">
-                  <div class="flex items-center gap-3 py-1">
-                    <span class="text-base-content/90">{packet.name}</span>
-                    <span class="font-mono text-xs text-base-content/50">
-                      apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits || "—"} b
-                    </span>
+                <div :for={packet <- row.packets} class="mb-3 last:mb-0">
+                  <div class="flex items-start gap-3 py-1">
+                    <div class="min-w-0">
+                      <div class="text-base-content/90">{packet.name}</div>
+                      <div
+                        :if={packet_description(packet)}
+                        class="text-xs text-base-content/60 mt-0.5"
+                      >
+                        {packet_description(packet)}
+                      </div>
+                      <div class="font-mono text-xs text-base-content/40 mt-0.5">
+                        apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits ||
+                          "—"} b
+                      </div>
+                    </div>
                     <button
                       type="button"
                       id={"telemetry-decom-entries-toggle-#{packet.packet_id}"}
-                      class="ml-auto text-xs text-primary/80 hover:text-primary"
+                      class="ml-auto text-xs text-primary/80 hover:text-primary shrink-0"
                       phx-click="toggle_entries"
                       phx-value-packet-id={packet.packet_id}
                     >
@@ -192,4 +203,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
   defp entry_notes(%{fixed_value: value}) when is_binary(value), do: "fixed=#{value}"
   defp entry_notes(%{array_size: size}) when is_integer(size), do: "array[#{size}]"
   defp entry_notes(_), do: ""
+
+  defp packet_description(%{short_description: desc}) when is_binary(desc) and desc != "",
+    do: desc
+
+  defp packet_description(%{description: desc}) when is_binary(desc) and desc != "" do
+    if String.length(desc) <= 200, do: desc, else: String.slice(desc, 0, 197) <> "…"
+  end
+
+  defp packet_description(_), do: nil
 end
