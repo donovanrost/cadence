@@ -18,6 +18,8 @@ defmodule Cadence.Applications.TelemetryDecom.APIDSelection do
     |> parse_tokens()
   end
 
+  def parse([]), do: {:ok, []}
+
   def parse(values) when is_list(values) do
     values
     |> Enum.map(&to_string/1)

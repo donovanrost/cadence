@@ -219,4 +219,78 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     assert html =~ "Not configured"
     assert html =~ "Configure"
   end
+
+  test "select-all-unclaimed picks every non-conflicting APID and autosaves" do
+    {conn, org, mission, spacecraft} = setup_session()
+    _revision = persist_revision!(org, mission)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+      )
+
+    _html =
+      view
+      |> element("#telemetry-decom-select-all")
+      |> render_click()
+
+    assert {:ok, config} =
+             TelemetryDecom.fetch_config(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id
+             )
+
+    assert config.handled_apids == [42]
+  end
+
+  test "clear empties the selection and resets handled APIDs in the saved config" do
+    {conn, org, mission, spacecraft} = setup_session()
+    _revision = persist_revision!(org, mission)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+      )
+
+    view
+    |> element("#telemetry-decom-select-all")
+    |> render_click()
+
+    html =
+      view
+      |> element("#telemetry-decom-clear")
+      |> render_click()
+
+    assert html =~ "Handled APIDs · 0 / 1"
+
+    assert {:ok, config} =
+             TelemetryDecom.fetch_config(
+               org.organization_id,
+               mission.mission_id,
+               spacecraft.spacecraft_id
+             )
+
+    assert config.handled_apids == []
+  end
+
+  test "filter narrows visible rows to matches on APID or name" do
+    {conn, org, mission, spacecraft} = setup_session()
+    _revision = persist_revision!(org, mission)
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+      )
+
+    html =
+      view
+      |> form("#telemetry-decom-filter-form", %{"filter" => "health"})
+      |> render_change()
+
+    assert html =~ "HEALTH"
+  end
 end
