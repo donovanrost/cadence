@@ -60,7 +60,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   attr :selection, :any, required: true
   attr :conflicts, :map, required: true
   attr :expanded_apids, :any, required: true
-  attr :expanded_entries, :any, required: true
   attr :filter, :string, required: true
   attr :points_by_id, :map, required: true
 
@@ -107,7 +106,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         selection={@selection}
         conflicts={@conflicts}
         expanded_apids={@expanded_apids}
-        expanded_entries={@expanded_entries}
         filter={@filter}
         points_by_id={@points_by_id}
       />

@@ -7,7 +7,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
   attr :selection, :any, required: true
   attr :conflicts, :map, required: true
   attr :expanded_apids, :any, required: true
-  attr :expanded_entries, :any, required: true
   attr :filter, :string, default: ""
   attr :points_by_id, :map, default: %{}
 
@@ -73,65 +72,48 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
           <tr :if={MapSet.member?(@expanded_apids, row.apid)}>
             <td colspan="7" class="p-0">
               <div
-                class="pl-5 pr-2 py-3 border-l border-primary/40 bg-base-300/15"
+                class="pl-5 pr-2 py-3 border-l border-primary/40 bg-base-300/15 font-mono text-xs"
                 id={"apid-row-#{row.apid}-detail"}
               >
-                <div :for={packet <- row.packets} class="mb-3 last:mb-0">
-                  <div class="flex items-start gap-3 py-1">
-                    <div class="min-w-0">
-                      <div class="text-base-content/90">{packet.name}</div>
-                      <div
-                        :if={packet_description(packet)}
-                        class="text-xs text-base-content/60 mt-0.5"
-                      >
-                        {packet_description(packet)}
-                      </div>
-                      <div class="font-mono text-xs text-base-content/40 mt-0.5">
-                        apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits ||
-                          "—"} b
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      id={"telemetry-decom-entries-toggle-#{packet.packet_id}"}
-                      class="ml-auto text-xs text-primary/80 hover:text-primary shrink-0"
-                      phx-click="toggle_entries"
-                      phx-value-packet-id={packet.packet_id}
-                    >
-                      <%= if MapSet.member?(@expanded_entries, packet.packet_id) do %>
-                        ▾ hide entries ({length(packet.entries)})
-                      <% else %>
-                        ▸ show entries ({length(packet.entries)})
-                      <% end %>
-                    </button>
-                  </div>
+                <div :for={packet <- row.packets} class="mb-4 last:mb-0">
                   <div
-                    :if={MapSet.member?(@expanded_entries, packet.packet_id)}
-                    class="mt-1 font-mono text-xs"
-                    id={"telemetry-decom-entries-#{packet.packet_id}"}
+                    :if={length(row.packets) > 1}
+                    class="text-base-content/70 not-italic mb-1"
                   >
-                    <table class="w-full">
-                      <thead>
-                        <tr class="text-base-content/40">
-                          <th class="text-left py-1 font-normal">name</th>
-                          <th class="text-left py-1 font-normal">kind</th>
-                          <th class="text-right py-1 font-normal">offset</th>
-                          <th class="text-left py-1 pl-3 font-normal">notes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr :for={entry <- Enum.take(packet.entries, 20)}>
-                          <td class="py-0.5 text-primary/90">{entry_name(entry, @points_by_id)}</td>
-                          <td class="py-0.5 text-base-content/60">{entry.entry_kind}</td>
-                          <td class="py-0.5 text-right text-base-content/50">{entry.bit_offset || "—"}</td>
-                          <td class="py-0.5 pl-3 text-base-content/50">{entry_notes(entry)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/50">
-                      {length(packet.entries) - 20} more omitted.
-                    </p>
+                    {packet.name}
+                    <span :if={packet.entries == []} class="text-base-content/40">
+                      · no entries
+                    </span>
                   </div>
+                  <table :if={packet.entries != []} class="w-full">
+                    <thead>
+                      <tr class="text-base-content/40">
+                        <th class="text-left py-1 font-normal">name</th>
+                        <th class="text-left py-1 font-normal">kind</th>
+                        <th class="text-right py-1 font-normal">offset</th>
+                        <th class="text-left py-1 pl-3 font-normal">notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr :for={entry <- Enum.take(packet.entries, 20)}>
+                        <td class="py-0.5 text-primary/90">{entry_name(entry, @points_by_id)}</td>
+                        <td class="py-0.5 text-base-content/60">{entry.entry_kind}</td>
+                        <td class="py-0.5 text-right text-base-content/50">
+                          {entry.bit_offset || "—"}
+                        </td>
+                        <td class="py-0.5 pl-3 text-base-content/50">{entry_notes(entry)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/50">
+                    {length(packet.entries) - 20} more omitted.
+                  </p>
+                  <p
+                    :if={length(row.packets) == 1 and packet.entries == []}
+                    class="text-base-content/40 not-italic"
+                  >
+                    No entries.
+                  </p>
                 </div>
               </div>
             </td>
@@ -203,13 +185,4 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
   defp entry_notes(%{fixed_value: value}) when is_binary(value), do: "fixed=#{value}"
   defp entry_notes(%{array_size: size}) when is_integer(size), do: "array[#{size}]"
   defp entry_notes(_), do: ""
-
-  defp packet_description(%{short_description: desc}) when is_binary(desc) and desc != "",
-    do: desc
-
-  defp packet_description(%{description: desc}) when is_binary(desc) and desc != "" do
-    if String.length(desc) <= 200, do: desc, else: String.slice(desc, 0, 197) <> "…"
-  end
-
-  defp packet_description(_), do: nil
 end

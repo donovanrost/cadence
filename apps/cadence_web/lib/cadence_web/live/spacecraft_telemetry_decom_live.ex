@@ -39,7 +39,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:conflicts, conflicts)
      |> assign(:selection, selection)
      |> assign(:expanded_apids, MapSet.new())
-     |> assign(:expanded_entries, MapSet.new())
      |> assign(:filter, "")
      |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
@@ -122,11 +121,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     apid = String.to_integer(apid_string)
     expanded = toggle_member(socket.assigns.expanded_apids, apid)
     {:noreply, assign(socket, :expanded_apids, expanded)}
-  end
-
-  def handle_event("toggle_entries", %{"packet-id" => packet_id}, socket) do
-    expanded = toggle_member(socket.assigns.expanded_entries, packet_id)
-    {:noreply, assign(socket, :expanded_entries, expanded)}
   end
 
   def handle_event(
@@ -274,7 +268,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
               selection={@selection}
               conflicts={@conflicts}
               expanded_apids={@expanded_apids}
-              expanded_entries={@expanded_entries}
               filter={@filter}
               points_by_id={@points_by_id}
             />

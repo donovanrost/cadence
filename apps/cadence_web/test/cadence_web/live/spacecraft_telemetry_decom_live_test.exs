@@ -256,7 +256,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     assert html =~ "HEALTH"
   end
 
-  test "clicking a row expands it and shows the packet description" do
+  test "clicking a row expands it and shows the packet entries" do
     {conn, org, mission, spacecraft} = setup_session()
     _revision = persist_revision!(org, mission)
 
@@ -271,27 +271,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       |> element("#apid-row-42-toggle")
       |> render_click()
 
-    assert html =~ "apid=42 · type="
-  end
-
-  test "expanding a packet definition shows its entries" do
-    {conn, org, mission, spacecraft} = setup_session()
-    _revision = persist_revision!(org, mission)
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
-      )
-
-    view |> element("#apid-row-42-toggle") |> render_click()
-
-    html =
-      view
-      |> element("[id^='telemetry-decom-entries-toggle-']")
-      |> render_click()
-
-    assert html =~ ~s(id="telemetry-decom-entries-)
+    assert html =~ ~s(id="apid-row-42-detail")
     assert html =~ "mode"
   end
 
