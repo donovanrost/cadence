@@ -41,3 +41,6 @@ npm-debug.log
 /legacy/cadence_legacy/assets/node_modules/
 /legacy/cadence_legacy/priv/telemetry_logs/
 /apps/cadence_simulator/cadence_simulator
+
+# Transient state for the superpowers brainstorming visual companion.
+.superpowers/

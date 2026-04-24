@@ -98,6 +98,10 @@ defmodule CadenceWeb.Router do
       ],
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id/spacecraft/:spacecraft_id", SpacecraftShowLive, :show
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry_decom",
+           SpacecraftTelemetryDecomLive,
+           :show
     end
 
     live_session :catalog,

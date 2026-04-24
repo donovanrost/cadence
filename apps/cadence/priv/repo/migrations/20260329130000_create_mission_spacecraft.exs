@@ -62,9 +62,43 @@ defmodule Cadence.Repo.Migrations.CreateMissionSpacecraft do
     FOREIGN KEY (organization_id, mission_id, spacecraft_id)
     REFERENCES mission_spacecraft (organization_id, mission_id, spacecraft_id)
     """)
+
+    create table(:spacecraft_telemetry_decom_configs, primary_key: false) do
+      add(:spacecraft_id, :string, primary_key: true)
+      add(:organization_id, :string)
+      add(:mission_id, :string, null: false)
+      add(:catalog_revision_id, :string, null: false)
+      add(:handled_apids, {:array, :integer}, null: false, default: [])
+      add(:source_endpoint_id, :string, null: false)
+      add(:enabled, :boolean, null: false, default: true)
+      add(:applied_binding_set_id, :string)
+      add(:applied_binding_set_version, :integer)
+      add(:applied_at, :utc_datetime_usec)
+      add(:metadata, :map, null: false, default: %{})
+
+      timestamps(type: :utc_datetime_usec)
+    end
+
+    create(
+      index(:spacecraft_telemetry_decom_configs, [:organization_id, :mission_id],
+        name: :spacecraft_telemetry_decom_configs_mission_idx
+      )
+    )
+
+    execute("""
+    ALTER TABLE spacecraft_telemetry_decom_configs
+    ADD CONSTRAINT spacecraft_telemetry_decom_configs_spacecraft_fk
+    FOREIGN KEY (organization_id, mission_id, spacecraft_id)
+    REFERENCES mission_spacecraft (organization_id, mission_id, spacecraft_id)
+    ON DELETE CASCADE
+    """)
   end
 
   def down do
+    execute("""
+    DROP TABLE IF EXISTS spacecraft_telemetry_decom_configs
+    """)
+
     execute("""
     DROP TRIGGER IF EXISTS sync_organization_id_from_mission ON mission_spacecraft
     """)
