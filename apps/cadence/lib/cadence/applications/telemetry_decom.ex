@@ -325,6 +325,22 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
+  @doc """
+  Return a map of `apid => other_application_display_name` for every APID
+  already claimed by a *different* enabled application on this spacecraft.
+
+  Today Telemetry Decom is the only built-in application, so this always
+  returns an empty map. The function exists so the UI can render a conflict
+  column without future wiring when additional applications land.
+  """
+  @spec list_apid_conflicts(binary(), binary(), binary()) ::
+          %{non_neg_integer() => String.t()}
+  def list_apid_conflicts(organization_id, mission_id, spacecraft_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_id) do
+    %{}
+  end
+
   defp compile_mission_binding_set(organization_id, mission_id, []) do
     next_version = next_binding_set_version(organization_id, mission_id)
 

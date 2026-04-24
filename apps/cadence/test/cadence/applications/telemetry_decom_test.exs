@@ -452,6 +452,18 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
   end
 
+  describe "list_apid_conflicts/3" do
+    test "returns an empty map today — no other applications exist" do
+      {spacecraft, _revision, _endpoint} = setup_mission()
+
+      assert TelemetryDecom.list_apid_conflicts(
+               @organization_id,
+               @mission_id,
+               spacecraft.spacecraft_id
+             ) == %{}
+    end
+  end
+
   defp setup_mission do
     persist_mission_scope(@organization_id, @mission_id)
     spacecraft = persist_spacecraft!(@mission_id, display_name: "Nova-1")
