@@ -22,26 +22,34 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {TestFixtures.member_conn(user), org, mission, spacecraft}
   end
 
-  defp persist_revision!(org, mission) do
+  defp persist_revision!(org, mission, opts \\ []) do
+    revision_label = Keyword.get(opts, :revision_label, "Rev 1")
+    suffix = Integer.to_string(System.unique_integer([:positive]))
+
     {:ok, database} =
       Catalog.create_database(org.organization_id, mission.mission_id, %{
-        name: "Bus",
-        slug: "bus",
+        name: "Bus " <> suffix,
+        slug: "bus-" <> suffix,
         catalog_family: :combined,
         default_importer_key: "cadence_yaml"
       })
 
-    yaml = """
-    packets:
-      - name: HEALTH
-        apid: 42
-        items:
-          - name: mode
-            data_type: uint
-            bit_offset: 0
-            bit_size: 8
-    commands: []
-    """
+    yaml =
+      Keyword.get(
+        opts,
+        :yaml,
+        """
+        packets:
+          - name: HEALTH
+            apid: 42
+            items:
+              - name: mode
+                data_type: uint
+                bit_offset: 0
+                bit_size: 8
+        commands: []
+        """
+      )
 
     artifact =
       Artifact.new(%{
@@ -61,7 +69,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         database.catalog_database_id,
         artifact,
         "cadence_yaml",
-        metadata: %{"revision_label" => "Rev 1"}
+        metadata: %{"revision_label" => revision_label}
       )
 
     {:ok, completed} = Catalog.execute_enqueued_run(run.import_run_id)
@@ -185,30 +193,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     refute html =~ "Ingress source ref"
   end
 
-  @tag :skip
-  test "shows a validation error for APIDs not found in the selected revision" do
-    {conn, org, mission, spacecraft} = setup_session()
-    revision = persist_revision!(org, mission)
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
-      )
-
-    html =
-      view
-      |> form("#telemetry-decom-config-form", %{
-        "config" => %{
-          "catalog_revision_id" => revision.catalog_revision_id,
-          "handled_apids" => "999"
-        }
-      })
-      |> render_submit()
-
-    assert html =~ "APIDs not found in this revision"
-  end
-
   test "spacecraft show page surfaces the telemetry decom section" do
     {conn, _org, mission, spacecraft} = setup_session()
 
@@ -330,5 +314,62 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       |> render_click()
 
     assert html =~ "py-1 text-primary"
+  end
+
+  test "switching to a revision without some selected APIDs shows the drop-unknowns banner" do
+    {conn, org, mission, spacecraft} = setup_session()
+
+    rev_a = persist_revision!(org, mission)
+
+    rev_b =
+      persist_revision!(org, mission,
+        revision_label: "Rev 2",
+        yaml: """
+        packets:
+          - name: OTHER
+            apid: 7
+            items:
+              - name: v
+                data_type: uint
+                bit_offset: 0
+                bit_size: 8
+        commands: []
+        """
+      )
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+      )
+
+    # The page defaults to the highest-numbered revision (rev_b). Switch to rev_a first.
+    view
+    |> form("#telemetry-decom-revision-form", %{
+      "catalog_revision_id" => rev_a.catalog_revision_id
+    })
+    |> render_change()
+
+    # select APID 42 in rev A
+    view |> element("input[phx-click='toggle_apid'][phx-value-apid='42']") |> render_click()
+
+    # switch to rev B (which only has APID 7)
+    html =
+      view
+      |> form("#telemetry-decom-revision-form", %{
+        "catalog_revision_id" => rev_b.catalog_revision_id
+      })
+      |> render_change()
+
+    assert html =~ "previously selected"
+    assert html =~ "42"
+
+    # click "Drop them"
+    html =
+      view
+      |> element("#telemetry-decom-drop-unknowns")
+      |> render_click()
+
+    refute html =~ "previously selected"
   end
 end
