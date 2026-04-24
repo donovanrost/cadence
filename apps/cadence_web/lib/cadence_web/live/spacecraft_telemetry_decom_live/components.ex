@@ -19,8 +19,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     <div class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <.status_dot status={dot_status(@status)} />
-        <span class="font-semibold text-base-content">{status_label(@status)}</span>
-        <span class="text-sm text-base-content/60">— {status_description(@status)}</span>
+        <span class="text-base-content/90">{status_label(@status)}</span>
+        <span class="text-sm text-base-content/50">— {status_description(@status)}</span>
       </div>
       <span :if={@saved_at} class="hud-label">Saved {format_relative(@saved_at)}</span>
     </div>

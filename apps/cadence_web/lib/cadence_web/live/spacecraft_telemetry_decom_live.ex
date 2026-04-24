@@ -256,7 +256,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
             active={@active_binding_set_summary}
             saved_at={@saved_at}
           />
-          <div class="border-t border-dashed border-base-300/60"></div>
+          <div class="border-t border-base-300/30"></div>
 
           <%= if @revisions == [] do %>
             <Components.no_revisions_notice current_mission={@current_mission} />
@@ -265,7 +265,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
               revisions={@revisions}
               selected_revision_id={@selected_revision_id}
             />
-            <div class="border-t border-dashed border-base-300/60"></div>
+            <div class="border-t border-base-300/30"></div>
 
             <Components.dropped_unknowns_banner dropped={@dropped_unknowns} />
 
@@ -278,10 +278,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
               filter={@filter}
               points_by_id={@points_by_id}
             />
-            <div class="border-t border-dashed border-base-300/60"></div>
+            <div class="border-t border-base-300/30"></div>
 
             <Components.preview_section preview={@preview} />
-            <div class="border-t border-dashed border-base-300/60"></div>
+            <div class="border-t border-base-300/30"></div>
 
             <Components.apply_section config={@config} />
           <% end %>

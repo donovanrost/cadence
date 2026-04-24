@@ -291,7 +291,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       |> element("[id^='telemetry-decom-entries-toggle-']")
       |> render_click()
 
-    assert html =~ "py-1 text-primary"
+    assert html =~ ~s(id="telemetry-decom-entries-)
+    assert html =~ "mode"
   end
 
   test "switching to a revision without some selected APIDs shows the drop-unknowns banner" do

@@ -15,22 +15,28 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
     assigns = assign(assigns, :visible_rows, filter_rows(assigns.rows, assigns.filter))
 
     ~H"""
-    <table class="w-full text-sm" id="telemetry-decom-apid-table">
+    <table class="w-full text-sm text-base-content/80" id="telemetry-decom-apid-table">
       <thead>
-        <tr class="text-base-content/60 text-xs uppercase tracking-wider">
-          <th class="py-2 w-8"></th>
-          <th class="py-2 w-6"></th>
-          <th class="py-2 w-16 text-left">APID</th>
-          <th class="py-2 text-left">Packets</th>
-          <th class="py-2 w-16 text-left">Defs</th>
-          <th class="py-2 w-20 text-left">Rate</th>
-          <th class="py-2 w-28 text-left">Conflict</th>
+        <tr class="text-base-content/50 text-xs uppercase tracking-wider">
+          <th class="pb-2 w-8 font-normal"></th>
+          <th class="pb-2 w-6 font-normal"></th>
+          <th class="pb-2 w-16 text-left font-normal">APID</th>
+          <th class="pb-2 text-left font-normal">Packets</th>
+          <th class="pb-2 w-16 text-left font-normal">Defs</th>
+          <th class="pb-2 w-20 text-left font-normal">Rate</th>
+          <th class="pb-2 w-28 text-left font-normal">Conflict</th>
         </tr>
       </thead>
       <tbody>
         <%= for row <- @visible_rows do %>
-          <tr id={"apid-row-#{row.apid}"} class="border-t border-base-300/40">
-            <td class="py-2">
+          <tr
+            id={"apid-row-#{row.apid}"}
+            class={[
+              "hover:bg-base-300/20",
+              MapSet.member?(@expanded_apids, row.apid) && "bg-base-300/15"
+            ]}
+          >
+            <td class="py-1.5">
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm checkbox-primary"
@@ -40,42 +46,44 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                 phx-value-apid={row.apid}
               />
             </td>
-            <td class="py-2">
+            <td class="py-1.5">
               <button
                 type="button"
                 id={"apid-row-#{row.apid}-toggle"}
-                class={["text-base-content/50 transition-transform",
-                        MapSet.member?(@expanded_apids, row.apid) && "rotate-90 text-primary"]}
+                class={[
+                  "text-base-content/40 transition-transform",
+                  MapSet.member?(@expanded_apids, row.apid) && "rotate-90 text-primary"
+                ]}
                 phx-click="toggle_apid_expand"
                 phx-value-apid={row.apid}
                 aria-label="Toggle row details"
               >›</button>
             </td>
-            <td class="py-2 font-mono">{row.apid}</td>
-            <td class="py-2">{packets_label(row)}</td>
-            <td class="py-2 text-base-content/60">{row.def_count}</td>
-            <td class="py-2 text-base-content/60">{rate_label(row.rate_hz)}</td>
-            <td class="py-2 text-base-content/60">{conflict_label(@conflicts, row.apid)}</td>
+            <td class="py-1.5 font-mono text-base-content/90">{row.apid}</td>
+            <td class="py-1.5">{packets_label(row)}</td>
+            <td class="py-1.5 text-base-content/50">{row.def_count}</td>
+            <td class="py-1.5 text-base-content/50">{rate_label(row.rate_hz)}</td>
+            <td class="py-1.5 text-base-content/50">{conflict_label(@conflicts, row.apid)}</td>
           </tr>
           <tr :if={MapSet.member?(@expanded_apids, row.apid)}>
             <td colspan="7" class="p-0">
               <div
-                class="pl-4 pr-2 py-3 border-l-2 border-primary bg-base-300/40"
+                class="pl-5 pr-2 py-3 border-l border-primary/40 bg-base-300/15"
                 id={"apid-row-#{row.apid}-detail"}
               >
-                <p :if={row.short_description} class="text-sm text-base-content/80 mb-3">
+                <p :if={row.short_description} class="text-sm text-base-content/70 mb-3">
                   {row.short_description}
                 </p>
-                <div :for={packet <- row.packets} class="bg-base-200 border border-base-300/60 mb-2">
-                  <div class="flex items-center gap-3 px-3 py-2 border-b border-base-300/60">
-                    <span class="font-semibold text-base-content">{packet.name}</span>
-                    <span class="font-mono text-xs text-base-content/60">
+                <div :for={packet <- row.packets} class="mb-2 last:mb-0">
+                  <div class="flex items-center gap-3 py-1">
+                    <span class="text-base-content/90">{packet.name}</span>
+                    <span class="font-mono text-xs text-base-content/50">
                       apid={packet.apid} · type={packet.packet_type || "—"} · {packet.size_bits || "—"} b
                     </span>
                     <button
                       type="button"
                       id={"telemetry-decom-entries-toggle-#{packet.packet_id}"}
-                      class="ml-auto text-xs text-primary hover:underline"
+                      class="ml-auto text-xs text-primary/80 hover:text-primary"
                       phx-click="toggle_entries"
                       phx-value-packet-id={packet.packet_id}
                     >
@@ -88,28 +96,28 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                   </div>
                   <div
                     :if={MapSet.member?(@expanded_entries, packet.packet_id)}
-                    class="px-3 py-2 font-mono text-xs"
+                    class="mt-1 font-mono text-xs"
                     id={"telemetry-decom-entries-#{packet.packet_id}"}
                   >
                     <table class="w-full">
                       <thead>
-                        <tr class="text-base-content/60">
-                          <th class="text-left py-1">name</th>
-                          <th class="text-left py-1">kind</th>
-                          <th class="text-right py-1">offset</th>
-                          <th class="text-left py-1 pl-3">notes</th>
+                        <tr class="text-base-content/40">
+                          <th class="text-left py-1 font-normal">name</th>
+                          <th class="text-left py-1 font-normal">kind</th>
+                          <th class="text-right py-1 font-normal">offset</th>
+                          <th class="text-left py-1 pl-3 font-normal">notes</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr :for={entry <- Enum.take(packet.entries, 20)} class="border-t border-base-300/40">
-                          <td class="py-1 text-primary">{entry_name(entry, @points_by_id)}</td>
-                          <td class="py-1 text-base-content/70">{entry.entry_kind}</td>
-                          <td class="py-1 text-right text-base-content/60">{entry.bit_offset || "—"}</td>
-                          <td class="py-1 pl-3 text-base-content/60">{entry_notes(entry)}</td>
+                        <tr :for={entry <- Enum.take(packet.entries, 20)}>
+                          <td class="py-0.5 text-primary/90">{entry_name(entry, @points_by_id)}</td>
+                          <td class="py-0.5 text-base-content/60">{entry.entry_kind}</td>
+                          <td class="py-0.5 text-right text-base-content/50">{entry.bit_offset || "—"}</td>
+                          <td class="py-0.5 pl-3 text-base-content/50">{entry_notes(entry)}</td>
                         </tr>
                       </tbody>
                     </table>
-                    <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/60">
+                    <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/50">
                       {length(packet.entries) - 20} more omitted.
                     </p>
                   </div>
@@ -119,7 +127,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
           </tr>
         <% end %>
         <tr :if={@visible_rows == []}>
-          <td colspan="7" class="py-4 text-center text-base-content/60">
+          <td colspan="7" class="py-4 text-center text-base-content/50">
             No APIDs match the filter.
           </td>
         </tr>
