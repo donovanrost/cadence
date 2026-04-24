@@ -452,6 +452,33 @@ defmodule Cadence.Applications.TelemetryDecomTest do
     end
   end
 
+  describe "list_revision_apid_rows/3" do
+    test "groups snapshot packets by APID and sorts by APID" do
+      {_spacecraft, revision, _endpoint} = setup_mission()
+
+      assert {:ok, rows} =
+               TelemetryDecom.list_revision_apid_rows(
+                 @organization_id,
+                 @mission_id,
+                 revision.catalog_revision_id
+               )
+
+      assert [%{apid: 42, packets: packets, def_count: 1} | _] = rows
+      assert [%Cadence.Catalog.Telemetry.Packet{name: "HEALTH", apid: 42}] = packets
+    end
+
+    test "returns an error tuple when the revision does not exist" do
+      persist_mission_scope(@organization_id, @mission_id)
+
+      assert {:error, _} =
+               TelemetryDecom.list_revision_apid_rows(
+                 @organization_id,
+                 @mission_id,
+                 "nonexistent-revision-id"
+               )
+    end
+  end
+
   describe "list_apid_conflicts/3" do
     test "returns an empty map today — no other applications exist" do
       {spacecraft, _revision, _endpoint} = setup_mission()

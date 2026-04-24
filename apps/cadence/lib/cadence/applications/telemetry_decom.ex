@@ -341,6 +341,67 @@ defmodule Cadence.Applications.TelemetryDecom do
     %{}
   end
 
+  @type apid_row :: %{
+          apid: non_neg_integer(),
+          packets: [Packet.t()],
+          def_count: non_neg_integer(),
+          rate_hz: number() | nil,
+          short_description: String.t() | nil
+        }
+
+  @doc """
+  Return one row per APID present in the revision's telemetry snapshot.
+
+  Each row carries every packet definition that shares the APID, along with
+  a primary rate (from the first packet's `expected_rate_hz`) and a short
+  description derived from the first packet's `short_description` or a
+  truncated `description`. Rows are sorted by APID ascending.
+  """
+  @spec list_revision_apid_rows(binary(), binary(), binary()) ::
+          {:ok, [apid_row()]} | {:error, term()}
+  def list_revision_apid_rows(organization_id, mission_id, catalog_revision_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(catalog_revision_id) do
+    with {:ok, %Revision{} = revision} <-
+           Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
+         :ok <- ensure_telemetry_revision(revision),
+         {:ok, snapshot} <-
+           Catalog.fetch_telemetry_snapshot(
+             organization_id,
+             mission_id,
+             revision.telemetry_snapshot_id
+           ) do
+      rows =
+        snapshot.packets
+        |> Enum.filter(&is_integer(&1.apid))
+        |> Enum.group_by(& &1.apid)
+        |> Enum.sort_by(fn {apid, _} -> apid end)
+        |> Enum.map(fn {apid, packets} ->
+          %{
+            apid: apid,
+            packets: packets,
+            def_count: length(packets),
+            rate_hz: rate_of(packets),
+            short_description: short_description_of(List.first(packets))
+          }
+        end)
+
+      {:ok, rows}
+    end
+  end
+
+  defp rate_of([%Packet{expected_rate_hz: hz} | _]), do: hz
+  defp rate_of([]), do: nil
+
+  defp short_description_of(nil), do: nil
+  defp short_description_of(%Packet{short_description: desc}) when is_binary(desc), do: desc
+
+  defp short_description_of(%Packet{description: desc}) when is_binary(desc) do
+    if String.length(desc) <= 160, do: desc, else: String.slice(desc, 0, 157) <> "…"
+  end
+
+  defp short_description_of(_), do: nil
+
   defp compile_mission_binding_set(organization_id, mission_id, []) do
     next_version = next_binding_set_version(organization_id, mission_id)
 
