@@ -43,7 +43,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
      |> assign(:dropped_unknowns, [])
      |> assign(:preview, preview_for(organization_id, mission_id, config))
      |> assign(:active_binding_set_summary, fetch_active_binding_set_summary(mission_id))
-     |> assign(:saved_at, config && DateTime.utc_now())}
+     |> assign(:saved_at, config && config.updated_at)}
   end
 
   defp load_apid_rows(_organization_id, _mission_id, nil), do: {[], %{}}
@@ -214,7 +214,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
            socket
            |> assign(:config, config)
            |> assign(:preview, preview)
-           |> assign(:saved_at, DateTime.utc_now())}
+           |> assign(:saved_at, config.updated_at)}
 
         {:error, reason} ->
           {:noreply,

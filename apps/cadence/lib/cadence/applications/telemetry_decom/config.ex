@@ -20,6 +20,7 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
           applied_binding_set_id: binary() | nil,
           applied_binding_set_version: pos_integer() | nil,
           applied_at: DateTime.t() | nil,
+          updated_at: DateTime.t() | nil,
           metadata: map()
         }
 
@@ -32,6 +33,7 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
     :applied_binding_set_id,
     :applied_binding_set_version,
     :applied_at,
+    :updated_at,
     enabled: true,
     handled_apids: [],
     metadata: %{}
@@ -50,6 +52,7 @@ defmodule Cadence.Applications.TelemetryDecom.Config do
       applied_binding_set_id: Map.get(attrs, :applied_binding_set_id),
       applied_binding_set_version: Map.get(attrs, :applied_binding_set_version),
       applied_at: Map.get(attrs, :applied_at),
+      updated_at: Map.get(attrs, :updated_at),
       metadata: Map.get(attrs, :metadata, %{})
     }
   end

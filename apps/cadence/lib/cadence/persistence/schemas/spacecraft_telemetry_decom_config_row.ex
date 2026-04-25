@@ -57,6 +57,7 @@ defmodule Cadence.Persistence.Schemas.SpacecraftTelemetryDecomConfigRow do
       applied_binding_set_id: row.applied_binding_set_id,
       applied_binding_set_version: row.applied_binding_set_version,
       applied_at: row.applied_at,
+      updated_at: row.updated_at,
       metadata: JsonDocument.unwrap_value(row.metadata)
     }
   end
