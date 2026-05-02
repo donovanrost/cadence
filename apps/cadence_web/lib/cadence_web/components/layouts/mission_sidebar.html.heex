@@ -77,30 +77,41 @@
 
       <nav class="flex-1 overflow-y-auto py-2">
         <ul class="menu menu-sm space-y-0.5">
-          <li :if={assigns[:current_mission]}>
-            <.link navigate={~p"/missions/#{@current_mission.mission_id}"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :mission_overview, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-              <span class="hero-chart-bar-square h-4 w-4 opacity-80 flex-shrink-0"></span>
-              <span class="sidebar-label">Overview</span>
-            </.link>
-          </li>
-          <li :if={assigns[:current_mission]}>
-            <.link navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :spacecraft, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-              <span class="hero-rocket-launch h-4 w-4 opacity-80 flex-shrink-0"></span>
-              <span class="sidebar-label">Spacecraft</span>
-            </.link>
-          </li>
-          <li :if={assigns[:current_mission]}>
-            <.link navigate={~p"/missions/#{@current_mission.mission_id}/catalog"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :catalog, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-              <span class="hero-circle-stack h-4 w-4 opacity-80 flex-shrink-0"></span>
-              <span class="sidebar-label">Catalog</span>
-            </.link>
-          </li>
-          <li :if={assigns[:current_mission]}>
-            <.link navigate={~p"/missions/#{@current_mission.mission_id}/comms"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :comms, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-              <span class="hero-signal h-4 w-4 opacity-80 flex-shrink-0"></span>
-              <span class="sidebar-label">Comms</span>
-            </.link>
-          </li>
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}"}
+            icon="hero-chart-bar-square"
+            label="Overview"
+            active={assigns[:nav_item] == :mission_overview}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+            icon="hero-rocket-launch"
+            label="Spacecraft"
+            active={assigns[:nav_item] == :spacecraft}
+          />
+          <.nav_item
+            :if={assigns[:current_mission]}
+            navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
+            icon="hero-circle-stack"
+            label="Catalog"
+            active={assigns[:nav_item] == :catalog}
+          />
+          <.nav_section
+            :if={assigns[:current_mission]}
+            icon="hero-signal"
+            label="Comms"
+            active={section_active?(assigns[:nav_item], :comms)}
+            expanded={section_active?(assigns[:nav_item], :comms)}
+          >
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+              active={assigns[:nav_item] == :comms_overview}
+            >
+              Overview
+            </:item>
+          </.nav_section>
         </ul>
       </nav>
 
