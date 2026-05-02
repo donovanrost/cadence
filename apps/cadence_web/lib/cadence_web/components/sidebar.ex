@@ -78,8 +78,11 @@ defmodule CadenceWeb.Components.Sidebar do
         </summary>
         <ul class="mt-0.5 space-y-0.5">
           <li :for={item <- @item}>
-            <.link navigate={item.navigate} class={["flex items-center gap-2 pl-8 pr-3 py-1.5 text-xs tracking-wide uppercase border-l-2 transition-all", item_classes(Map.get(item, :active, false))]}>
-              {render_slot(item)}
+            <.link navigate={item.navigate} class={["flex items-center gap-2 px-3 py-1.5 text-xs tracking-wide uppercase border-l-2 border-transparent transition-all", child_classes(Map.get(item, :active, false))]}>
+              <span class="h-4 w-4 flex items-center justify-center flex-shrink-0">
+                <span class={["h-1.5 w-1.5 rounded-full transition-colors", child_dot_classes(Map.get(item, :active, false))]}></span>
+              </span>
+              <span class="sidebar-label">{render_slot(item)}</span>
             </.link>
           </li>
         </ul>
@@ -87,4 +90,10 @@ defmodule CadenceWeb.Components.Sidebar do
     </li>
     """
   end
+
+  defp child_classes(true), do: "text-primary"
+  defp child_classes(false), do: "text-base-content/60 hover:text-base-content"
+
+  defp child_dot_classes(true), do: "bg-primary"
+  defp child_dot_classes(false), do: "bg-base-content/30"
 end

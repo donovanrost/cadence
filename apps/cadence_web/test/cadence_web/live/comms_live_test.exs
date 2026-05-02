@@ -256,11 +256,17 @@ defmodule CadenceWeb.CommsLiveTest do
       # The <details> for the Comms section is rendered open.
       assert has_element?(view, "details[open] summary", "Comms")
 
-      # The Overview child link is present and styled active.
+      # The Overview child link is present and styled active (text-primary on
+      # the link itself; the active dot in its leading slot is bg-primary).
       assert has_element?(
                view,
-               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"].bg-primary\\/10|,
+               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"].text-primary|,
                "Overview"
+             )
+
+      assert has_element?(
+               view,
+               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"] span.bg-primary|
              )
     end
 
