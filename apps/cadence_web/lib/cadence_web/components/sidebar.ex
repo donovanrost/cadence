@@ -45,4 +45,46 @@ defmodule CadenceWeb.Components.Sidebar do
   defp item_classes(false),
     do:
       "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30"
+
+  @doc """
+  Expandable sidebar group. Renders a `<details>` element whose `<summary>`
+  is the parent row (label, icon, rotating chevron) and whose body is a
+  nested list of `:item` slots. Native `<details>` handles the click toggle
+  with no JS or LiveView state.
+
+  `:expanded` is the *initial* server-rendered `open` attribute. Sidebar
+  navigation uses `<.link navigate={...}>`, which causes a full LiveView
+  remount per click, so the open state is re-derived from the route on
+  every navigation.
+  """
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+  attr :active, :boolean, default: false, doc: "Parent row active state"
+  attr :expanded, :boolean, default: false, doc: "Initial <details open> state"
+
+  slot :item, required: true do
+    attr :navigate, :string, required: true
+    attr :active, :boolean
+  end
+
+  def nav_section(assigns) do
+    ~H"""
+    <li>
+      <details class="group" open={@expanded}>
+        <summary class={["list-none cursor-pointer flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", item_classes(@active)]}>
+          <span class={[@icon, "h-4 w-4 opacity-80 flex-shrink-0"]}></span>
+          <span class="sidebar-label flex-1">{@label}</span>
+          <span class="hero-chevron-right h-3 w-3 opacity-60 transition-transform group-open:rotate-90 sidebar-label"></span>
+        </summary>
+        <ul class="mt-0.5 space-y-0.5">
+          <li :for={item <- @item}>
+            <.link navigate={item.navigate} class={["flex items-center gap-2 pl-8 pr-3 py-1.5 text-xs tracking-wide uppercase border-l-2 transition-all", item_classes(Map.get(item, :active, false))]}>
+              {render_slot(item)}
+            </.link>
+          </li>
+        </ul>
+      </details>
+    </li>
+    """
+  end
 end
