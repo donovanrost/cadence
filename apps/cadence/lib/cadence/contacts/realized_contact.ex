@@ -15,6 +15,7 @@ defmodule Cadence.Contacts.RealizedContact do
           mission_id: binary(),
           scheduled_contact_id: binary() | nil,
           source_endpoint_refs: [binary()],
+          contact_intents: [atom()],
           paths: [Path.t()],
           clock_mode: clock_mode(),
           initial_time: DateTime.t() | nil,
@@ -31,6 +32,7 @@ defmodule Cadence.Contacts.RealizedContact do
     :initial_time,
     :realized_at,
     source_endpoint_refs: [],
+    contact_intents: [],
     paths: [],
     clock_mode: :live,
     lifecycle_state: :defined,
@@ -52,6 +54,10 @@ defmodule Cadence.Contacts.RealizedContact do
         Map.get(attrs, :scheduled_contact_id, Map.get(attrs, "scheduled_contact_id")),
       source_endpoint_refs:
         Map.get(attrs, :source_endpoint_refs, Map.get(attrs, "source_endpoint_refs", [])),
+      contact_intents:
+        attrs
+        |> Map.get(:contact_intents, Map.get(attrs, "contact_intents", []))
+        |> Enum.map(&KnownAtom.contact_intent!/1),
       paths:
         attrs
         |> Map.get(:paths, Map.get(attrs, "paths", []))

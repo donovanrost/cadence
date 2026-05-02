@@ -36,6 +36,14 @@ defmodule Cadence.Contacts.KnownAtom do
     "canceled" => :canceled
   }
 
+  @contact_intents %{
+    "telemetry_downlink" => :telemetry_downlink,
+    "command_window" => :command_window,
+    "tracking" => :tracking,
+    "health_check" => :health_check,
+    "maintenance" => :maintenance
+  }
+
   @versioned_resource_lifecycle_states %{
     "active" => :active,
     "deleted" => :deleted
@@ -71,6 +79,10 @@ defmodule Cadence.Contacts.KnownAtom do
   def scheduled_contact_lifecycle_state!(value) do
     normalize_known_atom!(value, @scheduled_contact_lifecycle_states, :lifecycle_state)
   end
+
+  @spec contact_intent!(atom() | binary()) ::
+          :telemetry_downlink | :command_window | :tracking | :health_check | :maintenance
+  def contact_intent!(value), do: normalize_known_atom!(value, @contact_intents, :contact_intent)
 
   @spec versioned_resource_lifecycle_state!(atom() | binary()) :: :active | :deleted
   def versioned_resource_lifecycle_state!(value) do

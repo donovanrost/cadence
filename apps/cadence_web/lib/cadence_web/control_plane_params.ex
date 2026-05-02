@@ -17,6 +17,7 @@ defmodule CadenceWeb.ControlPlaneParams do
   }
 
   alias Cadence.Contacts.{
+    LinkAssignment,
     Path,
     PathTemplate,
     ProviderBinding,
@@ -65,6 +66,13 @@ defmodule CadenceWeb.ControlPlaneParams do
   @service_identity_lifecycle_states [:active, :disabled]
   @direction_values [:uplink, :downlink]
   @selection_role_values [:selected, :candidate, :contributing]
+  @contact_intent_values [
+    :telemetry_downlink,
+    :command_window,
+    :tracking,
+    :health_check,
+    :maintenance
+  ]
   @transport_target_scope_values [:path, :transport]
 
   @spec bootstrap_admin_session(map()) :: {:ok, {binary(), binary()}} | {:error, term()}
@@ -202,13 +210,15 @@ defmodule CadenceWeb.ControlPlaneParams do
   @spec spacecraft(binary(), binary(), map()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def spacecraft(organization_id, mission_id, params)
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
-    with {:ok, display_name} <- required_string(params, "display_name") do
+    with {:ok, display_name} <- required_string(params, "display_name"),
+         {:ok, scid} <- non_neg_integer(params, "scid", nil) do
       {:ok,
        Spacecraft.new(%{
          spacecraft_id: string_value(params, "spacecraft_id"),
          organization_id: organization_id,
          mission_id: mission_id,
          display_name: display_name,
+         scid: scid,
          metadata: map_value(params, "metadata")
        })}
     end
@@ -432,7 +442,7 @@ defmodule CadenceWeb.ControlPlaneParams do
          path_id: string_value(params, "path_id"),
          direction: direction,
          selection_role: selection_role,
-         source_endpoint_ref: string_value(params, "source_endpoint_ref"),
+         source_endpoint_ref: nil,
          provider_path_ref: string_value(params, "provider_path_ref"),
          provider_profile_ids: provider_profile_ids,
          provider_profile_refs: provider_profile_refs,
@@ -447,8 +457,6 @@ defmodule CadenceWeb.ControlPlaneParams do
   def path_template_patch(params) when is_map(params) do
     with {:ok, direction} <- optional_direction(params, "direction"),
          {:ok, selection_role} <- optional_selection_role(params, "selection_role"),
-         {:ok, source_endpoint_ref} <-
-           optional_patch_nullable_string(params, "source_endpoint_ref"),
          {:ok, provider_path_ref} <- optional_patch_nullable_string(params, "provider_path_ref"),
          {:ok, provider_profile_ids} <- optional_patch_string_list(params, "provider_profile_ids"),
          {:ok, provider_profile_refs} <-
@@ -471,7 +479,6 @@ defmodule CadenceWeb.ControlPlaneParams do
        |> maybe_put_attr(:path_id, string_value(params, "path_id"))
        |> maybe_put_attr(:direction, direction)
        |> maybe_put_attr(:selection_role, selection_role)
-       |> maybe_put_attr(:source_endpoint_ref, source_endpoint_ref)
        |> maybe_put_attr(:provider_path_ref, provider_path_ref)
        |> maybe_put_attr(:provider_profile_ids, provider_profile_ids)
        |> maybe_put_attr(:provider_profile_refs, provider_profile_refs)
@@ -481,11 +488,78 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
+  @spec link_assignment(binary(), binary(), map()) :: {:ok, LinkAssignment.t()} | {:error, term()}
+  def link_assignment(organization_id, mission_id, params)
+      when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
+    with {:ok, spacecraft_id} <- required_string(params, "spacecraft_id"),
+         {:ok, source_endpoint_ref} <- required_string(params, "source_endpoint_ref"),
+         {:ok, path_template_id} <- required_string(params, "path_template_id"),
+         {:ok, path_template_version} <- positive_integer(params, "path_template_version", 1),
+         {:ok, direction} <- direction(params),
+         {:ok, selection_role} <- selection_role(params),
+         {:ok, provider_profile_refs} <-
+           optional_versioned_ref_list(params, "provider_profile_refs", "provider_profile_id"),
+         {:ok, transport_profile_refs} <-
+           optional_versioned_ref_list(params, "transport_profile_refs", "transport_profile_id") do
+      {:ok,
+       LinkAssignment.new(%{
+         link_assignment_id: string_value(params, "link_assignment_id"),
+         organization_id: organization_id,
+         mission_id: mission_id,
+         spacecraft_id: spacecraft_id,
+         source_endpoint_ref: source_endpoint_ref,
+         path_template_id: path_template_id,
+         path_template_version: path_template_version,
+         direction: direction,
+         selection_role: selection_role,
+         provider_path_ref: string_value(params, "provider_path_ref"),
+         provider_profile_refs: provider_profile_refs,
+         transport_profile_refs: transport_profile_refs,
+         metadata: map_value(params, "metadata")
+       })}
+    end
+  end
+
+  @spec link_assignment_delete(map()) :: {:ok, map()} | {:error, term()}
+  def link_assignment_delete(params) when is_map(params) do
+    optional_map(params, "metadata", %{})
+  end
+
+  @spec link_template_application(map()) :: {:ok, map()} | {:error, term()}
+  def link_template_application(params) when is_map(params) do
+    with {:ok, target_mode} <- link_template_application_target_mode(params),
+         {:ok, spacecraft_ids} <- optional_string_list(params, "spacecraft_ids"),
+         {:ok, path_template_version} <-
+           optional_positive_integer(params, "path_template_version") do
+      case {target_mode, spacecraft_ids} do
+        {"selected", []} ->
+          {:error, {:invalid_param, "spacecraft_ids", :required}}
+
+        _other ->
+          {:ok,
+           %{
+             "target_mode" => target_mode,
+             "spacecraft_ids" => spacecraft_ids,
+             "spacecraft_query" => string_value(params, "spacecraft_query"),
+             "path_template_version" => path_template_version,
+             "provider_path_ref_pattern" =>
+               string_value(params, "provider_path_ref_pattern") || "{spacecraft_id}-{direction}",
+             "display_name_pattern" =>
+               string_value(params, "display_name_pattern") || "{spacecraft_name} {direction}"
+           }}
+      end
+    end
+  end
+
   @spec scheduled_contact(binary(), binary(), map()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
   def scheduled_contact(organization_id, mission_id, params)
       when is_binary(organization_id) and is_binary(mission_id) and is_map(params) do
-    with {:ok, source_endpoint_refs} <- required_string_list(params, "source_endpoint_refs"),
+    with {:ok, source_endpoint_refs} <- optional_string_list(params, "source_endpoint_refs"),
+         {:ok, contact_intents} <-
+           optional_allowed_atom_list(params, "contact_intents", @contact_intent_values),
+         {:ok, link_assignment_refs} <-
+           optional_ref_list(params, "link_assignment_refs", "link_assignment_id"),
          {:ok, path_template_ids} <- optional_string_list(params, "path_template_ids"),
          {:ok, path_template_refs} <-
            optional_versioned_ref_list(params, "path_template_refs", "path_template_id"),
@@ -498,6 +572,8 @@ defmodule CadenceWeb.ControlPlaneParams do
          organization_id: organization_id,
          mission_id: mission_id,
          source_endpoint_refs: source_endpoint_refs,
+         contact_intents: contact_intents,
+         link_assignment_refs: link_assignment_refs,
          path_template_ids: path_template_ids,
          path_template_refs: path_template_refs,
          paths: paths,
@@ -1392,6 +1468,20 @@ defmodule CadenceWeb.ControlPlaneParams do
     parse_allowed_atom(Map.get(params, key), key, allowed)
   end
 
+  defp optional_allowed_atom_list(params, key, allowed)
+       when is_map(params) and is_binary(key) and is_list(allowed) do
+    case Map.get(params, key) do
+      nil ->
+        {:ok, []}
+
+      values when is_list(values) ->
+        reduce_ok(values, &parse_allowed_atom(&1, key, allowed))
+
+      _other ->
+        {:error, {:invalid_param, key, :list}}
+    end
+  end
+
   defp required_allowed_atom_param(params, key, allowed)
        when is_map(params) and is_binary(key) and is_list(allowed) do
     case Map.get(params, key) do
@@ -1547,6 +1637,14 @@ defmodule CadenceWeb.ControlPlaneParams do
     allowed_atom_param(params, "selection_role", :candidate, @selection_role_values)
   end
 
+  defp link_template_application_target_mode(params) when is_map(params) do
+    case Map.get(params, "target_mode", "matching") do
+      "matching" -> {:ok, "matching"}
+      "selected" -> {:ok, "selected"}
+      _other -> {:error, {:invalid_param, "target_mode", :unknown_atom}}
+    end
+  end
+
   defp transport_target_scope(params) when is_map(params) do
     allowed_atom_param(params, "target_scope", :path, @transport_target_scope_values)
   end
@@ -1666,6 +1764,20 @@ defmodule CadenceWeb.ControlPlaneParams do
     end
   end
 
+  defp optional_ref_list(params, key, id_key)
+       when is_map(params) and is_binary(key) and is_binary(id_key) do
+    case Map.get(params, key) do
+      nil ->
+        {:ok, []}
+
+      refs when is_list(refs) ->
+        reduce_ok(refs, &unversioned_ref(&1, id_key))
+
+      _other ->
+        {:error, {:invalid_param, key, :list}}
+    end
+  end
+
   defp optional_patch_versioned_ref_list(params, key, id_key)
        when is_map(params) and is_binary(key) and is_binary(id_key) do
     if Map.has_key?(params, key) do
@@ -1697,6 +1809,13 @@ defmodule CadenceWeb.ControlPlaneParams do
     else
       false -> {:error, {:invalid_param, id_key, :required}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp unversioned_ref(ref, id_key) when is_map(ref) and is_binary(id_key) do
+    case Map.get(ref, id_key) do
+      value when is_binary(value) and value != "" -> {:ok, %{id_key => value}}
+      _other -> {:error, {:invalid_param, id_key, :required}}
     end
   end
 

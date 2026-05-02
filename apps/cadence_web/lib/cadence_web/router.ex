@@ -99,6 +99,26 @@ defmodule CadenceWeb.Router do
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id/spacecraft/:spacecraft_id", SpacecraftShowLive, :show
 
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/identity",
+           SpacecraftEditLive,
+           :identity
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/edit", SpacecraftEditLive, :edit
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
+           SpacecraftReadinessLive,
+           :show
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/links", SpacecraftLinksLive, :show
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
+           SpacecraftTelemetryDecomLive,
+           :show
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/commanding",
+           SpacecraftCommandingLive,
+           :show
+
       live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry_decom",
            SpacecraftTelemetryDecomLive,
            :show
@@ -138,6 +158,146 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/catalog/command_snapshots/:snapshot_id",
            CatalogCommandSnapshotShowLive,
            :show
+    end
+
+    live_session :comms,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.UserAuth, :attach_user_menu}
+      ],
+      layout: {CadenceWeb.Layouts, :mission_sidebar} do
+      live "/missions/:mission_id/comms", CommsOverviewLive, :index
+
+      live "/missions/:mission_id/comms/apply-link-template",
+           CommsApplyLinkTemplateLive,
+           :new
+
+      live "/missions/:mission_id/comms/bulk-links",
+           CommsApplyLinkTemplateLive,
+           :new
+
+      live "/missions/:mission_id/comms/links",
+           CommsPathTemplateListLive,
+           :index
+
+      live "/missions/:mission_id/comms/links/new",
+           CommsLinkBuilderLive,
+           :new
+
+      live "/missions/:mission_id/comms/advanced/runtime-identities",
+           CommsSourceEndpointListLive,
+           :index
+
+      live "/missions/:mission_id/comms/advanced/runtime-identities/new",
+           CommsSourceEndpointNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/source-endpoints",
+           CommsSourceEndpointListLive,
+           :index
+
+      live "/missions/:mission_id/comms/source-endpoints/new",
+           CommsSourceEndpointNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/providers",
+           CommsProviderProfileListLive,
+           :index
+
+      live "/missions/:mission_id/comms/providers/new",
+           CommsProviderProfileNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/providers/:provider_profile_id",
+           CommsProviderProfileShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/providers/:provider_profile_id/new-version",
+           CommsProviderProfileNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/provider-profiles",
+           CommsProviderProfileListLive,
+           :index
+
+      live "/missions/:mission_id/comms/provider-profiles/new",
+           CommsProviderProfileNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/provider-profiles/:provider_profile_id",
+           CommsProviderProfileShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/provider-profiles/:provider_profile_id/new-version",
+           CommsProviderProfileNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/protocol-behaviors",
+           CommsTransportProfileListLive,
+           :index
+
+      live "/missions/:mission_id/comms/protocol-behaviors/new",
+           CommsTransportProfileNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id",
+           CommsTransportProfileShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id/new-version",
+           CommsTransportProfileNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/transport-profiles",
+           CommsTransportProfileListLive,
+           :index
+
+      live "/missions/:mission_id/comms/transport-profiles/new",
+           CommsTransportProfileNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/transport-profiles/:transport_profile_id",
+           CommsTransportProfileShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/transport-profiles/:transport_profile_id/new-version",
+           CommsTransportProfileNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/link-templates",
+           CommsPathTemplateListLive,
+           :index
+
+      live "/missions/:mission_id/comms/link-templates/new",
+           CommsPathTemplateNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/link-templates/:path_template_id",
+           CommsPathTemplateShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/link-templates/:path_template_id/new-version",
+           CommsPathTemplateNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/path-templates",
+           CommsPathTemplateListLive,
+           :index
+
+      live "/missions/:mission_id/comms/path-templates/new",
+           CommsPathTemplateNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/path-templates/:path_template_id",
+           CommsPathTemplateShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/path-templates/:path_template_id/new-version",
+           CommsPathTemplateNewLive,
+           :version
+
+      live "/missions/:mission_id/comms/validation", CommsValidationLive, :index
     end
 
     live_session :user,
@@ -256,6 +416,11 @@ defmodule CadenceWeb.Router do
         delete "/transport_profiles/:transport_profile_id", TransportProfileController, :delete
         get "/path_templates", PathTemplateController, :index
         post "/path_templates", PathTemplateController, :create
+
+        post "/path_templates/:path_template_id/link_assignments",
+             LinkAssignmentController,
+             :apply_template
+
         get "/path_templates/:path_template_id/versions", PathTemplateController, :versions
 
         get "/path_templates/:path_template_id/versions/:version",
@@ -265,6 +430,10 @@ defmodule CadenceWeb.Router do
         get "/path_templates/:path_template_id", PathTemplateController, :show
         patch "/path_templates/:path_template_id", PathTemplateController, :update
         delete "/path_templates/:path_template_id", PathTemplateController, :delete
+        get "/link_assignments", LinkAssignmentController, :index
+        post "/link_assignments", LinkAssignmentController, :create
+        get "/link_assignments/:link_assignment_id", LinkAssignmentController, :show
+        delete "/link_assignments/:link_assignment_id", LinkAssignmentController, :delete
         get "/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :index
         post "/spacecraft/:spacecraft_id/source_endpoints", SourceEndpointController, :create
 

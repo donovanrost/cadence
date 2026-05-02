@@ -708,6 +708,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         source_endpoint_id: runtime_source_endpoint_id(spacecraft.spacecraft_id),
         mission_id: spacecraft.mission_id,
         spacecraft_id: spacecraft.spacecraft_id,
+        scid: spacecraft.scid,
         display_name: spacecraft.display_name,
         metadata: %{"managed_by" => "telemetry_decom"}
       })

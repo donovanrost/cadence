@@ -26,6 +26,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
 
       assert html =~ "New Spacecraft"
       assert html =~ "Display Name"
+      assert html =~ "SCID"
       assert html =~ "Create Spacecraft"
     end
 
@@ -58,6 +59,28 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
       [persisted] = Cadence.list_spacecraft(org.organization_id, mission.mission_id)
       assert persisted.display_name == "Orbital-1"
       assert target =~ persisted.spacecraft_id
+    end
+
+    test "creating with SCID persists spacecraft identity and creates a managed source endpoint" do
+      {conn, org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
+
+      assert {:error, {:live_redirect, %{to: _target}}} =
+               view
+               |> form("#spacecraft-form", spacecraft: %{display_name: "Orbital-42", scid: "42"})
+               |> render_submit()
+
+      [persisted] = Cadence.list_spacecraft(org.organization_id, mission.mission_id)
+      assert persisted.scid == 42
+
+      assert [endpoint] =
+               Cadence.list_source_endpoints(org.organization_id, mission.mission_id,
+                 spacecraft_id: persisted.spacecraft_id
+               )
+
+      assert endpoint.scid == 42
+      assert endpoint.metadata["managed_by"] == "spacecraft"
     end
 
     test "blank display_name shows a flash error and stays on page" do

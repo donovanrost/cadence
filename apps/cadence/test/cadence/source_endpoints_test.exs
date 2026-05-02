@@ -119,6 +119,46 @@ defmodule Cadence.SourceEndpointsTest do
     assert Enum.map(filtered_source_endpoints, & &1.spacecraft_id) == ["sc-001"]
   end
 
+  test "resolves TM transfer-frame evidence to a source endpoint by SCID" do
+    persist_mission_scope(@organization_id, @mission_id)
+
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "sc-042",
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        display_name: "SC-042",
+        scid: 42
+      })
+
+    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft(@organization_id, spacecraft)
+
+    source_endpoint =
+      SourceEndpoint.new(%{
+        source_endpoint_id: "endpoint-sc-042",
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        spacecraft_id: "sc-042",
+        scid: 42,
+        display_name: "SC-042 Downlink"
+      })
+
+    assert {:ok, persisted_source_endpoint} =
+             Cadence.persist_source_endpoint(@organization_id, source_endpoint)
+
+    raw_evidence =
+      RawEvidence.new(%{
+        mission_id: @mission_id,
+        protocol_family: :tm_transfer_frame,
+        direction: :downlink,
+        raw: tm_frame_header(42)
+      })
+
+    assert {:ok, resolved_evidence} = Cadence.SourceEndpoints.resolve_raw_evidence(raw_evidence)
+    assert resolved_evidence.source_endpoint_ref == persisted_source_endpoint.source_endpoint_id
+    assert resolved_evidence.spacecraft_id == "sc-042"
+  end
+
   defp telemetry_binding_set(organization_id, mission_id) do
     packet_definition =
       PacketDefinition.new(%{
@@ -162,6 +202,14 @@ defmodule Cadence.SourceEndpointsTest do
       sequence_count::14,
       packet_length::16,
       packet_data::binary
+    >>
+  end
+
+  defp tm_frame_header(scid) do
+    <<
+      0::2,
+      scid::10,
+      0::20
     >>
   end
 end

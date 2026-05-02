@@ -154,12 +154,59 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
+  defp resolve_source_endpoint(
+         %RawEvidence{
+           mission_id: mission_id,
+           protocol_family: protocol_family,
+           raw: raw
+         } = raw_evidence
+       )
+       when protocol_family in [:tm, :tm_transfer_frame] and is_binary(raw) and
+              byte_size(raw) >= 2 do
+    with {:ok, scid} <- transfer_frame_scid(raw) do
+      case match_source_endpoints(mission_id, scid: scid) do
+        {:ok, nil} -> resolve_source_ref_or_spacecraft(raw_evidence)
+        result -> result
+      end
+    end
+  end
+
   defp resolve_source_endpoint(%RawEvidence{
          mission_id: mission_id,
          source_ref: source_ref,
          spacecraft_id: spacecraft_id
        })
        when is_binary(source_ref) and source_ref != "" do
+    resolve_source_ref_or_spacecraft(mission_id, source_ref, spacecraft_id)
+  end
+
+  defp resolve_source_endpoint(%RawEvidence{mission_id: mission_id, spacecraft_id: spacecraft_id})
+       when is_binary(spacecraft_id) and spacecraft_id != "" do
+    match_source_endpoints(mission_id, spacecraft_id: spacecraft_id)
+  end
+
+  defp resolve_source_endpoint(%RawEvidence{}), do: {:ok, nil}
+
+  defp resolve_source_ref_or_spacecraft(%RawEvidence{
+         mission_id: mission_id,
+         source_ref: source_ref,
+         spacecraft_id: spacecraft_id
+       })
+       when is_binary(source_ref) and source_ref != "" do
+    resolve_source_ref_or_spacecraft(mission_id, source_ref, spacecraft_id)
+  end
+
+  defp resolve_source_ref_or_spacecraft(%RawEvidence{
+         mission_id: mission_id,
+         spacecraft_id: spacecraft_id
+       })
+       when is_binary(spacecraft_id) and spacecraft_id != "" do
+    match_source_endpoints(mission_id, spacecraft_id: spacecraft_id)
+  end
+
+  defp resolve_source_ref_or_spacecraft(%RawEvidence{}), do: {:ok, nil}
+
+  defp resolve_source_ref_or_spacecraft(mission_id, source_ref, spacecraft_id) do
     case match_source_endpoints(mission_id, source_ref: source_ref) do
       {:ok, %SourceEndpoint{} = source_endpoint} ->
         {:ok, source_endpoint}
@@ -175,13 +222,6 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
-  defp resolve_source_endpoint(%RawEvidence{mission_id: mission_id, spacecraft_id: spacecraft_id})
-       when is_binary(spacecraft_id) and spacecraft_id != "" do
-    match_source_endpoints(mission_id, spacecraft_id: spacecraft_id)
-  end
-
-  defp resolve_source_endpoint(%RawEvidence{}), do: {:ok, nil}
-
   defp match_source_endpoints(mission_id, criteria)
        when is_binary(mission_id) and is_list(criteria) do
     query =
@@ -194,6 +234,9 @@ defmodule Cadence.SourceEndpoints do
 
           {:spacecraft_id, spacecraft_id}, query ->
             where(query, [row], row.spacecraft_id == ^spacecraft_id)
+
+          {:scid, scid}, query ->
+            where(query, [row], row.scid == ^scid)
         end
       )
 
@@ -218,6 +261,9 @@ defmodule Cadence.SourceEndpoints do
         spacecraft_id: raw_evidence.spacecraft_id || source_endpoint.spacecraft_id
     }
   end
+
+  defp transfer_frame_scid(<<_version::2, scid::10, _rest::bitstring>>), do: {:ok, scid}
+  defp transfer_frame_scid(_raw), do: {:ok, nil}
 
   defp put_organization_scope(%SourceEndpoint{} = source_endpoint, organization_id)
        when is_binary(organization_id) and organization_id != "" do

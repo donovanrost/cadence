@@ -380,7 +380,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
         %{
           "scheduled_contact" => %{
             "scheduled_contact_id" => "contact-alpha",
-            "source_endpoint_refs" => ["source-endpoint-001"],
+            "contact_intents" => ["command_window", "telemetry_downlink"],
             "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
             "starts_at" => DateTime.to_iso8601(starts_at),
             "ends_at" => DateTime.to_iso8601(ends_at),
@@ -395,6 +395,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
                "organization_id" => ^organization_id,
                "mission_id" => ^mission_id,
                "lifecycle_state" => "scheduled",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
                "path_template_ids" => ["uplink-template-alpha", "downlink-template-alpha"],
                "paths" => []
              }
@@ -435,6 +436,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
                "organization_id" => ^organization_id,
                "mission_id" => ^mission_id,
                "lifecycle_state" => "active",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
                "clock_mode" => "replay"
              }
            } = json_response(realized_contact_conn, 200)
@@ -449,6 +451,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     assert %{
              "data" => %{
                "realized_contact_id" => "contact-alpha_run",
+               "contact_intents" => ["command_window", "telemetry_downlink"],
                "path_count" => 2,
                "paths" => [
                  %{"path_id" => "uplink-path-alpha"},
@@ -738,7 +741,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
         %{
           "scheduled_contact" => %{
             "scheduled_contact_id" => "contact-versioned",
-            "source_endpoint_refs" => ["source-endpoint-001"],
+            "contact_intents" => ["telemetry_downlink"],
             "path_template_ids" => ["downlink-template-versioned"],
             "starts_at" => "2026-03-30T18:00:00Z",
             "ends_at" => "2026-03-30T18:10:00Z"
@@ -749,6 +752,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
     assert %{
              "data" => %{
                "scheduled_contact_id" => "contact-versioned",
+               "contact_intents" => ["telemetry_downlink"],
                "path_template_refs" => [
                  %{"path_template_id" => "downlink-template-versioned", "version" => 1}
                ]
@@ -813,6 +817,405 @@ defmodule CadenceWeb.ControlPlaneApiTest do
                "lifecycle_state" => "active"
              }
            } = json_response(provider_profile_v1_show_conn, 200)
+  end
+
+  test "mission-scoped API manages explicit link assignments", %{conn: conn} do
+    %{conn: conn, api_token: api_token, organization_id: organization_id, mission_id: mission_id} =
+      bootstrap(conn)
+
+    spacecraft_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{
+          "spacecraft_id" => "spacecraft-link-api-001",
+          "display_name" => "SC Link API 001"
+        }
+      })
+
+    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-001"}} =
+             json_response(spacecraft_conn, 201)
+
+    second_spacecraft_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
+        "spacecraft" => %{
+          "spacecraft_id" => "spacecraft-link-api-002",
+          "display_name" => "SC Link API 002",
+          "scid" => 202
+        }
+      })
+
+    assert %{"data" => %{"spacecraft_id" => "spacecraft-link-api-002", "scid" => 202}} =
+             json_response(second_spacecraft_conn, 201)
+
+    source_endpoint_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft/spacecraft-link-api-001/source_endpoints",
+        %{
+          "source_endpoint" => %{
+            "source_endpoint_id" => "source-endpoint-link-api-001",
+            "source_ref" => "sc-link-api-001",
+            "display_name" => "SC Link API Endpoint"
+          }
+        }
+      )
+
+    assert %{"data" => %{"source_endpoint_id" => "source-endpoint-link-api-001"}} =
+             json_response(source_endpoint_conn, 201)
+
+    provider_profile_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/provider_profiles", %{
+        "provider_profile" => %{
+          "provider_profile_id" => "tcp-link-api-profile",
+          "adapter_key" => "tcp_socket",
+          "configuration" => %{
+            "mode" => "listen",
+            "port" => 0,
+            "ingress_protocol_family" => "tm",
+            "frame_size" => 1115
+          }
+        }
+      })
+
+    assert %{"data" => %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}} =
+             json_response(provider_profile_conn, 201)
+
+    path_template_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates", %{
+        "path_template" => %{
+          "path_template_id" => "downlink-link-api-template",
+          "path_id" => "downlink-link-api-path",
+          "direction" => "downlink",
+          "selection_role" => "selected",
+          "source_endpoint_ref" => "source-endpoint-link-api-001",
+          "provider_profile_ids" => ["tcp-link-api-profile"]
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "path_template_id" => "downlink-link-api-template",
+               "version" => 1,
+               "source_endpoint_ref" => nil
+             }
+           } = json_response(path_template_conn, 201)
+
+    path_template_patch_conn =
+      conn
+      |> authorize(api_token)
+      |> patch(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-link-api-template",
+        %{
+          "path_template" => %{
+            "source_endpoint_ref" => "source-endpoint-link-api-001",
+            "metadata" => %{"operator_label" => "ignored direct assignment"}
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "path_template_id" => "downlink-link-api-template",
+               "version" => 2,
+               "source_endpoint_ref" => nil
+             }
+           } = json_response(path_template_patch_conn, 200)
+
+    link_assignment_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments", %{
+        "link_assignment" => %{
+          "link_assignment_id" => "link-assignment-api-001",
+          "spacecraft_id" => "spacecraft-link-api-001",
+          "source_endpoint_ref" => "source-endpoint-link-api-001",
+          "path_template_id" => "downlink-link-api-template",
+          "path_template_version" => 2,
+          "direction" => "downlink",
+          "selection_role" => "selected",
+          "provider_path_ref" => "provider-path-link-api-001",
+          "provider_profile_refs" => [
+            %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}
+          ],
+          "metadata" => %{"display_name" => "SC Link API downlink"}
+        }
+      })
+
+    assert %{
+             "data" => %{
+               "link_assignment_id" => "link-assignment-api-001",
+               "organization_id" => ^organization_id,
+               "mission_id" => ^mission_id,
+               "lifecycle_state" => "active",
+               "spacecraft_id" => "spacecraft-link-api-001",
+               "source_endpoint_ref" => "source-endpoint-link-api-001",
+               "path_template_id" => "downlink-link-api-template",
+               "path_template_version" => 2,
+               "direction" => "downlink",
+               "selection_role" => "selected",
+               "provider_path_ref" => "provider-path-link-api-001",
+               "provider_profile_refs" => [
+                 %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}
+               ]
+             }
+           } = json_response(link_assignment_conn, 201)
+
+    invalid_link_assignment_conn =
+      conn
+      |> authorize(api_token)
+      |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments", %{
+        "link_assignment" => %{
+          "link_assignment_id" => "link-assignment-api-invalid",
+          "spacecraft_id" => "spacecraft-link-api-002",
+          "source_endpoint_ref" => "source-endpoint-link-api-001",
+          "path_template_id" => "downlink-link-api-template",
+          "path_template_version" => 2,
+          "direction" => "downlink",
+          "selection_role" => "selected",
+          "provider_profile_refs" => [
+            %{"provider_profile_id" => "tcp-link-api-profile", "version" => 1}
+          ]
+        }
+      })
+
+    assert %{"errors" => [%{"reason" => "link_assignment_source_endpoint_mismatch"}]} =
+             json_response(invalid_link_assignment_conn, 422)
+
+    application_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-link-api-template/link_assignments",
+        %{
+          "link_template_application" => %{
+            "target_mode" => "selected",
+            "spacecraft_ids" => ["spacecraft-link-api-002"],
+            "path_template_version" => 2,
+            "provider_path_ref_pattern" => "{spacecraft_id}-{direction}",
+            "display_name_pattern" => "{spacecraft_name} {direction}"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "applied_count" => 1,
+               "skipped_count" => 0,
+               "failed_count" => 0,
+               "rows" => [
+                 %{
+                   "spacecraft" => %{"spacecraft_id" => "spacecraft-link-api-002"},
+                   "kind" => "applied",
+                   "status" => "ready"
+                 }
+               ]
+             }
+           } = json_response(application_conn, 201)
+
+    matching_application_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/path_templates/downlink-link-api-template/link_assignments",
+        %{
+          "link_template_application" => %{
+            "target_mode" => "matching",
+            "spacecraft_query" => "SC Link API",
+            "path_template_version" => 2
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "applied_count" => 0,
+               "skipped_count" => 2,
+               "failed_count" => 0
+             }
+           } = json_response(matching_application_conn, 201)
+
+    link_assignments_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments?spacecraft_id=spacecraft-link-api-001"
+      )
+
+    assert %{
+             "data" => [
+               %{
+                 "link_assignment_id" => "link-assignment-api-001",
+                 "spacecraft_id" => "spacecraft-link-api-001"
+               }
+             ]
+           } = json_response(link_assignments_conn, 200)
+
+    unmatched_link_assignments_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments?source_endpoint_ref=missing-source"
+      )
+
+    assert %{"data" => []} = json_response(unmatched_link_assignments_conn, 200)
+
+    link_assignment_show_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments/link-assignment-api-001"
+      )
+
+    assert %{"data" => %{"link_assignment_id" => "link-assignment-api-001"}} =
+             json_response(link_assignment_show_conn, 200)
+
+    scheduled_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
+        %{
+          "scheduled_contact" => %{
+            "scheduled_contact_id" => "link-assignment-contact-api-001",
+            "contact_intents" => ["telemetry_downlink"],
+            "link_assignment_refs" => [
+              %{"link_assignment_id" => "link-assignment-api-001"}
+            ],
+            "starts_at" => "2026-03-30T18:00:00Z",
+            "ends_at" => "2026-03-30T18:10:00Z"
+          }
+        }
+      )
+
+    assert %{
+             "data" => %{
+               "scheduled_contact_id" => "link-assignment-contact-api-001",
+               "source_endpoint_refs" => ["source-endpoint-link-api-001"],
+               "contact_intents" => ["telemetry_downlink"],
+               "link_assignment_refs" => [
+                 %{"link_assignment_id" => "link-assignment-api-001"}
+               ]
+             }
+           } = json_response(scheduled_contact_conn, 201)
+
+    realized_link_assignment_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts/link-assignment-contact-api-001/realize",
+        %{"realization" => %{"clock_mode" => "replay"}}
+      )
+
+    assert %{
+             "data" => %{
+               "realized_contact_id" => "link-assignment-contact-api-001_run",
+               "source_endpoint_refs" => ["source-endpoint-link-api-001"],
+               "contact_intents" => ["telemetry_downlink"],
+               "paths" => [
+                 %{
+                   "path_id" => "link-assignment-api-001",
+                   "source_endpoint_ref" => "source-endpoint-link-api-001",
+                   "provider_path_ref" => "provider-path-link-api-001",
+                   "metadata" => %{
+                     "link_assignment_id" => "link-assignment-api-001",
+                     "path_template_id" => "downlink-link-api-template",
+                     "path_template_version" => 2,
+                     "spacecraft_id" => "spacecraft-link-api-001"
+                   }
+                 }
+               ],
+               "metadata" => %{
+                 "contact_intents" => ["telemetry_downlink"],
+                 "link_assignment_refs" => [
+                   %{"link_assignment_id" => "link-assignment-api-001"}
+                 ]
+               }
+             }
+           } = json_response(realized_link_assignment_contact_conn, 200)
+
+    invalid_command_window_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
+        %{
+          "scheduled_contact" => %{
+            "scheduled_contact_id" => "invalid-command-window-contact",
+            "contact_intents" => ["command_window"],
+            "link_assignment_refs" => [
+              %{"link_assignment_id" => "link-assignment-api-001"}
+            ],
+            "starts_at" => "2026-03-30T19:00:00Z",
+            "ends_at" => "2026-03-30T19:10:00Z"
+          }
+        }
+      )
+
+    assert %{"errors" => [%{"reason" => "scheduled_contact_requires_selected_uplink_path"}]} =
+             json_response(invalid_command_window_contact_conn, 422)
+
+    invalid_selected_path_contact_conn =
+      conn
+      |> authorize(api_token)
+      |> post(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/scheduled_contacts",
+        %{
+          "scheduled_contact" => %{
+            "scheduled_contact_id" => "invalid-selected-path-contact",
+            "contact_intents" => ["maintenance"],
+            "paths" => [
+              %{
+                "path_id" => "candidate-only-path",
+                "direction" => "downlink",
+                "selection_role" => "candidate",
+                "source_endpoint_ref" => "source-endpoint-link-api-001"
+              }
+            ],
+            "starts_at" => "2026-03-30T19:30:00Z",
+            "ends_at" => "2026-03-30T19:40:00Z"
+          }
+        }
+      )
+
+    assert %{"errors" => [%{"reason" => "scheduled_contact_requires_selected_path"}]} =
+             json_response(invalid_selected_path_contact_conn, 422)
+
+    link_assignment_delete_conn =
+      conn
+      |> authorize(api_token)
+      |> delete(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments/link-assignment-api-001",
+        %{"link_assignment" => %{"metadata" => %{"deleted_by" => "api-test"}}}
+      )
+
+    assert %{
+             "data" => %{
+               "link_assignment_id" => "link-assignment-api-001",
+               "lifecycle_state" => "deleted",
+               "metadata" => %{
+                 "display_name" => "SC Link API downlink",
+                 "deleted_by" => "api-test"
+               }
+             }
+           } = json_response(link_assignment_delete_conn, 200)
+
+    missing_link_assignment_conn =
+      conn
+      |> authorize(api_token)
+      |> get(
+        "/api/organizations/#{organization_id}/missions/#{mission_id}/link_assignments/link-assignment-api-001"
+      )
+
+    assert %{"errors" => [%{"reason" => "contact_link_assignment_not_found"}]} =
+             json_response(missing_link_assignment_conn, 404)
   end
 
   test "mission-scoped token is constrained to its mission", %{conn: conn} do

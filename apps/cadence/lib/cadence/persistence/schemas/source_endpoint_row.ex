@@ -37,6 +37,19 @@ defmodule Cadence.Persistence.Schemas.SourceEndpointRow do
     )
   end
 
+  @spec update_changeset(struct(), SourceEndpoint.t()) :: Ecto.Changeset.t()
+  def update_changeset(%__MODULE__{} = row, %SourceEndpoint{} = source_endpoint) do
+    row
+    |> cast(domain_attrs(source_endpoint), [
+      :spacecraft_id,
+      :source_ref,
+      :scid,
+      :display_name,
+      :metadata
+    ])
+    |> validate_required([:metadata])
+  end
+
   @spec to_domain(struct()) :: SourceEndpoint.t()
   def to_domain(%__MODULE__{} = row) do
     %SourceEndpoint{

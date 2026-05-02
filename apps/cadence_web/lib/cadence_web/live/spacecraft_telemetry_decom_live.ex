@@ -29,7 +29,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Telemetry Decom")
+     |> assign(:page_title, "Telemetry Interpretation")
      |> assign(:nav_item, :spacecraft)
      |> assign(:config, config)
      |> assign(:revisions, revisions)
@@ -144,7 +144,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
          )
          |> put_flash(
            :info,
-           "Telemetry Decom mission changes applied. All enabled spacecraft configurations are now live."
+           "Telemetry interpretation mission changes applied. All enabled spacecraft configurations are now live."
          )}
 
       {:error, reason} ->
@@ -165,7 +165,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
          |> assign(:config, config)
          |> put_flash(
            :info,
-           "Telemetry Decom disabled for this spacecraft. Apply mission changes to remove it from the live mission."
+           "Telemetry interpretation disabled for this spacecraft. Apply mission changes to remove it from the live mission."
          )}
 
       {:error, reason} ->
@@ -236,9 +236,9 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
         >
           &larr; {@current_spacecraft.display_name}
         </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Telemetry Decom</h1>
+        <h1 class="text-2xl font-bold text-base-content mt-1">Telemetry Interpretation</h1>
         <p class="text-sm text-base-content/60 mt-1">
-          Packet routing configuration for
+          APID selection and packet routing configuration for
           <span class="font-semibold text-base-content">{@current_spacecraft.display_name}</span>.
         </p>
       </div>

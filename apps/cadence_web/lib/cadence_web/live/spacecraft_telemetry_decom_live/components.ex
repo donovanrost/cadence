@@ -199,7 +199,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         class="btn btn-ghost btn-sm"
         phx-click="disable"
         id="telemetry-decom-disable-button"
-        data-confirm="Disable Telemetry Decom for this spacecraft?"
+        data-confirm="Disable telemetry interpretation for this spacecraft?"
       >
         Disable
       </button>
@@ -282,7 +282,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   defp status_description(:disabled),
     do:
-      "This spacecraft is excluded from Telemetry Decom. Apply mission changes to publish the disabled state."
+      "This spacecraft is excluded from telemetry interpretation. Apply mission changes to publish the disabled state."
 
   defp status_description(:not_configured),
     do: "Choose a catalog revision and handled APIDs, then apply mission changes."

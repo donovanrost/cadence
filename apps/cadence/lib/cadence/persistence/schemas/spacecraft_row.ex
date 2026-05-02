@@ -16,6 +16,7 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
     field(:organization_id, :string)
     field(:mission_id, :string)
     field(:display_name, :string)
+    field(:scid, :integer)
     field(:metadata, :map, default: %{})
 
     timestamps()
@@ -29,7 +30,18 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
     |> cast(domain_attrs(spacecraft), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> validate_number(:scid, greater_than_or_equal_to: 0, less_than_or_equal_to: 1023)
     |> unique_constraint([:mission_id, :spacecraft_id], name: :mission_spacecraft_scope_idx)
+    |> unique_constraint(:scid, name: :mission_spacecraft_org_mission_scid_idx)
+  end
+
+  @spec update_changeset(struct(), Spacecraft.t()) :: Ecto.Changeset.t()
+  def update_changeset(%__MODULE__{} = row, %Spacecraft{} = spacecraft) do
+    row
+    |> cast(domain_attrs(spacecraft), [:display_name, :scid, :metadata])
+    |> validate_required([:display_name, :metadata])
+    |> validate_number(:scid, greater_than_or_equal_to: 0, less_than_or_equal_to: 1023)
+    |> unique_constraint(:scid, name: :mission_spacecraft_org_mission_scid_idx)
   end
 
   @spec to_domain(struct()) :: Spacecraft.t()
@@ -39,6 +51,7 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
       organization_id: row.organization_id,
       mission_id: row.mission_id,
       display_name: row.display_name,
+      scid: row.scid,
       metadata: JsonDocument.unwrap_value(row.metadata)
     })
   end
@@ -49,11 +62,12 @@ defmodule Cadence.Persistence.Schemas.SpacecraftRow do
       organization_id: spacecraft.organization_id,
       mission_id: spacecraft.mission_id,
       display_name: spacecraft.display_name,
+      scid: spacecraft.scid,
       metadata: JsonDocument.wrap_value(spacecraft.metadata)
     }
   end
 
   defp all_fields do
-    [:spacecraft_id, :organization_id, :mission_id, :display_name, :metadata]
+    [:spacecraft_id, :organization_id, :mission_id, :display_name, :scid, :metadata]
   end
 end

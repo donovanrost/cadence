@@ -30,14 +30,19 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
 
     test "renders spacecraft in a table" do
       {conn, _org, mission} = signed_in_org_and_mission()
-      _s1 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-1")
-      _s2 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-2")
+      _s1 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-1", scid: 101)
+      s2 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-2")
 
       {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
       assert html =~ "Alpha-1"
       assert html =~ "Alpha-2"
+      assert html =~ "101"
+      assert html =~ "Not set"
       assert html =~ "New Spacecraft"
+
+      assert html =~
+               ~p"/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}/identity"
     end
 
     test "shows only spacecraft belonging to this mission" do

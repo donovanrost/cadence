@@ -53,6 +53,7 @@ defmodule CadenceWeb.SpacecraftListLive do
               <tr>
                 <th class="hud-label">Name</th>
                 <th class="hud-label">Spacecraft ID</th>
+                <th class="hud-label">SCID</th>
                 <th class="hud-label text-right">Actions</th>
               </tr>
             </thead>
@@ -60,6 +61,9 @@ defmodule CadenceWeb.SpacecraftListLive do
               <tr :for={spacecraft <- @spacecraft}>
                 <td class="font-medium">{spacecraft.display_name}</td>
                 <td class="font-mono text-sm text-base-content/70">{spacecraft.spacecraft_id}</td>
+                <td class="font-mono text-sm text-base-content/70">
+                  {spacecraft.scid || "Not set"}
+                </td>
                 <td class="text-right">
                   <.action_menu>
                     <:action>
@@ -67,6 +71,13 @@ defmodule CadenceWeb.SpacecraftListLive do
                         ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
                       }>
                         View
+                      </.link>
+                    </:action>
+                    <:action>
+                      <.link navigate={
+                        ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
+                      }>
+                        Identity
                       </.link>
                     </:action>
                   </.action_menu>

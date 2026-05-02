@@ -20,7 +20,8 @@ defmodule CadenceWeb.SpacecraftNewLive do
   @impl true
   def handle_event("validate", %{"spacecraft" => params}, socket) do
     display_name = Map.get(params, "display_name", "")
-    form = to_form(%{"display_name" => display_name}, as: :spacecraft)
+    scid = Map.get(params, "scid", "")
+    form = to_form(%{"display_name" => display_name, "scid" => scid}, as: :spacecraft)
     {:noreply, assign(socket, :form, form)}
   end
 
@@ -30,17 +31,19 @@ defmodule CadenceWeb.SpacecraftNewLive do
     organization_id = socket.assigns.current_scope.organization_id
     display_name = normalize(params["display_name"])
 
-    if is_nil(display_name) do
-      {:noreply, put_flash(socket, :error, "Display name is required.")}
-    else
+    with true <- not is_nil(display_name),
+         {:ok, scid} <- parse_optional_scid(params["scid"]) do
       spacecraft =
         Spacecraft.new(%{
           mission_id: mission.mission_id,
-          display_name: display_name
+          display_name: display_name,
+          scid: scid
         })
 
       case Cadence.persist_spacecraft(organization_id, spacecraft) do
         {:ok, persisted} ->
+          _ = maybe_ensure_source_endpoint(organization_id, persisted)
+
           {:noreply,
            push_navigate(socket,
              to: ~p"/missions/#{mission.mission_id}/spacecraft/#{persisted.spacecraft_id}"
@@ -61,6 +64,12 @@ defmodule CadenceWeb.SpacecraftNewLive do
         {:error, reason} ->
           {:noreply, put_flash(socket, :error, "Failed to create spacecraft: #{inspect(reason)}")}
       end
+    else
+      false ->
+        {:noreply, put_flash(socket, :error, "Display name is required.")}
+
+      {:error, message} ->
+        {:noreply, put_flash(socket, :error, message)}
     end
   end
 
@@ -86,6 +95,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
         class="space-y-4"
       >
         <.input field={@form[:display_name]} type="text" label="Display Name" required />
+        <.input field={@form[:scid]} type="text" label="SCID" />
         <div class="flex items-center gap-3">
           <button type="submit" class="btn btn-primary">Create Spacecraft</button>
           <.link
@@ -100,7 +110,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
     """
   end
 
-  defp empty_form, do: to_form(%{"display_name" => ""}, as: :spacecraft)
+  defp empty_form, do: to_form(%{"display_name" => "", "scid" => ""}, as: :spacecraft)
 
   defp normalize(value) when is_binary(value) do
     case String.trim(value) do
@@ -110,6 +120,27 @@ defmodule CadenceWeb.SpacecraftNewLive do
   end
 
   defp normalize(_other), do: nil
+
+  defp parse_optional_scid(value) when is_binary(value) do
+    case normalize(value) do
+      nil ->
+        {:ok, nil}
+
+      value ->
+        case Integer.parse(value) do
+          {scid, ""} when scid >= 0 and scid <= 1023 -> {:ok, scid}
+          _other -> {:error, "SCID must be an integer from 0 to 1023."}
+        end
+    end
+  end
+
+  defp parse_optional_scid(_value), do: {:ok, nil}
+
+  defp maybe_ensure_source_endpoint(_organization_id, %{scid: nil}), do: :ok
+
+  defp maybe_ensure_source_endpoint(organization_id, spacecraft) do
+    Cadence.ensure_managed_spacecraft_source_endpoint(organization_id, spacecraft)
+  end
 
   defp format_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

@@ -29,6 +29,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
 
     on_exit(fn ->
       Runtime.stop_realized_contact(mission_id, "contact-alpha")
+      Runtime.stop_realized_contact(mission_id, "contact-downlink-only")
+      Runtime.stop_realized_contact(mission_id, "contact-uplink-only")
       Runtime.stop_realized_contact(mission_id, "contact-invalid")
       Runtime.stop_mission(mission_id)
     end)
@@ -411,6 +413,95 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
 
     assert {"downlink-path-beta", "accepted"} in selected_reasons
     assert {"downlink-path-alpha", "selected_path_preferred"} in selected_reasons
+  end
+
+  test "allows downlink-only realized contacts for telemetry downlink intent", %{
+    mission_id: mission_id
+  } do
+    realized_contact =
+      RealizedContact.new(%{
+        realized_contact_id: "contact-downlink-only",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        contact_intents: [:telemetry_downlink],
+        clock_mode: :replay,
+        initial_time: DateTime.from_unix!(1_700_030_100, :second),
+        paths: [
+          Path.new(%{
+            path_id: "downlink-path-alpha",
+            direction: :downlink,
+            selection_role: :selected,
+            source_endpoint_ref: "source-endpoint-alpha",
+            transport_bindings: [
+              TransportBinding.new(%{
+                transport_binding_id: "downlink-heartbeat",
+                family_key: :heartbeat_monitor,
+                configuration: %{"heartbeat_interval_ms" => 25}
+              })
+            ]
+          })
+        ]
+      })
+
+    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+
+    assert {:ok, contact_snapshot} =
+             Cadence.realized_contact_snapshot(mission_id, realized_contact.realized_contact_id)
+
+    assert contact_snapshot.contact_intents == ["telemetry_downlink"]
+    assert contact_snapshot.path_count == 1
+    assert contact_snapshot.downlink_combiner.selected_downlink_path_id == "downlink-path-alpha"
+  end
+
+  test "allows uplink-only realized contacts for command window intent", %{mission_id: mission_id} do
+    realized_contact =
+      RealizedContact.new(%{
+        realized_contact_id: "contact-uplink-only",
+        mission_id: mission_id,
+        contact_intents: [:command_window],
+        clock_mode: :replay,
+        initial_time: DateTime.from_unix!(1_700_030_100, :second),
+        paths: [
+          Path.new(%{
+            path_id: "uplink-path-alpha",
+            direction: :uplink,
+            selection_role: :selected,
+            transport_bindings: [
+              TransportBinding.new(%{
+                transport_binding_id: "uplink-heartbeat",
+                family_key: :heartbeat_monitor,
+                configuration: %{"heartbeat_interval_ms" => 25}
+              })
+            ]
+          })
+        ]
+      })
+
+    assert {:ok, _realized_contact_runtime} = Cadence.start_realized_contact(realized_contact)
+  end
+
+  test "rejects command window realized contacts without a selected uplink path", %{
+    mission_id: mission_id
+  } do
+    invalid_contact =
+      RealizedContact.new(%{
+        realized_contact_id: "contact-invalid",
+        mission_id: mission_id,
+        contact_intents: [:command_window],
+        clock_mode: :replay,
+        initial_time: DateTime.from_unix!(1_700_030_100, :second),
+        paths: [
+          Path.new(%{
+            path_id: "downlink-path-alpha",
+            direction: :downlink,
+            selection_role: :selected,
+            source_endpoint_ref: "source-endpoint-alpha"
+          })
+        ]
+      })
+
+    assert {:error, :realized_contact_requires_selected_uplink_path} =
+             Cadence.start_realized_contact(invalid_contact)
   end
 
   test "rejects realized contacts with multiple selected uplink paths", %{mission_id: mission_id} do

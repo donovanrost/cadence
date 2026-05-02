@@ -16,6 +16,8 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
     field(:mission_id, :string)
     field(:organization_id, :string)
     field(:source_endpoint_refs, {:array, :string}, default: [])
+    field(:contact_intents, {:array, :string}, default: [])
+    field(:link_assignment_ref_documents, :map, default: %{"items" => []})
     field(:path_template_ids, {:array, :string}, default: [])
     field(:path_template_ref_documents, :map, default: %{})
     field(:path_documents, :map, default: %{})
@@ -86,6 +88,8 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       organization_id: row.organization_id,
       mission_id: row.mission_id,
       source_endpoint_refs: row.source_endpoint_refs,
+      contact_intents: row.contact_intents,
+      link_assignment_refs: JsonDocument.unwrap_items(row.link_assignment_ref_documents),
       path_template_ids: row.path_template_ids,
       path_template_refs: JsonDocument.unwrap_items(row.path_template_ref_documents),
       paths: JsonDocument.unwrap_items(row.path_documents),
@@ -104,6 +108,9 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       organization_id: scheduled_contact.organization_id,
       mission_id: scheduled_contact.mission_id,
       source_endpoint_refs: scheduled_contact.source_endpoint_refs,
+      contact_intents: Enum.map(scheduled_contact.contact_intents, &Atom.to_string/1),
+      link_assignment_ref_documents:
+        JsonDocument.wrap_items(scheduled_contact.link_assignment_refs),
       path_template_ids: scheduled_contact.path_template_ids,
       path_template_ref_documents: JsonDocument.wrap_items(scheduled_contact.path_template_refs),
       path_documents: JsonDocument.wrap_items(scheduled_contact.paths),
@@ -122,6 +129,8 @@ defmodule Cadence.Persistence.Schemas.ScheduledContactRow do
       :organization_id,
       :mission_id,
       :source_endpoint_refs,
+      :contact_intents,
+      :link_assignment_ref_documents,
       :path_template_ids,
       :path_template_ref_documents,
       :path_documents,

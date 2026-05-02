@@ -10,10 +10,11 @@ defmodule Cadence.Spacecraft do
           organization_id: binary() | nil,
           mission_id: binary(),
           display_name: binary(),
+          scid: non_neg_integer() | nil,
           metadata: map()
         }
 
-  defstruct [:spacecraft_id, :organization_id, :mission_id, :display_name, metadata: %{}]
+  defstruct [:spacecraft_id, :organization_id, :mission_id, :display_name, :scid, metadata: %{}]
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
@@ -23,6 +24,7 @@ defmodule Cadence.Spacecraft do
       organization_id: Map.get(attrs, :organization_id, Map.get(attrs, "organization_id")),
       mission_id: Map.fetch!(attrs, :mission_id),
       display_name: Map.fetch!(attrs, :display_name),
+      scid: Map.get(attrs, :scid, Map.get(attrs, "scid")),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

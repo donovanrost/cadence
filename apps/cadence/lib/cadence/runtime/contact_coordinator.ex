@@ -97,6 +97,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
         realized_contact_id: state.realized_contact.realized_contact_id,
         mission_id: state.realized_contact.mission_id,
         source_endpoint_refs: state.realized_contact.source_endpoint_refs,
+        contact_intents: Enum.map(state.realized_contact.contact_intents, &Atom.to_string/1),
         clock_mode: state.realized_contact.clock_mode,
         initial_time: state.realized_contact.initial_time,
         metadata: state.realized_contact.metadata,
@@ -299,8 +300,10 @@ defmodule Cadence.Runtime.ContactCoordinator do
   defp validate_realized_contact(%RealizedContact{paths: []}),
     do: {:error, :realized_contact_requires_at_least_one_path}
 
-  defp validate_realized_contact(%RealizedContact{paths: paths}) do
+  defp validate_realized_contact(%RealizedContact{paths: paths, contact_intents: contact_intents}) do
     with :ok <- validate_unique_path_ids(paths),
+         :ok <- validate_selected_path_presence(paths),
+         :ok <- validate_contact_intents(paths, contact_intents),
          :ok <- validate_uplink_selection(paths),
          :ok <- validate_downlink_selection(paths) do
       validate_transport_binding_ids(paths)
@@ -317,6 +320,40 @@ defmodule Cadence.Runtime.ContactCoordinator do
     end
   end
 
+  defp validate_selected_path_presence(paths) do
+    if Enum.any?(paths, &(&1.selection_role == :selected)) do
+      :ok
+    else
+      {:error, :realized_contact_requires_selected_path}
+    end
+  end
+
+  defp validate_contact_intents(paths, contact_intents) do
+    with :ok <- validate_telemetry_downlink_intent(paths, contact_intents) do
+      validate_command_window_intent(paths, contact_intents)
+    end
+  end
+
+  defp validate_telemetry_downlink_intent(paths, contact_intents) do
+    if :telemetry_downlink in contact_intents and not selected_direction?(paths, :downlink) do
+      {:error, :realized_contact_requires_selected_downlink_path}
+    else
+      :ok
+    end
+  end
+
+  defp validate_command_window_intent(paths, contact_intents) do
+    if :command_window in contact_intents and not selected_direction?(paths, :uplink) do
+      {:error, :realized_contact_requires_selected_uplink_path}
+    else
+      :ok
+    end
+  end
+
+  defp selected_direction?(paths, direction) do
+    Enum.any?(paths, &(&1.direction == direction and &1.selection_role == :selected))
+  end
+
   defp validate_uplink_selection(paths) do
     selected_uplink_paths =
       Enum.filter(paths, fn path ->
@@ -324,8 +361,7 @@ defmodule Cadence.Runtime.ContactCoordinator do
       end)
 
     case length(selected_uplink_paths) do
-      0 -> {:error, :realized_contact_requires_selected_uplink_path}
-      1 -> :ok
+      count when count <= 1 -> :ok
       _count -> {:error, :realized_contact_has_multiple_selected_uplink_paths}
     end
   end

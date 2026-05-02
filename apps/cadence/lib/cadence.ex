@@ -44,6 +44,7 @@ defmodule Cadence do
 
   alias Cadence.Contacts.{
     ContactAction,
+    LinkAssignment,
     PathTemplate,
     ProviderProfile,
     RealizedContact,
@@ -281,6 +282,12 @@ defmodule Cadence do
     SpacecraftStore.persist_spacecraft(spacecraft)
   end
 
+  @spec update_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
+  def update_spacecraft(organization_id, %Spacecraft{} = spacecraft)
+      when is_binary(organization_id) do
+    SpacecraftStore.update_spacecraft(organization_id, spacecraft)
+  end
+
   @spec fetch_spacecraft(binary(), binary(), binary()) :: {:ok, Spacecraft.t()} | {:error, term()}
   def fetch_spacecraft(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
@@ -293,6 +300,13 @@ defmodule Cadence do
     SpacecraftStore.fetch_spacecraft(mission_id, spacecraft_id)
   end
 
+  @spec fetch_spacecraft_by_scid(binary(), binary(), non_neg_integer()) ::
+          {:ok, Spacecraft.t()} | {:error, term()}
+  def fetch_spacecraft_by_scid(organization_id, mission_id, scid)
+      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) and scid >= 0 do
+    SpacecraftStore.fetch_spacecraft_by_scid(organization_id, mission_id, scid)
+  end
+
   @spec list_spacecraft(binary(), binary()) :: [Spacecraft.t()]
   def list_spacecraft(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
@@ -302,6 +316,13 @@ defmodule Cadence do
   @spec list_spacecraft(binary()) :: [Spacecraft.t()]
   def list_spacecraft(mission_id) when is_binary(mission_id) do
     SpacecraftStore.list_spacecraft(mission_id)
+  end
+
+  @spec ensure_managed_spacecraft_source_endpoint(binary(), Spacecraft.t()) ::
+          {:ok, SourceEndpoint.t()} | {:error, term()}
+  def ensure_managed_spacecraft_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
+      when is_binary(organization_id) do
+    SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft)
   end
 
   @spec issue_service_identity(ServiceIdentity.t()) ::
@@ -973,6 +994,71 @@ defmodule Cadence do
           {:ok, ProviderProfile.t()} | {:error, term()}
   def persist_provider_profile(%ProviderProfile{} = provider_profile) do
     ContactsService.persist_provider_profile(provider_profile)
+  end
+
+  @spec create_shared_link(binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def create_shared_link(organization_id, mission_id, attrs)
+      when is_binary(organization_id) and is_binary(mission_id) and is_map(attrs) do
+    ContactsService.create_shared_link(organization_id, mission_id, attrs)
+  end
+
+  @spec apply_link_template(binary(), binary(), PathTemplate.t(), [Spacecraft.t()], map()) ::
+          {:ok, map()}
+  def apply_link_template(
+        organization_id,
+        mission_id,
+        %PathTemplate{} = source_template,
+        spacecraft,
+        attrs
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft) and
+             is_map(attrs) do
+    ContactsService.apply_link_template(
+      organization_id,
+      mission_id,
+      source_template,
+      spacecraft,
+      attrs
+    )
+  end
+
+  @spec persist_link_assignment(binary(), LinkAssignment.t()) ::
+          {:ok, LinkAssignment.t()} | {:error, term()}
+  def persist_link_assignment(organization_id, %LinkAssignment{} = assignment)
+      when is_binary(organization_id) do
+    ContactsService.persist_link_assignment(organization_id, assignment)
+  end
+
+  @spec fetch_link_assignment(binary(), binary(), binary()) ::
+          {:ok, LinkAssignment.t()} | {:error, term()}
+  def fetch_link_assignment(organization_id, mission_id, link_assignment_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(link_assignment_id) do
+    ContactsService.fetch_link_assignment(organization_id, mission_id, link_assignment_id)
+  end
+
+  @spec list_link_assignments(binary(), binary()) :: [LinkAssignment.t()]
+  def list_link_assignments(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    ContactsService.list_link_assignments(organization_id, mission_id)
+  end
+
+  @spec delete_link_assignment(binary(), binary(), binary(), map()) ::
+          {:ok, LinkAssignment.t()} | {:error, term()}
+  def delete_link_assignment(
+        organization_id,
+        mission_id,
+        link_assignment_id,
+        metadata_patch \\ %{}
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(link_assignment_id) and is_map(metadata_patch) do
+    ContactsService.delete_link_assignment(
+      organization_id,
+      mission_id,
+      link_assignment_id,
+      metadata_patch
+    )
   end
 
   @spec fetch_provider_profile(binary(), binary()) ::

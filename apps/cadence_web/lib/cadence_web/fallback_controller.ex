@@ -83,12 +83,48 @@ defmodule CadenceWeb.FallbackController do
     error_response(conn, :not_found, "contact_path_template_not_found")
   end
 
+  def call(conn, {:error, :contact_link_assignment_not_found}) do
+    error_response(conn, :not_found, "contact_link_assignment_not_found")
+  end
+
   def call(conn, {:error, :scheduled_contact_not_found}) do
     error_response(conn, :not_found, "scheduled_contact_not_found")
   end
 
   def call(conn, {:error, :realized_contact_not_found}) do
     error_response(conn, :not_found, "realized_contact_not_found")
+  end
+
+  def call(conn, {:error, :scheduled_contact_requires_selected_path}) do
+    error_response(conn, :unprocessable_entity, "scheduled_contact_requires_selected_path")
+  end
+
+  def call(conn, {:error, :scheduled_contact_requires_selected_downlink_path}) do
+    error_response(
+      conn,
+      :unprocessable_entity,
+      "scheduled_contact_requires_selected_downlink_path"
+    )
+  end
+
+  def call(conn, {:error, :scheduled_contact_requires_selected_uplink_path}) do
+    error_response(conn, :unprocessable_entity, "scheduled_contact_requires_selected_uplink_path")
+  end
+
+  def call(conn, {:error, :realized_contact_requires_selected_path}) do
+    error_response(conn, :unprocessable_entity, "realized_contact_requires_selected_path")
+  end
+
+  def call(conn, {:error, :realized_contact_requires_selected_downlink_path}) do
+    error_response(
+      conn,
+      :unprocessable_entity,
+      "realized_contact_requires_selected_downlink_path"
+    )
+  end
+
+  def call(conn, {:error, :realized_contact_requires_selected_uplink_path}) do
+    error_response(conn, :unprocessable_entity, "realized_contact_requires_selected_uplink_path")
   end
 
   def call(conn, {:error, :no_active_binding_set}) do

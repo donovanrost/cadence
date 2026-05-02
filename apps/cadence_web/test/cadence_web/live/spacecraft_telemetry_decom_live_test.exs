@@ -90,10 +90,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, _view, html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
       )
 
-    assert html =~ "Telemetry Decom"
+    assert html =~ "Telemetry Interpretation"
     assert html =~ "Not configured"
     assert html =~ spacecraft.display_name
   end
@@ -177,9 +177,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, _view, html} =
       live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
 
-    assert html =~ "Telemetry Decom"
+    assert html =~ "Telemetry Interpretation"
     assert html =~ "Not configured"
     assert html =~ "Configure"
+
+    assert html =~
+             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
   end
 
   test "select-all-unclaimed picks every non-conflicting APID and autosaves" do

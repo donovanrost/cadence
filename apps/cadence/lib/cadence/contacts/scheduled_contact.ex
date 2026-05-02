@@ -13,6 +13,8 @@ defmodule Cadence.Contacts.ScheduledContact do
           organization_id: binary() | nil,
           mission_id: binary(),
           source_endpoint_refs: [binary()],
+          contact_intents: [atom()],
+          link_assignment_refs: [map()],
           path_template_ids: [binary()],
           path_template_refs: [map()],
           paths: [Path.t()],
@@ -33,6 +35,8 @@ defmodule Cadence.Contacts.ScheduledContact do
     :provider_contact_ref,
     :realized_contact_id,
     source_endpoint_refs: [],
+    contact_intents: [],
+    link_assignment_refs: [],
     path_template_ids: [],
     path_template_refs: [],
     paths: [],
@@ -53,6 +57,14 @@ defmodule Cadence.Contacts.ScheduledContact do
       mission_id: Map.fetch!(attrs, :mission_id),
       source_endpoint_refs:
         Map.get(attrs, :source_endpoint_refs, Map.get(attrs, "source_endpoint_refs", [])),
+      contact_intents:
+        attrs
+        |> Map.get(:contact_intents, Map.get(attrs, "contact_intents", []))
+        |> Enum.map(&KnownAtom.contact_intent!/1),
+      link_assignment_refs:
+        attrs
+        |> Map.get(:link_assignment_refs, Map.get(attrs, "link_assignment_refs", []))
+        |> Enum.map(&normalize_link_assignment_ref/1),
       path_template_ids:
         Map.get(attrs, :path_template_ids, Map.get(attrs, "path_template_ids", [])),
       path_template_refs:
@@ -86,6 +98,13 @@ defmodule Cadence.Contacts.ScheduledContact do
     %{
       "path_template_id" => Map.get(ref, "path_template_id") || Map.get(ref, :path_template_id),
       "version" => Map.get(ref, "version") || Map.get(ref, :version) || 1
+    }
+  end
+
+  defp normalize_link_assignment_ref(%{} = ref) do
+    %{
+      "link_assignment_id" =>
+        Map.get(ref, "link_assignment_id") || Map.get(ref, :link_assignment_id)
     }
   end
 end

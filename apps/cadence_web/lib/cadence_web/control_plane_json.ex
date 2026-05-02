@@ -41,6 +41,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
 
   alias Cadence.Contacts.{
     ContactAction,
+    LinkAssignment,
     Path,
     PathTemplate,
     ProviderBinding,
@@ -185,6 +186,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
       organization_id: spacecraft.organization_id,
       mission_id: spacecraft.mission_id,
       display_name: spacecraft.display_name,
+      scid: spacecraft.scid,
       metadata: spacecraft.metadata
     }
   end
@@ -682,6 +684,8 @@ defmodule CadenceWeb.ControlPlaneJSON do
       organization_id: scheduled_contact.organization_id,
       mission_id: scheduled_contact.mission_id,
       source_endpoint_refs: scheduled_contact.source_endpoint_refs,
+      contact_intents: Enum.map(scheduled_contact.contact_intents, &Atom.to_string/1),
+      link_assignment_refs: json_value(scheduled_contact.link_assignment_refs),
       path_template_ids: scheduled_contact.path_template_ids,
       path_template_refs: json_value(scheduled_contact.path_template_refs),
       paths: Enum.map(scheduled_contact.paths, &contact_path/1),
@@ -744,6 +748,47 @@ defmodule CadenceWeb.ControlPlaneJSON do
     }
   end
 
+  @spec link_assignment(LinkAssignment.t()) :: map()
+  def link_assignment(%LinkAssignment{} = link_assignment) do
+    %{
+      link_assignment_id: link_assignment.link_assignment_id,
+      organization_id: link_assignment.organization_id,
+      mission_id: link_assignment.mission_id,
+      lifecycle_state: maybe_atom_to_string(link_assignment.lifecycle_state),
+      spacecraft_id: link_assignment.spacecraft_id,
+      source_endpoint_ref: link_assignment.source_endpoint_ref,
+      path_template_id: link_assignment.path_template_id,
+      path_template_version: link_assignment.path_template_version,
+      direction: maybe_atom_to_string(link_assignment.direction),
+      selection_role: maybe_atom_to_string(link_assignment.selection_role),
+      provider_path_ref: link_assignment.provider_path_ref,
+      provider_profile_refs: json_value(link_assignment.provider_profile_refs),
+      transport_profile_refs: json_value(link_assignment.transport_profile_refs),
+      metadata: json_value(link_assignment.metadata)
+    }
+  end
+
+  @spec link_template_application_result(map()) :: map()
+  def link_template_application_result(result) when is_map(result) do
+    %{
+      applied_count: result.applied_count,
+      skipped_count: result.skipped_count,
+      failed_count: result.failed_count,
+      rows: Enum.map(result.rows, &link_template_application_row/1)
+    }
+  end
+
+  defp link_template_application_row(row) when is_map(row) do
+    %{
+      id: row.id,
+      spacecraft: spacecraft(row.spacecraft),
+      kind: maybe_atom_to_string(row.kind),
+      status: maybe_atom_to_string(row.status),
+      label: row.label,
+      detail: row.detail
+    }
+  end
+
   @spec realized_contact(RealizedContact.t()) :: map()
   def realized_contact(%RealizedContact{} = realized_contact) do
     %{
@@ -752,6 +797,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
       mission_id: realized_contact.mission_id,
       scheduled_contact_id: realized_contact.scheduled_contact_id,
       source_endpoint_refs: realized_contact.source_endpoint_refs,
+      contact_intents: Enum.map(realized_contact.contact_intents, &Atom.to_string/1),
       paths: Enum.map(realized_contact.paths, &contact_path/1),
       clock_mode: Atom.to_string(realized_contact.clock_mode),
       initial_time: iso8601(realized_contact.initial_time),
@@ -767,6 +813,7 @@ defmodule CadenceWeb.ControlPlaneJSON do
       realized_contact_id: snapshot_value(snapshot, :realized_contact_id),
       mission_id: snapshot_value(snapshot, :mission_id),
       source_endpoint_refs: snapshot_value(snapshot, :source_endpoint_refs, []),
+      contact_intents: snapshot_value(snapshot, :contact_intents, []),
       clock_mode: snapshot_atom_string(snapshot, :clock_mode),
       initial_time: snapshot_iso8601(snapshot, :initial_time),
       metadata: snapshot_json(snapshot, :metadata, %{}),

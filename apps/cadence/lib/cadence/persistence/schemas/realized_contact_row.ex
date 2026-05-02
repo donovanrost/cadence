@@ -17,6 +17,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
     field(:organization_id, :string)
     field(:scheduled_contact_id, :string)
     field(:source_endpoint_refs, {:array, :string}, default: [])
+    field(:contact_intents, {:array, :string}, default: [])
     field(:path_documents, :map, default: %{})
     field(:clock_mode, :string)
     field(:initial_time, :utc_datetime_usec)
@@ -67,6 +68,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
       mission_id: row.mission_id,
       scheduled_contact_id: row.scheduled_contact_id,
       source_endpoint_refs: row.source_endpoint_refs,
+      contact_intents: row.contact_intents,
       paths: JsonDocument.unwrap_items(row.path_documents),
       clock_mode: row.clock_mode,
       initial_time: row.initial_time,
@@ -83,6 +85,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
       mission_id: realized_contact.mission_id,
       scheduled_contact_id: realized_contact.scheduled_contact_id,
       source_endpoint_refs: realized_contact.source_endpoint_refs,
+      contact_intents: Enum.map(realized_contact.contact_intents, &Atom.to_string/1),
       path_documents: JsonDocument.wrap_items(realized_contact.paths),
       clock_mode: Atom.to_string(realized_contact.clock_mode),
       initial_time: realized_contact.initial_time,
@@ -99,6 +102,7 @@ defmodule Cadence.Persistence.Schemas.RealizedContactRow do
       :mission_id,
       :scheduled_contact_id,
       :source_endpoint_refs,
+      :contact_intents,
       :path_documents,
       :clock_mode,
       :initial_time,
