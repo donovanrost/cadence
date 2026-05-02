@@ -12,7 +12,7 @@ defmodule CadenceWeb.CommsOverviewLive do
     {:ok,
      socket
      |> assign(:page_title, "Comms")
-     |> assign(:nav_item, :comms)
+     |> assign(:nav_item, :comms_overview)
      |> assign(Map.drop(summary, [:spacecraft_readiness]))
      |> stream(:spacecraft_readiness, summary.spacecraft_readiness)}
   end
