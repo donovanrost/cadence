@@ -40,8 +40,7 @@ defmodule CadenceWeb.Components.Sidebar do
   end
 
   defp item_classes(true),
-    do:
-      "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
+    do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]"
 
   defp item_classes(false),
     do:
