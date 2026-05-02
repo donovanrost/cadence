@@ -248,14 +248,20 @@ defmodule CadenceWeb.CommsLiveTest do
       assert has_element?(view, "#mission-network-validation span", "6")
     end
 
-    test "marks Comms as the active mission sidebar item" do
+    test "expands the Comms section and marks Overview active on /comms" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
-      assert html =~ "Comms"
-      assert html =~ "hero-signal"
-      assert html =~ "bg-primary/10"
+      # The <details> for the Comms section is rendered open.
+      assert has_element?(view, "details[open] summary", "Comms")
+
+      # The Overview child link is present and styled active.
+      assert has_element?(
+               view,
+               ~s|details[open] a[href="/missions/#{mission.mission_id}/comms"].bg-primary\\/10|,
+               "Overview"
+             )
     end
 
     test "applies link templates to missing spacecraft links" do
