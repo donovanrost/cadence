@@ -264,6 +264,16 @@ defmodule CadenceWeb.CommsLiveTest do
              )
     end
 
+    test "leaves the Comms section collapsed when not on a /comms route" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
+
+      # The Comms <summary> is rendered inside a <details> WITHOUT open.
+      assert has_element?(view, "details:not([open]) summary", "Comms")
+      refute has_element?(view, "details[open] summary", "Comms")
+    end
+
     test "applies link templates to missing spacecraft links" do
       {conn, org, mission} = signed_in_org_and_mission()
       alpha = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 77)
