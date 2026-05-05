@@ -37,7 +37,7 @@ defmodule CadenceWeb.CommsOverviewLive do
             <.status_badge status={if @blocking_findings == 0, do: :ready, else: :warning} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-3">
+          <div class="mt-5 grid gap-3 md:grid-cols-2">
             <.network_resource_card
               id="mission-network-links"
               title="Links"
@@ -51,13 +51,6 @@ defmodule CadenceWeb.CommsOverviewLive do
               value={@transport_profile_count}
               description="Reusable path-local protocol behavior."
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
-            />
-            <.network_resource_card
-              id="mission-network-advanced"
-              title="Advanced"
-              value={@source_endpoint_count}
-              description="Runtime identities and routing internals."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"}
             />
           </div>
         </div>
@@ -173,7 +166,6 @@ defmodule CadenceWeb.CommsOverviewLive do
       )
 
     %{
-      source_endpoint_count: length(source_endpoints),
       transport_profile_count: length(transport_profiles),
       path_template_count: length(path_templates),
       findings: findings,
