@@ -19,7 +19,7 @@ defmodule CadenceWeb.CommsPathTemplateListLive do
     {:ok,
      socket
      |> assign(:page_title, "Comms Link Templates")
-     |> assign(:nav_item, :comms)
+     |> assign(:nav_item, :comms_link_templates)
      |> assign(:source_endpoints_by_id, Map.new(source_endpoints, &{&1.source_endpoint_id, &1}))
      |> assign(
        :provider_profiles_by_id,

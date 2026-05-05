@@ -54,7 +54,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
         {:ok,
          socket
          |> assign(:page_title, display_name(path_template, :path_id))
-         |> assign(:nav_item, :comms)
+         |> assign(:nav_item, :comms_link_templates)
          |> assign(:path_template, path_template)
          |> assign(:versions, versions)
          |> assign(

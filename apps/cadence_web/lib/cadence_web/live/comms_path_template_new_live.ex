@@ -20,7 +20,7 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
 
     socket =
       socket
-      |> assign(:nav_item, :comms)
+      |> assign(:nav_item, :comms_link_templates)
       |> assign(
         :provider_profiles_by_id,
         Map.new(provider_profiles, &{&1.provider_profile_id, &1})

@@ -117,6 +117,12 @@
             >
               Providers
             </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}
+              active={assigns[:nav_item] == :comms_link_templates}
+            >
+              Link Templates
+            </:item>
           </.nav_section>
         </ul>
       </nav>

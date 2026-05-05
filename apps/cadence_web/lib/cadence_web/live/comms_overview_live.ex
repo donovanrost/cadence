@@ -65,7 +65,7 @@ defmodule CadenceWeb.CommsOverviewLive do
             <.status_badge status={if @blocking_findings == 0, do: :ready, else: :warning} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <.network_resource_card
               id="mission-network-links"
               title="Links"
@@ -79,13 +79,6 @@ defmodule CadenceWeb.CommsOverviewLive do
               value={@transport_profile_count}
               description="Reusable path-local protocol behavior."
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
-            />
-            <.network_resource_card
-              id="mission-network-link-templates"
-              title="Link Templates"
-              value={@path_template_count}
-              description="Reusable uplink and downlink options."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}
             />
             <.network_resource_card
               id="mission-network-validation"
