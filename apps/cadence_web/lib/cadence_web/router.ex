@@ -296,8 +296,6 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/comms/path-templates/:path_template_id/new-version",
            CommsPathTemplateNewLive,
            :version
-
-      live "/missions/:mission_id/comms/validation", CommsValidationLive, :index
     end
 
     live_session :user,

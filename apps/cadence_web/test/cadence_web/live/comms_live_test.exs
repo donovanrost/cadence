@@ -164,25 +164,20 @@ defmodule CadenceWeb.CommsLiveTest do
       assert has_element?(view, "#mission-network-resources")
       assert has_element?(view, "#mission-network-links")
       assert has_element?(view, "#mission-network-protocol-behaviors")
-      assert has_element?(view, "#mission-network-validation")
       assert has_element?(view, "#mission-network-advanced")
       assert render(view) =~ "Mission Network"
       assert render(view) =~ "Shared mission connectivity"
+      assert has_element?(view, "#comms-validation-page")
     end
 
-    test "overview validation count includes spacecraft interpretation findings" do
+    test "inlined validation surface includes spacecraft interpretation findings" do
       {conn, _org, mission} = signed_in_org_and_mission()
       _spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
-      assert has_element?(
-               view,
-               "#mission-network-validation",
-               "Mission network, assignment, and interpretation findings."
-             )
-
-      assert has_element?(view, "#mission-network-validation span", "6")
+      assert has_element?(view, "#comms-validation-spacecraft-interpretation")
+      assert render(view) =~ "Findings"
     end
 
     test "expands the Comms section and marks Overview active on /comms" do
@@ -644,7 +639,7 @@ defmodule CadenceWeb.CommsLiveTest do
       {conn, org, mission} = signed_in_org_and_mission()
 
       {:ok, incomplete_view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(incomplete_view, "#comms-validation-findings")
       assert has_element?(incomplete_view, "#comms-validation-mission-network")
@@ -656,7 +651,7 @@ defmodule CadenceWeb.CommsLiveTest do
       _setup = persist_complete_comms_setup!(org, mission)
 
       {:ok, complete_view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       complete_html = render(complete_view)
 
@@ -675,7 +670,7 @@ defmodule CadenceWeb.CommsLiveTest do
       needs_telemetry =
         TestFixtures.persist_spacecraft!(mission, display_name: "Needs Telemetry", scid: 42)
 
-      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(view, "#comms-validation-spacecraft-interpretation")
       assert html =~ "Spacecraft Interpretation"
@@ -726,7 +721,7 @@ defmodule CadenceWeb.CommsLiveTest do
       assert {:ok, _available_downlink} =
                Cadence.persist_path_template(org.organization_id, available_downlink)
 
-      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(view, "#comms-validation-link-assignment")
       assert html =~ "Needs Assignment needs a downlink assignment"
@@ -788,7 +783,7 @@ defmodule CadenceWeb.CommsLiveTest do
         })
 
       findings =
-        CadenceWeb.CommsValidationLive.findings(
+        CadenceWeb.CommsValidation.findings(
           [endpoint_a, endpoint_b],
           [],
           [provider],
@@ -813,7 +808,7 @@ defmodule CadenceWeb.CommsLiveTest do
         })
 
       findings =
-        CadenceWeb.CommsValidationLive.findings(
+        CadenceWeb.CommsValidation.findings(
           [endpoint_a, endpoint_b],
           [],
           [provider],
@@ -855,7 +850,7 @@ defmodule CadenceWeb.CommsLiveTest do
                )
 
       {:ok, validation_view, html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(validation_view, "#comms-validation-mission-network")
       assert html =~ "Alpha downlink uses TCP Provider v1; latest is v2."
@@ -944,7 +939,7 @@ defmodule CadenceWeb.CommsLiveTest do
                )
 
       {:ok, validation_view, validation_html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/validation")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(validation_view, "#comms-validation-findings")
       assert validation_html =~ "Alpha downlink references an archived provider"

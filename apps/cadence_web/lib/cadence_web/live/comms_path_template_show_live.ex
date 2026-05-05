@@ -68,7 +68,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
          )
          |> assign(
            :profile_ref_findings,
-           CadenceWeb.CommsValidationLive.profile_ref_findings(
+           CadenceWeb.CommsValidation.profile_ref_findings(
              path_template,
              provider_profiles_by_id,
              transport_profiles_by_id,

@@ -62,13 +62,6 @@ defmodule CadenceWeb.CommsComponents do
           Link Templates
         </.comms_nav_link>
         <.comms_nav_link
-          id="comms-nav-validation"
-          active={@active == :validation}
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/validation"}
-        >
-          Validation
-        </.comms_nav_link>
-        <.comms_nav_link
           id="comms-nav-advanced"
           active={@active in [:source_endpoints, :transport_profiles]}
           navigate={~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"}

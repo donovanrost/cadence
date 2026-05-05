@@ -4,6 +4,8 @@ defmodule CadenceWeb.CommsOverviewLive do
 
   import CadenceWeb.CommsComponents
 
+  alias CadenceWeb.CommsValidation
+
   @impl true
   def mount(_params, _session, socket) do
     summary = load_summary(socket.assigns)
@@ -35,7 +37,7 @@ defmodule CadenceWeb.CommsOverviewLive do
             <.status_badge status={if @blocking_findings == 0, do: :ready, else: :warning} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div class="mt-5 grid gap-3 md:grid-cols-3">
             <.network_resource_card
               id="mission-network-links"
               title="Links"
@@ -51,13 +53,6 @@ defmodule CadenceWeb.CommsOverviewLive do
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
             />
             <.network_resource_card
-              id="mission-network-validation"
-              title="Validation"
-              value={@finding_count}
-              description="Mission network, assignment, and interpretation findings."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/validation"}
-            />
-            <.network_resource_card
               id="mission-network-advanced"
               title="Advanced"
               value={@source_endpoint_count}
@@ -65,6 +60,67 @@ defmodule CadenceWeb.CommsOverviewLive do
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"}
             />
           </div>
+        </div>
+      </section>
+
+      <section id="comms-validation-page" class="card bg-base-200">
+        <div class="card-body p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="hud-label mb-2">Setup Checks</p>
+              <h2 class="text-lg font-semibold">Comms Validation</h2>
+              <p class="mt-1 text-sm text-base-content/60">
+                These checks focus on whether saved comms setup can produce usable operational
+                paths later. Runtime contact health belongs under the future ops workspace.
+              </p>
+            </div>
+            <.status_badge
+              status={if @findings == [], do: :ready, else: :warning}
+              label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
+            />
+          </div>
+
+          <%= if @findings == [] do %>
+            <div class="mt-6">
+              <.empty_state
+                icon="hero-check-circle"
+                title="No comms setup findings"
+                description="This mission has enough comms setup structure for the current validation rules."
+              />
+            </div>
+          <% else %>
+            <div id="comms-validation-findings" class="mt-6 space-y-5">
+              <section :for={group <- @finding_groups} id={group.id} class="space-y-3">
+                <div>
+                  <p class="hud-label mb-1">{group.title}</p>
+                  <p class="text-sm text-base-content/60">{group.description}</p>
+                </div>
+
+                <div
+                  :for={finding <- group.findings}
+                  class="border border-base-300 bg-base-100/40 p-4"
+                >
+                  <div class="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 class="font-semibold">{finding.title}</h3>
+                      <p class="mt-1 text-sm text-base-content/60">{finding.body}</p>
+                      <.link
+                        :if={Map.get(finding, :action_navigate)}
+                        navigate={finding.action_navigate}
+                        class="btn btn-primary btn-xs mt-3"
+                      >
+                        {Map.get(finding, :action_label, "Review")}
+                      </.link>
+                    </div>
+                    <.status_badge
+                      status={finding.severity}
+                      label={CommsValidation.finding_label(finding.severity)}
+                    />
+                  </div>
+                </div>
+              </section>
+            </div>
+          <% end %>
         </div>
       </section>
     </div>
@@ -106,7 +162,7 @@ defmodule CadenceWeb.CommsOverviewLive do
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
 
     findings =
-      CadenceWeb.CommsValidationLive.findings_for_resources(
+      CommsValidation.findings_for_resources(
         scope.organization_id,
         mission.mission_id,
         spacecraft,
@@ -120,7 +176,8 @@ defmodule CadenceWeb.CommsOverviewLive do
       source_endpoint_count: length(source_endpoints),
       transport_profile_count: length(transport_profiles),
       path_template_count: length(path_templates),
-      finding_count: length(findings),
+      findings: findings,
+      finding_groups: CommsValidation.finding_groups(findings),
       blocking_findings: Enum.count(findings, &(&1.severity == :missing))
     }
   end

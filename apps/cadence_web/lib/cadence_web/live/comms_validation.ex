@@ -1,110 +1,20 @@
-defmodule CadenceWeb.CommsValidationLive do
-  @moduledoc false
-  use CadenceWeb, :live_view
+defmodule CadenceWeb.CommsValidation do
+  @moduledoc """
+  Pure logic for computing comms-setup validation findings and grouping
+  them for display. Used by `CommsOverviewLive` (which renders the
+  findings inline) and `CommsPathTemplateShowLive` (which renders a
+  scoped subset for a single link template).
+  """
 
-  import CadenceWeb.CommsComponents
+  use Phoenix.VerifiedRoutes,
+    endpoint: CadenceWeb.Endpoint,
+    router: CadenceWeb.Router,
+    statics: CadenceWeb.static_paths()
+
+  import CadenceWeb.CommsComponents, only: [display_name: 2, human_atom: 1]
 
   alias Cadence.Applications.TelemetryDecom
   alias CadenceWeb.SpacecraftCommsReadiness
-
-  @impl true
-  def mount(_params, _session, socket) do
-    %{current_scope: scope, current_mission: mission} = socket.assigns
-
-    spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
-    source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
-    provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)
-
-    transport_profiles =
-      Cadence.list_transport_profiles(scope.organization_id, mission.mission_id)
-
-    path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
-
-    findings =
-      findings_for_resources(
-        scope.organization_id,
-        mission.mission_id,
-        spacecraft,
-        source_endpoints,
-        path_templates,
-        provider_profiles,
-        transport_profiles
-      )
-
-    {:ok,
-     socket
-     |> assign(:page_title, "Comms Validation")
-     |> assign(:nav_item, :comms)
-     |> assign(:findings, findings)
-     |> assign(:finding_groups, finding_groups(findings))}
-  end
-
-  @impl true
-  def render(assigns) do
-    ~H"""
-    <div id="comms-validation-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:validation} />
-
-      <section class="card bg-base-200">
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="hud-label mb-2">Setup Checks</p>
-              <h2 class="text-lg font-semibold">Comms Validation</h2>
-              <p class="mt-1 text-sm text-base-content/60">
-                These checks focus on whether saved comms setup can produce usable operational
-                paths later. Runtime contact health belongs under the future ops workspace.
-              </p>
-            </div>
-            <.status_badge
-              status={if @findings == [], do: :ready, else: :warning}
-              label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
-            />
-          </div>
-
-          <%= if @findings == [] do %>
-            <div class="mt-6">
-              <.empty_state
-                icon="hero-check-circle"
-                title="No comms setup findings"
-                description="This mission has enough comms setup structure for the current validation rules."
-              />
-            </div>
-          <% else %>
-            <div id="comms-validation-findings" class="mt-6 space-y-5">
-              <section :for={group <- @finding_groups} id={group.id} class="space-y-3">
-                <div>
-                  <p class="hud-label mb-1">{group.title}</p>
-                  <p class="text-sm text-base-content/60">{group.description}</p>
-                </div>
-
-                <div
-                  :for={finding <- group.findings}
-                  class="border border-base-300 bg-base-100/40 p-4"
-                >
-                  <div class="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 class="font-semibold">{finding.title}</h3>
-                      <p class="mt-1 text-sm text-base-content/60">{finding.body}</p>
-                      <.link
-                        :if={Map.get(finding, :action_navigate)}
-                        navigate={finding.action_navigate}
-                        class="btn btn-primary btn-xs mt-3"
-                      >
-                        {Map.get(finding, :action_label, "Review")}
-                      </.link>
-                    </div>
-                    <.status_badge status={finding.severity} label={finding_label(finding.severity)} />
-                  </div>
-                </div>
-              </section>
-            </div>
-          <% end %>
-        </div>
-      </section>
-    </div>
-    """
-  end
 
   def findings_for_mission(organization_id, mission_id) do
     findings_for_resources(
@@ -770,7 +680,7 @@ defmodule CadenceWeb.CommsValidationLive do
   defp add_if(findings, true, finding), do: findings ++ [finding]
   defp add_if(findings, false, _finding), do: findings
 
-  defp finding_groups(findings) do
+  def finding_groups(findings) do
     findings
     |> Enum.group_by(&Map.get(&1, :owner, :mission_network))
     |> Enum.flat_map(fn {owner, findings} ->
@@ -810,7 +720,7 @@ defmodule CadenceWeb.CommsValidationLive do
     }
   end
 
-  defp finding_label(:missing), do: "Blocking"
-  defp finding_label(:warning), do: "Warning"
-  defp finding_label(other), do: human_atom(other)
+  def finding_label(:missing), do: "Blocking"
+  def finding_label(:warning), do: "Warning"
+  def finding_label(other), do: human_atom(other)
 end
