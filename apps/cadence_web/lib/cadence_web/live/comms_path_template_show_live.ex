@@ -116,8 +116,6 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
   def render(assigns) do
     ~H"""
     <div id="comms-path-template-show-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:path_templates} />
-
       <div class="flex items-start justify-between gap-4">
         <div>
           <.link

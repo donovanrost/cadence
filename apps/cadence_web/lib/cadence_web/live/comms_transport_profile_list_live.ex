@@ -25,8 +25,6 @@ defmodule CadenceWeb.CommsTransportProfileListLive do
   def render(assigns) do
     ~H"""
     <div id="comms-transport-profiles-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:transport_profiles} />
-
       <section class="card bg-base-200">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">

@@ -25,8 +25,6 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
   def render(assigns) do
     ~H"""
     <div id="comms-source-endpoints-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:source_endpoints} />
-
       <section class="card bg-base-200">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">

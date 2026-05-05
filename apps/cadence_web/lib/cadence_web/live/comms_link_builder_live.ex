@@ -47,8 +47,6 @@ defmodule CadenceWeb.CommsLinkBuilderLive do
   def render(assigns) do
     ~H"""
     <div id="comms-link-builder-page" class="space-y-6 max-w-4xl">
-      <.comms_header current_mission={@current_mission} active={:links} />
-
       <div>
         <.link
           navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}

@@ -158,13 +158,9 @@ defmodule CadenceWeb.CommsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
 
       assert has_element?(view, "#comms-overview-page")
-      assert has_element?(view, "#comms-section-nav")
-      assert has_element?(view, "#comms-nav-links")
-      assert has_element?(view, "#comms-nav-path-templates")
       assert has_element?(view, "#mission-network-resources")
       assert has_element?(view, "#mission-network-links")
       assert has_element?(view, "#mission-network-protocol-behaviors")
-      assert render(view) =~ "Mission Network"
       assert render(view) =~ "Shared mission connectivity"
       assert has_element?(view, "#comms-validation-page")
     end

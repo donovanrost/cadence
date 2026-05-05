@@ -79,8 +79,6 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
   def render(assigns) do
     ~H"""
     <div id="comms-transport-profile-show-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:transport_profiles} />
-
       <div class="flex items-start justify-between gap-4">
         <div>
           <.link

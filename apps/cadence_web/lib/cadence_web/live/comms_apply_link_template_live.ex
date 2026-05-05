@@ -128,8 +128,6 @@ defmodule CadenceWeb.CommsApplyLinkTemplateLive do
   def render(assigns) do
     ~H"""
     <div id="comms-apply-link-template-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:overview} />
-
       <div class="max-w-4xl">
         <.link navigate={~p"/missions/#{@current_mission.mission_id}/comms"} class="text-sm text-primary hover:underline">
           &larr; Comms readiness

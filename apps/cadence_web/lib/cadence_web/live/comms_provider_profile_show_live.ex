@@ -79,8 +79,6 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
   def render(assigns) do
     ~H"""
     <div id="comms-provider-profile-show-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:provider_profiles} />
-
       <div class="flex items-start justify-between gap-4">
         <div>
           <.link

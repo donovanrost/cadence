@@ -21,8 +21,6 @@ defmodule CadenceWeb.CommsOverviewLive do
   def render(assigns) do
     ~H"""
     <div id="comms-overview-page" class="space-y-6">
-      <.comms_header current_mission={@current_mission} active={:overview} />
-
       <section id="mission-network-resources" class="card bg-base-200 border border-base-300">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
