@@ -26,7 +26,7 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
         {:ok,
          socket
          |> assign(:page_title, display_name(provider_profile, :provider_profile_id))
-         |> assign(:nav_item, :comms)
+         |> assign(:nav_item, :comms_providers)
          |> assign(:provider_profile, provider_profile)
          |> assign(:versions, versions)
          |> assign(:linked_path_count, linked_path_count(provider_profile, path_templates))

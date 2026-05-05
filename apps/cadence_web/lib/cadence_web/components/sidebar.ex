@@ -16,6 +16,7 @@ defmodule CadenceWeb.Components.Sidebar do
   @spec section_active?(atom() | nil, atom()) :: boolean()
   def section_active?(:comms, :comms), do: true
   def section_active?(:comms_overview, :comms), do: true
+  def section_active?(:comms_providers, :comms), do: true
   def section_active?(_, _), do: false
 
   @doc """

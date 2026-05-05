@@ -111,6 +111,12 @@
             >
               Overview
             </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
+              active={assigns[:nav_item] == :comms_providers}
+            >
+              Providers
+            </:item>
           </.nav_section>
         </ul>
       </nav>

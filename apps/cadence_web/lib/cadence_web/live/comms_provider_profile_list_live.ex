@@ -14,7 +14,7 @@ defmodule CadenceWeb.CommsProviderProfileListLive do
     {:ok,
      socket
      |> assign(:page_title, "Comms Providers")
-     |> assign(:nav_item, :comms)
+     |> assign(:nav_item, :comms_providers)
      |> assign(:provider_profiles, provider_profiles)
      |> assign(:path_templates, path_templates)}
   end

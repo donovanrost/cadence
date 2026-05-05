@@ -65,20 +65,13 @@ defmodule CadenceWeb.CommsOverviewLive do
             <.status_badge status={if @blocking_findings == 0, do: :ready, else: :warning} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <.network_resource_card
               id="mission-network-links"
               title="Links"
               value={@path_template_count}
               description="Create shared mission paths without editing raw objects."
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/links/new"}
-            />
-            <.network_resource_card
-              id="mission-network-providers"
-              title="Providers"
-              value={@provider_profile_count}
-              description="External ground-side systems and adapters."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
             />
             <.network_resource_card
               id="mission-network-protocol-behaviors"

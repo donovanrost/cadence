@@ -378,7 +378,7 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
       {:ok, provider_profile} ->
         socket
         |> assign(:page_title, "New Provider Version")
-        |> assign(:nav_item, :comms)
+        |> assign(:nav_item, :comms_providers)
         |> assign(:provider_profile, provider_profile)
         |> assign(
           :return_to,
@@ -401,7 +401,7 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
 
     socket
     |> assign(:page_title, "New Provider")
-    |> assign(:nav_item, :comms)
+    |> assign(:nav_item, :comms_providers)
     |> assign(:provider_profile, nil)
     |> assign(:return_to, ~p"/missions/#{mission.mission_id}/comms/providers")
     |> assign(:back_label, "Providers")

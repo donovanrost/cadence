@@ -165,7 +165,6 @@ defmodule CadenceWeb.CommsLiveTest do
       assert has_element?(view, "#configure-missing-links")
       assert has_element?(view, "#mission-network-resources")
       assert has_element?(view, "#mission-network-links")
-      assert has_element?(view, "#mission-network-providers")
       assert has_element?(view, "#mission-network-protocol-behaviors")
       assert has_element?(view, "#mission-network-link-templates")
       assert has_element?(view, "#mission-network-validation")
