@@ -8,6 +8,7 @@ defmodule CadenceWeb.MissionShowLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias Cadence.Contacts.{LinkAssignment, PathTemplate, ProviderProfile}
   alias Cadence.Missions.Mission
   alias CadenceWeb.TestFixtures
 
@@ -30,20 +31,145 @@ defmodule CadenceWeb.MissionShowLiveTest do
     persisted
   end
 
+  defp persist_ready_spacecraft_comms_setup!(org, mission) do
+    spacecraft =
+      TestFixtures.persist_spacecraft!(mission, display_name: "Alpha", scid: 42)
+
+    assert {:ok, endpoint} =
+             Cadence.ensure_managed_spacecraft_source_endpoint(org.organization_id, spacecraft)
+
+    provider =
+      ProviderProfile.new(%{
+        mission_id: mission.mission_id,
+        adapter_key: :tcp_socket,
+        metadata: %{"display_name" => "TCP Provider"}
+      })
+
+    assert {:ok, provider} = Cadence.persist_provider_profile(org.organization_id, provider)
+
+    path_template =
+      PathTemplate.new(%{
+        mission_id: mission.mission_id,
+        direction: :downlink,
+        selection_role: :selected,
+        source_endpoint_ref: endpoint.source_endpoint_id,
+        provider_profile_refs: [
+          %{"provider_profile_id" => provider.provider_profile_id, "version" => provider.version}
+        ],
+        metadata: %{"display_name" => "Alpha downlink"}
+      })
+
+    assert {:ok, path_template} =
+             Cadence.persist_path_template(org.organization_id, path_template)
+
+    link_assignment =
+      LinkAssignment.new(%{
+        mission_id: mission.mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        source_endpoint_ref: endpoint.source_endpoint_id,
+        path_template_id: path_template.path_template_id,
+        path_template_version: path_template.version,
+        direction: path_template.direction,
+        selection_role: path_template.selection_role,
+        provider_profile_refs: path_template.provider_profile_refs,
+        metadata: %{"display_name" => "Alpha downlink"}
+      })
+
+    assert {:ok, _link_assignment} =
+             Cadence.persist_link_assignment(org.organization_id, link_assignment)
+
+    %{
+      spacecraft: spacecraft,
+      endpoint: endpoint,
+      provider: provider,
+      path_template: path_template
+    }
+  end
+
   describe "mount" do
-    test "renders mission details with the mission sidebar layout" do
+    test "renders mission heading with the mission sidebar layout" do
       {conn, org} = signed_in_conn()
       mission = persist_mission!(org, "alpha", "Alpha Mission")
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}")
+      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}")
 
+      assert has_element?(view, "#mission-overview-page")
       assert html =~ "Alpha Mission"
       assert html =~ "alpha"
-      assert html =~ mission.mission_id
       # Sidebar Overview nav item is highlighted.
       assert html =~ ~r/border-primary[^"]*".*Overview/s
       # Sidebar back link shows the org display_name.
       assert html =~ "Cadence Ops"
+    end
+
+    test "renders the spacecraft readiness table and Apply Link Template CTA" do
+      {conn, org} = signed_in_conn()
+      mission = persist_mission!(org, "primary", "Primary Mission")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
+
+      assert has_element?(view, "#spacecraft-readiness-section")
+      assert has_element?(view, "#configure-missing-links")
+      assert has_element?(view, "#spacecraft-readiness-empty")
+    end
+
+    test "shows spacecraft readiness from SCID, runtime identity, and link state" do
+      {conn, org} = signed_in_conn()
+      mission = persist_mission!(org, "primary", "Primary Mission")
+      missing_scid = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
+      ready = persist_ready_spacecraft_comms_setup!(org, mission)
+
+      needs_assignment =
+        TestFixtures.persist_spacecraft!(mission, display_name: "Needs Assignment", scid: 84)
+
+      assert {:ok, _endpoint} =
+               Cadence.ensure_managed_spacecraft_source_endpoint(
+                 org.organization_id,
+                 needs_assignment
+               )
+
+      available_path =
+        PathTemplate.new(%{
+          mission_id: mission.mission_id,
+          direction: :downlink,
+          selection_role: :selected,
+          source_endpoint_ref: nil,
+          provider_profile_refs: [
+            %{
+              "provider_profile_id" => ready.provider.provider_profile_id,
+              "version" => ready.provider.version
+            }
+          ],
+          metadata: %{"display_name" => "Assignable downlink"}
+        })
+
+      assert {:ok, _available_path} =
+               Cadence.persist_path_template(org.organization_id, available_path)
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
+      html = render(view)
+
+      assert html =~ missing_scid.display_name
+      assert html =~ "Set SCID"
+      assert html =~ "Needs identity"
+
+      assert html =~ ready.spacecraft.display_name
+      assert html =~ "Managed identity"
+      assert html =~ "Ready for SCID-based telemetry routing."
+      assert html =~ "Ready"
+
+      assert html =~ needs_assignment.display_name
+      assert html =~ "Available to assign"
+      assert html =~ "2 available mission templates"
+      assert html =~ "Assign an available downlink link template to this spacecraft."
+
+      assert html =~
+               ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/readiness"
+
+      assert html =~
+               ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/links"
+
+      assert html =~ "Link assignments"
     end
   end
 

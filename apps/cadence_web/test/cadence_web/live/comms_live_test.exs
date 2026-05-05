@@ -161,8 +161,6 @@ defmodule CadenceWeb.CommsLiveTest do
       assert has_element?(view, "#comms-section-nav")
       assert has_element?(view, "#comms-nav-links")
       assert has_element?(view, "#comms-nav-path-templates")
-      assert has_element?(view, "#spacecraft-readiness-table")
-      assert has_element?(view, "#configure-missing-links")
       assert has_element?(view, "#mission-network-resources")
       assert has_element?(view, "#mission-network-links")
       assert has_element?(view, "#mission-network-protocol-behaviors")
@@ -170,65 +168,6 @@ defmodule CadenceWeb.CommsLiveTest do
       assert has_element?(view, "#mission-network-advanced")
       assert render(view) =~ "Mission Network"
       assert render(view) =~ "Shared mission connectivity"
-      assert render(view) =~ "Spacecraft Readiness"
-    end
-
-    test "shows spacecraft readiness from SCID, runtime identity, and link state" do
-      {conn, org, mission} = signed_in_org_and_mission()
-      missing_scid = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
-      ready = persist_ready_spacecraft_comms_setup!(org, mission)
-
-      needs_assignment =
-        TestFixtures.persist_spacecraft!(mission, display_name: "Needs Assignment", scid: 84)
-
-      assert {:ok, _endpoint} =
-               Cadence.ensure_managed_spacecraft_source_endpoint(
-                 org.organization_id,
-                 needs_assignment
-               )
-
-      available_path =
-        PathTemplate.new(%{
-          mission_id: mission.mission_id,
-          direction: :downlink,
-          selection_role: :selected,
-          source_endpoint_ref: nil,
-          provider_profile_refs: [
-            %{
-              "provider_profile_id" => ready.provider.provider_profile_id,
-              "version" => ready.provider.version
-            }
-          ],
-          metadata: %{"display_name" => "Assignable downlink"}
-        })
-
-      assert {:ok, _available_path} =
-               Cadence.persist_path_template(org.organization_id, available_path)
-
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms")
-      html = render(view)
-
-      assert html =~ missing_scid.display_name
-      assert html =~ "Set SCID"
-      assert html =~ "Needs identity"
-
-      assert html =~ ready.spacecraft.display_name
-      assert html =~ "Managed identity"
-      assert html =~ "Ready for SCID-based telemetry routing."
-      assert html =~ "Ready"
-
-      assert html =~ needs_assignment.display_name
-      assert html =~ "Available to assign"
-      assert html =~ "2 available mission templates"
-      assert html =~ "Assign an available downlink link template to this spacecraft."
-
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/readiness"
-
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/links"
-
-      assert html =~ "Link assignments"
     end
 
     test "overview validation count includes spacecraft interpretation findings" do
