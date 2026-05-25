@@ -35,13 +35,14 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@snapshot.import_run_id}"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Import run
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Telemetry snapshot</h1>
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+          {"Import run",
+           ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@snapshot.import_run_id}"},
+          {"Telemetry snapshot", nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry snapshot</h1>
       </div>
 
       <.snapshot_summary_card

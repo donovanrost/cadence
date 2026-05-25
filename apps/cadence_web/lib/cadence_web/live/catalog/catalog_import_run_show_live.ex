@@ -197,13 +197,14 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@run.artifact_id}"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Artifact
-        </.link>
-        <div class="flex items-center gap-3 mt-1">
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+          {"Artifact",
+           ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@run.artifact_id}"},
+          {"Import run", nil}
+        ]} />
+        <div class="flex items-center gap-3 mt-2">
           <h1 class="text-2xl font-bold text-base-content">Import run</h1>
           <.import_run_status_badge status={@run.status} />
         </div>

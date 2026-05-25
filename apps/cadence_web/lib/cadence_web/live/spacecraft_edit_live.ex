@@ -72,15 +72,14 @@ defmodule CadenceWeb.SpacecraftEditLive do
     ~H"""
     <div class="space-y-6 max-w-xl">
       <div>
-        <.link
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
-          }
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; {@current_spacecraft.display_name}
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Spacecraft Identity</h1>
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {@current_spacecraft.display_name,
+           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+          {"Identity", nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">Spacecraft Identity</h1>
         <p class="text-sm text-base-content/60 mt-2">
           SCID is used to resolve TM transfer frames to this spacecraft from the primary header.
         </p>

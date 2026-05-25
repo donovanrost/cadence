@@ -52,13 +52,12 @@ defmodule CadenceWeb.SpacecraftShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Spacecraft
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {@current_spacecraft.display_name, nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">
           {@current_spacecraft.display_name}
         </h1>
       </div>

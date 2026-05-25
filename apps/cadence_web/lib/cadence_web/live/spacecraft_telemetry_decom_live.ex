@@ -228,15 +228,14 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
-          }
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; {@current_spacecraft.display_name}
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Telemetry Interpretation</h1>
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {@current_spacecraft.display_name,
+           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+          {"Telemetry", nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry Interpretation</h1>
         <p class="text-sm text-base-content/60 mt-1">
           APID selection and packet routing configuration for
           <span class="font-semibold text-base-content">{@current_spacecraft.display_name}</span>.

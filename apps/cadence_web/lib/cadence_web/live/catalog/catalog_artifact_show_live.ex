@@ -94,13 +94,12 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Catalog
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">{@artifact.artifact_name}</h1>
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+          {@artifact.artifact_name, nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">{@artifact.artifact_name}</h1>
       </div>
 
       <.artifact_metadata_card current_mission={@current_mission} artifact={@artifact} />

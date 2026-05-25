@@ -118,15 +118,14 @@ defmodule CadenceWeb.SpacecraftLinksLive do
     <div id="spacecraft-links-page" class="space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
-            }
-            class="text-sm text-primary hover:underline"
-          >
-            &larr; Readiness
-          </.link>
-          <p class="hud-label mt-4 mb-2">Link Assignments</p>
+          <.breadcrumbs items={[
+            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+            {@current_spacecraft.display_name,
+             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+            {"Links", nil}
+          ]} />
+          <p class="hud-label mt-3 mb-2">Link Assignments</p>
           <h1 class="text-2xl font-bold text-base-content">
             {@current_spacecraft.display_name}
           </h1>

@@ -179,10 +179,12 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link navigate={~p"/missions/#{@current_mission.mission_id}/catalog"} class="text-sm text-primary hover:underline">
-          &larr; Catalog
-        </.link>
-        <div class="mt-1 flex items-start justify-between gap-4">
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+          {@database.name, nil}
+        ]} />
+        <div class="mt-2 flex items-start justify-between gap-4">
           <div>
             <h1 class="text-2xl font-bold text-base-content">{@database.name}</h1>
             <p class="font-mono text-sm text-base-content/50">{@database.slug}</p>

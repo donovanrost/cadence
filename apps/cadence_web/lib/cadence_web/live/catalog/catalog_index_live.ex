@@ -51,6 +51,10 @@ defmodule CadenceWeb.CatalogIndexLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
+      <.breadcrumbs items={[
+        {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+        {"Catalog", nil}
+      ]} />
       <div class="flex items-start justify-between gap-4">
         <div>
           <h1 class="text-2xl font-bold text-base-content">Catalog</h1>

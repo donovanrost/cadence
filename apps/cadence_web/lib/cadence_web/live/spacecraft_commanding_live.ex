@@ -20,15 +20,14 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
     <div id="spacecraft-commanding-page" class="space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
-            }
-            class="text-sm text-primary hover:underline"
-          >
-            &larr; {@current_spacecraft.display_name}
-          </.link>
-          <p class="hud-label mt-4 mb-2">Command Interpretation</p>
+          <.breadcrumbs items={[
+            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+            {@current_spacecraft.display_name,
+             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+            {"Commanding", nil}
+          ]} />
+          <p class="hud-label mt-3 mb-2">Command Interpretation</p>
           <h1 class="text-2xl font-bold text-base-content">
             Commanding for {@current_spacecraft.display_name}
           </h1>

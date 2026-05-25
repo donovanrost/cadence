@@ -210,4 +210,26 @@ defmodule CadenceWeb.UI do
 
   defp display_label(%{display_name: name, email: email}) when name in [nil, ""], do: email
   defp display_label(%{display_name: name}), do: name
+
+  @doc """
+  Single-line breadcrumb trail. Items are `{label, path}` tuples; pass
+  `nil` for the path to render the segment as plain text (used for the
+  final segment, which represents the current page).
+  """
+  attr :items, :list, required: true
+
+  def breadcrumbs(assigns) do
+    ~H"""
+    <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-1.5 text-xs text-base-content/60">
+      <%= for {{label, path}, index} <- Enum.with_index(@items) do %>
+        <span :if={index > 0} class="hero-chevron-right h-3 w-3 opacity-60"></span>
+        <%= if path do %>
+          <.link navigate={path} class="hover:text-primary">{label}</.link>
+        <% else %>
+          <span class="text-base-content">{label}</span>
+        <% end %>
+      <% end %>
+    </nav>
+    """
+  end
 end

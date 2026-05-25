@@ -64,19 +64,8 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
     ~H"""
     <div class="space-y-6">
       <div>
-        <.link
-          navigate={
-            if @database do
-              ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{@database.catalog_database_id}"
-            else
-              ~p"/missions/#{@current_mission.mission_id}/catalog"
-            end
-          }
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Catalog database
-        </.link>
-        <div class="mt-1">
+        <.breadcrumbs items={revision_breadcrumb_items(assigns)} />
+        <div class="mt-2">
           <h1 class="text-2xl font-bold text-base-content">{@revision.revision_label}</h1>
           <p class="font-mono text-sm text-base-content/50">
             Revision {@revision.revision_number}
@@ -256,5 +245,27 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
     fetch_optional(fn ->
       Catalog.fetch_command_snapshot(organization_id, mission_id, snapshot_id)
     end)
+  end
+
+  defp revision_breadcrumb_items(%{current_mission: mission, database: nil, revision: revision}) do
+    [
+      {mission.display_name, ~p"/missions/#{mission.mission_id}"},
+      {"Catalog", ~p"/missions/#{mission.mission_id}/catalog"},
+      {revision.revision_label, nil}
+    ]
+  end
+
+  defp revision_breadcrumb_items(%{
+         current_mission: mission,
+         database: database,
+         revision: revision
+       }) do
+    [
+      {mission.display_name, ~p"/missions/#{mission.mission_id}"},
+      {"Catalog", ~p"/missions/#{mission.mission_id}/catalog"},
+      {database.name,
+       ~p"/missions/#{mission.mission_id}/catalog/databases/#{database.catalog_database_id}"},
+      {revision.revision_label, nil}
+    ]
   end
 end

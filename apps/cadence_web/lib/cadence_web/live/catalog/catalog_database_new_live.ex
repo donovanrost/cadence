@@ -178,13 +178,12 @@ defmodule CadenceWeb.CatalogDatabaseNewLive do
     ~H"""
     <div class="space-y-6 max-w-2xl">
       <div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; Catalog
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">New catalog database</h1>
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
+          {"New database", nil}
+        ]} />
+        <h1 class="text-2xl font-bold text-base-content mt-2">New catalog database</h1>
       </div>
 
       <.upload_card uploads={@uploads} form={@database_form} />
