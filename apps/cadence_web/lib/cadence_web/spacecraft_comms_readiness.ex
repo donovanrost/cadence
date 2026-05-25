@@ -129,7 +129,7 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
 
   def missing_path?(%{scid: nil}), do: false
   def missing_path?(%{endpoint_ref: nil}), do: false
-  def missing_path?(%{status: :warning}), do: true
+  def missing_path?(%{status: :attention}), do: true
   def missing_path?(_row), do: false
 
   def identity_ready?(%{scid: scid}) when is_integer(scid), do: true
@@ -172,15 +172,15 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
     provider_backed_downlink?(template) and template.selection_role == :selected
   end
 
-  defp readiness_status(%{scid: nil}, _endpoint_match, _paths), do: :missing
+  defp readiness_status(%{scid: nil}, _endpoint_match, _paths), do: :blocked
 
   defp readiness_status(_spacecraft, %{scid_match_count: count}, _paths) when count > 1,
-    do: :missing
+    do: :blocked
 
-  defp readiness_status(_spacecraft, %{endpoint: nil}, _paths), do: :missing
+  defp readiness_status(_spacecraft, %{endpoint: nil}, _paths), do: :blocked
 
   defp readiness_status(_spacecraft, _endpoint_match, paths) do
-    if ready_downlink_path(paths), do: :ready, else: :warning
+    if ready_downlink_path(paths), do: :ready, else: :attention
   end
 
   defp readiness_issue(%{scid: nil}, _endpoint_match, _paths, _available_paths),
@@ -250,6 +250,6 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
   end
 
   defp readiness_status_label(:ready), do: "Ready"
-  defp readiness_status_label(:warning), do: "Needs link"
-  defp readiness_status_label(:missing), do: "Needs identity"
+  defp readiness_status_label(:attention), do: "Needs link"
+  defp readiness_status_label(:blocked), do: "Needs identity"
 end

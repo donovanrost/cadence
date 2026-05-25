@@ -224,18 +224,18 @@ defmodule CadenceWeb.CommsApplyLinkTemplateLive do
                   Cadence applied what it could and reports every skipped or failed row below.
                 </p>
               </div>
-              <.status_badge status={if @last_result.failed_count == 0, do: :ready, else: :warning} />
+              <.status_badge status={if @last_result.failed_count == 0, do: :ready, else: :attention} />
             </div>
             <div class="mt-4 grid gap-3 md:grid-cols-3">
               <.application_count_card id="link-application-applied-count" label="Applied" value={@last_result.applied_count} status={:ready} />
               <.application_count_card id="link-application-skipped-count" label="Skipped" value={@last_result.skipped_count} status={:info} />
-              <.application_count_card id="link-application-failed-count" label="Failed" value={@last_result.failed_count} status={if @last_result.failed_count == 0, do: :ready, else: :missing} />
+              <.application_count_card id="link-application-failed-count" label="Failed" value={@last_result.failed_count} status={if @last_result.failed_count == 0, do: :ready, else: :blocked} />
             </div>
           </section>
 
           <div class="grid gap-3 md:grid-cols-3">
             <.application_count_card id="link-application-ready-count" label="Ready to Apply" value={@ready_count} status={:ready} />
-            <.application_count_card id="link-application-missing-scid-count" label="Missing SCID" value={@missing_scid_count} status={:missing} />
+            <.application_count_card id="link-application-missing-scid-count" label="Missing SCID" value={@missing_scid_count} status={:blocked} />
             <.application_count_card id="link-application-existing-count" label="Already Assigned" value={@already_configured_count} status={:info} />
           </div>
 
@@ -266,7 +266,7 @@ defmodule CadenceWeb.CommsApplyLinkTemplateLive do
                   >
                     Clear
                   </button>
-                  <.status_badge status={if @ready_count == 0, do: :warning, else: :ready} />
+                  <.status_badge status={if @ready_count == 0, do: :attention, else: :ready} />
                 </div>
               </div>
 
@@ -389,7 +389,7 @@ defmodule CadenceWeb.CommsApplyLinkTemplateLive do
       id: spacecraft.spacecraft_id,
       spacecraft: spacecraft,
       kind: :missing_scid,
-      status: :missing,
+      status: :blocked,
       label: "Missing SCID",
       detail: "Set SCID before Cadence can generate a spacecraft-specific runtime identity."
     }
@@ -400,7 +400,7 @@ defmodule CadenceWeb.CommsApplyLinkTemplateLive do
       id: spacecraft.spacecraft_id,
       spacecraft: spacecraft,
       kind: :missing_template,
-      status: :warning,
+      status: :attention,
       label: "Select template",
       detail: "Select a mission link template before Cadence can preview assignments."
     }

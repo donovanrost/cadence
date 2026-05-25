@@ -108,16 +108,17 @@ defmodule CadenceWeb.CoreComponents do
   end
 
   @doc """
-  Renders a colored status indicator dot.
+  Renders a colored status indicator dot. Same vocabulary as `status_badge/1`
+  in `CadenceWeb.CommsComponents` — denser visual for tight layouts.
 
   ## Examples
 
-      <.status_dot status={:online} />
-      <.status_dot status={:fault} size={:sm} />
+      <.status_dot status={:ready} />
+      <.status_dot status={:attention} size={:sm} />
   """
   attr :status, :atom,
     required: true,
-    values: [:online, :offline, :standby, :fault, :critical, :warning, :info, :success, :nominal]
+    values: [:ready, :attention, :blocked, :info]
 
   attr :size, :atom, values: [:sm, :md], default: :md
   attr :class, :string, default: nil
@@ -137,15 +138,10 @@ defmodule CadenceWeb.CoreComponents do
   defp size_class(:sm), do: "w-1.5 h-1.5"
   defp size_class(:md), do: "w-2 h-2"
 
-  defp status_color(:online), do: "bg-success"
-  defp status_color(:nominal), do: "bg-success"
-  defp status_color(:success), do: "bg-success"
-  defp status_color(:standby), do: "bg-warning"
-  defp status_color(:warning), do: "bg-warning"
-  defp status_color(:fault), do: "bg-error"
-  defp status_color(:critical), do: "bg-error"
+  defp status_color(:ready), do: "bg-success"
+  defp status_color(:attention), do: "bg-warning"
+  defp status_color(:blocked), do: "bg-error"
   defp status_color(:info), do: "bg-info"
-  defp status_color(:offline), do: "bg-base-content/30"
 
   @doc """
   Renders a key-value detail row. Wrap multiple rows in a `divide-y divide-base-300`

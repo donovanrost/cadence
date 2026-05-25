@@ -65,18 +65,18 @@
               <span class="hud-label text-base-content/30">Administration</span>
             </div>
             <ul class="menu menu-sm space-y-0.5">
-              <li>
-                <.link navigate={~p"/admin"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :admin_dashboard, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-                  <span class="hero-chart-bar-square h-4 w-4 opacity-80 flex-shrink-0"></span>
-                  <span class="sidebar-label">Dashboard</span>
-                </.link>
-              </li>
-              <li>
-                <.link navigate={~p"/admin/organizations"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :admin_organizations, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-                  <span class="hero-building-office h-4 w-4 opacity-80 flex-shrink-0"></span>
-                  <span class="sidebar-label">Organizations</span>
-                </.link>
-              </li>
+              <.nav_item
+                navigate={~p"/admin"}
+                icon="hero-chart-bar-square"
+                label="Dashboard"
+                active={assigns[:nav_item] == :admin_dashboard}
+              />
+              <.nav_item
+                navigate={~p"/admin/organizations"}
+                icon="hero-building-office"
+                label="Organizations"
+                active={assigns[:nav_item] == :admin_organizations}
+              />
             </ul>
 
           <% :organization -> %>
@@ -90,18 +90,18 @@
               </span>
             </div>
             <ul class="menu menu-sm space-y-0.5">
-              <li>
-                <.link navigate={~p"/"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :organization_home, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-                  <span class="hero-home h-4 w-4 opacity-80 flex-shrink-0"></span>
-                  <span class="sidebar-label">Home</span>
-                </.link>
-              </li>
-              <li>
-                <.link navigate={~p"/missions"} class={["flex items-center gap-2 px-3 py-2 text-xs tracking-wide uppercase border-l-2 transition-all", if(assigns[:nav_item] == :missions, do: "bg-primary/10 text-primary border-primary shadow-[inset_0_0_20px_rgba(125,207,255,0.1)]", else: "text-base-content/60 border-transparent hover:bg-primary/5 hover:text-base-content hover:border-primary/30")]}>
-                  <span class="hero-rocket-launch h-4 w-4 opacity-80 flex-shrink-0"></span>
-                  <span class="sidebar-label">Missions</span>
-                </.link>
-              </li>
+              <.nav_item
+                navigate={~p"/"}
+                icon="hero-home"
+                label="Home"
+                active={assigns[:nav_item] == :organization_home}
+              />
+              <.nav_item
+                navigate={~p"/missions"}
+                icon="hero-rocket-launch"
+                label="Missions"
+                active={assigns[:nav_item] == :missions}
+              />
             </ul>
 
           <% _ -> %>

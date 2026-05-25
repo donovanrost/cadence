@@ -14,7 +14,7 @@ defmodule CadenceWeb.CommsSourceEndpointNewLive do
     {:ok,
      socket
      |> assign(:page_title, "New Runtime Identity")
-     |> assign(:nav_item, :comms)
+     |> assign(:nav_item, :comms_runtime_identities)
      |> assign(:spacecraft_options, spacecraft_options(spacecraft))
      |> assign(:form, empty_form())}
   end
@@ -48,7 +48,7 @@ defmodule CadenceWeb.CommsSourceEndpointNewLive do
         {:ok, _source_endpoint} ->
           {:noreply,
            push_navigate(socket,
-             to: ~p"/missions/#{mission.mission_id}/comms/advanced/runtime-identities"
+             to: ~p"/missions/#{mission.mission_id}/comms/runtime-identities"
            )}
 
         {:error, reason} ->
@@ -70,7 +70,7 @@ defmodule CadenceWeb.CommsSourceEndpointNewLive do
       <div>
         <.link
           navigate={
-            ~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"
+            ~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities"
           }
           class="text-sm text-primary hover:underline"
         >
@@ -105,7 +105,7 @@ defmodule CadenceWeb.CommsSourceEndpointNewLive do
           <button type="submit" class="btn btn-primary">Create Runtime Identity</button>
           <.link
             navigate={
-              ~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"
+              ~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities"
             }
             class="btn btn-ghost"
           >

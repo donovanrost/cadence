@@ -49,11 +49,32 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
 
       assert {:ok, _} = Cadence.persist_mission(mission)
 
-      {:ok, _view, html} = live(TestFixtures.member_conn(user), ~p"/")
+      {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
 
-      assert html =~ "View Missions"
+      assert html =~ "All missions"
       assert html =~ ~s(href="/missions")
-      assert html =~ ~r/>\s*1\s*</
+      assert has_element?(view, "#organization-stat-missions", "1")
+    end
+
+    test "lists recent missions with status badges" do
+      user = TestFixtures.persist_user!()
+      org = TestFixtures.persist_org!()
+      _ = TestFixtures.grant_membership!(user, org)
+
+      mission =
+        Mission.new(%{
+          organization_id: org.organization_id,
+          slug: "alpha",
+          display_name: "Alpha Mission"
+        })
+
+      assert {:ok, _} = Cadence.persist_mission(mission)
+
+      {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
+
+      assert has_element?(view, "#organization-recent-missions")
+      assert html =~ "Alpha Mission"
+      assert html =~ "No spacecraft"
     end
   end
 

@@ -155,7 +155,7 @@ defmodule CadenceWeb.SpacecraftLinksLive do
                 bytes to spacecraft-owned interpretation.
               </p>
             </div>
-            <.status_badge status={if @runtime_identity, do: :ready, else: :warning} />
+            <.status_badge status={if @runtime_identity, do: :ready, else: :attention} />
           </div>
         </div>
       </section>
@@ -172,7 +172,7 @@ defmodule CadenceWeb.SpacecraftLinksLive do
                 Mission link templates are shown with their assignment state for this spacecraft.
               </p>
             </div>
-            <.status_badge status={if @assigned_count == 0, do: :warning, else: :ready} />
+            <.status_badge status={if @assigned_count == 0, do: :attention, else: :ready} />
           </div>
 
           <%= cond do %>
@@ -394,7 +394,7 @@ defmodule CadenceWeb.SpacecraftLinksLive do
 
   defp assignment_status(:assigned), do: :ready
   defp assignment_status(:available), do: :info
-  defp assignment_status(:legacy_direct), do: :warning
+  defp assignment_status(:legacy_direct), do: :attention
 
   defp assignment_label(:assigned), do: "Assigned"
   defp assignment_label(:available), do: "Available"

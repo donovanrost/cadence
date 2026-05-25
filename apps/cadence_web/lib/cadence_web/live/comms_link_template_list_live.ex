@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsPathTemplateListLive do
+defmodule CadenceWeb.CommsLinkTemplateListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -35,7 +35,7 @@ defmodule CadenceWeb.CommsPathTemplateListLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-path-templates-page" class="space-y-6">
+    <div id="comms-link-templates-page" class="space-y-6">
       <section class="card bg-base-200">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
@@ -49,24 +49,17 @@ defmodule CadenceWeb.CommsPathTemplateListLive do
               </p>
             </div>
             <.status_badge
-              status={if @path_templates == [], do: :missing, else: :ready}
+              status={if @path_templates == [], do: :blocked, else: :ready}
               label={if @path_templates == [], do: "None", else: "Configured"}
             />
           </div>
           <div class="mt-4">
             <.link
-              id="new-shared-link"
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/links/new"}
+              id="new-link-template-link"
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates/new"}
               class="btn btn-primary btn-sm"
             >
-              New Shared Link
-            </.link>
-            <.link
-              id="new-path-template-link"
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates/new"}
-              class="btn btn-ghost btn-sm"
-            >
-              Advanced Template
+              New Link Template
             </.link>
           </div>
 
@@ -76,13 +69,13 @@ defmodule CadenceWeb.CommsPathTemplateListLive do
                 icon="hero-arrows-right-left"
                 title="No link templates"
                 description="Create link templates to define the uplink and downlink options that scheduled contacts can use."
-                action_label="New Shared Link"
-                action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/links/new"}
+                action_label="New Link Template"
+                action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates/new"}
               />
             </div>
           <% else %>
             <div class="mt-6 overflow-x-auto">
-              <table id="path-templates-table" class="table">
+              <table id="link-templates-table" class="table">
                 <thead>
                   <tr>
                     <th class="hud-label">Name</th>

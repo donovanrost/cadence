@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsPathTemplateNewLive do
+defmodule CadenceWeb.CommsLinkTemplateNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -77,7 +77,7 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-path-template-new-page" class="space-y-6 max-w-2xl">
+    <div id="comms-link-template-new-page" class="space-y-6 max-w-2xl">
       <div>
         <.link
           navigate={@return_to}
@@ -94,7 +94,7 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
 
       <div
         :if={@spacecraft_context.spacecraft}
-        id="path-template-spacecraft-context"
+        id="link-template-spacecraft-context"
         class="rounded border border-primary/20 bg-primary/5 p-4 text-sm"
       >
         <p class="hud-label mb-1">Spacecraft Assignment</p>
@@ -103,18 +103,18 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
           SCID {format_context_scid(@spacecraft_context.spacecraft.scid)}
         </p>
         <p class="mt-2 text-xs text-base-content/60">
-          This page creates a reusable mission template. Assign it to this spacecraft from
+          This page creates a reusable mission link template. Assign it to this spacecraft from
           spacecraft links after saving.
         </p>
       </div>
 
       <section
         :if={@pending_profile_upgrades != []}
-        id="path-template-version-upgrade-preview"
+        id="link-template-version-upgrade-preview"
         class="rounded border border-warning/30 bg-warning/10 p-4 text-sm"
       >
         <p class="hud-label mb-2 text-warning">Version Update Preview</p>
-        <p class="font-semibold">This new path version will move pinned profiles forward.</p>
+        <p class="font-semibold">This new link template version will move pinned profiles forward.</p>
         <div class="mt-3 space-y-2">
           <p :for={upgrade <- @pending_profile_upgrades}>
             {upgrade.label} will update from v{upgrade.current_version} to v{upgrade.latest_version}.
@@ -124,7 +124,7 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
 
       <.form
         for={@form}
-        id="path-template-form"
+        id="link-template-form"
         phx-change="validate"
         phx-submit="save"
         class="space-y-4"
@@ -401,7 +401,7 @@ defmodule CadenceWeb.CommsPathTemplateNewLive do
 
       {:error, _reason} ->
         socket
-        |> put_flash(:error, "Path template not found.")
+        |> put_flash(:error, "Link template not found.")
         |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/link-templates")
     end
   end

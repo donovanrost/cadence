@@ -2,7 +2,7 @@ defmodule CadenceWeb.CommsValidation do
   @moduledoc """
   Pure logic for computing comms-setup validation findings and grouping
   them for display. Used by `CommsOverviewLive` (which renders the
-  findings inline) and `CommsPathTemplateShowLive` (which renders a
+  findings inline) and `CommsLinkTemplateShowLive` (which renders a
   scoped subset for a single link template).
   """
 
@@ -169,13 +169,13 @@ defmodule CadenceWeb.CommsValidation do
     []
     |> add_if(source_endpoints == [], %{
       owner: :link_assignment,
-      severity: :missing,
+      severity: :blocked,
       title: "No runtime identities configured",
       body: "Mission links need runtime identities so ingress can resolve runtime ownership."
     })
     |> add_if(path_templates == [], %{
       owner: :mission_network,
-      severity: :missing,
+      severity: :blocked,
       title: "No link templates configured",
       body: "Operations will need at least one reusable uplink or downlink link template."
     })
@@ -206,14 +206,14 @@ defmodule CadenceWeb.CommsValidation do
     []
     |> add_if(provider_profiles == [], %{
       owner: :mission_network,
-      severity: :warning,
+      severity: :attention,
       title: "No providers configured",
       body:
         "Link templates can be sketched without providers, but operations need providers to connect to external streams."
     })
     |> add_if(transport_profiles == [], %{
       owner: :mission_network,
-      severity: :warning,
+      severity: :attention,
       title: "No protocol behaviors configured",
       body:
         "Protocol behaviors define reusable link-local behavior such as uplink gateways and heartbeat monitors."
@@ -236,7 +236,7 @@ defmodule CadenceWeb.CommsValidation do
           not MapSet.member?(endpoint_ids, template.source_endpoint_ref),
         %{
           owner: :link_assignment,
-          severity: :missing,
+          severity: :blocked,
           title: "#{path_name} references a missing runtime identity",
           body:
             "Update the link template or restore runtime identity #{template.source_endpoint_ref}."
@@ -244,14 +244,14 @@ defmodule CadenceWeb.CommsValidation do
       )
       |> add_if(template.provider_profile_refs == [], %{
         owner: :mission_network,
-        severity: :missing,
+        severity: :blocked,
         title: "#{path_name} has no provider",
         body:
           "A link template without a provider cannot connect to or receive from an external stream."
       })
       |> add_if(template.transport_profile_refs == [], %{
         owner: :mission_network,
-        severity: :warning,
+        severity: :attention,
         title: "#{path_name} has no protocol behavior",
         body:
           "A link template without protocol behaviors has no configured protocol or transport-extension behavior."
@@ -318,7 +318,7 @@ defmodule CadenceWeb.CommsValidation do
             mission_id,
             %{
               owner: :mission_network,
-              severity: :missing,
+              severity: :blocked,
               title: "#{path_name} references an archived #{profile_label}",
               body:
                 "#{path_name} still references archived #{profile_name} v#{ref_version}. Create a new link template version with an active #{profile_label}."
@@ -335,7 +335,7 @@ defmodule CadenceWeb.CommsValidation do
             mission_id,
             %{
               owner: :mission_network,
-              severity: :warning,
+              severity: :attention,
               title: "#{path_name} uses stale #{profile_label}",
               body:
                 "#{path_name} uses #{profile_name} v#{ref_version}; latest is v#{latest_profile.version}."
@@ -353,7 +353,7 @@ defmodule CadenceWeb.CommsValidation do
             mission_id,
             %{
               owner: :mission_network,
-              severity: :missing,
+              severity: :blocked,
               title: "#{path_name} references a missing #{profile_label}",
               body: "Update the link template or restore #{profile_label} #{profile_id}."
             }
@@ -416,7 +416,7 @@ defmodule CadenceWeb.CommsValidation do
     [
       %{
         owner: :link_assignment,
-        severity: :missing,
+        severity: :blocked,
         title: "#{spacecraft.display_name} has no runtime identity",
         body: "Sync runtime identity before assigning mission-owned links to this spacecraft.",
         action_label: "Edit identity",
@@ -447,7 +447,7 @@ defmodule CadenceWeb.CommsValidation do
         [
           %{
             owner: :link_assignment,
-            severity: :warning,
+            severity: :attention,
             title: "#{spacecraft.display_name} needs a downlink assignment",
             body: "Assign an available provider-backed mission downlink to this spacecraft.",
             action_label: "Assign link",
@@ -459,7 +459,7 @@ defmodule CadenceWeb.CommsValidation do
         [
           %{
             owner: :link_assignment,
-            severity: :missing,
+            severity: :blocked,
             title: "#{spacecraft.display_name} has no provider-backed downlink available",
             body:
               "Create a shared downlink before assigning mission connectivity to this spacecraft.",
@@ -483,7 +483,7 @@ defmodule CadenceWeb.CommsValidation do
       []
       |> add_if(is_nil(spacecraft.scid), %{
         owner: :spacecraft_interpretation,
-        severity: :missing,
+        severity: :blocked,
         title: "#{spacecraft.display_name} is missing SCID",
         body:
           "Set spacecraft identity so Cadence can recognize downlink bytes for this spacecraft.",
@@ -510,9 +510,9 @@ defmodule CadenceWeb.CommsValidation do
     ]
   end
 
-  defp telemetry_finding_severity(:not_configured), do: :missing
-  defp telemetry_finding_severity(:disabled), do: :missing
-  defp telemetry_finding_severity(_status), do: :warning
+  defp telemetry_finding_severity(:not_configured), do: :blocked
+  defp telemetry_finding_severity(:disabled), do: :blocked
+  defp telemetry_finding_severity(_status), do: :attention
 
   defp telemetry_status_label(:not_configured), do: "is not configured"
   defp telemetry_status_label(:configured), do: "is not applied"
@@ -560,7 +560,7 @@ defmodule CadenceWeb.CommsValidation do
   end
 
   defp mission_link_builder_path(mission_id) do
-    ~p"/missions/#{mission_id}/comms/links/new"
+    ~p"/missions/#{mission_id}/comms/link-templates/new"
   end
 
   defp ref_version(ref) do
@@ -655,14 +655,14 @@ defmodule CadenceWeb.CommsValidation do
       []
       |> add_if(length(selected_uplinks) > 1, %{
         owner: :link_assignment,
-        severity: :warning,
+        severity: :attention,
         title: "Multiple selected uplink link templates for #{runtime_identity}",
         body:
           "Uplink uniqueness is scoped to a runtime identity or realized contact, not the whole mission. Review this runtime identity's selected uplink templates."
       })
       |> add_if(assignments != [] and selected_downlinks == [], %{
         owner: :link_assignment,
-        severity: :warning,
+        severity: :attention,
         title: "No selected downlink link template for #{runtime_identity}",
         body:
           "Downlink can have contributors, but one selected/preferred downlink link template is useful for operator summaries."
@@ -720,7 +720,7 @@ defmodule CadenceWeb.CommsValidation do
     }
   end
 
-  def finding_label(:missing), do: "Blocking"
-  def finding_label(:warning), do: "Warning"
+  def finding_label(:blocked), do: "Blocking"
+  def finding_label(:attention), do: "Warning"
   def finding_label(other), do: human_atom(other)
 end

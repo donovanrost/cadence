@@ -2982,7 +2982,7 @@ defmodule Cadence.Contacts do
       application_row(
         spacecraft,
         :skipped,
-        :warning,
+        :attention,
         "Conflict",
         "Provider path ref #{provider_path_ref} is already used by another link template."
       )
@@ -3039,7 +3039,7 @@ defmodule Cadence.Contacts do
       application_row(spacecraft, :applied, :ready, "Applied", "Link assignment was created.")
     else
       {:error, reason} ->
-        application_row(spacecraft, :failed, :missing, "Failed", inspect(reason))
+        application_row(spacecraft, :failed, :blocked, "Failed", inspect(reason))
     end
   end
 

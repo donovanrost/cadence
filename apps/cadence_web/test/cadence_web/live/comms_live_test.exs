@@ -159,7 +159,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert has_element?(view, "#comms-overview-page")
       assert has_element?(view, "#mission-network-resources")
-      assert has_element?(view, "#mission-network-links")
+      assert has_element?(view, "#mission-network-link-templates")
       assert has_element?(view, "#mission-network-protocol-behaviors")
       assert render(view) =~ "Shared mission connectivity"
       assert has_element?(view, "#comms-validation-page")
@@ -321,7 +321,8 @@ defmodule CadenceWeb.CommsLiveTest do
     test "creates a shared mission link from one workflow" do
       {conn, org, mission} = signed_in_org_and_mission()
 
-      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/links/new")
+      {:ok, view, html} =
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/link-templates/new-shared-link")
 
       assert has_element?(view, "#comms-link-builder-page")
       assert html =~ "New Shared Mission Link"
@@ -589,7 +590,7 @@ defmodule CadenceWeb.CommsLiveTest do
       setup = persist_complete_comms_setup!(org, mission)
 
       {:ok, source_view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/advanced/runtime-identities")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/runtime-identities")
 
       assert has_element?(source_view, "#source-endpoints-table")
       assert render(source_view) =~ "Alpha endpoint"
@@ -608,7 +609,7 @@ defmodule CadenceWeb.CommsLiveTest do
       {:ok, transport_view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors")
 
-      assert has_element?(transport_view, "#transport-profiles-table")
+      assert has_element?(transport_view, "#protocol-behaviors-table")
       assert render(transport_view) =~ "Heartbeat Monitor"
 
       assert has_element?(
@@ -619,7 +620,7 @@ defmodule CadenceWeb.CommsLiveTest do
       {:ok, path_view, _html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/link-templates")
 
-      assert has_element?(path_view, "#path-templates-table")
+      assert has_element?(path_view, "#link-templates-table")
       assert render(path_view) =~ "Alpha downlink"
       assert render(path_view) =~ "TCP Provider v1"
       assert render(path_view) =~ "Heartbeat Monitor v1"
@@ -863,7 +864,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/#{setup.path_template.path_template_id}"
         )
 
-      assert has_element?(show_view, "#path-template-profile-version-findings")
+      assert has_element?(show_view, "#link-template-profile-version-findings")
       assert show_html =~ "Profile Version Drift"
       assert show_html =~ "Alpha downlink uses TCP Provider v1; latest is v2."
       assert show_html =~ "Alpha downlink uses Heartbeat Monitor v1; latest is v2."
@@ -874,7 +875,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/#{setup.path_template.path_template_id}/new-version"
         )
 
-      assert has_element?(version_view, "#path-template-version-upgrade-preview")
+      assert has_element?(version_view, "#link-template-version-upgrade-preview")
       assert version_html =~ "TCP Provider will update from v1 to v2."
       assert version_html =~ "Heartbeat Monitor will update from v1 to v2."
       assert version_html =~ "TCP Provider · current v1 -&gt; latest v2"
@@ -882,7 +883,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: target}}} =
                version_view
-               |> form("#path-template-form",
+               |> form("#link-template-form",
                  path_template: %{
                    display_name: "Alpha downlink",
                    direction: "downlink",
@@ -918,7 +919,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/#{setup.path_template.path_template_id}"
         )
 
-      refute has_element?(upgraded_show_view, "#path-template-profile-version-findings")
+      refute has_element?(upgraded_show_view, "#link-template-profile-version-findings")
       refute upgraded_show_html =~ "Profile Version Drift"
     end
 
@@ -946,7 +947,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/#{setup.path_template.path_template_id}"
         )
 
-      assert has_element?(show_view, "#path-template-profile-version-findings")
+      assert has_element?(show_view, "#link-template-profile-version-findings")
       assert show_html =~ "TCP Provider (archived)"
 
       {:ok, new_path_view, new_path_html} =
@@ -966,7 +967,7 @@ defmodule CadenceWeb.CommsLiveTest do
       {conn, org, mission} = signed_in_org_and_mission()
 
       {:ok, source_view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/advanced/runtime-identities/new")
+        live(conn, ~p"/missions/#{mission.mission_id}/comms/runtime-identities/new")
 
       assert {:error, {:live_redirect, %{to: source_target}}} =
                source_view
@@ -980,7 +981,7 @@ defmodule CadenceWeb.CommsLiveTest do
                |> render_submit()
 
       assert source_target ==
-               ~p"/missions/#{mission.mission_id}/comms/advanced/runtime-identities"
+               ~p"/missions/#{mission.mission_id}/comms/runtime-identities"
 
       [endpoint] = Cadence.list_source_endpoints(org.organization_id, mission.mission_id)
       assert endpoint.display_name == "Alpha endpoint"
@@ -1026,7 +1027,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: transport_target}}} =
                transport_view
-               |> form("#transport-profile-form",
+               |> form("#protocol-behavior-form",
                  transport_profile: %{
                    display_name: "Heartbeat Monitor",
                    family_key: "heartbeat_monitor",
@@ -1046,7 +1047,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: path_target}}} =
                path_view
-               |> form("#path-template-form",
+               |> form("#link-template-form",
                  path_template: %{
                    display_name: "Alpha downlink",
                    direction: "downlink",
@@ -1092,7 +1093,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: target}}} =
                view
-               |> form("#path-template-form",
+               |> form("#link-template-form",
                  path_template: %{
                    display_name: "Shared downlink",
                    direction: "downlink",
@@ -1118,7 +1119,7 @@ defmodule CadenceWeb.CommsLiveTest do
       {:ok, list_view, list_html} =
         live(conn, ~p"/missions/#{mission.mission_id}/comms/link-templates")
 
-      assert has_element?(list_view, "#path-templates-table")
+      assert has_element?(list_view, "#link-templates-table")
       assert list_html =~ "Shared downlink"
       assert list_html =~ "Reusable template"
 
@@ -1150,12 +1151,12 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/new?spacecraft_id=#{spacecraft.spacecraft_id}"
         )
 
-      assert has_element?(view, "#path-template-spacecraft-context")
+      assert has_element?(view, "#link-template-spacecraft-context")
       refute has_element?(view, "select[name='path_template[source_endpoint_ref]']")
 
       assert {:error, {:live_redirect, %{to: target}}} =
                view
-               |> form("#path-template-form",
+               |> form("#link-template-form",
                  path_template: %{
                    display_name: "Alpha downlink",
                    direction: "downlink",
@@ -1185,7 +1186,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/link-templates/#{setup.path_template.path_template_id}"
         )
 
-      assert has_element?(show_view, "#comms-path-template-show-page")
+      assert has_element?(show_view, "#comms-link-template-show-page")
       assert html =~ "Alpha downlink"
       assert html =~ "Version History"
       assert html =~ "Coverage"
@@ -1205,7 +1206,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: target}}} =
                version_view
-               |> form("#path-template-form",
+               |> form("#link-template-form",
                  path_template: %{
                    display_name: "Alpha downlink updated",
                    direction: "downlink",
@@ -1243,7 +1244,7 @@ defmodule CadenceWeb.CommsLiveTest do
       assert html =~ "Heartbeat Monitor"
 
       view
-      |> form("#transport-profile-form",
+      |> form("#protocol-behavior-form",
         transport_profile: %{
           display_name: "TC Uplink Gateway",
           family_key: "uplink_gateway",
@@ -1254,7 +1255,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: _target}}} =
                view
-               |> form("#transport-profile-form",
+               |> form("#protocol-behavior-form",
                  transport_profile: %{
                    display_name: "TC Uplink Gateway",
                    family_key: "uplink_gateway",
@@ -1310,7 +1311,7 @@ defmodule CadenceWeb.CommsLiveTest do
           ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors/#{transport.transport_profile_id}"
         )
 
-      assert has_element?(show_view, "#comms-transport-profile-show-page")
+      assert has_element?(show_view, "#comms-protocol-behavior-show-page")
       assert html =~ "Heartbeat Monitor"
       assert html =~ "Heartbeat every 1000 ms"
       assert html =~ "Version History"
@@ -1330,7 +1331,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: target}}} =
                version_view
-               |> form("#transport-profile-form",
+               |> form("#protocol-behavior-form",
                  transport_profile: %{
                    display_name: "Heartbeat Monitor",
                    family_key: "heartbeat_monitor",
@@ -1411,7 +1412,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: transport_target}}} =
                transport_view
-               |> element("#archive-transport-profile-button")
+               |> element("#archive-protocol-behavior-button")
                |> render_click()
 
       assert transport_target == ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors"
@@ -1456,7 +1457,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       assert {:error, {:live_redirect, %{to: path_target}}} =
                path_view
-               |> element("#archive-path-template-button")
+               |> element("#archive-link-template-button")
                |> render_click()
 
       assert path_target == ~p"/missions/#{mission.mission_id}/comms/link-templates"
@@ -1509,7 +1510,7 @@ defmodule CadenceWeb.CommsLiveTest do
 
       transport_result =
         transport_view
-        |> element("#archive-transport-profile-button")
+        |> element("#archive-protocol-behavior-button")
         |> render_click()
 
       assert transport_result =~ "Protocol behavior is still referenced by active link templates."
@@ -1554,7 +1555,7 @@ defmodule CadenceWeb.CommsLiveTest do
         live(conn, ~p"/missions/#{mission.mission_id}/comms/providers/new")
 
       assert html =~ "TCP Mode"
-      assert html =~ "Advanced Configuration Preview"
+      assert html =~ "Configuration Preview"
 
       assert {:error, {:live_redirect, %{to: _target}}} =
                view

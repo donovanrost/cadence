@@ -41,16 +41,20 @@ defmodule CadenceWeb.MissionListLiveTest do
 
     test "renders missions in a table" do
       {conn, org} = signed_in_conn()
-      _m1 = persist_mission!(org, "alpha", "Alpha Mission")
+      m1 = persist_mission!(org, "alpha", "Alpha Mission")
       _m2 = persist_mission!(org, "beta", "Beta Mission")
 
-      {:ok, _view, html} = live(conn, ~p"/missions")
+      {:ok, view, html} = live(conn, ~p"/missions")
 
       assert html =~ "Alpha Mission"
       assert html =~ "alpha"
       assert html =~ "Beta Mission"
       assert html =~ "beta"
       assert html =~ "New Mission"
+      assert has_element?(view, "#mission-list-table")
+      assert has_element?(view, "#mission-row-#{m1.mission_id}")
+      assert html =~ "Spacecraft"
+      assert html =~ "No spacecraft"
     end
 
     test "shows only missions belonging to the current organization" do

@@ -176,12 +176,12 @@ defmodule CadenceWeb.CommsComponents do
   end
 
   defp status_label(:ready), do: "Ready"
-  defp status_label(:warning), do: "Needs Work"
-  defp status_label(:missing), do: "Missing"
+  defp status_label(:attention), do: "Needs Work"
+  defp status_label(:blocked), do: "Missing"
   defp status_label(:info), do: "Setup"
 
   defp status_class(:ready), do: "bg-success/20 text-success"
-  defp status_class(:warning), do: "bg-warning/20 text-warning"
-  defp status_class(:missing), do: "bg-error/20 text-error"
+  defp status_class(:attention), do: "bg-warning/20 text-warning"
+  defp status_class(:blocked), do: "bg-error/20 text-error"
   defp status_class(:info), do: "bg-info/20 text-info"
 end

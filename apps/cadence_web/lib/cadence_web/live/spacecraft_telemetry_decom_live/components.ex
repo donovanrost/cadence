@@ -258,11 +258,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     """
   end
 
-  defp dot_status(:applied), do: :nominal
+  defp dot_status(:applied), do: :ready
   defp dot_status(:configured), do: :info
-  defp dot_status(:outdated), do: :warning
-  defp dot_status(:disabled), do: :offline
-  defp dot_status(:not_configured), do: :offline
+  defp dot_status(:outdated), do: :attention
+  defp dot_status(:disabled), do: :blocked
+  defp dot_status(:not_configured), do: :blocked
 
   defp status_label(:applied), do: "Applied"
   defp status_label(:configured), do: "Configured — not yet applied"
@@ -287,8 +287,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   defp status_description(:not_configured),
     do: "Choose a catalog revision and handled APIDs, then apply mission changes."
 
-  defp diagnostic_dot(:error), do: :critical
-  defp diagnostic_dot(:warning), do: :warning
+  defp diagnostic_dot(:error), do: :blocked
+  defp diagnostic_dot(:warning), do: :attention
   defp diagnostic_dot(_), do: :info
 
   defp format_relative(%DateTime{} = dt) do

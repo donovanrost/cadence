@@ -177,27 +177,11 @@ defmodule CadenceWeb.Router do
            CommsApplyLinkTemplateLive,
            :new
 
-      live "/missions/:mission_id/comms/links",
-           CommsPathTemplateListLive,
-           :index
-
-      live "/missions/:mission_id/comms/links/new",
-           CommsLinkBuilderLive,
-           :new
-
-      live "/missions/:mission_id/comms/advanced/runtime-identities",
+      live "/missions/:mission_id/comms/runtime-identities",
            CommsSourceEndpointListLive,
            :index
 
-      live "/missions/:mission_id/comms/advanced/runtime-identities/new",
-           CommsSourceEndpointNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/source-endpoints",
-           CommsSourceEndpointListLive,
-           :index
-
-      live "/missions/:mission_id/comms/source-endpoints/new",
+      live "/missions/:mission_id/comms/runtime-identities/new",
            CommsSourceEndpointNewLive,
            :new
 
@@ -217,86 +201,116 @@ defmodule CadenceWeb.Router do
            CommsProviderProfileNewLive,
            :version
 
-      live "/missions/:mission_id/comms/provider-profiles",
-           CommsProviderProfileListLive,
-           :index
-
-      live "/missions/:mission_id/comms/provider-profiles/new",
-           CommsProviderProfileNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/provider-profiles/:provider_profile_id",
-           CommsProviderProfileShowLive,
-           :show
-
-      live "/missions/:mission_id/comms/provider-profiles/:provider_profile_id/new-version",
-           CommsProviderProfileNewLive,
-           :version
-
       live "/missions/:mission_id/comms/protocol-behaviors",
-           CommsTransportProfileListLive,
+           CommsProtocolBehaviorListLive,
            :index
 
       live "/missions/:mission_id/comms/protocol-behaviors/new",
-           CommsTransportProfileNewLive,
+           CommsProtocolBehaviorNewLive,
            :new
 
       live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id",
-           CommsTransportProfileShowLive,
+           CommsProtocolBehaviorShowLive,
            :show
 
       live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id/new-version",
-           CommsTransportProfileNewLive,
-           :version
-
-      live "/missions/:mission_id/comms/transport-profiles",
-           CommsTransportProfileListLive,
-           :index
-
-      live "/missions/:mission_id/comms/transport-profiles/new",
-           CommsTransportProfileNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/transport-profiles/:transport_profile_id",
-           CommsTransportProfileShowLive,
-           :show
-
-      live "/missions/:mission_id/comms/transport-profiles/:transport_profile_id/new-version",
-           CommsTransportProfileNewLive,
+           CommsProtocolBehaviorNewLive,
            :version
 
       live "/missions/:mission_id/comms/link-templates",
-           CommsPathTemplateListLive,
+           CommsLinkTemplateListLive,
            :index
 
       live "/missions/:mission_id/comms/link-templates/new",
-           CommsPathTemplateNewLive,
+           CommsLinkTemplateNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/link-templates/new-shared-link",
+           CommsLinkBuilderLive,
            :new
 
       live "/missions/:mission_id/comms/link-templates/:path_template_id",
-           CommsPathTemplateShowLive,
+           CommsLinkTemplateShowLive,
            :show
 
       live "/missions/:mission_id/comms/link-templates/:path_template_id/new-version",
-           CommsPathTemplateNewLive,
-           :version
-
-      live "/missions/:mission_id/comms/path-templates",
-           CommsPathTemplateListLive,
-           :index
-
-      live "/missions/:mission_id/comms/path-templates/new",
-           CommsPathTemplateNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/path-templates/:path_template_id",
-           CommsPathTemplateShowLive,
-           :show
-
-      live "/missions/:mission_id/comms/path-templates/:path_template_id/new-version",
-           CommsPathTemplateNewLive,
+           CommsLinkTemplateNewLive,
            :version
     end
+
+    # Legacy comms URL aliases -- 301 redirect to canonical paths so old
+    # bookmarks (and any unmigrated outbound links) still resolve.
+    get "/missions/:mission_id/comms/links",
+        LegacyCommsRedirectController,
+        :link_templates_index
+
+    get "/missions/:mission_id/comms/links/new",
+        LegacyCommsRedirectController,
+        :shared_link_new
+
+    get "/missions/:mission_id/comms/path-templates",
+        LegacyCommsRedirectController,
+        :link_templates_index
+
+    get "/missions/:mission_id/comms/path-templates/new",
+        LegacyCommsRedirectController,
+        :link_templates_new
+
+    get "/missions/:mission_id/comms/path-templates/:path_template_id",
+        LegacyCommsRedirectController,
+        :link_templates_show
+
+    get "/missions/:mission_id/comms/path-templates/:path_template_id/new-version",
+        LegacyCommsRedirectController,
+        :link_templates_new_version
+
+    get "/missions/:mission_id/comms/transport-profiles",
+        LegacyCommsRedirectController,
+        :protocol_behaviors_index
+
+    get "/missions/:mission_id/comms/transport-profiles/new",
+        LegacyCommsRedirectController,
+        :protocol_behaviors_new
+
+    get "/missions/:mission_id/comms/transport-profiles/:transport_profile_id",
+        LegacyCommsRedirectController,
+        :protocol_behaviors_show
+
+    get "/missions/:mission_id/comms/transport-profiles/:transport_profile_id/new-version",
+        LegacyCommsRedirectController,
+        :protocol_behaviors_new_version
+
+    get "/missions/:mission_id/comms/provider-profiles",
+        LegacyCommsRedirectController,
+        :providers_index
+
+    get "/missions/:mission_id/comms/provider-profiles/new",
+        LegacyCommsRedirectController,
+        :providers_new
+
+    get "/missions/:mission_id/comms/provider-profiles/:provider_profile_id",
+        LegacyCommsRedirectController,
+        :providers_show
+
+    get "/missions/:mission_id/comms/provider-profiles/:provider_profile_id/new-version",
+        LegacyCommsRedirectController,
+        :providers_new_version
+
+    get "/missions/:mission_id/comms/source-endpoints",
+        LegacyCommsRedirectController,
+        :runtime_identities_index
+
+    get "/missions/:mission_id/comms/source-endpoints/new",
+        LegacyCommsRedirectController,
+        :runtime_identities_new
+
+    get "/missions/:mission_id/comms/advanced/runtime-identities",
+        LegacyCommsRedirectController,
+        :runtime_identities_index
+
+    get "/missions/:mission_id/comms/advanced/runtime-identities/new",
+        LegacyCommsRedirectController,
+        :runtime_identities_new
 
     live_session :user,
       on_mount: [

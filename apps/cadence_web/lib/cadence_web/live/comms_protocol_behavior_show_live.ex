@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsTransportProfileShowLive do
+defmodule CadenceWeb.CommsProtocolBehaviorShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -35,7 +35,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
       {:error, _reason} ->
         {:ok,
          socket
-         |> put_flash(:error, "Transport profile not found.")
+         |> put_flash(:error, "Protocol behavior not found.")
          |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors")}
     end
   end
@@ -66,7 +66,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
         {:ok, _transport_profile} ->
           {:noreply,
            socket
-           |> put_flash(:info, "Transport profile archived.")
+           |> put_flash(:info, "Protocol behavior archived.")
            |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors")}
 
         {:error, reason} ->
@@ -78,7 +78,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-transport-profile-show-page" class="space-y-6">
+    <div id="comms-protocol-behavior-show-page" class="space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
           <.link
@@ -96,7 +96,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
           <button
-            id="archive-transport-profile-button"
+            id="archive-protocol-behavior-button"
             type="button"
             phx-click="archive"
             data-confirm="Archive this protocol behavior?"
@@ -105,7 +105,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
             Archive
           </button>
           <.link
-            id="new-transport-profile-version-link"
+            id="new-protocol-behavior-version-link"
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors/#{@transport_profile.transport_profile_id}/new-version"
             }
@@ -118,7 +118,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
 
       <section
         :if={@linked_path_count > 0}
-        id="transport-profile-archive-blocker"
+        id="protocol-behavior-archive-blocker"
         class="rounded border border-warning/30 bg-warning/10 p-4 text-sm"
       >
         <p class="hud-label mb-2 text-warning">Archive Blocked By Active Paths</p>
@@ -159,7 +159,7 @@ defmodule CadenceWeb.CommsTransportProfileShowLive do
         <aside class="card bg-base-200 border border-base-300">
           <div class="card-body p-5">
             <p class="hud-label mb-2">Version History</p>
-            <div id="transport-profile-versions" class="space-y-3">
+            <div id="protocol-behavior-versions" class="space-y-3">
               <div :for={version <- @versions} class="flex items-center justify-between border-b border-base-300 pb-2 last:border-b-0">
                 <span class="font-mono">v{version.version}</span>
                 <span class="text-xs text-base-content/60">

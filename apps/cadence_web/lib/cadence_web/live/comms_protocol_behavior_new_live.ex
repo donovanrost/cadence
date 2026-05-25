@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsTransportProfileNewLive do
+defmodule CadenceWeb.CommsProtocolBehaviorNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -57,7 +57,7 @@ defmodule CadenceWeb.CommsTransportProfileNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-transport-profile-new-page" class="space-y-6 max-w-3xl">
+    <div id="comms-protocol-behavior-new-page" class="space-y-6 max-w-3xl">
       <div>
         <.link navigate={@return_to} class="text-sm text-primary hover:underline">
           &larr; {@back_label}
@@ -71,7 +71,7 @@ defmodule CadenceWeb.CommsTransportProfileNewLive do
 
       <.form
         for={@form}
-        id="transport-profile-form"
+        id="protocol-behavior-form"
         phx-change="validate"
         phx-submit="save"
         class="space-y-5"
@@ -212,7 +212,7 @@ defmodule CadenceWeb.CommsTransportProfileNewLive do
         </section>
 
         <details class="rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-          <summary class="cursor-pointer hud-label">Advanced Configuration Preview</summary>
+          <summary class="cursor-pointer hud-label">Configuration Preview</summary>
           <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(preview_configuration(@form), pretty: true)}</pre>
         </details>
 
@@ -480,7 +480,7 @@ defmodule CadenceWeb.CommsTransportProfileNewLive do
 
       {:error, _reason} ->
         socket
-        |> put_flash(:error, "Transport profile not found.")
+        |> put_flash(:error, "Protocol behavior not found.")
         |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors")
     end
   end

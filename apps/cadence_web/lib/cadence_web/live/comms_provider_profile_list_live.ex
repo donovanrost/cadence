@@ -35,7 +35,7 @@ defmodule CadenceWeb.CommsProviderProfileListLive do
               </p>
             </div>
             <.status_badge
-              status={if @provider_profiles == [], do: :warning, else: :ready}
+              status={if @provider_profiles == [], do: :attention, else: :ready}
               label={if @provider_profiles == [], do: "Not Started", else: "Configured"}
             />
           </div>

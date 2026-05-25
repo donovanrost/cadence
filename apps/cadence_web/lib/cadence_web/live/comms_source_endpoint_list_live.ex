@@ -14,8 +14,8 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Comms Advanced")
-     |> assign(:nav_item, :comms)
+     |> assign(:page_title, "Runtime Identities")
+     |> assign(:nav_item, :comms_runtime_identities)
      |> assign(:source_endpoints, source_endpoints)
      |> assign(:path_templates, path_templates)
      |> assign(:link_assignments, link_assignments)}
@@ -29,7 +29,7 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="hud-label mb-2">Advanced Runtime Mapping</p>
+              <p class="hud-label mb-2">Runtime Mapping</p>
               <h2 class="text-lg font-semibold">Runtime Identities</h2>
               <p class="mt-1 text-sm text-base-content/60">
                 Runtime identities map packet ingress into mission and spacecraft ownership.
@@ -37,7 +37,7 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
               </p>
             </div>
             <.status_badge
-              status={if @source_endpoints == [], do: :missing, else: :ready}
+              status={if @source_endpoints == [], do: :blocked, else: :ready}
               label={if @source_endpoints == [], do: "None", else: "Configured"}
             />
           </div>
@@ -45,7 +45,7 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
             <.link
               id="new-source-endpoint-link"
               navigate={
-                ~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities/new"
+                ~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities/new"
               }
               class="btn btn-primary btn-sm"
             >
@@ -61,7 +61,7 @@ defmodule CadenceWeb.CommsSourceEndpointListLive do
                 description="Telemetry interpretation and link templates need runtime identities before operations can resolve packet ownership."
                 action_label="New Runtime Identity"
                 action_navigate={
-                  ~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities/new"
+                  ~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities/new"
                 }
               />
             </div>

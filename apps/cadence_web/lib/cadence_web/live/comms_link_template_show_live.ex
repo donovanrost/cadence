@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsPathTemplateShowLive do
+defmodule CadenceWeb.CommsLinkTemplateShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -85,7 +85,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
       {:error, _reason} ->
         {:ok,
          socket
-         |> put_flash(:error, "Path template not found.")
+         |> put_flash(:error, "Link template not found.")
          |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/link-templates")}
     end
   end
@@ -104,7 +104,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
       {:ok, _path_template} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Path template archived.")
+         |> put_flash(:info, "Link template archived.")
          |> push_navigate(to: ~p"/missions/#{mission.mission_id}/comms/link-templates")}
 
       {:error, reason} ->
@@ -115,7 +115,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-path-template-show-page" class="space-y-6">
+    <div id="comms-link-template-show-page" class="space-y-6">
       <div class="flex items-start justify-between gap-4">
         <div>
           <.link
@@ -133,7 +133,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
           <button
-            id="archive-path-template-button"
+            id="archive-link-template-button"
             type="button"
             phx-click="archive"
             data-confirm="Archive this link template?"
@@ -142,7 +142,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
             Archive
           </button>
           <.link
-            id="new-path-template-version-link"
+            id="new-link-template-version-link"
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/comms/link-templates/#{@path_template.path_template_id}/new-version"
             }
@@ -155,20 +155,20 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
 
       <section
         :if={@profile_ref_findings != []}
-        id="path-template-profile-version-findings"
+        id="link-template-profile-version-findings"
         class="card bg-warning/10 border border-warning/30"
       >
         <div class="card-body p-5">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="hud-label mb-2 text-warning">Profile Version Drift</p>
-              <h2 class="font-semibold">This path is pinned to older or missing profile versions.</h2>
+              <h2 class="font-semibold">This link template is pinned to older or missing profile versions.</h2>
               <p class="mt-1 text-sm text-base-content/60">
-                Create a new path version when you intentionally want operations to use the
-                latest provider or protocol behavior versions.
+                Create a new link template version when you intentionally want operations to use
+                the latest provider or protocol behavior versions.
               </p>
             </div>
-            <.status_badge status={:warning} label={"#{Enum.count(@profile_ref_findings)} Findings"} />
+            <.status_badge status={:attention} label={"#{Enum.count(@profile_ref_findings)} Findings"} />
           </div>
 
           <div class="mt-4 space-y-3">
@@ -179,13 +179,13 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
           </div>
 
           <.link
-            id="path-template-version-drift-action"
+            id="link-template-version-drift-action"
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/comms/link-templates/#{@path_template.path_template_id}/new-version"
             }
             class="btn btn-primary btn-sm mt-4"
           >
-            Create new path version
+            Create new link template version
           </.link>
         </div>
       </section>
@@ -242,7 +242,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
         </section>
 
         <aside class="space-y-4">
-          <section id="path-template-coverage" class="card bg-base-200 border border-base-300">
+          <section id="link-template-coverage" class="card bg-base-200 border border-base-300">
             <div class="card-body p-5">
               <p class="hud-label mb-2">Coverage</p>
               <div class="grid grid-cols-2 gap-3">
@@ -271,7 +271,7 @@ defmodule CadenceWeb.CommsPathTemplateShowLive do
           <section class="card bg-base-200 border border-base-300">
             <div class="card-body p-5">
               <p class="hud-label mb-2">Version History</p>
-              <div id="path-template-versions" class="space-y-3">
+              <div id="link-template-versions" class="space-y-3">
                 <div :for={version <- @versions} class="flex items-center justify-between border-b border-base-300 pb-2 last:border-b-0">
                   <span class="font-mono">v{version.version}</span>
                   <span class="text-xs text-base-content/60">

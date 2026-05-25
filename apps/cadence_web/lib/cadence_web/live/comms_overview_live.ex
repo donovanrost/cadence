@@ -32,16 +32,16 @@ defmodule CadenceWeb.CommsOverviewLive do
                 Spacecraft-specific interpretation stays on each spacecraft.
               </p>
             </div>
-            <.status_badge status={if @blocking_findings == 0, do: :ready, else: :warning} />
+            <.status_badge status={if @blocking_findings == 0, do: :ready, else: :attention} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-2">
+          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <.network_resource_card
-              id="mission-network-links"
-              title="Links"
+              id="mission-network-link-templates"
+              title="Link Templates"
               value={@path_template_count}
               description="Create shared mission paths without editing raw objects."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/links/new"}
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}
             />
             <.network_resource_card
               id="mission-network-protocol-behaviors"
@@ -49,6 +49,13 @@ defmodule CadenceWeb.CommsOverviewLive do
               value={@transport_profile_count}
               description="Reusable path-local protocol behavior."
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
+            />
+            <.network_resource_card
+              id="mission-network-runtime-identities"
+              title="Runtime Identities"
+              value={@source_endpoint_count}
+              description="Map packet ingress into mission and spacecraft ownership."
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities"}
             />
           </div>
         </div>
@@ -61,12 +68,11 @@ defmodule CadenceWeb.CommsOverviewLive do
               <p class="hud-label mb-2">Setup Checks</p>
               <h2 class="text-lg font-semibold">Comms Validation</h2>
               <p class="mt-1 text-sm text-base-content/60">
-                These checks focus on whether saved comms setup can produce usable operational
-                paths later. Runtime contact health belongs under the future ops workspace.
+                These checks cover saved comms setup. Runtime link health is shown elsewhere.
               </p>
             </div>
             <.status_badge
-              status={if @findings == [], do: :ready, else: :warning}
+              status={if @findings == [], do: :ready, else: :attention}
               label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
             />
           </div>
@@ -166,9 +172,10 @@ defmodule CadenceWeb.CommsOverviewLive do
     %{
       transport_profile_count: length(transport_profiles),
       path_template_count: length(path_templates),
+      source_endpoint_count: length(source_endpoints),
       findings: findings,
       finding_groups: CommsValidation.finding_groups(findings),
-      blocking_findings: Enum.count(findings, &(&1.severity == :missing))
+      blocking_findings: Enum.count(findings, &(&1.severity == :blocked))
     }
   end
 end

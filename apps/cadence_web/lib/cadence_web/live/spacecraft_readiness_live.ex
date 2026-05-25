@@ -197,12 +197,12 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
          not is_nil(link_assignment.selected_downlink) do
       :ready
     else
-      :warning
+      :attention
     end
   end
 
-  defp identity_status(%{scid: nil}, _runtime_identity), do: :missing
-  defp identity_status(_spacecraft, nil), do: :warning
+  defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
+  defp identity_status(_spacecraft, nil), do: :attention
   defp identity_status(_spacecraft, _runtime_identity), do: :ready
 
   defp identity_status_label(%{scid: nil}, _runtime_identity), do: "Missing SCID"
@@ -219,10 +219,10 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     do: "Cadence can resolve incoming bytes to this spacecraft identity."
 
   defp telemetry_panel_status(:applied), do: :ready
-  defp telemetry_panel_status(:configured), do: :warning
-  defp telemetry_panel_status(:outdated), do: :warning
-  defp telemetry_panel_status(:disabled), do: :missing
-  defp telemetry_panel_status(:not_configured), do: :missing
+  defp telemetry_panel_status(:configured), do: :attention
+  defp telemetry_panel_status(:outdated), do: :attention
+  defp telemetry_panel_status(:disabled), do: :blocked
+  defp telemetry_panel_status(:not_configured), do: :blocked
 
   defp telemetry_status_label(:applied), do: "Applied"
   defp telemetry_status_label(:configured), do: "Configured"
@@ -248,7 +248,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
   defp telemetry_action_label(:not_configured), do: "Configure Telemetry"
   defp telemetry_action_label(_status), do: "Manage Telemetry"
 
-  defp link_panel_status(%{selected_downlink: nil}), do: :warning
+  defp link_panel_status(%{selected_downlink: nil}), do: :attention
   defp link_panel_status(_assignment), do: :ready
 
   defp link_status_label(%{selected_downlink: nil, available_downlink_count: count})

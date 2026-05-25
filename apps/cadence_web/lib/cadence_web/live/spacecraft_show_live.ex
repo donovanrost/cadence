@@ -51,50 +51,19 @@ defmodule CadenceWeb.SpacecraftShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-            class="text-sm text-primary hover:underline"
-          >
-            &larr; Spacecraft
-          </.link>
-          <h1 class="text-2xl font-bold text-base-content mt-1">
-            {@current_spacecraft.display_name}
-          </h1>
-        </div>
-        <div class="flex items-center gap-2">
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
-            }
-            class="btn btn-primary btn-sm"
-            id="spacecraft-readiness-link"
-          >
-            Readiness
-          </.link>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/links"
-            }
-            class="btn btn-ghost btn-sm"
-            id="spacecraft-links-link"
-          >
-            Links
-          </.link>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-            }
-            class="btn btn-ghost btn-sm"
-            id="spacecraft-identity-link"
-          >
-            Identity
-          </.link>
-        </div>
+      <div>
+        <.link
+          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+          class="text-sm text-primary hover:underline"
+        >
+          &larr; Spacecraft
+        </.link>
+        <h1 class="text-2xl font-bold text-base-content mt-1">
+          {@current_spacecraft.display_name}
+        </h1>
       </div>
 
-      <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-5">
+      <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-4">
         <.workflow_card
           id="spacecraft-overview-identity"
           title="Identity"
@@ -127,17 +96,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/links"
           }
           action_label="Manage Links"
-        />
-        <.workflow_card
-          id="spacecraft-overview-command"
-          title="Command Interpretation"
-          value="Not tracked"
-          description="Command encoding, TC defaults, and uplink interpretation will live here."
-          status={:info}
-          navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/commanding"
-          }
-          action_label="Review Commanding"
         />
         <.workflow_card
           id="spacecraft-overview-readiness"
@@ -189,12 +147,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
         </div>
       </div>
 
-      <.telemetry_decom_section
-        current_mission={@current_mission}
-        current_spacecraft={@current_spacecraft}
-        status={@telemetry_decom_status}
-        config={@telemetry_decom_config}
-      />
     </div>
     """
   end
@@ -231,41 +183,8 @@ defmodule CadenceWeb.SpacecraftShowLive do
     """
   end
 
-  attr :current_mission, :map, required: true
-  attr :current_spacecraft, :map, required: true
-  attr :status, :atom, required: true
-  attr :config, :any, default: nil
-
-  defp telemetry_decom_section(assigns) do
-    ~H"""
-    <div class="card bg-base-200" id="spacecraft-telemetry-decom-section">
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label mb-2">Telemetry Interpretation</p>
-            <div class="flex items-center gap-2">
-              <.status_dot status={dot_status(@status)} />
-              <span class="text-base-content font-semibold">{label(@status)}</span>
-            </div>
-            <p class="text-sm text-base-content/60 mt-2">{description(@status)}</p>
-          </div>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/telemetry"
-            }
-            class="btn btn-ghost btn-sm"
-            id="spacecraft-telemetry-decom-configure-link"
-          >
-            {configure_label(@status)}
-          </.link>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  defp identity_status(%{scid: nil}, _runtime_identity), do: :missing
-  defp identity_status(_spacecraft, nil), do: :warning
+  defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
+  defp identity_status(_spacecraft, nil), do: :attention
   defp identity_status(_spacecraft, _runtime_identity), do: :ready
 
   defp identity_summary(%{scid: nil}, _runtime_identity), do: "Missing SCID"
@@ -273,12 +192,12 @@ defmodule CadenceWeb.SpacecraftShowLive do
   defp identity_summary(spacecraft, _runtime_identity), do: "SCID #{spacecraft.scid} configured"
 
   defp telemetry_panel_status(:applied), do: :ready
-  defp telemetry_panel_status(:configured), do: :warning
-  defp telemetry_panel_status(:outdated), do: :warning
-  defp telemetry_panel_status(:disabled), do: :missing
-  defp telemetry_panel_status(:not_configured), do: :missing
+  defp telemetry_panel_status(:configured), do: :attention
+  defp telemetry_panel_status(:outdated), do: :attention
+  defp telemetry_panel_status(:disabled), do: :blocked
+  defp telemetry_panel_status(:not_configured), do: :blocked
 
-  defp link_status(%{selected_downlink: nil}), do: :warning
+  defp link_status(%{selected_downlink: nil}), do: :attention
   defp link_status(_link_assignment), do: :ready
 
   defp link_summary(%{selected_downlink: nil, available_downlink_count: count}) when count > 0 do
@@ -306,7 +225,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
          not is_nil(link_assignment.selected_downlink) do
       :ready
     else
-      :warning
+      :attention
     end
   end
 
@@ -317,12 +236,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
       "Needs review"
     end
   end
-
-  defp dot_status(:applied), do: :nominal
-  defp dot_status(:configured), do: :info
-  defp dot_status(:outdated), do: :warning
-  defp dot_status(:disabled), do: :offline
-  defp dot_status(:not_configured), do: :offline
 
   defp label(:applied), do: "Applied"
   defp label(:configured), do: "Configured — not yet applied"

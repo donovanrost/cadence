@@ -44,17 +44,12 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
       assert html =~
                ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/commanding"
-
       assert has_element?(view, "#spacecraft-interpretation-overview")
       assert has_element?(view, "#spacecraft-overview-identity")
       assert has_element?(view, "#spacecraft-overview-telemetry")
       assert has_element?(view, "#spacecraft-overview-links")
-      assert has_element?(view, "#spacecraft-overview-command")
       assert has_element?(view, "#spacecraft-overview-readiness")
       assert html =~ "Runtime identity missing"
-      assert html =~ "Command Interpretation"
     end
 
     test "summarizes selected link assignments on the spacecraft overview" do

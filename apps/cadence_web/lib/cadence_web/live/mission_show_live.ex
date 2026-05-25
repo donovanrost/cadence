@@ -27,31 +27,24 @@ defmodule CadenceWeb.MissionShowLive do
         <p class="mt-1 text-sm text-base-content/50 font-mono">{@current_mission.slug}</p>
       </div>
 
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div class="grid gap-4 md:grid-cols-3">
         <.readiness_card
           title="Ready Spacecraft"
           value={@ready_spacecraft_count}
-          status={if @ready_spacecraft_count == 0, do: :warning, else: :ready}
+          status={if @ready_spacecraft_count == 0, do: :attention, else: :ready}
           description="Spacecraft with SCID, a runtime identity, and at least one downlink link template."
         />
         <.readiness_card
           title="Need SCID"
           value={@missing_scid_count}
-          status={if @missing_scid_count == 0, do: :ready, else: :missing}
+          status={if @missing_scid_count == 0, do: :ready, else: :blocked}
           description="Spacecraft that cannot be resolved from TM transfer-frame primary headers yet."
         />
         <.readiness_card
           title="Need Link"
           value={@missing_path_count}
-          status={if @missing_path_count == 0, do: :ready, else: :warning}
+          status={if @missing_path_count == 0, do: :ready, else: :attention}
           description="Spacecraft with identity configured but no provider-backed downlink link assignment."
-        />
-        <.readiness_card
-          title="Advanced Objects"
-          value={@advanced_object_count}
-          status={if @advanced_object_count == 0, do: :warning, else: :info}
-          description="Runtime identities, providers, protocol behaviors, and reusable link templates."
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/advanced/runtime-identities"}
         />
       </div>
 
@@ -76,7 +69,7 @@ defmodule CadenceWeb.MissionShowLive do
               >
                 Apply Link Template
               </.link>
-              <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :warning} />
+              <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
             </div>
           </div>
 
@@ -95,7 +88,7 @@ defmodule CadenceWeb.MissionShowLive do
               </.link>
             </div>
 
-            <table class="table">
+            <table :if={not @spacecraft_readiness_empty?} class="table">
               <thead>
                 <tr>
                   <th class="hud-label">Spacecraft</th>
@@ -169,11 +162,6 @@ defmodule CadenceWeb.MissionShowLive do
   defp load_summary(%{current_scope: scope, current_mission: mission}) do
     spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
     source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
-    provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)
-
-    transport_profiles =
-      Cadence.list_transport_profiles(scope.organization_id, mission.mission_id)
-
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
     link_assignments = Cadence.list_link_assignments(scope.organization_id, mission.mission_id)
 
@@ -192,10 +180,7 @@ defmodule CadenceWeb.MissionShowLive do
       missing_scid_count: Enum.count(spacecraft_readiness, &is_nil(&1.scid)),
       missing_path_count:
         Enum.count(spacecraft_readiness, &SpacecraftCommsReadiness.missing_path?/1),
-      setup_issue_count: Enum.count(spacecraft_readiness, &(&1.status != :ready)),
-      advanced_object_count:
-        length(source_endpoints) + length(provider_profiles) + length(transport_profiles) +
-          length(path_templates) + length(link_assignments)
+      setup_issue_count: Enum.count(spacecraft_readiness, &(&1.status != :ready))
     }
   end
 

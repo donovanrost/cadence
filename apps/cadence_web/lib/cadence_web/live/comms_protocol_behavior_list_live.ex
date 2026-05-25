@@ -1,4 +1,4 @@
-defmodule CadenceWeb.CommsTransportProfileListLive do
+defmodule CadenceWeb.CommsProtocolBehaviorListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
@@ -24,7 +24,7 @@ defmodule CadenceWeb.CommsTransportProfileListLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="comms-transport-profiles-page" class="space-y-6">
+    <div id="comms-protocol-behaviors-page" class="space-y-6">
       <section class="card bg-base-200">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
@@ -37,13 +37,13 @@ defmodule CadenceWeb.CommsTransportProfileListLive do
               </p>
             </div>
             <.status_badge
-              status={if @transport_profiles == [], do: :warning, else: :ready}
+              status={if @transport_profiles == [], do: :attention, else: :ready}
               label={if @transport_profiles == [], do: "Not Started", else: "Configured"}
             />
           </div>
           <div class="mt-4">
             <.link
-              id="new-transport-profile-link"
+              id="new-protocol-behavior-link"
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors/new"}
               class="btn btn-primary btn-sm"
             >
@@ -63,7 +63,7 @@ defmodule CadenceWeb.CommsTransportProfileListLive do
             </div>
           <% else %>
             <div class="mt-6 overflow-x-auto">
-              <table id="transport-profiles-table" class="table">
+              <table id="protocol-behaviors-table" class="table">
                 <thead>
                   <tr>
                     <th class="hud-label">Name</th>

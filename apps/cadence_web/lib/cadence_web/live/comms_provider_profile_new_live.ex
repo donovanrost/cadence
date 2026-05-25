@@ -120,7 +120,7 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
         />
 
         <details class="rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-          <summary class="cursor-pointer hud-label">Advanced Configuration Preview</summary>
+          <summary class="cursor-pointer hud-label">Configuration Preview</summary>
           <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(preview_configuration(@form), pretty: true)}</pre>
         </details>
 
