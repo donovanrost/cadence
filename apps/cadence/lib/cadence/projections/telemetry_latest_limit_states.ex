@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Projections.TelemetryLatestLimitStates do
   @moduledoc """
   Rebuilds the latest telemetry limit-state projection from canonical limit

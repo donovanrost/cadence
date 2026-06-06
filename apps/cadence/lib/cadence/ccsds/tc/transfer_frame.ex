@@ -58,8 +58,8 @@ defmodule Cadence.CCSDS.TC.TransferFrame do
     else
       frame_count = div(byte_size(buffer), frame_size)
       total_size = frame_count * frame_size
-      <<frames_bin::binary-size(total_size), rest::binary>> = buffer
-      frames = for <<frame::binary-size(frame_size) <- frames_bin>>, do: frame
+      <<frames_bin::binary-size(^total_size), rest::binary>> = buffer
+      frames = for <<frame::binary-size(^frame_size) <- frames_bin>>, do: frame
       {frames, rest}
     end
   end

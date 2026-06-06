@@ -22,9 +22,12 @@ defmodule CadenceWeb.MissionShowLive do
   def render(assigns) do
     ~H"""
     <div id="mission-overview-page" class="space-y-6">
-      <div>
-        <h1 class="text-2xl font-bold text-base-content">{@current_mission.display_name}</h1>
-        <p class="mt-1 text-sm text-base-content/50 font-mono">{@current_mission.slug}</p>
+      <div class="border-b border-primary/20 pb-4">
+        <p class="hud-label text-base-content/50">Mission</p>
+        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          {@current_mission.display_name}
+        </h1>
+        <p class="mt-1 font-mono text-xs text-base-content/40">{@current_mission.slug}</p>
       </div>
 
       <div class="grid gap-4 md:grid-cols-3">
@@ -32,43 +35,36 @@ defmodule CadenceWeb.MissionShowLive do
           title="Ready Spacecraft"
           value={@ready_spacecraft_count}
           status={if @ready_spacecraft_count == 0, do: :attention, else: :ready}
-          description="Spacecraft with SCID, a runtime identity, and at least one downlink link template."
+          description="Spacecraft with SCID and identity configured."
         />
         <.readiness_card
           title="Need SCID"
           value={@missing_scid_count}
           status={if @missing_scid_count == 0, do: :ready, else: :blocked}
-          description="Spacecraft that cannot be resolved from TM transfer-frame primary headers yet."
+          description="Spacecraft that cannot be resolved from incoming frames yet."
         />
         <.readiness_card
           title="Need Link"
           value={@missing_path_count}
           status={if @missing_path_count == 0, do: :ready, else: :attention}
-          description="Spacecraft with identity configured but no provider-backed downlink link assignment."
+          description="Spacecraft with identity configured but no provider link."
         />
       </div>
 
-      <section class="card bg-base-200">
+      <section class="card bg-base-200 border border-base-300 hud-corners">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="hud-label mb-2">Spacecraft Readiness</p>
               <h2 class="text-lg font-semibold">
-                Configure spacecraft identity, then assign mission-owned links
+                Configure spacecraft identity and select a spacecraft profile
               </h2>
-              <p class="mt-1 text-sm text-base-content/60">
-                Each row shows whether a spacecraft can be identified from TM transfer frames
-                and use a configured downlink link template.
+              <p class="mt-1 max-w-2xl text-sm text-base-content/60">
+                Each row shows whether a spacecraft can be identified from incoming frames
+                and has a profile that defines its byte-interpretation contract.
               </p>
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
-              <.link
-                id="configure-missing-links"
-                navigate={~p"/missions/#{@current_mission.mission_id}/comms/apply-link-template"}
-                class="btn btn-primary btn-sm"
-              >
-                Apply Link Template
-              </.link>
               <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
             </div>
           </div>
@@ -77,14 +73,14 @@ defmodule CadenceWeb.MissionShowLive do
             <div
               :if={@spacecraft_readiness_empty?}
               id="spacecraft-readiness-empty"
-              class="rounded border border-base-300 bg-base-100/40 p-5 text-sm text-base-content/60"
+              class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center text-sm text-base-content/60"
             >
-              No spacecraft have been registered for this mission yet.
+              No spacecraft have been registered for this mission yet.<br />
               <.link
                 navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
-                class="text-primary hover:underline"
+                class="mt-3 inline-flex btn btn-primary btn-sm hover-glow-cyan transition-glow"
               >
-                Add the first spacecraft.
+                Add the first spacecraft
               </.link>
             </div>
 
@@ -100,14 +96,18 @@ defmodule CadenceWeb.MissionShowLive do
                 </tr>
               </thead>
               <tbody id="spacecraft-readiness-table" phx-update="stream">
-                <tr :for={{id, row} <- @streams.spacecraft_readiness} id={id}>
+                <tr
+                  :for={{id, row} <- @streams.spacecraft_readiness}
+                  id={id}
+                  class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
+                >
                   <td>
                     <div class="font-medium">{row.spacecraft.display_name}</div>
-                    <div class="font-mono text-xs text-base-content/50">
+                    <div class="font-mono text-xs text-base-content/40">
                       {row.spacecraft.spacecraft_id}
                     </div>
                   </td>
-                  <td class="font-mono text-sm text-base-content/70">
+                  <td class="font-mono text-sm text-primary/80">
                     {format_scid(row.scid)}
                   </td>
                   <td>
@@ -138,13 +138,6 @@ defmodule CadenceWeb.MissionShowLive do
                           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{row.spacecraft.spacecraft_id}"
                         }>
                           View spacecraft
-                        </.link>
-                      </:action>
-                      <:action :if={row.endpoint_ref}>
-                        <.link navigate={
-                          spacecraft_links_path(@current_mission.mission_id, row.spacecraft)
-                        }>
-                          Link assignments
                         </.link>
                       </:action>
                     </.action_menu>
@@ -189,9 +182,5 @@ defmodule CadenceWeb.MissionShowLive do
 
   defp spacecraft_readiness_path(mission_id, spacecraft) do
     ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness"
-  end
-
-  defp spacecraft_links_path(mission_id, spacecraft) do
-    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/links"
   end
 end

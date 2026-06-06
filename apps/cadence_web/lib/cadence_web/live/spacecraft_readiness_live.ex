@@ -2,10 +2,9 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [display_name: 2, status_badge: 1]
+  import CadenceWeb.CommsComponents, only: [status_badge: 1]
 
   alias Cadence.Applications.TelemetryDecom
-  alias CadenceWeb.SpacecraftCommsReadiness
 
   @impl true
   def mount(_params, _session, socket) do
@@ -13,74 +12,76 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
       socket.assigns
 
     telemetry_status = telemetry_status(scope.organization_id, mission.mission_id, spacecraft)
-
-    runtime_identity =
-      SpacecraftCommsReadiness.runtime_identity(
-        scope.organization_id,
-        mission.mission_id,
-        spacecraft
-      )
-
-    link_assignment =
-      SpacecraftCommsReadiness.link_assignment(
-        scope.organization_id,
-        mission.mission_id,
-        runtime_identity
-      )
+    type_binding = load_type_binding(scope.organization_id, mission.mission_id, spacecraft)
 
     {:ok,
      socket
      |> assign(:page_title, "#{spacecraft.display_name} Readiness")
      |> assign(:nav_item, :spacecraft)
      |> assign(:telemetry_status, telemetry_status)
-     |> assign(:runtime_identity, runtime_identity)
-     |> assign(:link_assignment, link_assignment)}
+     |> assign(:type_binding, type_binding)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
     <div id="spacecraft-readiness-page" class="space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <.breadcrumbs items={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-            {@current_spacecraft.display_name,
-             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-            {"Readiness", nil}
-          ]} />
-          <p class="hud-label mt-3 mb-2">Spacecraft Readiness</p>
-          <h1 class="text-2xl font-bold text-base-content">
-            Identity, interpretation, and link assignment
-          </h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            Mission Comms owns shared network paths. This page shows whether this spacecraft
-            can be identified, interpreted, and assigned to those mission-owned links.
-          </p>
+      <div class="border-b border-primary/20 pb-4">
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {@current_spacecraft.display_name,
+           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+          {"Readiness", nil}
+        ]} />
+        <div class="mt-2 flex items-start justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-bold text-base-content tracking-tight">
+              Readiness &middot;
+              <span class="text-base-content/40 font-normal">
+                {@current_spacecraft.display_name}
+              </span>
+            </h1>
+            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
+              Identity, profile, and application setup for this spacecraft.
+            </p>
+          </div>
+          <.status_badge status={overall_status(@current_spacecraft, @telemetry_status, @type_binding)} />
         </div>
-        <.status_badge status={overall_status(@current_spacecraft, @telemetry_status, @link_assignment)} />
       </div>
 
       <div class="grid gap-4 xl:grid-cols-2">
         <.readiness_panel
           id="spacecraft-readiness-identity"
           title="Identity"
-          status={identity_status(@current_spacecraft, @runtime_identity)}
-          status_label={identity_status_label(@current_spacecraft, @runtime_identity)}
-          description={identity_description(@current_spacecraft, @runtime_identity)}
+          status={identity_status(@current_spacecraft)}
+          status_label={identity_status_label(@current_spacecraft)}
+          description={identity_description(@current_spacecraft)}
           action_label="Edit Identity"
           action_navigate={
             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
           }
         >
           <:detail label="SCID" value={format_scid(@current_spacecraft.scid)} />
-          <:detail label="Runtime Identity" value={runtime_identity_label(@runtime_identity)} />
         </.readiness_panel>
 
         <.readiness_panel
-          id="spacecraft-readiness-telemetry"
-          title="Telemetry Interpretation"
+          id="spacecraft-readiness-profile"
+          title="Spacecraft Profile"
+          status={profile_status(@type_binding)}
+          status_label={profile_status_label(@type_binding)}
+          description={profile_description(@type_binding)}
+          action_label={profile_action_label(@type_binding)}
+          action_navigate={
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
+          }
+        >
+          <:detail label="Pinned Profile" value={profile_detail(@type_binding)} />
+        </.readiness_panel>
+
+        <.readiness_panel
+          id="spacecraft-readiness-applications"
+          title="Applications"
           status={telemetry_panel_status(@telemetry_status)}
           status_label={telemetry_status_label(@telemetry_status)}
           description={telemetry_description(@telemetry_status)}
@@ -89,35 +90,21 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/telemetry"
           }
         >
-          <:detail label="Configuration" value={telemetry_status_label(@telemetry_status)} />
+          <:detail label="Telemetry Decom" value={telemetry_status_label(@telemetry_status)} />
         </.readiness_panel>
 
         <.readiness_panel
-          id="spacecraft-readiness-links"
-          title="Link Assignments"
-          status={link_panel_status(@link_assignment)}
-          status_label={link_status_label(@link_assignment)}
-          description={link_description(@link_assignment)}
-          action_label={link_action_label(@link_assignment)}
-          action_navigate={link_action_navigate(@current_mission.mission_id, @current_spacecraft)}
-        >
-          <:detail label="Downlink" value={link_detail(@link_assignment)} />
-          <:detail label="Runtime Identity" value={runtime_identity_label(@runtime_identity)} />
-        </.readiness_panel>
-
-        <.readiness_panel
-          id="spacecraft-readiness-command"
-          title="Command Interpretation"
+          id="spacecraft-readiness-routing"
+          title="Routing"
           status={:info}
-          status_label="Not tracked"
-          description="Command interpretation will live with the spacecraft once command setup is exposed."
-          action_label="Review Commanding"
+          status_label="Tracked in Comms"
+          description="Routing Rules describe durable spacecraft use of mission transports."
+          action_label="Review Routing"
           action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/commanding"
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/routing"
           }
         >
-          <:detail label="TC framing" value="Not tracked" />
-          <:detail label="Command routing" value="Not tracked" />
+          <:detail label="Setup Area" value="Routing Rules" />
         </.readiness_panel>
       </div>
     </div>
@@ -139,28 +126,32 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
 
   defp readiness_panel(assigns) do
     ~H"""
-    <section id={@id} class="card bg-base-200 border border-base-300">
+    <section
+      id={@id}
+      class={[
+        "card bg-base-200 border border-base-300",
+        readiness_panel_accent(@status)
+      ]}
+    >
       <div class="card-body p-6">
         <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label mb-2">{@title}</p>
-            <h2 class="text-lg font-semibold">{@status_label}</h2>
-            <p class="mt-1 text-sm text-base-content/60">{@description}</p>
-          </div>
+          <p class="hud-label">{@title}</p>
           <.status_badge status={@status} label={@status_label} />
         </div>
+        <h2 class="mt-3 text-base font-semibold">{@status_label}</h2>
+        <p class="mt-1 text-sm text-base-content/60">{@description}</p>
 
-        <div class="mt-5 divide-y divide-base-300">
-          <div :for={detail <- @detail} class="grid gap-2 py-3 sm:grid-cols-[10rem_1fr]">
-            <div class="hud-label text-base-content/50">{detail.label}</div>
-            <div class="text-sm text-base-content">{detail.value}</div>
+        <div class="mt-5 space-y-1">
+          <div :for={detail <- @detail} class="hud-data-row">
+            <span class="hud-data-label">{detail.label}</span>
+            <span class="hud-data-value">{detail.value}</span>
           </div>
         </div>
 
         <.link
           :if={@action_navigate}
           navigate={@action_navigate}
-          class="btn btn-primary btn-sm mt-5"
+          class="btn btn-primary btn-sm mt-5 hover-glow-cyan transition-glow"
         >
           {@action_label}
         </.link>
@@ -168,6 +159,11 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     </section>
     """
   end
+
+  defp readiness_panel_accent(:ready), do: "border-l-2 border-l-success/60"
+  defp readiness_panel_accent(:attention), do: "border-l-2 border-l-warning/60"
+  defp readiness_panel_accent(:blocked), do: "border-l-2 border-l-error/60"
+  defp readiness_panel_accent(_), do: "border-l-2 border-l-transparent"
 
   defp telemetry_status(organization_id, mission_id, spacecraft) do
     config =
@@ -191,31 +187,86 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     TelemetryDecom.status(config, active)
   end
 
-  defp overall_status(spacecraft, telemetry_status, link_assignment) do
-    if SpacecraftCommsReadiness.identity_ready?(spacecraft) and telemetry_status == :applied and
-         not is_nil(link_assignment.selected_downlink) do
+  defp load_type_binding(_organization_id, _mission_id, %{spacecraft_type_id: nil}), do: nil
+
+  defp load_type_binding(organization_id, mission_id, spacecraft) do
+    pinned =
+      Cadence.fetch_spacecraft_type_version(
+        organization_id,
+        mission_id,
+        spacecraft.spacecraft_type_id,
+        spacecraft.spacecraft_type_version
+      )
+
+    latest =
+      Cadence.fetch_spacecraft_type(
+        organization_id,
+        mission_id,
+        spacecraft.spacecraft_type_id
+      )
+
+    case {pinned, latest} do
+      {{:ok, pinned_type}, {:ok, latest_type}} ->
+        %{
+          pinned: pinned_type,
+          latest_version: latest_type.version,
+          drift?: latest_type.version > pinned_type.version
+        }
+
+      {{:ok, pinned_type}, _} ->
+        %{pinned: pinned_type, latest_version: pinned_type.version, drift?: false}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp overall_status(spacecraft, telemetry_status, type_binding) do
+    if identity_status(spacecraft) == :ready and profile_status(type_binding) == :ready and
+         telemetry_panel_status(telemetry_status) in [:ready, :attention] do
       :ready
     else
       :attention
     end
   end
 
-  defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
-  defp identity_status(_spacecraft, nil), do: :attention
-  defp identity_status(_spacecraft, _runtime_identity), do: :ready
+  defp identity_status(%{scid: nil}), do: :blocked
+  defp identity_status(_spacecraft), do: :ready
 
-  defp identity_status_label(%{scid: nil}, _runtime_identity), do: "Missing SCID"
-  defp identity_status_label(_spacecraft, nil), do: "Runtime identity missing"
-  defp identity_status_label(_spacecraft, _runtime_identity), do: "Ready"
+  defp identity_status_label(%{scid: nil}), do: "Missing SCID"
+  defp identity_status_label(_spacecraft), do: "Ready"
 
-  defp identity_description(%{scid: nil}, _runtime_identity),
+  defp identity_description(%{scid: nil}),
     do: "Set SCID so Cadence can identify this spacecraft from TM transfer frames."
 
-  defp identity_description(_spacecraft, nil),
-    do: "Create or sync the runtime identity for this spacecraft."
+  defp identity_description(_spacecraft),
+    do: "The spacecraft identity is configured."
 
-  defp identity_description(_spacecraft, _runtime_identity),
-    do: "Cadence can resolve incoming bytes to this spacecraft identity."
+  defp profile_status(nil), do: :attention
+  defp profile_status(%{drift?: true}), do: :attention
+  defp profile_status(_type_binding), do: :ready
+
+  defp profile_status_label(nil), do: "No profile selected"
+  defp profile_status_label(%{drift?: true}), do: "Profile drift"
+  defp profile_status_label(_type_binding), do: "Current"
+
+  defp profile_description(nil),
+    do: "Select a Spacecraft Profile to pin a reusable byte-interpretation contract."
+
+  defp profile_description(%{drift?: true}),
+    do: "A newer Spacecraft Profile version is available; this spacecraft remains pinned."
+
+  defp profile_description(_type_binding),
+    do: "The spacecraft is pinned to a Spacecraft Profile version."
+
+  defp profile_action_label(nil), do: "Select Profile"
+  defp profile_action_label(_type_binding), do: "Change Profile"
+
+  defp profile_detail(nil), do: "Not selected"
+
+  defp profile_detail(%{pinned: profile}) do
+    "#{profile.display_name} v#{profile.version}"
+  end
 
   defp telemetry_panel_status(:applied), do: :ready
   defp telemetry_panel_status(:configured), do: :attention
@@ -230,10 +281,10 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
   defp telemetry_status_label(:not_configured), do: "Not configured"
 
   defp telemetry_description(:applied),
-    do: "Telemetry interpretation is live for this spacecraft."
+    do: "Telemetry interpretation is configured for this spacecraft."
 
   defp telemetry_description(:configured),
-    do: "Telemetry interpretation is saved but not applied to the mission runtime."
+    do: "Telemetry interpretation is saved and ready for mission application."
 
   defp telemetry_description(:outdated),
     do: "Telemetry interpretation has changed since it was last applied."
@@ -242,55 +293,10 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     do: "Telemetry interpretation is disabled for this spacecraft."
 
   defp telemetry_description(:not_configured),
-    do: "Configure catalog binding and APID ownership before downlink data can be interpreted."
+    do: "Configure catalog binding and APID ownership for this spacecraft application."
 
   defp telemetry_action_label(:not_configured), do: "Configure Telemetry"
   defp telemetry_action_label(_status), do: "Manage Telemetry"
-
-  defp link_panel_status(%{selected_downlink: nil}), do: :attention
-  defp link_panel_status(_assignment), do: :ready
-
-  defp link_status_label(%{selected_downlink: nil, available_downlink_count: count})
-       when count > 0,
-       do: "Needs assignment"
-
-  defp link_status_label(%{selected_downlink: nil}), do: "Needs downlink"
-
-  defp link_status_label(_assignment), do: "Ready"
-
-  defp link_description(%{selected_downlink: nil, available_downlink_count: count})
-       when count > 0,
-       do: "Assign an available provider-backed downlink link template from Mission Network."
-
-  defp link_description(%{selected_downlink: nil}),
-    do: "Assign a provider-backed downlink link template from Mission Network."
-
-  defp link_description(_assignment),
-    do: "This spacecraft has a selected provider-backed downlink link template."
-
-  defp link_detail(%{selected_downlink: nil, available_downlink_count: count}) when count > 0 do
-    "#{count} available downlink link template#{if count == 1, do: "", else: "s"}"
-  end
-
-  defp link_detail(%{selected_downlink: nil, assigned_count: 0}), do: "No assigned links"
-
-  defp link_detail(%{selected_downlink: nil, assigned_count: count}) do
-    "#{count} assigned link template#{if count == 1, do: "", else: "s"}"
-  end
-
-  defp link_detail(%{selected_downlink: template}) do
-    display_name(template, :path_template_id)
-  end
-
-  defp link_action_label(%{selected_downlink: nil}), do: "Assign Link"
-  defp link_action_label(_assignment), do: "View Links"
-
-  defp link_action_navigate(mission_id, spacecraft) do
-    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/links"
-  end
-
-  defp runtime_identity_label(nil), do: "Not created"
-  defp runtime_identity_label(runtime_identity), do: runtime_identity.source_endpoint_id
 
   defp format_scid(nil), do: "Not set"
   defp format_scid(scid), do: Integer.to_string(scid)

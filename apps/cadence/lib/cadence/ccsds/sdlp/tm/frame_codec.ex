@@ -134,9 +134,9 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     else
       frame_count = div(byte_size(buffer), frame_size)
       total_size = frame_count * frame_size
-      <<frames_bin::binary-size(total_size), rest::binary>> = buffer
+      <<frames_bin::binary-size(^total_size), rest::binary>> = buffer
 
-      frames = for <<frame::binary-size(frame_size) <- frames_bin>>, do: frame
+      frames = for <<frame::binary-size(^frame_size) <- frames_bin>>, do: frame
       {frames, rest}
     end
   end
@@ -264,9 +264,9 @@ defmodule Cadence.CCSDS.SDLP.TM.FrameCodec do
     if byte_size(payload) < sec_hdr_len + ocf_len do
       {:error, :frame_too_short}
     else
-      <<_sec_hdr::binary-size(sec_hdr_len), rest::binary>> = payload
+      <<_sec_hdr::binary-size(^sec_hdr_len), rest::binary>> = payload
       data_len = byte_size(rest) - ocf_len
-      <<data_field::binary-size(data_len), ocf::binary-size(ocf_len)>> = rest
+      <<data_field::binary-size(^data_len), ocf::binary-size(^ocf_len)>> = rest
       {:ok, data_field, ocf}
     end
   end

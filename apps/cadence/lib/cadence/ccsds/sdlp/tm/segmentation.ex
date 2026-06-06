@@ -78,7 +78,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
 
   defp build_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count)
        when byte_size(packet) > max_payload do
-    <<segment::binary-size(max_payload), rest::binary>> = packet
+    <<segment::binary-size(^max_payload), rest::binary>> = packet
     fhp = if first?, do: 0, else: 2047
     frame = build_frame(segment, fhp, frame_ctx, state)
 
@@ -103,7 +103,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Segmentation do
 
   defp encode_segmented_frames(packet, max_payload, frame_ctx, state, acc, first?, count)
        when byte_size(packet) > max_payload do
-    <<segment::binary-size(max_payload), rest::binary>> = packet
+    <<segment::binary-size(^max_payload), rest::binary>> = packet
     fhp = if first?, do: 0, else: 2047
     frame = encode_frame(segment, fhp, frame_ctx, state)
 

@@ -326,6 +326,6 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
         []
       )
 
-    for <<frame::binary-size(frame_size) <- encoded_frames>>, do: frame
+    for <<frame::binary-size(^frame_size) <- encoded_frames>>, do: frame
   end
 end

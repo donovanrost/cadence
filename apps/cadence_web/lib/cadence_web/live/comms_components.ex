@@ -11,13 +11,13 @@ defmodule CadenceWeb.CommsComponents do
 
   def readiness_card(assigns) do
     ~H"""
-    <div class="card bg-base-200 border border-base-300">
+    <div class={[
+      "card bg-base-200 border border-base-300",
+      readiness_accent(@status)
+    ]}>
       <div class="card-body p-5">
         <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label mb-2">{@title}</p>
-            <p class="text-3xl font-bold font-mono">{@value}</p>
-          </div>
+          <p class="hud-label">{@title}</p>
           <span class={[
             "rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
             status_class(@status)
@@ -25,14 +25,24 @@ defmodule CadenceWeb.CommsComponents do
             {status_label(@status)}
           </span>
         </div>
-        <p class="mt-3 text-sm text-base-content/60">{@description}</p>
-        <.link :if={@navigate} navigate={@navigate} class="mt-4 text-sm text-primary hover:underline">
-          Review configuration
+        <p class="mt-3 mc-value-large text-primary">{@value}</p>
+        <p class="mt-2 text-sm text-base-content/60">{@description}</p>
+        <.link
+          :if={@navigate}
+          navigate={@navigate}
+          class="mt-4 inline-flex text-sm text-primary hover:underline"
+        >
+          Review configuration &rarr;
         </.link>
       </div>
     </div>
     """
   end
+
+  defp readiness_accent(:ready), do: "border-l-2 border-l-success/60"
+  defp readiness_accent(:attention), do: "border-l-2 border-l-warning/60"
+  defp readiness_accent(:blocked), do: "border-l-2 border-l-error/60"
+  defp readiness_accent(_), do: "border-l-2 border-l-transparent"
 
   attr :status, :atom, required: true
   attr :label, :string, default: nil
@@ -60,6 +70,8 @@ defmodule CadenceWeb.CommsComponents do
     Map.get(resource, fallback_field)
   end
 
+  def human_atom(nil), do: "Not set"
+
   def human_atom(value) when is_atom(value) do
     value
     |> Atom.to_string()
@@ -68,7 +80,6 @@ defmodule CadenceWeb.CommsComponents do
   end
 
   def human_atom(value) when is_binary(value), do: value
-  def human_atom(nil), do: "Not set"
 
   def profile_ref_label(ref, id_key) do
     id = Map.get(ref, id_key) || "unknown"

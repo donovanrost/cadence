@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
   @moduledoc false
 

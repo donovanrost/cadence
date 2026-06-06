@@ -87,6 +87,12 @@ defmodule CadenceWeb.Router do
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id/spacecraft", SpacecraftListLive, :index
       live "/missions/:mission_id/spacecraft/new", SpacecraftNewLive, :new
+      live "/missions/:mission_id/spacecraft/profiles", SpacecraftTypeListLive, :index
+      live "/missions/:mission_id/spacecraft/profiles/new", SpacecraftTypeNewLive, :new
+
+      live "/missions/:mission_id/spacecraft/profiles/:profile_id",
+           SpacecraftTypeShowLive,
+           :show
     end
 
     live_session :spacecraft_show,
@@ -109,7 +115,9 @@ defmodule CadenceWeb.Router do
            SpacecraftReadinessLive,
            :show
 
-      live "/missions/:mission_id/spacecraft/:spacecraft_id/links", SpacecraftLinksLive, :show
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
+           SpacecraftRoutingLive,
+           :show
 
       live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
            SpacecraftTelemetryDecomLive,
@@ -169,21 +177,33 @@ defmodule CadenceWeb.Router do
       layout: {CadenceWeb.Layouts, :mission_sidebar} do
       live "/missions/:mission_id/comms", CommsOverviewLive, :index
 
-      live "/missions/:mission_id/comms/apply-link-template",
-           CommsApplyLinkTemplateLive,
-           :new
-
-      live "/missions/:mission_id/comms/bulk-links",
-           CommsApplyLinkTemplateLive,
-           :new
-
-      live "/missions/:mission_id/comms/runtime-identities",
-           CommsSourceEndpointListLive,
+      live "/missions/:mission_id/comms/transports",
+           CommsTransportListLive,
            :index
 
-      live "/missions/:mission_id/comms/runtime-identities/new",
-           CommsSourceEndpointNewLive,
+      live "/missions/:mission_id/comms/transports/new",
+           CommsTransportNewLive,
            :new
+
+      live "/missions/:mission_id/comms/transports/:transport_id",
+           CommsTransportShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/routing",
+           CommsRoutingListLive,
+           :index
+
+      live "/missions/:mission_id/comms/routing/new",
+           CommsRoutingNewLive,
+           :new
+
+      live "/missions/:mission_id/comms/routing/:routing_rule_id",
+           CommsRoutingShowLive,
+           :show
+
+      live "/missions/:mission_id/comms/validation",
+           CommsValidationLive,
+           :index
 
       live "/missions/:mission_id/comms/providers",
            CommsProviderProfileListLive,
@@ -199,42 +219,6 @@ defmodule CadenceWeb.Router do
 
       live "/missions/:mission_id/comms/providers/:provider_profile_id/new-version",
            CommsProviderProfileNewLive,
-           :version
-
-      live "/missions/:mission_id/comms/protocol-behaviors",
-           CommsProtocolBehaviorListLive,
-           :index
-
-      live "/missions/:mission_id/comms/protocol-behaviors/new",
-           CommsProtocolBehaviorNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id",
-           CommsProtocolBehaviorShowLive,
-           :show
-
-      live "/missions/:mission_id/comms/protocol-behaviors/:transport_profile_id/new-version",
-           CommsProtocolBehaviorNewLive,
-           :version
-
-      live "/missions/:mission_id/comms/link-templates",
-           CommsLinkTemplateListLive,
-           :index
-
-      live "/missions/:mission_id/comms/link-templates/new",
-           CommsLinkTemplateNewLive,
-           :new
-
-      live "/missions/:mission_id/comms/link-templates/new-shared-link",
-           CommsLinkBuilderLive,
-           :new
-
-      live "/missions/:mission_id/comms/link-templates/:path_template_id",
-           CommsLinkTemplateShowLive,
-           :show
-
-      live "/missions/:mission_id/comms/link-templates/:path_template_id/new-version",
-           CommsLinkTemplateNewLive,
            :version
     end
 

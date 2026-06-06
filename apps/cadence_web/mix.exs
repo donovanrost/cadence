@@ -47,7 +47,8 @@ defmodule CadenceWeb.MixProject do
       {:phoenix_html, "~> 4.3"},
       {:phoenix_live_view, "~> 1.1"},
       {:swoosh, "~> 1.17"},
-      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev}
+      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:tidewave, "~> 0.5", only: [:dev]}
     ]
   end
 

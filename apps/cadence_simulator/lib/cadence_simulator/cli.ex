@@ -681,7 +681,6 @@ defmodule CadenceSimulator.CLI do
     case fetch_map_value(parsed, ["simulator"]) do
       nil -> {:ok, parsed}
       %{} = simulator_root -> {:ok, simulator_root}
-      _other -> {:error, "simulator config root must be a map"}
     end
   end
 
@@ -1126,7 +1125,6 @@ defmodule CadenceSimulator.CLI do
     end)
   end
 
-  defp parse_integer(nil), do: nil
   defp parse_integer(value) when is_integer(value), do: value
 
   defp parse_integer(value) when is_binary(value) do

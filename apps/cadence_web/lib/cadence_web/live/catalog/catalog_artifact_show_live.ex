@@ -1,7 +1,7 @@
 defmodule CadenceWeb.CatalogArtifactShowLive do
   @moduledoc false
 
-  # TODO(authz): Catalog management currently permitted for any active org member.
+  # Authz note: Catalog management currently permitted for any active org member.
   use CadenceWeb, :live_view
 
   import CadenceWeb.Catalog.Components

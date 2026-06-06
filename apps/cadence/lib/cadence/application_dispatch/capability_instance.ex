@@ -141,12 +141,12 @@ defmodule Cadence.ApplicationDispatch.CapabilityInstance do
 
   defp build_capability_config(_attrs), do: nil
 
+  defp normalize_family_key(nil), do: nil
+
   defp normalize_family_key(family_key) when is_atom(family_key), do: family_key
 
   defp normalize_family_key(family_key) when is_binary(family_key),
     do: String.to_existing_atom(family_key)
-
-  defp normalize_family_key(nil), do: nil
 
   defp normalize_target_scope(target_scope) when is_atom(target_scope), do: target_scope
 

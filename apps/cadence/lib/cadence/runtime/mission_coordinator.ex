@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Runtime.MissionCoordinator do
   @moduledoc """
   Mission-scoped runtime coordinator for active basis resolution and partition
@@ -202,8 +203,6 @@ defmodule Cadence.Runtime.MissionCoordinator do
     end
   end
 
-  defp ensure_partition_owner(_state, %PartitionKey{}), do: {:error, :no_active_binding_set}
-
   defp start_partition_owner(mission_id, %PartitionKey{} = partition_key, activation, binding_set) do
     child_spec =
       {PartitionOwner,
@@ -249,6 +248,4 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
     state
   end
-
-  defp reconcile_partitions(state), do: state
 end

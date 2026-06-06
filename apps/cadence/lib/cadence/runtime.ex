@@ -176,9 +176,6 @@ defmodule Cadence.Runtime do
 
       {:error, :realized_contact_runtime_not_running} ->
         :ok
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 

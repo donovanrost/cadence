@@ -34,12 +34,13 @@ defmodule Cadence.Telemetry.Extractor do
 
       true ->
         prefix_size = field.offset_bits
+        field_size = field.size_bits
         suffix_size = total_bits - end_offset
 
         <<
-          _::size(prefix_size),
-          value_bits::bitstring-size(field.size_bits),
-          _::size(suffix_size)
+          _::size(^prefix_size),
+          value_bits::bitstring-size(^field_size),
+          _::size(^suffix_size)
         >> = packet_data
 
         decode_value(value_bits, field)
@@ -83,11 +84,11 @@ defmodule Cadence.Telemetry.Extractor do
       value =
         case sign_mode do
           :unsigned ->
-            <<decoded::little-unsigned-size(size_bits)>> = value_bits
+            <<decoded::little-unsigned-size(^size_bits)>> = value_bits
             decoded
 
           :signed ->
-            <<decoded::little-signed-size(size_bits)>> = value_bits
+            <<decoded::little-signed-size(^size_bits)>> = value_bits
             decoded
         end
 
@@ -99,11 +100,11 @@ defmodule Cadence.Telemetry.Extractor do
     value =
       case sign_mode do
         :unsigned ->
-          <<decoded::big-unsigned-size(size_bits)>> = value_bits
+          <<decoded::big-unsigned-size(^size_bits)>> = value_bits
           decoded
 
         :signed ->
-          <<decoded::big-signed-size(size_bits)>> = value_bits
+          <<decoded::big-signed-size(^size_bits)>> = value_bits
           decoded
       end
 

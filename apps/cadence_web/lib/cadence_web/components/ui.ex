@@ -219,14 +219,22 @@ defmodule CadenceWeb.UI do
   attr :items, :list, required: true
 
   def breadcrumbs(assigns) do
+    assigns = assign(assigns, :last_index, length(assigns.items) - 1)
+
     ~H"""
-    <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-1.5 text-xs text-base-content/60">
+    <nav
+      aria-label="Breadcrumb"
+      class="flex flex-wrap items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.15em] text-base-content/40"
+    >
       <%= for {{label, path}, index} <- Enum.with_index(@items) do %>
-        <span :if={index > 0} class="hero-chevron-right h-3 w-3 opacity-60"></span>
-        <%= if path do %>
-          <.link navigate={path} class="hover:text-primary">{label}</.link>
-        <% else %>
-          <span class="text-base-content">{label}</span>
+        <span :if={index > 0} class="text-base-content/20" aria-hidden="true">/</span>
+        <%= cond do %>
+          <% index == @last_index -> %>
+            <span class="text-primary/90">{label}</span>
+          <% path -> %>
+            <.link navigate={path} class="hover:text-primary transition-colors">{label}</.link>
+          <% true -> %>
+            <span>{label}</span>
         <% end %>
       <% end %>
     </nav>

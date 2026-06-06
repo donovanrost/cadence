@@ -112,22 +112,22 @@
               Overview
             </:item>
             <:item
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
-              active={assigns[:nav_item] == :comms_providers}
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports"}
+              active={assigns[:nav_item] == :comms_transports}
             >
-              Providers
+              Transports
             </:item>
             <:item
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}
-              active={assigns[:nav_item] == :comms_link_templates}
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+              active={assigns[:nav_item] == :comms_routing}
             >
-              Link Templates
+              Routing
             </:item>
             <:item
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities"}
-              active={assigns[:nav_item] == :comms_runtime_identities}
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/validation"}
+              active={assigns[:nav_item] == :comms_validation}
             >
-              Runtime Identities
+              Validation
             </:item>
           </.nav_section>
         </ul>

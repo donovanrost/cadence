@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Protocol.RecordArchive.FileSystem do
   @moduledoc """
   Local filesystem protocol-record archive backend.

@@ -947,7 +947,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
         []
       )
 
-    for <<frame::binary-size(frame_size) <- encoded_frames>>, do: frame
+    for <<frame::binary-size(^frame_size) <- encoded_frames>>, do: frame
   end
 
   defp build_tm_single_frame(apid, sequence_count, packet_data, frame_size, vcfc) do

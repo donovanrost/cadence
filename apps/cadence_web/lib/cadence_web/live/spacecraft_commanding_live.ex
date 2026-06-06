@@ -56,9 +56,7 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
           id="spacecraft-commanding-uplink"
           title="Uplink Behavior"
           value="Not tracked"
-          description="COP-1 and uplink gateway behavior can be reviewed from mission protocol behaviors today."
-          action_label="View Protocol Behaviors"
-          action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
+          description="COP-1 and uplink-gateway behavior is configured on the spacecraft's type. Surface here when commanding ships."
         />
       </section>
 

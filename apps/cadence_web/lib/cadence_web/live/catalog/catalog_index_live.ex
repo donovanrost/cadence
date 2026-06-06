@@ -51,24 +51,26 @@ defmodule CadenceWeb.CatalogIndexLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <.breadcrumbs items={[
-        {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-        {"Catalog", nil}
-      ]} />
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-bold text-base-content">Catalog</h1>
-          <p class="text-sm text-base-content/60 mt-1">
-            Mission database library. Revisions are imported here; runtime usage is selected later.
-          </p>
+      <div class="border-b border-primary/20 pb-4">
+        <.breadcrumbs items={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Catalog", nil}
+        ]} />
+        <div class="mt-2 flex items-start justify-between gap-4">
+          <div>
+            <h1 class="text-2xl font-bold text-base-content tracking-tight">Catalog</h1>
+            <p class="mt-2 max-w-2xl text-sm text-base-content/60">
+              Mission database library. Revisions are imported here; runtime usage is selected later.
+            </p>
+          </div>
+          <.link
+            id="new-database-link"
+            navigate={~p"/missions/#{@current_mission.mission_id}/catalog/new"}
+            class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
+          >
+            <span class="hero-plus h-4 w-4"></span> New database
+          </.link>
         </div>
-        <.link
-          id="new-database-link"
-          navigate={~p"/missions/#{@current_mission.mission_id}/catalog/new"}
-          class="btn btn-primary"
-        >
-          + New database
-        </.link>
       </div>
 
       <.databases_table

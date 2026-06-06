@@ -102,49 +102,21 @@ defmodule CadenceWeb.MissionShowLiveTest do
       assert html =~ "Cadence Ops"
     end
 
-    test "renders the spacecraft readiness table and Apply Link Template CTA" do
+    test "renders the spacecraft readiness table" do
       {conn, org} = signed_in_conn()
       mission = persist_mission!(org, "primary", "Primary Mission")
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
 
       assert has_element?(view, "#spacecraft-readiness-section")
-      assert has_element?(view, "#configure-missing-links")
       assert has_element?(view, "#spacecraft-readiness-empty")
     end
 
-    test "shows spacecraft readiness from SCID, runtime identity, and link state" do
+    test "shows spacecraft readiness from SCID and runtime state" do
       {conn, org} = signed_in_conn()
       mission = persist_mission!(org, "primary", "Primary Mission")
       missing_scid = TestFixtures.persist_spacecraft!(mission, display_name: "Needs SCID")
       ready = persist_ready_spacecraft_comms_setup!(org, mission)
-
-      needs_assignment =
-        TestFixtures.persist_spacecraft!(mission, display_name: "Needs Assignment", scid: 84)
-
-      assert {:ok, _endpoint} =
-               Cadence.ensure_managed_spacecraft_source_endpoint(
-                 org.organization_id,
-                 needs_assignment
-               )
-
-      available_path =
-        PathTemplate.new(%{
-          mission_id: mission.mission_id,
-          direction: :downlink,
-          selection_role: :selected,
-          source_endpoint_ref: nil,
-          provider_profile_refs: [
-            %{
-              "provider_profile_id" => ready.provider.provider_profile_id,
-              "version" => ready.provider.version
-            }
-          ],
-          metadata: %{"display_name" => "Assignable downlink"}
-        })
-
-      assert {:ok, _available_path} =
-               Cadence.persist_path_template(org.organization_id, available_path)
 
       {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
       html = render(view)
@@ -154,22 +126,9 @@ defmodule CadenceWeb.MissionShowLiveTest do
       assert html =~ "Needs identity"
 
       assert html =~ ready.spacecraft.display_name
-      assert html =~ "Managed identity"
-      assert html =~ "Ready for SCID-based telemetry routing."
-      assert html =~ "Ready"
-
-      assert html =~ needs_assignment.display_name
-      assert html =~ "Available to assign"
-      assert html =~ "2 available mission templates"
-      assert html =~ "Assign an available downlink link template to this spacecraft."
 
       assert html =~
                ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/readiness"
-
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{ready.spacecraft.spacecraft_id}/links"
-
-      assert html =~ "Link assignments"
     end
   end
 

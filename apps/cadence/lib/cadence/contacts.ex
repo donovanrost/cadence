@@ -1252,9 +1252,6 @@ defmodule Cadence.Contacts do
           :ok -> {:error, :realized_contact_not_found}
           {:error, reason} -> {:error, reason}
         end
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -1272,9 +1269,6 @@ defmodule Cadence.Contacts do
           :ok -> {:error, :realized_contact_not_found}
           {:error, reason} -> {:error, reason}
         end
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -1707,9 +1701,6 @@ defmodule Cadence.Contacts do
 
       {:error, :realized_contact_not_found} ->
         persist_realized_contact(realized_contact)
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -1763,9 +1754,6 @@ defmodule Cadence.Contacts do
 
       {:error, :realized_contact_not_found} ->
         {:ok, nil}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -1798,9 +1786,6 @@ defmodule Cadence.Contacts do
 
       {:error, :scheduled_contact_not_found} ->
         {:ok, nil}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 

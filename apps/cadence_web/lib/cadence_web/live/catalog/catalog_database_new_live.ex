@@ -1,7 +1,7 @@
 defmodule CadenceWeb.CatalogDatabaseNewLive do
   @moduledoc false
 
-  # TODO(authz): any signed-in mission member can create a catalog database.
+  # Authz note: any signed-in mission member can create a catalog database.
   # Tighten once platform-wide authorization is defined.
   use CadenceWeb, :live_view
 

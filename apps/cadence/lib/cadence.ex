@@ -40,6 +40,9 @@ defmodule Cadence do
     StagedCommandItem
   }
 
+  alias Cadence.Comms.{RoutingRule, RoutingRuleEvent, Transport}
+  alias Cadence.Comms.RoutingRuleStore
+  alias Cadence.Comms.TransportStore
   alias Cadence.Contacts, as: ContactsService
 
   alias Cadence.Contacts.{
@@ -72,6 +75,8 @@ defmodule Cadence do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftType
+  alias Cadence.SpacecraftTypeStore
 
   alias Cadence.Projections.DerivedTelemetryLatestValues,
     as: DerivedTelemetryLatestValueProjection
@@ -323,6 +328,189 @@ defmodule Cadence do
   def ensure_managed_spacecraft_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
       when is_binary(organization_id) do
     SpacecraftStore.ensure_managed_source_endpoint(organization_id, spacecraft)
+  end
+
+  @spec persist_spacecraft_type(binary(), SpacecraftType.t()) ::
+          {:ok, SpacecraftType.t()} | {:error, term()}
+  def persist_spacecraft_type(organization_id, %SpacecraftType{} = type)
+      when is_binary(organization_id) do
+    SpacecraftTypeStore.persist_spacecraft_type(organization_id, type)
+  end
+
+  @spec fetch_spacecraft_type(binary(), binary(), binary()) ::
+          {:ok, SpacecraftType.t()} | {:error, term()}
+  def fetch_spacecraft_type(organization_id, mission_id, spacecraft_type_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) do
+    SpacecraftTypeStore.fetch_spacecraft_type(organization_id, mission_id, spacecraft_type_id)
+  end
+
+  @spec fetch_spacecraft_type_version(binary(), binary(), binary(), pos_integer()) ::
+          {:ok, SpacecraftType.t()} | {:error, term()}
+  def fetch_spacecraft_type_version(organization_id, mission_id, spacecraft_type_id, version)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) and is_integer(version) and version > 0 do
+    SpacecraftTypeStore.fetch_spacecraft_type_version(
+      organization_id,
+      mission_id,
+      spacecraft_type_id,
+      version
+    )
+  end
+
+  @spec list_spacecraft_types(binary(), binary()) :: [SpacecraftType.t()]
+  def list_spacecraft_types(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+  end
+
+  @spec list_spacecraft_type_versions(binary(), binary(), binary()) :: [SpacecraftType.t()]
+  def list_spacecraft_type_versions(organization_id, mission_id, spacecraft_type_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) do
+    SpacecraftTypeStore.list_spacecraft_type_versions(
+      organization_id,
+      mission_id,
+      spacecraft_type_id
+    )
+  end
+
+  @spec persist_transport(binary(), Transport.t()) :: {:ok, Transport.t()} | {:error, term()}
+  def persist_transport(organization_id, %Transport{} = transport)
+      when is_binary(organization_id) do
+    TransportStore.persist_transport(organization_id, transport)
+  end
+
+  @spec fetch_transport(binary(), binary(), binary()) :: {:ok, Transport.t()} | {:error, term()}
+  def fetch_transport(organization_id, mission_id, transport_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) do
+    TransportStore.fetch_transport(organization_id, mission_id, transport_id)
+  end
+
+  @spec fetch_transport_version(binary(), binary(), binary(), pos_integer()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def fetch_transport_version(organization_id, mission_id, transport_id, version)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
+             is_integer(version) and version > 0 do
+    TransportStore.fetch_transport_version(organization_id, mission_id, transport_id, version)
+  end
+
+  @spec list_transports(binary(), binary()) :: [Transport.t()]
+  def list_transports(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    TransportStore.list_transports(organization_id, mission_id)
+  end
+
+  @spec list_transport_versions(binary(), binary(), binary()) :: [Transport.t()]
+  def list_transport_versions(organization_id, mission_id, transport_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) do
+    TransportStore.list_transport_versions(organization_id, mission_id, transport_id)
+  end
+
+  @spec version_transport(binary(), binary(), binary(), map()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def version_transport(organization_id, mission_id, transport_id, attrs)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
+             is_map(attrs) do
+    TransportStore.version_transport(organization_id, mission_id, transport_id, attrs)
+  end
+
+  @spec archive_transport(binary(), binary(), binary(), map()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def archive_transport(organization_id, mission_id, transport_id, metadata_patch \\ %{})
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
+             is_map(metadata_patch) do
+    TransportStore.archive_transport(organization_id, mission_id, transport_id, metadata_patch)
+  end
+
+  @spec create_routing_rule(binary(), RoutingRule.t(), keyword()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def create_routing_rule(organization_id, %RoutingRule{} = routing_rule, opts \\ [])
+      when is_binary(organization_id) and is_list(opts) do
+    RoutingRuleStore.create_routing_rule(organization_id, routing_rule, opts)
+  end
+
+  @spec update_routing_rule(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def update_routing_rule(organization_id, mission_id, routing_rule_id, attrs, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) and is_map(attrs) and is_list(opts) do
+    RoutingRuleStore.update_routing_rule(
+      organization_id,
+      mission_id,
+      routing_rule_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec set_routing_rule_enabled(binary(), binary(), binary(), boolean(), keyword()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def set_routing_rule_enabled(organization_id, mission_id, routing_rule_id, enabled?, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) and is_boolean(enabled?) and is_list(opts) do
+    RoutingRuleStore.set_routing_rule_enabled(
+      organization_id,
+      mission_id,
+      routing_rule_id,
+      enabled?,
+      opts
+    )
+  end
+
+  @spec archive_routing_rule(binary(), binary(), binary(), map(), keyword()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def archive_routing_rule(
+        organization_id,
+        mission_id,
+        routing_rule_id,
+        metadata_patch \\ %{},
+        opts \\ []
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) and is_map(metadata_patch) and is_list(opts) do
+    RoutingRuleStore.archive_routing_rule(
+      organization_id,
+      mission_id,
+      routing_rule_id,
+      metadata_patch,
+      opts
+    )
+  end
+
+  @spec fetch_routing_rule(binary(), binary(), binary()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def fetch_routing_rule(organization_id, mission_id, routing_rule_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) do
+    RoutingRuleStore.fetch_routing_rule(organization_id, mission_id, routing_rule_id)
+  end
+
+  @spec fetch_routing_rule_state(binary(), binary(), binary()) ::
+          {:ok, RoutingRule.t()} | {:error, term()}
+  def fetch_routing_rule_state(organization_id, mission_id, routing_rule_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) do
+    RoutingRuleStore.fetch_routing_rule_state(organization_id, mission_id, routing_rule_id)
+  end
+
+  @spec list_routing_rules(binary(), binary()) :: [RoutingRule.t()]
+  def list_routing_rules(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    RoutingRuleStore.list_routing_rules(organization_id, mission_id)
+  end
+
+  @spec list_routing_rules_for_spacecraft(binary(), binary(), binary()) :: [RoutingRule.t()]
+  def list_routing_rules_for_spacecraft(organization_id, mission_id, spacecraft_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
+    RoutingRuleStore.list_routing_rules_for_spacecraft(organization_id, mission_id, spacecraft_id)
+  end
+
+  @spec list_routing_rule_events(binary(), binary(), binary()) :: [RoutingRuleEvent.t()]
+  def list_routing_rule_events(organization_id, mission_id, routing_rule_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(routing_rule_id) do
+    RoutingRuleStore.list_routing_rule_events(organization_id, mission_id, routing_rule_id)
   end
 
   @spec issue_service_identity(ServiceIdentity.t()) ::

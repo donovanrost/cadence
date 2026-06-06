@@ -169,8 +169,6 @@ defmodule Cadence.DevProfile do
     end)
   end
 
-  defp resolve_opt_path(opts, _profile, _key) when not is_list(opts), do: opts
-
   defp resolve_opt_path(opts, profile, key) when is_atom(key) do
     case Keyword.fetch(opts, key) do
       {:ok, value} when is_binary(value) and value != "" ->

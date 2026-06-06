@@ -466,6 +466,6 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
         []
       )
 
-    for <<frame::binary-size(frame_size) <- encoded_frames>>, do: frame
+    for <<frame::binary-size(^frame_size) <- encoded_frames>>, do: frame
   end
 end

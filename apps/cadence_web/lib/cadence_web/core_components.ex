@@ -5,6 +5,16 @@ defmodule CadenceWeb.CoreComponents do
 
   alias Phoenix.HTML.FormField
 
+  attr :name, :string, required: true
+  attr :class, :string, default: nil
+  attr :rest, :global
+
+  def icon(assigns) do
+    ~H"""
+    <span class={[@name, @class]} {@rest}></span>
+    """
+  end
+
   attr :field, FormField, required: true
   attr :type, :string, default: "text"
   attr :label, :string, default: nil
@@ -161,9 +171,12 @@ defmodule CadenceWeb.CoreComponents do
 
   def detail_row(assigns) do
     ~H"""
-    <div class="py-3 flex justify-between">
-      <span class="text-base-content/60">{@label}</span>
-      <span class={[@mono && "font-mono text-sm"]}>
+    <div class="hud-data-row">
+      <span class="hud-data-label">{@label}</span>
+      <span class={[
+        "hud-data-value",
+        @mono && "font-mono text-sm"
+      ]}>
         <%= if @inner_block != [] do %>
           {render_slot(@inner_block)}
         <% else %>
@@ -196,17 +209,19 @@ defmodule CadenceWeb.CoreComponents do
 
   def empty_state(assigns) do
     ~H"""
-    <div class="text-center py-12 border border-dashed border-base-300 rounded-sm bg-base-200/30">
-      <span class={[@icon, "mx-auto h-12 w-12 text-base-content/30"]}></span>
-      <h3 class="mt-2 text-sm font-semibold text-base-content">{@title}</h3>
-      <p :if={@description} class="mt-1 text-sm text-base-content/60">{@description}</p>
-      <div :if={@action_label} class="mt-6">
+    <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
+      <span class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
+      <p class="hud-label mt-3 text-base-content/60">{@title}</p>
+      <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/60">
+        {@description}
+      </p>
+      <div :if={@action_label} class="mt-5">
         <.link
           navigate={@action_navigate}
           patch={@action_patch}
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
         >
-          <span class="hero-plus -ml-0.5 mr-1.5 h-5 w-5"></span>
+          <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
           {@action_label}
         </.link>
       </div>

@@ -21,43 +21,79 @@ defmodule CadenceWeb.CommsOverviewLive do
   def render(assigns) do
     ~H"""
     <div id="comms-overview-page" class="space-y-6">
-      <section id="mission-network-resources" class="card bg-base-200 border border-base-300">
+      <div class="border-b border-primary/20 pb-4">
+        <p class="hud-label text-base-content/50">Communications</p>
+        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          {@current_mission.display_name} &middot;
+          <span class="text-base-content/40 font-normal">Mission Comms</span>
+        </h1>
+      </div>
+
+      <section id="comms-transports" class="card bg-base-200 border border-base-300 hud-corners">
         <div class="card-body p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="hud-label mb-2">Network Resources</p>
-              <h2 class="text-lg font-semibold">Shared mission connectivity</h2>
-              <p class="mt-1 text-sm text-base-content/60">
-                Providers, protocol behaviors, and link templates are mission-owned.
-                Spacecraft-specific interpretation stays on each spacecraft.
+              <p class="hud-label mb-2">Transport</p>
+              <div class="flex items-baseline gap-4">
+                <span class="mc-value-large text-primary">{@transport_count}</span>
+                <span class="text-sm text-base-content/60">
+                  transport<%= if @transport_count == 1, do: "", else: "s" %> configured
+                </span>
+              </div>
+              <p class="mt-3 max-w-2xl text-sm text-base-content/60">
+                Transports describe durable capabilities for moving bytes. Routing rules will decide how spacecraft use those capabilities.
               </p>
             </div>
-            <.status_badge status={if @blocking_findings == 0, do: :ready, else: :attention} />
+            <.status_badge status={if @transport_count > 0, do: :ready, else: :attention} />
           </div>
 
-          <div class="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <.network_resource_card
-              id="mission-network-link-templates"
-              title="Link Templates"
-              value={@path_template_count}
-              description="Create shared mission paths without editing raw objects."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/link-templates"}
-            />
-            <.network_resource_card
-              id="mission-network-protocol-behaviors"
-              title="Protocol Behaviors"
-              value={@transport_profile_count}
-              description="Reusable path-local protocol behavior."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/protocol-behaviors"}
-            />
-            <.network_resource_card
-              id="mission-network-runtime-identities"
-              title="Runtime Identities"
-              value={@source_endpoint_count}
-              description="Map packet ingress into mission and spacecraft ownership."
-              navigate={~p"/missions/#{@current_mission.mission_id}/comms/runtime-identities"}
-            />
-          </div>
+          <%= if @transports == [] do %>
+            <div class="mt-6 rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
+              <p class="hud-label mb-2 text-base-content/60">No transports configured</p>
+              <p class="text-sm text-base-content/60 max-w-md mx-auto">
+                Add a transport to describe a byte-moving capability for this mission.
+              </p>
+              <div class="mt-5">
+                <.link
+                  navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
+                  class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
+                >
+                  Add a transport
+                </.link>
+              </div>
+            </div>
+          <% else %>
+            <ul class="mt-6 grid gap-3 md:grid-cols-2">
+              <li :for={transport <- @transports}>
+                <.link
+                  navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
+                  }
+                  class="block rounded border border-base-300 bg-base-100/40 p-4 border-l-2 border-l-transparent hover:border-l-primary/60 hover-glow-cyan transition-glow"
+                >
+                  <p class="font-medium">{transport.display_name}</p>
+                  <p class="mt-1 font-mono text-xs text-base-content/50">
+                    {transport.transport_kind} · {transport.direction_capability} · v{transport.version}
+                  </p>
+                </.link>
+              </li>
+            </ul>
+
+            <div class="mt-5 flex gap-4 text-sm">
+              <.link
+                navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports"}
+                class="text-primary hover:underline"
+              >
+                Manage transports &rarr;
+              </.link>
+              <.link
+                navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
+                class="text-primary hover:underline"
+              >
+                + Add a transport
+              </.link>
+            </div>
+          <% end %>
         </div>
       </section>
 
@@ -66,9 +102,9 @@ defmodule CadenceWeb.CommsOverviewLive do
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="hud-label mb-2">Setup Checks</p>
-              <h2 class="text-lg font-semibold">Comms Validation</h2>
+              <h2 class="text-lg font-semibold">What's missing or broken</h2>
               <p class="mt-1 text-sm text-base-content/60">
-                These checks cover saved comms setup. Runtime link health is shown elsewhere.
+                Checks on saved configuration for spacecraft on this mission.
               </p>
             </div>
             <.status_badge
@@ -78,12 +114,11 @@ defmodule CadenceWeb.CommsOverviewLive do
           </div>
 
           <%= if @findings == [] do %>
-            <div class="mt-6">
-              <.empty_state
-                icon="hero-check-circle"
-                title="No comms setup findings"
-                description="This mission has enough comms setup structure for the current validation rules."
-              />
+            <div class="mt-6 rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
+              <p class="hud-label mb-2 text-success">All clear</p>
+              <p class="text-sm text-base-content/60 max-w-md mx-auto">
+                The saved configuration looks consistent.
+              </p>
             </div>
           <% else %>
             <div id="comms-validation-findings" class="mt-6 space-y-5">
@@ -124,58 +159,38 @@ defmodule CadenceWeb.CommsOverviewLive do
     """
   end
 
-  attr :id, :string, required: true
-  attr :title, :string, required: true
-  attr :value, :integer, required: true
-  attr :description, :string, required: true
-  attr :navigate, :string, required: true
-
-  defp network_resource_card(assigns) do
-    ~H"""
-    <.link
-      id={@id}
-      navigate={@navigate}
-      class="rounded border border-base-300 bg-base-100/40 p-4 transition hover:border-primary/50 hover:bg-base-100"
-    >
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="hud-label mb-2">{@title}</p>
-          <p class="text-sm text-base-content/60">{@description}</p>
-        </div>
-        <span class="font-mono text-xl font-bold">{@value}</span>
-      </div>
-    </.link>
-    """
-  end
-
   defp load_summary(%{current_scope: scope, current_mission: mission}) do
     spacecraft = Cadence.list_spacecraft(scope.organization_id, mission.mission_id)
     source_endpoints = Cadence.list_source_endpoints(scope.organization_id, mission.mission_id)
+    transports = Cadence.list_transports(scope.organization_id, mission.mission_id)
     provider_profiles = Cadence.list_provider_profiles(scope.organization_id, mission.mission_id)
 
     transport_profiles =
       Cadence.list_transport_profiles(scope.organization_id, mission.mission_id)
 
     path_templates = Cadence.list_path_templates(scope.organization_id, mission.mission_id)
+    routing_rules = Cadence.list_routing_rules(scope.organization_id, mission.mission_id)
 
     findings =
       CommsValidation.findings_for_resources(
         scope.organization_id,
         mission.mission_id,
-        spacecraft,
-        source_endpoints,
-        path_templates,
-        provider_profiles,
-        transport_profiles
+        %{
+          spacecraft: spacecraft,
+          source_endpoints: source_endpoints,
+          path_templates: path_templates,
+          provider_profiles: provider_profiles,
+          transport_profiles: transport_profiles,
+          transports: transports,
+          routing_rules: routing_rules
+        }
       )
 
     %{
-      transport_profile_count: length(transport_profiles),
-      path_template_count: length(path_templates),
-      source_endpoint_count: length(source_endpoints),
+      transports: Enum.take(transports, 6),
+      transport_count: length(transports),
       findings: findings,
-      finding_groups: CommsValidation.finding_groups(findings),
-      blocking_findings: Enum.count(findings, &(&1.severity == :blocked))
+      finding_groups: CommsValidation.finding_groups(findings)
     }
   end
 end

@@ -36,8 +36,6 @@ defmodule CadenceWeb.SpacecraftCommandingLiveTest do
       assert html =~ "Command Interpretation"
       assert html =~ "Commanding for Nova-1"
       assert html =~ "Not tracked"
-
-      assert html =~ ~p"/missions/#{mission.mission_id}/comms/protocol-behaviors"
     end
 
     test "unauthenticated redirects to /sign-in", %{conn: conn} do

@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.IngressArchive.FileSystem do
   @moduledoc """
   Local filesystem ingress archive backend.

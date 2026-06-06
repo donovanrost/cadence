@@ -1,7 +1,7 @@
 defmodule CadenceWeb.MissionNewLive do
   @moduledoc false
 
-  # TODO(authz): Any active organization member can create a mission. This gate
+  # Authz note: Any active organization member can create a mission. This gate
   # should tighten once platform-wide authorization is defined (likely to the
   # :organization_admin role, possibly a finer capability).
   use CadenceWeb, :live_view
@@ -81,18 +81,23 @@ defmodule CadenceWeb.MissionNewLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6 max-w-xl">
-      <div>
-        <.link navigate={~p"/missions"} class="text-sm text-primary hover:underline">
+      <div class="border-b border-primary/20 pb-4">
+        <.link
+          navigate={~p"/missions"}
+          class="hud-label text-base-content/50 hover:text-primary"
+        >
           &larr; Missions
         </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">New Mission</h1>
+        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">New Mission</h1>
       </div>
 
-      <.form for={@form} id="mission-form" phx-change="validate" phx-submit="save" class="space-y-4">
+      <.form for={@form} id="mission-form" phx-change="validate" phx-submit="save" class="space-y-6">
         <.input field={@form[:display_name]} type="text" label="Display Name" required />
         <.input field={@form[:slug]} type="text" label="Slug" required />
-        <div class="flex items-center gap-3">
-          <button type="submit" class="btn btn-primary">Create Mission</button>
+        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+            Create Mission
+          </button>
           <.link navigate={~p"/missions"} class="btn btn-ghost">Cancel</.link>
         </div>
       </.form>

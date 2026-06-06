@@ -22,12 +22,23 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
     test "renders the form" do
       {conn, _org, mission} = signed_in_org_and_mission()
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
+      {:ok, view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
 
+      assert has_element?(view, "#spacecraft-new-page")
+      assert has_element?(view, "#spacecraft-form")
       assert html =~ "New Spacecraft"
       assert html =~ "Display Name"
       assert html =~ "SCID"
+      assert html =~ "Spacecraft Profile"
       assert html =~ "Create Spacecraft"
+
+      page = render(element(view, "#spacecraft-new-page"))
+      refute page =~ "Transport"
+      refute page =~ "Routing"
+      refute page =~ "Contact"
+      refute page =~ "Provider"
+      refute page =~ "Path"
+      refute page =~ "Link"
     end
 
     test "unauthenticated redirects to /sign-in", %{conn: conn} do

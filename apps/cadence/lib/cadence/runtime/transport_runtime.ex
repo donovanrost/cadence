@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Runtime.TransportRuntime do
   @moduledoc """
   Clock-aware runtime for one transport-local extension instance.

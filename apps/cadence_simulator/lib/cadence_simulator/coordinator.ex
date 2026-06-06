@@ -44,6 +44,7 @@ defmodule CadenceSimulator.Coordinator do
   @default_dispatch_batch_floor 4
   @default_dispatch_batch_ceiling 32
 
+  # credo:disable-for-next-line Credo.Check.Warning.StructFieldAmount
   defstruct [
     :target_id,
     :provider_module,

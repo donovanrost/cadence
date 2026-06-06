@@ -1,7 +1,7 @@
 defmodule CadenceWeb.SpacecraftNewLive do
   @moduledoc false
 
-  # TODO(authz): Any active organization member can create a spacecraft. This
+  # Authz note: Any active organization member can create a spacecraft. This
   # gate should tighten once platform-wide authorization is defined (likely to
   # the :organization_admin role, possibly a finer capability).
   use CadenceWeb, :live_view
@@ -10,19 +10,21 @@ defmodule CadenceWeb.SpacecraftNewLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    organization_id = socket.assigns.current_scope.organization_id
+    mission_id = socket.assigns.current_mission.mission_id
+    available_types = Cadence.list_spacecraft_types(organization_id, mission_id)
+
     {:ok,
      socket
      |> assign(:page_title, "New Spacecraft")
      |> assign(:nav_item, :spacecraft)
+     |> assign(:available_types, available_types)
      |> assign(:form, empty_form())}
   end
 
   @impl true
   def handle_event("validate", %{"spacecraft" => params}, socket) do
-    display_name = Map.get(params, "display_name", "")
-    scid = Map.get(params, "scid", "")
-    form = to_form(%{"display_name" => display_name, "scid" => scid}, as: :spacecraft)
-    {:noreply, assign(socket, :form, form)}
+    {:noreply, assign(socket, :form, form_from_params(params))}
   end
 
   @impl true
@@ -32,13 +34,19 @@ defmodule CadenceWeb.SpacecraftNewLive do
     display_name = normalize(params["display_name"])
 
     with true <- not is_nil(display_name),
-         {:ok, scid} <- parse_optional_scid(params["scid"]) do
+         {:ok, scid} <- parse_optional_scid(params["scid"]),
+         {:ok, type_binding} <- resolve_type_binding(socket, params["spacecraft_type_id"]) do
       spacecraft =
-        Spacecraft.new(%{
-          mission_id: mission.mission_id,
-          display_name: display_name,
-          scid: scid
-        })
+        Spacecraft.new(
+          Map.merge(
+            %{
+              mission_id: mission.mission_id,
+              display_name: display_name,
+              scid: scid
+            },
+            type_binding
+          )
+        )
 
       case Cadence.persist_spacecraft(organization_id, spacecraft) do
         {:ok, persisted} ->
@@ -76,15 +84,20 @@ defmodule CadenceWeb.SpacecraftNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6 max-w-xl">
-      <div>
+    <div id="spacecraft-new-page" class="space-y-6 max-w-xl">
+      <div class="border-b border-primary/20 pb-4">
         <.link
           navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-          class="text-sm text-primary hover:underline"
+          class="hud-label text-base-content/50 hover:text-primary"
         >
           &larr; Spacecraft
         </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">New Spacecraft</h1>
+        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+          New Spacecraft
+        </h1>
+        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
+          Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract.
+        </p>
       </div>
 
       <.form
@@ -92,12 +105,46 @@ defmodule CadenceWeb.SpacecraftNewLive do
         id="spacecraft-form"
         phx-change="validate"
         phx-submit="save"
-        class="space-y-4"
+        class="space-y-8"
       >
-        <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        <.input field={@form[:scid]} type="text" label="SCID" />
-        <div class="flex items-center gap-3">
-          <button type="submit" class="btn btn-primary">Create Spacecraft</button>
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">01</span>
+            <h2 class="hud-label">Identity</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input field={@form[:display_name]} type="text" label="Display Name" required />
+          <.input field={@form[:scid]} type="text" label="SCID" />
+        </section>
+
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">02</span>
+            <h2 class="hud-label">Profile</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input
+            field={@form[:spacecraft_type_id]}
+            type="select"
+            label="Spacecraft Profile"
+            options={type_options(@available_types)}
+          />
+          <p :if={@available_types == []} class="text-xs text-base-content/60">
+            No spacecraft profiles defined yet.
+            <.link
+              navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
+              class="text-primary hover:underline"
+            >
+              Create one
+            </.link>
+            to give this spacecraft a reusable interpretation profile.
+          </p>
+        </section>
+
+        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+            Create Spacecraft
+          </button>
           <.link
             navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
             class="btn btn-ghost"
@@ -110,7 +157,49 @@ defmodule CadenceWeb.SpacecraftNewLive do
     """
   end
 
-  defp empty_form, do: to_form(%{"display_name" => "", "scid" => ""}, as: :spacecraft)
+  defp empty_form do
+    to_form(
+      %{"display_name" => "", "scid" => "", "spacecraft_type_id" => ""},
+      as: :spacecraft
+    )
+  end
+
+  defp form_from_params(params) do
+    to_form(
+      %{
+        "display_name" => Map.get(params, "display_name", ""),
+        "scid" => Map.get(params, "scid", ""),
+        "spacecraft_type_id" => Map.get(params, "spacecraft_type_id", "")
+      },
+      as: :spacecraft
+    )
+  end
+
+  defp type_options(available_types) do
+    [
+      {"None", ""}
+      | Enum.map(available_types, &{"#{&1.display_name} (v#{&1.version})", &1.spacecraft_type_id})
+    ]
+  end
+
+  defp resolve_type_binding(_socket, value) when value in [nil, ""], do: {:ok, %{}}
+
+  defp resolve_type_binding(socket, spacecraft_type_id) when is_binary(spacecraft_type_id) do
+    %{current_scope: scope, current_mission: mission} = socket.assigns
+
+    case Cadence.fetch_spacecraft_type(
+           scope.organization_id,
+           mission.mission_id,
+           spacecraft_type_id
+         ) do
+      {:ok, type} ->
+        {:ok,
+         %{spacecraft_type_id: type.spacecraft_type_id, spacecraft_type_version: type.version}}
+
+      {:error, _reason} ->
+        {:error, "Selected spacecraft profile is not available."}
+    end
+  end
 
   defp normalize(value) when is_binary(value) do
     case String.trim(value) do

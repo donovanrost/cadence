@@ -28,21 +28,28 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
       assert html =~ ~p"/missions/#{mission.mission_id}/spacecraft/new"
     end
 
-    test "renders spacecraft in a table" do
+    test "renders spacecraft in the vehicles management card" do
       {conn, _org, mission} = signed_in_org_and_mission()
       _s1 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-1", scid: 101)
       s2 = TestFixtures.persist_spacecraft!(mission, display_name: "Alpha-2")
 
-      {:ok, _view, html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
 
-      assert html =~ "Alpha-1"
-      assert html =~ "Alpha-2"
-      assert html =~ "101"
-      assert html =~ "Not set"
-      assert html =~ "New Spacecraft"
+      assert has_element?(view, "#spacecraft-vehicles-card td", "Alpha-1")
+      assert has_element?(view, "#spacecraft-vehicles-card td", "Alpha-2")
+      assert has_element?(view, "#spacecraft-vehicles-card td", "101")
+      assert has_element?(view, "#spacecraft-vehicles-card td", "Not set")
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}/identity"
+      assert has_element?(
+               view,
+               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/new']",
+               "New spacecraft"
+             )
+
+      assert has_element?(
+               view,
+               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/#{s2.spacecraft_id}/identity']"
+             )
     end
 
     test "shows only spacecraft belonging to this mission" do

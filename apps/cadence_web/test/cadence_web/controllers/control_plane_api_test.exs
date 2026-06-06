@@ -2848,7 +2848,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
         []
       )
 
-    <<encoded_frame::binary-size(frame_size), _rest::binary>> = encoded_frames
+    <<encoded_frame::binary-size(^frame_size), _rest::binary>> = encoded_frames
     encoded_frame
   end
 end

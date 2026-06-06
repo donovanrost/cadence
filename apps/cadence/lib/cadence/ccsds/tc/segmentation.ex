@@ -59,7 +59,7 @@ defmodule Cadence.CCSDS.TC.Segmentation do
   defp do_split_segments(<<>>, _max_payload, acc), do: Enum.reverse(acc)
 
   defp do_split_segments(packet, max_payload, acc) when byte_size(packet) > max_payload do
-    <<chunk::binary-size(max_payload), rest::binary>> = packet
+    <<chunk::binary-size(^max_payload), rest::binary>> = packet
     do_split_segments(rest, max_payload, [chunk | acc])
   end
 

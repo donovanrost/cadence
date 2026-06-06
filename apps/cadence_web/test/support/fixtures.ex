@@ -7,7 +7,7 @@ defmodule CadenceWeb.TestFixtures do
   alias Cadence.Ids
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.Spacecraft
+  alias Cadence.{Spacecraft, SpacecraftType}
 
   alias Cadence.Persistence.Schemas.{
     OrganizationMembershipRow,
@@ -127,6 +127,29 @@ defmodule CadenceWeb.TestFixtures do
       })
 
     assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)
+    persisted
+  end
+
+  @spec persist_spacecraft_profile!(Mission.t(), keyword()) :: SpacecraftType.t()
+  def persist_spacecraft_profile!(%Mission{} = mission, opts \\ []) do
+    profile =
+      SpacecraftType.new(%{
+        mission_id: mission.mission_id,
+        display_name:
+          Keyword.get(opts, :display_name, "Profile-#{System.unique_integer([:positive])}"),
+        downlink_protocol: Keyword.get(opts, :downlink_protocol, :tm),
+        uplink_protocol: Keyword.get(opts, :uplink_protocol, :tc),
+        packet_protocol: Keyword.get(opts, :packet_protocol, :space_packet),
+        frame_parameters:
+          Keyword.get(opts, :frame_parameters, %{
+            "frame_size" => 1024,
+            "secondary_header_length" => 0,
+            "ocf_length" => 0
+          }),
+        applications: Keyword.get(opts, :applications, %{telemetry_decom: %{}})
+      })
+
+    assert {:ok, persisted} = Cadence.persist_spacecraft_type(mission.organization_id, profile)
     persisted
   end
 

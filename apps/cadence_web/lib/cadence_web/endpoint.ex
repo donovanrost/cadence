@@ -21,6 +21,10 @@ defmodule CadenceWeb.Endpoint do
     gzip: false,
     only: CadenceWeb.static_paths()
 
+  if Mix.env() == :dev do
+    plug Tidewave
+  end
+
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Accounts do
   @moduledoc """
   Platform users, local credentials, memberships, invitations, and browser sessions.

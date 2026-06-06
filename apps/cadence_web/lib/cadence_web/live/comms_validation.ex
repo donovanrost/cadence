@@ -1,9 +1,8 @@
 defmodule CadenceWeb.CommsValidation do
   @moduledoc """
   Pure logic for computing comms-setup validation findings and grouping
-  them for display. Used by `CommsOverviewLive` (which renders the
-  findings inline) and `CommsLinkTemplateShowLive` (which renders a
-  scoped subset for a single link template).
+  them for display. Used by `CommsOverviewLive` for the setup summary and by
+  `CommsValidationLive` for the dedicated validation page.
   """
 
   use Phoenix.VerifiedRoutes,
@@ -20,11 +19,15 @@ defmodule CadenceWeb.CommsValidation do
     findings_for_resources(
       organization_id,
       mission_id,
-      Cadence.list_spacecraft(organization_id, mission_id),
-      Cadence.list_source_endpoints(organization_id, mission_id),
-      Cadence.list_path_templates(organization_id, mission_id),
-      Cadence.list_provider_profiles(organization_id, mission_id),
-      Cadence.list_transport_profiles(organization_id, mission_id)
+      %{
+        spacecraft: Cadence.list_spacecraft(organization_id, mission_id),
+        source_endpoints: Cadence.list_source_endpoints(organization_id, mission_id),
+        path_templates: Cadence.list_path_templates(organization_id, mission_id),
+        provider_profiles: Cadence.list_provider_profiles(organization_id, mission_id),
+        transport_profiles: Cadence.list_transport_profiles(organization_id, mission_id),
+        transports: Cadence.list_transports(organization_id, mission_id),
+        routing_rules: Cadence.list_routing_rules(organization_id, mission_id)
+      }
     )
   end
 
@@ -37,6 +40,30 @@ defmodule CadenceWeb.CommsValidation do
         provider_profiles,
         transport_profiles
       ) do
+    findings_for_resources(
+      organization_id,
+      mission_id,
+      %{
+        spacecraft: spacecraft,
+        source_endpoints: source_endpoints,
+        path_templates: path_templates,
+        provider_profiles: provider_profiles,
+        transport_profiles: transport_profiles,
+        transports: Cadence.list_transports(organization_id, mission_id),
+        routing_rules: Cadence.list_routing_rules(organization_id, mission_id)
+      }
+    )
+  end
+
+  def findings_for_resources(organization_id, mission_id, resources) when is_map(resources) do
+    spacecraft = Map.fetch!(resources, :spacecraft)
+    source_endpoints = Map.fetch!(resources, :source_endpoints)
+    path_templates = Map.fetch!(resources, :path_templates)
+    provider_profiles = Map.fetch!(resources, :provider_profiles)
+    transport_profiles = Map.fetch!(resources, :transport_profiles)
+    transports = Map.fetch!(resources, :transports)
+    routing_rules = Map.fetch!(resources, :routing_rules)
+
     provider_profiles_by_id =
       profile_versions_by_ref(
         provider_profiles,
@@ -74,6 +101,8 @@ defmodule CadenceWeb.CommsValidation do
       transport_profiles_by_id,
       mission_id
     )
+    |> Kernel.++(transport_setup_findings(transports, mission_id))
+    |> Kernel.++(routing_setup_findings(spacecraft, transports, routing_rules, mission_id))
     |> Kernel.++(
       selected_path_findings(
         [],
@@ -91,7 +120,7 @@ defmodule CadenceWeb.CommsValidation do
       )
     )
     |> Kernel.++(
-      spacecraft_interpretation_findings(
+      spacecraft_setup_findings(
         spacecraft,
         telemetry_configs_by_spacecraft,
         active_telemetry,
@@ -168,16 +197,17 @@ defmodule CadenceWeb.CommsValidation do
 
     []
     |> add_if(source_endpoints == [], %{
-      owner: :link_assignment,
+      owner: :advanced_runtime_identity,
       severity: :blocked,
       title: "No runtime identities configured",
-      body: "Mission links need runtime identities so ingress can resolve runtime ownership."
+      body: "Runtime compatibility diagnostics need identities so ingress can resolve ownership."
     })
     |> add_if(path_templates == [], %{
-      owner: :mission_network,
+      owner: :advanced_runtime_identity,
       severity: :blocked,
-      title: "No link templates configured",
-      body: "Operations will need at least one reusable uplink or downlink link template."
+      title: "No routing compatibility artifacts configured",
+      body:
+        "Create Routing Rules to materialize the runtime compatibility artifacts used by existing integrations."
     })
     |> Kernel.++(
       path_template_findings(
@@ -205,18 +235,17 @@ defmodule CadenceWeb.CommsValidation do
   defp profile_findings(provider_profiles, transport_profiles) do
     []
     |> add_if(provider_profiles == [], %{
-      owner: :mission_network,
+      owner: :advanced_runtime_identity,
       severity: :attention,
-      title: "No providers configured",
-      body:
-        "Link templates can be sketched without providers, but operations need providers to connect to external streams."
+      title: "No transport compatibility providers configured",
+      body: "Transports materialize provider records for existing runtime integrations."
     })
     |> add_if(transport_profiles == [], %{
-      owner: :mission_network,
+      owner: :advanced_runtime_identity,
       severity: :attention,
-      title: "No protocol behaviors configured",
+      title: "No advanced protocol behaviors configured",
       body:
-        "Protocol behaviors define reusable link-local behavior such as uplink gateways and heartbeat monitors."
+        "Advanced protocol behaviors are optional runtime-local extensions such as uplink gateways and heartbeat monitors."
     })
   end
 
@@ -235,26 +264,26 @@ defmodule CadenceWeb.CommsValidation do
         is_binary(template.source_endpoint_ref) and
           not MapSet.member?(endpoint_ids, template.source_endpoint_ref),
         %{
-          owner: :link_assignment,
+          owner: :advanced_runtime_identity,
           severity: :blocked,
           title: "#{path_name} references a missing runtime identity",
           body:
-            "Update the link template or restore runtime identity #{template.source_endpoint_ref}."
+            "Update the Routing Rule compatibility artifact or restore runtime identity #{template.source_endpoint_ref}."
         }
       )
       |> add_if(template.provider_profile_refs == [], %{
-        owner: :mission_network,
+        owner: :advanced_runtime_identity,
         severity: :blocked,
-        title: "#{path_name} has no provider",
+        title: "#{path_name} has no transport provider artifact",
         body:
-          "A link template without a provider cannot connect to or receive from an external stream."
+          "The compatibility artifact cannot connect to or receive from an external stream without a provider record."
       })
       |> add_if(template.transport_profile_refs == [], %{
-        owner: :mission_network,
+        owner: :advanced_runtime_identity,
         severity: :attention,
-        title: "#{path_name} has no protocol behavior",
+        title: "#{path_name} has no advanced protocol behavior",
         body:
-          "A link template without protocol behaviors has no configured protocol or transport-extension behavior."
+          "Advanced protocol behavior is optional unless this runtime integration needs a transport extension."
       })
       |> Kernel.++(
         profile_ref_findings(
@@ -317,11 +346,11 @@ defmodule CadenceWeb.CommsValidation do
             path_template,
             mission_id,
             %{
-              owner: :mission_network,
+              owner: :advanced_runtime_identity,
               severity: :blocked,
               title: "#{path_name} references an archived #{profile_label}",
               body:
-                "#{path_name} still references archived #{profile_name} v#{ref_version}. Create a new link template version with an active #{profile_label}."
+                "#{path_name} still references archived #{profile_name} v#{ref_version}. Refresh the Routing Rule compatibility artifact with an active #{profile_label}."
             }
           )
         ]
@@ -334,7 +363,7 @@ defmodule CadenceWeb.CommsValidation do
             path_template,
             mission_id,
             %{
-              owner: :mission_network,
+              owner: :advanced_runtime_identity,
               severity: :attention,
               title: "#{path_name} uses stale #{profile_label}",
               body:
@@ -352,23 +381,104 @@ defmodule CadenceWeb.CommsValidation do
             path_template,
             mission_id,
             %{
-              owner: :mission_network,
+              owner: :advanced_runtime_identity,
               severity: :blocked,
               title: "#{path_name} references a missing #{profile_label}",
-              body: "Update the link template or restore #{profile_label} #{profile_id}."
+              body:
+                "Refresh the Routing Rule compatibility artifact or restore #{profile_label} #{profile_id}."
             }
           )
         ]
     end
   end
 
-  defp path_action_finding(_path_template, nil, finding), do: finding
+  defp path_action_finding(_path_template, _mission_id, finding) do
+    Map.put(finding, :owner, :advanced_runtime_identity)
+  end
 
-  defp path_action_finding(path_template, mission_id, finding) do
-    Map.merge(finding, %{
-      action_label: "Create new link template version",
-      action_navigate:
-        ~p"/missions/#{mission_id}/comms/link-templates/#{path_template.path_template_id}/new-version"
+  defp transport_setup_findings(transports, mission_id) do
+    []
+    |> add_if(transports == [], %{
+      owner: :transport_setup,
+      severity: :blocked,
+      title: "No Transports configured",
+      body: "Add a Transport to describe a durable byte-moving capability for this mission.",
+      action_label: "Add Transport",
+      action_navigate: ~p"/missions/#{mission_id}/comms/transports/new"
+    })
+    |> Kernel.++(
+      Enum.flat_map(transports, fn transport ->
+        []
+        |> add_if(is_nil(transport.materialized_provider_profile_id), %{
+          owner: :advanced_runtime_identity,
+          severity: :attention,
+          title: "#{transport.display_name} has no runtime provider artifact",
+          body:
+            "This Transport is saved, but the existing runtime compatibility provider record was not materialized.",
+          action_label: "Review Transport",
+          action_navigate: ~p"/missions/#{mission_id}/comms/transports/#{transport.transport_id}"
+        })
+      end)
+    )
+  end
+
+  defp routing_setup_findings(spacecraft, transports, routing_rules, mission_id) do
+    transport_refs = MapSet.new(transports, & &1.transport_id)
+
+    []
+    |> add_if(spacecraft != [] and transports != [] and routing_rules == [], %{
+      owner: :routing_setup,
+      severity: :blocked,
+      title: "No Routing Rules configured",
+      body: "Create Routing Rules to declare how spacecraft use mission Transports.",
+      action_label: "Create Routing Rule",
+      action_navigate: ~p"/missions/#{mission_id}/comms/routing/new"
+    })
+    |> Kernel.++(
+      Enum.flat_map(spacecraft, fn spacecraft ->
+        spacecraft_routing_findings(spacecraft, routing_rules, transports, mission_id)
+      end)
+    )
+    |> Kernel.++(
+      Enum.flat_map(routing_rules, fn rule ->
+        routing_rule_findings(rule, transport_refs, mission_id)
+      end)
+    )
+  end
+
+  defp spacecraft_routing_findings(_spacecraft, _routing_rules, [], _mission_id), do: []
+
+  defp spacecraft_routing_findings(spacecraft, routing_rules, _transports, mission_id) do
+    has_rule? = Enum.any?(routing_rules, &(&1.spacecraft_id == spacecraft.spacecraft_id))
+
+    []
+    |> add_if(not has_rule?, %{
+      owner: :routing_setup,
+      severity: :attention,
+      title: "#{spacecraft.display_name} has no Routing Rule",
+      body: "Add a Routing Rule when this spacecraft should use a mission Transport.",
+      action_label: "Review Routing",
+      action_navigate: ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
+    })
+  end
+
+  defp routing_rule_findings(rule, transport_refs, mission_id) do
+    []
+    |> add_if(not rule.enabled?, %{
+      owner: :routing_setup,
+      severity: :attention,
+      title: "#{rule.display_name} is disabled",
+      body: "Enable or archive this Routing Rule so the intended transport use is clear.",
+      action_label: "Review Routing Rule",
+      action_navigate: ~p"/missions/#{mission_id}/comms/routing/#{rule.routing_rule_id}"
+    })
+    |> add_if(not MapSet.member?(transport_refs, rule.transport_id), %{
+      owner: :routing_setup,
+      severity: :blocked,
+      title: "#{rule.display_name} references an unavailable Transport",
+      body: "Update the Routing Rule to use an active Transport.",
+      action_label: "Review Routing Rule",
+      action_navigate: ~p"/missions/#{mission_id}/comms/routing/#{rule.routing_rule_id}"
     })
   end
 
@@ -415,10 +525,11 @@ defmodule CadenceWeb.CommsValidation do
        ) do
     [
       %{
-        owner: :link_assignment,
+        owner: :advanced_runtime_identity,
         severity: :blocked,
         title: "#{spacecraft.display_name} has no runtime identity",
-        body: "Sync runtime identity before assigning mission-owned links to this spacecraft.",
+        body:
+          "Sync runtime identity before existing runtime integrations can resolve this spacecraft.",
         action_label: "Edit identity",
         action_navigate: spacecraft_identity_path(mission_id, spacecraft)
       }
@@ -446,31 +557,33 @@ defmodule CadenceWeb.CommsValidation do
       available != [] ->
         [
           %{
-            owner: :link_assignment,
+            owner: :advanced_runtime_identity,
             severity: :attention,
-            title: "#{spacecraft.display_name} needs a downlink assignment",
-            body: "Assign an available provider-backed mission downlink to this spacecraft.",
-            action_label: "Assign link",
-            action_navigate: spacecraft_links_path(mission_id, spacecraft)
+            title: "#{spacecraft.display_name} has no selected downlink runtime artifact",
+            body:
+              "Routing Rules can materialize compatibility artifacts for existing runtime integrations.",
+            action_label: "Review Routing",
+            action_navigate: spacecraft_routing_path(mission_id, spacecraft)
           }
         ]
 
       true ->
         [
           %{
-            owner: :link_assignment,
+            owner: :advanced_runtime_identity,
             severity: :blocked,
-            title: "#{spacecraft.display_name} has no provider-backed downlink available",
+            title:
+              "#{spacecraft.display_name} has no provider-backed downlink artifact available",
             body:
-              "Create a shared downlink before assigning mission connectivity to this spacecraft.",
-            action_label: "Create shared link",
-            action_navigate: mission_link_builder_path(mission_id)
+              "Create a Transport and Routing Rule before reviewing runtime compatibility artifacts.",
+            action_label: "Create Routing Rule",
+            action_navigate: mission_routing_path(mission_id)
           }
         ]
     end
   end
 
-  defp spacecraft_interpretation_findings(
+  defp spacecraft_setup_findings(
          spacecraft,
          telemetry_configs_by_spacecraft,
          active_telemetry,
@@ -482,12 +595,20 @@ defmodule CadenceWeb.CommsValidation do
 
       []
       |> add_if(is_nil(spacecraft.scid), %{
-        owner: :spacecraft_interpretation,
+        owner: :spacecraft_setup,
         severity: :blocked,
         title: "#{spacecraft.display_name} is missing SCID",
         body:
-          "Set spacecraft identity so Cadence can recognize downlink bytes for this spacecraft.",
+          "Set spacecraft identity so Cadence can associate interpreted bytes with this spacecraft.",
         action_label: "Edit identity",
+        action_navigate: spacecraft_identity_path(mission_id, spacecraft)
+      })
+      |> add_if(is_nil(spacecraft.spacecraft_type_id), %{
+        owner: :spacecraft_setup,
+        severity: :attention,
+        title: "#{spacecraft.display_name} has no Spacecraft Profile",
+        body: "Select a Spacecraft Profile to pin the byte-interpretation contract.",
+        action_label: "Select profile",
         action_navigate: spacecraft_identity_path(mission_id, spacecraft)
       })
       |> Kernel.++(telemetry_interpretation_findings(spacecraft, telemetry_status, mission_id))
@@ -499,10 +620,10 @@ defmodule CadenceWeb.CommsValidation do
   defp telemetry_interpretation_findings(spacecraft, telemetry_status, mission_id) do
     [
       %{
-        owner: :spacecraft_interpretation,
+        owner: :spacecraft_setup,
         severity: telemetry_finding_severity(telemetry_status),
         title:
-          "#{spacecraft.display_name} telemetry interpretation #{telemetry_status_label(telemetry_status)}",
+          "#{spacecraft.display_name} telemetry application #{telemetry_status_label(telemetry_status)}",
         body: telemetry_finding_body(telemetry_status),
         action_label: telemetry_action_label(telemetry_status),
         action_navigate: spacecraft_telemetry_path(mission_id, spacecraft)
@@ -520,13 +641,13 @@ defmodule CadenceWeb.CommsValidation do
   defp telemetry_status_label(:disabled), do: "is disabled"
 
   defp telemetry_finding_body(:not_configured),
-    do: "Configure catalog binding and APID ownership before downlink data can be interpreted."
+    do: "Configure catalog binding and APID ownership for this spacecraft application."
 
   defp telemetry_finding_body(:configured),
-    do: "Telemetry interpretation is saved but has not been applied to the mission runtime."
+    do: "Telemetry application setup is saved but has not been applied."
 
   defp telemetry_finding_body(:outdated),
-    do: "Telemetry interpretation has changed since the active mission runtime was applied."
+    do: "Telemetry application setup has changed since it was last applied."
 
   defp telemetry_finding_body(:disabled),
     do: "Telemetry interpretation is disabled for this spacecraft."
@@ -555,12 +676,12 @@ defmodule CadenceWeb.CommsValidation do
     ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
   end
 
-  defp spacecraft_links_path(mission_id, spacecraft) do
-    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/links"
+  defp spacecraft_routing_path(mission_id, spacecraft) do
+    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
   end
 
-  defp mission_link_builder_path(mission_id) do
-    ~p"/missions/#{mission_id}/comms/link-templates/new"
+  defp mission_routing_path(mission_id) do
+    ~p"/missions/#{mission_id}/comms/routing/new"
   end
 
   defp ref_version(ref) do
@@ -654,18 +775,18 @@ defmodule CadenceWeb.CommsValidation do
 
       []
       |> add_if(length(selected_uplinks) > 1, %{
-        owner: :link_assignment,
+        owner: :advanced_runtime_identity,
         severity: :attention,
-        title: "Multiple selected uplink link templates for #{runtime_identity}",
+        title: "Multiple selected uplink runtime artifacts for #{runtime_identity}",
         body:
-          "Uplink uniqueness is scoped to a runtime identity or realized contact, not the whole mission. Review this runtime identity's selected uplink templates."
+          "Uplink uniqueness is scoped to a runtime identity or realized contact, not the whole mission. Review this runtime identity's selected uplink artifacts."
       })
       |> add_if(assignments != [] and selected_downlinks == [], %{
-        owner: :link_assignment,
+        owner: :advanced_runtime_identity,
         severity: :attention,
-        title: "No selected downlink link template for #{runtime_identity}",
+        title: "No selected downlink runtime artifact for #{runtime_identity}",
         body:
-          "Downlink can have contributors, but one selected/preferred downlink link template is useful for operator summaries."
+          "Downlink can have contributors, but one selected or preferred runtime artifact is useful for operator summaries."
       })
     end)
   end
@@ -682,7 +803,7 @@ defmodule CadenceWeb.CommsValidation do
 
   def finding_groups(findings) do
     findings
-    |> Enum.group_by(&Map.get(&1, :owner, :mission_network))
+    |> Enum.group_by(&Map.get(&1, :owner, :advanced_runtime_identity))
     |> Enum.flat_map(fn {owner, findings} ->
       if findings == [] do
         []
@@ -693,30 +814,39 @@ defmodule CadenceWeb.CommsValidation do
     |> Enum.sort_by(& &1.order)
   end
 
-  defp finding_group(:mission_network) do
+  defp finding_group(:spacecraft_setup) do
     %{
-      id: "comms-validation-mission-network",
+      id: "comms-validation-spacecraft-setup",
       order: 1,
-      title: "Mission Network",
-      description: "Shared providers, link templates, and reusable protocol behavior."
+      title: "Spacecraft Setup",
+      description: "Identity, Spacecraft Profile, and application setup owned by each spacecraft."
     }
   end
 
-  defp finding_group(:link_assignment) do
+  defp finding_group(:transport_setup) do
     %{
-      id: "comms-validation-link-assignment",
+      id: "comms-validation-transport-setup",
       order: 2,
-      title: "Link Assignments",
-      description: "How mission-owned links attach to spacecraft runtime identities."
+      title: "Transport Setup",
+      description: "Durable byte-moving capabilities available to this mission."
     }
   end
 
-  defp finding_group(:spacecraft_interpretation) do
+  defp finding_group(:routing_setup) do
     %{
-      id: "comms-validation-spacecraft-interpretation",
+      id: "comms-validation-routing-setup",
       order: 3,
-      title: "Spacecraft Interpretation",
-      description: "Spacecraft-owned identity, telemetry interpretation, and commanding setup."
+      title: "Routing Setup",
+      description: "Durable rules for how spacecraft use mission Transports."
+    }
+  end
+
+  defp finding_group(:advanced_runtime_identity) do
+    %{
+      id: "comms-validation-advanced-runtime-identity",
+      order: 4,
+      title: "Advanced / Runtime Identity",
+      description: "Compatibility diagnostics for runtime identity and legacy runtime artifacts."
     }
   end
 

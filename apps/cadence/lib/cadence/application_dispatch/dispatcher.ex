@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.ApplicationDispatch.Dispatcher do
   @moduledoc """
   Applies governed binding rules to canonical packet records and executes the

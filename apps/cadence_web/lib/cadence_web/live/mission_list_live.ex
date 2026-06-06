@@ -22,9 +22,20 @@ defmodule CadenceWeb.MissionListLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-base-content">Missions</h1>
-        <.link navigate={~p"/missions/new"} class="btn btn-primary btn-sm gap-1">
+      <div class="flex items-end justify-between gap-4 border-b border-primary/20 pb-4">
+        <div>
+          <p class="hud-label text-base-content/50">Organization</p>
+          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
+            Missions
+            <span class="ml-3 font-mono text-base text-base-content/40">
+              {length(@mission_rows)} configured
+            </span>
+          </h1>
+        </div>
+        <.link
+          navigate={~p"/missions/new"}
+          class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
+        >
           <span class="hero-plus h-4 w-4"></span> New Mission
         </.link>
       </div>
@@ -38,7 +49,7 @@ defmodule CadenceWeb.MissionListLive do
           action_navigate={~p"/missions/new"}
         />
       <% else %>
-        <div class="card bg-base-200">
+        <div class="card bg-base-200 hud-corners border border-base-300">
           <table id="mission-list-table" class="table">
             <thead>
               <tr>
@@ -53,10 +64,10 @@ defmodule CadenceWeb.MissionListLive do
                 :for={row <- @mission_rows}
                 id={"mission-row-#{row.mission.mission_id}"}
                 phx-click={JS.navigate(~p"/missions/#{row.mission.mission_id}")}
-                class="cursor-pointer hover:bg-base-300/40"
+                class="cursor-pointer border-l-2 border-l-transparent hover:border-l-primary/60 hover:bg-base-300/30 transition-colors"
               >
                 <td class="font-medium">{row.mission.display_name}</td>
-                <td class="font-mono text-sm text-base-content/70">{row.mission.slug}</td>
+                <td class="font-mono text-sm text-primary/80">{row.mission.slug}</td>
                 <td class="text-right font-mono text-sm">{row.spacecraft_count}</td>
                 <td>
                   <.status_badge status={row.status} label={row.status_label} />

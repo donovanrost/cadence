@@ -492,7 +492,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp split_fixed_messages(buffer, bytes, acc) when byte_size(buffer) >= bytes do
-    <<message::binary-size(bytes), rest::binary>> = buffer
+    <<message::binary-size(^bytes), rest::binary>> = buffer
     split_fixed_messages(rest, bytes, [message | acc])
   end
 
@@ -778,18 +778,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp maybe_demonitor_socket_receiver(state), do: state
-
-  defp ensure_ingress_executor(%{ingress_executor_pid: pid} = state) when is_pid(pid) do
-    if Process.alive?(pid) do
-      {:ok, state}
-    else
-      resolve_ingress_executor(%{
-        state
-        | ingress_executor_pid: nil,
-          ingress_executor_monitor_ref: nil
-      })
-    end
-  end
 
   defp ensure_ingress_executor(state), do: resolve_ingress_executor(state)
 

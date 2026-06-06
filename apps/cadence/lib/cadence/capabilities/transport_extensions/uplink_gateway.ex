@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   @moduledoc """
   Transport extension that frames command payloads into CCSDS TC transfer frames.
@@ -863,8 +864,6 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp normalize_cop1_clcw_event(_event), do: {:error, :not_cop1_clcw_event}
 
-  defp maybe_schedule_start_timer(_command_release_attempt_id, nil, _release_metadata), do: []
-
   defp maybe_schedule_start_timer(command_release_attempt_id, delay_ms, release_metadata)
        when is_binary(command_release_attempt_id) and is_integer(delay_ms) and delay_ms > 0 do
     [
@@ -875,8 +874,6 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       })
     ]
   end
-
-  defp maybe_schedule_completion_timer(nil, _release_metadata), do: []
 
   defp maybe_schedule_completion_timer(delay_ms, release_metadata)
        when is_integer(delay_ms) and delay_ms > 0 do

@@ -54,17 +54,16 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
   def render(assigns) do
     ~H"""
     <div id="comms-provider-profile-new-page" class="space-y-6 max-w-2xl">
-      <div>
+      <div class="border-b border-primary/20 pb-4">
         <.link
           navigate={@return_to}
-          class="text-sm text-primary hover:underline"
+          class="hud-label text-base-content/50 hover:text-primary"
         >
           &larr; {@back_label}
         </.link>
-        <h1 class="mt-1 text-2xl font-bold text-base-content">{@heading}</h1>
-        <p class="mt-1 text-sm text-base-content/60">
-          Configure reusable TCP I/O for mission links. Spacecraft-specific byte interpretation
-          is configured from each spacecraft.
+        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">{@heading}</h1>
+        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
+          Configure a reusable transport adapter. Spacecraft-specific byte interpretation lives on the spacecraft's type.
         </p>
       </div>
 
@@ -73,63 +72,95 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
         id="provider-profile-form"
         phx-change="validate"
         phx-submit="save"
-        class="space-y-4"
+        class="space-y-8"
       >
-        <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        <.input
-          field={@form[:tcp_mode]}
-          type="select"
-          label="TCP Mode"
-          options={tcp_mode_options()}
-          required
-        />
-        <.input
-          field={@form[:direction]}
-          type="select"
-          label="Direction"
-          options={tcp_direction_options()}
-          required
-        />
-        <.input field={@form[:host]} type="text" label={host_label(@form)} required />
-        <.input field={@form[:port]} type="number" label={port_label(@form)} required />
-        <.input
-          field={@form[:framing_mode]}
-          type="select"
-          label="Framing"
-          options={framing_options()}
-          required
-        />
-        <.input
-          field={@form[:frame_size]}
-          type="number"
-          label="Fixed Frame Size (bytes, only for fixed-size framing)"
-        />
-        <.input
-          field={@form[:reconnect_policy]}
-          type="select"
-          label="Reconnect Policy"
-          options={reconnect_policy_options()}
-          required
-        />
-        <.input
-          field={@form[:tls_enabled]}
-          type="select"
-          label="TLS"
-          options={tls_options()}
-          required
-        />
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">01</span>
+            <h2 class="hud-label">Identity</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input field={@form[:display_name]} type="text" label="Display Name" required />
+        </section>
+
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">02</span>
+            <h2 class="hud-label">Connection</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input
+            field={@form[:tcp_mode]}
+            type="select"
+            label="TCP Mode"
+            options={tcp_mode_options()}
+            required
+          />
+          <.input
+            field={@form[:direction]}
+            type="select"
+            label="Direction"
+            options={tcp_direction_options()}
+            required
+          />
+          <.input field={@form[:host]} type="text" label={host_label(@form)} required />
+          <.input field={@form[:port]} type="number" label={port_label(@form)} required />
+        </section>
+
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">03</span>
+            <h2 class="hud-label">Framing</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input
+            field={@form[:framing_mode]}
+            type="select"
+            label="Framing"
+            options={framing_options()}
+            required
+          />
+          <.input
+            field={@form[:frame_size]}
+            type="number"
+            label="Fixed Frame Size (bytes, only for fixed-size framing)"
+          />
+        </section>
+
+        <section class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="hud-label text-primary/70">04</span>
+            <h2 class="hud-label">Reliability</h2>
+            <div class="flex-1 h-px bg-base-300/60"></div>
+          </div>
+          <.input
+            field={@form[:reconnect_policy]}
+            type="select"
+            label="Reconnect Policy"
+            options={reconnect_policy_options()}
+            required
+          />
+          <.input
+            field={@form[:tls_enabled]}
+            type="select"
+            label="TLS"
+            options={tls_options()}
+            required
+          />
+        </section>
 
         <details class="rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-          <summary class="cursor-pointer hud-label">Configuration Preview</summary>
+          <summary class="cursor-pointer hud-label hover:text-primary">
+            Configuration Preview
+          </summary>
           <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(preview_configuration(@form), pretty: true)}</pre>
         </details>
 
-        <div class="flex items-center gap-3">
-          <button type="submit" class="btn btn-primary">{@submit_label}</button>
-          <.link
-            navigate={@return_to}
-            class="btn btn-ghost"
-          >
+        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+            {@submit_label}
+          </button>
+          <.link navigate={@return_to} class="btn btn-ghost">
             Cancel
           </.link>
         </div>

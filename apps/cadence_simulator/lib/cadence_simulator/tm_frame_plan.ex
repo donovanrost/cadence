@@ -70,8 +70,9 @@ defmodule CadenceSimulator.TMFramePlan do
     }
   end
 
-  defp build_plans(packet, max_payload, cache, acc, first?) when byte_size(packet) > max_payload do
-    <<segment::binary-size(max_payload), rest::binary>> = packet
+  defp build_plans(packet, max_payload, cache, acc, first?)
+       when byte_size(packet) > max_payload do
+    <<segment::binary-size(^max_payload), rest::binary>> = packet
     fhp = if first?, do: 0, else: 2047
     build_plans(rest, max_payload, cache, [%{payload: segment, fhp: fhp} | acc], false)
   end

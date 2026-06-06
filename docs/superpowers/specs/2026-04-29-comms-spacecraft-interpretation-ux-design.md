@@ -3,6 +3,7 @@
 - Status: draft
 - Created: 2026-04-29
 - Scope: Reframe communication setup UI around mission-owned network paths and spacecraft-owned data interpretation.
+- Superseded in part by: [Comms Transport, Routing, and Spacecraft Profile UX](2026-06-01-comms-transport-routing-and-spacecraft-profile-design.md), which reserves Link for runtime realization and replaces persistent setup Link terminology with Transport and Routing Rule.
 - Related decisions:
   - [ADR-006: Contact, Link, and Transport Runtime Model](../../decisions/006-contact-link-and-transport-runtime-model.md)
   - [ADR-012: Provider Adapter and Ground Station Simulator Model](../../decisions/012-provider-adapter-and-ground-station-simulator-model.md)

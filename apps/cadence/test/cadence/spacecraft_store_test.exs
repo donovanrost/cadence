@@ -3,6 +3,7 @@ defmodule Cadence.SpacecraftStoreTest do
 
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.SpacecraftType
 
   test "persists and lists mission-owned spacecraft" do
     persist_mission_scope("org-spacecraft", "mission-spacecraft")
@@ -50,6 +51,52 @@ defmodule Cadence.SpacecraftStoreTest do
              Cadence.fetch_spacecraft_by_scid("org-spacecraft", "mission-spacecraft", 7)
 
     assert fetched_spacecraft.spacecraft_id == "spacecraft-001"
+  end
+
+  test "binds a spacecraft to a spacecraft profile version" do
+    persist_mission_scope("org-spacecraft", "mission-spacecraft")
+
+    type =
+      SpacecraftType.new(%{
+        mission_id: "mission-spacecraft",
+        display_name: "Sentinel-X",
+        downlink_protocol: :tm,
+        uplink_protocol: :tc,
+        packet_protocol: :space_packet,
+        frame_parameters: %{
+          "frame_size" => 1024,
+          "secondary_header_length" => 0,
+          "ocf_length" => 0
+        },
+        applications: %{telemetry_decom: %{}}
+      })
+
+    assert {:ok, persisted_type} = Cadence.persist_spacecraft_type("org-spacecraft", type)
+
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "spacecraft-typed-001",
+        organization_id: "org-spacecraft",
+        mission_id: "mission-spacecraft",
+        display_name: "Typed SC",
+        scid: 42,
+        spacecraft_type_id: persisted_type.spacecraft_type_id,
+        spacecraft_type_version: persisted_type.version
+      })
+
+    assert {:ok, persisted} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
+    assert persisted.spacecraft_type_id == persisted_type.spacecraft_type_id
+    assert persisted.spacecraft_type_version == 1
+
+    assert {:ok, fetched} =
+             Cadence.fetch_spacecraft(
+               "org-spacecraft",
+               "mission-spacecraft",
+               "spacecraft-typed-001"
+             )
+
+    assert fetched.spacecraft_type_id == persisted_type.spacecraft_type_id
+    assert fetched.spacecraft_type_version == 1
   end
 
   test "updates spacecraft identity fields" do

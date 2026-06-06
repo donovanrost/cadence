@@ -174,7 +174,7 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
          } = transition,
          %CLCW{}
        )
-       when length(frames) > 0 do
+       when frames != [] do
     if Enum.any?(frames, &(&1.retries >= state.max_retransmit)) do
       %{
         transition
@@ -330,18 +330,6 @@ defmodule Cadence.CCSDS.Transport.COP1.FOP do
         retransmit: clcw.retransmit == 1
     }
   end
-
-  defp valid_report_value?(%{in_flight_release: nil, last_report_value: nil}, _report_value),
-    do: true
-
-  defp valid_report_value?(
-         %{in_flight_release: nil, last_report_value: last_report_value},
-         report_value
-       ) do
-    seq_distance(last_report_value, report_value) <= 127
-  end
-
-  defp valid_report_value?(%{in_flight_release: %{frames: []}}, _report_value), do: true
 
   defp valid_report_value?(%{in_flight_release: %{frames: [oldest | frames]}}, report_value) do
     seq_distance(oldest.seq, report_value) < length([oldest | frames])

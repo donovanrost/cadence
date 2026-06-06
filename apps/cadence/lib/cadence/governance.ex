@@ -887,13 +887,6 @@ defmodule Cadence.Governance do
     {:ok, CapabilityConfig.inline_document(capability_config) || %{}}
   end
 
-  defp resolve_capability_configuration(
-         %CapabilityConfig{} = capability_config,
-         _packet_definitions_by_key
-       ) do
-    {:error, {:unsupported_capability_config_type, capability_config.config_type}}
-  end
-
   defp to_packet_definition(%GovernedPacketDefinitionRow{} = packet_definition_row) do
     fields =
       Enum.map(packet_definition_row.field_rows, fn %PacketDefinitionFieldRow{} = field_row ->
@@ -1117,9 +1110,6 @@ defmodule Cadence.Governance do
 
         {:error, :source_endpoint_not_found} ->
           {:error, {:source_endpoint_not_found, mission_id, source_endpoint_ref}}
-
-        {:error, reason} ->
-          {:error, reason}
       end
     else
       {:error, {:invalid_binding_rule_scope, binding_rule.selector.scope}}
@@ -1134,9 +1124,6 @@ defmodule Cadence.Governance do
 
         {:error, :source_endpoint_not_found} ->
           {:error, {:source_endpoint_not_found, mission_id, source_endpoint_ref, scope_id}}
-
-        {:error, reason} ->
-          {:error, reason}
       end
     else
       {:error, {:invalid_source_endpoint_scope, scope_id}}

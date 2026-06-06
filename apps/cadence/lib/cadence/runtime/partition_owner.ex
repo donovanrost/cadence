@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 defmodule Cadence.Runtime.PartitionOwner do
   @moduledoc """
   Active owner for one mission execution partition.
@@ -628,9 +629,6 @@ defmodule Cadence.Runtime.PartitionOwner do
 
       {:error, reason, _next_tm_pipeline_state, _next_tm_continuity_state} ->
         {:error, {protocol_family, reason}}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 

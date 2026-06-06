@@ -97,7 +97,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
     if byte_size(buffer) < total_size do
       {[], buffer}
     else
-      <<packet::binary-size(total_size), remaining::binary>> = buffer
+      <<packet::binary-size(^total_size), remaining::binary>> = buffer
       {more, rest} = split_space_packets(remaining)
       {[packet | more], rest}
     end
@@ -209,7 +209,7 @@ defmodule Cadence.CCSDS.SDLP.TM.Reassembly do
   defp build_segments(_prefix, suffix, false), do: [suffix]
 
   defp split_at(binary, offset) do
-    <<prefix::binary-size(offset), suffix::binary>> = binary
+    <<prefix::binary-size(^offset), suffix::binary>> = binary
     {prefix, suffix}
   end
 

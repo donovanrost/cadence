@@ -301,7 +301,8 @@ defmodule Cadence.Commanding.Encoder do
     byte_offset = div(bit_offset, 8)
     value_bits = binary_to_bits(value, bit_length)
 
-    <<before::binary-size(byte_offset), _::bitstring-size(bit_length), rest::bitstring>> = buffer
+    <<before::binary-size(^byte_offset), _::bitstring-size(^bit_length), rest::bitstring>> =
+      buffer
 
     pad_to_bytes(<<before::binary, value_bits::bitstring-size(bit_length), rest::bitstring>>)
   end
@@ -309,7 +310,7 @@ defmodule Cadence.Commanding.Encoder do
   defp insert_bits(buffer, bit_offset, bit_length, value) do
     value_bits = binary_to_bits(value, bit_length)
 
-    <<before::bitstring-size(bit_offset), _::bitstring-size(bit_length), rest::bitstring>> =
+    <<before::bitstring-size(^bit_offset), _::bitstring-size(^bit_length), rest::bitstring>> =
       buffer
 
     pad_to_bytes(<<before::bitstring, value_bits::bitstring-size(bit_length), rest::bitstring>>)
@@ -320,7 +321,7 @@ defmodule Cadence.Commanding.Encoder do
 
     if total_bits >= bit_length do
       skip = total_bits - bit_length
-      <<_::size(skip), bits::bitstring-size(bit_length)>> = binary
+      <<_::size(^skip), bits::bitstring-size(^bit_length)>> = binary
       bits
     else
       padding = bit_length - total_bits
