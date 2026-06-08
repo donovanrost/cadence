@@ -159,7 +159,7 @@ defmodule CadenceWeb.SpacecraftEditLive do
         socket
         |> put_flash(
           :error,
-          "Spacecraft updated, but Cadence could not sync the managed runtime identity: #{inspect(reason)}"
+          "Spacecraft updated, but Cadence could not sync the telemetry identity: #{inspect(reason)}"
         )
         |> push_navigate(
           to: ~p"/missions/#{spacecraft.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"

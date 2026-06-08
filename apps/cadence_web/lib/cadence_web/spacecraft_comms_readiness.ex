@@ -28,24 +28,15 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
     spacecraft_bound =
       Enum.find(source_endpoints, &(&1.spacecraft_id == spacecraft.spacecraft_id))
 
-    scid_matches =
-      case spacecraft.scid do
-        nil -> []
-        scid -> Enum.filter(source_endpoints, &(&1.scid == scid))
-      end
-
     cond do
       managed ->
-        %{endpoint: managed, kind: :managed, scid_match_count: length(scid_matches)}
+        %{endpoint: managed, kind: :managed}
 
       spacecraft_bound ->
-        %{endpoint: spacecraft_bound, kind: :spacecraft, scid_match_count: length(scid_matches)}
-
-      length(scid_matches) == 1 ->
-        %{endpoint: hd(scid_matches), kind: :scid, scid_match_count: 1}
+        %{endpoint: spacecraft_bound, kind: :spacecraft}
 
       true ->
-        %{endpoint: nil, kind: :missing, scid_match_count: length(scid_matches)}
+        %{endpoint: nil, kind: :missing}
     end
   end
 
@@ -147,12 +138,9 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
 
   def managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
 
-  defp matching_runtime_identity_candidates(%{scid: nil}, _organization_id, _mission_id), do: []
-
   defp matching_runtime_identity_candidates(spacecraft, organization_id, mission_id) do
     organization_id
-    |> Cadence.list_source_endpoints(mission_id)
-    |> Enum.filter(&(&1.scid == spacecraft.scid or &1.spacecraft_id == spacecraft.spacecraft_id))
+    |> Cadence.list_source_endpoints(mission_id, spacecraft_id: spacecraft.spacecraft_id)
   end
 
   defp empty_link_assignment,
@@ -174,9 +162,6 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
 
   defp readiness_status(%{scid: nil}, _endpoint_match, _paths), do: :blocked
 
-  defp readiness_status(_spacecraft, %{scid_match_count: count}, _paths) when count > 1,
-    do: :blocked
-
   defp readiness_status(_spacecraft, %{endpoint: nil}, _paths), do: :blocked
 
   defp readiness_status(_spacecraft, _endpoint_match, paths) do
@@ -186,23 +171,19 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
   defp readiness_issue(%{scid: nil}, _endpoint_match, _paths, _available_paths),
     do: "Set SCID so Cadence can identify this spacecraft from TM transfer frames."
 
-  defp readiness_issue(_spacecraft, %{scid_match_count: count}, _paths, _available_paths)
-       when count > 1,
-       do: "Multiple runtime identities match this SCID. Resolve ambiguity before ingest."
-
   defp readiness_issue(_spacecraft, %{endpoint: nil}, _paths, _available_paths),
-    do: "Create the managed runtime identity for this spacecraft."
+    do: "Sync the internal telemetry identity for this spacecraft."
 
   defp readiness_issue(_spacecraft, _endpoint_match, paths, available_paths) do
     cond do
       ready_downlink_path(paths) ->
-        "Ready for SCID-based telemetry routing."
+        "Ready for spacecraft telemetry routing."
 
       available_paths != [] ->
-        "Assign an available downlink link template to this spacecraft."
+        "Assign an available downlink route to this spacecraft."
 
       true ->
-        "Create a provider-backed downlink link template for this spacecraft."
+        "Create a provider-backed downlink routing rule for this spacecraft."
     end
   end
 
@@ -214,23 +195,22 @@ defmodule CadenceWeb.SpacecraftCommsReadiness do
   end
 
   defp endpoint_label(%{endpoint: nil}), do: "Missing"
-  defp endpoint_label(%{kind: :managed}), do: "Managed identity"
-  defp endpoint_label(%{kind: :spacecraft}), do: "Spacecraft-bound endpoint"
-  defp endpoint_label(%{kind: :scid}), do: "SCID-matched endpoint"
+  defp endpoint_label(%{kind: :managed}), do: "Telemetry identity"
+  defp endpoint_label(%{kind: :spacecraft}), do: "Telemetry identity"
 
   defp endpoint_ref(nil), do: nil
   defp endpoint_ref(endpoint), do: endpoint.source_endpoint_id
 
-  defp path_label(%{endpoint: nil}, [], _available_paths), do: "No downlink link"
+  defp path_label(%{endpoint: nil}, [], _available_paths), do: "No downlink route"
 
   defp path_label(_endpoint_match, [], available_paths) when available_paths != [],
     do: "Available to assign"
 
-  defp path_label(_endpoint_match, [], _available_paths), do: "No downlink link"
+  defp path_label(_endpoint_match, [], _available_paths), do: "No downlink route"
 
   defp path_label(_endpoint_match, paths, _available_paths) do
     downlink_paths = Enum.filter(paths, &(&1.direction == :downlink))
-    "#{length(downlink_paths)} downlink link#{if length(downlink_paths) == 1, do: "", else: "s"}"
+    "#{length(downlink_paths)} downlink route#{if length(downlink_paths) == 1, do: "", else: "s"}"
   end
 
   defp path_detail(%{endpoint: nil}, [], _available_paths), do: "Not configured"

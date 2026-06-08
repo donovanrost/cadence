@@ -151,7 +151,7 @@ Profile should include:
 Profile should not include:
 
 - SCID or spacecraft display name
-- runtime identity or source endpoint
+- runtime telemetry identity or source endpoint
 - transport selection
 - routing rules
 - contact preferences
@@ -342,7 +342,6 @@ An initial domain shape:
   purpose_label: "Live telemetry",
   direction: :inbound,
   transport_ref: %{"transport_id" => "transport_...", "version" => 1},
-  runtime_identity_policy: :managed_spacecraft,
   provider_path_ref: nil,
   role: :primary,
   enabled?: true,
@@ -358,8 +357,8 @@ Field notes:
 - `direction` is product-facing: `:inbound`, `:outbound`, or `:bidirectional`.
   The compatibility layer can map these to current `:downlink` and `:uplink`
   path directions.
-- `runtime_identity_policy` should default to managed spacecraft identity so the
-  UI does not ask users to choose `SourceEndpoint` rows.
+- Runtime telemetry identity is resolved internally from the spacecraft. The UI
+  must not ask users to choose `SourceEndpoint` rows or SCID-based routing keys.
 - `role` should be product-facing, such as `:primary`, `:candidate`, or
   `:contributing`, and only map to current `selection_role` internally.
 - `transport_ref` points to the product-level Transport. It should not expose
@@ -632,7 +631,7 @@ before Contacts/runtime execution are in scope.
 
 Spacecraft setup should report:
 
-- Identity: SCID and managed runtime identity state.
+- Identity: SCID and internal telemetry identity sync state.
 - Profile: profile bound, pinned version, drift.
 - Applications: telemetry/command app config state.
 
@@ -659,7 +658,7 @@ Validation groups should become:
 - Spacecraft Setup findings
 - Transport Setup findings
 - Routing Setup findings
-- Advanced/runtime identity findings
+- Internal runtime artifact findings
 
 Old `PathTemplate` and `LinkAssignment` findings may remain internally, but the
 rendered finding should translate them into routing language and navigate to a
@@ -669,7 +668,7 @@ First-pass validation scope:
 
 Spacecraft Setup:
 
-- missing SCID when runtime identity or routing requires it
+- missing SCID when CCSDS telemetry identity resolution requires it
 - missing profile
 - profile version missing or archived
 - profile drift
@@ -843,7 +842,6 @@ comms_routing_rules
 - direction
 - transport_id
 - transport_version
-- runtime_identity_policy
 - provider_path_ref
 - role
 - enabled
@@ -876,7 +874,7 @@ Rules:
   enabled, disabled, archived, materialized, and stale reference detected
 - archived routing rules are excluded from active routing coverage
 - current state is the product source of truth; materialized path/link records
-  are runtime compatibility artifacts
+  are internal runtime artifacts
 
 ## Implementation Plan
 

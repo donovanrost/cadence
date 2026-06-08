@@ -404,7 +404,6 @@ defmodule Cadence.Comms.RoutingRuleStore do
               direction: Atom.to_string(rule.direction),
               transport_id: rule.transport_id,
               transport_version: rule.transport_version,
-              runtime_identity_policy: Atom.to_string(rule.runtime_identity_policy),
               provider_path_ref: rule.provider_path_ref,
               role: Atom.to_string(rule.role),
               enabled: rule.enabled?,
@@ -439,8 +438,6 @@ defmodule Cadence.Comms.RoutingRuleStore do
        direction: Map.get(attrs, :direction, rule.direction),
        transport_id: Map.get(attrs, :transport_id, rule.transport_id),
        transport_version: Map.get(attrs, :transport_version, rule.transport_version),
-       runtime_identity_policy:
-         Map.get(attrs, :runtime_identity_policy, rule.runtime_identity_policy),
        provider_path_ref: Map.get(attrs, :provider_path_ref, rule.provider_path_ref),
        role: Map.get(attrs, :role, rule.role),
        enabled?: Map.get(attrs, :enabled?, rule.enabled?),

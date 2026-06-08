@@ -11,7 +11,6 @@ defmodule Cadence.Comms.RoutingRule do
 
   @type lifecycle_state :: :active | :archived
   @type direction :: :inbound | :outbound | :bidirectional
-  @type runtime_identity_policy :: :managed_spacecraft
   @type role :: :primary | :candidate | :contributing
 
   @type t :: %__MODULE__{
@@ -25,7 +24,6 @@ defmodule Cadence.Comms.RoutingRule do
           direction: direction(),
           transport_id: binary(),
           transport_version: pos_integer(),
-          runtime_identity_policy: runtime_identity_policy(),
           provider_path_ref: binary() | nil,
           role: role(),
           enabled?: boolean(),
@@ -44,7 +42,6 @@ defmodule Cadence.Comms.RoutingRule do
     :direction,
     :transport_id,
     :transport_version,
-    :runtime_identity_policy,
     :provider_path_ref,
     :role,
     :materialized_link_assignment_id,
@@ -53,7 +50,6 @@ defmodule Cadence.Comms.RoutingRule do
   ]
 
   @directions [:inbound, :outbound, :bidirectional]
-  @runtime_identity_policies [:managed_spacecraft]
   @roles [:primary, :candidate, :contributing]
   @lifecycle_states [:active, :archived]
 
@@ -87,13 +83,6 @@ defmodule Cadence.Comms.RoutingRule do
         |> normalize_atom(@directions, :direction),
       transport_id: Map.fetch!(attrs, :transport_id),
       transport_version: Map.fetch!(attrs, :transport_version),
-      runtime_identity_policy:
-        attrs
-        |> Map.get(
-          :runtime_identity_policy,
-          Map.get(attrs, "runtime_identity_policy", :managed_spacecraft)
-        )
-        |> normalize_atom(@runtime_identity_policies, :runtime_identity_policy),
       provider_path_ref: Map.get(attrs, :provider_path_ref, Map.get(attrs, "provider_path_ref")),
       role:
         attrs

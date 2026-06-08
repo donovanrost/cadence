@@ -199,15 +199,16 @@ defmodule CadenceWeb.CommsValidation do
     |> add_if(source_endpoints == [], %{
       owner: :advanced_runtime_identity,
       severity: :blocked,
-      title: "No runtime identities configured",
-      body: "Runtime compatibility diagnostics need identities so ingress can resolve ownership."
+      title: "No internal telemetry identities configured",
+      body:
+        "Internal runtime diagnostics need telemetry identities so ingress can resolve ownership."
     })
     |> add_if(path_templates == [], %{
       owner: :advanced_runtime_identity,
       severity: :blocked,
-      title: "No routing compatibility artifacts configured",
+      title: "No internal routing artifacts configured",
       body:
-        "Create Routing Rules to materialize the runtime compatibility artifacts used by existing integrations."
+        "Create Routing Rules to materialize internal runtime artifacts used during execution."
     })
     |> Kernel.++(
       path_template_findings(
@@ -266,9 +267,9 @@ defmodule CadenceWeb.CommsValidation do
         %{
           owner: :advanced_runtime_identity,
           severity: :blocked,
-          title: "#{path_name} references a missing runtime identity",
+          title: "#{path_name} references a missing internal telemetry identity",
           body:
-            "Update the Routing Rule compatibility artifact or restore runtime identity #{template.source_endpoint_ref}."
+            "Update the Routing Rule artifact or restore internal telemetry identity #{template.source_endpoint_ref}."
         }
       )
       |> add_if(template.provider_profile_refs == [], %{
@@ -276,7 +277,7 @@ defmodule CadenceWeb.CommsValidation do
         severity: :blocked,
         title: "#{path_name} has no transport provider artifact",
         body:
-          "The compatibility artifact cannot connect to or receive from an external stream without a provider record."
+          "The internal runtime artifact cannot connect to or receive from an external stream without a provider record."
       })
       |> add_if(template.transport_profile_refs == [], %{
         owner: :advanced_runtime_identity,
@@ -350,7 +351,7 @@ defmodule CadenceWeb.CommsValidation do
               severity: :blocked,
               title: "#{path_name} references an archived #{profile_label}",
               body:
-                "#{path_name} still references archived #{profile_name} v#{ref_version}. Refresh the Routing Rule compatibility artifact with an active #{profile_label}."
+                "#{path_name} still references archived #{profile_name} v#{ref_version}. Refresh the Routing Rule artifact with an active #{profile_label}."
             }
           )
         ]
@@ -384,8 +385,7 @@ defmodule CadenceWeb.CommsValidation do
               owner: :advanced_runtime_identity,
               severity: :blocked,
               title: "#{path_name} references a missing #{profile_label}",
-              body:
-                "Refresh the Routing Rule compatibility artifact or restore #{profile_label} #{profile_id}."
+              body: "Refresh the Routing Rule artifact or restore #{profile_label} #{profile_id}."
             }
           )
         ]
@@ -527,9 +527,8 @@ defmodule CadenceWeb.CommsValidation do
       %{
         owner: :advanced_runtime_identity,
         severity: :blocked,
-        title: "#{spacecraft.display_name} has no runtime identity",
-        body:
-          "Sync runtime identity before existing runtime integrations can resolve this spacecraft.",
+        title: "#{spacecraft.display_name} has no internal telemetry identity",
+        body: "Sync internal telemetry identity before execution can resolve this spacecraft.",
         action_label: "Edit identity",
         action_navigate: spacecraft_identity_path(mission_id, spacecraft)
       }
@@ -560,8 +559,7 @@ defmodule CadenceWeb.CommsValidation do
             owner: :advanced_runtime_identity,
             severity: :attention,
             title: "#{spacecraft.display_name} has no selected downlink runtime artifact",
-            body:
-              "Routing Rules can materialize compatibility artifacts for existing runtime integrations.",
+            body: "Routing Rules can materialize internal runtime artifacts for execution.",
             action_label: "Review Routing",
             action_navigate: spacecraft_routing_path(mission_id, spacecraft)
           }
@@ -575,7 +573,7 @@ defmodule CadenceWeb.CommsValidation do
             title:
               "#{spacecraft.display_name} has no provider-backed downlink artifact available",
             body:
-              "Create a Transport and Routing Rule before reviewing runtime compatibility artifacts.",
+              "Create a Transport and Routing Rule before reviewing internal runtime artifacts.",
             action_label: "Create Routing Rule",
             action_navigate: mission_routing_path(mission_id)
           }
@@ -765,7 +763,7 @@ defmodule CadenceWeb.CommsValidation do
     link_assignments
     |> Enum.group_by(& &1.source_endpoint_ref)
     |> Enum.flat_map(fn {source_endpoint_ref, assignments} ->
-      runtime_identity = runtime_identity_label(source_endpoint_ref, source_endpoints_by_id)
+      telemetry_identity = runtime_identity_label(source_endpoint_ref, source_endpoints_by_id)
 
       selected_uplinks =
         Enum.filter(assignments, &(&1.direction == :uplink and &1.selection_role == :selected))
@@ -777,14 +775,14 @@ defmodule CadenceWeb.CommsValidation do
       |> add_if(length(selected_uplinks) > 1, %{
         owner: :advanced_runtime_identity,
         severity: :attention,
-        title: "Multiple selected uplink runtime artifacts for #{runtime_identity}",
+        title: "Multiple selected uplink runtime artifacts for #{telemetry_identity}",
         body:
-          "Uplink uniqueness is scoped to a runtime identity or realized contact, not the whole mission. Review this runtime identity's selected uplink artifacts."
+          "Uplink uniqueness is scoped to an internal telemetry identity or realized contact, not the whole mission. Review this identity's selected uplink artifacts."
       })
       |> add_if(assignments != [] and selected_downlinks == [], %{
         owner: :advanced_runtime_identity,
         severity: :attention,
-        title: "No selected downlink runtime artifact for #{runtime_identity}",
+        title: "No selected downlink runtime artifact for #{telemetry_identity}",
         body:
           "Downlink can have contributors, but one selected or preferred runtime artifact is useful for operator summaries."
       })
@@ -845,8 +843,9 @@ defmodule CadenceWeb.CommsValidation do
     %{
       id: "comms-validation-advanced-runtime-identity",
       order: 4,
-      title: "Advanced / Runtime Identity",
-      description: "Compatibility diagnostics for runtime identity and legacy runtime artifacts."
+      title: "Internal Runtime Artifacts",
+      description:
+        "Diagnostics for internal execution artifacts derived from spacecraft routing setup."
     }
   end
 

@@ -163,7 +163,7 @@ defmodule CadenceWeb.CommsComponents do
   def format_error(:contact_transport_profile_not_found),
     do: "Selected protocol behavior was not found."
 
-  def format_error(:source_endpoint_not_found), do: "Selected runtime identity was not found."
+  def format_error(:source_endpoint_not_found), do: "Selected telemetry identity was not found."
   def format_error(reason), do: "Failed to save comms configuration: #{inspect(reason)}"
 
   def adapter_options, do: [{"TCP Socket", "tcp_socket"}]

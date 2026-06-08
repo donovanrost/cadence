@@ -1333,9 +1333,7 @@ defmodule Cadence.Contacts do
   end
 
   defp validate_assignment_source_endpoint(spacecraft, source_endpoint) do
-    scid_matches? = not is_nil(spacecraft.scid) and source_endpoint.scid == spacecraft.scid
-
-    if source_endpoint.spacecraft_id == spacecraft.spacecraft_id or scid_matches? do
+    if source_endpoint.spacecraft_id == spacecraft.spacecraft_id do
       :ok
     else
       {:error, :link_assignment_source_endpoint_mismatch}
@@ -2926,7 +2924,7 @@ defmodule Cadence.Contacts do
           :skipped,
           :info,
           "Skipped",
-          "Set SCID before Cadence can generate a spacecraft-specific runtime identity."
+          "Set SCID before Cadence can generate a spacecraft telemetry identity."
         )
 
       assigned_path_exists?(endpoint_refs, path_templates, link_assignments, source_template) ->
@@ -3055,8 +3053,7 @@ defmodule Cadence.Contacts do
   end
 
   defp endpoint_matches_spacecraft?(endpoint, spacecraft) do
-    endpoint.spacecraft_id == spacecraft.spacecraft_id or
-      (not is_nil(spacecraft.scid) and endpoint.scid == spacecraft.scid)
+    endpoint.spacecraft_id == spacecraft.spacecraft_id
   end
 
   defp assigned_path_exists?(endpoint_refs, _path_templates, link_assignments, source_template) do

@@ -33,26 +33,6 @@ defmodule Cadence.SpacecraftStoreTest do
     assert listed_spacecraft == persisted_spacecraft
   end
 
-  test "fetches spacecraft by SCID" do
-    persist_mission_scope("org-spacecraft", "mission-spacecraft")
-
-    spacecraft =
-      Spacecraft.new(%{
-        spacecraft_id: "spacecraft-001",
-        organization_id: "org-spacecraft",
-        mission_id: "mission-spacecraft",
-        display_name: "SC-001",
-        scid: 7
-      })
-
-    assert {:ok, _persisted_spacecraft} = Cadence.persist_spacecraft("org-spacecraft", spacecraft)
-
-    assert {:ok, fetched_spacecraft} =
-             Cadence.fetch_spacecraft_by_scid("org-spacecraft", "mission-spacecraft", 7)
-
-    assert fetched_spacecraft.spacecraft_id == "spacecraft-001"
-  end
-
   test "binds a spacecraft to a spacecraft profile version" do
     persist_mission_scope("org-spacecraft", "mission-spacecraft")
 

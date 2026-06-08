@@ -23,7 +23,6 @@ defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
     field(:direction, :string)
     field(:transport_id, :string)
     field(:transport_version, :integer)
-    field(:runtime_identity_policy, :string)
     field(:provider_path_ref, :string)
     field(:role, :string)
     field(:enabled, :boolean, default: true)
@@ -43,7 +42,6 @@ defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
     :direction,
     :transport_id,
     :transport_version,
-    :runtime_identity_policy,
     :role,
     :enabled,
     :metadata
@@ -75,7 +73,6 @@ defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
       direction: row.direction,
       transport_id: row.transport_id,
       transport_version: row.transport_version,
-      runtime_identity_policy: row.runtime_identity_policy,
       provider_path_ref: row.provider_path_ref,
       role: row.role,
       enabled?: row.enabled,
@@ -96,7 +93,6 @@ defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
       direction: Atom.to_string(routing_rule.direction),
       transport_id: routing_rule.transport_id,
       transport_version: routing_rule.transport_version,
-      runtime_identity_policy: Atom.to_string(routing_rule.runtime_identity_policy),
       provider_path_ref: routing_rule.provider_path_ref,
       role: Atom.to_string(routing_rule.role),
       enabled: routing_rule.enabled?,
@@ -117,7 +113,6 @@ defmodule Cadence.Persistence.Schemas.CommsRoutingRuleRow do
       :direction,
       :transport_id,
       :transport_version,
-      :runtime_identity_policy,
       :provider_path_ref,
       :role,
       :enabled,

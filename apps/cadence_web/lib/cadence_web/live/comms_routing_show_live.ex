@@ -77,19 +77,15 @@ defmodule CadenceWeb.CommsRoutingShowLive do
               <.detail label="Transport" value={transport_name(@transport, @routing_rule.transport_id)} />
               <.detail label="Transport Version" value={"v#{@routing_rule.transport_version}"} />
               <.detail label="Role" value={human_atom(@routing_rule.role)} />
-              <.detail
-                label="Runtime Identity Policy"
-                value={human_atom(@routing_rule.runtime_identity_policy)}
-              />
             </div>
 
             <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
               <summary class="cursor-pointer hud-label hover:text-primary">
-                Compatibility Artifacts
+                Internal Runtime Artifacts
               </summary>
               <div class="mt-3 space-y-1">
                 <.detail
-                  label="Runtime assignment"
+                  label="Assignment artifact"
                   value={@routing_rule.materialized_link_assignment_id || "Not materialized"}
                 />
                 <.detail

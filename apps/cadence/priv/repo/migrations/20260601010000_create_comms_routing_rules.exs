@@ -13,7 +13,6 @@ defmodule Cadence.Repo.Migrations.CreateCommsRoutingRules do
       add(:direction, :string, null: false)
       add(:transport_id, :string, null: false)
       add(:transport_version, :integer, null: false)
-      add(:runtime_identity_policy, :string, null: false)
       add(:provider_path_ref, :string)
       add(:role, :string, null: false)
       add(:enabled, :boolean, null: false, default: true)

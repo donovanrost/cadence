@@ -305,13 +305,6 @@ defmodule Cadence do
     SpacecraftStore.fetch_spacecraft(mission_id, spacecraft_id)
   end
 
-  @spec fetch_spacecraft_by_scid(binary(), binary(), non_neg_integer()) ::
-          {:ok, Spacecraft.t()} | {:error, term()}
-  def fetch_spacecraft_by_scid(organization_id, mission_id, scid)
-      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) and scid >= 0 do
-    SpacecraftStore.fetch_spacecraft_by_scid(organization_id, mission_id, scid)
-  end
-
   @spec list_spacecraft(binary(), binary()) :: [Spacecraft.t()]
   def list_spacecraft(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do

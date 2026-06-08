@@ -78,7 +78,7 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
       assert has_element?(show_view, "#comms-routing-show-page")
       assert show_html =~ "Routing Rule"
       assert show_html =~ "Durable spacecraft use of a transport"
-      assert show_html =~ "Runtime assignment"
+      assert show_html =~ "Assignment artifact"
       refute show_html =~ "Link Template"
     end
 

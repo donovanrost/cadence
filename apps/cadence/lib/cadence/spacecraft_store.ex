@@ -109,30 +109,6 @@ defmodule Cadence.SpacecraftStore do
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
-  @spec fetch_spacecraft_by_scid(binary(), non_neg_integer()) ::
-          {:ok, Spacecraft.t()} | {:error, term()}
-  def fetch_spacecraft_by_scid(mission_id, scid)
-      when is_binary(mission_id) and is_integer(scid) and scid >= 0 do
-    case Repo.get_by(SpacecraftRow, mission_id: mission_id, scid: scid) do
-      nil -> {:error, :spacecraft_not_found}
-      %SpacecraftRow{} = row -> {:ok, SpacecraftRow.to_domain(row)}
-    end
-  end
-
-  @spec fetch_spacecraft_by_scid(binary(), binary(), non_neg_integer()) ::
-          {:ok, Spacecraft.t()} | {:error, term()}
-  def fetch_spacecraft_by_scid(organization_id, mission_id, scid)
-      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) and scid >= 0 do
-    case Repo.get_by(SpacecraftRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           scid: scid
-         ) do
-      nil -> {:error, :spacecraft_not_found}
-      %SpacecraftRow{} = row -> {:ok, SpacecraftRow.to_domain(row)}
-    end
-  end
-
   @spec ensure_managed_source_endpoint(binary(), Spacecraft.t()) ::
           {:ok, SourceEndpoint.t()} | {:error, term()}
   def ensure_managed_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
