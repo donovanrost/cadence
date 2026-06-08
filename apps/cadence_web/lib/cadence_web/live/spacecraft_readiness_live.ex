@@ -87,7 +87,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
           description={telemetry_description(@telemetry_status)}
           action_label={telemetry_action_label(@telemetry_status)}
           action_navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/telemetry"
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications/telemetry_decom"
           }
         >
           <:detail label="Telemetry Decom" value={telemetry_status_label(@telemetry_status)} />

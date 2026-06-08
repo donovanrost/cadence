@@ -18,6 +18,8 @@ defmodule Cadence.Applications.TelemetryDecom do
   import Ecto.Query
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Applications.ApplicationBinding
+  alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Catalog
@@ -28,13 +30,14 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Governance
   alias Cadence.Missions
-  alias Cadence.Persistence.Schemas.SpacecraftTelemetryDecomConfigRow
+  alias Cadence.Persistence.Schemas.ApplicationBindingRow
   alias Cadence.Repo
   alias Cadence.Runtime
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.SpacecraftStore
 
+  @application_key "telemetry_decom"
   @type status :: :not_configured | :configured | :applied | :outdated | :disabled
 
   @spec configure(binary(), binary(), binary(), map() | keyword()) ::
@@ -83,11 +86,15 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   defp upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
     existing =
-      Repo.get_by(SpacecraftTelemetryDecomConfigRow,
-        organization_id: organization_id,
-        mission_id: mission_id,
-        spacecraft_id: spacecraft_id
-      )
+      case ApplicationBindingStore.fetch(
+             organization_id,
+             mission_id,
+             spacecraft_id,
+             @application_key
+           ) do
+        {:ok, binding} -> binding
+        {:error, :application_binding_not_configured} -> nil
+      end
 
     catalog_revision_id = fetch_attr!(attrs, :catalog_revision_id)
     source_endpoint_id = config_inputs.source_endpoint_id
@@ -113,33 +120,14 @@ defmodule Cadence.Applications.TelemetryDecom do
         metadata: Map.get(attrs, :metadata, %{})
       })
 
-    changeset = SpacecraftTelemetryDecomConfigRow.changeset(config)
-
-    upsert_opts = [
-      on_conflict:
-        {:replace,
-         [
-           :catalog_revision_id,
-           :handled_apids,
-           :source_endpoint_id,
-           :enabled,
-           :metadata,
-           :applied_binding_set_id,
-           :applied_binding_set_version,
-           :applied_at,
-           :updated_at
-         ]},
-      conflict_target: [:spacecraft_id]
-    ]
-
-    case Repo.insert(changeset, upsert_opts) do
-      {:ok, row} -> {:ok, SpacecraftTelemetryDecomConfigRow.to_domain(row)}
+    case ApplicationBindingStore.upsert(config_to_binding(config)) do
+      {:ok, binding} -> {:ok, config_from_binding(binding)}
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp preserved_applied_stamp(
-         %SpacecraftTelemetryDecomConfigRow{
+         %ApplicationBinding{
            catalog_revision_id: catalog_revision_id,
            source_endpoint_id: source_endpoint_id,
            handled_apids: handled_apids
@@ -174,7 +162,7 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp resolve_enabled(attrs, %SpacecraftTelemetryDecomConfigRow{} = existing) do
+  defp resolve_enabled(attrs, %ApplicationBinding{} = existing) do
     Map.get(attrs, :enabled, Map.get(attrs, "enabled", existing.enabled))
   end
 
@@ -182,31 +170,67 @@ defmodule Cadence.Applications.TelemetryDecom do
     Map.get(attrs, :enabled, Map.get(attrs, "enabled", true))
   end
 
+  defp config_to_binding(%Config{} = config) do
+    ApplicationBinding.new(%{
+      application_binding_id: application_binding_id(config.spacecraft_id),
+      organization_id: config.organization_id,
+      mission_id: config.mission_id,
+      spacecraft_id: config.spacecraft_id,
+      application_key: @application_key,
+      catalog_revision_id: config.catalog_revision_id,
+      handled_apids: config.handled_apids,
+      source_endpoint_id: config.source_endpoint_id,
+      enabled: config.enabled,
+      applied_binding_set_id: config.applied_binding_set_id,
+      applied_binding_set_version: config.applied_binding_set_version,
+      applied_at: config.applied_at,
+      updated_at: config.updated_at,
+      metadata: config.metadata
+    })
+  end
+
+  defp config_from_binding(%ApplicationBinding{} = binding) do
+    %Config{
+      spacecraft_id: binding.spacecraft_id,
+      organization_id: binding.organization_id,
+      mission_id: binding.mission_id,
+      catalog_revision_id: binding.catalog_revision_id,
+      handled_apids: binding.handled_apids,
+      source_endpoint_id: binding.source_endpoint_id,
+      enabled: binding.enabled,
+      applied_binding_set_id: binding.applied_binding_set_id,
+      applied_binding_set_version: binding.applied_binding_set_version,
+      applied_at: binding.applied_at,
+      updated_at: binding.updated_at,
+      metadata: binding.metadata
+    }
+  end
+
+  defp application_binding_id(spacecraft_id) do
+    "application_binding:#{spacecraft_id}:#{@application_key}"
+  end
+
   @spec fetch_config(binary(), binary(), binary()) ::
           {:ok, Config.t()} | {:error, :not_configured}
   def fetch_config(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    case Repo.get_by(SpacecraftTelemetryDecomConfigRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           spacecraft_id: spacecraft_id
+    case ApplicationBindingStore.fetch(
+           organization_id,
+           mission_id,
+           spacecraft_id,
+           @application_key
          ) do
-      nil -> {:error, :not_configured}
-      row -> {:ok, SpacecraftTelemetryDecomConfigRow.to_domain(row)}
+      {:ok, binding} -> {:ok, config_from_binding(binding)}
+      {:error, :application_binding_not_configured} -> {:error, :not_configured}
     end
   end
 
   @spec list_configs(binary(), binary()) :: [Config.t()]
   def list_configs(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
-    SpacecraftTelemetryDecomConfigRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> order_by([row], asc: row.spacecraft_id)
-    |> Repo.all()
-    |> Enum.map(&SpacecraftTelemetryDecomConfigRow.to_domain/1)
+    organization_id
+    |> ApplicationBindingStore.list(mission_id, application_key: @application_key)
+    |> Enum.map(&config_from_binding/1)
   end
 
   @doc """
@@ -251,14 +275,10 @@ defmodule Cadence.Applications.TelemetryDecom do
   @spec disable(binary(), binary(), binary()) :: {:ok, Config.t()} | {:error, term()}
   def disable(organization_id, mission_id, spacecraft_id) do
     with {:ok, %Config{} = config} <- fetch_config(organization_id, mission_id, spacecraft_id) do
-      changeset =
-        SpacecraftTelemetryDecomConfigRow.changeset(%Config{config | enabled: false})
-
-      case Repo.insert(changeset,
-             on_conflict: {:replace, [:enabled, :updated_at]},
-             conflict_target: [:spacecraft_id]
-           ) do
-        {:ok, row} -> {:ok, SpacecraftTelemetryDecomConfigRow.to_domain(row)}
+      case %Config{config | enabled: false}
+           |> config_to_binding()
+           |> ApplicationBindingStore.upsert() do
+        {:ok, binding} -> {:ok, config_from_binding(binding)}
         {:error, reason} -> {:error, reason}
       end
     end
@@ -338,7 +358,12 @@ defmodule Cadence.Applications.TelemetryDecom do
   def list_apid_conflicts(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(spacecraft_id) do
-    %{}
+    ApplicationBindingStore.list_apid_conflicts(
+      organization_id,
+      mission_id,
+      spacecraft_id,
+      @application_key
+    )
   end
 
   @type apid_row :: %{
@@ -494,18 +519,10 @@ defmodule Cadence.Applications.TelemetryDecom do
             applied_at: now
         }
 
-      case Repo.insert(SpacecraftTelemetryDecomConfigRow.changeset(updated),
-             on_conflict:
-               {:replace,
-                [
-                  :applied_binding_set_id,
-                  :applied_binding_set_version,
-                  :applied_at,
-                  :updated_at
-                ]},
-             conflict_target: [:spacecraft_id]
-           ) do
-        {:ok, _} -> {:cont, :ok}
+      case updated
+           |> config_to_binding()
+           |> ApplicationBindingStore.upsert() do
+        {:ok, _binding} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
@@ -515,10 +532,10 @@ defmodule Cadence.Applications.TelemetryDecom do
     now = DateTime.utc_now()
 
     from(
-      row in SpacecraftTelemetryDecomConfigRow,
+      row in ApplicationBindingRow,
       where:
         row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.enabled == false
+          row.application_key == ^@application_key and row.enabled == false
     )
     |> Repo.update_all(
       set: [
@@ -710,7 +727,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         spacecraft_id: spacecraft.spacecraft_id,
         scid: spacecraft.scid,
         display_name: spacecraft.display_name,
-        metadata: %{"managed_by" => "telemetry_decom"}
+        metadata: %{"managed_by" => "spacecraft_application_binding"}
       })
 
     case SourceEndpoints.persist_source_endpoint(organization_id, endpoint) do
@@ -721,7 +738,10 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   defp managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
     endpoint.source_endpoint_id == runtime_source_endpoint_id(endpoint.spacecraft_id) or
-      Map.get(endpoint.metadata, "managed_by") == "telemetry_decom"
+      Map.get(endpoint.metadata, "managed_by") in [
+        "spacecraft_application_binding",
+        "telemetry_decom"
+      ]
   end
 
   defp fetch_required(attrs, key) do

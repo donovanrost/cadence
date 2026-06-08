@@ -9,7 +9,25 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   alias CadenceWeb.SpacecraftTelemetryDecomLive.Components
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
+    if supported_application?(Map.get(params, "application_key")) do
+      mount_application(socket)
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "Application not found.")
+       |> push_navigate(
+         to:
+           ~p"/missions/#{socket.assigns.current_mission.mission_id}/spacecraft/#{socket.assigns.current_spacecraft.spacecraft_id}/applications"
+       )}
+    end
+  end
+
+  defp supported_application?(nil), do: true
+  defp supported_application?("telemetry_decom"), do: true
+  defp supported_application?(_application_key), do: false
+
+  defp mount_application(socket) do
     organization_id = socket.assigns.current_scope.organization_id
     mission_id = socket.assigns.current_mission.mission_id
     spacecraft_id = socket.assigns.current_spacecraft.spacecraft_id
@@ -29,7 +47,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Telemetry Interpretation")
+     |> assign(:page_title, "Telemetry Decom")
      |> assign(:nav_item, :spacecraft)
      |> assign(:config, config)
      |> assign(:revisions, revisions)
@@ -144,7 +162,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
          )
          |> put_flash(
            :info,
-           "Telemetry interpretation mission changes applied. All enabled spacecraft configurations are now live."
+           "Telemetry Decom mission changes applied. All enabled spacecraft configurations are now live."
          )}
 
       {:error, reason} ->
@@ -165,7 +183,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
          |> assign(:config, config)
          |> put_flash(
            :info,
-           "Telemetry interpretation disabled for this spacecraft. Apply mission changes to remove it from the live mission."
+           "Telemetry Decom disabled for this spacecraft. Apply mission changes to remove it from the live mission."
          )}
 
       {:error, reason} ->
@@ -233,11 +251,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name,
            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-          {"Telemetry", nil}
+          {"Applications",
+           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"},
+          {"Telemetry Decom", nil}
         ]} />
-        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry Interpretation</h1>
+        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry Decom</h1>
         <p class="text-sm text-base-content/60 mt-1">
-          APID selection and packet routing configuration for
+          Application packet claims and publication state for
           <span class="font-semibold text-base-content">{@current_spacecraft.display_name}</span>.
         </p>
       </div>

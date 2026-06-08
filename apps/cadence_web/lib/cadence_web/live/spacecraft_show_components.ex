@@ -89,6 +89,8 @@ defmodule CadenceWeb.SpacecraftShowComponents do
 
   attr :type_binding, :any, required: true
   attr :telemetry_decom_status, :atom, required: true
+  attr :mission_id, :string, required: true
+  attr :spacecraft_id, :string, required: true
 
   def applications_card(assigns) do
     ~H"""
@@ -106,13 +108,30 @@ defmodule CadenceWeb.SpacecraftShowComponents do
               :for={{app_key, _config} <- Enum.sort(@type_binding.pinned.applications)}
               class="rounded border border-base-300 bg-base-100/40 p-4"
             >
-              <p class="font-medium">{humanize_application_key(app_key)}</p>
+              <div class="flex items-start justify-between gap-3">
+                <p class="font-medium">{humanize_application_key(app_key)}</p>
+                <.link
+                  :if={app_key == :telemetry_decom}
+                  navigate={
+                    ~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/applications/#{app_key}"
+                  }
+                  class="text-xs text-primary hover:underline"
+                >
+                  Manage
+                </.link>
+              </div>
               <p class="mt-1 text-xs text-base-content/60">
                 {application_status_hint(app_key, @telemetry_decom_status)}
               </p>
             </div>
           </div>
         <% end %>
+        <.link
+          navigate={~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/applications"}
+          class="mt-3 inline-flex text-sm text-primary hover:underline"
+        >
+          View applications &rarr;
+        </.link>
       </div>
     </section>
     """

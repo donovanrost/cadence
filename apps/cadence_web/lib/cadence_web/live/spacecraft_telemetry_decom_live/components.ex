@@ -68,7 +68,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     <div>
       <div class="flex items-center justify-between gap-2">
         <p class="hud-label">
-          Handled APIDs · {MapSet.size(@selection)} / {length(@rows)}
+          Packet Claims · {MapSet.size(@selection)} / {length(@rows)}
         </p>
         <div class="flex items-center gap-2">
           <form phx-change="filter_apids" id="telemetry-decom-filter-form">
@@ -120,7 +120,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     <div>
       <p class="hud-label mb-2">Preview</p>
       <p class="text-sm text-base-content/60">
-        Select one or more APIDs to preview matched packets.
+        Select one or more packet APIDs to preview the application input claim.
       </p>
     </div>
     """
@@ -199,7 +199,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         class="btn btn-ghost btn-sm"
         phx-click="disable"
         id="telemetry-decom-disable-button"
-        data-confirm="Disable telemetry interpretation for this spacecraft?"
+        data-confirm="Disable Telemetry Decom for this spacecraft?"
       >
         Disable
       </button>
@@ -245,7 +245,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     ~H"""
     <div>
       <p class="text-sm text-base-content/60">
-        No telemetry catalog revisions available for this mission yet. Import a catalog
+        No packet catalog revisions are available for this mission yet. Import a catalog
         revision first.
       </p>
       <.link
@@ -282,10 +282,10 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   defp status_description(:disabled),
     do:
-      "This spacecraft is excluded from telemetry interpretation. Apply mission changes to publish the disabled state."
+      "This spacecraft is excluded from Telemetry Decom. Apply mission changes to publish the disabled state."
 
   defp status_description(:not_configured),
-    do: "Choose a catalog revision and handled APIDs, then apply mission changes."
+    do: "Choose a catalog revision and packet claims, then apply mission changes."
 
   defp diagnostic_dot(:error), do: :blocked
   defp diagnostic_dot(:warning), do: :attention

@@ -119,6 +119,14 @@ defmodule CadenceWeb.Router do
            SpacecraftRoutingLive,
            :show
 
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/applications",
+           SpacecraftApplicationsLive,
+           :index
+
+      live "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key",
+           SpacecraftTelemetryDecomLive,
+           :show
+
       live "/missions/:mission_id/spacecraft/:spacecraft_id/telemetry",
            SpacecraftTelemetryDecomLive,
            :show

@@ -116,6 +116,8 @@ defmodule CadenceWeb.SpacecraftShowLive do
       <.applications_card
         type_binding={@type_binding}
         telemetry_decom_status={@telemetry_decom_status}
+        mission_id={@current_mission.mission_id}
+        spacecraft_id={@current_spacecraft.spacecraft_id}
       />
 
       <section id="spacecraft-interpretation-overview" class="grid gap-4 xl:grid-cols-3">
@@ -132,12 +134,12 @@ defmodule CadenceWeb.SpacecraftShowLive do
         />
         <.workflow_card
           id="spacecraft-overview-telemetry"
-          title="Telemetry Interpretation"
+          title="Applications"
           value={label(@telemetry_decom_status)}
           description={description(@telemetry_decom_status)}
           status={telemetry_panel_status(@telemetry_decom_status)}
           navigate={
-            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/telemetry"
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"
           }
           action_label={configure_label(@telemetry_decom_status)}
         />
@@ -289,7 +291,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
     do: "Telemetry interpretation is disabled for this spacecraft."
 
   defp description(:not_configured),
-    do: "Configure a catalog revision and data source to decode packets for this spacecraft."
+    do: "Configure application packet claims for this spacecraft."
 
   defp configure_label(:not_configured), do: "Configure"
   defp configure_label(_), do: "Manage"

@@ -123,7 +123,9 @@ defmodule CadenceWeb.TestFixtures do
       Spacecraft.new(%{
         mission_id: mission.mission_id,
         display_name: display_name,
-        scid: Keyword.get(opts, :scid)
+        scid: Keyword.get(opts, :scid),
+        spacecraft_type_id: Keyword.get(opts, :spacecraft_type_id),
+        spacecraft_type_version: Keyword.get(opts, :spacecraft_type_version)
       })
 
     assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)

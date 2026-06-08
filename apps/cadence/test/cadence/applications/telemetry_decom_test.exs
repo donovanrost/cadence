@@ -2,6 +2,8 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Applications.ApplicationBinding
+  alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
@@ -481,14 +483,27 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   end
 
   describe "list_apid_conflicts/3" do
-    test "returns an empty map today — no other applications exist" do
-      {spacecraft, _revision, _endpoint} = setup_mission()
+    test "returns enabled APID claims from other applications on the spacecraft" do
+      {spacecraft, revision, endpoint} = setup_mission()
+
+      assert {:ok, _binding} =
+               ApplicationBindingStore.upsert(
+                 ApplicationBinding.new(%{
+                   organization_id: @organization_id,
+                   mission_id: @mission_id,
+                   spacecraft_id: spacecraft.spacecraft_id,
+                   application_key: :event_reporting,
+                   catalog_revision_id: revision.catalog_revision_id,
+                   handled_apids: [42],
+                   source_endpoint_id: endpoint.source_endpoint_id
+                 })
+               )
 
       assert TelemetryDecom.list_apid_conflicts(
                @organization_id,
                @mission_id,
                spacecraft.spacecraft_id
-             ) == %{}
+             ) == %{42 => "Event Reporting"}
     end
   end
 

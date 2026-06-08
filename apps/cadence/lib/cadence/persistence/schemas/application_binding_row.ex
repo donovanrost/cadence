@@ -1,20 +1,22 @@
-defmodule Cadence.Persistence.Schemas.SpacecraftTelemetryDecomConfigRow do
+defmodule Cadence.Persistence.Schemas.ApplicationBindingRow do
   @moduledoc false
 
   use Ecto.Schema
 
   import Ecto.Changeset
 
-  alias Cadence.Applications.TelemetryDecom.Config
+  alias Cadence.Applications.ApplicationBinding
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.OrganizationScope
 
-  @primary_key {:spacecraft_id, :string, autogenerate: false}
+  @primary_key {:application_binding_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec]
 
-  schema "spacecraft_telemetry_decom_configs" do
+  schema "spacecraft_application_bindings" do
     field(:organization_id, :string)
     field(:mission_id, :string)
+    field(:spacecraft_id, :string)
+    field(:application_key, :string)
     field(:catalog_revision_id, :string)
     field(:handled_apids, {:array, :integer}, default: [])
     field(:source_endpoint_id, :string)
@@ -28,28 +30,35 @@ defmodule Cadence.Persistence.Schemas.SpacecraftTelemetryDecomConfigRow do
   end
 
   @required_fields [
-    :spacecraft_id,
+    :application_binding_id,
     :mission_id,
+    :spacecraft_id,
+    :application_key,
     :catalog_revision_id,
     :handled_apids,
     :source_endpoint_id,
     :metadata
   ]
 
-  @spec changeset(Config.t()) :: Ecto.Changeset.t()
-  def changeset(%Config{} = config) do
+  @spec changeset(ApplicationBinding.t()) :: Ecto.Changeset.t()
+  def changeset(%ApplicationBinding{} = binding) do
     %__MODULE__{}
-    |> cast(domain_attrs(config), all_fields())
+    |> cast(domain_attrs(binding), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> unique_constraint([:organization_id, :mission_id, :spacecraft_id, :application_key],
+      name: :spacecraft_application_bindings_scope_idx
+    )
   end
 
-  @spec to_domain(struct()) :: Config.t()
+  @spec to_domain(struct()) :: ApplicationBinding.t()
   def to_domain(%__MODULE__{} = row) do
-    %Config{
-      spacecraft_id: row.spacecraft_id,
+    %ApplicationBinding{
+      application_binding_id: row.application_binding_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,
+      spacecraft_id: row.spacecraft_id,
+      application_key: row.application_key,
       catalog_revision_id: row.catalog_revision_id,
       handled_apids: row.handled_apids || [],
       source_endpoint_id: row.source_endpoint_id,
@@ -62,27 +71,31 @@ defmodule Cadence.Persistence.Schemas.SpacecraftTelemetryDecomConfigRow do
     }
   end
 
-  defp domain_attrs(%Config{} = config) do
+  defp domain_attrs(%ApplicationBinding{} = binding) do
     %{
-      spacecraft_id: config.spacecraft_id,
-      organization_id: config.organization_id,
-      mission_id: config.mission_id,
-      catalog_revision_id: config.catalog_revision_id,
-      handled_apids: config.handled_apids,
-      source_endpoint_id: config.source_endpoint_id,
-      enabled: config.enabled,
-      applied_binding_set_id: config.applied_binding_set_id,
-      applied_binding_set_version: config.applied_binding_set_version,
-      applied_at: config.applied_at,
-      metadata: JsonDocument.wrap_value(config.metadata)
+      application_binding_id: binding.application_binding_id,
+      organization_id: binding.organization_id,
+      mission_id: binding.mission_id,
+      spacecraft_id: binding.spacecraft_id,
+      application_key: binding.application_key,
+      catalog_revision_id: binding.catalog_revision_id,
+      handled_apids: binding.handled_apids,
+      source_endpoint_id: binding.source_endpoint_id,
+      enabled: binding.enabled,
+      applied_binding_set_id: binding.applied_binding_set_id,
+      applied_binding_set_version: binding.applied_binding_set_version,
+      applied_at: binding.applied_at,
+      metadata: JsonDocument.wrap_value(binding.metadata)
     }
   end
 
   defp all_fields do
     [
-      :spacecraft_id,
+      :application_binding_id,
       :organization_id,
       :mission_id,
+      :spacecraft_id,
+      :application_key,
       :catalog_revision_id,
       :handled_apids,
       :source_endpoint_id,

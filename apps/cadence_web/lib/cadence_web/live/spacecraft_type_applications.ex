@@ -15,8 +15,8 @@ defmodule CadenceWeb.SpacecraftTypeApplications do
   @entries [
     %{
       key: :telemetry_decom,
-      display_name: "Telemetry Decommutation",
-      description: "Decode space packets into named telemetry points.",
+      display_name: "Telemetry Decom",
+      description: "Claim packet APIDs and decode selected packets into named telemetry points.",
       available?: true
     },
     %{

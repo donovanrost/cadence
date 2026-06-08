@@ -671,7 +671,7 @@ defmodule CadenceWeb.CommsValidation do
   end
 
   defp spacecraft_telemetry_path(mission_id, spacecraft) do
-    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
+    ~p"/missions/#{mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
   end
 
   defp spacecraft_routing_path(mission_id, spacecraft) do

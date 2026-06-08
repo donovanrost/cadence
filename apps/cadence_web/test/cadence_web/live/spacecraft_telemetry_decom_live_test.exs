@@ -93,7 +93,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
       )
 
-    assert html =~ "Telemetry Interpretation"
+    assert html =~ "Telemetry Decom"
     assert html =~ "Not configured"
     assert html =~ spacecraft.display_name
   end
@@ -105,7 +105,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     html =
@@ -132,7 +132,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     view |> element("input[phx-click='toggle_apid'][phx-value-apid='42']") |> render_click()
@@ -161,11 +161,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, _view, html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     assert html =~ "Catalog revision"
-    assert html =~ "Handled APIDs"
+    assert html =~ "Packet Claims"
     refute html =~ "Data Source"
     refute html =~ "New Data Source"
     refute html =~ "Ingress source ref"
@@ -177,12 +177,12 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, _view, html} =
       live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
 
-    assert html =~ "Telemetry Interpretation"
+    assert html =~ "Applications"
     assert html =~ "Not configured"
     assert html =~ "Configure"
 
     assert html =~
-             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
+             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
   end
 
   test "select-all-unclaimed picks every non-conflicting APID and autosaves" do
@@ -192,7 +192,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     _html =
@@ -217,7 +217,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     view
@@ -229,7 +229,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
       |> element("#telemetry-decom-clear")
       |> render_click()
 
-    assert html =~ "Handled APIDs · 0 / 1"
+    assert html =~ "Packet Claims · 0 / 1"
 
     assert {:ok, config} =
              TelemetryDecom.fetch_config(
@@ -248,7 +248,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     html =
@@ -266,7 +266,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     html =
@@ -302,7 +302,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLiveTest do
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry_decom"
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
       )
 
     # The page defaults to the highest-numbered revision (rev_b). Switch to rev_a first.

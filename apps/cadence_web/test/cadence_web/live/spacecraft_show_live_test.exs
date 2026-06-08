@@ -38,7 +38,7 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
                ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
 
       assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/telemetry"
+               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
 
       assert has_element?(view, "#spacecraft-interpretation-overview")
       assert has_element?(view, "#spacecraft-overview-identity")
