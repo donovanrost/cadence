@@ -96,6 +96,7 @@ defmodule Cadence do
   alias Cadence.Replay.Scope
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
+  alias Cadence.Telemetry.RuntimeHealth
 
   @type processing_result :: %{
           raw_evidence: RawEvidence.t(),
@@ -2196,6 +2197,16 @@ defmodule Cadence do
   def mission_health_summary(organization_id, mission_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     MissionHealthReads.summary(organization_id, mission_id, opts)
+  end
+
+  @spec runtime_health_snapshot() :: RuntimeHealth.snapshot()
+  def runtime_health_snapshot do
+    RuntimeHealth.snapshot()
+  end
+
+  @spec reset_runtime_health() :: :ok
+  def reset_runtime_health do
+    RuntimeHealth.reset()
   end
 
   @spec telemetry_limit_event_history(binary(), binary(), keyword()) ::

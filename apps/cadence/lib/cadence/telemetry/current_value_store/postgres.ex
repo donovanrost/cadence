@@ -21,10 +21,9 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
 
   @impl true
   def record_samples(samples) when is_list(samples) do
-    case persist_samples_transaction(samples) do
-      {:ok, :ok} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    samples
+    |> latest_per_key()
+    |> persist_latest_samples()
   end
 
   @impl true
@@ -66,45 +65,6 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     :ok
   end
 
-  defp persist_samples_transaction(samples) do
-    Repo.transaction(fn ->
-      Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
-        persist_sample_transaction_step(sample)
-      end)
-    end)
-  end
-
-  defp persist_sample_transaction_step(%Sample{} = sample) do
-    case persist_latest_value(sample) do
-      {:ok, _row} -> {:cont, :ok}
-      {:error, reason} -> Repo.rollback(reason)
-    end
-  end
-
-  defp persist_latest_value(%Sample{} = sample) do
-    existing_row =
-      Repo.get_by(TelemetryLatestValueRow,
-        mission_id: sample.mission_id,
-        spacecraft_scope_id: spacecraft_scope_id(sample.spacecraft_id),
-        point_id: sample.point_id
-      )
-
-    cond do
-      is_nil(existing_row) ->
-        %TelemetryLatestValueRow{}
-        |> TelemetryLatestValueRow.changeset(sample)
-        |> Repo.insert()
-
-      sample_newer?(sample, existing_row) ->
-        existing_row
-        |> TelemetryLatestValueRow.changeset(sample)
-        |> Repo.update()
-
-      true ->
-        {:ok, existing_row}
-    end
-  end
-
   defp latest_value_query(mission_id, point_id, opts) do
     spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
 
@@ -129,8 +89,102 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   defp spacecraft_scope_id(nil), do: @mission_scope_key
   defp spacecraft_scope_id(spacecraft_id), do: spacecraft_id
 
+  defp latest_per_key(samples) do
+    Enum.reduce(samples, %{}, fn %Sample{} = sample, acc ->
+      key = key(sample)
+
+      Map.update(acc, key, sample, &latest_sample(sample, &1))
+    end)
+  end
+
+  defp persist_latest_samples(samples_by_key) when map_size(samples_by_key) == 0, do: :ok
+
+  defp persist_latest_samples(samples_by_key) do
+    existing_rows = existing_rows_by_key(Map.keys(samples_by_key))
+
+    samples_to_persist =
+      samples_by_key
+      |> Enum.filter(fn {key, %Sample{} = sample} ->
+        case Map.get(existing_rows, key) do
+          nil -> true
+          %TelemetryLatestValueRow{} = existing_row -> sample_newer?(sample, existing_row)
+        end
+      end)
+      |> Enum.map(fn {_key, %Sample{} = sample} -> sample end)
+
+    upsert_latest_samples(samples_to_persist)
+  end
+
+  defp existing_rows_by_key(keys) do
+    mission_ids = keys |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    spacecraft_scope_ids = keys |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+    point_ids = keys |> Enum.map(&elem(&1, 2)) |> Enum.uniq()
+    key_set = MapSet.new(keys)
+
+    TelemetryLatestValueRow
+    |> where([row], row.mission_id in ^mission_ids)
+    |> where([row], row.spacecraft_scope_id in ^spacecraft_scope_ids)
+    |> where([row], row.point_id in ^point_ids)
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn %TelemetryLatestValueRow{} = row, acc ->
+      row_key = {row.mission_id, row.spacecraft_scope_id, row.point_id}
+
+      if MapSet.member?(key_set, row_key) do
+        Map.put(acc, row_key, row)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp upsert_latest_samples([]), do: :ok
+
+  defp upsert_latest_samples(samples) do
+    now = DateTime.utc_now()
+    rows = Enum.map(samples, &TelemetryLatestValueRow.insert_attrs(&1, now))
+
+    case Repo.insert_all(TelemetryLatestValueRow, rows,
+           conflict_target: [:mission_id, :spacecraft_scope_id, :point_id],
+           on_conflict: {:replace, replace_fields()}
+         ) do
+      {count, _rows} when count == length(rows) -> :ok
+      {count, _rows} -> {:error, {:insert_all_count_mismatch, :telemetry_latest_values, count}}
+    end
+  end
+
+  defp replace_fields do
+    [
+      :spacecraft_id,
+      :point_name,
+      :sample_id,
+      :packet_id,
+      :evidence_id,
+      :packet_definition_id,
+      :packet_definition_version,
+      :raw_value,
+      :engineering_value,
+      :quality_state,
+      :generation_time,
+      :receipt_time,
+      :provenance,
+      :updated_at
+    ]
+  end
+
+  defp key(%Sample{} = sample) do
+    {sample.mission_id, spacecraft_scope_id(sample.spacecraft_id), sample.point_id}
+  end
+
+  defp latest_sample(%Sample{} = sample, %Sample{} = existing_sample) do
+    if sample_newer?(sample, existing_sample), do: sample, else: existing_sample
+  end
+
   defp sample_newer?(%Sample{} = sample, %TelemetryLatestValueRow{} = latest_value_row) do
     compare_sort_keys(sample_sort_key(sample), row_sort_key(latest_value_row)) == :gt
+  end
+
+  defp sample_newer?(%Sample{} = sample, %Sample{} = existing_sample) do
+    compare_sort_keys(sample_sort_key(sample), sample_sort_key(existing_sample)) == :gt
   end
 
   defp sample_sort_key(%Sample{} = sample) do

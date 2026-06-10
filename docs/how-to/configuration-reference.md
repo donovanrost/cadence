@@ -3,7 +3,7 @@ title: Configuration Reference
 tags: [reference, developer, config, env, profiles, runtime]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-06-09
 ---
 
 # Configuration Reference
@@ -62,15 +62,15 @@ This is the hot-path-safe latest-value backend.
 
 Default:
 
-- `Cadence.Telemetry.HistoryStore.Noop`
+- `Cadence.Telemetry.HistoryStore.ETS`
 
-This keeps sample-history persistence off the default runtime hot path.
+This keeps a bounded local recent-history window for runtime reads.
 
 ### Schedulers and background jobs
 
-Defaults include enabled schedulers for:
+Defaults include enabled runtime workers for:
 
-- contact scheduling
+- mission-owned contact scheduling
 - command dispatch
 - command verifier scheduling
 - background jobs
@@ -78,9 +78,68 @@ Defaults include enabled schedulers for:
 These are controlled through:
 
 - `:contact_scheduler`
+- `:contact_scheduler_global_safety`
 - `:command_dispatcher`
 - `:command_verifier_scheduler`
+- `:background_jobs`
 - `:start_background_jobs`
+
+`:contact_scheduler` controls mission-scoped schedulers started under
+`Cadence.Runtime.MissionRuntime`.
+
+Mission schedulers emit `[:cadence, :contacts, :scheduler, event]` telemetry
+for `:notification`, `:projection_rebuild`, `:timer_scheduled`,
+`:timer_fired`, `:stale_timer`, `:reconcile`, and `:safety_reconcile`.
+
+`:contact_scheduler_global_safety` controls the legacy no-mission global
+contact scheduler. It is disabled by default; manual global reconciliation
+remains available through `Cadence.reconcile_contact_lifecycle/1`.
+
+`:command_dispatcher` controls durable command queue dispatch. Queue writes and
+release-target contact changes kick affected lanes directly. Lane dispatchers
+use timers for `not_before` delays, and `:safety_poll_interval_ms` /
+`:lane_safety_poll_interval_ms` control slow durable recovery scans.
+
+Command dispatch emits `[:cadence, :commanding, :dispatcher, event]` telemetry
+for dispatcher reconcile events, and
+`[:cadence, :commanding, :lane_dispatcher, event]` telemetry for
+`:dispatch_attempt`, `:dispatch_result`, `:timer_scheduled`, and
+`:stale_timer`.
+
+`:command_verifier_scheduler` controls the command verifier timeout scheduler.
+The default path keeps pending verifier timeout deadlines in memory, schedules
+the next due timeout with a process timer, and uses `:safety_poll_interval_ms`
+as a slow durable recovery scan.
+
+Verifier schedulers emit
+`[:cadence, :commanding, :verifier_scheduler, event]` telemetry for
+`:notification`, `:projection_rebuild`, `:timer_scheduled`, `:timer_fired`,
+`:stale_timer`, `:reconcile`, and `:safety_reconcile`.
+
+`:start_background_jobs` enables or disables the background jobs supervisor.
+`:background_jobs` configures the durable jobs dispatcher, including
+`:max_concurrency` and `:safety_poll_interval_ms`. Job enqueue signals and
+worker-exit monitors drive normal dispatch; the safety interval is only the
+durable recovery scan.
+
+Background jobs emit `[:cadence, :jobs, :dispatcher, event]` telemetry for
+`:notification`, `:dispatch_attempt`, `:jobs_claimed`, `:worker_started`,
+`:worker_start_failed`, `:safety_dispatch_scheduled`, and `:stale_timer`.
+
+These telemetry events are the operational view of the BEAM-owned data plane.
+Normal steady-state activity should show notifications, exact timers, dispatch
+attempts, and worker transitions. Safety reconcile or safety dispatch events
+should be present as a recovery signal, not as the dominant source of runtime
+work. The architecture guard in
+`apps/cadence/test/cadence/architecture_runtime_guard_test.exs` protects those
+defaults from regressing back to tight database polling.
+
+`Cadence.Telemetry.RuntimeHealth` is supervised with the application and
+subscribes to the same scheduler and dispatcher telemetry events. Its
+`snapshot/0` API exposes process-local counters by source, event, and reason,
+plus stale-timer and safety-activity totals and a bounded recent-event list.
+This view is intentionally in memory only; it is suitable for a runtime health
+page or alert adapter, not as durable audit history.
 
 ## 2. Bootstrap admin env in `config/runtime.exs`
 

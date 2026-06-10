@@ -9,16 +9,23 @@ defmodule Cadence.Telemetry.HistoryStore.Postgres do
 
   alias Cadence.Persistence.Schemas.TelemetrySampleRow
   alias Cadence.Repo
-  alias Cadence.Telemetry.Sample
 
   @impl true
   def child_spec(_opts), do: nil
 
   @impl true
   def persist_samples(samples) when is_list(samples) do
-    case persist_samples_transaction(samples) do
-      {:ok, :ok} -> :ok
-      {:error, reason} -> {:error, reason}
+    rows = sample_rows(samples)
+
+    case rows do
+      [] ->
+        :ok
+
+      [_ | _] ->
+        case Repo.insert_all(TelemetrySampleRow, rows) do
+          {count, _rows} when count == length(rows) -> :ok
+          {count, _rows} -> {:error, {:insert_all_count_mismatch, :telemetry_samples, count}}
+        end
     end
   end
 
@@ -50,19 +57,9 @@ defmodule Cadence.Telemetry.HistoryStore.Postgres do
     :ok
   end
 
-  defp persist_samples_transaction(samples) do
-    Repo.transaction(fn ->
-      Enum.reduce_while(samples, :ok, fn %Sample{} = sample, :ok ->
-        persist_sample_transaction_step(sample)
-      end)
-    end)
-  end
-
-  defp persist_sample_transaction_step(%Sample{} = sample) do
-    case Repo.insert(TelemetrySampleRow.changeset(sample)) do
-      {:ok, _row} -> {:cont, :ok}
-      {:error, reason} -> Repo.rollback(reason)
-    end
+  defp sample_rows(samples) do
+    inserted_at = DateTime.utc_now()
+    Enum.map(samples, &TelemetrySampleRow.insert_attrs(&1, inserted_at))
   end
 
   defp maybe_filter_spacecraft(query, nil), do: query

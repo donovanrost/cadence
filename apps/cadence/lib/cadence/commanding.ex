@@ -35,7 +35,8 @@ defmodule Cadence.Commanding do
     Dispatcher,
     DispatchSupervisor,
     Encoder,
-    StagedCommandItem
+    StagedCommandItem,
+    VerifierScheduler
   }
 
   alias Cadence.Contacts
@@ -474,6 +475,70 @@ defmodule Cadence.Commanding do
     |> Repo.all()
   end
 
+  @spec notify_release_target_available(RealizedContact.t()) :: :ok
+  def notify_release_target_available(%RealizedContact{} = realized_contact)
+      when realized_contact.lifecycle_state in [:defined, :active] do
+    lane_keys = release_target_lane_keys(realized_contact)
+
+    if lane_keys == [] do
+      :ok
+    else
+      realized_contact.organization_id
+      |> pending_release_target_lanes(realized_contact.mission_id, lane_keys)
+      |> Enum.each(fn lane ->
+        maybe_schedule_queue_lane_dispatch(
+          lane.organization_id,
+          lane.mission_id,
+          lane.queue_lane_key
+        )
+      end)
+    end
+
+    :ok
+  end
+
+  def notify_release_target_available(%RealizedContact{}), do: :ok
+
+  defp pending_release_target_lanes(nil, mission_id, lane_keys) do
+    CommandQueueEntryRow
+    |> where([row], row.mission_id == ^mission_id)
+    |> pending_release_target_lanes_query(lane_keys)
+  end
+
+  defp pending_release_target_lanes(organization_id, mission_id, lane_keys)
+       when is_binary(organization_id) do
+    CommandQueueEntryRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> pending_release_target_lanes_query(lane_keys)
+  end
+
+  defp pending_release_target_lanes_query(query, lane_keys) when is_list(lane_keys) do
+    query
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], row.queue_lane_key in ^lane_keys)
+    |> distinct([row], [row.organization_id, row.mission_id, row.queue_lane_key])
+    |> order_by([row], asc: row.organization_id, asc: row.mission_id, asc: row.queue_lane_key)
+    |> select([row], %{
+      organization_id: row.organization_id,
+      mission_id: row.mission_id,
+      queue_lane_key: row.queue_lane_key
+    })
+    |> Repo.all()
+  end
+
+  defp release_target_lane_keys(%RealizedContact{} = realized_contact) do
+    realized_contact.paths
+    |> Enum.filter(&selected_uplink_path?/1)
+    |> Enum.map(fn %Path{source_endpoint_ref: source_endpoint_ref} -> source_endpoint_ref end)
+    |> Enum.concat(realized_contact.source_endpoint_refs)
+    |> Enum.filter(&is_binary/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp selected_uplink_path?(%Path{direction: :uplink, selection_role: :selected}), do: true
+  defp selected_uplink_path?(%Path{}), do: false
+
   @spec requeue_release_pending_queue_entries() :: non_neg_integer()
   def requeue_release_pending_queue_entries do
     {updated_count, _rows} =
@@ -617,8 +682,15 @@ defmodule Cadence.Commanding do
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def evaluate_command_verifiers(telemetry_samples) when is_list(telemetry_samples) do
     case Repo.transaction(fn -> evaluate_command_verifiers(Repo, telemetry_samples) end) do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
+      {:ok, {:ok, verifier_instances}} ->
+        VerifierScheduler.notify_verifier_instances_changed(verifier_instances)
+        {:ok, verifier_instances}
+
+      {:ok, result} ->
+        result
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -656,8 +728,15 @@ defmodule Cadence.Commanding do
              transport_action_requests
            )
          end) do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
+      {:ok, {:ok, verifier_instances}} ->
+        VerifierScheduler.notify_verifier_instances_changed(verifier_instances)
+        {:ok, verifier_instances}
+
+      {:ok, result} ->
+        result
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -693,6 +772,13 @@ defmodule Cadence.Commanding do
     end)
   end
 
+  @spec command_verifier_timeout_projection() :: [CommandVerifierInstance.t()]
+  def command_verifier_timeout_projection do
+    pending_command_verifier_timeout_query()
+    |> Repo.all()
+    |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)
+  end
+
   @spec timeout_command_verifier_instances(DateTime.t()) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def timeout_command_verifier_instances(%DateTime{} = current_time) do
@@ -706,12 +792,8 @@ defmodule Cadence.Commanding do
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def timeout_command_verifier_instances(repo, %DateTime{} = current_time) do
     timed_out_rows =
-      CommandVerifierInstanceRow
-      |> where(
-        [row],
-        row.lifecycle_state == "pending" and not is_nil(row.timeout_at) and
-          row.timeout_at <= ^current_time
-      )
+      pending_command_verifier_timeout_query()
+      |> where([row], row.timeout_at <= ^current_time)
       |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
       |> repo.all()
 
@@ -2036,6 +2118,16 @@ defmodule Cadence.Commanding do
         completed_release_attempt.command_release_attempt_id
       )
     end)
+    |> Multi.run(:pending_command_verifier_timeouts, fn repo, _changes ->
+      {:ok,
+       repo
+       |> pending_command_verifier_timeout_rows(
+         queue_entry_row.organization_id,
+         queue_entry_row.mission_id,
+         completed_release_attempt.command_release_attempt_id
+       )
+       |> Enum.map(&CommandVerifierInstanceRow.to_domain/1)}
+    end)
     |> Multi.run(:final_command_release_attempt, fn repo, _changes ->
       fetch_final_command_release_attempt_row(repo, queue_entry_row, completed_release_attempt)
     end)
@@ -2085,9 +2177,12 @@ defmodule Cadence.Commanding do
           %{
             final_command_release_attempt: release_attempt_row,
             command_queue_entry: queue_entry_row,
-            final_command_request: request_row
+            final_command_request: request_row,
+            pending_command_verifier_timeouts: pending_command_verifier_timeouts
           }}
        ) do
+    VerifierScheduler.notify_verifier_instances_changed(pending_command_verifier_timeouts)
+
     maybe_schedule_queue_lane_dispatch(
       queue_entry_row.organization_id,
       queue_entry_row.mission_id,
@@ -2290,6 +2385,28 @@ defmodule Cadence.Commanding do
 
       apply_command_verifier_updates(repo, updates)
     end
+  end
+
+  defp pending_command_verifier_timeout_query do
+    CommandVerifierInstanceRow
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], not is_nil(row.timeout_at))
+    |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
+  end
+
+  defp pending_command_verifier_timeout_rows(
+         repo,
+         organization_id,
+         mission_id,
+         command_release_attempt_id
+       ) do
+    CommandVerifierInstanceRow
+    |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+    |> where([row], row.command_release_attempt_id == ^command_release_attempt_id)
+    |> where([row], row.lifecycle_state == "pending")
+    |> where([row], not is_nil(row.timeout_at))
+    |> order_by([row], asc: row.timeout_at, asc: row.command_verifier_instance_id)
+    |> repo.all()
   end
 
   defp pending_command_verifier_rows(repo, organization_id, mission_id) do

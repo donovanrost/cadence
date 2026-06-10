@@ -50,11 +50,18 @@ defmodule Cadence.Persistence.Schemas.TelemetrySampleRow do
   @spec changeset(Sample.t()) :: Ecto.Changeset.t()
   def changeset(%Sample{} = sample) do
     %__MODULE__{}
-    |> cast(domain_attrs(sample), all_fields())
+    |> cast(row_attrs(sample), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:packet_id)
     |> foreign_key_constraint(:evidence_id)
+  end
+
+  @spec insert_attrs(Sample.t(), DateTime.t()) :: map()
+  def insert_attrs(%Sample{} = sample, %DateTime{} = inserted_at) do
+    sample
+    |> row_attrs()
+    |> Map.put(:inserted_at, inserted_at)
   end
 
   @spec to_domain(struct()) :: Sample.t()
@@ -78,7 +85,8 @@ defmodule Cadence.Persistence.Schemas.TelemetrySampleRow do
     }
   end
 
-  defp domain_attrs(%Sample{} = sample) do
+  @spec row_attrs(Sample.t()) :: map()
+  def row_attrs(%Sample{} = sample) do
     %{
       sample_id: sample.sample_id,
       packet_id: sample.packet_id,
@@ -92,10 +100,17 @@ defmodule Cadence.Persistence.Schemas.TelemetrySampleRow do
       raw_value: JsonDocument.wrap_value(sample.raw_value),
       engineering_value: JsonDocument.wrap_value(sample.engineering_value),
       quality_state: Atom.to_string(sample.quality_state),
-      generation_time: sample.generation_time,
-      receipt_time: sample.receipt_time,
+      generation_time: truncate_datetime(sample.generation_time),
+      receipt_time: truncate_datetime(sample.receipt_time),
       provenance: JsonDocument.encode(sample.provenance)
     }
+  end
+
+  defp truncate_datetime(nil), do: nil
+
+  defp truncate_datetime(%DateTime{} = datetime) do
+    {microsecond, _precision} = datetime.microsecond
+    %{datetime | microsecond: {microsecond, 6}}
   end
 
   defp all_fields do

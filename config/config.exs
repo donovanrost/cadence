@@ -6,6 +6,10 @@ config :swoosh, :api_client, false
 config :cadence,
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,
+  background_jobs: [
+    safety_poll_interval_ms: 60_000,
+    max_concurrency: 4
+  ],
   ingress_archive: [
     module: Cadence.IngressArchive.FileSystem,
     base_path: Path.expand("../var/ingress_archive", __DIR__),
@@ -19,15 +23,19 @@ config :cadence,
     flush_count: 250
   ],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
-  telemetry_history_store: [module: Cadence.Telemetry.HistoryStore.Noop],
-  contact_scheduler: [enabled: true, poll_interval_ms: 1_000],
+  telemetry_history_store: [
+    module: Cadence.Telemetry.HistoryStore.ETS,
+    max_samples_per_point: 5_000
+  ],
+  contact_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
+  contact_scheduler_global_safety: [enabled: false, safety_poll_interval_ms: 300_000],
   command_dispatcher: [
     enabled: true,
-    poll_interval_ms: 1_000,
-    lane_poll_interval_ms: 250
+    safety_poll_interval_ms: 60_000,
+    lane_safety_poll_interval_ms: 60_000
   ],
   bootstrap_admin: [enabled: false],
-  command_verifier_scheduler: [enabled: true, poll_interval_ms: 1_000],
+  command_verifier_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
   catalog_importers: [Cadence.Catalog.Importers.CadenceYamlDatabase],
   generators: [timestamp_type: :utc_datetime_usec]
 

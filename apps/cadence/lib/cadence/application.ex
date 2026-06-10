@@ -7,19 +7,24 @@ defmodule Cadence.Application do
 
   alias Cadence.IngressArchive
   alias Cadence.Protocol.RecordArchive
-  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore}
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, RuntimeHealth}
 
   @impl true
   def start(_type, _args) do
     children =
-      [Cadence.Repo, {Phoenix.PubSub, name: Cadence.PubSub}, Cadence.Telemetry.Profiler] ++
+      [
+        Cadence.Repo,
+        {Phoenix.PubSub, name: Cadence.PubSub},
+        Cadence.Telemetry.Profiler,
+        RuntimeHealth
+      ] ++
         ingress_archive_children() ++
         protocol_record_archive_children() ++
         telemetry_backend_children() ++
         [Cadence.Runtime.Supervisor] ++
         command_dispatcher_children() ++
         command_verifier_scheduler_children() ++
-        contact_scheduler_children() ++ background_job_children()
+        contact_scheduler_global_safety_children() ++ background_job_children()
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
 
@@ -42,10 +47,10 @@ defmodule Cadence.Application do
     end
   end
 
-  defp contact_scheduler_children do
-    contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler, [])
+  defp contact_scheduler_global_safety_children do
+    contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler_global_safety, [])
 
-    if Keyword.get(contact_scheduler_config, :enabled, true) do
+    if Keyword.get(contact_scheduler_config, :enabled, false) do
       [{Cadence.Contacts.Scheduler, contact_scheduler_config}]
     else
       []
@@ -75,7 +80,7 @@ defmodule Cadence.Application do
 
   defp background_job_children do
     if Application.get_env(:cadence, :start_background_jobs, true) do
-      [Cadence.Jobs.Supervisor]
+      [{Cadence.Jobs.Supervisor, Application.get_env(:cadence, :background_jobs, [])}]
     else
       []
     end

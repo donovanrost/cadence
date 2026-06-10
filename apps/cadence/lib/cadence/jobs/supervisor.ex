@@ -8,10 +8,10 @@ defmodule Cadence.Jobs.Supervisor do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     children = [
       {DynamicSupervisor, strategy: :one_for_one, name: Cadence.Jobs.WorkerSupervisor},
-      {Cadence.Jobs.Dispatcher, []}
+      {Cadence.Jobs.Dispatcher, opts}
     ]
 
     Supervisor.init(children, strategy: :one_for_all)

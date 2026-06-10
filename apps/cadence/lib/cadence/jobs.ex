@@ -9,6 +9,7 @@ defmodule Cadence.Jobs do
 
   alias Cadence.Catalog
   alias Cadence.DerivedTelemetry
+  alias Cadence.Jobs.Dispatcher
   alias Cadence.Jobs.Job
   alias Cadence.Limits
   alias Cadence.Persistence.Schemas.BackgroundJobRow
@@ -32,7 +33,9 @@ defmodule Cadence.Jobs do
 
     case Repo.insert(BackgroundJobRow.changeset(job)) do
       {:ok, %BackgroundJobRow{} = background_job_row} ->
-        {:ok, BackgroundJobRow.to_domain(background_job_row)}
+        job = BackgroundJobRow.to_domain(background_job_row)
+        Dispatcher.notify_available()
+        {:ok, job}
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}

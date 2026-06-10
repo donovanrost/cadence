@@ -1,19 +1,28 @@
 defmodule Cadence.ContactsSchedulerTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Contacts.Scheduler
   alias Cadence.Runtime
+  alias Cadence.Runtime.MissionRuntime
+
+  @scheduler_event_prefix [:cadence, :contacts, :scheduler]
+  @scheduler_events [
+    [:cadence, :contacts, :scheduler, :notification],
+    [:cadence, :contacts, :scheduler, :projection_rebuild],
+    [:cadence, :contacts, :scheduler, :reconcile],
+    [:cadence, :contacts, :scheduler, :safety_reconcile],
+    [:cadence, :contacts, :scheduler, :stale_timer],
+    [:cadence, :contacts, :scheduler, :timer_fired],
+    [:cadence, :contacts, :scheduler, :timer_scheduled]
+  ]
 
   setup do
     mission_id =
       "mission-contact-scheduler-" <> Integer.to_string(System.unique_integer([:positive]))
 
-    on_exit(fn ->
-      Cadence.stop_realized_contact(mission_id, "due-contact_run")
-      Cadence.stop_realized_contact(mission_id, "restart-contact")
-      Runtime.stop_mission(mission_id)
-    end)
+    on_exit(fn -> Runtime.stop_mission(mission_id) end)
 
     %{mission_id: mission_id}
   end
@@ -43,6 +52,7 @@ defmodule Cadence.ContactsSchedulerTest do
 
     assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(due_contact)
     assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(future_contact)
+    refute GenServer.whereis(Scheduler)
 
     assert {:ok, summary} = Cadence.reconcile_contact_lifecycle(reference_time)
 
@@ -116,6 +126,360 @@ defmodule Cadence.ContactsSchedulerTest do
     assert restarted_contact.lifecycle_state == :active
     assert restarted_contact.metadata["reconciled_at"]
     assert restarted_contact.metadata["started_at"]
+  end
+
+  test "scheduler notification reconciles a changed mission without interval polling", %{
+    mission_id: mission_id
+  } do
+    reference_time = DateTime.from_unix!(1_700_051_500, :second)
+
+    scheduled_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "notified-due-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, -15, :second),
+        ends_at: DateTime.add(reference_time, 300, :second),
+        paths: contact_paths()
+      })
+
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       auto_schedule?: true,
+       run_on_boot?: false,
+       safety_poll_interval_ms: :timer.hours(1),
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    Scheduler.notify_contact_changed(scheduler_name, mission_id)
+
+    wait_until(fn ->
+      case Cadence.fetch_realized_contact(mission_id, "notified-due-contact_run") do
+        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
+        _other -> :retry
+      end
+    end)
+
+    assert {:ok, realized_contact} =
+             Cadence.fetch_realized_contact(mission_id, "notified-due-contact_run")
+
+    assert realized_contact.lifecycle_state == :active
+    assert Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
+    assert {:ok, _summary} = Scheduler.reconcile_now(scheduler_name, reference_time)
+  end
+
+  test "default contact notifications route to the mission runtime scheduler", %{
+    mission_id: mission_id
+  } do
+    previous_contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler)
+
+    Application.put_env(:cadence, :contact_scheduler,
+      enabled: true,
+      safety_poll_interval_ms: :timer.hours(1)
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :contact_scheduler, previous_contact_scheduler_config)
+    end)
+
+    reference_time = DateTime.utc_now()
+
+    scheduled_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "mission-runtime-due-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, -15, :second),
+        ends_at: DateTime.add(reference_time, 300, :second),
+        paths: contact_paths()
+      })
+
+    refute GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id))
+    refute GenServer.whereis(Scheduler)
+
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+
+    assert is_pid(GenServer.whereis(MissionRuntime.contact_scheduler_name(mission_id)))
+    refute GenServer.whereis(Scheduler)
+
+    wait_until(fn ->
+      case Cadence.fetch_realized_contact(mission_id, "mission-runtime-due-contact_run") do
+        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
+        _other -> :retry
+      end
+    end)
+
+    assert {:ok, _summary} =
+             Scheduler.reconcile_now(
+               MissionRuntime.contact_scheduler_name(mission_id),
+               reference_time
+             )
+
+    assert :ok = Runtime.stop_mission(mission_id)
+  end
+
+  test "mission scheduler updates its projection from contact change notifications", %{
+    mission_id: mission_id
+  } do
+    reference_time = DateTime.from_unix!(1_700_051_650, :second)
+
+    future_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "projected-future-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, 600, :second),
+        ends_at: DateTime.add(reference_time, 900, :second),
+        paths: contact_paths()
+      })
+
+    canceled_contact = %ScheduledContact{future_contact | lifecycle_state: :canceled}
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       mission_id: mission_id,
+       auto_schedule?: true,
+       run_on_boot?: false,
+       safety_poll_interval_ms: :timer.hours(1),
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    Scheduler.notify_contact_changed(future_contact, server: scheduler_name)
+
+    assert %{
+             scheduled_contact_ids: ["projected-future-contact"],
+             mission_timer_count: 1
+           } = Scheduler.snapshot(scheduler_name)
+
+    Scheduler.notify_contact_changed(canceled_contact, server: scheduler_name)
+
+    assert %{
+             scheduled_contact_ids: [],
+             mission_timer_count: 0
+           } = Scheduler.snapshot(scheduler_name)
+  end
+
+  test "mission scheduler emits telemetry for projection rebuilds notifications and timers", %{
+    mission_id: mission_id
+  } do
+    attach_scheduler_telemetry(self())
+    reference_time = DateTime.from_unix!(1_700_051_660, :second)
+
+    future_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "telemetry-projected-future-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, 600, :second),
+        ends_at: DateTime.add(reference_time, 900, :second),
+        paths: contact_paths()
+      })
+
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       mission_id: mission_id,
+       auto_schedule?: true,
+       run_on_boot?: false,
+       safety_poll_interval_ms: :timer.hours(1),
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    assert_scheduler_event(:projection_rebuild, fn measurements, metadata ->
+      measurements.projected_contact_count == 0 and metadata.mode == :mission and
+        metadata.mission_id == mission_id
+    end)
+
+    Scheduler.notify_contact_changed(future_contact, server: scheduler_name)
+
+    assert_scheduler_event(:notification, fn measurements, metadata ->
+      measurements.count == 1 and metadata.contact_kind == :scheduled and
+        metadata.scheduled_contact_id == future_contact.scheduled_contact_id and
+        metadata.lifecycle_state == :scheduled and metadata.mission_id == mission_id
+    end)
+
+    assert_scheduler_event(:timer_scheduled, fn measurements, metadata ->
+      measurements.count == 1 and measurements.delay_ms == 600_000 and
+        metadata.mode == :mission and metadata.mission_id == mission_id and
+        DateTime.compare(metadata.wake_at, future_contact.starts_at) == :eq
+    end)
+  end
+
+  test "mission scheduler emits telemetry when a timer reconciles due contacts", %{
+    mission_id: mission_id
+  } do
+    attach_scheduler_telemetry(self())
+    reference_time = DateTime.from_unix!(1_700_051_675, :second)
+
+    scheduled_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "telemetry-due-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, -5, :second),
+        ends_at: DateTime.add(reference_time, 300, :second),
+        paths: contact_paths()
+      })
+
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(scheduled_contact)
+
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       mission_id: mission_id,
+       auto_schedule?: true,
+       run_on_boot?: false,
+       safety_poll_interval_ms: :timer.hours(1),
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    assert_scheduler_event(:timer_scheduled, fn measurements, metadata ->
+      measurements.delay_ms == 0 and metadata.mission_id == mission_id
+    end)
+
+    assert_scheduler_event(:timer_fired, fn measurements, metadata ->
+      measurements.count == 1 and metadata.mission_id == mission_id
+    end)
+
+    assert_scheduler_event(:reconcile, fn measurements, metadata ->
+      metadata.reason == :timer and metadata.mode == :mission and
+        metadata.mission_id == mission_id and measurements.realized_scheduled_contact_count == 1
+    end)
+
+    wait_until(fn ->
+      case Cadence.fetch_realized_contact(mission_id, "telemetry-due-contact_run") do
+        {:ok, %RealizedContact{lifecycle_state: :active}} -> :ok
+        _other -> :retry
+      end
+    end)
+  end
+
+  test "scheduler emits telemetry for manual safety and stale timer paths", %{
+    mission_id: mission_id
+  } do
+    attach_scheduler_telemetry(self())
+    reference_time = DateTime.from_unix!(1_700_051_690, :second)
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       mission_id: mission_id,
+       auto_schedule?: false,
+       run_on_boot?: false,
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    assert {:ok, summary} = Scheduler.reconcile_now(scheduler_name, reference_time)
+    assert summary.errors == []
+
+    assert_scheduler_event(:reconcile, fn measurements, metadata ->
+      metadata.reason == :manual and metadata.mode == :mission and
+        metadata.mission_id == mission_id and measurements.error_count == 0
+    end)
+
+    pid = GenServer.whereis(scheduler_name)
+    send(pid, {:mission_wakeup, mission_id, make_ref()})
+
+    assert_scheduler_event(:stale_timer, fn measurements, metadata ->
+      measurements.count == 1 and metadata.mission_id == mission_id
+    end)
+
+    send(pid, :safety_reconcile)
+
+    assert_scheduler_event(:safety_reconcile, fn measurements, metadata ->
+      metadata.reason == :safety and metadata.mode == :mission and
+        metadata.mission_id == mission_id and measurements.error_count == 0
+    end)
+  end
+
+  test "mission scheduler rebuilds its projection from durable contacts on boot", %{
+    mission_id: mission_id
+  } do
+    reference_time = DateTime.from_unix!(1_700_051_700, :second)
+
+    future_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "boot-projected-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, 600, :second),
+        ends_at: DateTime.add(reference_time, 900, :second),
+        paths: contact_paths()
+      })
+
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(future_contact)
+
+    scheduler_name = :"contact-scheduler-#{System.unique_integer([:positive])}"
+
+    start_supervised!(
+      {Scheduler,
+       name: scheduler_name,
+       mission_id: mission_id,
+       auto_schedule?: false,
+       run_on_boot?: false,
+       reference_time_fun: fn -> reference_time end}
+    )
+
+    assert %{
+             scheduled_contact_ids: ["boot-projected-contact"],
+             mission_timer_count: 0
+           } = Scheduler.snapshot(scheduler_name)
+  end
+
+  test "scheduler wakeups are mission scoped", %{mission_id: mission_id} do
+    reference_time = DateTime.from_unix!(1_700_051_800, :second)
+    other_mission_id = mission_id <> "-other"
+
+    due_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "mission-scoped-due-contact",
+        mission_id: mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, -10, :second),
+        ends_at: DateTime.add(reference_time, 300, :second),
+        paths: contact_paths()
+      })
+
+    other_contact =
+      ScheduledContact.new(%{
+        scheduled_contact_id: "other-mission-future-contact",
+        mission_id: other_mission_id,
+        source_endpoint_refs: ["source-endpoint-alpha"],
+        starts_at: DateTime.add(reference_time, 900, :second),
+        ends_at: DateTime.add(reference_time, 1_200, :second),
+        paths: contact_paths()
+      })
+
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(due_contact)
+    assert {:ok, _scheduled_contact} = Cadence.persist_scheduled_contact(other_contact)
+
+    assert Contacts.next_contact_scheduler_wakeup(mission_id, reference_time) == reference_time
+
+    assert DateTime.compare(
+             Contacts.next_contact_scheduler_wakeup(other_mission_id, reference_time),
+             other_contact.starts_at
+           ) == :eq
+
+    assert {:ok, summary} = Contacts.reconcile(mission_id, reference_time)
+
+    assert summary.realized_scheduled_contact_ids == ["mission-scoped-due-contact_run"]
+
+    assert {:ok, untouched_other_contact} =
+             Cadence.fetch_scheduled_contact(other_mission_id, other_contact.scheduled_contact_id)
+
+    assert untouched_other_contact.lifecycle_state == :scheduled
   end
 
   test "reconcile completes expired scheduled contacts instead of restarting them", %{
@@ -240,5 +604,54 @@ defmodule Cadence.ContactsSchedulerTest do
         ]
       })
     ]
+  end
+
+  defp wait_until(fun, attempts_left \\ 40)
+
+  defp wait_until(_fun, 0), do: flunk("condition not met before timeout")
+
+  defp wait_until(fun, attempts_left) when is_function(fun, 0) and attempts_left > 0 do
+    case fun.() do
+      :ok ->
+        :ok
+
+      :retry ->
+        Process.sleep(25)
+        wait_until(fun, attempts_left - 1)
+    end
+  end
+
+  defp attach_scheduler_telemetry(test_pid) do
+    handler_id = "contacts-scheduler-test-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach_many(
+        handler_id,
+        @scheduler_events,
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:scheduler_telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  defp assert_scheduler_event(event_name, predicate) do
+    event = @scheduler_event_prefix ++ [event_name]
+
+    receive do
+      {:scheduler_telemetry, ^event, measurements, metadata} ->
+        if predicate.(measurements, metadata) do
+          {measurements, metadata}
+        else
+          assert_scheduler_event(event_name, predicate)
+        end
+
+      {:scheduler_telemetry, _other_event, _measurements, _metadata} ->
+        assert_scheduler_event(event_name, predicate)
+    after
+      1_000 -> flunk("expected scheduler telemetry event #{inspect(event)}")
+    end
   end
 end

@@ -53,7 +53,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
   @spec changeset(struct(), Sample.t()) :: Ecto.Changeset.t()
   def changeset(%__MODULE__{} = latest_value_row, %Sample{} = sample) do
     latest_value_row
-    |> cast(domain_attrs(sample), all_fields())
+    |> cast(row_attrs(sample), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:packet_id)
@@ -61,6 +61,13 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
     |> unique_constraint([:mission_id, :spacecraft_scope_id, :point_id],
       name: :telemetry_latest_values_scope_idx
     )
+  end
+
+  @spec insert_attrs(Sample.t(), DateTime.t()) :: map()
+  def insert_attrs(%Sample{} = sample, %DateTime{} = now) do
+    sample
+    |> row_attrs()
+    |> Map.merge(%{inserted_at: now, updated_at: now})
   end
 
   @spec to_domain(struct()) :: Sample.t()
@@ -84,7 +91,8 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
     }
   end
 
-  defp domain_attrs(%Sample{} = sample) do
+  @spec row_attrs(Sample.t()) :: map()
+  def row_attrs(%Sample{} = sample) do
     %{
       mission_id: sample.mission_id,
       spacecraft_scope_id: sample.spacecraft_id || @mission_scope_key,
@@ -99,10 +107,17 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
       raw_value: JsonDocument.wrap_value(sample.raw_value),
       engineering_value: JsonDocument.wrap_value(sample.engineering_value),
       quality_state: Atom.to_string(sample.quality_state),
-      generation_time: sample.generation_time,
-      receipt_time: sample.receipt_time,
+      generation_time: truncate_datetime(sample.generation_time),
+      receipt_time: truncate_datetime(sample.receipt_time),
       provenance: JsonDocument.encode(sample.provenance)
     }
+  end
+
+  defp truncate_datetime(nil), do: nil
+
+  defp truncate_datetime(%DateTime{} = datetime) do
+    {microsecond, _precision} = datetime.microsecond
+    %{datetime | microsecond: {microsecond, 6}}
   end
 
   defp all_fields do

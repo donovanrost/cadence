@@ -17,6 +17,7 @@ defmodule Cadence.Contacts do
     ProviderProfile,
     RealizedContact,
     ScheduledContact,
+    Scheduler,
     TransportBinding,
     TransportProfile
   }
@@ -844,7 +845,9 @@ defmodule Cadence.Contacts do
              conflict_target: [:mission_id, :scheduled_contact_id]
            ) do
         {:ok, %ScheduledContactRow{} = row} ->
-          {:ok, ScheduledContactRow.to_domain(row)}
+          row
+          |> ScheduledContactRow.to_domain()
+          |> notify_contact_changed()
 
         {:error, %Changeset{} = changeset} ->
           {:error, changeset}
@@ -953,7 +956,9 @@ defmodule Cadence.Contacts do
              conflict_target: [:mission_id, :realized_contact_id]
            ) do
         {:ok, %RealizedContactRow{} = row} ->
-          {:ok, RealizedContactRow.to_domain(row)}
+          row
+          |> RealizedContactRow.to_domain()
+          |> notify_contact_changed()
 
         {:error, %Changeset{} = changeset} ->
           {:error, changeset}
@@ -1031,24 +1036,33 @@ defmodule Cadence.Contacts do
 
   @spec reconcile(DateTime.t()) :: {:ok, map()}
   def reconcile(%DateTime{} = reference_time) do
+    do_reconcile(nil, reference_time)
+  end
+
+  @spec reconcile(binary(), DateTime.t()) :: {:ok, map()}
+  def reconcile(mission_id, %DateTime{} = reference_time) when is_binary(mission_id) do
+    do_reconcile(mission_id, reference_time)
+  end
+
+  defp do_reconcile(mission_id, %DateTime{} = reference_time) do
     {expired_scheduled_contact_ids, expiration_errors} =
-      list_expired_scheduled_contacts(reference_time)
+      list_expired_scheduled_contacts(reference_time, mission_id)
       |> collect_reconcile_results(&expire_scheduled_contact_for_reconcile(&1, reference_time))
 
     {completed_scheduled_contact_ids, scheduled_completion_errors} =
-      list_completed_scheduled_contacts(reference_time)
+      list_completed_scheduled_contacts(reference_time, mission_id)
       |> collect_reconcile_results(&complete_scheduled_contact_for_reconcile(&1, reference_time))
 
     {realized_scheduled_contact_ids, realization_errors} =
-      list_due_scheduled_contacts(reference_time)
+      list_due_scheduled_contacts(reference_time, mission_id)
       |> collect_reconcile_results(&realize_scheduled_contact_for_reconcile(&1, reference_time))
 
     {completed_realized_contact_ids, completion_errors} =
-      list_expired_active_realized_contacts(reference_time)
+      list_expired_active_realized_contacts(reference_time, mission_id)
       |> collect_reconcile_results(&complete_realized_contact_for_reconcile(&1, reference_time))
 
     {restarted_realized_contact_ids, restart_errors} =
-      list_active_realized_contacts()
+      list_active_realized_contacts(mission_id)
       |> collect_reconcile_results(&restart_realized_contact_for_reconcile(&1, reference_time))
 
     {:ok,
@@ -1065,6 +1079,77 @@ defmodule Cadence.Contacts do
            Enum.reverse(realization_errors) ++
            Enum.reverse(completion_errors) ++ Enum.reverse(restart_errors)
      }}
+  end
+
+  @spec next_contact_scheduler_wakeup(binary(), DateTime.t()) :: DateTime.t() | nil
+  def next_contact_scheduler_wakeup(mission_id, %DateTime{} = reference_time)
+      when is_binary(mission_id) do
+    reference_time
+    |> list_contact_scheduler_wakeups(mission_id)
+    |> Enum.find_value(fn
+      %{mission_id: ^mission_id, wake_at: wake_at} -> wake_at
+      _other -> nil
+    end)
+  end
+
+  @spec list_contact_scheduler_wakeups(DateTime.t()) :: [
+          %{mission_id: binary(), wake_at: DateTime.t()}
+        ]
+  def list_contact_scheduler_wakeups(reference_time, mission_id \\ nil)
+
+  def list_contact_scheduler_wakeups(%DateTime{} = reference_time, mission_id)
+      when is_nil(mission_id) or is_binary(mission_id) do
+    scheduled_wakeups =
+      ScheduledContactRow
+      |> where([row], row.lifecycle_state in ["scheduled", "realized"])
+      |> maybe_filter_scheduled_contacts_by_mission(mission_id)
+      |> Repo.all()
+      |> Enum.flat_map(&scheduled_contact_scheduler_wakeups(&1, reference_time))
+
+    active_realized_wakeups =
+      RealizedContactRow
+      |> join(
+        :inner,
+        [realized_contact_row],
+        scheduled_contact_row in ScheduledContactRow,
+        on:
+          realized_contact_row.mission_id == scheduled_contact_row.mission_id and
+            realized_contact_row.scheduled_contact_id ==
+              scheduled_contact_row.scheduled_contact_id
+      )
+      |> where(
+        [realized_contact_row, scheduled_contact_row],
+        realized_contact_row.lifecycle_state == "active" and
+          not is_nil(scheduled_contact_row.ends_at)
+      )
+      |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
+      |> select([realized_contact_row, scheduled_contact_row], %{
+        mission_id: realized_contact_row.mission_id,
+        wake_at: scheduled_contact_row.ends_at
+      })
+      |> Repo.all()
+      |> Enum.map(&normalize_scheduler_wakeup(&1, reference_time))
+
+    scheduled_wakeups
+    |> Kernel.++(active_realized_wakeups)
+    |> group_scheduler_wakeups()
+  end
+
+  @spec contact_scheduler_projection(binary()) :: %{
+          scheduled_contacts: %{optional(binary()) => ScheduledContact.t()}
+        }
+  def contact_scheduler_projection(mission_id) when is_binary(mission_id) do
+    scheduled_contacts =
+      ScheduledContactRow
+      |> where(
+        [row],
+        row.mission_id == ^mission_id and row.lifecycle_state in ["scheduled", "realized"]
+      )
+      |> Repo.all()
+      |> Enum.map(&ScheduledContactRow.to_domain/1)
+      |> Map.new(&{&1.scheduled_contact_id, &1})
+
+    %{scheduled_contacts: scheduled_contacts}
   end
 
   defp collect_reconcile_results(contacts, action)
@@ -1121,6 +1206,7 @@ defmodule Cadence.Contacts do
            initial_time: reference_time,
            realized_at: reference_time,
            transition_time: reference_time,
+           notify_scheduler?: false,
            metadata: %{scheduler_realized?: true}
          ) do
       {:ok, %RealizedContact{} = realized_contact} ->
@@ -1519,7 +1605,12 @@ defmodule Cadence.Contacts do
                persisted_realized_contact.mission_id,
                persisted_realized_contact.realized_contact_id
              ) do
-        {:ok, active_realized_contact}
+        scheduled_contact
+        |> realized_scheduled_contact_projection(active_realized_contact)
+        |> maybe_notify_contact_changed(opts)
+
+        active_realized_contact
+        |> maybe_notify_contact_changed(opts)
       end
     end
   end
@@ -1562,7 +1653,8 @@ defmodule Cadence.Contacts do
                    opts
                  )
                ) do
-          {:ok, canceled_scheduled_contact}
+          canceled_scheduled_contact
+          |> notify_contact_changed()
         end
     end
   end
@@ -1589,7 +1681,8 @@ defmodule Cadence.Contacts do
                opts
              )
            ) do
-      {:ok, stopped_realized_contact}
+      stopped_realized_contact
+      |> notify_contact_changed()
     end
   end
 
@@ -2557,51 +2650,55 @@ defmodule Cadence.Contacts do
      }}
   end
 
-  defp list_due_scheduled_contacts(%DateTime{} = reference_time) do
+  defp list_due_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
     ScheduledContactRow
     |> where(
       [row],
       row.lifecycle_state == "scheduled" and row.starts_at <= ^reference_time and
         (is_nil(row.ends_at) or row.ends_at > ^reference_time)
     )
+    |> maybe_filter_scheduled_contacts_by_mission(mission_id)
     |> order_by([row], asc: row.starts_at, asc: row.scheduled_contact_id)
     |> Repo.all()
     |> Enum.map(&ScheduledContactRow.to_domain/1)
   end
 
-  defp list_expired_scheduled_contacts(%DateTime{} = reference_time) do
+  defp list_expired_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
     ScheduledContactRow
     |> where(
       [row],
       row.lifecycle_state == "scheduled" and not is_nil(row.ends_at) and
         row.ends_at <= ^reference_time
     )
+    |> maybe_filter_scheduled_contacts_by_mission(mission_id)
     |> order_by([row], asc: row.ends_at, asc: row.scheduled_contact_id)
     |> Repo.all()
     |> Enum.map(&ScheduledContactRow.to_domain/1)
   end
 
-  defp list_completed_scheduled_contacts(%DateTime{} = reference_time) do
+  defp list_completed_scheduled_contacts(%DateTime{} = reference_time, mission_id) do
     ScheduledContactRow
     |> where(
       [row],
       row.lifecycle_state == "realized" and not is_nil(row.ends_at) and
         row.ends_at <= ^reference_time
     )
+    |> maybe_filter_scheduled_contacts_by_mission(mission_id)
     |> order_by([row], asc: row.ends_at, asc: row.scheduled_contact_id)
     |> Repo.all()
     |> Enum.map(&ScheduledContactRow.to_domain/1)
   end
 
-  defp list_active_realized_contacts do
+  defp list_active_realized_contacts(mission_id) do
     RealizedContactRow
     |> where([row], row.lifecycle_state == "active")
+    |> maybe_filter_realized_contacts_by_mission(mission_id)
     |> order_by([row], asc: row.realized_at, asc: row.realized_contact_id)
     |> Repo.all()
     |> Enum.map(&RealizedContactRow.to_domain/1)
   end
 
-  defp list_expired_active_realized_contacts(%DateTime{} = reference_time) do
+  defp list_expired_active_realized_contacts(%DateTime{} = reference_time, mission_id) do
     RealizedContactRow
     |> join(
       :inner,
@@ -2617,6 +2714,7 @@ defmodule Cadence.Contacts do
         not is_nil(scheduled_contact_row.ends_at) and
         scheduled_contact_row.ends_at <= ^reference_time
     )
+    |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
     |> order_by(
       [realized_contact_row, scheduled_contact_row],
       asc: scheduled_contact_row.ends_at,
@@ -2625,6 +2723,124 @@ defmodule Cadence.Contacts do
     |> select([realized_contact_row, _scheduled_contact_row], realized_contact_row)
     |> Repo.all()
     |> Enum.map(&RealizedContactRow.to_domain/1)
+  end
+
+  defp maybe_filter_scheduled_contacts_by_mission(query, nil), do: query
+
+  defp maybe_filter_scheduled_contacts_by_mission(query, mission_id) when is_binary(mission_id) do
+    where(query, [row], row.mission_id == ^mission_id)
+  end
+
+  defp maybe_filter_realized_contacts_by_mission(query, nil), do: query
+
+  defp maybe_filter_realized_contacts_by_mission(query, mission_id) when is_binary(mission_id) do
+    where(query, [row], row.mission_id == ^mission_id)
+  end
+
+  defp maybe_filter_joined_realized_contacts_by_mission(query, nil), do: query
+
+  defp maybe_filter_joined_realized_contacts_by_mission(query, mission_id)
+       when is_binary(mission_id) do
+    where(
+      query,
+      [realized_contact_row, _scheduled_contact_row],
+      realized_contact_row.mission_id == ^mission_id
+    )
+  end
+
+  defp scheduled_contact_scheduler_wakeups(%ScheduledContactRow{} = row, reference_time) do
+    case row.lifecycle_state do
+      "scheduled" ->
+        scheduled_contact_scheduled_wakeup(row, reference_time)
+
+      "realized" ->
+        scheduled_contact_realized_wakeup(row, reference_time)
+    end
+  end
+
+  defp scheduled_contact_scheduled_wakeup(
+         %ScheduledContactRow{ends_at: %DateTime{} = ends_at} = row,
+         reference_time
+       ) do
+    cond do
+      DateTime.compare(ends_at, reference_time) != :gt ->
+        [%{mission_id: row.mission_id, wake_at: reference_time}]
+
+      DateTime.compare(row.starts_at, reference_time) != :gt ->
+        [%{mission_id: row.mission_id, wake_at: reference_time}]
+
+      true ->
+        [%{mission_id: row.mission_id, wake_at: row.starts_at}]
+    end
+  end
+
+  defp scheduled_contact_scheduled_wakeup(%ScheduledContactRow{} = row, reference_time) do
+    if DateTime.compare(row.starts_at, reference_time) == :gt do
+      [%{mission_id: row.mission_id, wake_at: row.starts_at}]
+    else
+      [%{mission_id: row.mission_id, wake_at: reference_time}]
+    end
+  end
+
+  defp scheduled_contact_realized_wakeup(%ScheduledContactRow{ends_at: nil}, _reference_time),
+    do: []
+
+  defp scheduled_contact_realized_wakeup(
+         %ScheduledContactRow{ends_at: ends_at} = row,
+         reference_time
+       ) do
+    [%{mission_id: row.mission_id, wake_at: max_datetime(ends_at, reference_time)}]
+  end
+
+  defp normalize_scheduler_wakeup(%{wake_at: %DateTime{} = wake_at} = wakeup, reference_time) do
+    %{wakeup | wake_at: max_datetime(wake_at, reference_time)}
+  end
+
+  defp group_scheduler_wakeups(wakeups) do
+    wakeups
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.map(fn {mission_id, mission_wakeups} ->
+      %{
+        mission_id: mission_id,
+        wake_at: Enum.min_by(mission_wakeups, &datetime_sort_key(&1.wake_at)).wake_at
+      }
+    end)
+  end
+
+  defp max_datetime(%DateTime{} = datetime, %DateTime{} = minimum) do
+    if DateTime.compare(datetime, minimum) == :lt, do: minimum, else: datetime
+  end
+
+  defp datetime_sort_key(%DateTime{} = datetime), do: DateTime.to_unix(datetime, :microsecond)
+
+  defp notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
+    Scheduler.notify_contact_changed(scheduled_contact)
+    {:ok, scheduled_contact}
+  end
+
+  defp notify_contact_changed(%RealizedContact{} = realized_contact) do
+    Scheduler.notify_contact_changed(realized_contact)
+    Cadence.Commanding.notify_release_target_available(realized_contact)
+    {:ok, realized_contact}
+  end
+
+  defp maybe_notify_contact_changed(contact, opts) do
+    if Keyword.get(opts, :notify_scheduler?, true) do
+      notify_contact_changed(contact)
+    else
+      {:ok, contact}
+    end
+  end
+
+  defp realized_scheduled_contact_projection(
+         %ScheduledContact{} = scheduled_contact,
+         %RealizedContact{} = realized_contact
+       ) do
+    %ScheduledContact{
+      scheduled_contact
+      | lifecycle_state: :realized,
+        realized_contact_id: realized_contact.realized_contact_id
+    }
   end
 
   defp reconcile_error(kind, %ScheduledContact{} = scheduled_contact, reason) do

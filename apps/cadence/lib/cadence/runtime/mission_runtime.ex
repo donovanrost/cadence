@@ -11,12 +11,15 @@ defmodule Cadence.Runtime.MissionRuntime do
 
   @impl true
   def init(mission_id) when is_binary(mission_id) do
-    children = [
-      {DynamicSupervisor,
-       strategy: :one_for_one, name: realized_contact_supervisor_name(mission_id)},
-      {DynamicSupervisor, strategy: :one_for_one, name: partition_supervisor_name(mission_id)},
-      {Cadence.Runtime.MissionCoordinator, mission_id: mission_id}
-    ]
+    children =
+      [
+        {DynamicSupervisor,
+         strategy: :one_for_one, name: realized_contact_supervisor_name(mission_id)},
+        {DynamicSupervisor, strategy: :one_for_one, name: partition_supervisor_name(mission_id)},
+        contact_scheduler_child(mission_id),
+        {Cadence.Runtime.MissionCoordinator, mission_id: mission_id}
+      ]
+      |> Enum.reject(&is_nil/1)
 
     Supervisor.init(children, strategy: :one_for_all)
   end
@@ -28,6 +31,10 @@ defmodule Cadence.Runtime.MissionRuntime do
   @spec coordinator_name(binary()) :: {:via, Registry, {module(), term()}}
   def coordinator_name(mission_id),
     do: {:via, Registry, {Cadence.Runtime.Registry, {:mission_coordinator, mission_id}}}
+
+  @spec contact_scheduler_name(binary()) :: {:via, Registry, {module(), term()}}
+  def contact_scheduler_name(mission_id),
+    do: {:via, Registry, {Cadence.Runtime.Registry, {:contact_scheduler, mission_id}}}
 
   @spec partition_supervisor_name(binary()) :: {:via, Registry, {module(), term()}}
   def partition_supervisor_name(mission_id),
@@ -138,5 +145,16 @@ defmodule Cadence.Runtime.MissionRuntime do
      {Cadence.Runtime.Registry,
       {:provider_persistence_projector, mission_id, realized_contact_id, path_id,
        provider_binding_id}}}
+  end
+
+  defp contact_scheduler_child(mission_id) do
+    contact_scheduler_config = Application.get_env(:cadence, :contact_scheduler, [])
+
+    if Keyword.get(contact_scheduler_config, :enabled, true) do
+      {Cadence.Contacts.Scheduler,
+       contact_scheduler_config
+       |> Keyword.put(:mission_id, mission_id)
+       |> Keyword.put(:name, contact_scheduler_name(mission_id))}
+    end
   end
 end

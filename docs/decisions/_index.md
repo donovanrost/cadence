@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-03-30
+updated: 2026-06-08
 status: active
 ---
 
@@ -33,6 +33,7 @@ Legacy ADRs remain under
 | [ADR-010](010-canonical-command-catalog-model.md) | Canonical Command Catalog Model | Accepted |
 | [ADR-011](011-command-staging-queueing-and-release-lifecycle.md) | Command Staging, Queueing, and Release Lifecycle | Accepted |
 | [ADR-012](012-provider-adapter-and-ground-station-simulator-model.md) | Provider Adapter and Ground Station Simulator Model | Accepted |
+| [ADR-013](013-control-plane-data-plane-and-reconciliation-patterns.md) | Control Plane, Data Plane, and Reconciliation Patterns | Accepted |
 
 ## Planned Decisions
 

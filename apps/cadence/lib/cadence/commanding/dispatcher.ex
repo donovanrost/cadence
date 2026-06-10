@@ -7,7 +7,8 @@ defmodule Cadence.Commanding.Dispatcher do
   alias Cadence.Commanding.DispatchSupervisor
   alias Cadence.Commanding.LaneDispatcher
 
-  @default_poll_interval_ms 1_000
+  @default_safety_poll_interval_ms 60_000
+  @event_prefix [:cadence, :commanding, :dispatcher]
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
@@ -44,9 +45,22 @@ defmodule Cadence.Commanding.Dispatcher do
   @impl true
   def init(opts) do
     state = %{
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, @default_poll_interval_ms),
-      lane_poll_interval_ms:
-        Keyword.get(opts, :lane_poll_interval_ms, Keyword.get(opts, :poll_interval_ms, 250)),
+      safety_poll_interval_ms:
+        Keyword.get(
+          opts,
+          :safety_poll_interval_ms,
+          Keyword.get(opts, :poll_interval_ms, @default_safety_poll_interval_ms)
+        ),
+      lane_safety_poll_interval_ms:
+        Keyword.get(
+          opts,
+          :lane_safety_poll_interval_ms,
+          Keyword.get(
+            opts,
+            :lane_poll_interval_ms,
+            Keyword.get(opts, :poll_interval_ms, @default_safety_poll_interval_ms)
+          )
+        ),
       auto_schedule?: Keyword.get(opts, :auto_schedule?, true),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true)
     }
@@ -59,7 +73,7 @@ defmodule Cadence.Commanding.Dispatcher do
     _ = Commanding.requeue_release_pending_queue_entries()
 
     if state.run_on_boot? do
-      _ = reconcile_dispatch_lanes(state)
+      _ = reconcile_dispatch_lanes(state, :boot)
     end
 
     schedule_next_reconcile(state)
@@ -68,17 +82,18 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @impl true
   def handle_call(:reconcile_now, _from, state) do
-    {:reply, {:ok, reconcile_dispatch_lanes(state)}, state}
+    summary = reconcile_dispatch_lanes(state, :manual)
+    {:reply, {:ok, summary}, state}
   end
 
   @impl true
   def handle_info(:reconcile, state) do
-    _ = reconcile_dispatch_lanes(state)
+    _ = reconcile_dispatch_lanes(state, :safety)
     schedule_next_reconcile(state)
     {:noreply, state}
   end
 
-  defp reconcile_dispatch_lanes(state) do
+  defp reconcile_dispatch_lanes(state, reason) do
     pending_lanes = Commanding.list_pending_queue_lanes()
 
     Enum.each(pending_lanes, fn lane ->
@@ -87,16 +102,32 @@ defmodule Cadence.Commanding.Dispatcher do
           lane.organization_id,
           lane.mission_id,
           lane.queue_lane_key,
-          poll_interval_ms: state.lane_poll_interval_ms
+          safety_poll_interval_ms: state.lane_safety_poll_interval_ms
         )
     end)
 
-    %{pending_lane_count: length(pending_lanes)}
+    summary = %{pending_lane_count: length(pending_lanes)}
+    emit(:reconcile, state, summary, %{reason: reason})
+    summary
   end
 
-  defp schedule_next_reconcile(%{auto_schedule?: true, poll_interval_ms: poll_interval_ms}) do
-    Process.send_after(self(), :reconcile, poll_interval_ms)
+  defp schedule_next_reconcile(%{
+         auto_schedule?: true,
+         safety_poll_interval_ms: safety_poll_interval_ms
+       }) do
+    Process.send_after(self(), :reconcile, safety_poll_interval_ms)
   end
 
   defp schedule_next_reconcile(_state), do: :ok
+
+  defp emit(event, state, measurements, metadata) when is_atom(event) do
+    :telemetry.execute(
+      @event_prefix ++ [event],
+      measurements,
+      Map.merge(metadata, %{
+        safety_poll_interval_ms: state.safety_poll_interval_ms,
+        lane_safety_poll_interval_ms: state.lane_safety_poll_interval_ms
+      })
+    )
+  end
 end

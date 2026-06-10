@@ -5,7 +5,7 @@ defmodule Cadence.CommandingDispatcherTest do
 
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.Command.Snapshot, as: CommandSnapshot
-  alias Cadence.Commanding.{CommandRequest, Dispatcher, DispatchSupervisor}
+  alias Cadence.Commanding.{CommandRequest, DispatchSupervisor}
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Persistence.Schemas.TransportActionRequestRow
   alias Cadence.Repo
@@ -16,6 +16,12 @@ defmodule Cadence.CommandingDispatcherTest do
   @mission_id "mission-dispatcher"
   @spacecraft_id "spacecraft-dispatcher"
   @source_endpoint_id "source-endpoint-dispatcher"
+  @lane_dispatcher_event_prefix [:cadence, :commanding, :lane_dispatcher]
+  @lane_dispatcher_events [
+    [:cadence, :commanding, :lane_dispatcher, :dispatch_attempt],
+    [:cadence, :commanding, :lane_dispatcher, :dispatch_result],
+    [:cadence, :commanding, :lane_dispatcher, :timer_scheduled]
+  ]
 
   setup do
     previous_importers = Application.get_env(:cadence, :catalog_importers, [])
@@ -40,6 +46,14 @@ defmodule Cadence.CommandingDispatcherTest do
     source_endpoint: source_endpoint,
     command_snapshot: command_snapshot
   } do
+    start_supervised!(
+      {DispatchSupervisor,
+       safety_poll_interval_ms: :timer.hours(1),
+       lane_safety_poll_interval_ms: :timer.hours(1),
+       run_on_boot?: false,
+       auto_schedule?: false}
+    )
+
     low_priority_request =
       persist_safe_command_request(command_snapshot, source_endpoint, 5, %{"label" => "low"})
 
@@ -62,17 +76,9 @@ defmodule Cadence.CommandingDispatcherTest do
                %{"user_id" => "queue-operator"}
              )
 
+    assert Cadence.list_command_release_attempts(@organization_id, @mission_id) == []
+
     _realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
-
-    start_supervised!(
-      {DispatchSupervisor,
-       poll_interval_ms: 1_000,
-       lane_poll_interval_ms: 20,
-       run_on_boot?: false,
-       auto_schedule?: false}
-    )
-
-    assert {:ok, _summary} = Dispatcher.reconcile_now()
 
     release_attempts =
       wait_until(fn ->
@@ -120,6 +126,16 @@ defmodule Cadence.CommandingDispatcherTest do
     source_endpoint: source_endpoint,
     command_snapshot: command_snapshot
   } do
+    attach_lane_dispatcher_telemetry(self())
+
+    start_supervised!(
+      {DispatchSupervisor,
+       safety_poll_interval_ms: :timer.hours(1),
+       lane_safety_poll_interval_ms: :timer.hours(1),
+       run_on_boot?: false,
+       auto_schedule?: false}
+    )
+
     command_request =
       persist_safe_command_request(command_snapshot, source_endpoint, 1, %{"label" => "delayed"})
 
@@ -131,20 +147,20 @@ defmodule Cadence.CommandingDispatcherTest do
                %{"user_id" => "queue-operator"}
              )
 
-    start_supervised!(
-      {DispatchSupervisor,
-       poll_interval_ms: 1_000,
-       lane_poll_interval_ms: 20,
-       run_on_boot?: false,
-       auto_schedule?: false}
-    )
-
-    assert {:ok, _summary} = Dispatcher.reconcile_now()
+    assert_lane_dispatcher_event(:dispatch_result, fn measurements, metadata ->
+      measurements.count == 1 and metadata.result == :no_release_target and
+        metadata.queue_lane_key == source_endpoint.source_endpoint_id
+    end)
 
     Process.sleep(80)
     assert Cadence.list_command_release_attempts(@organization_id, @mission_id) == []
 
     _realized_contact = persist_active_uplink_contact(source_endpoint.source_endpoint_id)
+
+    assert_lane_dispatcher_event(:dispatch_result, fn measurements, metadata ->
+      measurements.count == 1 and metadata.result == :released and
+        metadata.queue_lane_key == source_endpoint.source_endpoint_id
+    end)
 
     release_attempt =
       wait_until(fn ->
@@ -182,6 +198,40 @@ defmodule Cadence.CommandingDispatcherTest do
       :retry ->
         Process.sleep(25)
         wait_until(fun, attempts_left - 1)
+    end
+  end
+
+  defp attach_lane_dispatcher_telemetry(test_pid) do
+    handler_id = "command-lane-dispatcher-test-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach_many(
+        handler_id,
+        @lane_dispatcher_events,
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:lane_dispatcher_telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+  end
+
+  defp assert_lane_dispatcher_event(event_name, predicate) do
+    event = @lane_dispatcher_event_prefix ++ [event_name]
+
+    receive do
+      {:lane_dispatcher_telemetry, ^event, measurements, metadata} ->
+        if predicate.(measurements, metadata) do
+          {measurements, metadata}
+        else
+          assert_lane_dispatcher_event(event_name, predicate)
+        end
+
+      {:lane_dispatcher_telemetry, _other_event, _measurements, _metadata} ->
+        assert_lane_dispatcher_event(event_name, predicate)
+    after
+      1_000 -> flunk("expected lane dispatcher telemetry event #{inspect(event)}")
     end
   end
 
