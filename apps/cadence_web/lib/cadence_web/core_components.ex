@@ -168,7 +168,7 @@ defmodule CadenceWeb.CoreComponents do
 
       <.panel_header label="Active Alarms" count={5}>
         <:controls>
-          <button class="btn btn-ghost btn-xs">Filter</button>
+          <.button variant={:ghost} size={:xs}>Filter</.button>
         </:controls>
       </.panel_header>
   """
