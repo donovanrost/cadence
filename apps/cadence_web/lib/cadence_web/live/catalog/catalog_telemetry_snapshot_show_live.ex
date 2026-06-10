@@ -34,16 +34,16 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={[
+      <.page_header
+        title="Telemetry snapshot"
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
           {"Import run",
            ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{@snapshot.import_run_id}"},
           {"Telemetry snapshot", nil}
-        ]} />
-        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry snapshot</h1>
-      </div>
+        ]}
+      />
 
       <.snapshot_summary_card
         title="Telemetry catalog"
@@ -76,9 +76,8 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotShowLive do
 
   defp provenance_block(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4 text-sm space-y-1">
-        <p class="hud-label mb-2">Provenance</p>
+    <.card title="Provenance">
+      <div class="text-sm space-y-1">
         <div>
           Artifact:
           <.link
@@ -98,7 +97,7 @@ defmodule CadenceWeb.CatalogTelemetrySnapshotShowLive do
           </.link>
         </div>
       </div>
-    </div>
+    </.card>
     """
   end
 end

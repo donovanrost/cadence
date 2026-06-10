@@ -34,26 +34,23 @@ defmodule CadenceWeb.Catalog.Components do
 
     ~H"""
     <div :if={@diagnostics != []} class="space-y-3">
-      <div :for={{severity, items} <- @groups} class="card bg-base-200">
-        <div class="card-body p-4">
-          <p class="hud-label mb-2">{severity_heading(severity)} ({length(items)})</p>
-          <ul class="space-y-2">
-            <li :for={diagnostic <- items} class="text-sm">
-              <span class="font-mono text-xs text-base-content/60">{diagnostic.code}</span>
-              <span class="ml-2">{diagnostic.message}</span>
-              <p
-                :if={diagnostic_detail(diagnostic) != nil}
-                class="text-xs text-base-content/70 mt-1"
-              >
-                {diagnostic_detail(diagnostic)}
-              </p>
-              <p :if={diagnostic.path != []} class="text-xs text-base-content/50 font-mono mt-1">
-                {Enum.join(diagnostic.path, " / ")}
-              </p>
-            </li>
-          </ul>
-        </div>
-      </div>
+      <.card :for={{severity, items} <- @groups} title={"#{severity_heading(severity)} (#{length(items)})"}>
+        <ul class="space-y-2">
+          <li :for={diagnostic <- items} class="text-sm">
+            <span class="font-mono text-xs text-base-content/60">{diagnostic.code}</span>
+            <span class="ml-2">{diagnostic.message}</span>
+            <p
+              :if={diagnostic_detail(diagnostic) != nil}
+              class="text-xs text-base-content/70 mt-1"
+            >
+              {diagnostic_detail(diagnostic)}
+            </p>
+            <p :if={diagnostic.path != []} class="text-xs text-base-content/50 font-mono mt-1">
+              {Enum.join(diagnostic.path, " / ")}
+            </p>
+          </li>
+        </ul>
+      </.card>
     </div>
     """
   end
@@ -113,9 +110,8 @@ defmodule CadenceWeb.Catalog.Components do
       )
 
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-6 space-y-4">
-        <p class="hud-label">Create catalog database revision</p>
+    <.card title="Create catalog database revision">
+      <div class="space-y-4 mt-2">
         <p class="text-sm text-base-content/60">
           Save the upload as an immutable revision in the mission catalog library. Runtime
           usage is chosen separately.
@@ -144,14 +140,14 @@ defmodule CadenceWeb.Catalog.Components do
               class="flex items-center justify-between text-sm"
             >
               <span class="font-mono">{entry.client_name} ({entry.client_type || "unknown"})</span>
-              <button
-                type="button"
+              <.button
+                variant={:ghost}
+                size={:xs}
                 phx-click="cancel_upload"
                 phx-value-ref={entry.ref}
-                class="btn btn-ghost btn-xs"
               >
                 Remove
-              </button>
+              </.button>
             </li>
           </ul>
 
@@ -160,17 +156,13 @@ defmodule CadenceWeb.Catalog.Components do
           <.detected_preview detected={@detected_importer} />
 
           <div class="flex items-center gap-3">
-            <button
-              type="submit"
-              class="btn btn-primary"
-              disabled={!importer_detected?(@detected_importer)}
-            >
+            <.button type="submit" size={:md} disabled={!importer_detected?(@detected_importer)}>
               Upload &amp; import
-            </button>
+            </.button>
           </div>
         </.form>
       </div>
-    </div>
+    </.card>
     """
   end
 
@@ -236,25 +228,23 @@ defmodule CadenceWeb.Catalog.Components do
 
   def snapshot_summary_card(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4">
-        <div class="flex items-center gap-2 mb-3">
-          <span class={[@icon, "h-4 w-4"]}></span>
-          <p class="hud-label">{@title}</p>
-        </div>
-        <dl class="grid grid-cols-2 gap-2 text-sm">
-          <div :for={{label, count} <- @counts} class="contents">
-            <dt class="text-base-content/60">{label}</dt>
-            <dd class="font-mono text-base-content text-right">{count}</dd>
-          </div>
-        </dl>
-        <div :if={@navigate} class="card-actions justify-end mt-3">
-          <.link navigate={@navigate} class="btn btn-ghost btn-xs">
-            View details <span class="hero-arrow-right h-3 w-3 ml-1"></span>
-          </.link>
-        </div>
+    <.card>
+      <div class="flex items-center gap-2 mb-3">
+        <span class={[@icon, "h-4 w-4"]}></span>
+        <p class="hud-label">{@title}</p>
       </div>
-    </div>
+      <dl class="grid grid-cols-2 gap-2 text-sm">
+        <div :for={{label, count} <- @counts} class="contents">
+          <dt class="text-base-content/60">{label}</dt>
+          <dd class="font-mono text-base-content text-right">{count}</dd>
+        </div>
+      </dl>
+      <div :if={@navigate} class="card-actions justify-end mt-3">
+        <.button variant={:ghost} size={:xs} navigate={@navigate}>
+          View details <span class="hero-arrow-right h-3 w-3 ml-1"></span>
+        </.button>
+      </div>
+    </.card>
     """
   end
 end

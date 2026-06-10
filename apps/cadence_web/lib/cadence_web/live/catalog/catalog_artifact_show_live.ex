@@ -93,14 +93,14 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={[
+      <.page_header
+        title={@artifact.artifact_name}
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
           {@artifact.artifact_name, nil}
-        ]} />
-        <h1 class="text-2xl font-bold text-base-content mt-2">{@artifact.artifact_name}</h1>
-      </div>
+        ]}
+      />
 
       <.artifact_metadata_card current_mission={@current_mission} artifact={@artifact} />
 
@@ -114,38 +114,33 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
 
   defp artifact_metadata_card(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-6 space-y-3">
-        <p class="hud-label">Artifact</p>
-        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <div class="contents">
-            <dt class="text-base-content/60">Format</dt>
-            <dd class="font-mono">{@artifact.format_key}</dd>
-            <dt class="text-base-content/60">Media type</dt>
-            <dd class="font-mono">{@artifact.media_type || "—"}</dd>
-            <dt class="text-base-content/60">Content SHA-256</dt>
-            <dd class="font-mono text-xs break-all">{@artifact.content_sha256}</dd>
-            <dt class="text-base-content/60">Uploaded at</dt>
-            <dd>{Calendar.strftime(@artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC")}</dd>
-          </div>
-        </dl>
-        <div class="flex items-center gap-3 pt-2">
-          <a
-            href={
-              ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}/download"
-            }
-            class="btn btn-ghost btn-sm"
-          >
-            <span class="hero-arrow-down-tray h-4 w-4"></span>
-            Download original
-          </a>
-          <button type="button" phx-click="reimport" class="btn btn-primary btn-sm">
-            <span class="hero-arrow-path h-4 w-4"></span>
-            Re-import
-          </button>
+    <.card title="Artifact">
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+        <div class="contents">
+          <dt class="text-base-content/60">Format</dt>
+          <dd class="font-mono">{@artifact.format_key}</dd>
+          <dt class="text-base-content/60">Media type</dt>
+          <dd class="font-mono">{@artifact.media_type || "—"}</dd>
+          <dt class="text-base-content/60">Content SHA-256</dt>
+          <dd class="font-mono text-xs break-all">{@artifact.content_sha256}</dd>
+          <dt class="text-base-content/60">Uploaded at</dt>
+          <dd>{Calendar.strftime(@artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC")}</dd>
         </div>
+      </dl>
+      <div class="flex items-center gap-3 pt-2">
+        <.button
+          variant={:ghost}
+          href={
+            ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@artifact.artifact_id}/download"
+          }
+        >
+          <span class="hero-arrow-down-tray h-4 w-4"></span> Download original
+        </.button>
+        <.button phx-click="reimport">
+          <span class="hero-arrow-path h-4 w-4"></span> Re-import
+        </.button>
       </div>
-    </div>
+    </.card>
     """
   end
 
@@ -167,11 +162,9 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
 
   defp artifact_runs_empty(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4 text-sm text-base-content/60">
-        No runs yet.
-      </div>
-    </div>
+    <.card>
+      <p class="text-sm text-base-content/60">No runs yet.</p>
+    </.card>
     """
   end
 
@@ -180,42 +173,30 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
 
   defp artifact_runs_table(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <table class="table">
-        <thead>
-          <tr>
-            <th class="hud-label">Status</th>
-            <th class="hud-label">Started</th>
-            <th class="hud-label">Completed</th>
-            <th class="hud-label text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :for={run <- @runs}>
-            <td><.import_run_status_badge status={run.status} /></td>
-            <td class="text-sm text-base-content/70">
-              {Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S")}
-            </td>
-            <td class="text-sm text-base-content/70">
-              <%= if run.completed_at,
-                do: Calendar.strftime(run.completed_at, "%Y-%m-%d %H:%M:%S"),
-                else: "—" %>
-            </td>
-            <td class="text-right">
-              <.action_menu>
-                <:action>
-                  <.link navigate={
-                    ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"
-                  }>
-                    View run
-                  </.link>
-                </:action>
-              </.action_menu>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <.card padding={:none}>
+      <.table id="catalog-artifact-runs-table" rows={@runs} row_accent={false}>
+        <:col :let={run} label="Status"><.import_run_status_badge status={run.status} /></:col>
+        <:col :let={run} label="Started" class="text-sm text-base-content/70">
+          {Calendar.strftime(run.started_at, "%Y-%m-%d %H:%M:%S")}
+        </:col>
+        <:col :let={run} label="Completed" class="text-sm text-base-content/70">
+          <%= if run.completed_at,
+            do: Calendar.strftime(run.completed_at, "%Y-%m-%d %H:%M:%S"),
+            else: "—" %>
+        </:col>
+        <:col :let={run} label="Actions" align={:right}>
+          <.action_menu>
+            <:action>
+              <.link navigate={
+                ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"
+              }>
+                View run
+              </.link>
+            </:action>
+          </.action_menu>
+        </:col>
+      </.table>
+    </.card>
     """
   end
 end

@@ -196,19 +196,18 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={[
+      <.page_header
+        title="Import run"
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
           {"Artifact",
            ~p"/missions/#{@current_mission.mission_id}/catalog/artifacts/#{@run.artifact_id}"},
           {"Import run", nil}
-        ]} />
-        <div class="flex items-center gap-3 mt-2">
-          <h1 class="text-2xl font-bold text-base-content">Import run</h1>
-          <.import_run_status_badge status={@run.status} />
-        </div>
-      </div>
+        ]}
+      >
+        <:title_suffix><.import_run_status_badge status={@run.status} /></:title_suffix>
+      </.page_header>
 
       <.run_header run={@run} />
 
@@ -235,8 +234,8 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
 
   defp run_header(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4 text-sm space-y-1">
+    <.card>
+      <div class="text-sm space-y-1">
         <div class="flex items-center gap-2">
           <span class="text-base-content/60">Importer</span>
           <span class="font-mono">{@run.importer_key}</span>
@@ -250,7 +249,7 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
           <span>{Calendar.strftime(@run.completed_at, "%Y-%m-%d %H:%M:%S UTC")}</span>
         </div>
       </div>
-    </div>
+    </.card>
     """
   end
 
@@ -258,45 +257,42 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
 
   defp telemetry_runtime_summary_card(assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4 space-y-3">
-        <p class="hud-label">Built-in telemetry runtime</p>
-        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <div>
-            <dt class="text-base-content/60">Catalog packets</dt>
-            <dd class="text-lg font-semibold">{@summary["packet_count"]}</dd>
-          </div>
-          <div>
-            <dt class="text-base-content/60">Compiled for built-in telemetry</dt>
-            <dd class="text-lg font-semibold">{@summary["built_in_telemetry_packet_count"]}</dd>
-          </div>
-          <div>
-            <dt class="text-base-content/60">Available for custom applications</dt>
-            <dd class="text-lg font-semibold">
-              {@summary["custom_application_candidate_packet_count"]}
-            </dd>
-          </div>
-        </dl>
-
-        <div
-          :if={@summary["custom_application_candidate_packets"] != []}
-          class="rounded-lg border border-base-300 bg-base-100/60 p-3 text-sm space-y-2"
-        >
-          <p class="font-medium">
-            Some packets were preserved in the imported catalog but were not compiled into built-in telemetry.
-            They remain available for custom application binding.
-          </p>
-          <ul class="space-y-1">
-            <li
-              :for={packet <- @summary["custom_application_candidate_packets"]}
-              class="font-mono text-xs text-base-content/70"
-            >
-              {packet["packet_name"] || packet["packet_id"]} ({packet["reason"]})
-            </li>
-          </ul>
+    <.card title="Built-in telemetry runtime">
+      <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <div>
+          <dt class="text-base-content/60">Catalog packets</dt>
+          <dd class="text-lg font-semibold">{@summary["packet_count"]}</dd>
         </div>
+        <div>
+          <dt class="text-base-content/60">Compiled for built-in telemetry</dt>
+          <dd class="text-lg font-semibold">{@summary["built_in_telemetry_packet_count"]}</dd>
+        </div>
+        <div>
+          <dt class="text-base-content/60">Available for custom applications</dt>
+          <dd class="text-lg font-semibold">
+            {@summary["custom_application_candidate_packet_count"]}
+          </dd>
+        </div>
+      </dl>
+
+      <div
+        :if={@summary["custom_application_candidate_packets"] != []}
+        class="rounded-lg border border-base-300 bg-base-100/60 p-3 text-sm space-y-2"
+      >
+        <p class="font-medium">
+          Some packets were preserved in the imported catalog but were not compiled into built-in telemetry.
+          They remain available for custom application binding.
+        </p>
+        <ul class="space-y-1">
+          <li
+            :for={packet <- @summary["custom_application_candidate_packets"]}
+            class="font-mono text-xs text-base-content/70"
+          >
+            {packet["packet_name"] || packet["packet_id"]} ({packet["reason"]})
+          </li>
+        </ul>
       </div>
-    </div>
+    </.card>
     """
   end
 

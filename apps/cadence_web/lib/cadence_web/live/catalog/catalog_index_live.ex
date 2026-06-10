@@ -51,27 +51,24 @@ defmodule CadenceWeb.CatalogIndexLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title="Catalog"
+        subtitle="Mission database library. Revisions are imported here; runtime usage is selected later."
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Catalog", nil}
-        ]} />
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">Catalog</h1>
-            <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-              Mission database library. Revisions are imported here; runtime usage is selected later.
-            </p>
-          </div>
-          <.link
+        ]}
+      >
+        <:actions>
+          <.button
             id="new-database-link"
             navigate={~p"/missions/#{@current_mission.mission_id}/catalog/new"}
-            class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
+            class="gap-1"
           >
             <span class="hero-plus h-4 w-4"></span> New database
-          </.link>
-        </div>
-      </div>
+          </.button>
+        </:actions>
+      </.page_header>
 
       <.databases_table
         current_mission={@current_mission}
@@ -91,71 +88,56 @@ defmodule CadenceWeb.CatalogIndexLive do
   defp databases_table(assigns) do
     ~H"""
     <%= if @databases == [] do %>
-      <div class="card bg-base-200" id="catalog-database-list">
-        <div class="card-body p-6 text-center">
-          <p class="hud-label text-base-content/60">No catalog databases yet</p>
-          <p class="text-sm text-base-content/50 mt-1">
-            Use <span class="font-medium text-base-content">+ New database</span> above to import the first revision.
-          </p>
-        </div>
+      <div id="catalog-database-list">
+        <.empty_state
+          title="No catalog databases yet"
+          description="Use + New database above to import the first revision."
+        />
       </div>
     <% else %>
-      <div class="card bg-base-200" id="catalog-database-list">
-        <table class="table">
-          <thead>
-            <tr>
-              <th class="hud-label">Database</th>
-              <th class="hud-label">Latest revision</th>
-              <th class="hud-label">Latest import</th>
-              <th class="hud-label">Runtime usage</th>
-              <th class="hud-label text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={database <- @databases}>
-              <td>
-                <.link
-                  navigate={
-                    ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
-                  }
-                  class="font-medium hover:underline"
-                >
-                  {database.name}
+      <.card id="catalog-database-list" padding={:none}>
+        <.table id="catalog-databases-table" rows={@databases} row_accent={false}>
+          <:col :let={database} label="Database">
+            <.link
+              navigate={
+                ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+              }
+              class="font-medium hover:underline"
+            >
+              {database.name}
+            </.link>
+            <p class="font-mono text-xs text-base-content/50">{database.slug}</p>
+          </:col>
+          <:col :let={database} label="Latest revision">
+            <.latest_revision_cell
+              revision={Map.get(@latest_revisions, database.catalog_database_id)}
+              current_mission={@current_mission}
+            />
+          </:col>
+          <:col :let={database} label="Latest import">
+            <.latest_run_cell
+              run={Map.get(@latest_runs, database.catalog_database_id)}
+              current_mission={@current_mission}
+            />
+          </:col>
+          <:col :let={_database} label="Runtime usage">
+            <span class="badge badge-ghost badge-sm" id="catalog-runtime-usage-summary">
+              No runtime bindings yet
+            </span>
+          </:col>
+          <:col :let={database} label="Actions" align={:right}>
+            <.action_menu>
+              <:action>
+                <.link navigate={
+                  ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
+                }>
+                  View database
                 </.link>
-                <p class="font-mono text-xs text-base-content/50">{database.slug}</p>
-              </td>
-              <td>
-                <.latest_revision_cell
-                  revision={Map.get(@latest_revisions, database.catalog_database_id)}
-                  current_mission={@current_mission}
-                />
-              </td>
-              <td>
-                <.latest_run_cell
-                  run={Map.get(@latest_runs, database.catalog_database_id)}
-                  current_mission={@current_mission}
-                />
-              </td>
-              <td>
-                <span class="badge badge-ghost badge-sm" id="catalog-runtime-usage-summary">
-                  No runtime bindings yet
-                </span>
-              </td>
-              <td class="text-right">
-                <.action_menu>
-                  <:action>
-                    <.link navigate={
-                      ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"
-                    }>
-                      View database
-                    </.link>
-                  </:action>
-                </.action_menu>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              </:action>
+            </.action_menu>
+          </:col>
+        </.table>
+      </.card>
     <% end %>
     """
   end

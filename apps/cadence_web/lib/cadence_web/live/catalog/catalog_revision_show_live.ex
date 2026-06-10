@@ -63,53 +63,41 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={revision_breadcrumb_items(assigns)} />
-        <div class="mt-2">
-          <h1 class="text-2xl font-bold text-base-content">{@revision.revision_label}</h1>
-          <p class="font-mono text-sm text-base-content/50">
-            Revision {@revision.revision_number}
-          </p>
-        </div>
-      </div>
+      <.page_header
+        title={@revision.revision_label}
+        breadcrumbs={revision_breadcrumb_items(assigns)}
+      >
+        <:title_suffix>Revision {@revision.revision_number}</:title_suffix>
+      </.page_header>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="card bg-base-200 lg:col-span-2">
-          <div class="card-body p-5">
-            <p class="hud-label">Revision provenance</p>
-            <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-3">
-              <div class="contents">
-                <dt class="text-base-content/60">Database</dt>
-                <dd>{if @database, do: @database.name, else: "—"}</dd>
-                <dt class="text-base-content/60">Artifact</dt>
-                <dd>
-                  <.maybe_artifact_link
-                    current_mission={@current_mission}
-                    artifact={@artifact}
-                  />
-                </dd>
-                <dt class="text-base-content/60">Import run</dt>
-                <dd>
-                  <.maybe_run_link current_mission={@current_mission} run={@import_run} />
-                </dd>
-                <dt class="text-base-content/60">Content SHA-256</dt>
-                <dd class="font-mono text-xs break-all">{@revision.content_sha256}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
+        <.card title="Revision provenance" class="lg:col-span-2">
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-3">
+            <div class="contents">
+              <dt class="text-base-content/60">Database</dt>
+              <dd>{if @database, do: @database.name, else: "—"}</dd>
+              <dt class="text-base-content/60">Artifact</dt>
+              <dd>
+                <.maybe_artifact_link current_mission={@current_mission} artifact={@artifact} />
+              </dd>
+              <dt class="text-base-content/60">Import run</dt>
+              <dd>
+                <.maybe_run_link current_mission={@current_mission} run={@import_run} />
+              </dd>
+              <dt class="text-base-content/60">Content SHA-256</dt>
+              <dd class="font-mono text-xs break-all">{@revision.content_sha256}</dd>
+            </div>
+          </dl>
+        </.card>
 
-        <div class="card bg-base-200">
-          <div class="card-body p-5">
-            <p class="hud-label">Runtime usage</p>
-            <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
-              No runtime bindings yet.
-            </p>
-            <button type="button" class="btn btn-ghost btn-sm mt-3" disabled>
-              Use this revision in runtime
-            </button>
-          </div>
-        </div>
+        <.card title="Runtime usage">
+          <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
+            No runtime bindings yet.
+          </p>
+          <.button variant={:ghost} class="mt-3" disabled>
+            Use this revision in runtime
+          </.button>
+        </.card>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -167,12 +155,9 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
 
   defp telemetry_snapshot_card(%{snapshot: nil} = assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-5">
-        <p class="hud-label">Telemetry snapshot</p>
-        <p class="text-sm text-base-content/60 mt-2">No telemetry snapshot in this revision.</p>
-      </div>
-    </div>
+    <.card title="Telemetry snapshot">
+      <p class="text-sm text-base-content/60 mt-2">No telemetry snapshot in this revision.</p>
+    </.card>
     """
   end
 
@@ -199,12 +184,9 @@ defmodule CadenceWeb.CatalogRevisionShowLive do
 
   defp command_snapshot_card(%{snapshot: nil} = assigns) do
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-5">
-        <p class="hud-label">Command snapshot</p>
-        <p class="text-sm text-base-content/60 mt-2">No command snapshot in this revision.</p>
-      </div>
-    </div>
+    <.card title="Command snapshot">
+      <p class="text-sm text-base-content/60 mt-2">No command snapshot in this revision.</p>
+    </.card>
     """
   end
 
