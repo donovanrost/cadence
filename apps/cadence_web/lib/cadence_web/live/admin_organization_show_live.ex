@@ -29,82 +29,80 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <.link navigate={~p"/admin/organizations"} class="text-sm text-primary hover:underline">
-            &larr; Organizations
-          </.link>
-          <h1 class="text-2xl font-bold text-base-content mt-1">{@organization.display_name}</h1>
-          <p class="text-sm text-base-content/60 font-mono">{@organization.slug}</p>
-        </div>
-        <.link
-          navigate={~p"/admin/organizations/#{@organization.organization_id}/invite"}
-          class="btn btn-primary btn-sm"
-        >
-          Invite User
-        </.link>
-      </div>
+      <.page_header
+        title={@organization.display_name}
+        subtitle={@organization.slug}
+        back_label="Organizations"
+        back_navigate={~p"/admin/organizations"}
+      >
+        <:actions>
+          <.button navigate={~p"/admin/organizations/#{@organization.organization_id}/invite"}>
+            Invite User
+          </.button>
+        </:actions>
+      </.page_header>
 
-      <div>
-        <h2 class="text-lg font-bold mb-3">Members</h2>
-        <%= if @members == [] do %>
-          <div class="card bg-base-200">
-            <div class="card-body p-6 text-center">
-              <p class="text-base-content/50">No members yet. Invite someone to get started.</p>
-            </div>
-          </div>
-        <% else %>
-          <div class="card bg-base-200 overflow-hidden">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-base-300">
-                  <th class="hud-label text-left p-3">User</th>
-                  <th class="hud-label text-left p-3">Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={member <- @members} class="border-b border-base-300 last:border-0">
-                  <td class="p-3">
-                    <p class="font-semibold">{member.user.display_name}</p>
-                    <p class="text-sm text-base-content/60">{member.user.email}</p>
-                  </td>
-                  <td class="p-3">
-                    <span class="badge badge-sm">
-                      {Phoenix.Naming.humanize(member.membership.role)}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        <% end %>
-      </div>
+      <.members_section members={@members} />
+      <.invitations_section invitations={@invitations} />
+    </div>
+    """
+  end
 
-      <div>
-        <h2 class="text-lg font-bold mb-3">Pending Invitations</h2>
-        <%= if @invitations == [] do %>
-          <p class="text-sm text-base-content/50">No pending invitations.</p>
-        <% else %>
-          <div class="space-y-2">
-            <div :for={inv <- @invitations} class="card bg-base-200">
-              <div class="card-body p-3 flex-row items-center justify-between">
-                <div>
-                  <p class="font-semibold">{inv.email}</p>
-                  <p class="text-sm text-base-content/60">
-                    Role: {Phoenix.Naming.humanize(inv.membership_role)}
-                    <%= if inv.grant_platform_admin do %>
-                      &middot; Platform Admin
-                    <% end %>
-                  </p>
-                </div>
-                <p class="text-xs text-base-content/40">
-                  Expires {Calendar.strftime(inv.expires_at, "%Y-%m-%d")}
+  attr :members, :list, required: true
+
+  defp members_section(assigns) do
+    ~H"""
+    <div>
+      <h2 class="text-lg font-bold mb-3">Members</h2>
+      <%= if @members == [] do %>
+        <.empty_state title="No members yet." description="Invite someone to get started." />
+      <% else %>
+        <.card padding={:none}>
+          <.table id="org-members-table" rows={@members} row_accent={false}>
+            <:col :let={member} label="User">
+              <p class="font-semibold">{member.user.display_name}</p>
+              <p class="text-sm text-base-content/60">{member.user.email}</p>
+            </:col>
+            <:col :let={member} label="Role">
+              <span class="badge badge-sm">
+                {Phoenix.Naming.humanize(member.membership.role)}
+              </span>
+            </:col>
+          </.table>
+        </.card>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :invitations, :list, required: true
+
+  defp invitations_section(assigns) do
+    ~H"""
+    <div>
+      <h2 class="text-lg font-bold mb-3">Pending Invitations</h2>
+      <%= if @invitations == [] do %>
+        <p class="text-sm text-base-content/50">No pending invitations.</p>
+      <% else %>
+        <div class="space-y-2">
+          <.card :for={inv <- @invitations} padding={:none}>
+            <div class="flex items-center justify-between p-3">
+              <div>
+                <p class="font-semibold">{inv.email}</p>
+                <p class="text-sm text-base-content/60">
+                  Role: {Phoenix.Naming.humanize(inv.membership_role)}
+                  <%= if inv.grant_platform_admin do %>
+                    &middot; Platform Admin
+                  <% end %>
                 </p>
               </div>
+              <p class="text-xs text-base-content/40">
+                Expires {Calendar.strftime(inv.expires_at, "%Y-%m-%d")}
+              </p>
             </div>
-          </div>
-        <% end %>
-      </div>
+          </.card>
+        </div>
+      <% end %>
     </div>
     """
   end

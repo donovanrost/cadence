@@ -16,47 +16,38 @@ defmodule CadenceWeb.AdminHomeLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-8">
-      <div>
-        <h1 class="text-2xl font-bold text-base-content">Platform Administration</h1>
-        <p class="mt-1 text-sm text-base-content/50">
-          Manage organizations, users, and system settings
-        </p>
-      </div>
+      <.page_header
+        title="Platform Administration"
+        subtitle="Manage organizations, users, and system settings"
+      />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="card bg-base-200 hover-glow-cyan transition-glow">
-          <div class="card-body p-6">
-            <p class="hud-label">Organizations</p>
-            <p class="text-3xl font-bold mt-2">{@org_count}</p>
-            <.link navigate={~p"/admin/organizations"} class="btn btn-primary btn-sm mt-4 w-full">
-              Manage Organizations
-            </.link>
-          </div>
-        </div>
+        <.card title="Organizations" hover_glow>
+          <p class="text-3xl font-bold mt-2">{@org_count}</p>
+          <.button navigate={~p"/admin/organizations"} class="mt-4 w-full">
+            Manage Organizations
+          </.button>
+        </.card>
 
-        <div class="card bg-base-200 hover-glow-purple transition-glow">
-          <div class="card-body p-6">
-            <p class="hud-label">Users</p>
-            <p class="text-3xl font-bold mt-2">{@user_count}</p>
-            <button class="btn btn-secondary btn-sm mt-4 w-full" disabled>
-              Manage Users <span class="text-xs">(Coming Soon)</span>
-            </button>
-          </div>
-        </div>
+        <.card title="Users" class="hover-glow-purple transition-glow">
+          <p class="text-3xl font-bold mt-2">{@user_count}</p>
+          <.button variant={:secondary} class="mt-4 w-full" disabled>
+            Manage Users <span class="text-xs">(Coming Soon)</span>
+          </.button>
+        </.card>
       </div>
 
       <div>
         <h2 class="text-lg font-bold mb-4">Quick Actions</h2>
-        <.link
-          navigate={~p"/admin/organizations/new"}
-          class="card bg-base-200 p-6 hover:bg-base-300 transition-all hover-glow-cyan"
-        >
-          <div class="flex items-center gap-4">
-            <div>
-              <h3 class="font-semibold">Create New Organization</h3>
-              <p class="text-sm text-base-content/60">Add a new organization to the system</p>
+        <.link navigate={~p"/admin/organizations/new"} class="block">
+          <.card hover_glow class="hover:bg-base-300 transition-all">
+            <div class="flex items-center gap-4">
+              <div>
+                <h3 class="font-semibold">Create New Organization</h3>
+                <p class="text-sm text-base-content/60">Add a new organization to the system</p>
+              </div>
             </div>
-          </div>
+          </.card>
         </.link>
       </div>
     </div>

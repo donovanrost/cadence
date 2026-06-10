@@ -51,17 +51,16 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.link navigate={~p"/admin/organizations"} class="text-sm text-primary hover:underline">
-          &larr; Organizations
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Create Organization</h1>
-      </div>
+      <.page_header
+        title="Create Organization"
+        back_label="Organizations"
+        back_navigate={~p"/admin/organizations"}
+      />
 
       <.form for={@form} id="org-form" phx-change="validate" phx-submit="save" class="space-y-4">
         <.input field={@form[:display_name]} type="text" label="Display Name" required />
         <.input field={@form[:slug]} type="text" label="Slug" required />
-        <button type="submit" class="btn btn-primary">Create Organization</button>
+        <.button type="submit" size={:md}>Create Organization</.button>
       </.form>
     </div>
     """

@@ -15,38 +15,32 @@ defmodule CadenceWeb.AdminOrganizationListLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <.link navigate={~p"/admin"} class="text-sm text-primary hover:underline">
-            &larr; Platform Admin
-          </.link>
-          <h1 class="text-2xl font-bold text-base-content mt-1">Organizations</h1>
-        </div>
-        <.link navigate={~p"/admin/organizations/new"} class="btn btn-primary btn-sm">
-          Create Organization
-        </.link>
-      </div>
+      <.page_header title="Organizations" back_label="Platform Admin" back_navigate={~p"/admin"}>
+        <:actions>
+          <.button navigate={~p"/admin/organizations/new"}>
+            Create Organization
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @organizations == [] do %>
-        <div class="card bg-base-200">
-          <div class="card-body p-8 text-center">
-            <p class="text-base-content/50">No organizations yet. Create the first one.</p>
-          </div>
-        </div>
+        <.empty_state title="No organizations yet." description="Create the first one." />
       <% else %>
         <div class="space-y-3">
           <.link
             :for={org <- @organizations}
             navigate={~p"/admin/organizations/#{org.organization_id}"}
-            class="card bg-base-200 hover:bg-base-300 transition-all block"
+            class="block"
           >
-            <div class="card-body p-4 flex-row items-center justify-between">
-              <div>
-                <p class="font-semibold">{org.display_name}</p>
-                <p class="text-sm text-base-content/60 font-mono">{org.slug}</p>
+            <.card padding={:none} class="hover:bg-base-300 transition-all">
+              <div class="flex items-center justify-between p-4">
+                <div>
+                  <p class="font-semibold">{org.display_name}</p>
+                  <p class="text-sm text-base-content/60 font-mono">{org.slug}</p>
+                </div>
+                <span class="text-primary text-sm">View &rarr;</span>
               </div>
-              <span class="text-primary text-sm">View &rarr;</span>
-            </div>
+            </.card>
           </.link>
         </div>
       <% end %>

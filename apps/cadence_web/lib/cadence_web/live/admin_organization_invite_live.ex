@@ -70,19 +70,12 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.link
-          navigate={~p"/admin/organizations/#{@organization.organization_id}"}
-          class="text-sm text-primary hover:underline"
-        >
-          &larr; {@organization.display_name}
-        </.link>
-        <h1 class="text-2xl font-bold text-base-content mt-1">Invite User</h1>
-        <p class="mt-1 text-sm text-base-content/50">
-          Invite a user to {@organization.display_name}. The invited user will see a
-          notification and must accept the invitation to gain access.
-        </p>
-      </div>
+      <.page_header
+        title="Invite User"
+        subtitle={"Invite a user to #{@organization.display_name}. The invited user will see a notification and must accept the invitation to gain access."}
+        back_label={@organization.display_name}
+        back_navigate={~p"/admin/organizations/#{@organization.organization_id}"}
+      />
 
       <.form for={@form} id="invite-form" phx-change="validate" phx-submit="save" class="space-y-4">
         <.input
@@ -105,26 +98,35 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
           options={[{"Organization Admin", "organization_admin"}, {"Member", "member"}]}
         />
 
-        <div class="fieldset mb-3">
-          <label class="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              name="invite[grant_platform_admin]"
-              value="true"
-              checked={@form[:grant_platform_admin].value == "true"}
-              class="checkbox checkbox-primary checkbox-sm"
-            />
-            <span>
-              <span class="font-semibold text-sm">Grant platform admin</span>
-              <span class="block text-xs text-base-content/50">
-                Platform admins can manage all organizations and system settings.
-              </span>
-            </span>
-          </label>
-        </div>
+        <.platform_admin_checkbox form={@form} />
 
-        <button type="submit" class="btn btn-primary">Send Invitation</button>
+        <.button type="submit" size={:md}>Send Invitation</.button>
       </.form>
+    </div>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  # Bespoke checkbox-with-description layout; <.input> has no checkbox treatment.
+  defp platform_admin_checkbox(assigns) do
+    ~H"""
+    <div class="fieldset mb-3">
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          name="invite[grant_platform_admin]"
+          value="true"
+          checked={@form[:grant_platform_admin].value == "true"}
+          class="checkbox checkbox-primary checkbox-sm"
+        />
+        <span>
+          <span class="font-semibold text-sm">Grant platform admin</span>
+          <span class="block text-xs text-base-content/50">
+            Platform admins can manage all organizations and system settings.
+          </span>
+        </span>
+      </label>
     </div>
     """
   end
