@@ -3,6 +3,9 @@ defmodule CadenceWeb.CommsComponents do
 
   use Phoenix.Component
 
+  import CadenceWeb.Components.Badges, only: [status_badge: 1]
+  import CadenceWeb.Components.Card, only: [card: 1]
+
   attr :title, :string, required: true
   attr :value, :integer, required: true
   attr :description, :string, required: true
@@ -11,38 +14,29 @@ defmodule CadenceWeb.CommsComponents do
 
   def readiness_card(assigns) do
     ~H"""
-    <div class={[
-      "card bg-base-200 border border-base-300",
-      readiness_accent(@status)
-    ]}>
-      <div class="card-body p-5">
-        <div class="flex items-start justify-between gap-4">
-          <p class="hud-label">{@title}</p>
-          <span class={[
-            "rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
-            status_class(@status)
-          ]}>
-            {status_label(@status)}
-          </span>
-        </div>
-        <p class="mt-3 mc-value-large text-primary">{@value}</p>
-        <p class="mt-2 text-sm text-base-content/60">{@description}</p>
-        <.link
-          :if={@navigate}
-          navigate={@navigate}
-          class="mt-4 inline-flex text-sm text-primary hover:underline"
-        >
-          Review configuration &rarr;
-        </.link>
+    <.card accent={readiness_accent(@status)}>
+      <div class="flex items-start justify-between gap-4">
+        <p class="hud-label">{@title}</p>
+        <.status_badge status={@status} />
       </div>
-    </div>
+      <p class="mt-3 mc-value-large text-primary">{@value}</p>
+      <p class="mt-2 text-sm text-base-content/60">{@description}</p>
+      <.link
+        :if={@navigate}
+        navigate={@navigate}
+        class="mt-4 inline-flex text-sm text-primary hover:underline"
+      >
+        Review configuration &rarr;
+      </.link>
+    </.card>
     """
   end
 
-  defp readiness_accent(:ready), do: "border-l-2 border-l-success/60"
-  defp readiness_accent(:attention), do: "border-l-2 border-l-warning/60"
-  defp readiness_accent(:blocked), do: "border-l-2 border-l-error/60"
-  defp readiness_accent(_), do: "border-l-2 border-l-transparent"
+  defp readiness_accent(:ready), do: :success
+  defp readiness_accent(:attention), do: :warning
+  defp readiness_accent(:blocked), do: :error
+  # Card with accent nil has no left border (previous code used border-l-transparent).
+  defp readiness_accent(_), do: nil
 
   def display_name(%{metadata: metadata} = resource, fallback_field)
       when is_map(metadata) and is_atom(fallback_field) do
@@ -171,14 +165,4 @@ defmodule CadenceWeb.CommsComponents do
       {"Contributing", "contributing"}
     ]
   end
-
-  defp status_label(:ready), do: "Ready"
-  defp status_label(:attention), do: "Needs Work"
-  defp status_label(:blocked), do: "Missing"
-  defp status_label(:info), do: "Setup"
-
-  defp status_class(:ready), do: "bg-success/20 text-success"
-  defp status_class(:attention), do: "bg-warning/20 text-warning"
-  defp status_class(:blocked), do: "bg-error/20 text-error"
-  defp status_class(:info), do: "bg-info/20 text-info"
 end

@@ -77,89 +77,100 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   def render(assigns) do
     ~H"""
     <div id="comms-routing-new-page" class="space-y-6 max-w-2xl">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Routing
-        </.link>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-          New Routing Rule
-        </h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later.
-        </p>
-      </div>
+      <.page_header
+        title="New Routing Rule"
+        subtitle="Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later."
+        back_label="Routing"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+      />
 
-      <.form
-        for={@form}
-        id="routing-rule-form"
-        phx-change="validate"
-        phx-submit="save"
-        class="space-y-8"
-      >
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">01</span>
-            <h2 class="hud-label">Intent</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-          <.input field={@form[:purpose_label]} type="text" label="Purpose" required />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">02</span>
-            <h2 class="hud-label">Spacecraft And Transport</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input
-            field={@form[:spacecraft_id]}
-            type="select"
-            label="Spacecraft"
-            options={spacecraft_options(@spacecraft)}
-            required
-          />
-          <.input
-            field={@form[:transport_ref]}
-            type="select"
-            label="Transport"
-            options={transport_options(@transports)}
-            required
-          />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">03</span>
-            <h2 class="hud-label">Routing Policy</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input
-            field={@form[:direction]}
-            type="select"
-            label="Direction"
-            options={direction_options()}
-            required
-          />
-          <.input field={@form[:role]} type="select" label="Role" options={role_options()} required />
-        </section>
-
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
-            Create Routing Rule
-          </button>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-            class="btn btn-ghost"
-          >
-            Cancel
-          </.link>
-        </div>
-      </.form>
+      <.routing_rule_form
+        form={@form}
+        spacecraft={@spacecraft}
+        transports={@transports}
+        current_mission={@current_mission}
+      />
     </div>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+  attr :spacecraft, :list, required: true
+  attr :transports, :list, required: true
+  attr :current_mission, :map, required: true
+
+  defp routing_rule_form(assigns) do
+    ~H"""
+    <.form
+      for={@form}
+      id="routing-rule-form"
+      phx-change="validate"
+      phx-submit="save"
+      class="space-y-8"
+    >
+      <.form_section number="01" title="Intent">
+        <.input field={@form[:display_name]} type="text" label="Display Name" required />
+        <.input field={@form[:purpose_label]} type="text" label="Purpose" required />
+      </.form_section>
+
+      <.form_section number="02" title="Spacecraft And Transport">
+        <.input
+          field={@form[:spacecraft_id]}
+          type="select"
+          label="Spacecraft"
+          options={spacecraft_options(@spacecraft)}
+          required
+        />
+        <.input
+          field={@form[:transport_ref]}
+          type="select"
+          label="Transport"
+          options={transport_options(@transports)}
+          required
+        />
+      </.form_section>
+
+      <.form_section number="03" title="Routing Policy">
+        <.input
+          field={@form[:direction]}
+          type="select"
+          label="Direction"
+          options={direction_options()}
+          required
+        />
+        <.input field={@form[:role]} type="select" label="Role" options={role_options()} required />
+      </.form_section>
+
+      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
+        <.button type="submit" size={:md}>
+          Create Routing Rule
+        </.button>
+        <.button
+          variant={:ghost}
+          size={:md}
+          navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+        >
+          Cancel
+        </.button>
+      </div>
+    </.form>
+    """
+  end
+
+  attr :number, :string, required: true
+  attr :title, :string, required: true
+  slot :inner_block, required: true
+
+  defp form_section(assigns) do
+    ~H"""
+    <section class="space-y-4">
+      <div class="flex items-center gap-3">
+        <span class="hud-label text-primary/70">{@number}</span>
+        <h2 class="hud-label">{@title}</h2>
+        <div class="flex-1 h-px bg-base-300/60"></div>
+      </div>
+      {render_slot(@inner_block)}
+    </section>
     """
   end
 

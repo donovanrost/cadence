@@ -42,88 +42,85 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   def render(assigns) do
     ~H"""
     <div id="comms-routing-show-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Routing
-        </.link>
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">
-              {@routing_rule.display_name}
-            </h1>
-            <p class="mt-1 font-mono text-xs text-base-content/40">
-              {@routing_rule.routing_rule_id}
-            </p>
-          </div>
-          <span class="badge badge-outline">{if @routing_rule.enabled?, do: "Enabled", else: "Disabled"}</span>
-        </div>
-      </div>
+      <.page_header
+        title={@routing_rule.display_name}
+        subtitle={@routing_rule.routing_rule_id}
+        back_label="Routing"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+      >
+        <:actions>
+          <span class="badge badge-outline">
+            {if @routing_rule.enabled?, do: "Enabled", else: "Disabled"}
+          </span>
+        </:actions>
+      </.page_header>
 
       <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-        <section class="card bg-base-200 border border-base-300 hud-corners">
-          <div class="card-body p-6">
-            <p class="hud-label mb-2">Routing Rule</p>
-            <p class="text-sm text-base-content/60">
-              Durable spacecraft use of a transport for a purpose and direction.
-            </p>
-
-            <div class="mt-6 space-y-1">
-              <.detail label="Spacecraft" value={spacecraft_name(@spacecraft, @routing_rule.spacecraft_id)} />
-              <.detail label="Purpose" value={@routing_rule.purpose_label} />
-              <.detail label="Direction" value={human_atom(@routing_rule.direction)} />
-              <.detail label="Transport" value={transport_name(@transport, @routing_rule.transport_id)} />
-              <.detail label="Transport Version" value={"v#{@routing_rule.transport_version}"} />
-              <.detail label="Role" value={human_atom(@routing_rule.role)} />
-            </div>
-
-            <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-              <summary class="cursor-pointer hud-label hover:text-primary">
-                Internal Runtime Artifacts
-              </summary>
-              <div class="mt-3 space-y-1">
-                <.detail
-                  label="Assignment artifact"
-                  value={@routing_rule.materialized_link_assignment_id || "Not materialized"}
-                />
-                <.detail
-                  label="Path artifacts"
-                  value={Enum.join(Map.get(@routing_rule.metadata, "materialized_path_template_ids", []), ", ")}
-                />
-              </div>
-            </details>
-          </div>
-        </section>
-
-        <aside class="card bg-base-200 border border-base-300">
-          <div class="card-body p-5">
-            <p class="hud-label mb-3">Events</p>
-            <div id="routing-rule-events" class="space-y-2">
-              <div :for={event <- @events} class="rounded border border-base-300 bg-base-100/40 p-3">
-                <p class="font-mono text-xs text-primary/80">{human_atom(event.event_type)}</p>
-                <p class="mt-1 text-xs text-base-content/50">
-                  {Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <.rule_card routing_rule={@routing_rule} spacecraft={@spacecraft} transport={@transport} />
+        <.events_card events={@events} />
       </div>
     </div>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
+  attr :routing_rule, :map, required: true
+  attr :spacecraft, :any, required: true
+  attr :transport, :any, required: true
 
-  defp detail(assigns) do
+  defp rule_card(assigns) do
     ~H"""
-    <div class="hud-data-row">
-      <span class="hud-data-label">{@label}</span>
-      <span class="hud-data-value">{@value}</span>
-    </div>
+    <.card title="Routing Rule">
+      <p class="text-sm text-base-content/60">
+        Durable spacecraft use of a transport for a purpose and direction.
+      </p>
+
+      <div class="mt-6 space-y-1">
+        <.detail_row
+          label="Spacecraft"
+          value={spacecraft_name(@spacecraft, @routing_rule.spacecraft_id)}
+        />
+        <.detail_row label="Purpose" value={@routing_rule.purpose_label} />
+        <.detail_row label="Direction" value={human_atom(@routing_rule.direction)} />
+        <.detail_row label="Transport" value={transport_name(@transport, @routing_rule.transport_id)} />
+        <.detail_row label="Transport Version" value={"v#{@routing_rule.transport_version}"} />
+        <.detail_row label="Role" value={human_atom(@routing_rule.role)} />
+      </div>
+
+      <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
+        <summary class="cursor-pointer hud-label hover:text-primary">
+          Internal Runtime Artifacts
+        </summary>
+        <div class="mt-3 space-y-1">
+          <.detail_row
+            label="Assignment artifact"
+            value={@routing_rule.materialized_link_assignment_id || "Not materialized"}
+          />
+          <.detail_row
+            label="Path artifacts"
+            value={
+              Enum.join(Map.get(@routing_rule.metadata, "materialized_path_template_ids", []), ", ")
+            }
+          />
+        </div>
+      </details>
+    </.card>
+    """
+  end
+
+  attr :events, :list, required: true
+
+  defp events_card(assigns) do
+    ~H"""
+    <.card title="Events">
+      <div id="routing-rule-events" class="space-y-2">
+        <div :for={event <- @events} class="rounded border border-base-300 bg-base-100/40 p-3">
+          <p class="font-mono text-xs text-primary/80">{human_atom(event.event_type)}</p>
+          <p class="mt-1 text-xs text-base-content/50">
+            {Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")}
+          </p>
+        </div>
+      </div>
+    </.card>
     """
   end
 

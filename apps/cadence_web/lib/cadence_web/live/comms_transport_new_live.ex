@@ -59,15 +59,12 @@ defmodule CadenceWeb.CommsTransportNewLive do
   def render(assigns) do
     ~H"""
     <div id="comms-transport-new-page" class="space-y-6 max-w-2xl">
-      <div class="border-b border-primary/20 pb-4">
-        <.link navigate={@return_to} class="hud-label text-base-content/50 hover:text-primary">
-          &larr; Transports
-        </.link>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">New Transport</h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          Describe a durable capability for moving bytes. This setup does not mean a connection is currently open.
-        </p>
-      </div>
+      <.page_header
+        title="New Transport"
+        subtitle="Describe a durable capability for moving bytes. This setup does not mean a connection is currently open."
+        back_label="Transports"
+        back_navigate={@return_to}
+      />
 
       <.form
         for={@form}
@@ -76,87 +73,10 @@ defmodule CadenceWeb.CommsTransportNewLive do
         phx-submit="save"
         class="space-y-8"
       >
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">01</span>
-            <h2 class="hud-label">Identity</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input field={@form[:display_name]} type="text" label="Display Name" required />
-          <.input
-            field={@form[:transport_kind]}
-            type="select"
-            label="Transport Kind"
-            options={transport_kind_options()}
-            required
-          />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">02</span>
-            <h2 class="hud-label">TCP Socket Capability</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input
-            field={@form[:tcp_mode]}
-            type="select"
-            label="TCP Mode"
-            options={tcp_mode_options()}
-            required
-          />
-          <.input
-            field={@form[:direction_capability]}
-            type="select"
-            label="Direction Capability"
-            options={direction_capability_options()}
-            required
-          />
-          <.input field={@form[:host]} type="text" label={host_label(@form)} required />
-          <.input field={@form[:port]} type="number" label={port_label(@form)} required />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">03</span>
-            <h2 class="hud-label">Framing</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input
-            field={@form[:framing_mode]}
-            type="select"
-            label="Framing"
-            options={framing_options()}
-            required
-          />
-          <.input
-            field={@form[:frame_size]}
-            type="number"
-            label="Fixed Frame Size (bytes, only for fixed-size framing)"
-          />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">04</span>
-            <h2 class="hud-label">Reliability</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <.input
-            field={@form[:reconnect_policy]}
-            type="select"
-            label="Reconnect Policy"
-            options={reconnect_policy_options()}
-            required
-          />
-          <.input
-            field={@form[:tls_enabled]}
-            type="select"
-            label="TLS"
-            options={tls_options()}
-            required
-          />
-        </section>
+        <.identity_section form={@form} />
+        <.capability_section form={@form} />
+        <.framing_section form={@form} />
+        <.reliability_section form={@form} />
 
         <details class="rounded border border-base-300 bg-base-100/40 p-4 text-sm">
           <summary class="cursor-pointer hud-label hover:text-primary">
@@ -166,15 +86,118 @@ defmodule CadenceWeb.CommsTransportNewLive do
         </details>
 
         <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+          <.button type="submit" size={:md}>
             Create Transport
-          </button>
-          <.link navigate={@return_to} class="btn btn-ghost">
+          </.button>
+          <.button variant={:ghost} size={:md} navigate={@return_to}>
             Cancel
-          </.link>
+          </.button>
         </div>
       </.form>
     </div>
+    """
+  end
+
+  attr :number, :string, required: true
+  attr :title, :string, required: true
+  slot :inner_block, required: true
+
+  defp form_section(assigns) do
+    ~H"""
+    <section class="space-y-4">
+      <div class="flex items-center gap-3">
+        <span class="hud-label text-primary/70">{@number}</span>
+        <h2 class="hud-label">{@title}</h2>
+        <div class="flex-1 h-px bg-base-300/60"></div>
+      </div>
+      {render_slot(@inner_block)}
+    </section>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp identity_section(assigns) do
+    ~H"""
+    <.form_section number="01" title="Identity">
+      <.input field={@form[:display_name]} type="text" label="Display Name" required />
+      <.input
+        field={@form[:transport_kind]}
+        type="select"
+        label="Transport Kind"
+        options={transport_kind_options()}
+        required
+      />
+    </.form_section>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp capability_section(assigns) do
+    ~H"""
+    <.form_section number="02" title="TCP Socket Capability">
+      <.input
+        field={@form[:tcp_mode]}
+        type="select"
+        label="TCP Mode"
+        options={tcp_mode_options()}
+        required
+      />
+      <.input
+        field={@form[:direction_capability]}
+        type="select"
+        label="Direction Capability"
+        options={direction_capability_options()}
+        required
+      />
+      <.input field={@form[:host]} type="text" label={host_label(@form)} required />
+      <.input field={@form[:port]} type="number" label={port_label(@form)} required />
+    </.form_section>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp framing_section(assigns) do
+    ~H"""
+    <.form_section number="03" title="Framing">
+      <.input
+        field={@form[:framing_mode]}
+        type="select"
+        label="Framing"
+        options={framing_options()}
+        required
+      />
+      <.input
+        field={@form[:frame_size]}
+        type="number"
+        label="Fixed Frame Size (bytes, only for fixed-size framing)"
+      />
+    </.form_section>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp reliability_section(assigns) do
+    ~H"""
+    <.form_section number="04" title="Reliability">
+      <.input
+        field={@form[:reconnect_policy]}
+        type="select"
+        label="Reconnect Policy"
+        options={reconnect_policy_options()}
+        required
+      />
+      <.input
+        field={@form[:tls_enabled]}
+        type="select"
+        label="TLS"
+        options={tls_options()}
+        required
+      />
+    </.form_section>
     """
   end
 

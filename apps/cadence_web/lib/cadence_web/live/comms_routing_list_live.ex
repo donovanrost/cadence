@@ -25,86 +25,77 @@ defmodule CadenceWeb.CommsRoutingListLive do
   def render(assigns) do
     ~H"""
     <div id="comms-routing-page" class="space-y-6">
-      <div class="flex items-end justify-between gap-4 border-b border-primary/20 pb-4">
-        <div>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
-            class="hud-label text-base-content/50 hover:text-primary"
+      <.page_header
+        title="Routing"
+        subtitle="Durable rules describing how spacecraft use transports for a purpose and direction."
+        back_label="Comms"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+      >
+        <:title_suffix>{@routing_rule_count} rules</:title_suffix>
+        <:actions>
+          <.button
+            id="new-routing-rule-link"
+            navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
+            class="gap-1"
           >
-            &larr; Comms
-          </.link>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-            Routing
-            <span class="ml-3 font-mono text-base text-base-content/40">
-              {@routing_rule_count} rules
-            </span>
-          </h1>
-          <p class="mt-1 max-w-2xl text-sm text-base-content/60">
-            Durable rules describing how spacecraft use transports for a purpose and direction.
-          </p>
-        </div>
-        <.link
-          id="new-routing-rule-link"
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
-          class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
-        >
-          <.icon name="hero-plus" class="h-4 w-4" /> New Routing Rule
-        </.link>
-      </div>
+            <.icon name="hero-plus" class="h-4 w-4" /> New Routing Rule
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @routing_rules_empty? do %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <div class="card-body p-8 text-center">
-            <p class="hud-label mb-3 text-base-content/60">No routing rules</p>
-            <p class="text-sm text-base-content/60 max-w-md mx-auto">
-              Create a routing rule to declare how a spacecraft should use an available transport.
-            </p>
-            <div class="mt-5">
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
-                class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-              >
-                Create the first routing rule
-              </.link>
-            </div>
-          </div>
-        </div>
+        <.empty_state
+          title="No routing rules"
+          description="Create a routing rule to declare how a spacecraft should use an available transport."
+          action_label="Create the first routing rule"
+          action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/new"}
+        />
       <% else %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <table id="routing-rules-table" class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Rule</th>
-                <th class="hud-label">Spacecraft</th>
-                <th class="hud-label">Purpose</th>
-                <th class="hud-label">Direction</th>
-                <th class="hud-label">Transport</th>
-                <th class="hud-label">Role</th>
-              </tr>
-            </thead>
-            <tbody id="routing-rules" phx-update="stream">
-              <tr :for={{id, rule} <- @streams.routing_rules} id={id}>
-                <td class="font-medium">
-                  <.link
-                    navigate={
-                      ~p"/missions/#{@current_mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
-                    }
-                    class="text-primary hover:underline"
-                  >
-                    {rule.display_name}
-                  </.link>
-                </td>
-                <td>{spacecraft_name(@spacecraft_by_id, rule.spacecraft_id)}</td>
-                <td>{rule.purpose_label}</td>
-                <td class="font-mono text-sm uppercase text-primary/80">{human_atom(rule.direction)}</td>
-                <td>{transport_name(@transport_by_id, rule.transport_id)}</td>
-                <td class="font-mono text-sm uppercase text-base-content/70">{human_atom(rule.role)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <.routing_rules_table
+          rows={@streams.routing_rules}
+          current_mission={@current_mission}
+          spacecraft_by_id={@spacecraft_by_id}
+          transport_by_id={@transport_by_id}
+        />
       <% end %>
     </div>
+    """
+  end
+
+  attr :rows, :any, required: true
+  attr :current_mission, :map, required: true
+  attr :spacecraft_by_id, :map, required: true
+  attr :transport_by_id, :map, required: true
+
+  defp routing_rules_table(assigns) do
+    ~H"""
+    <.card padding={:none}>
+      <.table id="routing-rules-table" body_id="routing-rules" rows={@rows}>
+        <:col :let={rule} label="Rule" class="font-medium">
+          <.link
+            navigate={
+              ~p"/missions/#{@current_mission.mission_id}/comms/routing/#{rule.routing_rule_id}"
+            }
+            class="text-primary hover:underline"
+          >
+            {rule.display_name}
+          </.link>
+        </:col>
+        <:col :let={rule} label="Spacecraft">
+          {spacecraft_name(@spacecraft_by_id, rule.spacecraft_id)}
+        </:col>
+        <:col :let={rule} label="Purpose">{rule.purpose_label}</:col>
+        <:col :let={rule} label="Direction" mono class="uppercase text-primary/80">
+          {human_atom(rule.direction)}
+        </:col>
+        <:col :let={rule} label="Transport">
+          {transport_name(@transport_by_id, rule.transport_id)}
+        </:col>
+        <:col :let={rule} label="Role" mono class="uppercase text-base-content/70">
+          {human_atom(rule.role)}
+        </:col>
+      </.table>
+    </.card>
     """
   end
 

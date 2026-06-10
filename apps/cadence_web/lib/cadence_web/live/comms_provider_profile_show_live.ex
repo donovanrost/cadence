@@ -79,48 +79,34 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
   def render(assigns) do
     ~H"""
     <div id="comms-provider-profile-show-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Providers
-        </.link>
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <div class="flex items-baseline gap-3">
-              <h1 class="text-2xl font-bold text-base-content tracking-tight">
-                {display_name(@provider_profile, :provider_profile_id)}
-              </h1>
-              <span class="mc-value-small text-primary/80">v{@provider_profile.version}</span>
-            </div>
-            <p class="mt-1 font-mono text-xs text-base-content/40">
-              {@provider_profile.provider_profile_id}
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <button
-              id="archive-provider-profile-button"
-              type="button"
-              phx-click="archive"
-              data-confirm="Archive this provider?"
-              class="btn btn-error btn-outline btn-sm"
-            >
-              Archive
-            </button>
-            <.link
-              id="new-provider-profile-version-link"
-              navigate={
-                ~p"/missions/#{@current_mission.mission_id}/comms/providers/#{@provider_profile.provider_profile_id}/new-version"
-              }
-              class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-            >
-              New Version
-            </.link>
-          </div>
-        </div>
-      </div>
+      <.page_header
+        title={display_name(@provider_profile, :provider_profile_id)}
+        subtitle={@provider_profile.provider_profile_id}
+        back_label="Providers"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
+      >
+        <:title_suffix>v{@provider_profile.version}</:title_suffix>
+        <:actions>
+          <.button
+            id="archive-provider-profile-button"
+            variant={:danger}
+            phx-click="archive"
+            data-confirm="Archive this provider?"
+          >
+            Archive
+          </.button>
+          <.button
+            id="new-provider-profile-version-link"
+            navigate={
+              ~p"/missions/#{@current_mission.mission_id}/comms/providers/#{@provider_profile.provider_profile_id}/new-version"
+            }
+          >
+            New Version
+          </.button>
+        </:actions>
+      </.page_header>
 
+      <%!-- One-off warning callout (warning tint + dashed-free chrome); kept raw. --%>
       <section
         :if={@linked_path_count > 0}
         id="provider-profile-archive-blocker"
@@ -134,75 +120,64 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
       </section>
 
       <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
-        <section class="card bg-base-200 border border-base-300 hud-corners">
-          <div class="card-body p-6">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <p class="hud-label mb-2">Endpoint</p>
-                <h2 class="font-mono text-lg font-semibold text-primary">
-                  {tcp_endpoint(@provider_profile.configuration)}
-                </h2>
-                <p class="mt-1 text-sm text-base-content/60">
-                  Transport adapter configuration used to move bytes between Cadence and the ground network.
-                </p>
-              </div>
-              <.status_badge status={:info} label={human_atom(@provider_profile.adapter_key)} />
-            </div>
-
-            <div class="mt-6 space-y-1">
-              <.profile_detail label="Mode" value={tcp_mode(@provider_profile.configuration)} />
-              <.profile_detail
-                label="Direction"
-                value={tcp_direction(@provider_profile.configuration)}
-              />
-              <.profile_detail label="Framing" value={tcp_framing(@provider_profile.configuration)} />
-              <.profile_detail label="TLS" value={tls_label(@provider_profile.configuration)} />
-              <.profile_detail
-                label="Reconnect"
-                value={reconnect_label(@provider_profile.configuration)}
-              />
-              <.profile_detail label="Linked paths" value={Integer.to_string(@linked_path_count)} />
-            </div>
-
-            <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
-              <summary class="cursor-pointer hud-label hover:text-primary">
-                Raw Configuration
-              </summary>
-              <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(@provider_profile.configuration, pretty: true)}</pre>
-            </details>
-          </div>
-        </section>
-
-        <aside class="card bg-base-200 border border-base-300">
-          <div class="card-body p-5">
-            <p class="hud-label mb-3">Version History</p>
-            <div id="provider-profile-versions" class="space-y-1">
-              <div
-                :for={version <- @versions}
-                class="hud-data-row"
-              >
-                <span class="hud-data-label">v{version.version}</span>
-                <span class="hud-data-value text-xs">
-                  {version.lifecycle_state |> Atom.to_string() |> String.upcase()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <.endpoint_card provider_profile={@provider_profile} linked_path_count={@linked_path_count} />
+        <.version_history_card versions={@versions} />
       </div>
     </div>
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
+  attr :provider_profile, :map, required: true
+  attr :linked_path_count, :integer, required: true
 
-  defp profile_detail(assigns) do
+  defp endpoint_card(assigns) do
     ~H"""
-    <div class="hud-data-row">
-      <span class="hud-data-label">{@label}</span>
-      <span class="hud-data-value">{@value}</span>
-    </div>
+    <.card>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label mb-2">Endpoint</p>
+          <h2 class="font-mono text-lg font-semibold text-primary">
+            {tcp_endpoint(@provider_profile.configuration)}
+          </h2>
+          <p class="mt-1 text-sm text-base-content/60">
+            Transport adapter configuration used to move bytes between Cadence and the ground network.
+          </p>
+        </div>
+        <.status_badge status={:info} label={human_atom(@provider_profile.adapter_key)} />
+      </div>
+
+      <div class="mt-6 space-y-1">
+        <.detail_row label="Mode" value={tcp_mode(@provider_profile.configuration)} />
+        <.detail_row label="Direction" value={tcp_direction(@provider_profile.configuration)} />
+        <.detail_row label="Framing" value={tcp_framing(@provider_profile.configuration)} />
+        <.detail_row label="TLS" value={tls_label(@provider_profile.configuration)} />
+        <.detail_row label="Reconnect" value={reconnect_label(@provider_profile.configuration)} />
+        <.detail_row label="Linked paths" value={Integer.to_string(@linked_path_count)} />
+      </div>
+
+      <details class="mt-6 rounded border border-base-300 bg-base-100/40 p-4 text-sm">
+        <summary class="cursor-pointer hud-label hover:text-primary">
+          Raw Configuration
+        </summary>
+        <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(@provider_profile.configuration, pretty: true)}</pre>
+      </details>
+    </.card>
+    """
+  end
+
+  attr :versions, :list, required: true
+
+  defp version_history_card(assigns) do
+    ~H"""
+    <.card title="Version History">
+      <div id="provider-profile-versions" class="space-y-1">
+        <.detail_row :for={version <- @versions} label={"v#{version.version}"}>
+          <span class="text-xs">
+            {version.lifecycle_state |> Atom.to_string() |> String.upcase()}
+          </span>
+        </.detail_row>
+      </div>
+    </.card>
     """
   end
 
