@@ -2,8 +2,6 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   @impl true
   def mount(_params, _session, socket) do
     spacecraft = socket.assigns.current_spacecraft

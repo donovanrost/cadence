@@ -22,92 +22,58 @@ defmodule CadenceWeb.CommsTransportListLive do
   def render(assigns) do
     ~H"""
     <div id="comms-transports-page" class="space-y-6">
-      <div class="flex items-end justify-between gap-4 border-b border-primary/20 pb-4">
-        <div>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
-            class="hud-label text-base-content/50 hover:text-primary"
+      <.page_header
+        title="Transports"
+        subtitle="Durable byte-moving capabilities Cadence can use for inbound, outbound, or bidirectional spacecraft traffic."
+        back_label="Comms"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+      >
+        <:title_suffix>{@transport_count} configured</:title_suffix>
+        <:actions>
+          <.button
+            id="new-transport-link"
+            navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
+            class="gap-1"
           >
-            &larr; Comms
-          </.link>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-            Transports
-            <span class="ml-3 font-mono text-base text-base-content/40">
-              {@transport_count} configured
-            </span>
-          </h1>
-          <p class="mt-1 max-w-2xl text-sm text-base-content/60">
-            Durable byte-moving capabilities Cadence can use for inbound, outbound, or bidirectional spacecraft traffic.
-          </p>
-        </div>
-        <.link
-          id="new-transport-link"
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
-          class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
-        >
-          <.icon name="hero-plus" class="h-4 w-4" /> New Transport
-        </.link>
-      </div>
+            <.icon name="hero-plus" class="h-4 w-4" /> New Transport
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @transports_empty? do %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <div class="card-body p-8 text-center">
-            <p class="hud-label mb-3 text-base-content/60">No transports</p>
-            <p class="text-sm text-base-content/60 max-w-md mx-auto">
-              Create a transport to describe an external capability for moving bytes.
-            </p>
-            <div class="mt-5">
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
-                class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-              >
-                Create the first transport
-              </.link>
-            </div>
-          </div>
-        </div>
+        <.empty_state
+          title="No transports"
+          description="Create a transport to describe an external capability for moving bytes."
+          action_label="Create the first transport"
+          action_navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports/new"}
+        />
       <% else %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <table id="transports-table" class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Name</th>
-                <th class="hud-label">Kind</th>
-                <th class="hud-label">Capability</th>
-                <th class="hud-label">Endpoint</th>
-                <th class="hud-label">Version</th>
-              </tr>
-            </thead>
-            <tbody id="transports" phx-update="stream">
-              <tr
-                :for={{id, transport} <- @streams.transports}
-                id={id}
-                class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
+        <.card padding={:none}>
+          <.table id="transports-table" body_id="transports" rows={@streams.transports}>
+            <:col :let={transport} label="Name" class="font-medium">
+              <.link
+                navigate={
+                  ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
+                }
+                class="text-primary hover:underline"
               >
-                <td class="font-medium">
-                  <.link
-                    navigate={
-                      ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
-                    }
-                    class="text-primary hover:underline"
-                  >
-                    {transport.display_name}
-                  </.link>
-                </td>
-                <td class="font-mono text-sm uppercase text-primary/80">
-                  {human_atom(transport.transport_kind)}
-                </td>
-                <td class="font-mono text-sm uppercase text-base-content/70">
-                  {human_atom(transport.direction_capability)}
-                </td>
-                <td class="font-mono text-sm text-base-content/70">
-                  {transport_summary(transport).endpoint}
-                </td>
-                <td class="font-mono text-sm text-base-content/70">v{transport.version}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                {transport.display_name}
+              </.link>
+            </:col>
+            <:col :let={transport} label="Kind" mono class="uppercase text-primary/80">
+              {human_atom(transport.transport_kind)}
+            </:col>
+            <:col :let={transport} label="Capability" mono class="uppercase text-base-content/70">
+              {human_atom(transport.direction_capability)}
+            </:col>
+            <:col :let={transport} label="Endpoint" mono class="text-base-content/70">
+              {transport_summary(transport).endpoint}
+            </:col>
+            <:col :let={transport} label="Version" mono class="text-base-content/70">
+              v{transport.version}
+            </:col>
+          </.table>
+        </.card>
       <% end %>
     </div>
     """

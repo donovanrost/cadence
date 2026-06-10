@@ -2,8 +2,6 @@ defmodule CadenceWeb.SpacecraftListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   @profile_preview_limit 5
 
   @impl true

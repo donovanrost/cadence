@@ -2,7 +2,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
   import CadenceWeb.SpacecraftShowComponents, only: [type_binding_card: 1, applications_card: 1]
 
   alias Cadence.Applications.TelemetryDecom

@@ -2,8 +2,6 @@ defmodule CadenceWeb.CommsOverviewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents
-
   alias CadenceWeb.CommsValidation
 
   @impl true

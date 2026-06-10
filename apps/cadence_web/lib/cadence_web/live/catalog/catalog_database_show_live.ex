@@ -178,45 +178,39 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={[
+      <.page_header
+        title={@database.name}
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Catalog", ~p"/missions/#{@current_mission.mission_id}/catalog"},
           {@database.name, nil}
-        ]} />
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content">{@database.name}</h1>
-            <p class="font-mono text-sm text-base-content/50">{@database.slug}</p>
-          </div>
-          <button
+        ]}
+      >
+        <:title_suffix>{@database.slug}</:title_suffix>
+        <:actions>
+          <.button
             id="add-revision-toggle"
-            type="button"
+            variant={if @show_revision_form, do: :ghost, else: :primary}
+            size={:md}
             phx-click="toggle_revision_form"
-            class={["btn", if(@show_revision_form, do: "btn-ghost", else: "btn-primary")]}
           >
             {if @show_revision_form, do: "Cancel", else: "+ Add revision"}
-          </button>
-        </div>
-      </div>
+          </.button>
+        </:actions>
+      </.page_header>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="card bg-base-200 lg:col-span-2">
-          <div class="card-body p-5">
-            <p class="hud-label">Database</p>
-            <p class="text-sm text-base-content/70 mt-2">
-              {@database.description || "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."}
-            </p>
-          </div>
-        </div>
-        <div class="card bg-base-200">
-          <div class="card-body p-5">
-            <p class="hud-label">Runtime usage</p>
-            <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
-              No runtime bindings yet.
-            </p>
-          </div>
-        </div>
+        <.card title="Database" class="lg:col-span-2">
+          <p class="text-sm text-base-content/70 mt-2">
+            {@database.description ||
+              "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately."}
+          </p>
+        </.card>
+        <.card title="Runtime usage">
+          <p class="text-sm text-base-content/60 mt-2" id="catalog-runtime-usage-summary">
+            No runtime bindings yet.
+          </p>
+        </.card>
       </div>
 
       <.revision_upload_card :if={@show_revision_form} uploads={@uploads} form={@revision_form} />
@@ -240,28 +234,25 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
       )
 
     ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-5 space-y-4">
-        <p class="hud-label">Add revision</p>
-        <.form
-          id="catalog-revision-upload-form"
-          for={@form}
-          phx-change="validate"
-          phx-submit="save"
-          class="space-y-4"
-        >
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <.input field={@form[:revision_label]} type="text" label="Revision label" />
-            <.input field={@form[:revision_notes]} type="text" label="Notes" />
-          </div>
-          <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
-          <.detected_preview detected={@detected_importer} />
-          <button type="submit" class="btn btn-primary" disabled={!importer_detected?(@detected_importer)}>
-            Upload revision
-          </button>
-        </.form>
-      </div>
-    </div>
+    <.card title="Add revision">
+      <.form
+        id="catalog-revision-upload-form"
+        for={@form}
+        phx-change="validate"
+        phx-submit="save"
+        class="space-y-4"
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <.input field={@form[:revision_label]} type="text" label="Revision label" />
+          <.input field={@form[:revision_notes]} type="text" label="Notes" />
+        </div>
+        <.live_file_input upload={@uploads.artifact} class="file-input file-input-bordered w-full" />
+        <.detected_preview detected={@detected_importer} />
+        <.button type="submit" size={:md} disabled={!importer_detected?(@detected_importer)}>
+          Upload revision
+        </.button>
+      </.form>
+    </.card>
     """
   end
 
@@ -270,45 +261,37 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
 
   defp revision_history(assigns) do
     ~H"""
-    <div id="catalog-revision-history" class="card bg-base-200">
-      <div class="card-body p-5">
-        <p class="hud-label mb-3">Revision history</p>
-        <%= if @revisions == [] do %>
-          <p class="text-sm text-base-content/60">No revisions yet.</p>
-        <% else %>
-          <table class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Revision</th>
-                <th class="hud-label">Telemetry</th>
-                <th class="hud-label">Command</th>
-                <th class="hud-label text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={revision <- @revisions}>
-                <td>
-                  <p class="font-medium">{revision.revision_label}</p>
-                  <p class="font-mono text-xs text-base-content/50">{"#" <> Integer.to_string(revision.revision_number)}</p>
-                </td>
-                <td>{if revision.telemetry_snapshot_id, do: "Present", else: "—"}</td>
-                <td>{if revision.command_snapshot_id, do: "Present", else: "—"}</td>
-                <td class="text-right">
-                  <.link
-                    navigate={
-                      ~p"/missions/#{@current_mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
-                    }
-                    class="btn btn-ghost btn-xs"
-                  >
-                    View revision
-                  </.link>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        <% end %>
-      </div>
-    </div>
+    <.card id="catalog-revision-history" title="Revision history">
+      <%= if @revisions == [] do %>
+        <p class="text-sm text-base-content/60">No revisions yet.</p>
+      <% else %>
+        <.table id="catalog-revisions-table" rows={@revisions} row_accent={false}>
+          <:col :let={revision} label="Revision">
+            <p class="font-medium">{revision.revision_label}</p>
+            <p class="font-mono text-xs text-base-content/50">
+              {"#" <> Integer.to_string(revision.revision_number)}
+            </p>
+          </:col>
+          <:col :let={revision} label="Telemetry">
+            {if revision.telemetry_snapshot_id, do: "Present", else: "—"}
+          </:col>
+          <:col :let={revision} label="Command">
+            {if revision.command_snapshot_id, do: "Present", else: "—"}
+          </:col>
+          <:col :let={revision} label="Actions" align={:right}>
+            <.button
+              variant={:ghost}
+              size={:xs}
+              navigate={
+                ~p"/missions/#{@current_mission.mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
+              }
+            >
+              View revision
+            </.button>
+          </:col>
+        </.table>
+      <% end %>
+    </.card>
     """
   end
 
@@ -317,31 +300,29 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
 
   defp import_attempts(assigns) do
     ~H"""
-    <div id="catalog-import-attempts" class="card bg-base-200">
-      <div class="card-body p-5">
-        <p class="hud-label mb-3">Import attempts</p>
-        <%= if @runs == [] do %>
-          <p class="text-sm text-base-content/60">No import attempts yet.</p>
-        <% else %>
-          <table class="table">
-            <tbody>
-              <tr :for={run <- @runs}>
-                <td><.import_run_status_badge status={run.status} /></td>
-                <td class="font-mono text-xs text-base-content/60">{run.import_run_id}</td>
-                <td class="text-right">
-                  <.link
-                    navigate={~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"}
-                    class="btn btn-ghost btn-xs"
-                  >
-                    View run
-                  </.link>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        <% end %>
-      </div>
-    </div>
+    <.card id="catalog-import-attempts" title="Import attempts">
+      <%= if @runs == [] do %>
+        <p class="text-sm text-base-content/60">No import attempts yet.</p>
+      <% else %>
+        <.table id="catalog-import-runs-table" rows={@runs} row_accent={false}>
+          <:col :let={run} label="Status"><.import_run_status_badge status={run.status} /></:col>
+          <:col :let={run} label="Run" class="font-mono text-xs text-base-content/60">
+            {run.import_run_id}
+          </:col>
+          <:col :let={run} label="Actions" align={:right}>
+            <.button
+              variant={:ghost}
+              size={:xs}
+              navigate={
+                ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"
+              }
+            >
+              View run
+            </.button>
+          </:col>
+        </.table>
+      <% end %>
+    </.card>
     """
   end
 

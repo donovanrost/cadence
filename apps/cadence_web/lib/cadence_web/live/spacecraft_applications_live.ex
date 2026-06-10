@@ -3,8 +3,6 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   alias Cadence.Applications.TelemetryDecom
   alias CadenceWeb.SpacecraftTypeApplications
 

@@ -2,8 +2,6 @@ defmodule CadenceWeb.CommsValidationLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   alias CadenceWeb.CommsValidation
 
   @impl true

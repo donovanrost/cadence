@@ -6,8 +6,6 @@ defmodule CadenceWeb.SpacecraftShowComponents do
 
   use CadenceWeb, :html
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   attr :mission_id, :string, required: true
   attr :spacecraft_id, :string, required: true
   attr :type_binding, :any, required: true

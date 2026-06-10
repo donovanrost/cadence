@@ -12,7 +12,9 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 1. **Never add rules to CSS files.** The CSS in `assets/css/components/` is a closed set ported from legacy. Compose from daisyUI classes + Tailwind utilities + existing HUD utilities (`hud-label`, `hover-glow-cyan`, `hud-grid`, etc.). If you think you need new CSS, you're wrong — use an existing class or a Tailwind arbitrary value.
 
-2. **Never write raw HTML form inputs.** Use `<.input>` from `CadenceWeb.CoreComponents` for all form fields. It handles labels (`hud-label`), daisyUI styling, error display, and select/text/email/password types.
+2. **Never write raw HTML form inputs.** Use `<.input>` from `CadenceWeb.Components.FormInputs` for all form fields. It handles labels (`hud-label`), daisyUI styling, error display, and select/text/email/password types. For standalone controls outside a form binding (filter boxes, `phx-change` selectors), pass `name`/`value` instead of `field`.
+
+7. **Use the component layer, not raw daisyUI markup.** `<.button>` (never `class="btn ..."`), `<.card>`/`<.stat_tile>` (never `class="card bg-base-200 ..."`), `<.table>` for data tables, `<.page_header>` for page titles, `<.empty_state>` for empty lists, `<.status_badge>`/`<.severity_badge>` for pills. All live in `lib/cadence_web/components/` and are imported everywhere via `html_helpers`. A one-off layout that would need more than a couple of `class` escape hatches may stay raw — leave a one-line comment saying why.
 
 3. **No render function over 50 lines.** Extract a private component function or a separate component module. Large render functions are where duplication hides.
 
@@ -32,6 +34,6 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 **Admin routes:** Inside `live_session :admin` with `CadenceWeb.AdminAuth` on_mount hook. The hook authenticates, checks `platform_admin` capability, and assigns `current_scope` + `nav_context`.
 
-**Frontend stack:** daisyUI 5 + Tailwind v4 + Tokyo Night dark theme (hot pink accent, sharp 2px corners, oklch colors) + HUD utility layer. Use `card bg-base-200`, `btn btn-primary`, `hud-label`, `hover-glow-cyan transition-glow`, `text-base-content/60` for muted text.
+**Frontend stack:** daisyUI 5 + Tailwind v4 + Tokyo Night dark theme (hot pink accent, sharp 2px corners, oklch colors) + HUD utility layer, wrapped by the component layer in `lib/cadence_web/components/` (rule 7). Inside components and one-off layouts, compose from `hud-label`, `hover-glow-cyan transition-glow`, `text-base-content/60` for muted text.
 
 **Legacy reference:** `legacy/cadence_legacy/` has the visual reference for the HUD aesthetic. Use it for pattern reference, not code copying.

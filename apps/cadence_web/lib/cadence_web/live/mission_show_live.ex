@@ -2,7 +2,7 @@ defmodule CadenceWeb.MissionShowLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [readiness_card: 1, status_badge: 1]
+  import CadenceWeb.CommsComponents, only: [readiness_card: 1]
 
   alias CadenceWeb.SpacecraftCommsReadiness
 

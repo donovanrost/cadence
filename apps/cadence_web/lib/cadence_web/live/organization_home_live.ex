@@ -2,8 +2,6 @@ defmodule CadenceWeb.OrganizationHomeLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   @recent_mission_limit 3
 
   @impl true

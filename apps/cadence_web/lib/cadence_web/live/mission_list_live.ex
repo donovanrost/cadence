@@ -4,8 +4,6 @@ defmodule CadenceWeb.MissionListLive do
 
   alias Phoenix.LiveView.JS
 
-  import CadenceWeb.CommsComponents, only: [status_badge: 1]
-
   @impl true
   def mount(_params, _session, socket) do
     organization_id = socket.assigns.current_scope.organization_id

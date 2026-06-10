@@ -50,6 +50,12 @@ defmodule CadenceWeb do
   defp html_helpers do
     quote do
       import Phoenix.HTML
+      import CadenceWeb.Components.Badges
+      import CadenceWeb.Components.Button
+      import CadenceWeb.Components.Card
+      import CadenceWeb.Components.FormInputs
+      import CadenceWeb.Components.PageHeader
+      import CadenceWeb.Components.Table
       import CadenceWeb.CoreComponents
       import CadenceWeb.UI
 

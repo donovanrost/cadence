@@ -3,7 +3,7 @@ defmodule CadenceWeb.CoreComponents do
 
   use Phoenix.Component
 
-  alias Phoenix.HTML.FormField
+  import CadenceWeb.Components.Button, only: [button: 1]
 
   attr :name, :string, required: true
   attr :class, :string, default: nil
@@ -12,70 +12,6 @@ defmodule CadenceWeb.CoreComponents do
   def icon(assigns) do
     ~H"""
     <span class={[@name, @class]} {@rest}></span>
-    """
-  end
-
-  attr :field, FormField, required: true
-  attr :type, :string, default: "text"
-  attr :label, :string, default: nil
-  attr :placeholder, :string, default: nil
-  attr :options, :list, default: []
-  attr :required, :boolean, default: false
-  attr :class, :string, default: nil
-  attr :rest, :global, include: ~w(autocomplete autofocus disabled maxlength minlength pattern)
-
-  def input(assigns) do
-    value =
-      case assigns.type do
-        "password" -> nil
-        _other -> assigns.field.value
-      end
-
-    errors =
-      if Phoenix.Component.used_input?(assigns.field),
-        do: assigns.field.errors,
-        else: []
-
-    assigns = assigns |> assign(:value, value) |> assign(:errors, errors)
-
-    ~H"""
-    <div class="fieldset mb-3">
-      <label>
-        <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
-        <%= if @type == "select" do %>
-          <select
-            id={@field.id}
-            name={@field.name}
-            required={@required}
-            class={["w-full select", @errors != [] && "select-error", @class]}
-            {@rest}
-          >
-            <option :if={@placeholder} value="">{@placeholder}</option>
-            <option
-              :for={{label, option_value} <- @options}
-              value={option_value}
-              selected={to_string(@value) == to_string(option_value)}
-            >
-              {label}
-            </option>
-          </select>
-        <% else %>
-          <input
-            id={@field.id}
-            name={@field.name}
-            type={@type}
-            value={@value}
-            placeholder={@placeholder}
-            required={@required}
-            class={["w-full input", @errors != [] && "input-error", @class]}
-            {@rest}
-          />
-        <% end %>
-      </label>
-      <p :for={{msg, _opts} <- @errors} class="mt-1.5 text-sm text-error">
-        {msg}
-      </p>
-    </div>
     """
   end
 
@@ -119,7 +55,7 @@ defmodule CadenceWeb.CoreComponents do
 
   @doc """
   Renders a colored status indicator dot. Same vocabulary as `status_badge/1`
-  in `CadenceWeb.CommsComponents` — denser visual for tight layouts.
+  in `CadenceWeb.Components.Badges` — denser visual for tight layouts.
 
   ## Examples
 
@@ -200,7 +136,7 @@ defmodule CadenceWeb.CoreComponents do
         action_navigate={~p"/admin/organizations/new"}
       />
   """
-  attr :icon, :string, required: true
+  attr :icon, :string, default: nil
   attr :title, :string, required: true
   attr :description, :string, default: nil
   attr :action_label, :string, default: nil
@@ -210,67 +146,20 @@ defmodule CadenceWeb.CoreComponents do
   def empty_state(assigns) do
     ~H"""
     <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
-      <span class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
-      <p class="hud-label mt-3 text-base-content/60">{@title}</p>
+      <span :if={@icon} class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
+      <p class={["hud-label text-base-content/60", @icon && "mt-3"]}>{@title}</p>
       <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/60">
         {@description}
       </p>
       <div :if={@action_label} class="mt-5">
-        <.link
-          navigate={@action_navigate}
-          patch={@action_patch}
-          class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-        >
+        <.button navigate={@action_navigate} patch={@action_patch}>
           <span class="hero-plus -ml-0.5 mr-1 h-4 w-4"></span>
           {@action_label}
-        </.link>
+        </.button>
       </div>
     </div>
     """
   end
-
-  @doc """
-  Renders an inline severity badge with a status dot, optional count, and label.
-
-  ## Examples
-
-      <.severity_badge severity={:critical} count={3} />
-      <.severity_badge severity={:warning} count={12} />
-      <.severity_badge severity={:info} />
-  """
-  attr :severity, :atom, required: true, values: [:critical, :warning, :info, :nominal]
-  attr :count, :integer, default: nil
-  attr :label, :string, default: nil
-  attr :class, :string, default: nil
-
-  def severity_badge(assigns) do
-    assigns =
-      assign_new(assigns, :resolved_label, fn ->
-        assigns.label || severity_label(assigns.severity)
-      end)
-
-    ~H"""
-    <span class={[
-      "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-      severity_badge_class(@severity),
-      @class
-    ]}>
-      <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
-      <span :if={@count} class="font-mono">{@count}</span>
-      <span class="uppercase text-[0.65rem]">{@resolved_label}</span>
-    </span>
-    """
-  end
-
-  defp severity_badge_class(:critical), do: "bg-error/20 text-error"
-  defp severity_badge_class(:warning), do: "bg-warning/20 text-warning"
-  defp severity_badge_class(:info), do: "bg-info/20 text-info"
-  defp severity_badge_class(:nominal), do: "bg-success/20 text-success"
-
-  defp severity_label(:critical), do: "CRIT"
-  defp severity_label(:warning), do: "WARN"
-  defp severity_label(:info), do: "INFO"
-  defp severity_label(:nominal), do: "NOM"
 
   @doc """
   Renders a panel/section header bar with an uppercase label and optional right-side controls.

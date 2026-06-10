@@ -44,20 +44,6 @@ defmodule CadenceWeb.CommsComponents do
   defp readiness_accent(:blocked), do: "border-l-2 border-l-error/60"
   defp readiness_accent(_), do: "border-l-2 border-l-transparent"
 
-  attr :status, :atom, required: true
-  attr :label, :string, default: nil
-
-  def status_badge(assigns) do
-    ~H"""
-    <span class={[
-      "inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
-      status_class(@status)
-    ]}>
-      {@label || status_label(@status)}
-    </span>
-    """
-  end
-
   def display_name(%{metadata: metadata} = resource, fallback_field)
       when is_map(metadata) and is_atom(fallback_field) do
     Map.get(metadata, "display_name") ||
