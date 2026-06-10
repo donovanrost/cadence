@@ -18,6 +18,7 @@
     </.link>
   </div>
   <.form for={%{}} as={:session} action={~p"/session"} method="delete" class="w-full">
+    <%!-- Sign-out chrome matches the sidebar rail treatment; needs too many class overrides for <.button>. --%>
     <button type="submit" class="btn btn-ghost btn-sm w-full gap-2 text-xs uppercase tracking-wide">
       <span class="hero-arrow-right-start-on-rectangle h-4 w-4 opacity-80"></span>
       Sign out

@@ -24,63 +24,54 @@
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div class="card bg-base-200">
-      <div class="card-body p-4">
-        <p class="hud-label">Organization</p>
-        <p class="font-semibold">
-          <%= if @organization do %>
-            {@organization.display_name}
-          <% else %>
-            Unavailable
-          <% end %>
-        </p>
-        <p class="text-sm text-base-content/60">
-          <%= if @organization do %>
-            Slug: {@organization.slug}
-          <% else %>
-            Cadence could not resolve the invitation target from this link.
-          <% end %>
-        </p>
-      </div>
-    </div>
+    <.card title="Organization">
+      <p class="font-semibold">
+        <%= if @organization do %>
+          {@organization.display_name}
+        <% else %>
+          Unavailable
+        <% end %>
+      </p>
+      <p class="text-sm text-base-content/60">
+        <%= if @organization do %>
+          Slug: {@organization.slug}
+        <% else %>
+          Cadence could not resolve the invitation target from this link.
+        <% end %>
+      </p>
+    </.card>
 
-    <div class="card bg-base-200">
-      <div class="card-body p-4">
-        <p class="hud-label">Email</p>
-        <p class="font-semibold">
-          <%= if @invitation do %>
-            {@invitation.email}
-          <% else %>
-            Unavailable
-          <% end %>
-        </p>
-        <p class="text-sm text-base-content/60">
-          This invitation is bound to a specific email address and establishes the durable user
-          identity for that operator.
-        </p>
-      </div>
-    </div>
+    <.card title="Email">
+      <p class="font-semibold">
+        <%= if @invitation do %>
+          {@invitation.email}
+        <% else %>
+          Unavailable
+        <% end %>
+      </p>
+      <p class="text-sm text-base-content/60">
+        This invitation is bound to a specific email address and establishes the durable user
+        identity for that operator.
+      </p>
+    </.card>
 
-    <div class="card bg-base-200">
-      <div class="card-body p-4">
-        <p class="hud-label">Access</p>
-        <p class="font-semibold">
-          <%= if @invitation do %>
-            {Phoenix.Naming.humanize(@invitation.membership_role)}
-          <% else %>
-            Pending new invitation
-          <% end %>
-        </p>
-        <p class="text-sm text-base-content/60">
-          <%= if @invitation do %>
-            Platform Admin:
-            {if(@invitation.grant_platform_admin, do: " Yes", else: " No")}
-          <% else %>
-            The original invitation details are no longer available from this link.
-          <% end %>
-        </p>
-      </div>
-    </div>
+    <.card title="Access">
+      <p class="font-semibold">
+        <%= if @invitation do %>
+          {Phoenix.Naming.humanize(@invitation.membership_role)}
+        <% else %>
+          Pending new invitation
+        <% end %>
+      </p>
+      <p class="text-sm text-base-content/60">
+        <%= if @invitation do %>
+          Platform Admin:
+          {if(@invitation.grant_platform_admin, do: " Yes", else: " No")}
+        <% else %>
+          The original invitation details are no longer available from this link.
+        <% end %>
+      </p>
+    </.card>
   </div>
 
   <%= if @invitation_available? do %>
@@ -116,7 +107,7 @@
       />
 
       <div class="flex items-center justify-between gap-4 flex-wrap">
-        <button type="submit" class="btn btn-primary">Accept Invitation</button>
+        <.button type="submit" size={:md}>Accept Invitation</.button>
         <p class="text-sm text-base-content/50">
           Passwords must be at least 12 characters. Accepting this invitation signs you into the
           durable operator session immediately.
