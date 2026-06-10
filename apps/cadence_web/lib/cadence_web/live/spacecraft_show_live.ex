@@ -84,27 +84,23 @@ defmodule CadenceWeb.SpacecraftShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title={@current_spacecraft.display_name}
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name, nil}
-        ]} />
-        <div class="mt-2 flex items-baseline gap-3">
-          <h1 class="text-2xl font-bold text-base-content tracking-tight">
-            {@current_spacecraft.display_name}
-          </h1>
+        ]}
+      >
+        <:title_suffix>
           <span :if={@current_spacecraft.scid} class="mc-value-small text-primary/80">
             SCID {@current_spacecraft.scid}
           </span>
-          <span
-            :if={is_nil(@current_spacecraft.scid)}
-            class="hud-label text-warning/70"
-          >
+          <span :if={is_nil(@current_spacecraft.scid)} class="hud-label text-warning/70">
             SCID not set
           </span>
-        </div>
-      </div>
+        </:title_suffix>
+      </.page_header>
 
       <.type_binding_card
         mission_id={@current_mission.mission_id}
@@ -155,48 +151,50 @@ defmodule CadenceWeb.SpacecraftShowLive do
         />
       </section>
 
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6 space-y-3">
-          <p class="hud-label">Overview</p>
-          <div class="grid gap-x-8 gap-y-1 md:grid-cols-2">
-            <div class="hud-data-row">
-              <span class="hud-data-label">SCID</span>
-              <span class="hud-data-value">{format_scid(@current_spacecraft.scid)}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Display name</span>
-              <span class="hud-data-value">{@current_spacecraft.display_name}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Spacecraft ID</span>
-              <span class="hud-data-value text-xs">{@current_spacecraft.spacecraft_id}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Mission</span>
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}"}
-                class="hud-data-value text-primary hover:underline"
-              >
-                {@current_mission.display_name}
-              </.link>
-            </div>
-            <div class="hud-data-row md:col-span-2">
-              <span class="hud-data-label">Organization ID</span>
-              <span class="hud-data-value text-xs">{@current_spacecraft.organization_id}</span>
-            </div>
-          </div>
-
-          <div :if={map_size(@current_spacecraft.metadata) > 0} class="pt-2">
-            <details class="text-sm">
-              <summary class="cursor-pointer hud-label text-base-content/50 hover:text-primary">
-                Metadata
-              </summary>
-              <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{Jason.encode!(@current_spacecraft.metadata, pretty: true)}</pre>
-            </details>
-          </div>
-        </div>
-      </section>
+      <.overview_card
+        current_spacecraft={@current_spacecraft}
+        current_mission={@current_mission}
+      />
     </div>
+    """
+  end
+
+  attr :current_spacecraft, :any, required: true
+  attr :current_mission, :any, required: true
+
+  defp overview_card(assigns) do
+    ~H"""
+    <.card title="Overview">
+      <div class="mt-3 grid gap-x-8 gap-y-1 md:grid-cols-2">
+        <.detail_row label="SCID" value={format_scid(@current_spacecraft.scid)} />
+        <.detail_row label="Display name" value={@current_spacecraft.display_name} />
+        <.detail_row label="Spacecraft ID">
+          <span class="text-xs">{@current_spacecraft.spacecraft_id}</span>
+        </.detail_row>
+        <div class="hud-data-row">
+          <span class="hud-data-label">Mission</span>
+          <.link
+            navigate={~p"/missions/#{@current_mission.mission_id}"}
+            class="hud-data-value text-primary hover:underline"
+          >
+            {@current_mission.display_name}
+          </.link>
+        </div>
+        <div class="hud-data-row md:col-span-2">
+          <span class="hud-data-label">Organization ID</span>
+          <span class="hud-data-value text-xs">{@current_spacecraft.organization_id}</span>
+        </div>
+      </div>
+
+      <div :if={map_size(@current_spacecraft.metadata) > 0} class="pt-2">
+        <details class="text-sm">
+          <summary class="cursor-pointer hud-label text-base-content/50 hover:text-primary">
+            Metadata
+          </summary>
+          <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{Jason.encode!(@current_spacecraft.metadata, pretty: true)}</pre>
+        </details>
+      </div>
+    </.card>
     """
   end
 
@@ -210,36 +208,28 @@ defmodule CadenceWeb.SpacecraftShowLive do
 
   defp workflow_card(assigns) do
     ~H"""
-    <div
-      id={@id}
-      class={[
-        "card bg-base-200 border border-base-300",
-        workflow_accent(@status)
-      ]}
-    >
-      <div class="card-body p-5">
-        <div class="flex items-start justify-between gap-3">
-          <p class="hud-label">{@title}</p>
-          <.status_badge status={@status} />
-        </div>
-        <h2 class="mt-3 text-base font-semibold">{@value}</h2>
-        <p class="mt-2 text-sm text-base-content/60">{@description}</p>
-        <.link
-          :if={@navigate}
-          navigate={@navigate}
-          class="mt-4 inline-flex text-sm text-primary hover:underline"
-        >
-          {@action_label} &rarr;
-        </.link>
+    <.card id={@id} accent={workflow_accent(@status)}>
+      <div class="flex items-start justify-between gap-3">
+        <p class="hud-label">{@title}</p>
+        <.status_badge status={@status} />
       </div>
-    </div>
+      <h2 class="mt-3 text-base font-semibold">{@value}</h2>
+      <p class="mt-2 text-sm text-base-content/60">{@description}</p>
+      <.link
+        :if={@navigate}
+        navigate={@navigate}
+        class="mt-4 inline-flex text-sm text-primary hover:underline"
+      >
+        {@action_label} &rarr;
+      </.link>
+    </.card>
     """
   end
 
-  defp workflow_accent(:ready), do: "border-l-2 border-l-success/60"
-  defp workflow_accent(:attention), do: "border-l-2 border-l-warning/60"
-  defp workflow_accent(:blocked), do: "border-l-2 border-l-error/60"
-  defp workflow_accent(_), do: "border-l-2 border-l-transparent"
+  defp workflow_accent(:ready), do: :success
+  defp workflow_accent(:attention), do: :warning
+  defp workflow_accent(:blocked), do: :error
+  defp workflow_accent(_), do: nil
 
   defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
   defp identity_status(_spacecraft, nil), do: :attention

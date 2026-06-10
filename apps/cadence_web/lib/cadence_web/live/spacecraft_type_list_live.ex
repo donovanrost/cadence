@@ -23,90 +23,65 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-end justify-between gap-4 border-b border-primary/20 pb-4">
-        <div>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}"}
-            class="hud-label text-base-content/50 hover:text-primary"
+      <.page_header
+        title="Spacecraft Profiles"
+        subtitle="Reusable byte-interpretation contracts for spacecraft that share bus protocols, frame parameters, and platform applications."
+        back_label={@current_mission.display_name}
+        back_navigate={~p"/missions/#{@current_mission.mission_id}"}
+      >
+        <:title_suffix>{@spacecraft_profile_count} defined</:title_suffix>
+        <:actions>
+          <.button
+            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
+            class="gap-1"
           >
-            &larr; {@current_mission.display_name}
-          </.link>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-            Spacecraft Profiles
-            <span class="ml-3 font-mono text-base text-base-content/40">
-              {@spacecraft_profile_count} defined
-            </span>
-          </h1>
-          <p class="mt-1 max-w-2xl text-sm text-base-content/60">
-            Reusable byte-interpretation contracts for spacecraft that share bus protocols, frame parameters, and platform applications.
-          </p>
-        </div>
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
-          class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
-        >
-          <.icon name="hero-plus" class="h-4 w-4" /> New Profile
-        </.link>
-      </div>
+            <.icon name="hero-plus" class="h-4 w-4" /> New Profile
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @spacecraft_profiles_empty? do %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <div class="card-body p-8 text-center">
-            <p class="hud-label mb-3 text-base-content/60">No profiles yet</p>
-            <p class="text-sm text-base-content/60 max-w-md mx-auto">
-              Define a profile to capture the protocol stack and applications shared by a set of spacecraft.
-            </p>
-            <div class="mt-5">
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
-                class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-              >
-                Create the first profile
-              </.link>
-            </div>
-          </div>
-        </div>
+        <.empty_state
+          title="No profiles yet"
+          description="Define a profile to capture the protocol stack and applications shared by a set of spacecraft."
+          action_label="Create the first profile"
+          action_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
+        />
       <% else %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <table class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Name</th>
-                <th class="hud-label">Version</th>
-                <th class="hud-label">Downlink</th>
-                <th class="hud-label">Uplink</th>
-                <th class="hud-label">Applications</th>
-                <th class="hud-label text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="spacecraft-profiles" phx-update="stream">
-              <tr
-                :for={{id, profile} <- @streams.spacecraft_profiles}
-                id={id}
-                class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
-              >
-                <td class="font-medium">{profile.display_name}</td>
-                <td class="font-mono text-sm text-base-content/70">v{profile.version}</td>
-                <td class="font-mono text-sm uppercase text-primary/80">{profile.downlink_protocol}</td>
-                <td class="font-mono text-sm uppercase text-primary/80">{profile.uplink_protocol}</td>
-                <td class="text-sm text-base-content/70">
-                  {applications_summary(profile.applications)}
-                </td>
-                <td class="text-right">
-                  <.action_menu>
-                    <:action>
-                      <.link navigate={
-                        ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-                      }>
-                        View
-                      </.link>
-                    </:action>
-                  </.action_menu>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <.card padding={:none}>
+          <.table
+            id="spacecraft-profiles-table"
+            body_id="spacecraft-profiles"
+            rows={@streams.spacecraft_profiles}
+          >
+            <:col :let={profile} label="Name" class="font-medium">
+              {profile.display_name}
+            </:col>
+            <:col :let={profile} label="Version" mono class="text-base-content/70">
+              v{profile.version}
+            </:col>
+            <:col :let={profile} label="Downlink" mono class="uppercase text-primary/80">
+              {profile.downlink_protocol}
+            </:col>
+            <:col :let={profile} label="Uplink" mono class="uppercase text-primary/80">
+              {profile.uplink_protocol}
+            </:col>
+            <:col :let={profile} label="Applications" class="text-sm text-base-content/70">
+              {applications_summary(profile.applications)}
+            </:col>
+            <:col :let={profile} label="Actions" align={:right}>
+              <.action_menu>
+                <:action>
+                  <.link navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+                  }>
+                    View
+                  </.link>
+                </:action>
+              </.action_menu>
+            </:col>
+          </.table>
+        </.card>
       <% end %>
     </div>
     """

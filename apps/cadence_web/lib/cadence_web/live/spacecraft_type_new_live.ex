@@ -62,21 +62,12 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-profile-new-page" class="space-y-6 max-w-2xl">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Spacecraft Profiles
-        </.link>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-          New Spacecraft Profile
-        </h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          Captures the byte-interpretation contract shared across spacecraft of the same kind &mdash;
-          downlink and uplink protocols, frame parameters, and which platform applications run.
-        </p>
-      </div>
+      <.page_header
+        title="New Spacecraft Profile"
+        subtitle="Captures the byte-interpretation contract shared across spacecraft of the same kind — downlink and uplink protocols, frame parameters, and which platform applications run."
+        back_label="Spacecraft Profiles"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
+      />
 
       <.form
         for={@form}
@@ -86,20 +77,12 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
         class="space-y-8"
       >
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">01</span>
-            <h2 class="hud-label">Identity</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="01" title="Identity" />
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
         </section>
 
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">02</span>
-            <h2 class="hud-label">Data Link Protocols</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="02" title="Data Link Protocols" />
           <.input
             field={@form[:downlink_protocol]}
             type="select"
@@ -116,112 +99,134 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           />
         </section>
 
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">03</span>
-            <h2 class="hud-label">Downlink Frame Parameters</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <p class="text-sm text-base-content/60">
-            How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol.
-          </p>
+        <.frame_parameters_section form={@form} />
 
-          <.input
-            field={@form[:frame_size]}
-            type="number"
-            label="Transfer Frame Size (bytes)"
-            required
-          />
-
-          <.input
-            :if={frame_field_visible?(@form, :secondary_header_length)}
-            field={@form[:secondary_header_length]}
-            type="number"
-            label="Secondary Header Length (bytes, 0 if absent)"
-          />
-
-          <.input
-            :if={frame_field_visible?(@form, :insert_zone_length)}
-            field={@form[:insert_zone_length]}
-            type="number"
-            label="Insert Zone Length (bytes, 0 if absent)"
-          />
-
-          <.input
-            :if={frame_field_visible?(@form, :truncated_primary_header)}
-            field={@form[:truncated_primary_header]}
-            type="select"
-            label="Truncated Primary Header"
-            options={[{"No", "false"}, {"Yes", "true"}]}
-          />
-
-          <.input
-            field={@form[:ocf_length]}
-            type="select"
-            label="Operational Control Field"
-            options={[{"Not present", "0"}, {"Present (4 bytes)", "4"}]}
-          />
-        </section>
-
-        <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">04</span>
-            <h2 class="hud-label">Applications</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
-          <p class="text-sm text-base-content/60">
-            Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft.
-          </p>
-
-          <div class="space-y-3">
-            <label
-              :for={app <- @applications}
-              class={[
-                "flex items-start gap-3 rounded border p-3 transition-colors",
-                if(app.available?,
-                  do:
-                    "border-base-300 bg-base-100/40 border-l-2 border-l-primary/40 hover:border-l-primary cursor-pointer",
-                  else: "border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed"
-                )
-              ]}
-            >
-              <input
-                type="checkbox"
-                name={"spacecraft_type[applications][#{app.key}]"}
-                value="1"
-                checked={application_checked?(@form, app.key)}
-                disabled={not app.available?}
-                class="checkbox checkbox-primary mt-0.5"
-              />
-              <div>
-                <div class="font-medium text-base-content">
-                  {app.display_name}
-                  <span
-                    :if={not app.available?}
-                    class="hud-label ml-2 text-base-content/40"
-                  >
-                    Roadmap
-                  </span>
-                </div>
-                <p class="mt-0.5 text-sm text-base-content/60">{app.description}</p>
-              </div>
-            </label>
-          </div>
-        </section>
+        <.applications_section form={@form} applications={@applications} />
 
         <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+          <.button type="submit" size={:md}>
             Create Profile
-          </button>
-          <.link
+          </.button>
+          <.button
+            variant={:ghost}
+            size={:md}
             navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-            class="btn btn-ghost"
           >
             Cancel
-          </.link>
+          </.button>
         </div>
       </.form>
     </div>
+    """
+  end
+
+  attr :number, :string, required: true
+  attr :title, :string, required: true
+
+  defp section_heading(assigns) do
+    ~H"""
+    <div class="flex items-center gap-3">
+      <span class="hud-label text-primary/70">{@number}</span>
+      <h2 class="hud-label">{@title}</h2>
+      <div class="flex-1 h-px bg-base-300/60"></div>
+    </div>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp frame_parameters_section(assigns) do
+    ~H"""
+    <section class="space-y-4">
+      <.section_heading number="03" title="Downlink Frame Parameters" />
+      <p class="text-sm text-base-content/60">
+        How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol.
+      </p>
+
+      <.input
+        field={@form[:frame_size]}
+        type="number"
+        label="Transfer Frame Size (bytes)"
+        required
+      />
+
+      <.input
+        :if={frame_field_visible?(@form, :secondary_header_length)}
+        field={@form[:secondary_header_length]}
+        type="number"
+        label="Secondary Header Length (bytes, 0 if absent)"
+      />
+
+      <.input
+        :if={frame_field_visible?(@form, :insert_zone_length)}
+        field={@form[:insert_zone_length]}
+        type="number"
+        label="Insert Zone Length (bytes, 0 if absent)"
+      />
+
+      <.input
+        :if={frame_field_visible?(@form, :truncated_primary_header)}
+        field={@form[:truncated_primary_header]}
+        type="select"
+        label="Truncated Primary Header"
+        options={[{"No", "false"}, {"Yes", "true"}]}
+      />
+
+      <.input
+        field={@form[:ocf_length]}
+        type="select"
+        label="Operational Control Field"
+        options={[{"Not present", "0"}, {"Present (4 bytes)", "4"}]}
+      />
+    </section>
+    """
+  end
+
+  attr :form, Phoenix.HTML.Form, required: true
+  attr :applications, :list, required: true
+
+  defp applications_section(assigns) do
+    ~H"""
+    <section class="space-y-4">
+      <.section_heading number="04" title="Applications" />
+      <p class="text-sm text-base-content/60">
+        Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft.
+      </p>
+
+      <div class="space-y-3">
+        <%!-- bespoke layout: selectable application cards with a raw checkbox (dynamic
+        name/checked/disabled that <.input> does not support) --%>
+        <label
+          :for={app <- @applications}
+          class={[
+            "flex items-start gap-3 rounded border p-3 transition-colors",
+            if(app.available?,
+              do:
+                "border-base-300 bg-base-100/40 border-l-2 border-l-primary/40 hover:border-l-primary cursor-pointer",
+              else: "border-base-300/50 bg-base-100/20 opacity-50 cursor-not-allowed"
+            )
+          ]}
+        >
+          <input
+            type="checkbox"
+            name={"spacecraft_type[applications][#{app.key}]"}
+            value="1"
+            checked={application_checked?(@form, app.key)}
+            disabled={not app.available?}
+            class="checkbox checkbox-primary mt-0.5"
+          />
+          <div>
+            <div class="font-medium text-base-content">
+              {app.display_name}
+              <span :if={not app.available?} class="hud-label ml-2 text-base-content/40">
+                Roadmap
+              </span>
+            </div>
+            <p class="mt-0.5 text-sm text-base-content/60">{app.description}</p>
+          </div>
+        </label>
+      </div>
+    </section>
     """
   end
 

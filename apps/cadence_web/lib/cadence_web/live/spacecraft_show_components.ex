@@ -12,78 +12,90 @@ defmodule CadenceWeb.SpacecraftShowComponents do
 
   def type_binding_card(assigns) do
     ~H"""
-    <section
-      id="spacecraft-profile-binding"
-      class={[
-        "card bg-base-200 border border-base-300 hud-corners",
-        type_binding_accent(@type_binding)
-      ]}
-    >
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div class="space-y-2">
-            <p class="hud-label">Spacecraft Profile</p>
-            <%= if @type_binding do %>
-              <div class="flex items-baseline gap-3">
-                <h2 class="text-lg font-semibold">{@type_binding.pinned.display_name}</h2>
-                <span class="mc-value-small text-primary/80">v{@type_binding.pinned.version}</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                <span class="hud-label text-base-content/40">DOWN</span>
-                <span class="font-mono uppercase text-primary/80">
-                  {@type_binding.pinned.downlink_protocol}
-                </span>
-                <span class="text-base-content/30">·</span>
-                <span class="hud-label text-base-content/40">UP</span>
-                <span class="font-mono uppercase text-primary/80">
-                  {@type_binding.pinned.uplink_protocol}
-                </span>
-              </div>
-            <% else %>
-              <h2 class="text-lg font-semibold text-base-content/70">No profile selected</h2>
-              <p class="text-sm text-base-content/60">
-                Select a spacecraft profile to pin a reusable byte-interpretation contract.
-              </p>
-            <% end %>
-          </div>
-          <%= cond do %>
-            <% is_nil(@type_binding) -> %>
-              <.status_badge status={:attention} label="Unbound" />
-            <% @type_binding.drift? -> %>
-              <.status_badge
-                status={:attention}
-                label={"Drift · latest v#{@type_binding.latest_version}"}
-              />
-            <% true -> %>
-              <.status_badge status={:ready} label="Current" />
-          <% end %>
+    <.card id="spacecraft-profile-binding" accent={type_binding_accent(@type_binding)}>
+      <div class="flex items-start justify-between gap-4">
+        <div class="space-y-2">
+          <p class="hud-label">Spacecraft Profile</p>
+          <.type_binding_summary type_binding={@type_binding} />
         </div>
-
-        <div class="mt-5 flex gap-4 text-sm border-t border-base-300/50 pt-4">
-          <.link
-            :if={@type_binding}
-            navigate={
-              ~p"/missions/#{@mission_id}/spacecraft/profiles/#{@type_binding.pinned.spacecraft_type_id}"
-            }
-            class="text-primary hover:underline"
-          >
-            View profile &rarr;
-          </.link>
-          <.link
-            navigate={~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/identity"}
-            class="text-primary hover:underline"
-          >
-            {if @type_binding, do: "Change profile", else: "Select profile"}
-          </.link>
-        </div>
+        <.type_binding_badge type_binding={@type_binding} />
       </div>
-    </section>
+
+      <div class="mt-5 flex gap-4 text-sm border-t border-base-300/50 pt-4">
+        <.link
+          :if={@type_binding}
+          navigate={
+            ~p"/missions/#{@mission_id}/spacecraft/profiles/#{@type_binding.pinned.spacecraft_type_id}"
+          }
+          class="text-primary hover:underline"
+        >
+          View profile &rarr;
+        </.link>
+        <.link
+          navigate={~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/identity"}
+          class="text-primary hover:underline"
+        >
+          {if @type_binding, do: "Change profile", else: "Select profile"}
+        </.link>
+      </div>
+    </.card>
     """
   end
 
-  defp type_binding_accent(nil), do: "border-l-2 border-l-warning/60"
-  defp type_binding_accent(%{drift?: true}), do: "border-l-2 border-l-warning/60"
-  defp type_binding_accent(_), do: "border-l-2 border-l-success/60"
+  attr :type_binding, :any, required: true
+
+  defp type_binding_summary(%{type_binding: nil} = assigns) do
+    ~H"""
+    <h2 class="text-lg font-semibold text-base-content/70">No profile selected</h2>
+    <p class="text-sm text-base-content/60">
+      Select a spacecraft profile to pin a reusable byte-interpretation contract.
+    </p>
+    """
+  end
+
+  defp type_binding_summary(assigns) do
+    ~H"""
+    <div class="flex items-baseline gap-3">
+      <h2 class="text-lg font-semibold">{@type_binding.pinned.display_name}</h2>
+      <span class="mc-value-small text-primary/80">v{@type_binding.pinned.version}</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      <span class="hud-label text-base-content/40">DOWN</span>
+      <span class="font-mono uppercase text-primary/80">
+        {@type_binding.pinned.downlink_protocol}
+      </span>
+      <span class="text-base-content/30">·</span>
+      <span class="hud-label text-base-content/40">UP</span>
+      <span class="font-mono uppercase text-primary/80">
+        {@type_binding.pinned.uplink_protocol}
+      </span>
+    </div>
+    """
+  end
+
+  attr :type_binding, :any, required: true
+
+  defp type_binding_badge(%{type_binding: nil} = assigns) do
+    ~H"""
+    <.status_badge status={:attention} label="Unbound" />
+    """
+  end
+
+  defp type_binding_badge(%{type_binding: %{drift?: true}} = assigns) do
+    ~H"""
+    <.status_badge status={:attention} label={"Drift · latest v#{@type_binding.latest_version}"} />
+    """
+  end
+
+  defp type_binding_badge(assigns) do
+    ~H"""
+    <.status_badge status={:ready} label="Current" />
+    """
+  end
+
+  defp type_binding_accent(nil), do: :warning
+  defp type_binding_accent(%{drift?: true}), do: :warning
+  defp type_binding_accent(_), do: :success
 
   attr :type_binding, :any, required: true
   attr :telemetry_decom_status, :atom, required: true
@@ -92,9 +104,8 @@ defmodule CadenceWeb.SpacecraftShowComponents do
 
   def applications_card(assigns) do
     ~H"""
-    <section :if={@type_binding} id="spacecraft-applications" class="card bg-base-200">
-      <div class="card-body p-6 space-y-3">
-        <p class="hud-label">Applications</p>
+    <.card :if={@type_binding} id="spacecraft-applications" title="Applications">
+      <div class="mt-3 space-y-3">
         <p class="text-sm text-base-content/60">
           Platform applications enabled by this spacecraft's profile. Per-application configuration is set per spacecraft.
         </p>
@@ -131,7 +142,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
           View applications &rarr;
         </.link>
       </div>
-    </section>
+    </.card>
     """
   end
 

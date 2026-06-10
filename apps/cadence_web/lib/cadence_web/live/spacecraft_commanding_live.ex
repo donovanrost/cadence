@@ -16,26 +16,22 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-commanding-page" class="space-y-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <.breadcrumbs items={[
-            {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-            {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-            {@current_spacecraft.display_name,
-             ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-            {"Commanding", nil}
-          ]} />
-          <p class="hud-label mt-3 mb-2">Command Interpretation</p>
-          <h1 class="text-2xl font-bold text-base-content">
-            Commanding for {@current_spacecraft.display_name}
-          </h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            Spacecraft-owned command interpretation will collect command encoding,
-            TC frame defaults, and uplink behavior once command setup is exposed.
-          </p>
-        </div>
-        <.status_badge status={:info} label="Not tracked" />
-      </div>
+      <.page_header
+        title={"Commanding for #{@current_spacecraft.display_name}"}
+        subtitle="Spacecraft-owned command interpretation will collect command encoding, TC frame defaults, and uplink behavior once command setup is exposed."
+        eyebrow="Command Interpretation"
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {@current_spacecraft.display_name,
+           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
+          {"Commanding", nil}
+        ]}
+      >
+        <:actions>
+          <.status_badge status={:info} label="Not tracked" />
+        </:actions>
+      </.page_header>
 
       <section class="grid gap-4 lg:grid-cols-3">
         <.command_panel
@@ -58,22 +54,20 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
         />
       </section>
 
-      <section class="card bg-base-200 border border-base-300">
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="hud-label mb-2">Readiness Impact</p>
-              <h2 class="text-lg font-semibold">Command interpretation is not part of readiness yet</h2>
-              <p class="mt-1 text-sm text-base-content/60">
-                This page keeps the spacecraft-owned command surface visible while command
-                setup matures. Current readiness still focuses on identity, telemetry
-                interpretation, and link assignment.
-              </p>
-            </div>
-            <.status_badge status={:info} label="Placeholder" />
+      <.card>
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="hud-label mb-2">Readiness Impact</p>
+            <h2 class="text-lg font-semibold">Command interpretation is not part of readiness yet</h2>
+            <p class="mt-1 text-sm text-base-content/60">
+              This page keeps the spacecraft-owned command surface visible while command
+              setup matures. Current readiness still focuses on identity, telemetry
+              interpretation, and link assignment.
+            </p>
           </div>
+          <.status_badge status={:info} label="Placeholder" />
         </div>
-      </section>
+      </.card>
     </div>
     """
   end
@@ -87,25 +81,23 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
 
   defp command_panel(assigns) do
     ~H"""
-    <section id={@id} class="card bg-base-200 border border-base-300">
-      <div class="card-body p-5">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <p class="hud-label mb-2">{@title}</p>
-            <h2 class="text-base font-semibold">{@value}</h2>
-          </div>
-          <.status_badge status={:info} label="Setup" />
+    <.card id={@id}>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="hud-label mb-2">{@title}</p>
+          <h2 class="text-base font-semibold">{@value}</h2>
         </div>
-        <p class="mt-3 text-sm text-base-content/60">{@description}</p>
-        <.link
-          :if={@action_navigate}
-          navigate={@action_navigate}
-          class="mt-4 text-sm text-primary hover:underline"
-        >
-          {@action_label}
-        </.link>
+        <.status_badge status={:info} label="Setup" />
       </div>
-    </section>
+      <p class="mt-3 text-sm text-base-content/60">{@description}</p>
+      <.link
+        :if={@action_navigate}
+        navigate={@action_navigate}
+        class="mt-4 text-sm text-primary hover:underline"
+      >
+        {@action_label}
+      </.link>
+    </.card>
     """
   end
 end

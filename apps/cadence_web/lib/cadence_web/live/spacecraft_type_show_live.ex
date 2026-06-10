@@ -35,101 +35,102 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Spacecraft Profiles
-        </.link>
-        <div class="mt-2 flex items-baseline gap-3">
-          <h1 class="text-2xl font-bold text-base-content tracking-tight">
-            {@profile.display_name}
-          </h1>
+      <.page_header
+        title={@profile.display_name}
+        back_label="Spacecraft Profiles"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
+      >
+        <:title_suffix>
           <span class="mc-value-medium text-primary/80">v{@profile.version}</span>
           <span class="hud-label text-base-content/40">{@profile.lifecycle_state}</span>
-        </div>
+        </:title_suffix>
+      </.page_header>
+
+      <.byte_interpretation_card profile={@profile} />
+
+      <.applications_card profile={@profile} />
+
+      <.version_history versions={@versions} />
+    </div>
+    """
+  end
+
+  attr :profile, :any, required: true
+
+  defp byte_interpretation_card(assigns) do
+    ~H"""
+    <.card title="Byte Interpretation">
+      <div class="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
+        <.detail_row label="Downlink Protocol">
+          <span class="uppercase">{@profile.downlink_protocol}</span>
+        </.detail_row>
+        <.detail_row label="Uplink Protocol">
+          <span class="uppercase">{@profile.uplink_protocol}</span>
+        </.detail_row>
+        <.detail_row label="Packet Protocol" value={to_string(@profile.packet_protocol)} />
+        <.detail_row label="Lifecycle" value={to_string(@profile.lifecycle_state)} />
       </div>
 
-      <section class="card bg-base-200 border border-base-300 hud-corners">
-        <div class="card-body space-y-5 p-6">
-          <p class="hud-label">Byte Interpretation</p>
-
-          <div class="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <div class="hud-data-row">
-              <span class="hud-data-label">Downlink Protocol</span>
-              <span class="hud-data-value uppercase">{@profile.downlink_protocol}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Uplink Protocol</span>
-              <span class="hud-data-value uppercase">{@profile.uplink_protocol}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Packet Protocol</span>
-              <span class="hud-data-value">{@profile.packet_protocol}</span>
-            </div>
-            <div class="hud-data-row">
-              <span class="hud-data-label">Lifecycle</span>
-              <span class="hud-data-value">{@profile.lifecycle_state}</span>
-            </div>
-          </div>
-
-          <div :if={map_size(@profile.frame_parameters) > 0}>
-            <div class="hud-divider"></div>
-            <p class="hud-label mb-3">Frame Parameters</p>
-            <div class="grid gap-x-8 gap-y-1 md:grid-cols-2">
-              <div :for={{key, value} <- Enum.sort(@profile.frame_parameters)} class="hud-data-row">
-                <span class="hud-data-label">{humanize(key)}</span>
-                <span class="hud-data-value">{format_value(value)}</span>
-              </div>
-            </div>
-          </div>
+      <div :if={map_size(@profile.frame_parameters) > 0} class="mt-5">
+        <div class="hud-divider"></div>
+        <p class="hud-label mb-3">Frame Parameters</p>
+        <div class="grid gap-x-8 gap-y-1 md:grid-cols-2">
+          <.detail_row
+            :for={{key, value} <- Enum.sort(@profile.frame_parameters)}
+            label={humanize(key)}
+            value={format_value(value)}
+          />
         </div>
-      </section>
+      </div>
+    </.card>
+    """
+  end
 
-      <section class="card bg-base-200 border border-base-300 hud-corners">
-        <div class="card-body space-y-4 p-6">
-          <p class="hud-label">Applications</p>
-          <%= if map_size(@profile.applications) > 0 do %>
-            <ul class="space-y-2">
-              <li
-                :for={{key, _config} <- Enum.sort(@profile.applications)}
-                class="flex items-center gap-3 rounded border border-base-300 bg-base-100/40 p-3 text-sm border-l-2 border-l-primary/60"
-              >
-                <.icon name="hero-bolt" class="h-4 w-4 text-primary/70" />
-                <span class="font-medium">{humanize(key)}</span>
-              </li>
-            </ul>
-          <% else %>
-            <p class="text-sm text-base-content/40 italic">No applications enabled.</p>
-          <% end %>
-        </div>
-      </section>
+  attr :profile, :any, required: true
 
-      <section :if={length(@versions) > 1} class="card bg-base-200 border border-base-300">
-        <div class="card-body space-y-3 p-6">
-          <p class="hud-label">Version History</p>
-          <table class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Version</th>
-                <th class="hud-label">Lifecycle</th>
-                <th class="hud-label">Downlink</th>
-                <th class="hud-label">Uplink</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={version <- @versions}>
-                <td class="font-mono">v{version.version}</td>
-                <td class="font-mono text-base-content/60">{version.lifecycle_state}</td>
-                <td class="font-mono uppercase text-primary/80">{version.downlink_protocol}</td>
-                <td class="font-mono uppercase text-primary/80">{version.uplink_protocol}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+  defp applications_card(assigns) do
+    ~H"""
+    <.card title="Applications">
+      <%= if map_size(@profile.applications) > 0 do %>
+        <ul class="mt-4 space-y-2">
+          <li
+            :for={{key, _config} <- Enum.sort(@profile.applications)}
+            class="flex items-center gap-3 rounded border border-base-300 bg-base-100/40 p-3 text-sm border-l-2 border-l-primary/60"
+          >
+            <.icon name="hero-bolt" class="h-4 w-4 text-primary/70" />
+            <span class="font-medium">{humanize(key)}</span>
+          </li>
+        </ul>
+      <% else %>
+        <p class="mt-4 text-sm text-base-content/40 italic">No applications enabled.</p>
+      <% end %>
+    </.card>
+    """
+  end
+
+  attr :versions, :list, required: true
+
+  defp version_history(assigns) do
+    ~H"""
+    <.card :if={length(@versions) > 1} title="Version History">
+      <.table
+        id="spacecraft-profile-version-history"
+        rows={@versions}
+        row_accent={false}
+        class="mt-3"
+      >
+        <:col :let={version} label="Version" mono>v{version.version}</:col>
+        <:col :let={version} label="Lifecycle" mono class="text-base-content/60">
+          {version.lifecycle_state}
+        </:col>
+        <:col :let={version} label="Downlink" mono class="uppercase text-primary/80">
+          {version.downlink_protocol}
+        </:col>
+        <:col :let={version} label="Uplink" mono class="uppercase text-primary/80">
+          {version.uplink_protocol}
+        </:col>
+      </.table>
+    </.card>
     """
   end
 

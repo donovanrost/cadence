@@ -37,234 +37,164 @@ defmodule CadenceWeb.SpacecraftListLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-management-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <div>
-          <.link
-            navigate={~p"/missions/#{@current_mission.mission_id}"}
-            class="hud-label text-base-content/50 hover:text-primary"
-          >
-            &larr; {@current_mission.display_name}
-          </.link>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-            Spacecraft
-          </h1>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/60">
-            Manage mission spacecraft identities and reusable spacecraft profiles.
-          </p>
-        </div>
-      </div>
+      <.page_header
+        title="Spacecraft"
+        subtitle="Manage mission spacecraft identities and reusable spacecraft profiles."
+        back_label={@current_mission.display_name}
+        back_navigate={~p"/missions/#{@current_mission.mission_id}"}
+      />
 
       <div id="spacecraft-setup-summary" class="grid gap-3 md:grid-cols-4">
-        <.summary_tile label="Vehicles" value={@spacecraft_count} />
-        <.summary_tile label="Profiles" value={@profile_count} />
-        <.summary_tile label="Missing profile" value={@missing_profile_count} />
-        <.summary_tile label="Profile drift" value={@profile_drift_count} />
+        <.stat_tile label="Vehicles" value={@spacecraft_count} />
+        <.stat_tile label="Profiles" value={@profile_count} />
+        <.stat_tile label="Missing profile" value={@missing_profile_count} />
+        <.stat_tile label="Profile drift" value={@profile_drift_count} />
       </div>
 
-      <section id="spacecraft-vehicles-card" class="card bg-base-200 hud-corners border border-base-300">
-        <div class="card-body p-0">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
-            <div>
-              <h2 class="text-base font-semibold text-base-content">Vehicles</h2>
-              <p class="mt-1 text-xs text-base-content/60">
-                {@spacecraft_count} total · {@missing_profile_count} missing profile
-              </p>
-            </div>
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
-              class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
+      <.card
+        id="spacecraft-vehicles-card"
+        heading="Vehicles"
+        subtitle={"#{@spacecraft_count} total · #{@missing_profile_count} missing profile"}
+        padding={if @spacecraft_empty?, do: :default, else: :none}
+      >
+        <:actions>
+          <.button
+            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
+            class="gap-1"
+          >
+            <.icon name="hero-plus" class="h-4 w-4" /> New spacecraft
+          </.button>
+        </:actions>
+
+        <%= if @spacecraft_empty? do %>
+          <.empty_state
+            title="No spacecraft yet"
+            description="Register the first spacecraft for this mission."
+            action_label="Register the first spacecraft"
+            action_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
+          />
+        <% else %>
+          <.table
+            id="spacecraft-vehicles-table"
+            body_id="spacecraft-vehicles"
+            rows={@streams.spacecraft}
+          >
+            <:col :let={spacecraft} label="Name" class="font-medium">
+              {spacecraft.display_name}
+            </:col>
+            <:col :let={spacecraft} label="SCID" mono>
+              <span class={
+                if(spacecraft.scid, do: "text-primary/80", else: "text-base-content/40 italic")
+              }>
+                {spacecraft.scid || "Not set"}
+              </span>
+            </:col>
+            <:col :let={spacecraft} label="Profile" class="text-sm text-base-content/70">
+              {profile_label(spacecraft, @profiles_by_id)}
+            </:col>
+            <:col :let={spacecraft} label="Applications" class="text-sm text-base-content/70">
+              {spacecraft_applications_label(spacecraft, @profiles_by_id)}
+            </:col>
+            <:col :let={spacecraft} label="Setup">
+              <.status_badge
+                status={setup_status(spacecraft, @profiles_by_id)}
+                label={setup_status_label(spacecraft, @profiles_by_id)}
+              />
+            </:col>
+            <:col :let={spacecraft} label="Actions" align={:right}>
+              <.action_menu>
+                <:action>
+                  <.link navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+                  }>
+                    View
+                  </.link>
+                </:action>
+                <:action>
+                  <.link navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
+                  }>
+                    Identity
+                  </.link>
+                </:action>
+              </.action_menu>
+            </:col>
+          </.table>
+        <% end %>
+      </.card>
+
+      <.card
+        id="spacecraft-profiles-card"
+        heading="Profiles"
+        subtitle={"#{@profile_count} total · #{@profile_drift_count} drift warning"}
+        padding={if @profiles_empty?, do: :default, else: :none}
+      >
+        <:actions>
+          <.button
+            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
+            class="gap-1"
+          >
+            <.icon name="hero-plus" class="h-4 w-4" /> New profile
+          </.button>
+        </:actions>
+
+        <%= if @profiles_empty? do %>
+          <.empty_state
+            title="No profiles yet"
+            description="Create a profile to reuse frame and packet interpretation settings across spacecraft."
+            action_label="Create the first profile"
+            action_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
+          />
+        <% else %>
+          <.table
+            id="spacecraft-profiles-preview-table"
+            body_id="spacecraft-profile-previews"
+            rows={@streams.spacecraft_profiles}
+          >
+            <:col :let={profile} label="Name" class="font-medium">
+              {profile.display_name}
+            </:col>
+            <:col :let={profile} label="Version" mono class="text-base-content/70">
+              v{profile.version}
+            </:col>
+            <:col :let={profile} label="Protocols" mono class="uppercase text-primary/80">
+              {profile.downlink_protocol} / {profile.uplink_protocol}
+            </:col>
+            <:col :let={profile} label="Packet" mono class="text-base-content/70">
+              {human_atom(profile.packet_protocol)}
+            </:col>
+            <:col :let={profile} label="Applications" class="text-sm text-base-content/70">
+              {applications_summary(profile.applications)}
+            </:col>
+            <:col :let={profile} label="Used by" mono class="text-base-content/70">
+              {profile_usage_count(profile, @profile_usage_counts)}
+            </:col>
+            <:col :let={profile} label="State">
+              <.status_badge status={profile_status(profile)} label={profile_status_label(profile)} />
+            </:col>
+            <:col :let={profile} label="Actions" align={:right}>
+              <.action_menu>
+                <:action>
+                  <.link navigate={
+                    ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+                  }>
+                    View
+                  </.link>
+                </:action>
+              </.action_menu>
+            </:col>
+          </.table>
+
+          <div :if={@profiles_truncated?} class="border-t border-base-300 px-4 py-3 text-right">
+            <.button
+              variant={:ghost}
+              navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
             >
-              <.icon name="hero-plus" class="h-4 w-4" /> New spacecraft
-            </.link>
+              View all profiles
+            </.button>
           </div>
-
-          <%= if @spacecraft_empty? do %>
-            <div class="p-8 text-center">
-              <p class="hud-label mb-3 text-base-content/60">No spacecraft yet</p>
-              <p class="mx-auto max-w-md text-sm text-base-content/60">
-                Register the first spacecraft for this mission.
-              </p>
-              <div class="mt-5">
-                <.link
-                  navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
-                  class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-                >
-                  Register the first spacecraft
-                </.link>
-              </div>
-            </div>
-          <% else %>
-            <table id="spacecraft-vehicles-table" class="table">
-              <thead>
-                <tr>
-                  <th class="hud-label">Name</th>
-                  <th class="hud-label">SCID</th>
-                  <th class="hud-label">Profile</th>
-                  <th class="hud-label">Applications</th>
-                  <th class="hud-label">Setup</th>
-                  <th class="hud-label text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="spacecraft-vehicles" phx-update="stream">
-                <tr
-                  :for={{id, spacecraft} <- @streams.spacecraft}
-                  id={id}
-                  class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
-                >
-                  <td class="font-medium">{spacecraft.display_name}</td>
-                  <td class={[
-                    "font-mono text-sm",
-                    if(spacecraft.scid, do: "text-primary/80", else: "text-base-content/40 italic")
-                  ]}>
-                    {spacecraft.scid || "Not set"}
-                  </td>
-                  <td class="text-sm text-base-content/70">
-                    {profile_label(spacecraft, @profiles_by_id)}
-                  </td>
-                  <td class="text-sm text-base-content/70">
-                    {spacecraft_applications_label(spacecraft, @profiles_by_id)}
-                  </td>
-                  <td>
-                    <.status_badge
-                      status={setup_status(spacecraft, @profiles_by_id)}
-                      label={setup_status_label(spacecraft, @profiles_by_id)}
-                    />
-                  </td>
-                  <td class="text-right">
-                    <.action_menu>
-                      <:action>
-                        <.link navigate={
-                          ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
-                        }>
-                          View
-                        </.link>
-                      </:action>
-                      <:action>
-                        <.link navigate={
-                          ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
-                        }>
-                          Identity
-                        </.link>
-                      </:action>
-                    </.action_menu>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          <% end %>
-        </div>
-      </section>
-
-      <section id="spacecraft-profiles-card" class="card bg-base-200 hud-corners border border-base-300">
-        <div class="card-body p-0">
-          <div class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3">
-            <div>
-              <h2 class="text-base font-semibold text-base-content">Profiles</h2>
-              <p class="mt-1 text-xs text-base-content/60">
-                {@profile_count} total · {@profile_drift_count} drift warning
-              </p>
-            </div>
-            <.link
-              navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
-              class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
-            >
-              <.icon name="hero-plus" class="h-4 w-4" /> New profile
-            </.link>
-          </div>
-
-          <%= if @profiles_empty? do %>
-            <div class="p-8 text-center">
-              <p class="hud-label mb-3 text-base-content/60">No profiles yet</p>
-              <p class="mx-auto max-w-md text-sm text-base-content/60">
-                Create a profile to reuse frame and packet interpretation settings across spacecraft.
-              </p>
-              <div class="mt-5">
-                <.link
-                  navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}
-                  class="btn btn-primary btn-sm hover-glow-cyan transition-glow"
-                >
-                  Create the first profile
-                </.link>
-              </div>
-            </div>
-          <% else %>
-            <table id="spacecraft-profiles-preview-table" class="table">
-              <thead>
-                <tr>
-                  <th class="hud-label">Name</th>
-                  <th class="hud-label">Version</th>
-                  <th class="hud-label">Protocols</th>
-                  <th class="hud-label">Packet</th>
-                  <th class="hud-label">Applications</th>
-                  <th class="hud-label">Used by</th>
-                  <th class="hud-label">State</th>
-                  <th class="hud-label text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="spacecraft-profile-previews" phx-update="stream">
-                <tr
-                  :for={{id, profile} <- @streams.spacecraft_profiles}
-                  id={id}
-                  class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
-                >
-                  <td class="font-medium">{profile.display_name}</td>
-                  <td class="font-mono text-sm text-base-content/70">v{profile.version}</td>
-                  <td class="font-mono text-sm uppercase text-primary/80">
-                    {profile.downlink_protocol} / {profile.uplink_protocol}
-                  </td>
-                  <td class="font-mono text-sm text-base-content/70">
-                    {human_atom(profile.packet_protocol)}
-                  </td>
-                  <td class="text-sm text-base-content/70">
-                    {applications_summary(profile.applications)}
-                  </td>
-                  <td class="font-mono text-sm text-base-content/70">
-                    {profile_usage_count(profile, @profile_usage_counts)}
-                  </td>
-                  <td>
-                    <.status_badge status={profile_status(profile)} label={profile_status_label(profile)} />
-                  </td>
-                  <td class="text-right">
-                    <.action_menu>
-                      <:action>
-                        <.link navigate={
-                          ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-                        }>
-                          View
-                        </.link>
-                      </:action>
-                    </.action_menu>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div
-              :if={@profiles_truncated?}
-              class="border-t border-base-300 px-4 py-3 text-right"
-            >
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-                class="btn btn-ghost btn-sm"
-              >
-                View all profiles
-              </.link>
-            </div>
-          <% end %>
-        </div>
-      </section>
-    </div>
-    """
-  end
-
-  attr :label, :string, required: true
-  attr :value, :integer, required: true
-
-  defp summary_tile(assigns) do
-    ~H"""
-    <div class="border border-base-300 bg-base-200 px-3 py-2 hud-corners">
-      <p class="hud-label text-base-content/50">{@label}</p>
-      <p class="mt-1 font-mono text-xl text-base-content">{@value}</p>
+        <% end %>
+      </.card>
     </div>
     """
   end

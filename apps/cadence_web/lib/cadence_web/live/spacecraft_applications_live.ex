@@ -27,77 +27,64 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-applications-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title="Applications"
+        subtitle="Spacecraft-scoped application setup for packet claims and runtime publication."
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name,
            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
           {"Applications", nil}
-        ]} />
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">
-              Applications
-            </h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              Spacecraft-scoped application setup for packet claims and runtime publication.
-            </p>
-          </div>
-          <.link
+        ]}
+      >
+        <:actions>
+          <.button
+            variant={:ghost}
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/readiness"
             }
-            class="btn btn-ghost btn-sm"
           >
             Readiness
-          </.link>
-        </div>
-      </div>
+          </.button>
+        </:actions>
+      </.page_header>
 
-      <section
+      <.card
         :if={is_nil(@type_binding)}
         id="spacecraft-applications-no-profile"
-        class="card bg-base-200 border border-base-300 border-l-2 border-l-warning/60"
+        title="Spacecraft Profile"
+        accent={:warning}
       >
-        <div class="card-body p-6">
-          <p class="hud-label">Spacecraft Profile</p>
-          <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
-          <p class="mt-1 text-sm text-base-content/60">
-            Select a Spacecraft Profile before configuring application packet claims.
-          </p>
-          <.link
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
-            }
-            class="btn btn-primary btn-sm mt-5"
-          >
-            Select profile
-          </.link>
-        </div>
-      </section>
+        <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
+        <p class="mt-1 text-sm text-base-content/60">
+          Select a Spacecraft Profile before configuring application packet claims.
+        </p>
+        <.button
+          navigate={
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/identity"
+          }
+          class="mt-5"
+        >
+          Select profile
+        </.button>
+      </.card>
 
-      <section
-        :if={@type_binding}
-        id="spacecraft-applications-profile"
-        class="card bg-base-200 border border-base-300"
-      >
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="hud-label">Pinned Profile</p>
-              <h2 class="mt-2 text-base font-semibold">
-                {@type_binding.pinned.display_name}
-                <span class="mc-value-small text-primary/70">v{@type_binding.pinned.version}</span>
-              </h2>
-            </div>
-            <.status_badge
-              status={if(@type_binding.drift?, do: :attention, else: :ready)}
-              label={if(@type_binding.drift?, do: "Profile drift", else: "Current")}
-            />
+      <.card :if={@type_binding} id="spacecraft-applications-profile">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="hud-label">Pinned Profile</p>
+            <h2 class="mt-2 text-base font-semibold">
+              {@type_binding.pinned.display_name}
+              <span class="mc-value-small text-primary/70">v{@type_binding.pinned.version}</span>
+            </h2>
           </div>
+          <.status_badge
+            status={if(@type_binding.drift?, do: :attention, else: :ready)}
+            label={if(@type_binding.drift?, do: "Profile drift", else: "Current")}
+          />
         </div>
-      </section>
+      </.card>
 
       <section
         :if={@type_binding}
@@ -121,46 +108,32 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   defp application_card(assigns) do
     ~H"""
-    <section
-      id={"spacecraft-application-#{@app.key}"}
-      class={[
-        "card bg-base-200 border border-base-300",
-        application_accent(@app.status)
-      ]}
-    >
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label">Application</p>
-            <h2 class="mt-2 text-base font-semibold">{@app.display_name}</h2>
-          </div>
-          <.status_badge status={panel_status(@app.status)} label={@app.status_label} />
+    <.card id={"spacecraft-application-#{@app.key}"} accent={application_accent(@app.status)}>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label">Application</p>
+          <h2 class="mt-2 text-base font-semibold">{@app.display_name}</h2>
         </div>
-        <p class="mt-3 text-sm text-base-content/60">{@app.description}</p>
-        <div class="mt-5 space-y-1">
-          <div class="hud-data-row">
-            <span class="hud-data-label">Packet claims</span>
-            <span class="hud-data-value">{@app.claims_label}</span>
-          </div>
-          <div class="hud-data-row">
-            <span class="hud-data-label">Publication</span>
-            <span class="hud-data-value">{@app.publication_label}</span>
-          </div>
-        </div>
-        <.link
-          :if={@app.available?}
-          navigate={
-            ~p"/missions/#{@mission.mission_id}/spacecraft/#{@spacecraft.spacecraft_id}/applications/#{@app.key}"
-          }
-          class="btn btn-primary btn-sm mt-5"
-        >
-          Manage
-        </.link>
-        <p :if={not @app.available?} class="mt-5 text-xs text-base-content/50">
-          Not available yet.
-        </p>
+        <.status_badge status={panel_status(@app.status)} label={@app.status_label} />
       </div>
-    </section>
+      <p class="mt-3 text-sm text-base-content/60">{@app.description}</p>
+      <div class="mt-5 space-y-1">
+        <.detail_row label="Packet claims" value={@app.claims_label} />
+        <.detail_row label="Publication" value={@app.publication_label} />
+      </div>
+      <.button
+        :if={@app.available?}
+        navigate={
+          ~p"/missions/#{@mission.mission_id}/spacecraft/#{@spacecraft.spacecraft_id}/applications/#{@app.key}"
+        }
+        class="mt-5"
+      >
+        Manage
+      </.button>
+      <p :if={not @app.available?} class="mt-5 text-xs text-base-content/50">
+        Not available yet.
+      </p>
+    </.card>
     """
   end
 
@@ -259,11 +232,11 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
     TelemetryDecom.status(config, active)
   end
 
-  defp application_accent(:applied), do: "border-l-2 border-l-success/60"
-  defp application_accent(:configured), do: "border-l-2 border-l-warning/60"
-  defp application_accent(:outdated), do: "border-l-2 border-l-warning/60"
-  defp application_accent(:disabled), do: "border-l-2 border-l-error/60"
-  defp application_accent(_status), do: "border-l-2 border-l-transparent"
+  defp application_accent(:applied), do: :success
+  defp application_accent(:configured), do: :warning
+  defp application_accent(:outdated), do: :warning
+  defp application_accent(:disabled), do: :error
+  defp application_accent(_status), do: nil
 
   defp panel_status(:applied), do: :ready
   defp panel_status(:configured), do: :attention

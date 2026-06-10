@@ -81,21 +81,17 @@ defmodule CadenceWeb.SpacecraftEditLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6 max-w-xl">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title="Spacecraft Identity"
+        subtitle="SCID identifies this spacecraft. The optional profile pins its byte-interpretation contract."
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name,
            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
           {"Identity", nil}
-        ]} />
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-          Spacecraft Identity
-        </h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          SCID identifies this spacecraft. The optional profile pins its byte-interpretation contract.
-        </p>
-      </div>
+        ]}
+      />
 
       <.form
         for={@form}
@@ -105,21 +101,13 @@ defmodule CadenceWeb.SpacecraftEditLive do
         class="space-y-8"
       >
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">01</span>
-            <h2 class="hud-label">Identity</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="01" title="Identity" />
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
           <.input field={@form[:scid]} type="text" label="SCID" />
         </section>
 
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">02</span>
-            <h2 class="hud-label">Profile</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="02" title="Profile" />
           <.input
             field={@form[:spacecraft_type_id]}
             type="select"
@@ -129,19 +117,33 @@ defmodule CadenceWeb.SpacecraftEditLive do
         </section>
 
         <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+          <.button type="submit" size={:md}>
             Save Identity
-          </button>
-          <.link
+          </.button>
+          <.button
+            variant={:ghost}
+            size={:md}
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
             }
-            class="btn btn-ghost"
           >
             Cancel
-          </.link>
+          </.button>
         </div>
       </.form>
+    </div>
+    """
+  end
+
+  attr :number, :string, required: true
+  attr :title, :string, required: true
+
+  defp section_heading(assigns) do
+    ~H"""
+    <div class="flex items-center gap-3">
+      <span class="hud-label text-primary/70">{@number}</span>
+      <h2 class="hud-label">{@title}</h2>
+      <div class="flex-1 h-px bg-base-300/60"></div>
     </div>
     """
   end

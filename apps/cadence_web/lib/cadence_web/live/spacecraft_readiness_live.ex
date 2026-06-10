@@ -24,29 +24,24 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-readiness-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title="Readiness"
+        subtitle="Identity, profile, and application setup for this spacecraft."
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name,
            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
           {"Readiness", nil}
-        ]} />
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">
-              Readiness &middot;
-              <span class="text-base-content/40 font-normal">
-                {@current_spacecraft.display_name}
-              </span>
-            </h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              Identity, profile, and application setup for this spacecraft.
-            </p>
-          </div>
-          <.status_badge status={overall_status(@current_spacecraft, @telemetry_status, @type_binding)} />
-        </div>
-      </div>
+        ]}
+      >
+        <:title_suffix>&middot; {@current_spacecraft.display_name}</:title_suffix>
+        <:actions>
+          <.status_badge status={
+            overall_status(@current_spacecraft, @telemetry_status, @type_binding)
+          } />
+        </:actions>
+      </.page_header>
 
       <div class="grid gap-4 xl:grid-cols-2">
         <.readiness_panel
@@ -124,44 +119,29 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
 
   defp readiness_panel(assigns) do
     ~H"""
-    <section
-      id={@id}
-      class={[
-        "card bg-base-200 border border-base-300",
-        readiness_panel_accent(@status)
-      ]}
-    >
-      <div class="card-body p-6">
-        <div class="flex items-start justify-between gap-4">
-          <p class="hud-label">{@title}</p>
-          <.status_badge status={@status} label={@status_label} />
-        </div>
-        <h2 class="mt-3 text-base font-semibold">{@status_label}</h2>
-        <p class="mt-1 text-sm text-base-content/60">{@description}</p>
-
-        <div class="mt-5 space-y-1">
-          <div :for={detail <- @detail} class="hud-data-row">
-            <span class="hud-data-label">{detail.label}</span>
-            <span class="hud-data-value">{detail.value}</span>
-          </div>
-        </div>
-
-        <.link
-          :if={@action_navigate}
-          navigate={@action_navigate}
-          class="btn btn-primary btn-sm mt-5 hover-glow-cyan transition-glow"
-        >
-          {@action_label}
-        </.link>
+    <.card id={@id} accent={readiness_panel_accent(@status)}>
+      <div class="flex items-start justify-between gap-4">
+        <p class="hud-label">{@title}</p>
+        <.status_badge status={@status} label={@status_label} />
       </div>
-    </section>
+      <h2 class="mt-3 text-base font-semibold">{@status_label}</h2>
+      <p class="mt-1 text-sm text-base-content/60">{@description}</p>
+
+      <div class="mt-5 space-y-1">
+        <.detail_row :for={detail <- @detail} label={detail.label} value={detail.value} />
+      </div>
+
+      <.button :if={@action_navigate} navigate={@action_navigate} class="mt-5">
+        {@action_label}
+      </.button>
+    </.card>
     """
   end
 
-  defp readiness_panel_accent(:ready), do: "border-l-2 border-l-success/60"
-  defp readiness_panel_accent(:attention), do: "border-l-2 border-l-warning/60"
-  defp readiness_panel_accent(:blocked), do: "border-l-2 border-l-error/60"
-  defp readiness_panel_accent(_), do: "border-l-2 border-l-transparent"
+  defp readiness_panel_accent(:ready), do: :success
+  defp readiness_panel_accent(:attention), do: :warning
+  defp readiness_panel_accent(:blocked), do: :error
+  defp readiness_panel_accent(_), do: nil
 
   defp telemetry_status(organization_id, mission_id, spacecraft) do
     config =

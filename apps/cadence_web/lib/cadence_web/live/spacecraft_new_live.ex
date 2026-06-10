@@ -85,20 +85,12 @@ defmodule CadenceWeb.SpacecraftNewLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-new-page" class="space-y-6 max-w-xl">
-      <div class="border-b border-primary/20 pb-4">
-        <.link
-          navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-          class="hud-label text-base-content/50 hover:text-primary"
-        >
-          &larr; Spacecraft
-        </.link>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-          New Spacecraft
-        </h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract.
-        </p>
-      </div>
+      <.page_header
+        title="New Spacecraft"
+        subtitle="Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract."
+        back_label="Spacecraft"
+        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+      />
 
       <.form
         for={@form}
@@ -108,21 +100,13 @@ defmodule CadenceWeb.SpacecraftNewLive do
         class="space-y-8"
       >
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">01</span>
-            <h2 class="hud-label">Identity</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="01" title="Identity" />
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
           <.input field={@form[:scid]} type="text" label="SCID" />
         </section>
 
         <section class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="hud-label text-primary/70">02</span>
-            <h2 class="hud-label">Profile</h2>
-            <div class="flex-1 h-px bg-base-300/60"></div>
-          </div>
+          <.section_heading number="02" title="Profile" />
           <.input
             field={@form[:spacecraft_type_id]}
             type="select"
@@ -142,17 +126,31 @@ defmodule CadenceWeb.SpacecraftNewLive do
         </section>
 
         <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <button type="submit" class="btn btn-primary hover-glow-cyan transition-glow">
+          <.button type="submit" size={:md}>
             Create Spacecraft
-          </button>
-          <.link
+          </.button>
+          <.button
+            variant={:ghost}
+            size={:md}
             navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-            class="btn btn-ghost"
           >
             Cancel
-          </.link>
+          </.button>
         </div>
       </.form>
+    </div>
+    """
+  end
+
+  attr :number, :string, required: true
+  attr :title, :string, required: true
+
+  defp section_heading(assigns) do
+    ~H"""
+    <div class="flex items-center gap-3">
+      <span class="hud-label text-primary/70">{@number}</span>
+      <h2 class="hud-label">{@title}</h2>
+      <div class="flex-1 h-px bg-base-300/60"></div>
     </div>
     """
   end

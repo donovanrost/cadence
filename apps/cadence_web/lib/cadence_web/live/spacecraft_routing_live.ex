@@ -34,45 +34,37 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
   def render(assigns) do
     ~H"""
     <div id="spacecraft-routing-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <.breadcrumbs items={[
+      <.page_header
+        title="Comms Routing"
+        subtitle="Durable routing rules that describe how this spacecraft uses mission transports."
+        breadcrumbs={[
           {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
           {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
           {@current_spacecraft.display_name,
            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
           {"Routing", nil}
-        ]} />
-        <div class="mt-2 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">
-              Comms Routing
-            </h1>
-            <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-              Durable routing rules that describe how this spacecraft uses mission transports.
-            </p>
-          </div>
-          <.link
+        ]}
+      >
+        <:actions>
+          <.button
             id="new-spacecraft-routing-rule-link"
             navigate={
               ~p"/missions/#{@current_mission.mission_id}/comms/routing/new?spacecraft_id=#{@current_spacecraft.spacecraft_id}"
             }
-            class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
+            class="gap-1"
           >
             <.icon name="hero-plus" class="h-4 w-4" /> New Routing Rule
-          </.link>
-        </div>
-      </div>
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @routing_rules_empty? do %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
-          <div class="card-body p-8 text-center">
-            <p class="hud-label mb-3 text-base-content/60">No routing rules</p>
-            <p class="text-sm text-base-content/60 max-w-md mx-auto">
-              Create a routing rule to declare how this spacecraft should use a transport.
-            </p>
-          </div>
-        </div>
+        <.empty_state
+          title="No routing rules"
+          description="Create a routing rule to declare how this spacecraft should use a transport."
+        />
       <% else %>
+        <%!-- bespoke layout: stream of link-cards (the whole card is the navigation target) --%>
         <div id="spacecraft-routing-rules" phx-update="stream" class="grid gap-3 md:grid-cols-2">
           <.link
             :for={{id, rule} <- @streams.routing_rules}

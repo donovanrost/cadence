@@ -47,7 +47,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
 
       page_header =
         view
-        |> element("#spacecraft-management-page > div:first-child")
+        |> element("#spacecraft-management-page > header:first-child")
         |> render()
 
       refute page_header =~ "New spacecraft"
