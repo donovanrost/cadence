@@ -21,10 +21,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <h1 class="text-2xl font-bold text-base-content">{@organization.display_name}</h1>
-        <p class="mt-1 text-sm text-base-content/50 font-mono">{@organization.slug}</p>
-      </div>
+      <.page_header title={@organization.display_name} subtitle={@organization.slug} />
 
       <div id="organization-stats" class="grid gap-4 md:grid-cols-3">
         <.stat_card id="organization-stat-missions" label="Missions" value={@mission_count} />
@@ -32,46 +29,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
         <.stat_card id="organization-stat-members" label="Members" value={@member_count} />
       </div>
 
-      <section id="organization-recent-missions" class="card bg-base-200">
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="hud-label mb-2">Recent Missions</p>
-              <h2 class="text-lg font-semibold">Jump into a mission</h2>
-            </div>
-            <.link navigate={~p"/missions"} class="btn btn-ghost btn-sm">
-              All missions
-            </.link>
-          </div>
-
-          <%= if @recent_missions == [] do %>
-            <div class="mt-6">
-              <.empty_state
-                icon="hero-rocket-launch"
-                title="No missions yet"
-                description="Create your first mission to get started."
-                action_label="New Mission"
-                action_navigate={~p"/missions/new"}
-              />
-            </div>
-          <% else %>
-            <ul class="mt-5 divide-y divide-base-300">
-              <li :for={summary <- @recent_missions} class="py-3">
-                <.link
-                  navigate={~p"/missions/#{summary.mission.mission_id}"}
-                  class="flex items-center justify-between gap-4 hover:text-primary"
-                >
-                  <div>
-                    <p class="font-medium">{summary.mission.display_name}</p>
-                    <p class="font-mono text-xs text-base-content/50">{summary.mission.slug}</p>
-                  </div>
-                  <.status_badge status={summary.status} label={summary.status_label} />
-                </.link>
-              </li>
-            </ul>
-          <% end %>
-        </div>
-      </section>
+      <.recent_missions_card recent_missions={@recent_missions} />
     </div>
     """
   end
@@ -82,12 +40,55 @@ defmodule CadenceWeb.OrganizationHomeLive do
 
   defp stat_card(assigns) do
     ~H"""
-    <div id={@id} class="card bg-base-200 hover-glow-cyan transition-glow">
-      <div class="card-body p-5">
-        <p class="hud-label">{@label}</p>
-        <p class="mt-2 font-mono text-3xl font-bold">{@value}</p>
+    <.card id={@id} hover_glow>
+      <p class="hud-label">{@label}</p>
+      <p class="mt-2 font-mono text-3xl font-bold">{@value}</p>
+    </.card>
+    """
+  end
+
+  attr :recent_missions, :list, required: true
+
+  defp recent_missions_card(assigns) do
+    ~H"""
+    <.card id="organization-recent-missions">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label mb-2">Recent Missions</p>
+          <h2 class="text-lg font-semibold">Jump into a mission</h2>
+        </div>
+        <.button variant={:ghost} navigate={~p"/missions"}>
+          All missions
+        </.button>
       </div>
-    </div>
+
+      <%= if @recent_missions == [] do %>
+        <div class="mt-6">
+          <.empty_state
+            icon="hero-rocket-launch"
+            title="No missions yet"
+            description="Create your first mission to get started."
+            action_label="New Mission"
+            action_navigate={~p"/missions/new"}
+          />
+        </div>
+      <% else %>
+        <ul class="mt-5 divide-y divide-base-300">
+          <li :for={summary <- @recent_missions} class="py-3">
+            <.link
+              navigate={~p"/missions/#{summary.mission.mission_id}"}
+              class="flex items-center justify-between gap-4 hover:text-primary"
+            >
+              <div>
+                <p class="font-medium">{summary.mission.display_name}</p>
+                <p class="font-mono text-xs text-base-content/50">{summary.mission.slug}</p>
+              </div>
+              <.status_badge status={summary.status} label={summary.status_label} />
+            </.link>
+          </li>
+        </ul>
+      <% end %>
+    </.card>
     """
   end
 

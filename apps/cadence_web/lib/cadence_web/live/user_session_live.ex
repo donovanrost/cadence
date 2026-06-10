@@ -21,6 +21,7 @@ defmodule CadenceWeb.UserSessionLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-4">
+      <%!-- Bespoke header: centered auth-layout branding, not a <.page_header> page. --%>
       <div class="text-center">
         <p class="text-primary tracking-[0.15em] text-sm font-semibold">
           &#9670; CADENCE
@@ -55,9 +56,9 @@ defmodule CadenceWeb.UserSessionLive do
           autocomplete="current-password"
         />
 
-        <button type="submit" class="btn btn-primary w-full mt-2">
+        <.button type="submit" size={:md} class="w-full mt-2">
           Sign In
-        </button>
+        </.button>
 
         <p class="mt-3 text-center text-xs text-base-content/60">
           Need access? Contact your organization admin.

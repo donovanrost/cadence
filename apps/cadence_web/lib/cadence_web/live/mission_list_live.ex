@@ -20,23 +20,14 @@ defmodule CadenceWeb.MissionListLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div class="flex items-end justify-between gap-4 border-b border-primary/20 pb-4">
-        <div>
-          <p class="hud-label text-base-content/50">Organization</p>
-          <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-            Missions
-            <span class="ml-3 font-mono text-base text-base-content/40">
-              {length(@mission_rows)} configured
-            </span>
-          </h1>
-        </div>
-        <.link
-          navigate={~p"/missions/new"}
-          class="btn btn-primary btn-sm gap-1 hover-glow-cyan transition-glow"
-        >
-          <span class="hero-plus h-4 w-4"></span> New Mission
-        </.link>
-      </div>
+      <.page_header title="Missions" eyebrow="Organization">
+        <:title_suffix>{length(@mission_rows)} configured</:title_suffix>
+        <:actions>
+          <.button navigate={~p"/missions/new"} class="gap-1">
+            <span class="hero-plus h-4 w-4"></span> New Mission
+          </.button>
+        </:actions>
+      </.page_header>
 
       <%= if @mission_rows == [] do %>
         <.empty_state
@@ -47,7 +38,8 @@ defmodule CadenceWeb.MissionListLive do
           action_navigate={~p"/missions/new"}
         />
       <% else %>
-        <div class="card bg-base-200 hud-corners border border-base-300">
+        <.card padding={:none}>
+          <%!-- Bespoke table: whole-row phx-click navigation isn't supported by <.table>. --%>
           <table id="mission-list-table" class="table">
             <thead>
               <tr>
@@ -73,7 +65,7 @@ defmodule CadenceWeb.MissionListLive do
               </tr>
             </tbody>
           </table>
-        </div>
+        </.card>
       <% end %>
     </div>
     """

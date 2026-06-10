@@ -85,19 +85,13 @@ defmodule CadenceWeb.NotificationsLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-4 max-w-2xl mx-auto">
-      <div>
-        <h1 class="text-2xl font-bold text-base-content">Notifications</h1>
-        <p class="mt-1 text-sm text-base-content/50">
-          Invitations, access grants, and system notices.
-        </p>
-      </div>
+      <.page_header
+        title="Notifications"
+        subtitle="Invitations, access grants, and system notices."
+      />
 
       <%= if @notifications == [] do %>
-        <div class="text-center py-12 border border-dashed border-base-300 rounded-sm bg-base-200/30">
-          <span class="hero-bell mx-auto h-12 w-12 text-base-content/30"></span>
-          <h3 class="mt-2 text-sm font-semibold text-base-content">No notifications</h3>
-          <p class="mt-1 text-sm text-base-content/60">All caught up.</p>
-        </div>
+        <.empty_state icon="hero-bell" title="No notifications" description="All caught up." />
       <% else %>
         <div class="space-y-2">
           <.notification_card :for={n <- @notifications} notification={n} />
@@ -111,6 +105,7 @@ defmodule CadenceWeb.NotificationsLive do
 
   defp notification_card(assigns) do
     ~H"""
+    <%!-- Bespoke card: read/unread state drives the left accent, beyond <.card> accents. --%>
     <div class={[
       "card bg-base-200 border-l-2 transition-all",
       if(is_nil(@notification.read_at), do: "border-l-primary", else: "border-l-base-300")
@@ -131,37 +126,44 @@ defmodule CadenceWeb.NotificationsLive do
           </p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <%= case @notification.kind do %>
-            <% :organization_invitation -> %>
-              <button
-                :if={is_nil(@notification.read_at)}
-                type="button"
-                class="btn btn-primary btn-xs"
-                phx-click="accept_invitation"
-                phx-value-notification_id={@notification.notification_id}
-              >
-                Accept
-              </button>
-              <span
-                :if={@notification.read_at}
-                class="text-xs text-base-content/40 uppercase tracking-wide"
-              >
-                Accepted
-              </span>
-            <% _ -> %>
-              <button
-                :if={is_nil(@notification.read_at)}
-                type="button"
-                class="btn btn-ghost btn-xs"
-                phx-click="mark_read"
-                phx-value-notification_id={@notification.notification_id}
-              >
-                Mark read
-              </button>
-          <% end %>
+          <.notification_actions notification={@notification} />
         </div>
       </div>
     </div>
+    """
+  end
+
+  attr :notification, Notification, required: true
+
+  defp notification_actions(assigns) do
+    ~H"""
+    <%= case @notification.kind do %>
+      <% :organization_invitation -> %>
+        <.button
+          :if={is_nil(@notification.read_at)}
+          size={:xs}
+          phx-click="accept_invitation"
+          phx-value-notification_id={@notification.notification_id}
+        >
+          Accept
+        </.button>
+        <span
+          :if={@notification.read_at}
+          class="text-xs text-base-content/40 uppercase tracking-wide"
+        >
+          Accepted
+        </span>
+      <% _ -> %>
+        <.button
+          :if={is_nil(@notification.read_at)}
+          variant={:ghost}
+          size={:xs}
+          phx-click="mark_read"
+          phx-value-notification_id={@notification.notification_id}
+        >
+          Mark read
+        </.button>
+    <% end %>
     """
   end
 

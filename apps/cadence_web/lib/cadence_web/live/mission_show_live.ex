@@ -22,13 +22,11 @@ defmodule CadenceWeb.MissionShowLive do
   def render(assigns) do
     ~H"""
     <div id="mission-overview-page" class="space-y-6">
-      <div class="border-b border-primary/20 pb-4">
-        <p class="hud-label text-base-content/50">Mission</p>
-        <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
-          {@current_mission.display_name}
-        </h1>
-        <p class="mt-1 font-mono text-xs text-base-content/40">{@current_mission.slug}</p>
-      </div>
+      <.page_header
+        eyebrow="Mission"
+        title={@current_mission.display_name}
+        subtitle={@current_mission.slug}
+      />
 
       <div class="grid gap-4 md:grid-cols-3">
         <.readiness_card
@@ -51,104 +49,101 @@ defmodule CadenceWeb.MissionShowLive do
         />
       </div>
 
-      <section class="card bg-base-200 border border-base-300 hud-corners">
-        <div class="card-body p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="hud-label mb-2">Spacecraft Readiness</p>
-              <h2 class="text-lg font-semibold">
-                Configure spacecraft identity and select a spacecraft profile
-              </h2>
-              <p class="mt-1 max-w-2xl text-sm text-base-content/60">
-                Each row shows whether a spacecraft can be identified from incoming frames
-                and has a profile that defines its byte-interpretation contract.
-              </p>
-            </div>
-            <div class="flex flex-wrap items-center justify-end gap-2">
-              <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
-            </div>
-          </div>
-
-          <div id="spacecraft-readiness-section" class="mt-6 overflow-x-auto">
-            <div
-              :if={@spacecraft_readiness_empty?}
-              id="spacecraft-readiness-empty"
-              class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center text-sm text-base-content/60"
-            >
-              No spacecraft have been registered for this mission yet.<br />
-              <.link
-                navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/new"}
-                class="mt-3 inline-flex btn btn-primary btn-sm hover-glow-cyan transition-glow"
-              >
-                Add the first spacecraft
-              </.link>
-            </div>
-
-            <table :if={not @spacecraft_readiness_empty?} class="table">
-              <thead>
-                <tr>
-                  <th class="hud-label">Spacecraft</th>
-                  <th class="hud-label">SCID</th>
-                  <th class="hud-label">Runtime Identity</th>
-                  <th class="hud-label">Downlink Link</th>
-                  <th class="hud-label">Status</th>
-                  <th class="hud-label text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="spacecraft-readiness-table" phx-update="stream">
-                <tr
-                  :for={{id, row} <- @streams.spacecraft_readiness}
-                  id={id}
-                  class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
-                >
-                  <td>
-                    <div class="font-medium">{row.spacecraft.display_name}</div>
-                    <div class="font-mono text-xs text-base-content/40">
-                      {row.spacecraft.spacecraft_id}
-                    </div>
-                  </td>
-                  <td class="font-mono text-sm text-primary/80">
-                    {format_scid(row.scid)}
-                  </td>
-                  <td>
-                    <div class="text-sm">{row.endpoint_label}</div>
-                    <div class="font-mono text-xs text-base-content/50">
-                      {row.endpoint_ref || "Not created"}
-                    </div>
-                  </td>
-                  <td>
-                    <div class="text-sm">{row.path_label}</div>
-                    <div class="text-xs text-base-content/50">{row.path_detail}</div>
-                  </td>
-                  <td>
-                    <.status_badge status={row.status} label={row.status_label} />
-                    <p class="mt-1 max-w-xs text-xs text-base-content/60">{row.issue}</p>
-                  </td>
-                  <td class="text-right">
-                    <.action_menu>
-                      <:action>
-                        <.link navigate={
-                          spacecraft_readiness_path(@current_mission.mission_id, row.spacecraft)
-                        }>
-                          {row.primary_action}
-                        </.link>
-                      </:action>
-                      <:action>
-                        <.link navigate={
-                          ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{row.spacecraft.spacecraft_id}"
-                        }>
-                          View spacecraft
-                        </.link>
-                      </:action>
-                    </.action_menu>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+      <.readiness_panel
+        setup_issue_count={@setup_issue_count}
+        empty?={@spacecraft_readiness_empty?}
+        mission_id={@current_mission.mission_id}
+        rows={@streams.spacecraft_readiness}
+      />
     </div>
+    """
+  end
+
+  attr :setup_issue_count, :integer, required: true
+  attr :empty?, :boolean, required: true
+  attr :mission_id, :string, required: true
+  attr :rows, :any, required: true
+
+  defp readiness_panel(assigns) do
+    ~H"""
+    <.card>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label mb-2">Spacecraft Readiness</p>
+          <h2 class="text-lg font-semibold">
+            Configure spacecraft identity and select a spacecraft profile
+          </h2>
+          <p class="mt-1 max-w-2xl text-sm text-base-content/60">
+            Each row shows whether a spacecraft can be identified from incoming frames
+            and has a profile that defines its byte-interpretation contract.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
+        </div>
+      </div>
+
+      <div id="spacecraft-readiness-section" class="mt-6 overflow-x-auto">
+        <div :if={@empty?} id="spacecraft-readiness-empty">
+          <.empty_state
+            title="No spacecraft have been registered for this mission yet."
+            action_label="Add the first spacecraft"
+            action_navigate={~p"/missions/#{@mission_id}/spacecraft/new"}
+          />
+        </div>
+
+        <.readiness_table :if={not @empty?} mission_id={@mission_id} rows={@rows} />
+      </div>
+    </.card>
+    """
+  end
+
+  attr :mission_id, :string, required: true
+  attr :rows, :any, required: true
+
+  defp readiness_table(assigns) do
+    ~H"""
+    <.table id="mission-spacecraft-readiness" body_id="spacecraft-readiness-table" rows={@rows}>
+      <:col :let={row} label="Spacecraft">
+        <div class="font-medium">{row.spacecraft.display_name}</div>
+        <div class="font-mono text-xs text-base-content/40">
+          {row.spacecraft.spacecraft_id}
+        </div>
+      </:col>
+      <:col :let={row} label="SCID" mono class="text-primary/80">
+        {format_scid(row.scid)}
+      </:col>
+      <:col :let={row} label="Runtime Identity">
+        <div class="text-sm">{row.endpoint_label}</div>
+        <div class="font-mono text-xs text-base-content/50">
+          {row.endpoint_ref || "Not created"}
+        </div>
+      </:col>
+      <:col :let={row} label="Downlink Link">
+        <div class="text-sm">{row.path_label}</div>
+        <div class="text-xs text-base-content/50">{row.path_detail}</div>
+      </:col>
+      <:col :let={row} label="Status">
+        <.status_badge status={row.status} label={row.status_label} />
+        <p class="mt-1 max-w-xs text-xs text-base-content/60">{row.issue}</p>
+      </:col>
+      <:col :let={row} label="Actions" align={:right}>
+        <.action_menu>
+          <:action>
+            <.link navigate={spacecraft_readiness_path(@mission_id, row.spacecraft)}>
+              {row.primary_action}
+            </.link>
+          </:action>
+          <:action>
+            <.link navigate={
+              ~p"/missions/#{@mission_id}/spacecraft/#{row.spacecraft.spacecraft_id}"
+            }>
+              View spacecraft
+            </.link>
+          </:action>
+        </.action_menu>
+      </:col>
+    </.table>
     """
   end
 
