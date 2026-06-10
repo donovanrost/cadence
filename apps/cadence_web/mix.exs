@@ -12,6 +12,7 @@ defmodule CadenceWeb.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      listeners: [Phoenix.CodeReloader],
       deps: deps(),
       aliases: aliases()
     ]
