@@ -3,8 +3,6 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   use CadenceWeb, :html
 
-  import CadenceWeb.CoreComponents, only: [status_dot: 1]
-
   alias Cadence.Applications.TelemetryDecom
   alias CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable
 
@@ -31,28 +29,17 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   attr :selected_revision_id, :any, default: nil
 
   def revision_section(assigns) do
-    # Intentional UI-rule deviation: <.input> requires a FormField binding,
-    # which is awkward for this standalone phx-change form. Raw <select>
-    # uses the same daisyUI tokens as <.input>.
     ~H"""
-    <div>
-      <p class="hud-label mb-2">Catalog revision</p>
-      <form phx-change="change_revision" id="telemetry-decom-revision-form" class="max-w-sm">
-        <select
-          name="catalog_revision_id"
-          id="telemetry-decom-revision-select"
-          class="select w-full"
-        >
-          <option
-            :for={{label, value} <- @revisions}
-            value={value}
-            selected={to_string(@selected_revision_id) == to_string(value)}
-          >
-            {label}
-          </option>
-        </select>
-      </form>
-    </div>
+    <form phx-change="change_revision" id="telemetry-decom-revision-form" class="max-w-sm">
+      <.input
+        type="select"
+        id="telemetry-decom-revision-select"
+        name="catalog_revision_id"
+        label="Catalog revision"
+        value={@selected_revision_id}
+        options={@revisions}
+      />
+    </form>
     """
   end
 
@@ -71,34 +58,32 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
           Packet Claims · {MapSet.size(@selection)} / {length(@rows)}
         </p>
         <div class="flex items-center gap-2">
-          <form phx-change="filter_apids" id="telemetry-decom-filter-form">
-            <%!-- Intentional UI-rule deviation: see revision_section/1. Raw <input>
-            for the same FormField-binding reason. --%>
-            <input
-              type="text"
+          <%!-- -mb-3 cancels the <.input> fieldset margin so the toolbar stays centered. --%>
+          <form phx-change="filter_apids" id="telemetry-decom-filter-form" class="w-80 -mb-3">
+            <.input
+              id="telemetry-decom-filter-input"
               name="filter"
               value={@filter}
               placeholder="Filter…"
-              class="input input-sm"
-              id="telemetry-decom-filter-input"
+              class="input-sm"
             />
           </form>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
+          <.button
+            variant={:ghost}
+            size={:xs}
             phx-click="select_all_unclaimed"
             id="telemetry-decom-select-all"
           >
             Select all unclaimed
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
+          </.button>
+          <.button
+            variant={:ghost}
+            size={:xs}
             phx-click="clear_selection"
             id="telemetry-decom-clear"
           >
             Clear
-          </button>
+          </.button>
         </div>
       </div>
       <APIDTable.table
@@ -130,27 +115,17 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     ~H"""
     <div>
       <p class="hud-label mb-2">Preview</p>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-        <div>
-          <div class="text-base-content/60">Matched packets</div>
-          <div class="text-xl font-semibold">{length(@preview.selected_packets)}</div>
-        </div>
-        <div>
-          <div class="text-base-content/60">Compiled defs</div>
-          <div class="text-xl font-semibold">
-            {length(@preview.compilation.compiler_result.packet_definitions)}
-          </div>
-        </div>
-        <div>
-          <div class="text-base-content/60">Unassigned APIDs</div>
-          <div class="text-xl font-semibold">{length(@preview.unassigned_apids)}</div>
-        </div>
-        <div>
-          <div class="text-base-content/60">Notices</div>
-          <div class="text-xl font-semibold">
-            {length(@preview.compilation.compiler_result.diagnostics)}
-          </div>
-        </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <.stat_tile label="Matched packets" value={length(@preview.selected_packets)} />
+        <.stat_tile
+          label="Compiled defs"
+          value={length(@preview.compilation.compiler_result.packet_definitions)}
+        />
+        <.stat_tile label="Unassigned APIDs" value={length(@preview.unassigned_apids)} />
+        <.stat_tile
+          label="Notices"
+          value={length(@preview.compilation.compiler_result.diagnostics)}
+        />
       </div>
       <.diagnostics_list diagnostics={@preview.compilation.compiler_result.diagnostics} />
     </div>
@@ -193,24 +168,18 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   def apply_section(assigns) do
     ~H"""
     <div class="flex justify-end gap-2">
-      <button
+      <.button
         :if={@config.enabled}
-        type="button"
-        class="btn btn-ghost btn-sm"
+        variant={:ghost}
         phx-click="disable"
         id="telemetry-decom-disable-button"
         data-confirm="Disable Telemetry Decom for this spacecraft?"
       >
         Disable
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        phx-click="enable"
-        id="telemetry-decom-enable-button"
-      >
+      </.button>
+      <.button phx-click="enable" id="telemetry-decom-enable-button">
         Apply mission changes
-      </button>
+      </.button>
     </div>
     """
   end
@@ -227,14 +196,14 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         not in this revision:
         <span class="font-mono">{Enum.join(@dropped, ", ")}</span>.
       </span>
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs"
+      <.button
+        variant={:ghost}
+        size={:xs}
         phx-click="drop_unknown_apids"
         id="telemetry-decom-drop-unknowns"
       >
         Drop them
-      </button>
+      </.button>
     </div>
     """
   end
@@ -248,12 +217,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
         No packet catalog revisions are available for this mission yet. Import a catalog
         revision first.
       </p>
-      <.link
+      <.button
         navigate={~p"/missions/#{@current_mission.mission_id}/catalog"}
-        class="btn btn-ghost btn-sm mt-3"
+        variant={:ghost}
+        class="mt-3"
       >
         Go to catalog
-      </.link>
+      </.button>
     </div>
     """
   end

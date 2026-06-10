@@ -14,6 +14,8 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
     assigns = assign(assigns, :visible_rows, filter_rows(assigns.rows, assigns.filter))
 
     ~H"""
+    <%!-- Documented <.table> exception: checkbox column, expander rows, colspan detail
+    panels, and nested mini-tables don't fit the canonical table component. --%>
     <table class="w-full text-sm text-base-content/80" id="telemetry-decom-apid-table">
       <thead>
         <tr class="text-base-content/50 text-xs uppercase tracking-wider">

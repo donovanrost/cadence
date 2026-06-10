@@ -245,25 +245,14 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <div>
-        <.breadcrumbs items={[
-          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
-          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
-          {@current_spacecraft.display_name,
-           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"},
-          {"Applications",
-           ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}/applications"},
-          {"Telemetry Decom", nil}
-        ]} />
-        <h1 class="text-2xl font-bold text-base-content mt-2">Telemetry Decom</h1>
-        <p class="text-sm text-base-content/60 mt-1">
-          Application packet claims and publication state for
-          <span class="font-semibold text-base-content">{@current_spacecraft.display_name}</span>.
-        </p>
-      </div>
+      <.page_header
+        title="Telemetry Decom"
+        subtitle={"Application packet claims and publication state for #{@current_spacecraft.display_name}."}
+        breadcrumbs={breadcrumb_items(@current_mission, @current_spacecraft)}
+      />
 
-      <div class="card bg-base-200" id="telemetry-decom-card">
-        <div class="card-body p-6 space-y-4">
+      <.card id="telemetry-decom-card">
+        <div class="space-y-4">
           <Components.status_section
             config={@config}
             active={@active_binding_set_summary}
@@ -298,9 +287,21 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive do
             <Components.apply_section config={@config} />
           <% end %>
         </div>
-      </div>
+      </.card>
     </div>
     """
+  end
+
+  defp breadcrumb_items(mission, spacecraft) do
+    [
+      {mission.display_name, ~p"/missions/#{mission.mission_id}"},
+      {"Spacecraft", ~p"/missions/#{mission.mission_id}/spacecraft"},
+      {spacecraft.display_name,
+       ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"},
+      {"Applications",
+       ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"},
+      {"Telemetry Decom", nil}
+    ]
   end
 
   defp first_option_value([]), do: nil
