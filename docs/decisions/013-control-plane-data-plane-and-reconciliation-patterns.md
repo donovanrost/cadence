@@ -165,7 +165,9 @@ projectors or batch writers unless correctness requires blocking the hot path.
 `Cadence.Runtime.ProviderIngressExecutor` follows this shape for provider
 ingress. It extracts telemetry samples, records current values only when the
 configured store reports `hot_path_safe?/0`, and enqueues persistence batches
-separately.
+separately. TCP receivers use passive socket reads and executor capacity
+notifications to pause reads above the high watermark and resume below the low
+watermark without sleep polling.
 
 ### 4. ETS Projection Backed By Rebuild
 
@@ -221,12 +223,11 @@ Those modules may still use:
 
 - process timers for exact due work, `not_before` delays, and slow recovery
 - `:safety_poll_interval_ms` as the durable missed-signal backstop
-- compatibility reads of old `:poll_interval_ms` options only when they fall
-  back to the safety interval
+- `:lane_safety_poll_interval_ms` for command lane recovery scans
 
-They should not add a new `@default_poll_interval_ms`, a tight numeric
-`:poll_interval_ms` default, or application config that makes polling the
-primary runtime path again.
+They should not add a new `@default_poll_interval_ms`, read old
+`:poll_interval_ms` / `:lane_poll_interval_ms` compatibility options, or add
+application config that makes polling the primary runtime path again.
 
 ## Failure Model
 

@@ -411,6 +411,19 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     assert recovered_provider_runtime_snapshot.ingress_persistence_projector.persisted_count == 2
   end
 
+  test "tcp backpressure waits on executor capacity notifications instead of sleeping" do
+    source =
+      __DIR__
+      |> Elixir.Path.join("../../../lib/cadence/provider_adapters/tcp_socket.ex")
+      |> Elixir.Path.expand()
+      |> File.read!()
+
+    refute source =~ "Process.sleep"
+    refute source =~ "@backpressure_poll_ms"
+    assert source =~ "ProviderIngressExecutor.notify_when_below"
+    assert source =~ ":provider_ingress_capacity_available"
+  end
+
   defp assert_eventually(fun, attempts \\ 20)
 
   defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")

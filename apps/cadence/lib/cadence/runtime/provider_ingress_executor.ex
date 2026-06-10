@@ -21,6 +21,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   @max_drain_batch 512
   @projector_high_watermark 8_192
   @projector_low_watermark 2_048
+  @projector_capacity_retry_ms 1_000
+  @event_prefix [:cadence, :runtime, :provider_ingress_executor]
 
   @type executor_item ::
           {:telemetry, RawEvidence.t()}
@@ -35,6 +37,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           persistence_projector_pid: pid() | nil,
           persistence_projector_monitor_ref: reference() | nil,
           projector_backpressured?: boolean(),
+          projector_capacity_wait_ref: reference() | nil,
           pending_persistence_batches: [ProcessedIngressBatch.t()],
           queue: :queue.queue(executor_item()),
           queue_depth: non_neg_integer(),
@@ -45,7 +48,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
           telemetry_count: non_neg_integer(),
           transport_event_count: non_neg_integer(),
           last_completed_at: DateTime.t() | nil,
-          last_error: binary() | nil
+          last_error: binary() | nil,
+          capacity_waiters: %{optional(reference()) => map()}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -98,6 +102,19 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     call_if_running(executor, :snapshot)
   end
 
+  @spec notify_when_below(GenServer.server(), non_neg_integer(), pid(), reference()) ::
+          :ok | {:error, term()}
+  def notify_when_below(executor, threshold, subscriber_pid, ref)
+      when is_integer(threshold) and threshold >= 0 and is_pid(subscriber_pid) and
+             is_reference(ref) do
+    call_if_running(executor, {:notify_when_below, threshold, subscriber_pid, ref})
+  end
+
+  @spec cancel_notify_when_below(GenServer.server(), reference()) :: :ok | {:error, term()}
+  def cancel_notify_when_below(executor, ref) when is_reference(ref) do
+    call_if_running(executor, {:cancel_notify_when_below, ref})
+  end
+
   @spec lookup(GenServer.server()) :: {:ok, pid()} | {:error, term()}
   def lookup(server)
 
@@ -128,6 +145,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
        persistence_projector_pid: nil,
        persistence_projector_monitor_ref: nil,
        projector_backpressured?: false,
+       projector_capacity_wait_ref: nil,
        pending_persistence_batches: [],
        queue: :queue.new(),
        queue_depth: 0,
@@ -138,7 +156,8 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
        telemetry_count: 0,
        transport_event_count: 0,
        last_completed_at: nil,
-       last_error: nil
+       last_error: nil,
+       capacity_waiters: %{}
      }}
   end
 
@@ -150,16 +169,36 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         provider_binding_id: state.provider_binding_id,
         queue_depth: state.queue_depth,
         processing?: state.processing?,
+        backpressured?: state.projector_backpressured?,
         projector_backpressured?: state.projector_backpressured?,
+        projector_capacity_waiting?: is_reference(state.projector_capacity_wait_ref),
         pending_persistence_batch_count: length(state.pending_persistence_batches),
         enqueued_count: state.enqueued_count,
         processed_count: state.processed_count,
         failed_count: state.failed_count,
         telemetry_count: state.telemetry_count,
         transport_event_count: state.transport_event_count,
+        capacity_waiter_count: map_size(state.capacity_waiters),
         last_completed_at: state.last_completed_at,
         last_error: state.last_error
       }}, state}
+  end
+
+  def handle_call({:notify_when_below, threshold, subscriber_pid, ref}, _from, state) do
+    state =
+      if state.queue_depth < threshold do
+        state = remove_capacity_waiter(state, ref)
+        notify_capacity_waiter(subscriber_pid, ref, state.queue_depth)
+        state
+      else
+        put_capacity_waiter(state, threshold, subscriber_pid, ref)
+      end
+
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:cancel_notify_when_below, ref}, _from, state) do
+    {:reply, :ok, remove_capacity_waiter(state, ref)}
   end
 
   @impl true
@@ -200,7 +239,6 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
             process_schedulable_queue_state(schedulable_state)
 
           {:blocked, blocked_state} ->
-            Process.send_after(self(), :process_queue, 10)
             {:noreply, %{blocked_state | processing?: true}}
         end
 
@@ -224,8 +262,43 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
      %{
        state
        | persistence_projector_pid: nil,
-         persistence_projector_monitor_ref: nil
+         persistence_projector_monitor_ref: nil,
+         projector_capacity_wait_ref: nil
      }}
+  end
+
+  def handle_info(
+        {:ingress_persistence_capacity_available, projector_pid, ref, queue_depth},
+        %{persistence_projector_pid: projector_pid, projector_capacity_wait_ref: ref} = state
+      ) do
+    emit(:capacity_waiter_released, state, %{queue_depth: state.queue_depth}, %{
+      downstream: :ingress_persistence_projector,
+      downstream_queue_depth: queue_depth
+    })
+
+    send(self(), :process_queue)
+    {:noreply, %{state | projector_capacity_wait_ref: nil, processing?: true}}
+  end
+
+  def handle_info(
+        {:ingress_persistence_capacity_available, _projector_pid, _stale_ref, _queue_depth},
+        state
+      ) do
+    {:noreply, state}
+  end
+
+  def handle_info({:projector_capacity_check, ref}, %{projector_capacity_wait_ref: ref} = state) do
+    state = cancel_projector_capacity_waiter(state, ref)
+    send(self(), :process_queue)
+    {:noreply, %{state | projector_capacity_wait_ref: nil, processing?: true}}
+  end
+
+  def handle_info({:projector_capacity_check, _stale_ref}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state) do
+    {:noreply, remove_capacity_waiter_by_monitor(state, monitor_ref)}
   end
 
   defp enqueue(executor, item) do
@@ -400,6 +473,7 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
 
   defp process_schedulable_queue_state(schedulable_state) do
     {next_state, persistence_batches} = drain_batch(schedulable_state, @max_drain_batch, [], [])
+    next_state = notify_capacity_waiters(next_state)
 
     case enqueue_persistence_batches(next_state, persistence_batches) do
       {:ok, persisted_state} ->
@@ -416,6 +490,77 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
       {:noreply, %{persisted_state | processing?: true}}
     else
       {:noreply, %{persisted_state | processing?: false}}
+    end
+  end
+
+  defp put_capacity_waiter(state, threshold, subscriber_pid, ref) do
+    case Map.get(state.capacity_waiters, ref) do
+      %{monitor_ref: monitor_ref} ->
+        Process.demonitor(monitor_ref, [:flush])
+
+      _other ->
+        :ok
+    end
+
+    waiter = %{
+      threshold: threshold,
+      subscriber_pid: subscriber_pid,
+      monitor_ref: Process.monitor(subscriber_pid)
+    }
+
+    emit(:capacity_waiter_registered, state, %{queue_depth: state.queue_depth}, %{
+      downstream: :provider_ingress_executor,
+      threshold: threshold
+    })
+
+    put_in(state.capacity_waiters[ref], waiter)
+  end
+
+  defp notify_capacity_waiters(%{capacity_waiters: waiters} = state) when map_size(waiters) == 0,
+    do: state
+
+  defp notify_capacity_waiters(state) do
+    {ready_waiters, waiting_waiters} =
+      Enum.split_with(state.capacity_waiters, fn {_ref, %{threshold: threshold}} ->
+        state.queue_depth < threshold
+      end)
+
+    Enum.each(ready_waiters, fn {ref, %{subscriber_pid: subscriber_pid, monitor_ref: monitor_ref}} ->
+      Process.demonitor(monitor_ref, [:flush])
+      notify_capacity_waiter(subscriber_pid, ref, state.queue_depth)
+    end)
+
+    if ready_waiters != [] do
+      emit(:capacity_waiter_released, state, %{queue_depth: state.queue_depth}, %{
+        downstream: :provider_ingress_executor,
+        released_count: length(ready_waiters)
+      })
+    end
+
+    %{state | capacity_waiters: Map.new(waiting_waiters)}
+  end
+
+  defp notify_capacity_waiter(subscriber_pid, ref, queue_depth) do
+    send(subscriber_pid, {:provider_ingress_capacity_available, self(), ref, queue_depth})
+  end
+
+  defp remove_capacity_waiter_by_monitor(state, monitor_ref) do
+    capacity_waiters =
+      state.capacity_waiters
+      |> Enum.reject(fn {_ref, waiter} -> waiter.monitor_ref == monitor_ref end)
+      |> Map.new()
+
+    %{state | capacity_waiters: capacity_waiters}
+  end
+
+  defp remove_capacity_waiter(state, ref) do
+    case Map.pop(state.capacity_waiters, ref) do
+      {%{monitor_ref: monitor_ref}, capacity_waiters} ->
+        Process.demonitor(monitor_ref, [:flush])
+        %{state | capacity_waiters: capacity_waiters}
+
+      {nil, _capacity_waiters} ->
+        state
     end
   end
 
@@ -607,12 +752,87 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
         end
 
       if queue_depth >= threshold do
-        {:blocked, %{next_state | projector_backpressured?: true}}
+        state =
+          next_state
+          |> maybe_emit_projector_backpressure_entered(queue_depth)
+          |> register_projector_capacity_waiter()
+          |> Map.put(:projector_backpressured?, true)
+
+        {:blocked, state}
       else
-        {:ok, %{next_state | projector_backpressured?: false}}
+        state =
+          next_state
+          |> maybe_emit_projector_backpressure_released(queue_depth)
+          |> Map.put(:projector_backpressured?, false)
+
+        {:ok, state}
       end
     end
   end
+
+  defp register_projector_capacity_waiter(%{projector_capacity_wait_ref: ref} = state)
+       when is_reference(ref) do
+    state
+  end
+
+  defp register_projector_capacity_waiter(state) do
+    ref = make_ref()
+
+    _ =
+      IngressPersistenceProjector.notify_when_below(
+        state.persistence_projector_pid,
+        @projector_low_watermark,
+        self(),
+        ref
+      )
+
+    Process.send_after(self(), {:projector_capacity_check, ref}, @projector_capacity_retry_ms)
+
+    emit(:capacity_waiter_registered, state, %{queue_depth: state.queue_depth}, %{
+      downstream: :ingress_persistence_projector,
+      downstream_low_watermark: @projector_low_watermark
+    })
+
+    %{state | projector_capacity_wait_ref: ref}
+  end
+
+  defp cancel_projector_capacity_waiter(%{persistence_projector_pid: pid} = state, ref)
+       when is_pid(pid) and is_reference(ref) do
+    _ = IngressPersistenceProjector.cancel_notify_when_below(pid, ref)
+    state
+  end
+
+  defp cancel_projector_capacity_waiter(state, _ref), do: state
+
+  defp maybe_emit_projector_backpressure_entered(
+         %{projector_backpressured?: false} = state,
+         downstream_queue_depth
+       ) do
+    emit(:backpressure_entered, state, %{queue_depth: state.queue_depth}, %{
+      downstream: :ingress_persistence_projector,
+      downstream_queue_depth: downstream_queue_depth,
+      downstream_high_watermark: @projector_high_watermark,
+      downstream_low_watermark: @projector_low_watermark
+    })
+
+    state
+  end
+
+  defp maybe_emit_projector_backpressure_entered(state, _downstream_queue_depth), do: state
+
+  defp maybe_emit_projector_backpressure_released(
+         %{projector_backpressured?: true} = state,
+         downstream_queue_depth
+       ) do
+    emit(:backpressure_released, state, %{queue_depth: state.queue_depth}, %{
+      downstream: :ingress_persistence_projector,
+      downstream_queue_depth: downstream_queue_depth
+    })
+
+    state
+  end
+
+  defp maybe_emit_projector_backpressure_released(state, _downstream_queue_depth), do: state
 
   defp resolve_persistence_projector(state) do
     with {:ok, pid} <- IngressPersistenceProjector.lookup(state.persistence_projector_name) do
@@ -637,6 +857,22 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   end
 
   defp maybe_demonitor_persistence_projector(state), do: state
+
+  defp emit(event, state, measurements, metadata) do
+    :telemetry.execute(
+      @event_prefix ++ [event],
+      measurements,
+      Map.merge(
+        %{
+          mission_id: state.mission_id,
+          realized_contact_id: state.realized_contact_id,
+          path_id: state.path_id,
+          provider_binding_id: state.provider_binding_id
+        },
+        metadata
+      )
+    )
+  end
 
   defp run_ingress(fun) when is_function(fun, 0) do
     {:ok, fun.()}

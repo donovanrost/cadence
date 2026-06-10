@@ -84,11 +84,7 @@ defmodule Cadence.Contacts.Scheduler do
     state = %{
       mission_id: mission_id,
       safety_poll_interval_ms:
-        Keyword.get(
-          opts,
-          :safety_poll_interval_ms,
-          Keyword.get(opts, :poll_interval_ms, @default_safety_poll_interval_ms)
-        ),
+        Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       auto_schedule?: Keyword.get(opts, :auto_schedule?, true),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
       reference_time_fun: Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0),

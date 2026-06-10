@@ -84,6 +84,12 @@ defmodule Cadence.ArchitectureRuntimeGuardTest do
 
       refute source =~ ~r/Keyword\.get\(\s*opts,\s*:poll_interval_ms,\s*\d/ms,
              "#{owner.name} must not default :poll_interval_ms directly to a tight numeric interval"
+
+      refute source =~ ":poll_interval_ms",
+             "#{owner.name} must not read compatibility :poll_interval_ms options"
+
+      refute source =~ ":lane_poll_interval_ms",
+             "#{owner.name} must not read compatibility :lane_poll_interval_ms options"
     end
   end
 

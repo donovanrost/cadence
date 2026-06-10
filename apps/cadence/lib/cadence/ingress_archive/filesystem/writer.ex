@@ -223,6 +223,8 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
                ) do
           flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
 
+          completed_at = DateTime.utc_now()
+
           next_state =
             state
             |> update_in([:buffers], &Map.delete(&1, mission_id))
@@ -236,6 +238,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
               |> Map.update!(:segment_count, &(&1 + 1))
               |> Map.update!(:flushed_bytes_total, &(&1 + segment_size_bytes))
               |> Map.update!(:flush_total_us, &(&1 + flush_duration_us))
+              |> Map.put(:last_completed_at, completed_at)
               |> Map.put(:last_flush_error, nil)
             end)
 
@@ -287,10 +290,14 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
 
     %{
       queue_depth: queue_depth,
+      processing?: Map.has_key?(state.timer_refs, mission_id),
+      backpressured?: false,
       oldest_buffered_age_ms: oldest_buffered_age_ms,
       flush_count: metrics.flush_count,
       flush_failure_count: metrics.flush_failure_count,
+      last_error: metrics.last_flush_error,
       last_flush_error: metrics.last_flush_error,
+      last_completed_at: metrics.last_completed_at,
       flushed_count: metrics.flushed_count,
       segment_count: metrics.segment_count,
       flush_total_us: metrics.flush_total_us,
@@ -301,7 +308,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
   end
 
   defp ensure_metrics(nil), do: zero_metrics()
-  defp ensure_metrics(metrics), do: metrics
+  defp ensure_metrics(metrics), do: Map.merge(zero_metrics(), metrics)
 
   defp normalize_state(state) do
     buffers =
@@ -377,6 +384,7 @@ defmodule Cadence.IngressArchive.FileSystem.Writer do
       flush_count: 0,
       flush_failure_count: 0,
       last_flush_error: nil,
+      last_completed_at: nil,
       flushed_count: 0,
       segment_count: 0,
       flush_total_us: 0,

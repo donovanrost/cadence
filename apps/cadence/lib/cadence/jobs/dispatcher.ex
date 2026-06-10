@@ -26,11 +26,7 @@ defmodule Cadence.Jobs.Dispatcher do
   def init(opts) do
     state = %{
       safety_poll_interval_ms:
-        Keyword.get(
-          opts,
-          :safety_poll_interval_ms,
-          Keyword.get(opts, :poll_interval_ms, @default_safety_poll_interval_ms)
-        ),
+        Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       max_concurrency: Keyword.get(opts, :max_concurrency, @default_max_concurrency),
       safety_timer: nil,
       worker_refs: %{}

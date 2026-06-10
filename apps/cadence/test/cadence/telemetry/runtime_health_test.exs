@@ -86,6 +86,42 @@ defmodule Cadence.Telemetry.RuntimeHealthTest do
     assert [:cadence, :commanding, :verifier_scheduler, :safety_reconcile] in RuntimeHealth.events()
 
     assert [:cadence, :jobs, :dispatcher, :worker_started] in RuntimeHealth.events()
+
+    assert [:cadence, :runtime, :provider_ingress_executor, :backpressure_entered] in RuntimeHealth.events()
+
+    assert [
+             :cadence,
+             :runtime,
+             :ingress_persistence_projector,
+             :capacity_waiter_registered
+           ] in RuntimeHealth.events()
+  end
+
+  test "collects runtime queue and backpressure telemetry" do
+    server = start_runtime_health!(recent_limit: 5)
+
+    emit([:cadence, :runtime, :provider_ingress_executor, :backpressure_entered], %{count: 1}, %{
+      mission_id: "mission-health",
+      provider_binding_id: "provider-health",
+      downstream: :ingress_persistence_projector
+    })
+
+    emit(
+      [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_registered],
+      %{queue_depth: 10},
+      %{
+        mission_id: "mission-health",
+        provider_binding_id: "provider-health"
+      }
+    )
+
+    snapshot = wait_for_total_events(server, 2)
+
+    assert snapshot.sources.provider_ingress_executor.total_events == 1
+    assert snapshot.sources.provider_ingress_executor.events.backpressure_entered == 1
+
+    assert snapshot.sources.ingress_persistence_projector.total_events == 1
+    assert snapshot.sources.ingress_persistence_projector.events.capacity_waiter_registered == 1
   end
 
   test "collector stays process-local and does not depend on Repo writes" do

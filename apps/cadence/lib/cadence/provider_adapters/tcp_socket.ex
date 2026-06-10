@@ -34,7 +34,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   ]
   @executor_high_watermark 8_192
   @executor_low_watermark 2_048
-  @backpressure_poll_ms 10
+  @executor_capacity_retry_ms 1_000
 
   @type mode :: :connect | :listen
 
@@ -545,7 +545,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ingress_metadata: state.ingress_metadata,
       socket: nil,
       receive_buffer: <<>>,
-      reads_paused?: false
+      reads_paused?: false,
+      capacity_wait_ref: nil
     }
   end
 
@@ -572,24 +573,82 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
         cond do
           state.reads_paused? and queue_depth >= @executor_low_watermark ->
-            Process.sleep(@backpressure_poll_ms)
-            maybe_wait_for_executor_capacity(state)
+            wait_for_executor_capacity_signal(state)
 
           state.reads_paused? ->
             send(state.provider_pid, {:tcp_receiver_reads_paused, self(), false})
-            %{state | reads_paused?: false}
+
+            state
+            |> cancel_capacity_waiter()
+            |> Map.merge(%{reads_paused?: false, capacity_wait_ref: nil})
 
           queue_depth >= @executor_high_watermark ->
-            send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
-            Process.sleep(@backpressure_poll_ms)
-            maybe_wait_for_executor_capacity(%{state | reads_paused?: true})
+            state
+            |> pause_socket_reads()
+            |> wait_for_executor_capacity_signal()
 
           true ->
             state
         end
 
       {:error, _reason} ->
-        Process.sleep(@backpressure_poll_ms)
+        wait_for_executor_capacity_retry(state)
+    end
+  end
+
+  defp pause_socket_reads(state) do
+    send(state.provider_pid, {:tcp_receiver_reads_paused, self(), true})
+    %{state | reads_paused?: true}
+  end
+
+  defp wait_for_executor_capacity_signal(state) do
+    {state, ref} = ensure_capacity_waiter(state)
+
+    receive do
+      {:provider_ingress_capacity_available, _executor_pid, ^ref, _queue_depth} ->
+        maybe_wait_for_executor_capacity(%{state | capacity_wait_ref: nil})
+
+      {:provider_ingress_capacity_available, _executor_pid, _stale_ref, _queue_depth} ->
+        wait_for_executor_capacity_signal(state)
+    after
+      @executor_capacity_retry_ms ->
+        maybe_wait_for_executor_capacity(state)
+    end
+  end
+
+  defp ensure_capacity_waiter(%{capacity_wait_ref: ref} = state) when is_reference(ref) do
+    register_capacity_waiter(state, ref)
+  end
+
+  defp ensure_capacity_waiter(state) do
+    register_capacity_waiter(state, make_ref())
+  end
+
+  defp register_capacity_waiter(state, ref) do
+    _ =
+      ProviderIngressExecutor.notify_when_below(
+        state.ingress_executor_name,
+        @executor_low_watermark,
+        self(),
+        ref
+      )
+
+    {%{state | capacity_wait_ref: ref}, ref}
+  end
+
+  defp cancel_capacity_waiter(%{capacity_wait_ref: ref} = state) when is_reference(ref) do
+    _ = ProviderIngressExecutor.cancel_notify_when_below(state.ingress_executor_name, ref)
+    state
+  end
+
+  defp cancel_capacity_waiter(state), do: state
+
+  defp wait_for_executor_capacity_retry(state) do
+    receive do
+      {:provider_ingress_capacity_available, _executor_pid, _ref, _queue_depth} ->
+        maybe_wait_for_executor_capacity(%{state | capacity_wait_ref: nil})
+    after
+      @executor_capacity_retry_ms ->
         maybe_wait_for_executor_capacity(state)
     end
   end

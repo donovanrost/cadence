@@ -3,7 +3,7 @@ title: How-To Guides
 tags: [how-to, developer, operations, tooling]
 status: active
 created: 2026-04-03
-updated: 2026-04-03
+updated: 2026-06-10
 ---
 
 # How-To Guides
@@ -32,6 +32,7 @@ out. Use these guides when you need to accomplish a specific task.
 
 - [Configuration Reference](configuration-reference.md)
 - [Archive Backlog and Backpressure](archive-backlog-and-backpressure.md)
+- [BEAM-Native Improvement Inventory](beam-native-improvement-inventory.md)
 
 ## Lower-Level and Debugging Flows
 

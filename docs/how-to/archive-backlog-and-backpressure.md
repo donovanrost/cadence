@@ -154,18 +154,24 @@ Important nested fields to inspect:
 
 - `queue_depth`
 - `processing?`
+- `backpressured?`
 - `projector_backpressured?`
+- `projector_capacity_waiting?`
 - `pending_persistence_batch_count`
+- `capacity_waiter_count`
 - `processed_count`
 - `failed_count`
+- `last_completed_at`
 - `last_error`
 
 ### Persistence projector
 
 - `queue_depth`
 - `processing?`
+- `capacity_waiter_count`
 - `persisted_count`
 - `failed_count`
+- `last_completed_at`
 - `last_error`
 
 ## 6. Interpret the runtime snapshot

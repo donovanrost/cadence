@@ -37,7 +37,13 @@ defmodule Cadence.Telemetry.RuntimeHealth do
     [:cadence, :jobs, :dispatcher, :worker_started],
     [:cadence, :jobs, :dispatcher, :worker_start_failed],
     [:cadence, :jobs, :dispatcher, :safety_dispatch_scheduled],
-    [:cadence, :jobs, :dispatcher, :stale_timer]
+    [:cadence, :jobs, :dispatcher, :stale_timer],
+    [:cadence, :runtime, :provider_ingress_executor, :backpressure_entered],
+    [:cadence, :runtime, :provider_ingress_executor, :backpressure_released],
+    [:cadence, :runtime, :provider_ingress_executor, :capacity_waiter_registered],
+    [:cadence, :runtime, :provider_ingress_executor, :capacity_waiter_released],
+    [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_registered],
+    [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_released]
   ]
 
   @type source ::
@@ -46,6 +52,8 @@ defmodule Cadence.Telemetry.RuntimeHealth do
           | :commanding_lane_dispatcher
           | :commanding_verifier_scheduler
           | :jobs_dispatcher
+          | :provider_ingress_executor
+          | :ingress_persistence_projector
 
   @type recent_event :: %{
           source: source(),
@@ -214,6 +222,12 @@ defmodule Cadence.Telemetry.RuntimeHealth do
 
   defp source_from_event([:cadence, :jobs, :dispatcher, _event]),
     do: :jobs_dispatcher
+
+  defp source_from_event([:cadence, :runtime, :provider_ingress_executor, _event]),
+    do: :provider_ingress_executor
+
+  defp source_from_event([:cadence, :runtime, :ingress_persistence_projector, _event]),
+    do: :ingress_persistence_projector
 
   defp record_source_event(source_summary, event, metadata, observed_at) do
     source_summary

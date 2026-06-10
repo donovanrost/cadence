@@ -39,11 +39,7 @@ defmodule Cadence.Commanding.LaneDispatcher do
       mission_id: Keyword.fetch!(opts, :mission_id),
       queue_lane_key: Keyword.fetch!(opts, :queue_lane_key),
       safety_poll_interval_ms:
-        Keyword.get(
-          opts,
-          :safety_poll_interval_ms,
-          Keyword.get(opts, :poll_interval_ms, @default_safety_poll_interval_ms)
-        ),
+        Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       reference_time_fun: Keyword.get(opts, :reference_time_fun, &DateTime.utc_now/0),
       dispatch_timer: nil,
       released_by:
