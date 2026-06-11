@@ -170,4 +170,115 @@ defmodule Cadence.SpacecraftStoreTest do
     assert {:error, :spacecraft_not_found} =
              Cadence.persist_source_endpoint("org-spacecraft", source_endpoint)
   end
+
+  describe "list_spacecraft_page/3" do
+    setup do
+      persist_mission_scope("org-fleet", "mission-fleet")
+
+      fleet_spacecraft!("alpha", display_name: "Alpha-1", scid: 101, type: {"type-a", 2})
+      fleet_spacecraft!("bravo", display_name: "Bravo-2", scid: 202, type: {"type-a", 1})
+      fleet_spacecraft!("charlie", display_name: "Charlie 100%", scid: nil, type: {"type-b", 1})
+      fleet_spacecraft!("delta", display_name: "Delta-4", scid: 404, type: nil)
+
+      :ok
+    end
+
+    test "search matches display name and scid as text" do
+      assert names(search: "alpha") == ["Alpha-1"]
+      assert names(search: "20") == ["Bravo-2"]
+    end
+
+    test "search escapes ILIKE metacharacters" do
+      assert names(search: "100%") == ["Charlie 100%"]
+      assert names(search: "%") == ["Charlie 100%"]
+    end
+
+    test "sorts by scid descending with stable tiebreak" do
+      assert names(sort: {:scid, :desc}) == ["Delta-4", "Bravo-2", "Alpha-1", "Charlie 100%"]
+    end
+
+    test "paginates and reports the filtered total" do
+      page = Cadence.list_spacecraft_page("org-fleet", "mission-fleet", page: 2, page_size: 3)
+
+      assert page.total_count == 4
+      assert page.page == 2
+      assert page.page_size == 3
+      assert [%Spacecraft{display_name: "Delta-4"}] = page.items
+    end
+
+    test "filters missing profile and missing scid" do
+      assert names(filter: :missing_profile) == ["Delta-4"]
+      assert names(filter: :missing_scid) == ["Charlie 100%"]
+    end
+
+    test "filters by profile and by stale versions" do
+      assert names(filter: {:profile, "type-a"}) == ["Alpha-1", "Bravo-2"]
+      assert names(filter: {:stale_versions, %{"type-a" => 2}}) == ["Bravo-2"]
+      assert names(filter: {:stale_versions, %{}}) == []
+    end
+  end
+
+  describe "fleet_summary/2" do
+    test "computes totals and per-profile-version counts" do
+      persist_mission_scope("org-fleet", "mission-fleet")
+
+      fleet_spacecraft!("alpha", display_name: "Alpha-1", scid: 101, type: {"type-a", 2})
+      fleet_spacecraft!("bravo", display_name: "Bravo-2", scid: 202, type: {"type-a", 1})
+      fleet_spacecraft!("charlie", display_name: "Charlie-3", scid: nil, type: {"type-a", 2})
+      fleet_spacecraft!("delta", display_name: "Delta-4", scid: 404, type: nil)
+
+      summary = Cadence.spacecraft_fleet_summary("org-fleet", "mission-fleet")
+
+      assert summary.total == 4
+      assert summary.missing_scid == 1
+      assert summary.missing_profile == 1
+
+      assert Enum.sort_by(summary.profile_version_counts, & &1.spacecraft_type_version) == [
+               %{spacecraft_type_id: "type-a", spacecraft_type_version: 1, count: 1},
+               %{spacecraft_type_id: "type-a", spacecraft_type_version: 2, count: 2}
+             ]
+    end
+
+    test "returns zeroed summary for an empty mission" do
+      persist_mission_scope("org-fleet", "mission-fleet")
+
+      summary = Cadence.spacecraft_fleet_summary("org-fleet", "mission-fleet")
+
+      assert summary == %{
+               total: 0,
+               missing_scid: 0,
+               missing_profile: 0,
+               profile_version_counts: []
+             }
+    end
+  end
+
+  defp fleet_spacecraft!(id, opts) do
+    {type_id, type_version} =
+      case Keyword.get(opts, :type) do
+        {type_id, version} -> {type_id, version}
+        nil -> {nil, nil}
+      end
+
+    spacecraft =
+      Spacecraft.new(%{
+        spacecraft_id: "spacecraft-#{id}",
+        organization_id: "org-fleet",
+        mission_id: "mission-fleet",
+        display_name: Keyword.fetch!(opts, :display_name),
+        scid: Keyword.get(opts, :scid),
+        spacecraft_type_id: type_id,
+        spacecraft_type_version: type_version
+      })
+
+    {:ok, persisted} = Cadence.persist_spacecraft("org-fleet", spacecraft)
+    persisted
+  end
+
+  defp names(opts) do
+    "org-fleet"
+    |> Cadence.list_spacecraft_page("mission-fleet", opts)
+    |> Map.fetch!(:items)
+    |> Enum.map(& &1.display_name)
+  end
 end

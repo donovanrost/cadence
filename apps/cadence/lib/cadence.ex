@@ -317,6 +317,19 @@ defmodule Cadence do
     SpacecraftStore.list_spacecraft(mission_id)
   end
 
+  @spec list_spacecraft_page(binary(), binary(), [SpacecraftStore.list_opt()]) ::
+          Cadence.Listing.Page.t()
+  def list_spacecraft_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftStore.list_spacecraft_page(organization_id, mission_id, opts)
+  end
+
+  @spec spacecraft_fleet_summary(binary(), binary()) :: map()
+  def spacecraft_fleet_summary(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    SpacecraftStore.fleet_summary(organization_id, mission_id)
+  end
+
   @spec ensure_managed_spacecraft_source_endpoint(binary(), Spacecraft.t()) ::
           {:ok, SourceEndpoint.t()} | {:error, term()}
   def ensure_managed_spacecraft_source_endpoint(organization_id, %Spacecraft{} = spacecraft)
