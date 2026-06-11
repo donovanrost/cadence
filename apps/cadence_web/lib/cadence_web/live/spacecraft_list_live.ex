@@ -50,15 +50,7 @@ defmodule CadenceWeb.SpacecraftListLive do
     organization_id = socket.assigns.current_scope.organization_id
     list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
     filter = parse_filter(params["filter"])
-
-    page =
-      Cadence.list_spacecraft_page(organization_id, mission.mission_id,
-        search: list.q,
-        sort: sort_tuple(list),
-        filter: store_filter(filter, socket.assigns.latest_versions),
-        page: list.page,
-        page_size: @page_size
-      )
+    {list, page} = fetch_roster(organization_id, mission.mission_id, list, filter, socket)
 
     {:noreply,
      socket
@@ -132,6 +124,27 @@ defmodule CadenceWeb.SpacecraftListLive do
       />
     </div>
     """
+  end
+
+  defp fetch_roster(organization_id, mission_id, list, filter, socket) do
+    page =
+      Cadence.list_spacecraft_page(organization_id, mission_id,
+        search: list.q,
+        sort: sort_tuple(list),
+        filter: store_filter(filter, socket.assigns.latest_versions),
+        page: list.page,
+        page_size: @page_size
+      )
+
+    last_page = max(ceil(page.total_count / @page_size), 1)
+
+    if list.page > last_page and page.total_count > 0 do
+      # A ?page= past the end (stale link, shrunken filter) clamps to the
+      # last real page instead of rendering an empty table.
+      fetch_roster(organization_id, mission_id, %{list | page: last_page}, filter, socket)
+    else
+      {list, page}
+    end
   end
 
   defp patch_roster(socket, list) do

@@ -66,7 +66,9 @@ defmodule CadenceWeb.CommsTransportListLive do
       |> Enum.filter(&matches_query?(&1, list.q))
       |> Enum.sort_by(&String.downcase(&1.display_name), list.dir)
 
-    visible = Enum.slice(matching, (list.page - 1) * @page_size, @page_size)
+    last_page = max(ceil(length(matching) / @page_size), 1)
+    page = min(list.page, last_page)
+    visible = Enum.slice(matching, (page - 1) * @page_size, @page_size)
     {visible, length(matching)}
   end
 
