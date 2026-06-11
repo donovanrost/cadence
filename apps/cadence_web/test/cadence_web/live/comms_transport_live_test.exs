@@ -38,6 +38,29 @@ defmodule CadenceWeb.CommsTransportLiveTest do
       refute page =~ "Link Template"
     end
 
+    test "search narrows the transport list" do
+      {conn, org, mission} = signed_in_org_and_mission()
+      _lab = persist_transport!(org.organization_id, mission.mission_id, "Lab TCP")
+      _ground = persist_transport!(org.organization_id, mission.mission_id, "Ground Uplink")
+
+      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/transports")
+
+      html =
+        view
+        |> element("#transports-toolbar form")
+        |> render_change(%{"q" => "ground"})
+
+      assert html =~ "Ground Uplink"
+      refute html =~ "Lab TCP"
+
+      html =
+        view
+        |> element("#transports-toolbar form")
+        |> render_change(%{"q" => "no-such-transport"})
+
+      assert html =~ "No transports match the current search."
+    end
+
     test "creates and shows a TCP transport" do
       {conn, org, mission} = signed_in_org_and_mission()
 

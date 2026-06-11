@@ -3,6 +3,14 @@ defmodule CadenceWeb.CommsTransportListLive do
   use CadenceWeb, :live_view
 
   alias Cadence.Comms.TransportKinds.TCPSocket
+  alias CadenceWeb.ListParams
+
+  # Search/sort/paginate happen in memory: TransportStore dedupes latest
+  # versions in Elixir, and transports number in the tens per mission.
+  # Move to DB-side paging (the list_spacecraft_page pattern) only if
+  # transports ever stop fitting comfortably in one query.
+  @page_size 50
+  @sortable ~w(display_name)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -13,9 +21,59 @@ defmodule CadenceWeb.CommsTransportListLive do
      socket
      |> assign(:page_title, "Comms Transports")
      |> assign(:nav_item, :comms_transports)
+     |> assign(:transports, transports)
      |> assign(:transport_count, length(transports))
-     |> assign(:transports_empty?, transports == [])
-     |> stream(:transports, transports, dom_id: &"transport-#{&1.transport_id}")}
+     |> assign(:transports_empty?, transports == [])}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    list = ListParams.parse(params, sortable: @sortable, default_sort: "display_name")
+    {visible, total} = filter_transports(socket.assigns.transports, list)
+
+    {:noreply,
+     socket
+     |> assign(:list, list)
+     |> assign(:filtered_count, total)
+     |> stream(:transports, visible, reset: true, dom_id: &"transport-#{&1.transport_id}")}
+  end
+
+  @impl true
+  def handle_event("search", %{"q" => q}, socket) do
+    {:noreply, patch_list(socket, %{socket.assigns.list | q: q, page: 1})}
+  end
+
+  @impl true
+  def handle_event("sort", %{"sort" => key}, socket) when key in @sortable do
+    {:noreply, patch_list(socket, ListParams.toggle_sort(socket.assigns.list, key))}
+  end
+
+  @impl true
+  def handle_event("paginate", %{"page" => page}, socket) do
+    list = %{socket.assigns.list | page: ListParams.parse(%{"page" => page}, sortable: []).page}
+    {:noreply, patch_list(socket, list)}
+  end
+
+  defp patch_list(socket, list) do
+    mission_id = socket.assigns.current_mission.mission_id
+    query = ListParams.to_query(list)
+    push_patch(socket, to: ~p"/missions/#{mission_id}/comms/transports?#{query}")
+  end
+
+  defp filter_transports(transports, %ListParams{} = list) do
+    matching =
+      transports
+      |> Enum.filter(&matches_query?(&1, list.q))
+      |> Enum.sort_by(&String.downcase(&1.display_name), list.dir)
+
+    visible = Enum.slice(matching, (list.page - 1) * @page_size, @page_size)
+    {visible, length(matching)}
+  end
+
+  defp matches_query?(_transport, nil), do: true
+
+  defp matches_query?(transport, q) do
+    String.contains?(String.downcase(transport.display_name), String.downcase(q))
   end
 
   @impl true
@@ -49,8 +107,15 @@ defmodule CadenceWeb.CommsTransportListLive do
         />
       <% else %>
         <.card padding={:none}>
-          <.table id="transports-table" body_id="transports" rows={@streams.transports}>
-            <:col :let={transport} label="Name" class="font-medium">
+          <.toolbar id="transports-toolbar" search={@list.q} placeholder="Search transports" />
+          <.table
+            id="transports-table"
+            body_id="transports"
+            rows={@streams.transports}
+            sort_by={@list.sort}
+            sort_dir={@list.dir}
+          >
+            <:col :let={transport} label="Name" sort="display_name" class="font-medium">
               <.link
                 navigate={
                   ~p"/missions/#{@current_mission.mission_id}/comms/transports/#{transport.transport_id}"
@@ -73,6 +138,15 @@ defmodule CadenceWeb.CommsTransportListLive do
               v{transport.version}
             </:col>
           </.table>
+          <p :if={@filtered_count == 0} class="py-6 text-center text-sm text-base-content/70">
+            No transports match the current search.
+          </p>
+          <.pagination
+            id="transports-pagination"
+            page={@list.page}
+            page_size={50}
+            total_count={@filtered_count}
+          />
         </.card>
       <% end %>
     </div>
