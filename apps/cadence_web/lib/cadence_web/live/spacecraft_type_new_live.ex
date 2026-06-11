@@ -2,8 +2,8 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
+  alias Cadence.Applications.Catalog, as: ApplicationCatalog
   alias Cadence.SpacecraftType
-  alias CadenceWeb.SpacecraftTypeApplications
   alias Phoenix.HTML.Form
 
   @impl true
@@ -12,7 +12,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
      socket
      |> assign(:page_title, "New Spacecraft Profile")
      |> assign(:nav_item, :spacecraft)
-     |> assign(:applications, SpacecraftTypeApplications.all())
+     |> assign(:applications, ApplicationCatalog.all())
      |> assign(:form, to_form(empty_form_params(), as: :spacecraft_type))}
   end
 
@@ -266,7 +266,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
   defp application_checked?(form, key) do
     case Form.input_value(form, :applications) do
-      %{} = applications -> Map.has_key?(applications, Atom.to_string(key))
+      %{} = applications -> Map.has_key?(applications, key)
       _ -> false
     end
   end
@@ -322,8 +322,8 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
   defp applications_from_params(params) do
     available_by_param =
-      SpacecraftTypeApplications.available()
-      |> Map.new(fn application -> {Atom.to_string(application.key), application.key} end)
+      ApplicationCatalog.available()
+      |> Map.new(fn application -> {application.key, application.key} end)
 
     applications =
       params

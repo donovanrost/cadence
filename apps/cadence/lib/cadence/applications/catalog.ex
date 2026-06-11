@@ -1,12 +1,16 @@
-defmodule CadenceWeb.SpacecraftTypeApplications do
+defmodule Cadence.Applications.Catalog do
   @moduledoc """
-  Small registry of platform applications exposed in the New Spacecraft Profile
-  form. Per the agreed UX, the form only declares which applications are
-  enabled for a profile; per-app configuration happens elsewhere.
+  Registry for platform applications known to Cadence.
+
+  Application keys are durable strings so first-party and future organization
+  uploaded applications can share the same persistence shape without creating
+  runtime atoms from user-controlled input.
   """
 
+  @type application_key :: binary()
+
   @type entry :: %{
-          key: atom(),
+          key: application_key(),
           display_name: binary(),
           description: binary(),
           available?: boolean()
@@ -14,13 +18,13 @@ defmodule CadenceWeb.SpacecraftTypeApplications do
 
   @entries [
     %{
-      key: :telemetry_decom,
+      key: "telemetry_decom",
       display_name: "Telemetry Decom",
       description: "Claim packet APIDs and decode selected packets into named telemetry points.",
       available?: true
     },
     %{
-      key: :derived_telemetry,
+      key: "derived_telemetry",
       display_name: "Derived Telemetry",
       description: "Compute telemetry values from raw points (roadmap).",
       available?: false
@@ -33,6 +37,6 @@ defmodule CadenceWeb.SpacecraftTypeApplications do
   @spec available() :: [entry()]
   def available, do: Enum.filter(@entries, & &1.available?)
 
-  @spec known_keys() :: [atom()]
+  @spec known_keys() :: [application_key()]
   def known_keys, do: Enum.map(@entries, & &1.key)
 end

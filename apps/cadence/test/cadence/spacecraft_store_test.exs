@@ -48,7 +48,7 @@ defmodule Cadence.SpacecraftStoreTest do
           "secondary_header_length" => 0,
           "ocf_length" => 0
         },
-        applications: %{telemetry_decom: %{}}
+        applications: %{"telemetry_decom" => %{}}
       })
 
     assert {:ok, persisted_type} = Cadence.persist_spacecraft_type("org-spacecraft", type)

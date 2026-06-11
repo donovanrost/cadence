@@ -45,6 +45,44 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
              ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
   end
 
+  test "lists custom application keys from the pinned spacecraft profile" do
+    {conn, _org, mission} = setup_session()
+
+    profile =
+      TestFixtures.persist_spacecraft_profile!(mission,
+        display_name: "Aurora Bus",
+        applications: %{
+          "custom:thermal-alerting" => %{
+            "display_name" => "Thermal Alerting",
+            "description" => "Mission-owned temperature monitoring."
+          }
+        }
+      )
+
+    spacecraft =
+      TestFixtures.persist_spacecraft!(mission,
+        display_name: "Nova-1",
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: profile.version
+      )
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+      )
+
+    assert has_element?(view, "#spacecraft-application-custom-thermal-alerting")
+
+    assert has_element?(
+             view,
+             "#spacecraft-application-custom-thermal-alerting",
+             "Thermal Alerting"
+           )
+
+    refute has_element?(view, "#spacecraft-application-custom-thermal-alerting a", "Manage")
+  end
+
   test "shows a profile setup gap when no profile is pinned" do
     {conn, _org, mission} = setup_session()
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")

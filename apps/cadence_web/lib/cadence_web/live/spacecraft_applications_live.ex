@@ -3,8 +3,8 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   use CadenceWeb, :live_view
 
+  alias Cadence.Applications.Catalog, as: ApplicationCatalog
   alias Cadence.Applications.TelemetryDecom
-  alias CadenceWeb.SpacecraftTypeApplications
 
   @impl true
   def mount(_params, _session, socket) do
@@ -108,7 +108,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   defp application_card(assigns) do
     ~H"""
-    <.card id={"spacecraft-application-#{@app.key}"} accent={application_accent(@app.status)}>
+    <.card id={@app.dom_id} accent={application_accent(@app.status)}>
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="hud-label">Application</p>
@@ -140,19 +140,20 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   defp application_rows(nil, _telemetry_status), do: []
 
   defp application_rows(%{pinned: %{applications: applications}}, telemetry_status) do
-    entries_by_key = Map.new(SpacecraftTypeApplications.all(), &{&1.key, &1})
+    entries_by_key = Map.new(ApplicationCatalog.all(), &{&1.key, &1})
 
     applications
     |> Enum.sort()
-    |> Enum.map(fn {key, _config} ->
-      entry = Map.fetch!(entries_by_key, key)
+    |> Enum.map(fn {key, config} ->
+      entry = Map.get(entries_by_key, key, custom_application_entry(key, config))
       application_row(entry, telemetry_status)
     end)
   end
 
-  defp application_row(%{key: :telemetry_decom} = entry, telemetry_status) do
+  defp application_row(%{key: "telemetry_decom"} = entry, telemetry_status) do
     %{
-      key: :telemetry_decom,
+      key: "telemetry_decom",
+      dom_id: application_dom_id("telemetry_decom"),
       display_name: entry.display_name,
       description: entry.description,
       available?: entry.available?,
@@ -166,6 +167,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   defp application_row(entry, _telemetry_status) do
     %{
       key: entry.key,
+      dom_id: application_dom_id(entry.key),
       display_name: entry.display_name,
       description: entry.description,
       available?: entry.available?,
@@ -173,6 +175,15 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
       status_label: if(entry.available?, do: "Not configured", else: "Roadmap"),
       claims_label: "None",
       publication_label: "Not published"
+    }
+  end
+
+  defp custom_application_entry(key, config) do
+    %{
+      key: key,
+      display_name: Map.get(config, "display_name", humanize_application_key(key)),
+      description: Map.get(config, "description", "Custom spacecraft application."),
+      available?: false
     }
   end
 
@@ -259,4 +270,16 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
   defp publication_label(:outdated), do: "Needs apply"
   defp publication_label(:disabled), do: "Disabled"
   defp publication_label(:not_configured), do: "Not published"
+
+  defp humanize_application_key(key) do
+    key
+    |> String.replace(["_", "-", ":"], " ")
+    |> String.split(" ", trim: true)
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
+  defp application_dom_id(key) do
+    safe_key = String.replace(key, ~r/[^A-Za-z0-9_-]+/, "-")
+    "spacecraft-application-#{safe_key}"
+  end
 end

@@ -20,7 +20,7 @@ defmodule Cadence.SpacecraftType do
   @type downlink_protocol :: :tm | :aos | :uslp
   @type uplink_protocol :: :tc | :uslp
   @type packet_protocol :: :space_packet
-  @type application_key :: atom()
+  @type application_key :: binary()
 
   @type t :: %__MODULE__{
           spacecraft_type_id: binary(),
@@ -126,8 +126,8 @@ defmodule Cadence.SpacecraftType do
     end)
   end
 
-  defp to_application_key(key) when is_atom(key), do: key
-  defp to_application_key(key) when is_binary(key), do: String.to_existing_atom(key)
+  defp to_application_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp to_application_key(key) when is_binary(key), do: key
 
   defp normalize_application_config(config) when is_map(config), do: config
   defp normalize_application_config(_), do: %{}

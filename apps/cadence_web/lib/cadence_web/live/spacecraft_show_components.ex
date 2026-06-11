@@ -120,7 +120,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
               <div class="flex items-start justify-between gap-3">
                 <p class="font-medium">{humanize_application_key(app_key)}</p>
                 <.link
-                  :if={app_key == :telemetry_decom}
+                  :if={app_key == "telemetry_decom"}
                   navigate={
                     ~p"/missions/#{@mission_id}/spacecraft/#{@spacecraft_id}/applications/#{app_key}"
                   }
@@ -155,7 +155,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
     |> Enum.map_join(" ", &String.capitalize/1)
   end
 
-  defp application_status_hint(:telemetry_decom, status), do: telemetry_decom_status_hint(status)
+  defp application_status_hint("telemetry_decom", status), do: telemetry_decom_status_hint(status)
   defp application_status_hint(_other, _status), do: "Coming soon."
 
   defp telemetry_decom_status_hint(:applied), do: "Configured and live."

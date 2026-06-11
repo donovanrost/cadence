@@ -148,7 +148,7 @@ defmodule CadenceWeb.TestFixtures do
             "secondary_header_length" => 0,
             "ocf_length" => 0
           }),
-        applications: Keyword.get(opts, :applications, %{telemetry_decom: %{}})
+        applications: Keyword.get(opts, :applications, %{"telemetry_decom" => %{}})
       })
 
     assert {:ok, persisted} = Cadence.persist_spacecraft_type(mission.organization_id, profile)
