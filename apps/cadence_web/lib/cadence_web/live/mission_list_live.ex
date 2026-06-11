@@ -2,8 +2,6 @@ defmodule CadenceWeb.MissionListLive do
   @moduledoc false
   use CadenceWeb, :live_view
 
-  alias Phoenix.LiveView.JS
-
   @impl true
   def mount(_params, _session, socket) do
     organization_id = socket.assigns.current_scope.organization_id
@@ -39,32 +37,26 @@ defmodule CadenceWeb.MissionListLive do
         />
       <% else %>
         <.card padding={:none}>
-          <%!-- Bespoke table: whole-row phx-click navigation isn't supported by <.table>. --%>
-          <table id="mission-list-table" class="table">
-            <thead>
-              <tr>
-                <th class="hud-label">Mission</th>
-                <th class="hud-label">Slug</th>
-                <th class="hud-label text-right">Spacecraft</th>
-                <th class="hud-label">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                :for={row <- @mission_rows}
-                id={"mission-row-#{row.mission.mission_id}"}
-                phx-click={JS.navigate(~p"/missions/#{row.mission.mission_id}")}
-                class="cursor-pointer border-l-2 border-l-transparent hover:border-l-primary/60 hover:bg-base-300/30 transition-colors"
-              >
-                <td class="font-medium">{row.mission.display_name}</td>
-                <td class="font-mono text-sm text-primary/80">{row.mission.slug}</td>
-                <td class="text-right font-mono text-sm">{row.spacecraft_count}</td>
-                <td>
-                  <.status_badge status={row.status} label={row.status_label} />
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <.table
+            id="mission-list-table"
+            rows={@mission_rows}
+            row_id={fn row -> "mission-row-#{row.mission.mission_id}" end}
+          >
+            <:col :let={row} label="Mission" class="font-medium">
+              <.link navigate={~p"/missions/#{row.mission.mission_id}"} class="text-primary hover:underline">
+                {row.mission.display_name}
+              </.link>
+            </:col>
+            <:col :let={row} label="Slug" mono class="text-primary/80">
+              {row.mission.slug}
+            </:col>
+            <:col :let={row} label="Spacecraft" align={:right} mono>
+              {row.spacecraft_count}
+            </:col>
+            <:col :let={row} label="Status">
+              <.status_badge status={row.status} label={row.status_label} />
+            </:col>
+          </.table>
         </.card>
       <% end %>
     </div>

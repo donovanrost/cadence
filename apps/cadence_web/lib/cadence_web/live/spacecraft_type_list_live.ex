@@ -55,7 +55,14 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
             rows={@streams.spacecraft_profiles}
           >
             <:col :let={profile} label="Name" class="font-medium">
-              {profile.display_name}
+              <.link
+                navigate={
+                  ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
+                }
+                class="text-primary hover:underline"
+              >
+                {profile.display_name}
+              </.link>
             </:col>
             <:col :let={profile} label="Version" mono class="text-base-content/70">
               v{profile.version}
@@ -68,17 +75,6 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
             </:col>
             <:col :let={profile} label="Applications" class="text-sm text-base-content/70">
               {applications_summary(profile.applications)}
-            </:col>
-            <:col :let={profile} label="Actions" align={:right}>
-              <.action_menu>
-                <:action>
-                  <.link navigate={
-                    ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-                  }>
-                    View
-                  </.link>
-                </:action>
-              </.action_menu>
             </:col>
           </.table>
         </.card>

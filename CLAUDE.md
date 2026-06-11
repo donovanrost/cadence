@@ -24,7 +24,7 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 5. **No file over 400 lines.** If approaching this, split by concern before continuing.
 
-6. **Table row actions use `<.action_menu>`, not inline buttons.** The component renders a vertical ellipsis that opens a dropdown menu. Never put multiple action buttons directly in a table cell.
+6. **Row navigation is the Name-cell link; secondary actions use `<.action_menu>`.** The Name column links to the row's show page (`text-primary hover:underline`) — never whole-row `phx-click`. Keep `<.action_menu>` only when the row has real secondary actions beyond View (a View-only menu should be dropped). Never put multiple action buttons directly in a table cell.
 
 ## Architecture quick reference
 
