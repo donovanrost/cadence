@@ -8,6 +8,7 @@ defmodule CadenceWeb.ComponentsTest do
   alias CadenceWeb.Components.Button
   alias CadenceWeb.Components.Card
   alias CadenceWeb.Components.FormInputs
+  alias CadenceWeb.Components.ListControls
   alias CadenceWeb.Components.PageHeader
   alias CadenceWeb.Components.Table
 
@@ -116,6 +117,63 @@ defmodule CadenceWeb.ComponentsTest do
       assert html =~ "Vehicles"
       assert html =~ "4"
     end
+
+    test "stat_tile with patch renders a filter link with active state" do
+      html =
+        render_component(&Card.stat_tile/1,
+          label: "Missing profile",
+          value: 3,
+          patch: "/spacecraft?filter=missing_profile",
+          active: true
+        )
+
+      assert html =~ ~s(href="/spacecraft?filter=missing_profile")
+      assert html =~ ~s(aria-current="true")
+      assert html =~ "border-primary/60"
+      assert html =~ "text-primary!"
+    end
+  end
+
+  describe "list_controls" do
+    test "toolbar renders a debounced search form" do
+      html =
+        render_component(&ListControls.toolbar/1,
+          id: "roster-toolbar",
+          search: "alpha",
+          on_search: "search"
+        )
+
+      assert html =~ ~s(phx-change="search")
+      assert html =~ ~s(phx-debounce="300")
+      assert html =~ ~s(name="q")
+      assert html =~ ~s(value="alpha")
+    end
+
+    test "pagination renders the range and disables prev on page one" do
+      html =
+        render_component(&ListControls.pagination/1,
+          id: "roster-pagination",
+          page: 1,
+          page_size: 50,
+          total_count: 287
+        )
+
+      assert html =~ "1–50 of 287"
+      assert html =~ ~s(phx-value-page="2")
+      assert html =~ "disabled"
+    end
+
+    test "pagination renders nothing when everything fits on one page" do
+      html =
+        render_component(&ListControls.pagination/1,
+          id: "roster-pagination",
+          page: 1,
+          page_size: 50,
+          total_count: 12
+        )
+
+      refute html =~ "of 12"
+    end
   end
 
   describe "table/1" do
@@ -161,6 +219,34 @@ defmodule CadenceWeb.ComponentsTest do
       assert html =~ "text-right"
       assert html =~ "font-mono text-sm"
       refute html =~ "hover:border-l-primary/60"
+    end
+
+    test "sortable column renders a header button with aria-sort when active" do
+      html =
+        render_component(&Table.table/1,
+          id: "t",
+          rows: [],
+          sort_by: "scid",
+          sort_dir: :desc,
+          col: [
+            %{
+              label: "SCID",
+              sort: "scid",
+              inner_block: fn _changed, _item -> item_text("x") end,
+              __slot__: :col
+            },
+            %{
+              label: "Name",
+              inner_block: fn _changed, _item -> item_text("x") end,
+              __slot__: :col
+            }
+          ]
+        )
+
+      assert html =~ ~s(phx-value-sort="scid")
+      assert html =~ ~s(aria-sort="descending")
+      assert html =~ "hero-chevron-down"
+      refute html =~ ~s(phx-value-sort="Name")
     end
 
     test "empty slot renders when rows are empty" do

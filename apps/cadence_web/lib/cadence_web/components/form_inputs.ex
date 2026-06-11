@@ -23,6 +23,7 @@ defmodule CadenceWeb.Components.FormInputs do
   attr :options, :list, default: []
   attr :required, :boolean, default: false
   attr :errors, :list, default: []
+  attr :compact, :boolean, default: false, doc: "drops the wrapper margin for toolbar use"
   attr :class, :string, default: nil
   attr :rest, :global, include: ~w(autocomplete autofocus disabled maxlength minlength pattern)
 
@@ -45,7 +46,7 @@ defmodule CadenceWeb.Components.FormInputs do
       end)
 
     ~H"""
-    <div class="fieldset mb-3">
+    <div class={["fieldset", !@compact && "mb-3"]}>
       <label>
         <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
         <%= if @type == "select" do %>

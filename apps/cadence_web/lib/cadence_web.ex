@@ -54,6 +54,7 @@ defmodule CadenceWeb do
       import CadenceWeb.Components.Button
       import CadenceWeb.Components.Card
       import CadenceWeb.Components.FormInputs
+      import CadenceWeb.Components.ListControls
       import CadenceWeb.Components.PageHeader
       import CadenceWeb.Components.Table
       import CadenceWeb.CoreComponents
