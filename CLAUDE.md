@@ -10,7 +10,7 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 ## UI rules (non-negotiable)
 
-1. **Never add rules to CSS files.** The CSS in `assets/css/components/` is a closed set ported from legacy. Compose from daisyUI classes + Tailwind utilities + existing HUD utilities (`hud-label`, `hover-glow-cyan`, `hud-grid`, etc.). If you think you need new CSS, you're wrong — use an existing class or a Tailwind arbitrary value.
+1. **No new CSS selectors.** The CSS in `assets/css/components/` is a closed set of selectors ported from legacy. Tuning the *values* of existing declarations and defining missing custom-property tokens inside the existing `:root`/`@theme` blocks in `app.css` is allowed; adding selectors or new rule blocks is not. Compose new looks from daisyUI classes + Tailwind utilities + existing HUD utilities (`hud-label`, `hud-grid`, etc.). If you think you need a new rule, you're wrong — use an existing class or a Tailwind arbitrary value.
 
 2. **Never write raw HTML form inputs.** Use `<.input>` from `CadenceWeb.Components.FormInputs` for all form fields. It handles labels (`hud-label`), daisyUI styling, error display, and select/text/email/password types. For standalone controls outside a form binding (filter boxes, `phx-change` selectors), pass `name`/`value` instead of `field`.
 

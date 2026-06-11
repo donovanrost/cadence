@@ -83,6 +83,8 @@
   --glow-purple: var(--brand-secondary);
   --glow-pink: var(--brand-accent);
 
+  --icon-muted: oklch(from var(--glow-cyan) 68% 0.06 h);
+
   --surface-overlay: oklch(8% 0.02 265);
   --surface-inset: oklch(10% 0.015 265);
   --surface-base: oklch(12% 0.02 265);
