@@ -12,12 +12,11 @@ defmodule CadenceWeb.ComponentsTest do
   alias CadenceWeb.Components.Table
 
   describe "button/1" do
-    test "primary default carries glow and small size" do
+    test "primary default carries small size without glow" do
       html = render_button(%{})
 
       assert html =~ "btn-primary"
-      assert html =~ "hover-glow-cyan"
-      assert html =~ "transition-glow"
+      refute html =~ "hover-glow-cyan"
       assert html =~ "btn-sm"
       assert html =~ ~s(type="button")
     end

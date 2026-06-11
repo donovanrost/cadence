@@ -16,6 +16,8 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 7. **Use the component layer, not raw daisyUI markup.** `<.button>` (never `class="btn ..."`), `<.card>`/`<.stat_tile>` (never `class="card bg-base-200 ..."`), `<.table>` for data tables, `<.page_header>` for page titles, `<.empty_state>` for empty lists, `<.status_badge>`/`<.severity_badge>` for pills. All live in `lib/cadence_web/components/` and are imported everywhere via `html_helpers`. A one-off layout that would need more than a couple of `class` escape hatches may stay raw — leave a one-line comment saying why.
 
+8. **Glow is reserved for navigation cards and live/alert signals.** Buttons never glow (`<.button>` enforces this). Use `<.card hover_glow>` only on cards that are themselves navigation targets.
+
 3. **No render function over 50 lines.** Extract a private component function or a separate component module. Large render functions are where duplication hides.
 
 4. **Before writing any template, read the most similar existing template.** Match its patterns. Don't invent new card layouts, button styles, or page structures — reuse what's there.
@@ -34,6 +36,6 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 **Admin routes:** Inside `live_session :admin` with `CadenceWeb.AdminAuth` on_mount hook. The hook authenticates, checks `platform_admin` capability, and assigns `current_scope` + `nav_context`.
 
-**Frontend stack:** daisyUI 5 + Tailwind v4 + Tokyo Night dark theme (hot pink accent, sharp 2px corners, oklch colors) + HUD utility layer, wrapped by the component layer in `lib/cadence_web/components/` (rule 7). Inside components and one-off layouts, compose from `hud-label`, `hover-glow-cyan transition-glow`, `text-base-content/60` for muted text.
+**Frontend stack:** daisyUI 5 + Tailwind v4 + Tokyo Night dark theme (hot pink accent, sharp 2px corners, oklch colors) + HUD utility layer, wrapped by the component layer in `lib/cadence_web/components/` (rule 7). Inside components and one-off layouts, compose from `hud-label`, `text-base-content/70` for secondary text.
 
 **Legacy reference:** `legacy/cadence_legacy/` has the visual reference for the HUD aesthetic. Use it for pattern reference, not code copying.

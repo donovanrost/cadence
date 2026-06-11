@@ -22,14 +22,14 @@ defmodule CadenceWeb.AdminHomeLive do
       />
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <.card title="Organizations" hover_glow>
+        <.card title="Organizations">
           <p class="text-3xl font-bold mt-2">{@org_count}</p>
           <.button navigate={~p"/admin/organizations"} class="mt-4 w-full">
             Manage Organizations
           </.button>
         </.card>
 
-        <.card title="Users" class="hover-glow-purple transition-glow">
+        <.card title="Users">
           <p class="text-3xl font-bold mt-2">{@user_count}</p>
           <.button variant={:secondary} class="mt-4 w-full" disabled>
             Manage Users <span class="text-xs">(Coming Soon)</span>

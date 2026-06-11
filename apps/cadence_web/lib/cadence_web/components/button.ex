@@ -5,8 +5,8 @@ defmodule CadenceWeb.Components.Button do
   Renders a `<button>` — or a `<.link>` styled as one when `navigate`,
   `patch`, or `href` is set. Conventions baked in:
 
-    * `:primary` always carries the cyan glow (`hover-glow-cyan transition-glow`);
-      ghost/secondary never do.
+    * Buttons never glow. Glow (`hover-glow-*`) is reserved for navigation
+      cards and future live/alert signals.
     * `:sm` is the default size. Reserve `:md` for form-submit and page-level
       CTAs, `:xs` for inline table controls.
     * `:danger` is the outline error treatment for destructive actions.
@@ -44,7 +44,7 @@ defmodule CadenceWeb.Components.Button do
     ["btn", variant_class(assigns.variant), size_class(assigns.size), assigns.class]
   end
 
-  defp variant_class(:primary), do: "btn-primary hover-glow-cyan transition-glow"
+  defp variant_class(:primary), do: "btn-primary"
   defp variant_class(:ghost), do: "btn-ghost"
   defp variant_class(:secondary), do: "btn-secondary"
   defp variant_class(:danger), do: "btn-error btn-outline"
