@@ -78,7 +78,7 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
               <p class="mt-2 text-sm text-base-content/60">
                 {human_atom(rule.direction)} via {transport_name(@transport_by_id, rule.transport_id)}
               </p>
-              <p class="mt-2 font-mono text-xs text-base-content/50">
+              <p class="mt-2 font-mono text-xs text-base-content/60">
                 {human_atom(rule.role)} · {if rule.enabled?, do: "ENABLED", else: "DISABLED"}
               </p>
             </div>

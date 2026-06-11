@@ -139,7 +139,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
     ~H"""
     <section class="space-y-4">
       <.section_heading number="03" title="Downlink Frame Parameters" />
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol.
       </p>
 
@@ -189,7 +189,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
     ~H"""
     <section class="space-y-4">
       <.section_heading number="04" title="Applications" />
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft.
       </p>
 
@@ -218,11 +218,11 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           <div>
             <div class="font-medium text-base-content">
               {app.display_name}
-              <span :if={not app.available?} class="hud-label ml-2 text-base-content/40">
+              <span :if={not app.available?} class="hud-label ml-2">
                 Roadmap
               </span>
             </div>
-            <p class="mt-0.5 text-sm text-base-content/60">{app.description}</p>
+            <p class="mt-0.5 text-sm text-base-content/70">{app.description}</p>
           </div>
         </label>
       </div>

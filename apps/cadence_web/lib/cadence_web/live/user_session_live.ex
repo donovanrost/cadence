@@ -27,7 +27,7 @@ defmodule CadenceWeb.UserSessionLive do
           &#9670; CADENCE
         </p>
         <h1 class="mt-3 text-xl font-bold text-base-content">Sign in</h1>
-        <p class="text-xs text-base-content/50 mt-0.5">
+        <p class="text-xs text-base-content/70 mt-0.5">
           Enter your operator credentials to access the control plane.
         </p>
       </div>
@@ -60,7 +60,7 @@ defmodule CadenceWeb.UserSessionLive do
           Sign In
         </.button>
 
-        <p class="mt-3 text-center text-xs text-base-content/60">
+        <p class="mt-3 text-center text-xs text-base-content/70">
           Need access? Contact your organization admin.
         </p>
       </.form>

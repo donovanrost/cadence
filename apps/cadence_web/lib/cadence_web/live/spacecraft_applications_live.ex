@@ -57,7 +57,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
         accent={:warning}
       >
         <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
-        <p class="mt-1 text-sm text-base-content/60">
+        <p class="mt-1 text-sm text-base-content/70">
           Select a Spacecraft Profile before configuring application packet claims.
         </p>
         <.button
@@ -116,7 +116,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
         </div>
         <.status_badge status={panel_status(@app.status)} label={@app.status_label} />
       </div>
-      <p class="mt-3 text-sm text-base-content/60">{@app.description}</p>
+      <p class="mt-3 text-sm text-base-content/70">{@app.description}</p>
       <div class="mt-5 space-y-1">
         <.detail_row label="Packet claims" value={@app.claims_label} />
         <.detail_row label="Publication" value={@app.publication_label} />

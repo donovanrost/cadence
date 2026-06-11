@@ -47,7 +47,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
   defp type_binding_summary(%{type_binding: nil} = assigns) do
     ~H"""
     <h2 class="text-lg font-semibold text-base-content/70">No profile selected</h2>
-    <p class="text-sm text-base-content/60">
+    <p class="text-sm text-base-content/70">
       Select a spacecraft profile to pin a reusable byte-interpretation contract.
     </p>
     """
@@ -60,12 +60,12 @@ defmodule CadenceWeb.SpacecraftShowComponents do
       <span class="mc-value-small text-primary/80">v{@type_binding.pinned.version}</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-      <span class="hud-label text-base-content/40">DOWN</span>
+      <span class="hud-label">DOWN</span>
       <span class="font-mono uppercase text-primary/80">
         {@type_binding.pinned.downlink_protocol}
       </span>
       <span class="text-base-content/30">·</span>
-      <span class="hud-label text-base-content/40">UP</span>
+      <span class="hud-label">UP</span>
       <span class="font-mono uppercase text-primary/80">
         {@type_binding.pinned.uplink_protocol}
       </span>
@@ -106,11 +106,11 @@ defmodule CadenceWeb.SpacecraftShowComponents do
     ~H"""
     <.card :if={@type_binding} id="spacecraft-applications" title="Applications">
       <div class="mt-3 space-y-3">
-        <p class="text-sm text-base-content/60">
+        <p class="text-sm text-base-content/70">
           Platform applications enabled by this spacecraft's profile. Per-application configuration is set per spacecraft.
         </p>
         <%= if map_size(@type_binding.pinned.applications) == 0 do %>
-          <p class="text-sm text-base-content/50">No applications enabled by this profile.</p>
+          <p class="text-sm text-base-content/60">No applications enabled by this profile.</p>
         <% else %>
           <div class="grid gap-3 md:grid-cols-2">
             <div

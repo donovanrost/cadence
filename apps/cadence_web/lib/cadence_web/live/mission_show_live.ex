@@ -73,7 +73,7 @@ defmodule CadenceWeb.MissionShowLive do
           <h2 class="text-lg font-semibold">
             Configure spacecraft identity and select a spacecraft profile
           </h2>
-          <p class="mt-1 max-w-2xl text-sm text-base-content/60">
+          <p class="mt-1 max-w-2xl text-sm text-base-content/70">
             Each row shows whether a spacecraft can be identified from incoming frames
             and has a profile that defines its byte-interpretation contract.
           </p>
@@ -106,7 +106,7 @@ defmodule CadenceWeb.MissionShowLive do
     <.table id="mission-spacecraft-readiness" body_id="spacecraft-readiness-table" rows={@rows}>
       <:col :let={row} label="Spacecraft">
         <div class="font-medium">{row.spacecraft.display_name}</div>
-        <div class="font-mono text-xs text-base-content/40">
+        <div class="font-mono text-xs text-base-content/60">
           {row.spacecraft.spacecraft_id}
         </div>
       </:col>
@@ -115,17 +115,17 @@ defmodule CadenceWeb.MissionShowLive do
       </:col>
       <:col :let={row} label="Runtime Identity">
         <div class="text-sm">{row.endpoint_label}</div>
-        <div class="font-mono text-xs text-base-content/50">
+        <div class="font-mono text-xs text-base-content/60">
           {row.endpoint_ref || "Not created"}
         </div>
       </:col>
       <:col :let={row} label="Downlink Link">
         <div class="text-sm">{row.path_label}</div>
-        <div class="text-xs text-base-content/50">{row.path_detail}</div>
+        <div class="text-xs text-base-content/60">{row.path_detail}</div>
       </:col>
       <:col :let={row} label="Status">
         <.status_badge status={row.status} label={row.status_label} />
-        <p class="mt-1 max-w-xs text-xs text-base-content/60">{row.issue}</p>
+        <p class="mt-1 max-w-xs text-xs text-base-content/70">{row.issue}</p>
       </:col>
       <:col :let={row} label="Actions" align={:right}>
         <.action_menu id={"#{row.spacecraft.spacecraft_id}-readiness-actions"}>

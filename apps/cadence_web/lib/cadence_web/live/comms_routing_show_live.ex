@@ -70,7 +70,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
   defp rule_card(assigns) do
     ~H"""
     <.card title="Routing Rule">
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         Durable spacecraft use of a transport for a purpose and direction.
       </p>
 
@@ -115,7 +115,7 @@ defmodule CadenceWeb.CommsRoutingShowLive do
       <div id="routing-rule-events" class="space-y-2">
         <div :for={event <- @events} class="rounded border border-base-300 bg-base-100/40 p-3">
           <p class="font-mono text-xs text-primary/80">{human_atom(event.event_type)}</p>
-          <p class="mt-1 text-xs text-base-content/50">
+          <p class="mt-1 text-xs text-base-content/60">
             {Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")}
           </p>
         </div>

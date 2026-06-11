@@ -48,7 +48,7 @@ defmodule CadenceWeb.Components.Card do
       >
         <div>
           <h2 class="text-base font-semibold text-base-content">{@heading}</h2>
-          <p :if={@subtitle} class="mt-1 text-xs text-base-content/60">{@subtitle}</p>
+          <p :if={@subtitle} class="mt-1 text-xs text-base-content/70">{@subtitle}</p>
         </div>
         <div :if={@actions != []} class="flex items-center gap-2">
           {render_slot(@actions)}

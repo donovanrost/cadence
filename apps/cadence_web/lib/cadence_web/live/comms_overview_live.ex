@@ -53,7 +53,7 @@ defmodule CadenceWeb.CommsOverviewLive do
               transport<%= if @transport_count == 1, do: "", else: "s" %> configured
             </span>
           </div>
-          <p class="mt-3 max-w-2xl text-sm text-base-content/60">
+          <p class="mt-3 max-w-2xl text-sm text-base-content/70">
             Transports describe durable capabilities for moving bytes. Routing rules will decide how spacecraft use those capabilities.
           </p>
         </div>
@@ -90,7 +90,7 @@ defmodule CadenceWeb.CommsOverviewLive do
           class="block rounded border border-base-300 bg-base-100/40 p-4 border-l-2 border-l-transparent hover:border-l-primary/60 hover-glow-cyan transition-glow"
         >
           <p class="font-medium">{transport.display_name}</p>
-          <p class="mt-1 font-mono text-xs text-base-content/50">
+          <p class="mt-1 font-mono text-xs text-base-content/60">
             {transport.transport_kind} · {transport.direction_capability} · v{transport.version}
           </p>
         </.link>
@@ -124,7 +124,7 @@ defmodule CadenceWeb.CommsOverviewLive do
         <div>
           <p class="hud-label mb-2">Setup Checks</p>
           <h2 class="text-lg font-semibold">What's missing or broken</h2>
-          <p class="mt-1 text-sm text-base-content/60">
+          <p class="mt-1 text-sm text-base-content/70">
             Checks on saved configuration for spacecraft on this mission.
           </p>
         </div>
@@ -143,7 +143,7 @@ defmodule CadenceWeb.CommsOverviewLive do
           <section :for={group <- @finding_groups} id={group.id} class="space-y-3">
             <div>
               <p class="hud-label mb-1">{group.title}</p>
-              <p class="text-sm text-base-content/60">{group.description}</p>
+              <p class="text-sm text-base-content/70">{group.description}</p>
             </div>
 
             <.finding_row :for={finding <- group.findings} finding={finding} />
@@ -162,7 +162,7 @@ defmodule CadenceWeb.CommsOverviewLive do
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="font-semibold">{@finding.title}</h3>
-          <p class="mt-1 text-sm text-base-content/60">{@finding.body}</p>
+          <p class="mt-1 text-sm text-base-content/70">{@finding.body}</p>
           <.button
             :if={Map.get(@finding, :action_navigate)}
             size={:xs}

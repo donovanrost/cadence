@@ -268,7 +268,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
         <.table id="catalog-revisions-table" rows={@revisions} row_accent={false}>
           <:col :let={revision} label="Revision">
             <p class="font-medium">{revision.revision_label}</p>
-            <p class="font-mono text-xs text-base-content/50">
+            <p class="font-mono text-xs text-base-content/60">
               {"#" <> Integer.to_string(revision.revision_number)}
             </p>
           </:col>

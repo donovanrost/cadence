@@ -62,7 +62,7 @@ defmodule CadenceWeb.CatalogCommandSnapshotShowLive do
         snapshot={@snapshot}
       />
 
-      <p class="text-sm text-base-content/50">
+      <p class="text-sm text-base-content/70">
         Individual-item views are coming in a future catalog explorer.
       </p>
     </div>

@@ -79,7 +79,7 @@ defmodule CadenceWeb.CommsProviderProfileListLive do
         <:col :let={profile} label="Version" mono class="text-base-content/70">
           v{profile.version}
         </:col>
-        <:col :let={profile} label="Provider ID" class="font-mono text-xs text-base-content/50">
+        <:col :let={profile} label="Provider ID" class="font-mono text-xs text-base-content/60">
           {profile.provider_profile_id}
         </:col>
       </.table>

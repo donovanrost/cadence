@@ -122,7 +122,7 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
         />
         <span>
           <span class="font-semibold text-sm">Grant platform admin</span>
-          <span class="block text-xs text-base-content/50">
+          <span class="block text-xs text-base-content/70">
             Platform admins can manage all organizations and system settings.
           </span>
         </span>

@@ -121,7 +121,7 @@ defmodule CadenceWeb.NotificationsLive do
           ]}>
             {@notification.title}
           </p>
-          <p :if={@notification.body} class="mt-1 text-xs text-base-content/60">
+          <p :if={@notification.body} class="mt-1 text-xs text-base-content/70">
             {@notification.body}
           </p>
         </div>
@@ -149,7 +149,7 @@ defmodule CadenceWeb.NotificationsLive do
         </.button>
         <span
           :if={@notification.read_at}
-          class="text-xs text-base-content/40 uppercase tracking-wide"
+          class="text-xs text-base-content/60 uppercase tracking-wide"
         >
           Accepted
         </span>

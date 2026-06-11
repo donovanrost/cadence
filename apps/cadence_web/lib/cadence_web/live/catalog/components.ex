@@ -45,7 +45,7 @@ defmodule CadenceWeb.Catalog.Components do
             >
               {diagnostic_detail(diagnostic)}
             </p>
-            <p :if={diagnostic.path != []} class="text-xs text-base-content/50 font-mono mt-1">
+            <p :if={diagnostic.path != []} class="text-xs text-base-content/60 font-mono mt-1">
               {Enum.join(diagnostic.path, " / ")}
             </p>
           </li>
@@ -112,7 +112,7 @@ defmodule CadenceWeb.Catalog.Components do
     ~H"""
     <.card title="Create catalog database revision">
       <div class="space-y-4 mt-2">
-        <p class="text-sm text-base-content/60">
+        <p class="text-sm text-base-content/70">
           Save the upload as an immutable revision in the mission catalog library. Runtime
           usage is chosen separately.
         </p>
@@ -196,7 +196,7 @@ defmodule CadenceWeb.Catalog.Components do
           </p>
         </div>
       <% _ -> %>
-        <div class="text-xs text-base-content/50">
+        <div class="text-xs text-base-content/60">
           Select a file to see the detected importer.
         </div>
     <% end %>

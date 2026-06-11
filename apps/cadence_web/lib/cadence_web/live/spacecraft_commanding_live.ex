@@ -59,7 +59,7 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
           <div>
             <p class="hud-label mb-2">Readiness Impact</p>
             <h2 class="text-lg font-semibold">Command interpretation is not part of readiness yet</h2>
-            <p class="mt-1 text-sm text-base-content/60">
+            <p class="mt-1 text-sm text-base-content/70">
               This page keeps the spacecraft-owned command surface visible while command
               setup matures. Current readiness still focuses on identity, telemetry
               interpretation, and link assignment.
@@ -89,7 +89,7 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
         </div>
         <.status_badge status={:info} label="Setup" />
       </div>
-      <p class="mt-3 text-sm text-base-content/60">{@description}</p>
+      <p class="mt-3 text-sm text-base-content/70">{@description}</p>
       <.link
         :if={@action_navigate}
         navigate={@action_navigate}

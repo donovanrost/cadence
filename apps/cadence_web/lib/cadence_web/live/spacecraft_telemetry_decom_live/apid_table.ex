@@ -63,13 +63,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
             <td class="py-1.5 font-mono text-base-content/90 align-top">{row.apid}</td>
             <td class="py-1.5">
               <div>{packets_label(row)}</div>
-              <div :if={row.short_description} class="text-xs text-base-content/50 mt-0.5">
+              <div :if={row.short_description} class="text-xs text-base-content/60 mt-0.5">
                 {row.short_description}
               </div>
             </td>
-            <td class="py-1.5 text-base-content/50 align-top">{row.def_count}</td>
-            <td class="py-1.5 text-base-content/50 align-top">{rate_label(row.rate_hz)}</td>
-            <td class="py-1.5 text-base-content/50 align-top">{conflict_label(@conflicts, row.apid)}</td>
+            <td class="py-1.5 text-base-content/70 align-top">{row.def_count}</td>
+            <td class="py-1.5 text-base-content/70 align-top">{rate_label(row.rate_hz)}</td>
+            <td class="py-1.5 text-base-content/70 align-top">{conflict_label(@conflicts, row.apid)}</td>
           </tr>
           <tr :if={MapSet.member?(@expanded_apids, row.apid)}>
             <td colspan="7" class="p-0">
@@ -83,13 +83,13 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                     class="text-base-content/70 not-italic mb-1"
                   >
                     {packet.name}
-                    <span :if={packet.entries == []} class="text-base-content/40">
+                    <span :if={packet.entries == []} class="text-base-content/50">
                       · no entries
                     </span>
                   </div>
                   <table :if={packet.entries != []} class="w-full">
                     <thead>
-                      <tr class="text-base-content/40">
+                      <tr class="text-base-content/50">
                         <th class="text-left py-1 font-normal">name</th>
                         <th class="text-left py-1 font-normal">kind</th>
                         <th class="text-right py-1 font-normal">offset</th>
@@ -99,20 +99,20 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
                     <tbody>
                       <tr :for={entry <- Enum.take(packet.entries, 20)}>
                         <td class="py-0.5 text-primary/90">{entry_name(entry, @points_by_id)}</td>
-                        <td class="py-0.5 text-base-content/60">{entry.entry_kind}</td>
-                        <td class="py-0.5 text-right text-base-content/50">
+                        <td class="py-0.5 text-base-content/70">{entry.entry_kind}</td>
+                        <td class="py-0.5 text-right text-base-content/70">
                           {entry.bit_offset || "—"}
                         </td>
-                        <td class="py-0.5 pl-3 text-base-content/50">{entry_notes(entry)}</td>
+                        <td class="py-0.5 pl-3 text-base-content/70">{entry_notes(entry)}</td>
                       </tr>
                     </tbody>
                   </table>
-                  <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/50">
+                  <p :if={length(packet.entries) > 20} class="mt-1 text-base-content/60">
                     {length(packet.entries) - 20} more omitted.
                   </p>
                   <p
                     :if={length(row.packets) == 1 and packet.entries == []}
-                    class="text-base-content/40 not-italic"
+                    class="text-base-content/50 not-italic"
                   >
                     No entries.
                   </p>
@@ -122,7 +122,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.APIDTable do
           </tr>
         <% end %>
         <tr :if={@visible_rows == []}>
-          <td colspan="7" class="py-4 text-center text-base-content/50">
+          <td colspan="7" class="py-4 text-center text-base-content/60">
             No APIDs match the filter.
           </td>
         </tr>

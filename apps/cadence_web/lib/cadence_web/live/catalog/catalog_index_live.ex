@@ -106,7 +106,7 @@ defmodule CadenceWeb.CatalogIndexLive do
             >
               {database.name}
             </.link>
-            <p class="font-mono text-xs text-base-content/50">{database.slug}</p>
+            <p class="font-mono text-xs text-base-content/60">{database.slug}</p>
           </:col>
           <:col :let={database} label="Latest revision">
             <.latest_revision_cell
@@ -147,7 +147,7 @@ defmodule CadenceWeb.CatalogIndexLive do
 
   defp latest_revision_cell(%{revision: nil} = assigns) do
     ~H"""
-    <span class="text-base-content/40 text-xs">No revisions</span>
+    <span class="text-base-content/50 text-xs">No revisions</span>
     """
   end
 
@@ -169,7 +169,7 @@ defmodule CadenceWeb.CatalogIndexLive do
 
   defp latest_run_cell(%{run: nil} = assigns) do
     ~H"""
-    <span class="text-base-content/40 text-xs">—</span>
+    <span class="text-base-content/50 text-xs">—</span>
     """
   end
 

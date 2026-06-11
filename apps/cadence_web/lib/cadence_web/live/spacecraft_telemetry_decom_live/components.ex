@@ -18,7 +18,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
       <div class="flex items-center gap-2">
         <.status_dot status={dot_status(@status)} />
         <span class="text-base-content/90">{status_label(@status)}</span>
-        <span class="text-sm text-base-content/50">— {status_description(@status)}</span>
+        <span class="text-sm text-base-content/70">— {status_description(@status)}</span>
       </div>
       <span :if={@saved_at} class="hud-label">Saved {format_relative(@saved_at)}</span>
     </div>
@@ -104,7 +104,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
     ~H"""
     <div>
       <p class="hud-label mb-2">Preview</p>
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         Select one or more packet APIDs to preview the application input claim.
       </p>
     </div>
@@ -158,7 +158,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   def apply_section(%{config: nil} = assigns) do
     ~H"""
     <div class="flex justify-end">
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         Select at least one APID to save and apply.
       </p>
     </div>
@@ -213,7 +213,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
   def no_revisions_notice(assigns) do
     ~H"""
     <div>
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         No packet catalog revisions are available for this mission yet. Import a catalog
         revision first.
       </p>

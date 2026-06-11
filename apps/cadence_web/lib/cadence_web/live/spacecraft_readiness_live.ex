@@ -125,7 +125,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
         <.status_badge status={@status} label={@status_label} />
       </div>
       <h2 class="mt-3 text-base font-semibold">{@status_label}</h2>
-      <p class="mt-1 text-sm text-base-content/60">{@description}</p>
+      <p class="mt-1 text-sm text-base-content/70">{@description}</p>
 
       <div class="mt-5 space-y-1">
         <.detail_row :for={detail <- @detail} label={detail.label} value={detail.value} />

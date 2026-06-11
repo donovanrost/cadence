@@ -20,7 +20,7 @@ defmodule CadenceWeb.CommsComponents do
         <.status_badge status={@status} />
       </div>
       <p class="mt-3 mc-value-large text-primary">{@value}</p>
-      <p class="mt-2 text-sm text-base-content/60">{@description}</p>
+      <p class="mt-2 text-sm text-base-content/70">{@description}</p>
       <.link
         :if={@navigate}
         navigate={@navigate}

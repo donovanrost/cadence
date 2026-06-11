@@ -33,18 +33,18 @@ defmodule CadenceWeb.Components.PageHeader do
           <.link
             :if={@back_navigate}
             navigate={@back_navigate}
-            class="hud-label text-base-content/50 hover:text-primary"
+            class="hud-label hover:text-primary"
           >
             &larr; {@back_label}
           </.link>
-          <p :if={@eyebrow} class="hud-label text-base-content/50">{@eyebrow}</p>
+          <p :if={@eyebrow} class="hud-label">{@eyebrow}</p>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {@title}
-            <span :if={@title_suffix != []} class="ml-3 font-mono text-base text-base-content/40">
+            <span :if={@title_suffix != []} class="ml-3 font-mono text-base text-base-content/60">
               {render_slot(@title_suffix)}
             </span>
           </h1>
-          <p :if={@subtitle} class="mt-1 max-w-3xl text-sm text-base-content/60">{@subtitle}</p>
+          <p :if={@subtitle} class="mt-1 max-w-3xl text-sm text-base-content/70">{@subtitle}</p>
         </div>
         <div :if={@actions != []} class="flex items-center gap-2">
           {render_slot(@actions)}

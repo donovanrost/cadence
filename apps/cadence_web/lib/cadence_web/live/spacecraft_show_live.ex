@@ -188,7 +188,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
 
       <div :if={map_size(@current_spacecraft.metadata) > 0} class="pt-2">
         <details class="text-sm">
-          <summary class="cursor-pointer hud-label text-base-content/50 hover:text-primary">
+          <summary class="cursor-pointer hud-label hover:text-primary">
             Metadata
           </summary>
           <pre class="mt-2 p-3 bg-base-300/40 border border-base-300 rounded-sm overflow-x-auto text-xs font-mono">{Jason.encode!(@current_spacecraft.metadata, pretty: true)}</pre>
@@ -214,7 +214,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
         <.status_badge status={@status} />
       </div>
       <h2 class="mt-3 text-base font-semibold">{@value}</h2>
-      <p class="mt-2 text-sm text-base-content/60">{@description}</p>
+      <p class="mt-2 text-sm text-base-content/70">{@description}</p>
       <.link
         :if={@navigate}
         navigate={@navigate}

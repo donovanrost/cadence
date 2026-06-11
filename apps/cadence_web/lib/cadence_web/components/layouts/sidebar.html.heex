@@ -66,7 +66,7 @@
         <%= case assigns[:nav_context] do %>
           <% :admin -> %>
             <div class="px-3 mb-2 sidebar-expanded-only">
-              <span class="hud-label text-base-content/30">Administration</span>
+              <span class="hud-label">Administration</span>
             </div>
             <ul class="menu menu-sm space-y-0.5">
               <.nav_item
@@ -85,7 +85,7 @@
 
           <% :organization -> %>
             <div class="px-3 mb-2 sidebar-expanded-only">
-              <span class="hud-label text-base-content/30">
+              <span class="hud-label">
                 <%= if @current_scope && @current_scope.organization do %>
                   {@current_scope.organization.display_name}
                 <% else %>

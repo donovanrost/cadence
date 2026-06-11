@@ -139,7 +139,7 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
           <h2 class="font-mono text-lg font-semibold text-primary">
             {tcp_endpoint(@provider_profile.configuration)}
           </h2>
-          <p class="mt-1 text-sm text-base-content/60">
+          <p class="mt-1 text-sm text-base-content/70">
             Transport adapter configuration used to move bytes between Cadence and the ground network.
           </p>
         </div>

@@ -42,7 +42,7 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
       >
         <:title_suffix>
           <span class="mc-value-medium text-primary/80">v{@profile.version}</span>
-          <span class="hud-label text-base-content/40">{@profile.lifecycle_state}</span>
+          <span class="hud-label">{@profile.lifecycle_state}</span>
         </:title_suffix>
       </.page_header>
 
@@ -102,7 +102,7 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
           </li>
         </ul>
       <% else %>
-        <p class="mt-4 text-sm text-base-content/40 italic">No applications enabled.</p>
+        <p class="mt-4 text-sm text-base-content/50 italic">No applications enabled.</p>
       <% end %>
     </.card>
     """
@@ -120,7 +120,7 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
         class="mt-3"
       >
         <:col :let={version} label="Version" mono>v{version.version}</:col>
-        <:col :let={version} label="Lifecycle" mono class="text-base-content/60">
+        <:col :let={version} label="Lifecycle" mono class="text-base-content/70">
           {version.lifecycle_state}
         </:col>
         <:col :let={version} label="Downlink" mono class="uppercase text-primary/80">

@@ -66,7 +66,7 @@ defmodule CadenceWeb.CommsTransportShowLive do
           <h2 class="font-mono text-lg font-semibold text-primary">
             {@summary.endpoint}
           </h2>
-          <p class="mt-1 text-sm text-base-content/60">
+          <p class="mt-1 text-sm text-base-content/70">
             Durable transport setup. Runtime Links and Contacts are realized later under execution context.
           </p>
         </div>

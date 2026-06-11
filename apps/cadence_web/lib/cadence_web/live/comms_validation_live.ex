@@ -70,7 +70,7 @@ defmodule CadenceWeb.CommsValidationLive do
       <div class="flex items-start justify-between gap-4">
         <div>
           <h3 class="font-semibold">{@finding.title}</h3>
-          <p class="mt-1 text-sm text-base-content/60">{@finding.body}</p>
+          <p class="mt-1 text-sm text-base-content/70">{@finding.body}</p>
           <.button
             :if={Map.get(@finding, :action_navigate)}
             size={:xs}

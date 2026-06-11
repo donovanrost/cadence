@@ -113,7 +113,7 @@ defmodule CadenceWeb.SpacecraftNewLive do
             label="Spacecraft Profile"
             options={type_options(@available_types)}
           />
-          <p :if={@available_types == []} class="text-xs text-base-content/60">
+          <p :if={@available_types == []} class="text-xs text-base-content/70">
             No spacecraft profiles defined yet.
             <.link
               navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles/new"}

@@ -160,8 +160,8 @@ defmodule CadenceWeb.CoreComponents do
     ~H"""
     <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
       <span :if={@icon} class={[@icon, "mx-auto h-10 w-10 text-base-content/30 block"]}></span>
-      <p class={["hud-label text-base-content/60", @icon && "mt-3"]}>{@title}</p>
-      <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/60">
+      <p class={["hud-label", @icon && "mt-3"]}>{@title}</p>
+      <p :if={@description} class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
         {@description}
       </p>
       <div :if={@action_label} class="mt-5">
@@ -194,7 +194,7 @@ defmodule CadenceWeb.CoreComponents do
     ~H"""
     <div class={["flex items-center justify-between px-2 py-1.5 border-b border-base-300", @class]}>
       <div class="flex items-center gap-2">
-        <span class="hud-label text-base-content/40">{@label}</span>
+        <span class="hud-label">{@label}</span>
         <span :if={@count} class="text-xs text-base-content/60">({@count})</span>
       </div>
       <div :if={@controls != []} class="flex items-center gap-1">
@@ -229,10 +229,10 @@ defmodule CadenceWeb.CoreComponents do
         <.status_dot :if={@status} status={@status} />
         <div>
           <p class="font-medium text-sm">{@name}</p>
-          <p :if={@detail} class="text-xs text-base-content/50">{@detail}</p>
+          <p :if={@detail} class="text-xs text-base-content/60">{@detail}</p>
         </div>
       </div>
-      <span :if={@badge} class="text-xs text-base-content/50">{@badge}</span>
+      <span :if={@badge} class="text-xs text-base-content/60">{@badge}</span>
     </div>
     """
   end

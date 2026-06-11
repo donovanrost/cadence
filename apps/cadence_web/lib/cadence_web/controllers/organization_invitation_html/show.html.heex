@@ -8,7 +8,7 @@
         This invitation is no longer available.
       <% end %>
     </h1>
-    <p class="mt-2 text-sm text-base-content/50 max-w-2xl">
+    <p class="mt-2 text-sm text-base-content/70 max-w-2xl">
       <%= if @invitation_available? do %>
         Invitation acceptance creates or finishes the durable human account, establishes tenant
         membership, and then signs you into the operator shell.
@@ -49,7 +49,7 @@
           Unavailable
         <% end %>
       </p>
-      <p class="text-sm text-base-content/60">
+      <p class="text-sm text-base-content/70">
         This invitation is bound to a specific email address and establishes the durable user
         identity for that operator.
       </p>
@@ -108,7 +108,7 @@
 
       <div class="flex items-center justify-between gap-4 flex-wrap">
         <.button type="submit" size={:md}>Accept Invitation</.button>
-        <p class="text-sm text-base-content/50">
+        <p class="text-sm text-base-content/70">
           Passwords must be at least 12 characters. Accepting this invitation signs you into the
           durable operator session immediately.
         </p>

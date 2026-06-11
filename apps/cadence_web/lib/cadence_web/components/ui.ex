@@ -76,7 +76,7 @@ defmodule CadenceWeb.UI do
         class="dropdown-content menu bg-base-200 z-[100] w-80 p-2 shadow-lg border border-primary/20 max-h-96 overflow-y-auto"
       >
         <li class="menu-title px-3 py-2">
-          <span class="hud-label text-base-content/60">
+          <span class="hud-label">
             Notifications
             <%= if @count > 0 do %>
               <span class="text-primary">({@count} unread)</span>
@@ -84,7 +84,7 @@ defmodule CadenceWeb.UI do
           </span>
         </li>
         <%= if @notifications == [] do %>
-          <li class="px-3 py-4 text-center text-sm text-base-content/50">
+          <li class="px-3 py-4 text-center text-sm text-base-content/60">
             No notifications
           </li>
         <% else %>
@@ -94,7 +94,7 @@ defmodule CadenceWeb.UI do
               <span :if={n.read_at} class="mt-1.5 w-1.5 h-1.5 flex-shrink-0"></span>
               <span class="flex-1 min-w-0">
                 <span class="block text-xs font-semibold text-base-content truncate">{n.title}</span>
-                <span :if={n.body} class="block text-xs text-base-content/50 truncate">{n.body}</span>
+                <span :if={n.body} class="block text-xs text-base-content/60 truncate">{n.body}</span>
               </span>
             </.link>
           </li>
@@ -151,7 +151,7 @@ defmodule CadenceWeb.UI do
           <p class="text-sm font-semibold text-base-content">{display_label(@scope.user)}</p>
           <p
             :if={@scope.user.display_name not in [nil, ""]}
-            class="text-xs text-base-content/50 truncate"
+            class="text-xs text-base-content/60 truncate"
           >
             {@scope.user.email}
           </p>
@@ -193,7 +193,7 @@ defmodule CadenceWeb.UI do
   defp user_menu_org_block(assigns) do
     ~H"""
     <div :if={@scope.organization} role="presentation" class="border-t border-primary/10 mt-1 pt-1">
-      <span class="hud-label text-base-content/60 px-3 py-1 block">ORGANIZATION</span>
+      <span class="hud-label px-3 py-1 block">ORGANIZATION</span>
       <%= if length(@memberships) > 1 do %>
         <details class="group">
           <summary class="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-sm text-base-content list-none">
@@ -244,7 +244,7 @@ defmodule CadenceWeb.UI do
     ~H"""
     <nav
       aria-label="Breadcrumb"
-      class="flex flex-wrap items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.15em] text-base-content/40"
+      class="flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60"
     >
       <%= for {{label, path}, index} <- Enum.with_index(@items) do %>
         <span :if={index > 0} class="text-base-content/20" aria-hidden="true">/</span>

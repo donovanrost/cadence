@@ -81,7 +81,7 @@ defmodule CadenceWeb.OrganizationHomeLive do
             >
               <div>
                 <p class="font-medium">{summary.mission.display_name}</p>
-                <p class="font-mono text-xs text-base-content/50">{summary.mission.slug}</p>
+                <p class="font-mono text-xs text-base-content/60">{summary.mission.slug}</p>
               </div>
               <.status_badge status={summary.status} label={summary.status_label} />
             </.link>
