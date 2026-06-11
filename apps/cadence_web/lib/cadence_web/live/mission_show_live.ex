@@ -128,7 +128,7 @@ defmodule CadenceWeb.MissionShowLive do
         <p class="mt-1 max-w-xs text-xs text-base-content/60">{row.issue}</p>
       </:col>
       <:col :let={row} label="Actions" align={:right}>
-        <.action_menu>
+        <.action_menu id={"#{row.spacecraft.spacecraft_id}-readiness-actions"}>
           <:action>
             <.link navigate={spacecraft_readiness_path(@mission_id, row.spacecraft)}>
               {row.primary_action}

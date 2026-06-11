@@ -6,11 +6,13 @@
     </.link>
     <div class="flex items-center gap-3">
       <.notifications_bell
+        id="notifications-bell"
         count={assigns[:unread_notifications_count] || 0}
         notifications={assigns[:recent_notifications] || []}
       />
       <%= if @current_scope && @current_scope.user do %>
         <.user_menu
+          id="user-menu"
           scope={@current_scope}
           memberships={assigns[:user_menu_memberships] || []}
           platform_admin?={assigns[:user_menu_platform_admin?] || false}

@@ -43,25 +43,36 @@ defmodule CadenceWeb.UI do
   Bell icon with unread badge and recent-notifications dropdown.
 
   Attrs:
+    * `id` — unique DOM id (layouts render this twice, so ids must differ)
     * `count` — unread count (integer)
     * `notifications` — list of `%Cadence.Notifications.Notification{}` (top 5)
   """
+  attr :id, :string, required: true
   attr :count, :integer, default: 0
   attr :notifications, :list, default: []
 
   def notifications_bell(assigns) do
     ~H"""
-    <div class="dropdown dropdown-end">
-      <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle relative" aria-label="Notifications">
+    <div id={@id} phx-hook="DropdownMenu" class="dropdown dropdown-end">
+      <button
+        type="button"
+        data-dropdown-trigger
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls={"#{@id}-menu"}
+        aria-label="Notifications"
+        class="btn btn-ghost btn-sm btn-circle relative"
+      >
         <span class="hero-bell h-5 w-5"></span>
         <%= if @count > 0 do %>
           <span class="badge badge-primary badge-xs absolute -top-0.5 -right-0.5 font-mono">
             {format_count(@count)}
           </span>
         <% end %>
-      </div>
+      </button>
       <div
-        tabindex="0"
+        id={"#{@id}-menu"}
+        role="menu"
         class="dropdown-content menu bg-base-200 z-[100] w-80 p-2 shadow-lg border border-primary/20 max-h-96 overflow-y-auto"
       >
         <li class="menu-title px-3 py-2">
@@ -106,24 +117,33 @@ defmodule CadenceWeb.UI do
   platform-admin shortcut (when applicable), and sign out.
 
   Attrs:
+    * `id` — unique DOM id (layouts render this twice, so ids must differ)
     * `scope` — `%Cadence.Auth.Scope{}` with `:user` and optional `:organization`
     * `memberships` — list of `%{membership: OrganizationMembership.t(), organization: Organization.t()}`
     * `platform_admin?` — boolean
   """
+  attr :id, :string, required: true
   attr :scope, :any, required: true
   attr :memberships, :list, default: []
   attr :platform_admin?, :boolean, default: false
 
   def user_menu(assigns) do
     ~H"""
-    <div class="dropdown dropdown-end">
-      <button type="button" tabindex="0" class="btn btn-ghost btn-sm gap-1" aria-haspopup="menu">
+    <div id={@id} phx-hook="DropdownMenu" class="dropdown dropdown-end">
+      <button
+        type="button"
+        data-dropdown-trigger
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls={"#{@id}-menu"}
+        class="btn btn-ghost btn-sm gap-1"
+      >
         <span class="text-xs text-base-content/60">{display_label(@scope.user)}</span>
         <span class="hero-chevron-down h-3 w-3 opacity-60 transition-transform"></span>
       </button>
 
       <div
-        tabindex="0"
+        id={"#{@id}-menu"}
         role="menu"
         class="dropdown-content menu bg-base-200 z-[100] w-72 p-2 shadow-lg border border-primary/20"
       >

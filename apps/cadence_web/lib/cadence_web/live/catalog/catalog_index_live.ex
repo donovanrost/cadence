@@ -126,7 +126,7 @@ defmodule CadenceWeb.CatalogIndexLive do
             </span>
           </:col>
           <:col :let={database} label="Actions" align={:right}>
-            <.action_menu>
+            <.action_menu id={"#{database.catalog_database_id}-actions"}>
               <:action>
                 <.link navigate={
                   ~p"/missions/#{@current_mission.mission_id}/catalog/databases/#{database.catalog_database_id}"

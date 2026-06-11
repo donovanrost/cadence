@@ -18,13 +18,14 @@ defmodule CadenceWeb.CoreComponents do
   @doc """
   Renders a vertical ellipsis action menu for table rows and card actions.
 
-  Uses daisyUI's dropdown pattern with the HUD-styled dropdown-content
-  (sharp corners, cyan border, backdrop blur — from component-overrides.css).
-  Each action is a slot that receives the row item and renders as a menu item.
+  Uses daisyUI's dropdown styling with the `DropdownMenu` hook for
+  accessible behavior: real button trigger with `aria-expanded`, arrow-key
+  navigation, Escape-to-close with focus return, and click-outside close.
+  Each action is a slot that renders as a menu item.
 
   ## Examples
 
-      <.action_menu>
+      <.action_menu id={"\#{thing.id}-actions"}>
         <:action>
           <.link navigate={~p"/things/\#{thing.id}"}>View</.link>
         </:action>
@@ -34,20 +35,32 @@ defmodule CadenceWeb.CoreComponents do
         </:action>
       </.action_menu>
   """
+  attr :id, :string, required: true
   attr :class, :string, default: nil
   slot :action, required: true
 
   def action_menu(assigns) do
     ~H"""
-    <div class={["dropdown dropdown-end", @class]}>
-      <div tabindex="0" role="button" class="btn btn-ghost btn-xs">
+    <div id={@id} phx-hook="DropdownMenu" class={["dropdown dropdown-end", @class]}>
+      <button
+        type="button"
+        data-dropdown-trigger
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls={"#{@id}-menu"}
+        aria-label="Actions"
+        class="btn btn-ghost btn-xs"
+      >
         <span class="hero-ellipsis-vertical h-5 w-5"></span>
-      </div>
+      </button>
       <ul
-        tabindex="0"
+        id={"#{@id}-menu"}
+        role="menu"
         class="dropdown-content menu bg-base-200 z-[100] w-52 p-2 shadow-lg border border-primary/20"
       >
-        <li :for={action <- @action}>{render_slot(action)}</li>
+        <li :for={action <- @action} role="none">
+          {render_slot(action)}
+        </li>
       </ul>
     </div>
     """

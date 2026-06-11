@@ -231,7 +231,7 @@ defmodule CadenceWeb.SpacecraftListComponents do
             />
           </:col>
           <:col :let={spacecraft} label="Actions" align={:right}>
-            <.action_menu>
+            <.action_menu id={"#{spacecraft.spacecraft_id}-actions"}>
               <:action>
                 <.link navigate={~p"/missions/#{@mission_id}/spacecraft/#{spacecraft.spacecraft_id}"}>
                   View

@@ -185,7 +185,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
             else: "—" %>
         </:col>
         <:col :let={run} label="Actions" align={:right}>
-          <.action_menu>
+          <.action_menu id={"#{run.import_run_id}-actions"}>
             <:action>
               <.link navigate={
                 ~p"/missions/#{@current_mission.mission_id}/catalog/imports/#{run.import_run_id}"

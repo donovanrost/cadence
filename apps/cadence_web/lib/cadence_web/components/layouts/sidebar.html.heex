@@ -10,10 +10,12 @@
       <div class="flex items-center gap-2">
         <%= if @current_scope && @current_scope.user do %>
           <.notifications_bell
+            id="notifications-bell-mobile"
             count={assigns[:unread_notifications_count] || 0}
             notifications={assigns[:recent_notifications] || []}
           />
           <.user_menu
+            id="user-menu-mobile"
             scope={@current_scope}
             memberships={assigns[:user_menu_memberships] || []}
             platform_admin?={assigns[:user_menu_platform_admin?] || false}
@@ -25,10 +27,12 @@
     <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
       <%= if @current_scope && @current_scope.user do %>
         <.notifications_bell
+          id="notifications-bell-desktop"
           count={assigns[:unread_notifications_count] || 0}
           notifications={assigns[:recent_notifications] || []}
         />
         <.user_menu
+          id="user-menu-desktop"
           scope={@current_scope}
           memberships={assigns[:user_menu_memberships] || []}
           platform_admin?={assigns[:user_menu_platform_admin?] || false}

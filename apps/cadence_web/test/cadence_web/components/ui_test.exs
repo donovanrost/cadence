@@ -39,6 +39,7 @@ defmodule CadenceWeb.UITest do
     test "renders display_name as trigger text" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -50,6 +51,7 @@ defmodule CadenceWeb.UITest do
     test "renders identity block with name and email" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -62,6 +64,7 @@ defmodule CadenceWeb.UITest do
     test "always renders sign-out form targeting DELETE /session" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -76,6 +79,7 @@ defmodule CadenceWeb.UITest do
     test "omits the organization block entirely when scope.organization is nil" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -90,6 +94,7 @@ defmodule CadenceWeb.UITest do
 
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture(), org),
           memberships: [membership_map],
           platform_admin?: false
@@ -107,6 +112,7 @@ defmodule CadenceWeb.UITest do
 
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture(), current_org),
           memberships: [
             %{membership: %{}, organization: current_org},
@@ -129,6 +135,7 @@ defmodule CadenceWeb.UITest do
     test "does not render the system administration link when platform_admin? is false" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -140,6 +147,7 @@ defmodule CadenceWeb.UITest do
     test "renders the system administration link when platform_admin? is true" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: true
@@ -152,6 +160,7 @@ defmodule CadenceWeb.UITest do
     test "identity block wrapper is a div so it doesn't trigger menu hover" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture()),
           memberships: [],
           platform_admin?: false
@@ -167,6 +176,7 @@ defmodule CadenceWeb.UITest do
 
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture(), org),
           memberships: [%{membership: %{}, organization: org}],
           platform_admin?: false
@@ -181,6 +191,7 @@ defmodule CadenceWeb.UITest do
     test "identity block falls back to email when display_name is blank" do
       html =
         render_component(&UI.user_menu/1,
+          id: "user-menu",
           scope: scope(user_fixture(%{display_name: ""})),
           memberships: [],
           platform_admin?: false

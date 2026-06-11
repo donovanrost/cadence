@@ -1,9 +1,11 @@
 import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
+import DropdownMenu from "./hooks/dropdown_menu"
 import ResizablePanel from "./hooks/resizable_panel"
 
 const Hooks = {
+  DropdownMenu,
   ResizablePanel
 }
 
