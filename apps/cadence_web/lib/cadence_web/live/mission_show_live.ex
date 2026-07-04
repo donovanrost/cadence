@@ -67,21 +67,15 @@ defmodule CadenceWeb.MissionShowLive do
   defp readiness_panel(assigns) do
     ~H"""
     <.card>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Spacecraft Readiness</p>
-          <h2 class="text-lg font-semibold">
-            Configure spacecraft identity and select a spacecraft profile
-          </h2>
-          <p class="mt-1 max-w-2xl text-sm text-base-content/70">
-            Each row shows whether a spacecraft can be identified from incoming frames
-            and has a profile that defines its byte-interpretation contract.
-          </p>
-        </div>
-        <div class="flex flex-wrap items-center justify-end gap-2">
+      <.section_header
+        eyebrow="Spacecraft Readiness"
+        title="Configure spacecraft identity and select a spacecraft profile"
+        description="Each row shows whether a spacecraft can be identified from incoming frames and has a profile that defines its byte-interpretation contract."
+      >
+        <:actions>
           <.status_badge status={if @setup_issue_count == 0, do: :ready, else: :attention} />
-        </div>
-      </div>
+        </:actions>
+      </.section_header>
 
       <div id="spacecraft-readiness-section" class="mt-6 overflow-x-auto">
         <div :if={@empty?} id="spacecraft-readiness-empty">

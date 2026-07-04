@@ -33,7 +33,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
+      stop_coordinator(pid)
     end)
 
     assert_eventually(fn ->
@@ -58,7 +58,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
+      stop_coordinator(pid)
     end)
 
     assert_eventually(fn ->
@@ -99,8 +99,8 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(sequential_pid), do: Coordinator.stop(sequential_pid)
-      if Process.alive?(one_generator_pid), do: Coordinator.stop(one_generator_pid)
+      stop_coordinator(sequential_pid)
+      stop_coordinator(one_generator_pid)
     end)
 
     assert_eventually(fn ->
@@ -128,7 +128,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
+      stop_coordinator(pid)
     end)
 
     assert_eventually(fn ->
@@ -169,7 +169,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
+      stop_coordinator(pid)
     end)
 
     assert_eventually(fn ->
@@ -207,7 +207,7 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       )
 
     on_exit(fn ->
-      if Process.alive?(pid), do: Coordinator.stop(pid)
+      stop_coordinator(pid)
     end)
 
     assert_eventually(fn ->
@@ -243,5 +243,14 @@ defmodule CadenceSimulator.CoordinatorParallelTest do
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
     end
+  end
+
+  defp stop_coordinator(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: Coordinator.stop(pid)
+  catch
+    :exit, reason when reason in [:noproc, :normal, :shutdown] -> :ok
+    :exit, {:noproc, _} -> :ok
+    :exit, {:shutdown, _} -> :ok
+    :exit, reason -> exit(reason)
   end
 end

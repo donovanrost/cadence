@@ -1,0 +1,165 @@
+<!-- @dsCard group="Patterns" name="Form page" subtitle="page_header + numbered sections + inputs + actions row" width="1000" height="1320" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Form page pattern</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1.page { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2.2rem; max-width: 72ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.4rem 0 1.1rem; }
+
+  /* specimen: forms are narrow — max-w-2xl */
+  .specimen { max-width: 42rem; }
+  .stack-6 > * + * { margin-top: 1.5rem; }
+  .stack-8 > * + * { margin-top: 2rem; }
+  .stack-4 > * + * { margin-top: 1rem; }
+
+  /* page_header */
+  .ph { border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding-bottom: 1rem; }
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); }
+  .back { display: inline-block; margin-bottom: .25rem; }
+  .ph h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; margin: .5rem 0 0; }
+  .subtitle { margin: .25rem 0 0; font-size: .875rem; color: oklch(85% 0.02 250 / 0.7); max-width: 56ch; }
+
+  /* numbered section heading */
+  .sec-head { display: flex; align-items: center; gap: .75rem; }
+  .sec-head .num { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(80% 0.12 210 / 0.7); }
+  .sec-head .line { flex: 1; height: 1px; background: oklch(23% 0.025 258 / 0.6); }
+
+  /* inputs (faithful <.input>) */
+  .flabel { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); display: block; margin-bottom: .375rem; }
+  .control { width: 100%; background: oklch(18% 0.02 260); border: 1px solid oklch(80% 0.12 210 / 0.5);
+    border-radius: 2px; color: oklch(90% 0.02 250); font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: .875rem; padding: .45rem .6rem; }
+  .control::placeholder { color: oklch(55% 0.02 250); }
+  .control:focus { background: oklch(20% 0.02 260); border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: 0 0 0 1px oklch(80% 0.12 210 / 0.2), 0 0 10px oklch(80% 0.12 210 / 0.15); outline: none; }
+  .control.error { border-color: oklch(68% 0.20 10); }
+  .err-msg { margin-top: .375rem; font-size: .8rem; color: oklch(72% 0.20 10); }
+  .select-wrap { position: relative; }
+  .select-wrap .chev { position: absolute; right: .6rem; top: 50%; transform: translateY(-50%);
+    color: oklch(80% 0.12 210); pointer-events: none; font-size: .8rem; }
+  select.control { appearance: none; -webkit-appearance: none; padding-right: 2.2rem; }
+
+  /* config preview details */
+  .preview { border: 1px solid oklch(23% 0.025 258); background: oklch(12% 0.02 265 / 0.4); border-radius: 2px; padding: 1rem; }
+  .preview summary { cursor: pointer; }
+  .preview pre { margin: .75rem 0 0; font-family: ui-monospace, monospace; font-size: .72rem;
+    color: oklch(85% 0.02 250 / 0.7); overflow-x: auto; }
+
+  /* actions row */
+  .actions { display: flex; align-items: center; gap: .75rem; border-top: 1px solid oklch(23% 0.025 258 / 0.6); padding-top: 1.25rem; }
+  .btn { display: inline-flex; align-items: center; gap: .4rem; height: 2.75rem; padding: 0 1.4rem; border-radius: 2px;
+    border: 1px solid transparent; cursor: pointer; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; font-size: .75rem; }
+  .btn-primary { background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(80% 0.12 210 / 0.2); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: transparent; }
+
+  /* anatomy + usage */
+  .anatomy { display: grid; gap: .55rem; max-width: 84ch; margin: .4rem 0 0; padding: 0; }
+  .anatomy li { display: grid; grid-template-columns: 13rem 1fr; gap: 1rem; font-size: .85rem; line-height: 1.45;
+    color: oklch(78% 0.02 250); list-style: none; }
+  .anatomy .k { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 84ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code, .anatomy code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Patterns</p>
+  <h1 class="page">Form page</h1>
+  <p class="lede">The canonical create / edit screen. A width-constrained <code>max-w-2xl</code> stack:
+    a <code>&lt;.page_header&gt;</code> over a <code>&lt;.form for={@form}&gt;</code> of numbered
+    <code>&lt;section&gt;</code> groups of <code>&lt;.input&gt;</code> fields, closed by an actions row.
+    Notably, Cadence forms are <strong>bare sections, not card-wrapped</strong> — the
+    <code>hud-label</code> divider headings carry the structure.</p>
+
+  <p class="section-label">Composition</p>
+  <div class="specimen stack-6">
+    <!-- page_header -->
+    <header class="ph">
+      <span class="hud-label back">Mission <span style="opacity:.5">/</span> Comms <span style="opacity:.5">/</span> Transports <span style="opacity:.5">/</span> <span style="color:oklch(from var(--glow-cyan) l c h / 0.9)">New</span></span>
+      <h2>New Transport</h2>
+      <p class="subtitle">Describe a durable capability for moving bytes. This setup does not mean a
+        connection is currently open.</p>
+    </header>
+
+    <!-- form -->
+    <form class="stack-8">
+      <!-- section 01 -->
+      <section class="stack-4">
+        <div class="sec-head"><span class="num">01</span><h3 class="hud-label">Identity</h3><div class="line"></div></div>
+        <div><label class="flabel">Display Name</label>
+          <input class="control" type="text" value="AWS Ground Station"></div>
+        <div><label class="flabel">Transport Kind</label>
+          <div class="select-wrap"><select class="control"><option>Cloud ground station</option><option>Ground station</option><option>Relay</option></select><span class="chev">&#9662;</span></div></div>
+      </section>
+
+      <!-- section 02 -->
+      <section class="stack-4">
+        <div class="sec-head"><span class="num">02</span><h3 class="hud-label">TCP Socket Capability</h3><div class="line"></div></div>
+        <div><label class="flabel">Direction Capability</label>
+          <div class="select-wrap"><select class="control"><option>Bidirectional</option><option>Inbound</option><option>Outbound</option></select><span class="chev">&#9662;</span></div></div>
+        <div><label class="flabel">Host</label>
+          <input class="control" type="text" value="us-west-2.ags.amazonaws.com"></div>
+        <div><label class="flabel">Port</label>
+          <input class="control error" type="number" value="70000">
+          <p class="err-msg">must be between 1 and 65535</p></div>
+      </section>
+
+      <!-- collapsible preview -->
+      <details class="preview">
+        <summary class="hud-label">Configuration Preview</summary>
+        <pre>{
+  "host": "us-west-2.ags.amazonaws.com",
+  "port": 70000,
+  "direction": "bidirectional"
+}</pre>
+      </details>
+
+      <!-- actions -->
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Create Transport</button>
+        <button class="btn btn-ghost">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <p class="section-label">Anatomy</p>
+  <ul class="anatomy">
+    <li><span class="k">max-w-2xl wrapper</span><span>Forms are narrow (<code>max-w-xl</code>/<code>2xl</code>) — a single readable column, not the full-bleed width of a list.</span></li>
+    <li><span class="k">&lt;.page_header&gt;</span><span>Title ("New Transport" / "Edit …"), subtitle, and breadcrumbs (never a back link) to where Cancel returns.</span></li>
+    <li><span class="k">&lt;.form for={@form}&gt;</span><span>Wires <code>phx-change="validate"</code> + <code>phx-submit="save"</code>; <code>space-y-8</code> between sections.</span></li>
+    <li><span class="k">&lt;.form_section&gt;</span><span>The numbered heading is a component, not raw markup — <code>number="01"</code> + title render the <code>hud-label</code> + <code>h-px</code> divider. Fields stack single-column inside.</span></li>
+    <li><span class="k">&lt;.input&gt; fields</span><span>Each renders its <code>hud-label</code> and inline errors; mark required fields <code>required</code>.</span></li>
+    <li><span class="k">&lt;.form_actions&gt;</span><span>The footer is a component too: <code>border-t</code> + <code>:md</code> primary <code>type="submit"</code> and a ghost Cancel via <code>cancel_navigate</code>.</span></li>
+  </ul>
+
+  <div class="usage">
+    <p class="hud-label" style="margin:0 0 1rem">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Constrain the width (<code>max-w-xl</code>/<code>max-w-2xl</code>) and stack fields in one column — forms read top-to-bottom.</li>
+      <li class="do"><span class="mark">&#10003;</span> Compose with <code>&lt;.form_section&gt;</code> / <code>&lt;.form_actions&gt;</code> — never hand-roll the numbered headings or the footer row; reach for sections once a form has more than ~4 fields.</li>
+      <li class="do"><span class="mark">&#10003;</span> Wire <code>phx-change="validate"</code> + <code>phx-submit="save"</code>. <code>&lt;.input&gt;</code> renders inline errors from changeset-backed forms once a field is touched — the specimen shows the target. <em>Today's transport/spacecraft forms bind plain maps and error via flash; migrating them to changesets is an open backlog item.</em></li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't wrap form sections in a <code>&lt;.card&gt;</code> — card chrome is for read views; the divider headings structure a form.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't lay fields in multi-column grids — it breaks the scan path and the label/value rhythm.</li>
+    </ul>
+  </div>
+</body>
+</html>

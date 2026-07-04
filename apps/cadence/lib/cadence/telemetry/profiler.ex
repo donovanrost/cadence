@@ -21,6 +21,7 @@ defmodule Cadence.Telemetry.Profiler do
 
   @table_name :cadence_telemetry_profiler
   @repo_query_event [:cadence, :repo, :query]
+  @ingress_result_event [:cadence, :runtime, :telemetry_ingress, :processing_result]
   @repo_handler_id "#{__MODULE__}.repo-query"
   @context_key {__MODULE__, :context}
   @stage_key {__MODULE__, :stage}
@@ -288,8 +289,13 @@ defmodule Cadence.Telemetry.Profiler do
         :ok
     end
 
+    emit_ingress_result(raw_evidence, opts)
+
     :ok
   end
+
+  @spec ingress_result_event() :: [atom()]
+  def ingress_result_event, do: @ingress_result_event
 
   @spec record_projected_persistence(binary(), non_neg_integer(), non_neg_integer()) :: :ok
   def record_projected_persistence(mission_id, persisted_count, total_us)
@@ -719,6 +725,57 @@ defmodule Cadence.Telemetry.Profiler do
 
   defp telemetry_sample?(%Cadence.Telemetry.Sample{}), do: true
   defp telemetry_sample?(_output), do: false
+
+  defp emit_ingress_result(%RawEvidence{} = raw_evidence, opts) do
+    measurements =
+      %{
+        resolve_us: Keyword.get(opts, :resolve_us),
+        runtime_us: Keyword.get(opts, :runtime_us),
+        persistence_us: Keyword.get(opts, :persistence_us),
+        end_to_end_us: Keyword.get(opts, :end_to_end_us)
+      }
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.new()
+
+    metadata =
+      %{
+        mission_id: raw_evidence.mission_id,
+        source_endpoint_id: raw_evidence.source_endpoint_ref || raw_evidence.source_ref,
+        source_endpoint_ref: raw_evidence.source_endpoint_ref,
+        source_ref: raw_evidence.source_ref,
+        spacecraft_id: raw_evidence.spacecraft_id,
+        transport_id: Keyword.get(opts, :transport_id),
+        ground_station_id:
+          Keyword.get(opts, :ground_station_id) || Keyword.get(opts, :antenna_id),
+        link_id: Keyword.get(opts, :link_id) || Keyword.get(opts, :link_assignment_id),
+        adapter_key: Keyword.get(opts, :adapter_key),
+        protocol_family: raw_evidence.protocol_family,
+        direction: raw_evidence.direction,
+        evidence_id: raw_evidence.evidence_id,
+        error?: Keyword.get(opts, :error?, false)
+      }
+      |> maybe_put_processing_counts(Keyword.get(opts, :processing_result))
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.new()
+
+    :telemetry.execute(@ingress_result_event, measurements, metadata)
+  end
+
+  defp maybe_put_processing_counts(metadata, %{} = processing_result) do
+    metadata
+    |> Map.put(:packet_count, length(Map.get(processing_result, :packet_records, [])))
+    |> Map.put(
+      :transfer_frame_count,
+      length(Map.get(processing_result, :transfer_frame_records, []))
+    )
+    |> Map.put(:anomaly_count, length(Map.get(processing_result, :protocol_anomalies, [])))
+    |> Map.put(
+      :sample_count,
+      Enum.count(Map.get(processing_result, :outputs, []), &telemetry_sample?/1)
+    )
+  end
+
+  defp maybe_put_processing_counts(metadata, _processing_result), do: metadata
 
   defp native_to_us(nil), do: 0
 

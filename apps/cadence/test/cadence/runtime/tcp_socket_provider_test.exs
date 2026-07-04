@@ -14,7 +14,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.Telemetry.PacketDefinition
 
   test "tcp provider ingests fixed-size TM frames into the active mission runtime" do
-    organization_id = "org-tcp-provider"
+    organization_id = unique_id("org-tcp-provider")
     mission_id = "mission-tcp-provider-" <> Integer.to_string(System.unique_integer([:positive]))
 
     persist_mission_scope(organization_id, mission_id)
@@ -211,7 +211,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   end
 
   test "tcp provider listen mode recovers when the socket receiver exits unexpectedly" do
-    organization_id = "org-tcp-provider"
+    organization_id = unique_id("org-tcp-provider")
     mission_id = "mission-tcp-provider-" <> Integer.to_string(System.unique_integer([:positive]))
 
     persist_mission_scope(organization_id, mission_id)
@@ -435,6 +435,10 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
     end
+  end
+
+  defp unique_id(prefix) do
+    prefix <> "-" <> Integer.to_string(System.unique_integer([:positive]))
   end
 
   defp build_space_packet(apid, sequence_count, packet_data) do

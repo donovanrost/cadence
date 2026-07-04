@@ -69,12 +69,16 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <div class="space-y-6 max-w-xl">
       <.page_header
         title="Invite User"
         subtitle={"Invite a user to #{@organization.display_name}. The invited user will see a notification and must accept the invitation to gain access."}
-        back_label={@organization.display_name}
-        back_navigate={~p"/admin/organizations/#{@organization.organization_id}"}
+        breadcrumbs={[
+          {"Platform Admin", ~p"/admin"},
+          {"Organizations", ~p"/admin/organizations"},
+          {@organization.display_name, ~p"/admin/organizations/#{@organization.organization_id}"},
+          {"Invite User", nil}
+        ]}
       />
 
       <.form for={@form} id="invite-form" phx-change="validate" phx-submit="save" class="space-y-4">
@@ -98,35 +102,18 @@ defmodule CadenceWeb.AdminOrganizationInviteLive do
           options={[{"Organization Admin", "organization_admin"}, {"Member", "member"}]}
         />
 
-        <.platform_admin_checkbox form={@form} />
-
-        <.button type="submit" size={:md}>Send Invitation</.button>
-      </.form>
-    </div>
-    """
-  end
-
-  attr :form, Phoenix.HTML.Form, required: true
-
-  # Bespoke checkbox-with-description layout; <.input> has no checkbox treatment.
-  defp platform_admin_checkbox(assigns) do
-    ~H"""
-    <div class="fieldset mb-3">
-      <label class="flex items-center gap-3 cursor-pointer">
-        <input
+        <.input
+          field={@form[:grant_platform_admin]}
           type="checkbox"
-          name="invite[grant_platform_admin]"
-          value="true"
-          checked={@form[:grant_platform_admin].value == "true"}
-          class="checkbox checkbox-primary checkbox-sm"
+          label="Grant platform admin"
+          description="Platform admins can manage all organizations and system settings."
         />
-        <span>
-          <span class="font-semibold text-sm">Grant platform admin</span>
-          <span class="block text-xs text-base-content/70">
-            Platform admins can manage all organizations and system settings.
-          </span>
-        </span>
-      </label>
+
+        <.form_actions
+          submit="Send invitation"
+          cancel_navigate={~p"/admin/organizations/#{@organization.organization_id}"}
+        />
+      </.form>
     </div>
     """
   end

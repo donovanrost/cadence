@@ -52,15 +52,11 @@ defmodule CadenceWeb.OrganizationHomeLive do
   defp recent_missions_card(assigns) do
     ~H"""
     <.card id="organization-recent-missions">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Recent Missions</p>
-          <h2 class="text-lg font-semibold">Jump into a mission</h2>
-        </div>
-        <.button variant={:ghost} navigate={~p"/missions"}>
-          All missions
-        </.button>
-      </div>
+      <.section_header eyebrow="Recent Missions" title="Jump into a mission">
+        <:actions>
+          <.button variant={:ghost} navigate={~p"/missions"}>All missions</.button>
+        </:actions>
+      </.section_header>
 
       <%= if @recent_missions == [] do %>
         <div class="mt-6">

@@ -18,6 +18,23 @@ defmodule Cadence.Reads.Replay do
   alias Cadence.Runtime.{ManagedActionRequest, ManagedCapabilityRecord, ManagedTimerEvent}
   alias Cadence.Telemetry.Sample
 
+  @spec list_runs(binary(), binary(), keyword()) :: [Run.t()]
+  def list_runs(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    limit = Keyword.get(opts, :limit, 25)
+    order = Keyword.get(opts, :order, :desc)
+
+    ReplayRunRow
+    |> where(
+      [replay_run],
+      replay_run.organization_id == ^organization_id and replay_run.mission_id == ^mission_id
+    )
+    |> order_replay_runs(order)
+    |> limit(^limit)
+    |> Repo.all()
+    |> Enum.map(&ReplayRunRow.to_domain/1)
+  end
+
   @spec fetch_run(binary()) :: {:ok, Run.t()} | {:error, term()}
   def fetch_run(replay_run_id) when is_binary(replay_run_id) do
     case Repo.get(ReplayRunRow, replay_run_id) do
@@ -88,6 +105,22 @@ defmodule Cadence.Reads.Replay do
 
   defp order_replay_samples(query, _order) do
     order_by(query, [sample_row], asc: sample_row.receipt_time, asc: sample_row.sample_id)
+  end
+
+  defp order_replay_runs(query, :asc) do
+    order_by(query, [replay_run],
+      asc: replay_run.started_at,
+      asc: replay_run.inserted_at,
+      asc: replay_run.replay_run_id
+    )
+  end
+
+  defp order_replay_runs(query, _order) do
+    order_by(query, [replay_run],
+      desc: replay_run.started_at,
+      desc: replay_run.inserted_at,
+      desc: replay_run.replay_run_id
+    )
   end
 
   defp order_managed_capability_records(query, :desc) do

@@ -32,8 +32,11 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
       <.page_header
         title={@organization.display_name}
         subtitle={@organization.slug}
-        back_label="Organizations"
-        back_navigate={~p"/admin/organizations"}
+        breadcrumbs={[
+          {"Platform Admin", ~p"/admin"},
+          {"Organizations", ~p"/admin/organizations"},
+          {@organization.display_name, nil}
+        ]}
       >
         <:actions>
           <.button navigate={~p"/admin/organizations/#{@organization.organization_id}/invite"}>
@@ -64,7 +67,7 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
               <p class="text-sm text-base-content/70">{member.user.email}</p>
             </:col>
             <:col :let={member} label="Role">
-              <span class="badge badge-sm">
+              <span class="font-mono text-[0.65rem] uppercase tracking-wide bg-base-300 px-2 py-1">
                 {Phoenix.Naming.humanize(member.membership.role)}
               </span>
             </:col>
@@ -82,7 +85,7 @@ defmodule CadenceWeb.AdminOrganizationShowLive do
     <div>
       <h2 class="text-lg font-bold mb-3">Pending Invitations</h2>
       <%= if @invitations == [] do %>
-        <p class="text-sm text-base-content/60">No pending invitations.</p>
+        <.empty_state compact title="No pending invitations." />
       <% else %>
         <div class="space-y-2">
           <.card :for={inv <- @invitations} padding={:none}>

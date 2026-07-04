@@ -12,7 +12,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
 
   def type_binding_card(assigns) do
     ~H"""
-    <.card id="spacecraft-profile-binding" accent={type_binding_accent(@type_binding)}>
+    <.card id="spacecraft-profile-binding">
       <div class="flex items-start justify-between gap-4">
         <div class="space-y-2">
           <p class="hud-label">Spacecraft Profile</p>
@@ -57,7 +57,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
     ~H"""
     <div class="flex items-baseline gap-3">
       <h2 class="text-lg font-semibold">{@type_binding.pinned.display_name}</h2>
-      <span class="mc-value-small text-primary/80">v{@type_binding.pinned.version}</span>
+      <span class="mc-value-small text-base-content">v{@type_binding.pinned.version}</span>
     </div>
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
       <span class="hud-label">DOWN</span>
@@ -93,10 +93,6 @@ defmodule CadenceWeb.SpacecraftShowComponents do
     """
   end
 
-  defp type_binding_accent(nil), do: :warning
-  defp type_binding_accent(%{drift?: true}), do: :warning
-  defp type_binding_accent(_), do: :success
-
   attr :type_binding, :any, required: true
   attr :telemetry_decom_status, :atom, required: true
   attr :mission_id, :string, required: true
@@ -110,7 +106,7 @@ defmodule CadenceWeb.SpacecraftShowComponents do
           Platform applications enabled by this spacecraft's profile. Per-application configuration is set per spacecraft.
         </p>
         <%= if map_size(@type_binding.pinned.applications) == 0 do %>
-          <p class="text-sm text-base-content/60">No applications enabled by this profile.</p>
+          <.empty_state compact title="No applications enabled by this profile." />
         <% else %>
           <div class="grid gap-3 md:grid-cols-2">
             <div

@@ -85,8 +85,11 @@ defmodule CadenceWeb.CommsTransportListLive do
       <.page_header
         title="Transports"
         subtitle="Durable byte-moving capabilities Cadence can use for inbound, outbound, or bidirectional spacecraft traffic."
-        back_label="Comms"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Transports", nil}
+        ]}
       >
         <:title_suffix>{@transport_count} configured</:title_suffix>
         <:actions>

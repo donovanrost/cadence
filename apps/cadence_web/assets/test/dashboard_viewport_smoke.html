@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard viewport smoke</title>
+    <link rel="stylesheet" href="../vendor/gridstack/gridstack.min.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10131d;
+        --panel: #171b28;
+        --panel-strong: #202638;
+        --line: rgba(114, 211, 255, 0.28);
+        --line-strong: rgba(114, 211, 255, 0.52);
+        --text: #d9e4f1;
+        --muted: #8c9bb2;
+        --accent: #f04f9c;
+        --cell: 88px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      a {
+        color: inherit;
+        font: inherit;
+      }
+
+      .dashboard-shell {
+        min-height: 100vh;
+        padding: 18px;
+      }
+
+      .dashboard-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+        margin-bottom: 14px;
+      }
+
+      .dashboard-title {
+        min-width: 0;
+      }
+
+      .dashboard-title h1 {
+        margin: 0;
+        font-size: 1.35rem;
+        line-height: 1.2;
+      }
+
+      .dashboard-title p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .dashboard-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .dashboard-button {
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--panel);
+        color: var(--text);
+        min-height: 34px;
+        max-width: 100%;
+        padding: 7px 10px;
+        overflow-wrap: anywhere;
+      }
+
+      .dashboard-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+        gap: 14px;
+        align-items: start;
+      }
+
+      .dashboard-grid {
+        min-width: 0;
+        height: 540px;
+      }
+
+      .grid-stack {
+        min-height: 540px;
+      }
+
+      .grid-stack > .grid-stack-item {
+        min-height: 80px;
+      }
+
+      .grid-stack > .grid-stack-item[gs-y="1"] {
+        top: calc(var(--cell) * 1);
+      }
+
+      .grid-stack > .grid-stack-item[gs-y="2"] {
+        top: calc(var(--cell) * 2);
+      }
+
+      .grid-stack > .grid-stack-item[gs-h="2"] {
+        height: calc(var(--cell) * 2);
+      }
+
+      .grid-stack > .grid-stack-item[gs-h="3"] {
+        height: calc(var(--cell) * 3);
+      }
+
+      .grid-stack > .grid-stack-item > .grid-stack-item-content,
+      .dashboard-panel {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        min-width: 0;
+      }
+
+      .widget {
+        display: flex;
+        min-height: 100%;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .widget h2,
+      .dashboard-panel h2 {
+        margin: 0;
+        font-size: 0.92rem;
+        line-height: 1.2;
+      }
+
+      .widget p,
+      .dashboard-panel p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.35;
+      }
+
+      .metric {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 1.5rem;
+      }
+
+      .chart-surface {
+        position: relative;
+        flex: 1;
+        min-height: 120px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background:
+          linear-gradient(to right, rgba(114, 211, 255, 0.14) 1px, transparent 1px) 0 0 / 48px 100%,
+          linear-gradient(to bottom, rgba(114, 211, 255, 0.10) 1px, transparent 1px) 0 0 / 100% 36px,
+          #111827;
+      }
+
+      .chart-line {
+        position: absolute;
+        inset: 54% 8% auto 8%;
+        height: 3px;
+        background: var(--accent);
+        transform: rotate(-8deg);
+        transform-origin: left center;
+        box-shadow: 0 0 12px rgba(240, 79, 156, 0.44);
+      }
+
+      .dashboard-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .panel-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .panel-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+        border: 1px solid rgba(114, 211, 255, 0.16);
+        border-radius: 4px;
+        padding: 8px;
+      }
+
+      .panel-row span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .badge {
+        flex: 0 0 auto;
+        color: var(--accent);
+      }
+
+      @media (max-width: 720px) {
+        .dashboard-shell {
+          padding: 12px;
+        }
+
+        .dashboard-toolbar,
+        .dashboard-main {
+          grid-template-columns: 1fr;
+        }
+
+        .dashboard-toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .dashboard-actions {
+          justify-content: flex-start;
+          width: 100%;
+        }
+
+        .dashboard-button {
+          flex: 1 1 150px;
+        }
+
+        .dashboard-main {
+          display: grid;
+        }
+
+        .dashboard-grid,
+        .grid-stack {
+          height: auto;
+          min-height: 0;
+        }
+
+        .grid-stack > .grid-stack-item {
+          position: relative;
+          top: auto !important;
+          left: auto !important;
+          width: 100% !important;
+          height: auto !important;
+          margin-bottom: 12px;
+        }
+
+        .grid-stack > .grid-stack-item > .grid-stack-item-content {
+          position: relative;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="dashboard-shell" id="dashboard-viewport-smoke">
+      <header class="dashboard-toolbar" data-viewport-critical="toolbar">
+        <div class="dashboard-title">
+          <h1 data-viewport-text>Operations Dashboard</h1>
+          <p data-viewport-text>Flight realm · managed QuestDB primary · generation time</p>
+        </div>
+        <nav class="dashboard-actions" aria-label="Dashboard actions">
+          <button class="dashboard-button" data-viewport-critical="copy-button" data-viewport-text>
+            Copy selected data link
+          </button>
+          <button class="dashboard-button" data-viewport-text>Context</button>
+          <button class="dashboard-button" data-viewport-text>Version history</button>
+        </nav>
+      </header>
+
+      <section class="dashboard-main">
+        <section
+          class="dashboard-grid grid-stack gs-12"
+          data-viewport-critical="dashboard-grid"
+          data-viewport-grid
+        >
+          <article class="grid-stack-item" gs-id="counter-tile" gs-x="0" gs-y="0" gs-w="4" gs-h="2">
+            <div class="grid-stack-item-content widget" data-viewport-critical="counter-widget">
+              <h2 data-viewport-text>Counter</h2>
+              <div class="metric" data-viewport-text>15</div>
+              <p data-viewport-text>Latest value, red high limit active.</p>
+            </div>
+          </article>
+
+          <article class="grid-stack-item" gs-id="counter-trend" gs-x="4" gs-y="0" gs-w="6" gs-h="3">
+            <div class="grid-stack-item-content widget" data-viewport-critical="trend-widget">
+              <h2 data-viewport-text>Counter Trend</h2>
+              <div class="chart-surface" data-viewport-critical="chart-surface" data-viewport-chart>
+                <div class="chart-line"></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="grid-stack-item" gs-id="fleet" gs-x="0" gs-y="2" gs-w="4" gs-h="2">
+            <div class="grid-stack-item-content widget" data-viewport-critical="fleet-widget">
+              <h2 data-viewport-text>Fleet</h2>
+              <p data-viewport-text>One spacecraft is currently violating a configured high limit.</p>
+            </div>
+          </article>
+        </section>
+
+        <aside class="dashboard-panel" data-viewport-critical="inspector-panel" data-viewport-panel>
+          <h2 data-viewport-text>Data Link Inspector</h2>
+          <p data-viewport-text>Selected telemetry sample retains source, binding, time axis, and replay context.</p>
+          <div class="panel-list">
+            <div class="panel-row">
+              <span data-viewport-text>Target</span>
+              <span class="badge" data-viewport-text>telemetry_sample</span>
+            </div>
+            <div class="panel-row">
+              <span data-viewport-text>Source binding</span>
+              <span class="badge" data-viewport-text>default_flight_telemetry</span>
+            </div>
+            <div class="panel-row">
+              <span data-viewport-text>Action</span>
+              <span class="badge" data-viewport-text>Open evidence</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

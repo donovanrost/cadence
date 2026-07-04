@@ -8,10 +8,12 @@ defmodule Cadence.Projections.MissionEvents do
 
   alias Ecto.Changeset
 
+  alias Cadence.Activations.BindingSetActivation
   alias Cadence.Contacts.{CombinedDownlinkRecord, ContactAction, DownlinkDiagnostic}
   alias Cadence.Jobs
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.MissionEvents.Entry
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Persistence.Schemas.{
     CombinedDownlinkRecordRow,
@@ -20,12 +22,110 @@ defmodule Cadence.Projections.MissionEvents do
     ManagedActionRequestRow,
     MissionEventRebuildRunRow,
     MissionEventRow,
+    OperationalEventRow,
     TelemetryLimitEventRow
   }
 
   alias Cadence.Projections.MissionEvents.Run
   alias Cadence.Repo
   alias Cadence.Runtime.ManagedActionRequest
+
+  @spec project(OperationalEvent.t()) :: [Entry.t()]
+  def project(%OperationalEvent{kind: :binding_set_activated} = event) do
+    [
+      Entry.new(%{
+        mission_event_id: "mission_event:#{event.event_id}",
+        mission_id: event.mission_id,
+        occurred_at: event.effective_at || event.occurred_at,
+        category: :runtime,
+        kind: :binding_set_activated,
+        severity: event.severity || :info,
+        status: "active",
+        title: "Binding Set Activated",
+        summary:
+          "Activated " <>
+            payload_text(event, :binding_set_id) <>
+            " v" <> payload_text(event, :binding_set_version),
+        source_record_kind: :operational_event,
+        source_record_id: event.event_id,
+        subject_kind: :binding_set,
+        subject_id: payload_text(event, :binding_set_id),
+        correlation_key: payload_text(event, :binding_set_id),
+        spacecraft_id: operational_event_text(event, :spacecraft_id),
+        source_endpoint_ref: operational_event_text(event, :source_endpoint_ref),
+        activation_id: payload_text(event, :activation_id),
+        actor: event.actor,
+        metadata:
+          event.metadata
+          |> Map.merge(%{
+            "operational_event_id" => event.event_id,
+            "source_record_kind" => causality_text(event, :source_record_kind),
+            "source_record_id" => causality_text(event, :source_record_id),
+            "binding_set_id" => payload_text(event, :binding_set_id),
+            "binding_set_version" => payload_value(event, :binding_set_version)
+          })
+      })
+    ]
+  end
+
+  def project(%OperationalEvent{kind: kind} = event)
+      when kind in [
+             :managed_capability_initialized,
+             :managed_capability_record_handled,
+             :managed_capability_timer_handled,
+             :managed_action_requested,
+             :managed_timer_scheduled,
+             :managed_timer_fired,
+             :managed_timer_canceled
+           ] do
+    [
+      Entry.new(%{
+        mission_event_id: "mission_event:#{event.event_id}",
+        mission_id: event.mission_id,
+        occurred_at: event.effective_at || event.occurred_at,
+        category: :runtime,
+        kind: kind,
+        severity: event.severity || :info,
+        status: managed_runtime_status(event),
+        title: managed_runtime_title(kind),
+        summary: managed_runtime_summary(event),
+        source_record_kind: :operational_event,
+        source_record_id: event.event_id,
+        subject_kind: :capability_instance,
+        subject_id: payload_text(event, :capability_instance_id),
+        correlation_key: payload_text(event, :capability_instance_id),
+        spacecraft_id: operational_event_text(event, :spacecraft_id),
+        source_endpoint_ref: managed_runtime_source_endpoint_ref(event),
+        capability_instance_id: payload_text(event, :capability_instance_id),
+        activation_id: payload_text(event, :activation_id),
+        actor: event.actor,
+        metadata:
+          event.metadata
+          |> Map.merge(%{
+            "operational_event_id" => event.event_id,
+            "source_record_kind" => causality_text(event, :source_record_kind),
+            "source_record_id" => causality_text(event, :source_record_id),
+            "replay_run_id" => causality_text(event, :replay_run_id),
+            "family_key" => payload_text(event, :family_key),
+            "event_kind" => payload_text(event, :event_kind),
+            "action_kind" => payload_text(event, :action_kind),
+            "timer_key" => payload_text(event, :timer_key),
+            "partition_affinity" => payload_text(event, :partition_affinity),
+            "partition_value" => payload_text(event, :partition_value),
+            "packet_id" => payload_text(event, :packet_id),
+            "evidence_id" => payload_text(event, :evidence_id)
+          })
+          |> compact_metadata()
+      })
+    ]
+  end
+
+  @spec project(BindingSetActivation.t()) :: [Entry.t()]
+  def project(%BindingSetActivation{} = activation) do
+    activation
+    |> OperationalEvent.from_binding_set_activation()
+    |> project()
+  end
 
   @spec project(ContactAction.t()) :: [Entry.t()]
   def project(%ContactAction{} = contact_action) do
@@ -377,8 +477,91 @@ defmodule Cadence.Projections.MissionEvents do
       |> Repo.all()
       |> Enum.map(&DownlinkDiagnosticRow.to_domain/1)
 
-    contact_actions ++ limit_events ++ managed_action_requests ++ combined_records ++ diagnostics
+    operational_events =
+      OperationalEventRow
+      |> where([row], row.mission_id == ^mission_id)
+      |> Repo.all()
+      |> Enum.map(&OperationalEventRow.to_domain/1)
+
+    operational_events ++
+      contact_actions ++
+      limit_events ++ managed_action_requests ++ combined_records ++ diagnostics
   end
+
+  defp payload_value(%OperationalEvent{payload: payload}, key) when is_atom(key) do
+    case Map.fetch(payload, key) do
+      {:ok, value} -> value
+      :error -> Map.get(payload, Atom.to_string(key))
+    end
+  end
+
+  defp payload_text(%OperationalEvent{} = event, key), do: text_value(payload_value(event, key))
+
+  defp operational_event_text(%OperationalEvent{} = event, key) when is_atom(key) do
+    event.scope
+    |> map_value(key)
+    |> fallback(payload_value(event, key))
+    |> fallback(map_value(event.current, key))
+    |> text_value()
+  end
+
+  defp causality_text(%OperationalEvent{causality: causality}, key) do
+    causality
+    |> map_value(key)
+    |> text_value()
+  end
+
+  defp managed_runtime_status(%OperationalEvent{kind: :managed_action_requested} = event),
+    do: payload_text(event, :action_kind)
+
+  defp managed_runtime_status(%OperationalEvent{} = event),
+    do: payload_text(event, :event_kind)
+
+  defp managed_runtime_title(:managed_capability_initialized),
+    do: "Managed Capability Initialized"
+
+  defp managed_runtime_title(:managed_capability_record_handled), do: "Managed Record Handled"
+  defp managed_runtime_title(:managed_capability_timer_handled), do: "Managed Timer Handled"
+  defp managed_runtime_title(:managed_action_requested), do: "Managed Action Requested"
+  defp managed_runtime_title(:managed_timer_scheduled), do: "Managed Timer Scheduled"
+  defp managed_runtime_title(:managed_timer_fired), do: "Managed Timer Fired"
+  defp managed_runtime_title(:managed_timer_canceled), do: "Managed Timer Canceled"
+
+  defp managed_runtime_summary(%OperationalEvent{kind: :managed_action_requested} = event) do
+    [payload_text(event, :family_key), "requested", payload_text(event, :action_kind)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
+  end
+
+  defp managed_runtime_summary(%OperationalEvent{} = event) do
+    [payload_text(event, :family_key), payload_text(event, :event_kind)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
+  end
+
+  defp managed_runtime_source_endpoint_ref(%OperationalEvent{} = event) do
+    if payload_text(event, :partition_affinity) == "source_endpoint" do
+      payload_text(event, :partition_value)
+    end
+  end
+
+  defp compact_metadata(map) when is_map(map) do
+    map
+    |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}, []] end)
+    |> Map.new()
+  end
+
+  defp map_value(map, key) when is_map(map) and is_atom(key) do
+    Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  end
+
+  defp fallback(nil, fallback), do: fallback
+  defp fallback(value, _fallback), do: value
+
+  defp text_value(nil), do: nil
+  defp text_value(value) when is_binary(value), do: value
+  defp text_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp text_value(value) when is_integer(value), do: Integer.to_string(value)
 
   defp contact_action_title(:scheduled_contact_canceled), do: "Scheduled Contact Canceled"
   defp contact_action_title(:realized_contact_ended_early), do: "Realized Contact Ended Early"

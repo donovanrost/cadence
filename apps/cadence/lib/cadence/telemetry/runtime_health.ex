@@ -9,6 +9,10 @@ defmodule Cadence.Telemetry.RuntimeHealth do
 
   use GenServer
 
+  alias Cadence.Dashboards.RuntimeInvalidation
+  alias Cadence.Dashboards.RuntimeInvalidation.Event
+  alias Cadence.Telemetry.Profiler
+
   @default_recent_limit 50
 
   @events [
@@ -43,7 +47,10 @@ defmodule Cadence.Telemetry.RuntimeHealth do
     [:cadence, :runtime, :provider_ingress_executor, :capacity_waiter_registered],
     [:cadence, :runtime, :provider_ingress_executor, :capacity_waiter_released],
     [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_registered],
-    [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_released]
+    [:cadence, :runtime, :ingress_persistence_projector, :capacity_waiter_released],
+    Profiler.ingress_result_event(),
+    RuntimeInvalidation.telemetry_event(),
+    RuntimeInvalidation.decision_telemetry_event()
   ]
 
   @type source ::
@@ -52,10 +59,13 @@ defmodule Cadence.Telemetry.RuntimeHealth do
           | :commanding_lane_dispatcher
           | :commanding_verifier_scheduler
           | :jobs_dispatcher
+          | :telemetry_ingress
           | :provider_ingress_executor
           | :ingress_persistence_projector
+          | :dashboards_runtime_invalidation
 
   @type recent_event :: %{
+          optional(:runtime_event) => Event.t(),
           source: source(),
           event: atom(),
           event_name: [atom()],
@@ -70,6 +80,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
           safety_activity_count: non_neg_integer(),
           events: %{optional(atom()) => non_neg_integer()},
           reasons: %{optional(atom()) => non_neg_integer()},
+          boundaries: %{optional(atom()) => non_neg_integer()},
           last_event_at: DateTime.t() | nil
         }
 
@@ -78,6 +89,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
           stale_timer_count: non_neg_integer(),
           safety_activity_count: non_neg_integer(),
           sources: %{optional(source()) => source_summary()},
+          metrics: map(),
           recent_events: [recent_event()],
           subscribed_events: [[atom()]]
         }
@@ -134,20 +146,23 @@ defmodule Cadence.Telemetry.RuntimeHealth do
   def handle_cast({:runtime_event, event_name, measurements, metadata, observed_at}, state) do
     source = source_from_event(event_name)
     event = List.last(event_name)
+    runtime_event = runtime_event(event_name, measurements, metadata, observed_at)
 
-    recent_event = %{
-      source: source,
-      event: event,
-      event_name: event_name,
-      observed_at: observed_at,
-      measurements: measurements,
-      metadata: metadata
-    }
+    recent_event =
+      %{
+        source: source,
+        event: event,
+        event_name: event_name,
+        observed_at: observed_at,
+        measurements: measurements,
+        metadata: metadata
+      }
+      |> maybe_put_runtime_event(runtime_event)
 
     source_summary =
       state.sources
       |> Map.get(source, empty_source_summary())
-      |> record_source_event(event, metadata, observed_at)
+      |> record_source_event(event, metadata, runtime_event, observed_at)
 
     state =
       state
@@ -158,6 +173,10 @@ defmodule Cadence.Telemetry.RuntimeHealth do
         &(&1 + safety_activity_increment(event, metadata))
       )
       |> Map.update!(:sources, &Map.put(&1, source, source_summary))
+      |> Map.update!(
+        :metrics,
+        &record_metrics(&1, source, event, measurements, metadata, observed_at)
+      )
       |> Map.update!(
         :recent_events,
         &limit_recent_events([recent_event | &1], state.recent_limit)
@@ -204,6 +223,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
       stale_timer_count: 0,
       safety_activity_count: 0,
       sources: %{},
+      metrics: empty_metrics(),
       recent_events: []
     }
   end
@@ -229,7 +249,29 @@ defmodule Cadence.Telemetry.RuntimeHealth do
   defp source_from_event([:cadence, :runtime, :ingress_persistence_projector, _event]),
     do: :ingress_persistence_projector
 
-  defp record_source_event(source_summary, event, metadata, observed_at) do
+  defp source_from_event([:cadence, :runtime, :telemetry_ingress, _event]),
+    do: :telemetry_ingress
+
+  defp source_from_event([:cadence, :dashboards, :runtime_invalidation, _event]),
+    do: :dashboards_runtime_invalidation
+
+  defp runtime_event(event_name, measurements, metadata, observed_at) do
+    if event_name == RuntimeInvalidation.telemetry_event() do
+      case Event.from_metadata(metadata, measurements, occurred_at: observed_at) do
+        {:ok, %Event{} = event} -> event
+        :error -> nil
+      end
+    else
+      nil
+    end
+  end
+
+  defp maybe_put_runtime_event(recent_event, %Event{} = runtime_event),
+    do: Map.put(recent_event, :runtime_event, runtime_event)
+
+  defp maybe_put_runtime_event(recent_event, _runtime_event), do: recent_event
+
+  defp record_source_event(source_summary, event, metadata, runtime_event, observed_at) do
     source_summary
     |> Map.update!(:total_events, &(&1 + 1))
     |> Map.update!(:stale_timer_count, &(&1 + stale_timer_increment(event)))
@@ -239,6 +281,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
     )
     |> Map.update!(:events, &Map.update(&1, event, 1, fn count -> count + 1 end))
     |> record_reason(metadata)
+    |> record_boundary(event, runtime_event, metadata)
     |> Map.put(:last_event_at, observed_at)
   end
 
@@ -248,6 +291,25 @@ defmodule Cadence.Telemetry.RuntimeHealth do
 
   defp record_reason(source_summary, _metadata), do: source_summary
 
+  defp record_boundary(source_summary, _event, %Event{boundary: boundary}, _metadata) do
+    Map.update!(
+      source_summary,
+      :boundaries,
+      &Map.update(&1, boundary, 1, fn count -> count + 1 end)
+    )
+  end
+
+  defp record_boundary(source_summary, :invalidate, _runtime_event, %{boundary: boundary})
+       when is_atom(boundary) do
+    Map.update!(
+      source_summary,
+      :boundaries,
+      &Map.update(&1, boundary, 1, fn count -> count + 1 end)
+    )
+  end
+
+  defp record_boundary(source_summary, _event, _runtime_event, _metadata), do: source_summary
+
   defp empty_source_summary do
     %{
       total_events: 0,
@@ -255,6 +317,7 @@ defmodule Cadence.Telemetry.RuntimeHealth do
       safety_activity_count: 0,
       events: %{},
       reasons: %{},
+      boundaries: %{},
       last_event_at: nil
     }
   end
@@ -277,8 +340,90 @@ defmodule Cadence.Telemetry.RuntimeHealth do
       stale_timer_count: state.stale_timer_count,
       safety_activity_count: state.safety_activity_count,
       sources: state.sources,
+      metrics: snapshot_metrics(state.metrics),
       recent_events: Enum.reverse(state.recent_events),
       subscribed_events: @events
+    }
+  end
+
+  defp empty_metrics do
+    %{
+      ingress_processing_latency_ms: %{}
+    }
+  end
+
+  defp record_metrics(
+         metrics,
+         :telemetry_ingress,
+         :processing_result,
+         measurements,
+         metadata,
+         observed_at
+       ) do
+    case normalize_ingress_latency_sample(measurements, metadata, observed_at) do
+      nil ->
+        metrics
+
+      sample ->
+        put_in(
+          metrics,
+          [:ingress_processing_latency_ms, ingress_latency_sample_key(sample)],
+          sample
+        )
+    end
+  end
+
+  defp record_metrics(metrics, _source, _event, _measurements, _metadata, _observed_at),
+    do: metrics
+
+  defp normalize_ingress_latency_sample(measurements, metadata, observed_at) do
+    with duration_us when is_integer(duration_us) and duration_us >= 0 <-
+           Map.get(measurements, :end_to_end_us),
+         mission_id when is_binary(mission_id) and mission_id != "" <-
+           Map.get(metadata, :mission_id) do
+      source_endpoint_id =
+        Map.get(metadata, :source_endpoint_id) ||
+          Map.get(metadata, :source_endpoint_ref) ||
+          Map.get(metadata, :source_ref)
+
+      %{
+        observable_id: "ingress.processing_latency_ms",
+        mission_id: mission_id,
+        source_endpoint_id: source_endpoint_id,
+        spacecraft_id: Map.get(metadata, :spacecraft_id),
+        transport_id: Map.get(metadata, :transport_id),
+        ground_station_id:
+          Map.get(metadata, :ground_station_id) || Map.get(metadata, :antenna_id),
+        link_id: Map.get(metadata, :link_id) || Map.get(metadata, :link_assignment_id),
+        adapter_key: Map.get(metadata, :adapter_key),
+        value: duration_us / 1000.0,
+        unit: "ms",
+        observed_at: observed_at,
+        error?: Map.get(metadata, :error?, false),
+        measurements: measurements,
+        metadata: metadata
+      }
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.new()
+    else
+      _missing -> nil
+    end
+  end
+
+  defp ingress_latency_sample_key(%{source_endpoint_id: source_endpoint_id})
+       when is_binary(source_endpoint_id) and source_endpoint_id != "" do
+    {:source_endpoint, source_endpoint_id}
+  end
+
+  defp ingress_latency_sample_key(%{mission_id: mission_id}), do: {:mission, mission_id}
+
+  defp snapshot_metrics(metrics) do
+    %{
+      ingress_processing_latency_ms:
+        metrics
+        |> Map.get(:ingress_processing_latency_ms, %{})
+        |> Map.values()
+        |> Enum.sort_by(&{Map.get(&1, :mission_id), Map.get(&1, :source_endpoint_id, "")})
     }
   end
 end

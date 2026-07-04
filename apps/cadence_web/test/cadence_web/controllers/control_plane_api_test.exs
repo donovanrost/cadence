@@ -32,6 +32,7 @@ defmodule CadenceWeb.ControlPlaneApiTest do
       session_ttl_seconds: 3600
     )
 
+    reset_bootstrap_state!()
     assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
 
     on_exit(fn ->

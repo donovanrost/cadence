@@ -1,0 +1,119 @@
+<!-- @dsCard group="Foundations" name="Content & terminology" subtitle="Voice · the noun glossary · time, numbers, copy" width="1040" height="1880" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Content &amp; terminology</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 80ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2rem 0 .9rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .4rem 0 0; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+
+  .voice { display: grid; gap: .55rem; max-width: 80ch; padding: 0; margin: 0; }
+  .voice li { list-style: none; display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; font-size: .85rem; line-height: 1.4; color: oklch(82% 0.02 250 / 0.85); }
+  .voice b { color: oklch(88% 0.02 250); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .81rem; max-width: 66rem; }
+  th { text-align: left; font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .45rem .5rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .45rem .5rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.use { font-weight: 600; color: var(--st-green); white-space: nowrap; }
+  td.not { color: oklch(72% 0.10 25); } /* ds-allow: voice example tint */
+  td.not s { color: oklch(70% 0.05 25 / 0.8); } /* ds-allow: voice example tint */
+
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; max-width: 64rem; margin-top: .4rem; }
+  .ba .col { border-radius: 2px; padding: .8rem 1rem; font-size: .82rem; line-height: 1.45; }
+  .ba .no { border: 1px solid oklch(70% 0.20 25 / 0.35); background: oklch(70% 0.20 25 / 0.06); }
+  .ba .yes { border: 1px solid oklch(78% 0.12 175 / 0.35); background: oklch(78% 0.12 175 / 0.06); }
+  .ba h4 { margin: 0 0 .4rem; font-size: .64rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .ba .no h4 { color: oklch(72% 0.20 25); } .ba .yes h4 { color: var(--st-green); }
+  .ba .ex { font-family: ui-sans-serif, system-ui, sans-serif; color: oklch(85% 0.02 250 / 0.9); }
+  .ba .ex + .ex { margin-top: .4rem; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Content &amp; terminology</h1>
+  <p class="lede">Language is design surface — especially for a domain tool. Cadence speaks
+    <strong>operator-to-operator</strong>: precise, terse, calm, technical. The words carry meaning the way the colors
+    do, so they're a <em>controlled</em> vocabulary, not free prose.</p>
+
+  <p class="section-label">Voice &amp; tone</p>
+  <ul class="voice">
+    <li><b>Precise &amp; technical</b><span>Use the real domain terms; operators know them. Don't dumb down "decommutation" to "data parsing."</span></li>
+    <li><b>Terse</b><span>Operators scan. Cut filler — "Create transport," not "Click here to create a new transport."</span></li>
+    <li><b>Calm &amp; factual</b><span>The UI signals urgency (color, motion); the <em>words</em> stay measured. No "Oops!", no exclamation marks.</span></li>
+    <li><b>Peer, not hand-holding</b><span>Talk to a professional, not a worried novice. No "Don't worry," no reassurance theatre.</span></li>
+    <li><b>Active, present tense</b><span>"Transport is active," not "The transport has been successfully activated."</span></li>
+  </ul>
+
+  <p class="section-label">The noun glossary — canonical terms</p>
+  <table>
+    <thead><tr><th>Use</th><th>Not</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td class="use">Spacecraft</td><td class="not"><s>Satellite</s></td><td>the vehicle; "satellite" is only a subset of spacecraft</td></tr>
+      <tr><td class="use">Spacecraft Type</td><td class="not"><s>Link Template · Protocol Behavior · Runtime Identity</s></td><td>the control-plane template bundling a spacecraft's app configs — one consolidated noun</td></tr>
+      <tr><td class="use">Mission</td><td class="not"><s>Project · Workspace</s></td><td>the top-level operational grouping</td></tr>
+      <tr><td class="use">Organization</td><td class="not"><s>Tenant · Account</s></td><td>the customer; "tenant" is internal-only language</td></tr>
+      <tr><td class="use">Transport</td><td class="not"><s>Connection · Link</s></td><td>a durable byte-moving capability; a runtime "Link" is a realized thing, different concept</td></tr>
+      <tr><td class="use">Ground Station</td><td class="not"><s>Antenna · Dish</s></td><td>a comms site</td></tr>
+      <tr><td class="use">Contact</td><td class="not"><s>Session</s></td><td>a scheduled comms window; "pass" = the orbital event, not the booking</td></tr>
+      <tr><td class="use">Limit</td><td class="not"><s>Threshold · Alarm</s></td><td>a value-range check (red/yellow/green/blue). "Alarm" is a separate, later concept</td></tr>
+      <tr><td class="use">Decommutation · decom</td><td class="not"><s>Parsing · Extraction</s></td><td>turning packets into telemetry points</td></tr>
+      <tr><td class="use">Telemetry point</td><td class="not"><s>Channel · Mnemonic</s></td><td>a single measured value</td></tr>
+      <tr><td class="use">Commanding</td><td class="not"><s>Controls · Uplink</s></td><td>sending commands to a spacecraft</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Established ops abbreviations are <em>kept</em>, not spelled out — <code>Comms</code>, <code>Ops</code>,
+    <code>SCID</code>, <code>AOS</code>/<code>LOS</code>, <code>decom</code>, <code>TLM</code>/<code>CMD</code>. Operators
+    read them faster than the full words. Spell out only in onboarding / help.</p>
+
+  <p class="section-label">Casing</p>
+  <p class="note">Author labels in their <strong>natural case</strong> — "Deploy," "Battery voltage," "New transport."
+    The UPPERCASE you see on labels is a <em>presentational</em> skin (<code>--label-case</code>), not content — the
+    legibility mode turns it off. <strong>Never write all-caps into content or data</strong>, or it can't be undone.</p>
+
+  <p class="section-label">Time &amp; numbers</p>
+  <ul class="voice">
+    <li><b>UTC, always</b><span>Spacecraft ops can't tolerate timezone ambiguity. Times are <code>HH:MM:SSZ</code>, timestamps <code>YYYY-MM-DDTHH:MM:SSZ</code>. Never local time. Relative ("2m ago") only as a secondary hint.</span></li>
+    <li><b>Units, always</b><span>Show the unit as a dim suffix (<code>98.2 V</code>); never a bare number. Fixed precision per telemetry point. Tabular figures so streaming values don't twitch.</span></li>
+    <li><b>Missing ≠ zero</b><span>No data renders as an em dash <code>—</code>, never <code>0</code> or blank. Identifiers are monospace, truncated with the full value on hover.</span></li>
+  </ul>
+
+  <p class="section-label">Copy patterns</p>
+  <table>
+    <thead><tr><th>Surface</th><th>Pattern</th></tr></thead>
+    <tbody>
+      <tr><td class="use">Empty state</td><td>State the absence + the next action. "No transports yet. Create one to describe a byte-moving capability."</td></tr>
+      <tr><td class="use">Error</td><td>What failed + why + the fix. Never "Something went wrong." → "Transport not created — port must be 1–65535."</td></tr>
+      <tr><td class="use">Validation</td><td>Lowercase, specific, on the field. "can't be blank," "must be between 1 and 65535."</td></tr>
+      <tr><td class="use">Action label</td><td>Verb + noun, specific. "Create transport," "Save identity," "Abort pass." Never "Submit" / "OK". Name destructive actions: "Delete spacecraft."</td></tr>
+    </tbody>
+  </table>
+
+  <p class="section-label">Voice — before / after</p>
+  <div class="ba">
+    <div class="col no"><h4>✗ Not Cadence</h4>
+      <p class="ex">"Oops! Something went wrong while creating your transport. Please try again later!"</p>
+      <p class="ex">"Awesome — your spacecraft is all set up! 🎉"</p>
+    </div>
+    <div class="col yes"><h4>✓ Cadence</h4>
+      <p class="ex">"Transport not created — port must be between 1 and 65535."</p>
+      <p class="ex">"Spacecraft ready. Identity and profile configured."</p>
+    </div>
+  </div>
+
+  <p class="section-label">Controlled state vocabulary</p>
+  <p class="note">One word per state, used <em>everywhere</em> — don't drift between synonyms. Readiness:
+    <strong>Ready · Needs Work · Missing</strong>. Severity: <strong>Critical · Warning · Info · Nominal</strong>
+    (CRIT/WARN/INFO/NOM). Quality: <strong>Good · Suspect · Bad</strong>. A thing that "failed" is "failed" in every
+    view, never "Error" here and "Bad" there. The state words are part of the design system, like the colors that carry them.</p>
+</body>
+</html>

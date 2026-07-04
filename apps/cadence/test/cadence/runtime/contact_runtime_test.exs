@@ -12,6 +12,8 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
     TransportBinding
   }
 
+  alias Cadence.OperationalEvents
+
   alias Cadence.Persistence.Schemas.{
     CombinedDownlinkRecordRow,
     DownlinkDiagnosticRow,
@@ -249,11 +251,14 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
     assert resumed_uplink_transport.state.heartbeat_count == 3
     assert resumed_uplink_transport.timer_count == 1
 
-    transport_event_kinds =
+    transport_capability_rows =
       TransportCapabilityRecordRow
       |> where([row], row.mission_id == ^mission_id)
-      |> select([row], row.event_kind)
       |> Repo.all()
+
+    transport_event_kinds =
+      transport_capability_rows
+      |> Enum.map(& &1.event_kind)
       |> MapSet.new()
 
     assert transport_event_kinds ==
@@ -264,6 +269,30 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
                "timer_handled"
              ])
 
+    operational_transport_events =
+      OperationalEvents.list_events(mission_id,
+        source_record_kind: :transport_capability_record,
+        order: :asc,
+        limit: length(transport_capability_rows)
+      )
+
+    assert operational_transport_events
+           |> Enum.map(& &1.kind)
+           |> MapSet.new() ==
+             MapSet.new([
+               :transport_initialized,
+               :transport_control_input_handled,
+               :transport_event_handled,
+               :transport_timer_handled
+             ])
+
+    assert operational_transport_events
+           |> Enum.map(& &1.causality.source_record_id)
+           |> MapSet.new() ==
+             transport_capability_rows
+             |> Enum.map(& &1.transport_record_id)
+             |> MapSet.new()
+
     transport_action_kinds =
       TransportActionRequestRow
       |> where([row], row.mission_id == ^mission_id)
@@ -273,14 +302,40 @@ defmodule Cadence.Runtime.ContactRuntimeTest do
 
     assert transport_action_kinds == MapSet.new(["schedule_timer", "cancel_timer"])
 
-    transport_timer_event_kinds =
+    transport_timer_rows =
       TransportTimerEventRow
       |> where([row], row.mission_id == ^mission_id)
-      |> select([row], row.event_kind)
       |> Repo.all()
+
+    transport_timer_event_kinds =
+      transport_timer_rows
+      |> Enum.map(& &1.event_kind)
       |> MapSet.new()
 
     assert transport_timer_event_kinds == MapSet.new(["scheduled", "fired", "canceled"])
+
+    operational_timer_events =
+      OperationalEvents.list_events(mission_id,
+        source_record_kind: :transport_timer_event,
+        order: :asc,
+        limit: length(transport_timer_rows)
+      )
+
+    assert operational_timer_events
+           |> Enum.map(& &1.kind)
+           |> MapSet.new() ==
+             MapSet.new([
+               :transport_timer_scheduled,
+               :transport_timer_fired,
+               :transport_timer_canceled
+             ])
+
+    assert operational_timer_events
+           |> Enum.map(& &1.causality.source_record_id)
+           |> MapSet.new() ==
+             transport_timer_rows
+             |> Enum.map(& &1.timer_event_id)
+             |> MapSet.new()
   end
 
   test "combines duplicate downlink observations and persists diagnostics", %{

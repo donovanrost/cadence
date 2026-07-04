@@ -14,12 +14,12 @@ defmodule CadenceWeb.CommsComponents do
 
   def readiness_card(assigns) do
     ~H"""
-    <.card accent={readiness_accent(@status)}>
+    <.card>
       <div class="flex items-start justify-between gap-4">
         <p class="hud-label">{@title}</p>
         <.status_badge status={@status} />
       </div>
-      <p class="mt-3 mc-value-large text-primary">{@value}</p>
+      <p class="mt-3 mc-value-large text-base-content">{@value}</p>
       <p class="mt-2 text-sm text-base-content/70">{@description}</p>
       <.link
         :if={@navigate}
@@ -31,12 +31,6 @@ defmodule CadenceWeb.CommsComponents do
     </.card>
     """
   end
-
-  defp readiness_accent(:ready), do: :success
-  defp readiness_accent(:attention), do: :warning
-  defp readiness_accent(:blocked), do: :error
-  # Card with accent nil has no left border (previous code used border-l-transparent).
-  defp readiness_accent(_), do: nil
 
   def display_name(%{metadata: metadata} = resource, fallback_field)
       when is_map(metadata) and is_atom(fallback_field) do

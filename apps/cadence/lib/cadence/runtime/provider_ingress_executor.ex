@@ -12,11 +12,13 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
   require Logger
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Persistence.OrganizationScope
   alias Cadence.Runtime, as: RuntimeBoundary
   alias Cadence.Runtime.{IngressPersistenceProjector, ProcessedIngressBatch}
   alias Cadence.SourceEndpoints
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
 
   @max_drain_batch 512
   @projector_high_watermark 8_192
@@ -619,14 +621,17 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
            extract_telemetry_samples(resolved_raw_evidence.mission_id, processing_result),
          :ok <-
            maybe_record_current_values(
-             resolved_raw_evidence.mission_id,
+             resolved_raw_evidence,
              telemetry_samples
            ) do
+      end_to_end_us = elapsed_us(ingress_started_at)
+      processing_result = put_ingress_latency_metric(processing_result, end_to_end_us, false)
+
       TelemetryProfiler.record_ingress_result(
         resolved_raw_evidence,
         resolve_us: resolve_us,
         runtime_us: runtime_us,
-        end_to_end_us: elapsed_us(ingress_started_at),
+        end_to_end_us: end_to_end_us,
         error?: false,
         processing_result: processing_result
       )
@@ -657,18 +662,70 @@ defmodule Cadence.Runtime.ProviderIngressExecutor do
     )
   end
 
-  defp maybe_record_current_values(_mission_id, telemetry_samples) when telemetry_samples == [],
-    do: :ok
+  defp maybe_record_current_values(%RawEvidence{}, telemetry_samples)
+       when telemetry_samples == [],
+       do: :ok
 
-  defp maybe_record_current_values(mission_id, telemetry_samples) do
+  defp maybe_record_current_values(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
     if CurrentValueStore.hot_path_safe?() do
-      TelemetryProfiler.with_runtime_component(mission_id, :current_value_record, fn ->
-        CurrentValueStore.record_samples(telemetry_samples)
-      end)
+      record_hot_path_current_values(resolved_raw_evidence, telemetry_samples)
     else
       :ok
     end
   end
+
+  defp record_hot_path_current_values(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
+    TelemetryProfiler.with_runtime_component(
+      resolved_raw_evidence.mission_id,
+      :current_value_record,
+      fn ->
+        resolved_raw_evidence
+        |> enriched_current_samples(telemetry_samples)
+        |> record_enriched_current_values()
+      end
+    )
+  end
+
+  defp enriched_current_samples(%RawEvidence{} = resolved_raw_evidence, telemetry_samples) do
+    TelemetryStorage.enrich_samples(
+      telemetry_samples,
+      current_value_storage_opts(resolved_raw_evidence)
+    )
+  end
+
+  defp record_enriched_current_values({:ok, enriched_samples}) do
+    CurrentValueStore.record_samples(enriched_samples)
+  end
+
+  defp record_enriched_current_values({:error, reason}), do: {:error, reason}
+
+  defp current_value_storage_opts(%RawEvidence{} = resolved_raw_evidence) do
+    [
+      organization_id:
+        OrganizationScope.organization_id_for_mission(resolved_raw_evidence.mission_id),
+      source_endpoint_id:
+        resolved_raw_evidence.source_endpoint_ref || resolved_raw_evidence.source_ref,
+      recorded_at: resolved_raw_evidence.receipt_time
+    ]
+    |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
+  end
+
+  defp put_ingress_latency_metric(processing_result, end_to_end_us, error?)
+       when is_map(processing_result) and is_integer(end_to_end_us) and end_to_end_us >= 0 do
+    raw_evidence = Map.get(processing_result, :raw_evidence)
+
+    Map.put(processing_result, :ingress_latency_metric, %{
+      value_ms: end_to_end_us / 1000.0,
+      end_to_end_us: end_to_end_us,
+      observed_at: ingress_latency_observed_at(raw_evidence),
+      error?: error?
+    })
+  end
+
+  defp ingress_latency_observed_at(%RawEvidence{receipt_time: %DateTime{} = receipt_time}),
+    do: receipt_time
+
+  defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
 
   defp elapsed_us(started_at) do
     System.convert_time_unit(System.monotonic_time() - started_at, :native, :microsecond)

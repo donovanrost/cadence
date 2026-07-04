@@ -10,6 +10,9 @@ defmodule Cadence.DataCase do
   alias Cadence.Telemetry.CurrentValueStore
   alias Cadence.Telemetry.CurrentValueStore.ETS
 
+  @repo_ready_attempts 200
+  @repo_ready_sleep_ms 50
+
   using do
     quote do
       alias Cadence.Repo
@@ -22,8 +25,13 @@ defmodule Cadence.DataCase do
   end
 
   setup tags do
-    {:ok, _started_apps} = Application.ensure_all_started(:cadence)
-    pid = start_owner_with_retry!(shared: not tags[:async])
+    ensure_cadence_started!()
+
+    unless tags[:async] do
+      Cadence.Runtime.stop_all_missions()
+    end
+
+    pid = start_owner_with_retry!(sandbox_owner_options(tags))
 
     on_exit(fn ->
       unless tags[:async] do
@@ -35,6 +43,8 @@ defmodule Cadence.DataCase do
       end
 
       Sandbox.stop_owner(pid)
+      Process.sleep(25)
+      ensure_cadence_started!()
     end)
 
     :ok
@@ -47,6 +57,7 @@ defmodule Cadence.DataCase do
   end
 
   defp start_owner_with_retry!(opts, attempts) do
+    ensure_cadence_started!()
     Sandbox.start_owner!(Cadence.Repo, opts)
   rescue
     MatchError ->
@@ -57,6 +68,8 @@ defmodule Cadence.DataCase do
   end
 
   def persist_mission_scope(organization_id, mission_id, opts \\ []) do
+    ensure_cadence_started!()
+
     organization =
       Organization.new(%{
         organization_id: organization_id,
@@ -73,6 +86,9 @@ defmodule Cadence.DataCase do
       })
 
     {:ok, persisted_organization} = Cadence.persist_organization(organization)
+
+    wait_for_repo_ready!()
+
     {:ok, persisted_mission} = Cadence.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}
@@ -85,7 +101,52 @@ defmodule Cadence.DataCase do
 
   defp retry_start_owner(opts, attempts) do
     Process.sleep(50)
-    {:ok, _started_apps} = Application.ensure_all_started(:cadence)
+    ensure_cadence_started!()
     start_owner_with_retry!(opts, attempts - 1)
   end
+
+  defp ensure_cadence_started! do
+    case Application.ensure_all_started(:cadence) do
+      {:ok, _started_apps} ->
+        wait_for_repo_ready!()
+
+      {:error, reason} ->
+        raise "Cadence application did not start: #{inspect(reason)}"
+    end
+  end
+
+  defp wait_for_repo_ready!(attempts \\ @repo_ready_attempts)
+
+  defp wait_for_repo_ready!(0) do
+    raise "Cadence.Repo did not become ready in time"
+  end
+
+  defp wait_for_repo_ready!(attempts) do
+    case Process.whereis(Cadence.Repo) do
+      nil ->
+        Process.sleep(@repo_ready_sleep_ms)
+        wait_for_repo_ready!(attempts - 1)
+
+      _pid ->
+        :ok
+    end
+  end
+
+  defp sandbox_owner_options(tags) do
+    shared? = not tags[:async]
+
+    [shared: shared?]
+    |> maybe_put_ownership_timeout(
+      tags[:sandbox_ownership_timeout] || default_ownership_timeout(shared?)
+    )
+  end
+
+  defp default_ownership_timeout(true), do: 600_000
+  defp default_ownership_timeout(false), do: nil
+
+  defp maybe_put_ownership_timeout(options, timeout) when is_integer(timeout) and timeout > 0 do
+    Keyword.put(options, :ownership_timeout, timeout)
+  end
+
+  defp maybe_put_ownership_timeout(options, _timeout), do: options
 end

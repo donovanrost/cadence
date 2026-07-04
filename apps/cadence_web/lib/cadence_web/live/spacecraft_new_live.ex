@@ -88,8 +88,11 @@ defmodule CadenceWeb.SpacecraftNewLive do
       <.page_header
         title="New Spacecraft"
         subtitle="Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract."
-        back_label="Spacecraft"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {"New Spacecraft", nil}
+        ]}
       />
 
       <.form
@@ -99,14 +102,12 @@ defmodule CadenceWeb.SpacecraftNewLive do
         phx-submit="save"
         class="space-y-8"
       >
-        <section class="space-y-4">
-          <.section_heading number="01" title="Identity" />
+        <.form_section number="01" title="Identity">
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
           <.input field={@form[:scid]} type="text" label="SCID" />
-        </section>
+        </.form_section>
 
-        <section class="space-y-4">
-          <.section_heading number="02" title="Profile" />
+        <.form_section number="02" title="Profile">
           <.input
             field={@form[:spacecraft_type_id]}
             type="select"
@@ -123,34 +124,13 @@ defmodule CadenceWeb.SpacecraftNewLive do
             </.link>
             to give this spacecraft a reusable interpretation profile.
           </p>
-        </section>
+        </.form_section>
 
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button type="submit" size={:md}>
-            Create Spacecraft
-          </.button>
-          <.button
-            variant={:ghost}
-            size={:md}
-            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
-          >
-            Cancel
-          </.button>
-        </div>
+        <.form_actions
+          submit="Create Spacecraft"
+          cancel_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft"}
+        />
       </.form>
-    </div>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-
-  defp section_heading(assigns) do
-    ~H"""
-    <div class="flex items-center gap-3">
-      <span class="hud-label text-primary/70">{@number}</span>
-      <h2 class="hud-label">{@title}</h2>
-      <div class="flex-1 h-px bg-base-300/60"></div>
     </div>
     """
   end

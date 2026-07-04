@@ -6,6 +6,10 @@ defmodule CadenceWeb.Plugs.FetchBrowserCurrentScope do
   def init(opts), do: opts
 
   def call(conn, _opts) do
+    CadenceWeb.ScopeLoader.allow_browser_test_sandbox_owner(
+      get_session(conn, :browser_test_sandbox_owner_key)
+    )
+
     case get_session(conn, :user_session_token) do
       session_token when is_binary(session_token) ->
         case Cadence.authenticate_api_token(session_token,

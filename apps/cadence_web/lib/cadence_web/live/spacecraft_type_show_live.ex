@@ -37,11 +37,15 @@ defmodule CadenceWeb.SpacecraftTypeShowLive do
     <div class="space-y-6">
       <.page_header
         title={@profile.display_name}
-        back_label="Spacecraft Profiles"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {"Spacecraft Profiles", ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"},
+          {@profile.display_name, nil}
+        ]}
       >
         <:title_suffix>
-          <span class="mc-value-medium text-primary/80">v{@profile.version}</span>
+          <span class="mc-value-medium text-base-content">v{@profile.version}</span>
           <span class="hud-label">{@profile.lifecycle_state}</span>
         </:title_suffix>
       </.page_header>

@@ -7,7 +7,7 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
 
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.OrganizationScope
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{Sample, SourceFilters}
 
   @mission_scope_key "__mission__"
   @timestamps_opts [type: :utc_datetime_usec]
@@ -19,6 +19,9 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
     field(:spacecraft_id, :string)
     field(:point_id, :string)
     field(:point_name, :string)
+    field(:realm, :string)
+    field(:data_source_id, :string)
+    field(:binding_id, :string)
     field(:sample_id, :string)
     field(:packet_id, :string)
     field(:evidence_id, :string)
@@ -39,6 +42,9 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
     :spacecraft_scope_id,
     :point_id,
     :point_name,
+    :realm,
+    :data_source_id,
+    :binding_id,
     :sample_id,
     :packet_id,
     :evidence_id,
@@ -58,7 +64,8 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
     |> validate_required(@required_fields)
     |> foreign_key_constraint(:packet_id)
     |> foreign_key_constraint(:evidence_id)
-    |> unique_constraint([:mission_id, :spacecraft_scope_id, :point_id],
+    |> unique_constraint(
+      [:mission_id, :spacecraft_scope_id, :point_id, :realm, :data_source_id, :binding_id],
       name: :telemetry_latest_values_scope_idx
     )
   end
@@ -93,12 +100,17 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
 
   @spec row_attrs(Sample.t()) :: map()
   def row_attrs(%Sample{} = sample) do
+    source_identity = SourceFilters.sample_identity(sample)
+
     %{
       mission_id: sample.mission_id,
       spacecraft_scope_id: sample.spacecraft_id || @mission_scope_key,
       spacecraft_id: sample.spacecraft_id,
       point_id: sample.point_id,
       point_name: sample.point_name,
+      realm: source_identity.realm,
+      data_source_id: source_identity.data_source_id,
+      binding_id: source_identity.binding_id,
       sample_id: sample.sample_id,
       packet_id: sample.packet_id,
       evidence_id: sample.evidence_id,
@@ -127,6 +139,9 @@ defmodule Cadence.Persistence.Schemas.TelemetryLatestValueRow do
       :spacecraft_id,
       :point_id,
       :point_name,
+      :realm,
+      :data_source_id,
+      :binding_id,
       :sample_id,
       :packet_id,
       :evidence_id,

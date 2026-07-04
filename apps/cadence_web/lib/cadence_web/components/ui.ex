@@ -22,16 +22,16 @@ defmodule CadenceWeb.UI do
 
   def flash_stack(assigns) do
     ~H"""
-    <div class="fixed top-5 right-5 max-md:top-auto max-md:bottom-3 max-md:left-3 max-md:right-3 z-[3] grid gap-3">
+    <div class="fixed top-5 right-5 max-md:top-auto max-md:bottom-3 max-md:left-3 max-md:right-3 z-[var(--z-toast)] grid gap-3">
       <p
         :if={info = Phoenix.Flash.get(@flash, :info)}
-        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-[rgba(147,242,200,0.24)] rounded-[1rem] bg-[rgba(6,12,19,0.92)] shadow-[0_28px_90px_rgba(0,0,0,0.42)]"
+        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-success/40 rounded-[2px] bg-base-200/95 text-sm text-base-content shadow-lg"
       >
         {info}
       </p>
       <p
         :if={error = Phoenix.Flash.get(@flash, :error)}
-        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-[rgba(255,142,133,0.32)] rounded-[1rem] bg-[rgba(6,12,19,0.92)] shadow-[0_28px_90px_rgba(0,0,0,0.42)]"
+        class="m-0 min-w-[16rem] max-w-[min(24rem,calc(100vw-2rem))] max-md:min-w-0 py-[0.9rem] px-4 border border-error/40 rounded-[2px] bg-base-200/95 text-sm text-base-content shadow-lg"
       >
         {error}
       </p>
@@ -73,7 +73,7 @@ defmodule CadenceWeb.UI do
       <div
         id={"#{@id}-menu"}
         role="menu"
-        class="dropdown-content menu bg-base-200 z-[100] w-80 p-2 shadow-lg border border-primary/20 max-h-96 overflow-y-auto"
+        class="dropdown-content menu bg-base-200 z-[var(--z-popover)] w-80 p-2 shadow-lg border border-primary/20 max-h-96 overflow-y-auto"
       >
         <li class="menu-title px-3 py-2">
           <span class="hud-label">
@@ -94,7 +94,7 @@ defmodule CadenceWeb.UI do
               <span :if={n.read_at} class="mt-1.5 w-1.5 h-1.5 flex-shrink-0"></span>
               <span class="flex-1 min-w-0">
                 <span class="block text-xs font-semibold text-base-content truncate">{n.title}</span>
-                <span :if={n.body} class="block text-xs text-base-content/60 truncate">{n.body}</span>
+                <span :if={n.body} class="block text-xs text-base-content/70 truncate">{n.body}</span>
               </span>
             </.link>
           </li>
@@ -145,7 +145,7 @@ defmodule CadenceWeb.UI do
       <div
         id={"#{@id}-menu"}
         role="menu"
-        class="dropdown-content menu bg-base-200 z-[100] w-72 p-2 shadow-lg border border-primary/20"
+        class="dropdown-content menu bg-base-200 z-[var(--z-popover)] w-72 p-2 shadow-lg border border-primary/20"
       >
         <div role="presentation" class="px-3 py-2">
           <p class="text-sm font-semibold text-base-content">{display_label(@scope.user)}</p>
@@ -258,6 +258,39 @@ defmodule CadenceWeb.UI do
         <% end %>
       <% end %>
     </nav>
+    """
+  end
+
+  @doc """
+  A sub-page / in-card section header: an optional `eyebrow` label over a
+  title and description, with right-aligned `:actions` (a badge or button).
+
+  Distinct from `<.page_header>` (page-level). Set `title_mono` for value-style
+  titles (endpoints, IDs) that render in monospace primary. Left-column content
+  richer than a plain title (counts, summaries, inline version tags) should stay
+  as raw markup.
+  """
+  attr :eyebrow, :string, default: nil
+  attr :title, :string, default: nil
+  attr :title_mono, :boolean, default: false
+  attr :description, :string, default: nil
+  attr :class, :string, default: nil
+  slot :actions
+
+  def section_header(assigns) do
+    ~H"""
+    <div class={["flex items-start justify-between gap-4", @class]}>
+      <div>
+        <p :if={@eyebrow} class="hud-label mb-2">{@eyebrow}</p>
+        <h2 :if={@title} class={["text-lg font-semibold", @title_mono && "font-mono text-primary"]}>
+          {@title}
+        </h2>
+        <p :if={@description} class="mt-1 max-w-2xl text-sm text-base-content/70">{@description}</p>
+      </div>
+      <div :if={@actions != []} class="flex flex-wrap items-center justify-end gap-2">
+        {render_slot(@actions)}
+      </div>
+    </div>
     """
   end
 end

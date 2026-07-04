@@ -100,50 +100,27 @@ defmodule CadenceWeb.SpacecraftEditLive do
         phx-submit="save"
         class="space-y-8"
       >
-        <section class="space-y-4">
-          <.section_heading number="01" title="Identity" />
+        <.form_section number="01" title="Identity">
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
           <.input field={@form[:scid]} type="text" label="SCID" />
-        </section>
+        </.form_section>
 
-        <section class="space-y-4">
-          <.section_heading number="02" title="Profile" />
+        <.form_section number="02" title="Profile">
           <.input
             field={@form[:spacecraft_type_id]}
             type="select"
             label="Spacecraft Profile"
             options={type_options(@available_types)}
           />
-        </section>
+        </.form_section>
 
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button type="submit" size={:md}>
-            Save Identity
-          </.button>
-          <.button
-            variant={:ghost}
-            size={:md}
-            navigate={
-              ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
-            }
-          >
-            Cancel
-          </.button>
-        </div>
+        <.form_actions
+          submit="Save Identity"
+          cancel_navigate={
+            ~p"/missions/#{@current_mission.mission_id}/spacecraft/#{@current_spacecraft.spacecraft_id}"
+          }
+        />
       </.form>
-    </div>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-
-  defp section_heading(assigns) do
-    ~H"""
-    <div class="flex items-center gap-3">
-      <span class="hud-label text-primary/70">{@number}</span>
-      <h2 class="hud-label">{@title}</h2>
-      <div class="flex-1 h-px bg-base-300/60"></div>
     </div>
     """
   end

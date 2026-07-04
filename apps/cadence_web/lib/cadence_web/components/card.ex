@@ -2,9 +2,9 @@ defmodule CadenceWeb.Components.Card do
   @moduledoc """
   The canonical Cadence card and stat tile.
 
-  Card chrome is always `card bg-base-200 border border-base-300 hud-corners`.
-  Body padding defaults to `p-6`; use `padding={:none}` for flush content
-  (tables, lists with their own row padding).
+  Card chrome is `card bg-base-200 border border-base-300`. Body padding
+  defaults to `p-6`; use `padding={:none}` for flush content (tables, lists
+  with their own row padding).
 
   Two heading styles, grounded in existing pages:
 
@@ -13,9 +13,12 @@ defmodule CadenceWeb.Components.Card do
     * `heading` (+ optional `subtitle` and `:actions`) — a full-bleed header
       bar above the body (list-page cards with a "New X" action).
 
-  Use `accent` for a status-colored left border and `hover_glow` for
-  navigation cards. One-off layouts that would need more than a couple of
-  `class` escape hatches should stay as raw markup instead.
+  The cyan `hud-corners` brackets are a navigation/hero signal, not default
+  chrome: `hover_glow` (navigation cards) applies them automatically, and
+  `corners` opts a non-navigating hero panel in. Content cards stay bare.
+  Status on a card is carried by the `<.status_badge>` inside it — there is
+  deliberately no status-colored border. One-off layouts that would need more
+  than a couple of `class` escape hatches should stay as raw markup instead.
   """
 
   use Phoenix.Component
@@ -24,9 +27,9 @@ defmodule CadenceWeb.Components.Card do
   attr :title, :string, default: nil
   attr :heading, :string, default: nil
   attr :subtitle, :string, default: nil
-  attr :accent, :atom, values: [nil, :success, :warning, :error, :info], default: nil
   attr :padding, :atom, values: [:default, :none], default: :default
   attr :hover_glow, :boolean, default: false
+  attr :corners, :boolean, default: false
   attr :class, :string, default: nil
   slot :actions
   slot :inner_block, required: true
@@ -36,9 +39,10 @@ defmodule CadenceWeb.Components.Card do
     <section
       id={@id}
       class={[
-        "card bg-base-200 border border-base-300 hud-corners",
-        accent_class(@accent),
-        @hover_glow && "hover-glow-cyan transition-glow",
+        "card bg-base-200 border border-base-300",
+        (@hover_glow || @corners) && "hud-corners",
+        @hover_glow &&
+          "hover-glow-cyan transition-glow hover:bg-[linear-gradient(var(--state-hover),var(--state-hover))]",
         @class
       ]}
     >
@@ -61,12 +65,6 @@ defmodule CadenceWeb.Components.Card do
     </section>
     """
   end
-
-  defp accent_class(nil), do: nil
-  defp accent_class(:success), do: "border-l-2 border-l-success/60"
-  defp accent_class(:warning), do: "border-l-2 border-l-warning/60"
-  defp accent_class(:error), do: "border-l-2 border-l-error/60"
-  defp accent_class(:info), do: "border-l-2 border-l-info/60"
 
   defp padding_class(:default), do: "p-6"
   defp padding_class(:none), do: "p-0"
@@ -93,7 +91,7 @@ defmodule CadenceWeb.Components.Card do
         patch={@patch}
         aria-current={@active && "true"}
         class={[
-          "block border bg-base-200 px-3 py-2 hud-corners transition-colors",
+          "block border bg-base-200 px-3 py-2 transition-colors",
           if(@active, do: "border-primary/60", else: "border-base-300 hover:border-primary/40"),
           @class
         ]}
@@ -101,7 +99,7 @@ defmodule CadenceWeb.Components.Card do
         <.stat_tile_body label={@label} value={@value} active={@active} />
       </.link>
     <% else %>
-      <div id={@id} class={["border border-base-300 bg-base-200 px-3 py-2 hud-corners", @class]}>
+      <div id={@id} class={["border border-base-300 bg-base-200 px-3 py-2", @class]}>
         <.stat_tile_body label={@label} value={@value} active={false} />
       </div>
     <% end %>

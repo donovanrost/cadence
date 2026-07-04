@@ -3,6 +3,21 @@ defmodule Cadence.CatalogTest do
 
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Database}
+
+  alias Cadence.Dashboards.{
+    DashboardResolveRequest,
+    DashboardResolveResult,
+    DataBinding,
+    DataSource,
+    Document,
+    Frame,
+    PlannedSourceRequest,
+    RuntimeCache,
+    RuntimeCacheKey,
+    SourceResult,
+    SourceWatermark
+  }
+
   alias Cadence.Missions.Mission
 
   @organization_id "org-alpha"
@@ -133,12 +148,13 @@ defmodule Cadence.CatalogTest do
 
   describe "latest_import_run_by_artifact/2" do
     test "returns empty map when there are no runs" do
-      persist_mission_scope(@organization_id, @mission_id)
+      suffix = System.unique_integer([:positive])
+      organization_id = "org-catalog-empty-#{suffix}"
+      mission_id = "mission-catalog-empty-#{suffix}"
 
-      assert Catalog.latest_import_run_by_artifact(
-               @organization_id,
-               @mission_id
-             ) == %{}
+      persist_mission_scope(organization_id, mission_id)
+
+      assert Catalog.latest_import_run_by_artifact(organization_id, mission_id) == %{}
     end
 
     test "returns the most recent run per artifact" do
@@ -257,6 +273,108 @@ defmodule Cadence.CatalogTest do
                )
 
       assert latest.catalog_revision_id == revision.catalog_revision_id
+
+      assert [operational_event] =
+               Cadence.list_operational_events(@organization_id, @mission_id,
+                 category: :catalog,
+                 kind: :catalog_revision_registered,
+                 source_record_kind: :catalog_revision,
+                 source_record_id: revision.catalog_revision_id
+               )
+
+      assert operational_event.subject == %{
+               kind: :catalog_revision,
+               id: revision.catalog_revision_id
+             }
+
+      assert operational_event.payload["catalog_database_id"] == database.catalog_database_id
+      assert operational_event.payload["revision_number"] == 1
+      assert operational_event.payload["revision_label"] == "FSW 3.7"
+      assert operational_event.payload["telemetry_snapshot_id"] == completed_run.snapshot_id
+      assert operational_event.causality.import_run_id == completed_run.import_run_id
+    end
+
+    test "successful revision import invalidates matching dashboard runtime caches" do
+      cache = start_supervised!({RuntimeCache, name: nil})
+      use_dashboard_runtime_cache!(cache)
+      persist_mission_scope(@organization_id, @mission_id)
+
+      other_mission_id = "mission-catalog-cache-other"
+      persist_mission_scope(@organization_id, other_mission_id)
+
+      assert {:ok, %Database{} = database} =
+               Catalog.create_database(@organization_id, @mission_id, %{
+                 name: "Bus Catalog",
+                 slug: "bus-catalog",
+                 catalog_family: :telemetry,
+                 default_importer_key: "fake_tm_json"
+               })
+
+      telemetry_plan_key = dashboard_plan_key(@mission_id, :telemetry)
+      limits_plan_key = dashboard_plan_key(@mission_id, :limits)
+      other_plan_key = dashboard_plan_key(other_mission_id, :telemetry)
+      telemetry_key = dashboard_source_result_key(@mission_id, :telemetry)
+      telemetry_frame_key = dashboard_frame_key(telemetry_key, "frame-telemetry")
+      limits_key = dashboard_source_result_key(@mission_id, :limits)
+      limits_frame_key = dashboard_frame_key(limits_key, "frame-limits")
+      other_key = dashboard_source_result_key(other_mission_id, :telemetry)
+      other_frame_key = dashboard_frame_key(other_key, "frame-other")
+
+      telemetry_plan = dashboard_plan(@mission_id, :telemetry, telemetry_plan_key)
+      limits_plan = dashboard_plan(@mission_id, :limits, limits_plan_key)
+      other_plan = dashboard_plan(other_mission_id, :telemetry, other_plan_key)
+      telemetry_result = dashboard_source_result(telemetry_key)
+      telemetry_frames = dashboard_frames(:telemetry, "frame-telemetry")
+      limits_result = dashboard_source_result(limits_key)
+      limits_frames = dashboard_frames(:limits, "frame-limits")
+      other_result = dashboard_source_result(other_key)
+      other_frames = dashboard_frames(:telemetry, "frame-other")
+
+      assert :ok = RuntimeCache.put_plan(telemetry_plan_key, telemetry_plan, cache)
+      assert :ok = RuntimeCache.put_plan(limits_plan_key, limits_plan, cache)
+      assert :ok = RuntimeCache.put_plan(other_plan_key, other_plan, cache)
+      assert :ok = RuntimeCache.put_source_result(telemetry_key, telemetry_result, cache)
+      assert :ok = RuntimeCache.put_frame(telemetry_frame_key, telemetry_frames, cache)
+      assert :ok = RuntimeCache.put_source_result(limits_key, limits_result, cache)
+      assert :ok = RuntimeCache.put_frame(limits_frame_key, limits_frames, cache)
+      assert :ok = RuntimeCache.put_source_result(other_key, other_result, cache)
+      assert :ok = RuntimeCache.put_frame(other_frame_key, other_frames, cache)
+
+      artifact =
+        Artifact.new(%{
+          organization_id: @organization_id,
+          mission_id: @mission_id,
+          catalog_database_id: database.catalog_database_id,
+          catalog_family: :telemetry,
+          artifact_name: "bus.json",
+          format_key: "fake_tm_json",
+          media_type: "application/json",
+          source_artifact: %{"packets" => [%{"name" => "HK_PACKET"}]}
+        })
+
+      assert {:ok, run} =
+               Catalog.start_revision_import(
+                 @organization_id,
+                 @mission_id,
+                 database.catalog_database_id,
+                 artifact,
+                 "fake_tm_json"
+               )
+
+      assert {:ok, job} = Cadence.Jobs.fetch_job_for_run(:catalog_import_run, run.import_run_id)
+      assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+      assert claimed_job.job_id == job.job_id
+      assert {:ok, _completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+
+      assert RuntimeCache.get_plan(telemetry_plan_key, cache) == :miss
+      assert RuntimeCache.get_plan(limits_plan_key, cache) == :miss
+      assert RuntimeCache.get_source_result(telemetry_key, cache) == :miss
+      assert RuntimeCache.get_frame(telemetry_frame_key, cache) == :miss
+      assert RuntimeCache.get_source_result(limits_key, cache) == :miss
+      assert RuntimeCache.get_frame(limits_frame_key, cache) == :miss
+      assert {:ok, ^other_plan} = RuntimeCache.get_plan(other_plan_key, cache)
+      assert {:ok, ^other_result} = RuntimeCache.get_source_result(other_key, cache)
+      assert {:ok, ^other_frames} = RuntimeCache.get_frame(other_frame_key, cache)
     end
 
     test "does not create a revision for a failed revision import" do
@@ -327,4 +445,143 @@ defmodule Cadence.CatalogTest do
       requested_by: %{"service_identity_id" => "svc-test"}
     )
   end
+
+  defp use_dashboard_runtime_cache!(cache) do
+    previous_config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
+
+    Application.put_env(:cadence, :dashboard_runtime_invalidation,
+      enabled?: true,
+      runtime_cache: cache
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_config)
+    end)
+  end
+
+  defp dashboard_plan_key(mission_id, logical_source) do
+    mission_id
+    |> dashboard_resolve_request(logical_source)
+    |> RuntimeCacheKey.plan()
+  end
+
+  defp dashboard_plan(mission_id, logical_source, %RuntimeCacheKey{} = plan_key) do
+    %DashboardResolveResult{
+      dashboard_id: "dashboard-#{mission_id}-#{logical_source}",
+      planned_source_requests: [dashboard_source_request(mission_id, logical_source)],
+      plan_metadata: %{cache: %{plan_key: plan_key}}
+    }
+  end
+
+  defp dashboard_resolve_request(mission_id, logical_source) do
+    document = %Document{
+      dashboard_id: "dashboard-#{mission_id}-#{logical_source}",
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      name: "Catalog cache dashboard",
+      placements: []
+    }
+
+    %DashboardResolveRequest{
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      dashboard_id: document.dashboard_id,
+      document: document
+    }
+  end
+
+  defp dashboard_source_result_key(mission_id, logical_source) do
+    request = dashboard_source_request(mission_id, logical_source)
+
+    RuntimeCacheKey.source_result(request,
+      source_binding: dashboard_source_binding(mission_id, logical_source),
+      data_source: dashboard_data_source(mission_id, logical_source),
+      watermark: dashboard_watermark(mission_id, logical_source)
+    )
+  end
+
+  defp dashboard_source_request(mission_id, logical_source) do
+    %PlannedSourceRequest{
+      request_id: "source-request-#{mission_id}-#{logical_source}",
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      logical_source: logical_source,
+      observables: ["HK.counter"],
+      sampling: %{mode: :latest}
+    }
+  end
+
+  defp dashboard_frame_key(%RuntimeCacheKey{} = source_key, frame_id) do
+    RuntimeCacheKey.frame(source_key,
+      placement_id: "placement-#{frame_id}",
+      placement_size: %{width_px: 320, height_px: 120},
+      display: %{density: :normal},
+      frame_shape: :scalar,
+      catalog_revision: "catalog-revision-old"
+    )
+  end
+
+  defp dashboard_source_result(%RuntimeCacheKey{} = key) do
+    %SourceResult{
+      request_id: key.parts.request.request_id,
+      watermarks: []
+    }
+  end
+
+  defp dashboard_frames(logical_source, frame_id) do
+    [%Frame{frame_id: frame_id, source: logical_source, shape: :scalar, fields: []}]
+  end
+
+  defp dashboard_source_binding(mission_id, logical_source) do
+    %DataBinding{
+      binding_id: "binding-#{mission_id}-#{logical_source}",
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      realm: :flight,
+      logical_source: logical_source,
+      data_source_id: dashboard_data_source_id(logical_source),
+      dataset: dashboard_dataset(logical_source)
+    }
+  end
+
+  defp dashboard_data_source(mission_id, logical_source) do
+    %DataSource{
+      data_source_id: dashboard_data_source_id(logical_source),
+      owner: :cadence,
+      kind: dashboard_source_kind(logical_source),
+      adapter: dashboard_source_adapter(logical_source),
+      organization_id: @organization_id,
+      mission_id: mission_id,
+      isolation_level: :mission_isolated,
+      capabilities: %{latest?: true, latest_state?: true, event_history?: true, watermarks?: true}
+    }
+  end
+
+  defp dashboard_watermark(mission_id, logical_source) do
+    %SourceWatermark{
+      logical_source: logical_source,
+      request_id: "source-request-#{mission_id}-#{logical_source}",
+      source_binding_id: "binding-#{mission_id}-#{logical_source}",
+      data_source_id: dashboard_data_source_id(logical_source),
+      realm: :flight,
+      dataset: dashboard_dataset(logical_source),
+      complete_through: ~U[2026-06-17 12:00:00Z],
+      latest_receipt_time: ~U[2026-06-17 12:00:00Z],
+      retention_starts_at: ~U[2026-06-17 11:00:00Z],
+      confidence: :best_effort,
+      freshness_state: :fresh
+    }
+  end
+
+  defp dashboard_data_source_id(:telemetry), do: "managed_questdb_primary"
+  defp dashboard_data_source_id(:limits), do: "managed_limits_projection"
+
+  defp dashboard_dataset(:telemetry), do: "flight"
+  defp dashboard_dataset(:limits), do: "telemetry_latest_limit_states"
+
+  defp dashboard_source_kind(:limits), do: :projection
+  defp dashboard_source_kind(_logical_source), do: :managed_tsdb
+
+  defp dashboard_source_adapter(:telemetry), do: Cadence.Dashboards.Sources.Telemetry
+  defp dashboard_source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
 end

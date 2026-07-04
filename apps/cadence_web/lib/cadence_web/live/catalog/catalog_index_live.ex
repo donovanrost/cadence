@@ -121,7 +121,7 @@ defmodule CadenceWeb.CatalogIndexLive do
             />
           </:col>
           <:col :let={_database} label="Runtime usage">
-            <span class="badge badge-ghost badge-sm" id="catalog-runtime-usage-summary">
+            <span class="text-xs text-base-content/60" id="catalog-runtime-usage-summary">
               No runtime bindings yet
             </span>
           </:col>

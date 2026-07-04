@@ -28,8 +28,11 @@ defmodule CadenceWeb.CommsRoutingListLive do
       <.page_header
         title="Routing"
         subtitle="Durable rules describing how spacecraft use transports for a purpose and direction."
-        back_label="Comms"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Routing", nil}
+        ]}
       >
         <:title_suffix>{@routing_rule_count} rules</:title_suffix>
         <:actions>

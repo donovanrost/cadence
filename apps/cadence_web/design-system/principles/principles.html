@@ -1,0 +1,69 @@
+<!-- @dsCard group="Principles" name="Design principles" subtitle="The six north-star rules" width="980" height="820" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Design principles</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2.2rem; max-width: 66ch; font-size: .9rem; line-height: 1.5; }
+  .list { display: grid; gap: 1.4rem; max-width: 78ch; }
+  .p { display: grid; grid-template-columns: 2.4rem 1fr; gap: 1rem; align-items: start; }
+  .num { font-family: ui-monospace, monospace; font-size: 1.1rem; font-weight: 700; color: oklch(80% 0.12 210);
+    border: 1px solid oklch(80% 0.12 210 / 0.3); border-radius: 2px; width: 2.4rem; height: 2.4rem;
+    display: grid; place-items: center; }
+  .p h2 { font-size: 1rem; font-weight: 600; margin: .25rem 0 .35rem; }
+  .p p { margin: 0; font-size: .88rem; line-height: 1.5; color: oklch(72% 0.02 250); }
+  .p p .accent { color: oklch(82% 0.05 340); font-weight: 500; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Principles</p>
+  <h1>Design principles</h1>
+  <p class="lede">The north stars that adjudicate every visual decision in Cadence. When two
+    approaches both "work," these break the tie. They're the reason the system looks the way it does —
+    a mission-control console, not a marketing site.</p>
+
+  <div class="list">
+    <div class="p"><div class="num">1</div><div>
+      <h2>Information density over decoration</h2>
+      <p>Every pixel earns its place. Operators read this screen to fly spacecraft — pack in signal,
+        cut ornament. Whitespace is for hierarchy, not for breathing room.</p></div></div>
+
+    <div class="p"><div class="num">2</div><div>
+      <h2>Legible under stress</h2>
+      <p>People scan this during anomalies. Maintain the contrast tiers (informational text at
+        <span class="accent">/70</span> minimum), keep hierarchy obvious, and never make someone hunt
+        for the number that matters.</p></div></div>
+
+    <div class="p"><div class="num">3</div><div>
+      <h2>Status is always a color</h2>
+      <p>The four status colors — critical, warning, success, info — mean the same thing everywhere:
+        badges, borders, dots, charts. A color is never decorative; if it's a status color, it's
+        reporting state.</p></div></div>
+
+    <div class="p"><div class="num">4</div><div>
+      <h2>Sharp and technical</h2>
+      <p>2px corners, uppercase tracked labels, monospace for every data value. The HUD aesthetic
+        <span class="accent">is</span> the brand — lean into it rather than softening it toward a
+        generic dashboard.</p></div></div>
+
+    <div class="p"><div class="num">5</div><div>
+      <h2>Glow means "live"</h2>
+      <p>Glow is reserved for navigation targets and live / alert signals. It signals "this is active
+        or actionable." <span class="accent">Buttons never glow.</span> Decorative glow erodes the
+        signal everywhere else.</p></div></div>
+
+    <div class="p"><div class="num">6</div><div>
+      <h2>One way to do each thing</h2>
+      <p>A closed component set and frozen CSS. Compose new looks from what exists — daisyUI classes,
+        HUD utilities, the component layer — rather than inventing selectors. Consistency beats
+        cleverness, and the system stays enforceable.</p></div></div>
+  </div>
+</body>
+</html>

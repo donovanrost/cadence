@@ -1,5 +1,5 @@
 defmodule Cadence.GovernanceTest do
-  use Cadence.DataCase, async: true
+  use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{
     BindingRule,

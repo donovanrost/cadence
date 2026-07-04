@@ -45,9 +45,13 @@ defmodule Cadence.Catalog.Events do
   def broadcast_failed(%ImportRun{} = run), do: broadcast(run, :import_run_failed)
 
   defp broadcast(%ImportRun{mission_id: mission_id, import_run_id: run_id} = run, event) do
-    message = {event, run}
-    :ok = Phoenix.PubSub.broadcast(@pubsub, import_runs_topic(mission_id), message)
-    :ok = Phoenix.PubSub.broadcast(@pubsub, import_run_topic(mission_id, run_id), message)
-    :ok
+    if is_nil(Process.whereis(@pubsub)) do
+      :ok
+    else
+      message = {event, run}
+      :ok = Phoenix.PubSub.broadcast(@pubsub, import_runs_topic(mission_id), message)
+      :ok = Phoenix.PubSub.broadcast(@pubsub, import_run_topic(mission_id, run_id), message)
+      :ok
+    end
   end
 end

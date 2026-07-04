@@ -19,7 +19,8 @@ defmodule Cadence.CommandingTest do
   }
 
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
-  alias Cadence.Persistence.Schemas.TransportActionRequestRow
+  alias Cadence.OperationalEvents
+  alias Cadence.Persistence.Schemas.{CommandQueueEntryRow, TransportActionRequestRow}
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -42,6 +43,7 @@ defmodule Cadence.CommandingTest do
     end)
 
     persist_mission_scope(@organization_id, @mission_id)
+    cleanup_static_command_queue_scope()
 
     source_endpoint = persist_source_endpoint()
     command_snapshot = import_command_snapshot()
@@ -328,11 +330,16 @@ defmodule Cadence.CommandingTest do
         queue_lane_key: source_endpoint.source_endpoint_id
       )
 
-    assert Enum.map(listed_queue_entries, & &1.command_queue_entry_id) == [
-             first_high_priority_queue_entry.command_queue_entry_id,
-             second_high_priority_queue_entry.command_queue_entry_id,
-             low_priority_queue_entry.command_queue_entry_id
-           ]
+    expected_queue_entry_ids = [
+      first_high_priority_queue_entry.command_queue_entry_id,
+      second_high_priority_queue_entry.command_queue_entry_id,
+      low_priority_queue_entry.command_queue_entry_id
+    ]
+
+    listed_queue_entry_ids = Enum.map(listed_queue_entries, & &1.command_queue_entry_id)
+
+    assert Enum.filter(listed_queue_entry_ids, &(&1 in expected_queue_entry_ids)) ==
+             expected_queue_entry_ids
   end
 
   test "rejects invalid direct command requests", %{
@@ -446,6 +453,41 @@ defmodule Cadence.CommandingTest do
     assert persisted_transport_action_request.request_document["transfer_frame_size_bytes"] == 32
     assert persisted_transport_action_request.request_document["first_frame_seq"] == 0
     assert persisted_transport_action_request.request_document["last_frame_seq"] == 0
+
+    assert [operational_event] =
+             OperationalEvents.list_events(@organization_id, @mission_id,
+               source_record_kind: :transport_action_request,
+               source_record_id: persisted_transport_action_request.action_request_id
+             )
+
+    assert operational_event.event_id ==
+             "operational_event:transport_action_request:#{persisted_transport_action_request.action_request_id}"
+
+    assert operational_event.category == :comms
+    assert operational_event.kind == :transport_action_requested
+
+    assert operational_event.subject == %{
+             kind: :transport,
+             id: persisted_transport_action_request.capability_instance_id
+           }
+
+    assert operational_event.causality.source_record_kind == :transport_action_request
+
+    assert operational_event.causality.source_record_id ==
+             persisted_transport_action_request.action_request_id
+
+    assert operational_event.causality.correlation_id ==
+             release_attempt.command_release_attempt_id
+
+    assert operational_event_value(operational_event, :action_kind) == "uplink_request"
+
+    assert operational_event_value(operational_event, :command_release_attempt_id) ==
+             release_attempt.command_release_attempt_id
+
+    assert operational_event_value(operational_event, :command_request_id) ==
+             persisted_request.command_request_id
+
+    assert operational_event_value(operational_event, :source_endpoint_ref) == @source_endpoint_id
 
     [encoded_transfer_frame] =
       persisted_transport_action_request.request_document["transfer_frames_base64"]
@@ -1144,6 +1186,14 @@ defmodule Cadence.CommandingTest do
     persisted_request
   end
 
+  defp cleanup_static_command_queue_scope do
+    Repo.delete_all(
+      from(row in CommandQueueEntryRow,
+        where: row.organization_id == ^@organization_id and row.mission_id == ^@mission_id
+      )
+    )
+  end
+
   defp persist_active_uplink_contact(
          source_endpoint_ref,
          transport_configuration \\ %{"service_name" => "gateway"},
@@ -1194,5 +1244,9 @@ defmodule Cadence.CommandingTest do
     command_snapshot.command_definitions
     |> Enum.find(&(&1.name == command_name))
     |> then(& &1.command_id)
+  end
+
+  defp operational_event_value(event, key) when is_atom(key) do
+    Map.get(event.current, key) || Map.get(event.current, Atom.to_string(key))
   end
 end

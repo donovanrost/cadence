@@ -87,8 +87,10 @@ defmodule CadenceWeb.SpacecraftListLive do
       <.page_header
         title="Spacecraft"
         subtitle="Manage mission spacecraft identities and reusable spacecraft profiles."
-        back_label={@current_mission.display_name}
-        back_navigate={~p"/missions/#{@current_mission.mission_id}"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", nil}
+        ]}
       />
 
       <.summary_tiles

@@ -7,7 +7,7 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
 
   @behaviour Cadence.Telemetry.HistoryStore
 
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{Sample, SelectionPolicy, SourceFilters}
 
   @mission_scope_key "__mission__"
   @table_name :cadence_telemetry_history
@@ -58,14 +58,21 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
     spacecraft_filter = Keyword.get(opts, :spacecraft_id)
     from_receipt_time = Keyword.get(opts, :from_receipt_time)
     to_receipt_time = Keyword.get(opts, :to_receipt_time)
+    from_observed_at = Keyword.get(opts, :from_observed_at)
+    to_observed_at = Keyword.get(opts, :to_observed_at)
     order = Keyword.get(opts, :order, :desc)
+    time_axis = Keyword.get(opts, :time_axis)
     limit = Keyword.get(opts, :limit, 100)
 
     table
     |> samples_for_point(mission_id, point_id, spacecraft_filter)
     |> filter_from_receipt_time(from_receipt_time)
     |> filter_to_receipt_time(to_receipt_time)
-    |> sort_history(order)
+    |> filter_from_observed_at(from_observed_at)
+    |> filter_to_observed_at(to_observed_at)
+    |> SourceFilters.filter_samples(opts)
+    |> SelectionPolicy.selected_samples(opts)
+    |> sort_history(order, time_axis)
     |> Enum.take(limit)
   end
 
@@ -115,8 +122,36 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
     Enum.filter(samples, &(DateTime.compare(&1.receipt_time, to_receipt_time) != :gt))
   end
 
-  defp sort_history(samples, :asc), do: Enum.sort_by(samples, &sort_key/1, :asc)
-  defp sort_history(samples, _order), do: Enum.sort_by(samples, &sort_key/1, :desc)
+  defp filter_from_observed_at(samples, nil), do: samples
+
+  defp filter_from_observed_at(samples, %DateTime{} = from_observed_at) do
+    Enum.filter(samples, fn %Sample{} = sample ->
+      case observed_at(sample) do
+        %DateTime{} = datetime -> DateTime.compare(datetime, from_observed_at) != :lt
+        nil -> false
+      end
+    end)
+  end
+
+  defp filter_to_observed_at(samples, nil), do: samples
+
+  defp filter_to_observed_at(samples, %DateTime{} = to_observed_at) do
+    Enum.filter(samples, fn %Sample{} = sample ->
+      case observed_at(sample) do
+        %DateTime{} = datetime -> DateTime.compare(datetime, to_observed_at) != :gt
+        nil -> false
+      end
+    end)
+  end
+
+  defp sort_history(samples, :asc, axis) when axis in [:generation_time, "generation_time"],
+    do: Enum.sort_by(samples, &observed_sort_key/1, :asc)
+
+  defp sort_history(samples, _order, axis) when axis in [:generation_time, "generation_time"],
+    do: Enum.sort_by(samples, &observed_sort_key/1, :desc)
+
+  defp sort_history(samples, :asc, _axis), do: Enum.sort_by(samples, &sort_key/1, :asc)
+  defp sort_history(samples, _order, _axis), do: Enum.sort_by(samples, &sort_key/1, :desc)
 
   defp prune_points(table, samples) do
     case max_samples_per_point() do
@@ -168,6 +203,20 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
   end
 
   defp sort_key(%Sample{} = sample), do: {receipt_us(sample), sample.sample_id}
+
+  defp observed_sort_key(%Sample{} = sample) do
+    observed_time =
+      case observed_at(sample) do
+        %DateTime{} = datetime -> DateTime.to_unix(datetime, :microsecond)
+        nil -> receipt_us(sample)
+      end
+
+    {observed_time, receipt_us(sample), sample.sample_id}
+  end
+
+  defp observed_at(%Sample{generation_time: %DateTime{} = generation_time}), do: generation_time
+  defp observed_at(%Sample{receipt_time: %DateTime{} = receipt_time}), do: receipt_time
+  defp observed_at(%Sample{}), do: nil
 
   defp receipt_us(%Sample{receipt_time: %DateTime{} = receipt_time}) do
     DateTime.to_unix(receipt_time, :microsecond)

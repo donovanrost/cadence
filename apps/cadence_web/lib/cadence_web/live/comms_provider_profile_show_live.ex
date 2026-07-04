@@ -82,8 +82,12 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
       <.page_header
         title={display_name(@provider_profile, :provider_profile_id)}
         subtitle={@provider_profile.provider_profile_id}
-        back_label="Providers"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/providers"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Providers", ~p"/missions/#{@current_mission.mission_id}/comms/providers"},
+          {display_name(@provider_profile, :provider_profile_id), nil}
+        ]}
       >
         <:title_suffix>v{@provider_profile.version}</:title_suffix>
         <:actions>
@@ -133,18 +137,16 @@ defmodule CadenceWeb.CommsProviderProfileShowLive do
   defp endpoint_card(assigns) do
     ~H"""
     <.card>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Endpoint</p>
-          <h2 class="font-mono text-lg font-semibold text-primary">
-            {tcp_endpoint(@provider_profile.configuration)}
-          </h2>
-          <p class="mt-1 text-sm text-base-content/70">
-            Transport adapter configuration used to move bytes between Cadence and the ground network.
-          </p>
-        </div>
-        <.status_badge status={:info} label={human_atom(@provider_profile.adapter_key)} />
-      </div>
+      <.section_header
+        eyebrow="Endpoint"
+        title={tcp_endpoint(@provider_profile.configuration)}
+        title_mono
+        description="Transport adapter configuration used to move bytes between Cadence and the ground network."
+      >
+        <:actions>
+          <.status_badge status={:info} label={human_atom(@provider_profile.adapter_key)} />
+        </:actions>
+      </.section_header>
 
       <div class="mt-6 space-y-1">
         <.detail_row label="Mode" value={tcp_mode(@provider_profile.configuration)} />

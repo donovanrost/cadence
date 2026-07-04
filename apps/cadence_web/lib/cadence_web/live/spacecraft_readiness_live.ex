@@ -119,7 +119,7 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
 
   defp readiness_panel(assigns) do
     ~H"""
-    <.card id={@id} accent={readiness_panel_accent(@status)}>
+    <.card id={@id}>
       <div class="flex items-start justify-between gap-4">
         <p class="hud-label">{@title}</p>
         <.status_badge status={@status} label={@status_label} />
@@ -137,11 +137,6 @@ defmodule CadenceWeb.SpacecraftReadinessLive do
     </.card>
     """
   end
-
-  defp readiness_panel_accent(:ready), do: :success
-  defp readiness_panel_accent(:attention), do: :warning
-  defp readiness_panel_accent(:blocked), do: :error
-  defp readiness_panel_accent(_), do: nil
 
   defp telemetry_status(organization_id, mission_id, spacecraft) do
     config =

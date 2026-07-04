@@ -24,6 +24,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   alias Cadence.Projections.TelemetryLatestLimitStates.Run
   alias Cadence.Repo
+  alias Cadence.Telemetry.LatestProjectionOrder
 
   @spec rebuild(binary(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def rebuild(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
@@ -307,30 +308,8 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
   end
 
   defp event_row_newer?(event_row, existing_row) do
-    compare_sort_keys(
-      {event_row.generation_time || event_row.receipt_time, event_row.receipt_time,
-       event_row.limit_event_id},
-      {existing_row.generation_time || existing_row.receipt_time, existing_row.receipt_time,
-       existing_row.limit_event_id}
-    ) == :gt
+    LatestProjectionOrder.newer?(event_row, existing_row, :limit_event_id)
   end
-
-  defp compare_sort_keys({time_a, receipt_a, id_a}, {time_b, receipt_b, id_b}) do
-    case DateTime.compare(time_a, time_b) do
-      :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(id_a, id_b)
-          other -> other
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp compare_ids(id_a, id_b) when id_a > id_b, do: :gt
-  defp compare_ids(id_a, id_b) when id_a < id_b, do: :lt
-  defp compare_ids(_id_a, _id_b), do: :eq
 
   defp fetch_latest_value_sources(mission_id, spacecraft_id) do
     telemetry_sources =
@@ -376,10 +355,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
     merged_sources =
       (telemetry_sources ++ derived_sources)
       |> Enum.sort(fn left, right ->
-        compare_sort_keys(
-          latest_value_source_sort_key(left),
-          latest_value_source_sort_key(right)
-        ) != :gt
+        LatestProjectionOrder.compare(left, right, :sample_id) != :gt
       end)
 
     {:ok, merged_sources}
@@ -392,11 +368,6 @@ defmodule Cadence.Projections.TelemetryLatestLimitStates do
 
   defp unwrap_value(%{"value" => value}), do: value
   defp unwrap_value(value), do: value
-
-  defp latest_value_source_sort_key(source_sample) do
-    {source_sample.generation_time || source_sample.receipt_time, source_sample.receipt_time,
-     source_sample.sample_id}
-  end
 
   defp maybe_filter_latest_telemetry_spacecraft(query, nil), do: query
 

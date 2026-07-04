@@ -1,0 +1,66 @@
+<!-- @dsCard group="Foundations" name="Glows & HUD frame" subtitle="Neon glows · hud-corners · grid" width="960" height="640" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Glows &amp; HUD frame</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --glow-purple: oklch(72% 0.15 285); --glow-pink: oklch(60% 0.25 340); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6rem; }
+  .demo { text-align: center; }
+  .tile { height: 92px; border-radius: 2px; background: oklch(17% 0.02 260);
+    border: 1px solid oklch(80% 0.12 210 / 0.2); display: grid; place-items: center; }
+  .name { margin-top: .9rem; font-family: ui-monospace, monospace; font-size: .76rem; }
+  .val { font-family: ui-monospace, monospace; font-size: .68rem; color: oklch(55% 0.02 250); margin-top: .15rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.4rem 0 1.1rem; }
+  /* Real utilities */
+  .glow-cyan { box-shadow: 0 0 10px oklch(from var(--glow-cyan) l c h / 0.5), 0 0 20px oklch(from var(--glow-cyan) l c h / 0.3); }
+  .glow-purple { box-shadow: 0 0 10px oklch(from var(--glow-purple) l c h / 0.5), 0 0 20px oklch(from var(--glow-purple) l c h / 0.3); }
+  .glow-pink { box-shadow: 0 0 10px oklch(from var(--glow-pink) l c h / 0.5), 0 0 20px oklch(from var(--glow-pink) l c h / 0.3); }
+  .hud-corners { position: relative; }
+  .hud-corners::before, .hud-corners::after { content:''; position:absolute; width:12px; height:12px;
+    border-color: oklch(from var(--glow-cyan) l c h / 0.6); border-style: solid; pointer-events: none; }
+  .hud-corners::before { top:0; left:0; border-width: 2px 0 0 2px; }
+  .hud-corners::after { top:0; right:0; border-width: 2px 2px 0 0; }
+  .hud-grid { background-image:
+      linear-gradient(oklch(from var(--glow-cyan) l c h / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(from var(--glow-cyan) l c h / 0.06) 1px, transparent 1px);
+    background-size: 16px 16px; }
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.10 h); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Glows &amp; HUD frame</h1>
+  <p class="lede">Glow is meaningful, not decorative — reserved for navigation cards and live / alert
+    signals. <strong>Buttons never glow.</strong> Corner brackets and the grid overlay are the
+    signature HUD framing devices.</p>
+
+  <p class="section-label">Neon glows</p>
+  <div class="grid">
+    <div class="demo"><div class="tile glow-cyan"></div><div class="name">.glow-cyan</div><div class="val">primary · nav hover</div></div>
+    <div class="demo"><div class="tile glow-purple"></div><div class="name">.glow-purple</div><div class="val">secondary</div></div>
+    <div class="demo"><div class="tile glow-pink"></div><div class="name">.glow-pink</div><div class="val">accent</div></div>
+  </div>
+
+  <p class="section-label">Framing devices</p>
+  <div class="grid">
+    <div class="demo"><div class="tile hud-corners"><span class="hud-label">hud-corners</span></div>
+      <div class="name">.hud-corners</div><div class="val">12px cyan brackets &mdash; navigation &amp; hero cards ONLY (applied by &lt;.card hover_glow&gt; / corners); never default chrome</div></div>
+    <div class="demo"><div class="tile hud-grid"></div>
+      <div class="name">.hud-grid</div><div class="val">16–20px cyan grid</div></div>
+    <div class="demo"><div class="tile" style="border-color: oklch(80% 0.12 210 / 0.5); box-shadow: inset 0 0 20px oklch(80% 0.12 210 / 0.05), 0 0 10px oklch(80% 0.12 210 / 0.1)"></div>
+      <div class="name">.hud-border-glow</div><div class="val">framed panel</div></div>
+  </div>
+</body>
+</html>

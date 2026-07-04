@@ -115,18 +115,17 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   defp artifact_metadata_card(assigns) do
     ~H"""
     <.card title="Artifact">
-      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        <div class="contents">
-          <dt class="text-base-content/60">Format</dt>
-          <dd class="font-mono">{@artifact.format_key}</dd>
-          <dt class="text-base-content/60">Media type</dt>
-          <dd class="font-mono">{@artifact.media_type || "—"}</dd>
-          <dt class="text-base-content/60">Content SHA-256</dt>
-          <dd class="font-mono text-xs break-all">{@artifact.content_sha256}</dd>
-          <dt class="text-base-content/60">Uploaded at</dt>
-          <dd>{Calendar.strftime(@artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC")}</dd>
-        </div>
-      </dl>
+      <div class="divide-y divide-base-300">
+        <.detail_row label="Format" value={@artifact.format_key} mono />
+        <.detail_row label="Media type" value={@artifact.media_type} mono />
+        <.detail_row label="Content SHA-256">
+          <span class="font-mono text-xs break-all">{@artifact.content_sha256}</span>
+        </.detail_row>
+        <.detail_row
+          label="Uploaded at"
+          value={Calendar.strftime(@artifact.uploaded_at, "%Y-%m-%d %H:%M:%S UTC")}
+        />
+      </div>
       <div class="flex items-center gap-3 pt-2">
         <.button
           variant={:ghost}
@@ -163,7 +162,7 @@ defmodule CadenceWeb.CatalogArtifactShowLive do
   defp artifact_runs_empty(assigns) do
     ~H"""
     <.card>
-      <p class="text-sm text-base-content/60">No runs yet.</p>
+      <.empty_state compact title="No runs yet." />
     </.card>
     """
   end

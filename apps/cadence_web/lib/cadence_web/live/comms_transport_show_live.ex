@@ -40,8 +40,12 @@ defmodule CadenceWeb.CommsTransportShowLive do
       <.page_header
         title={@transport.display_name}
         subtitle={@transport.transport_id}
-        back_label="Transports"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/transports"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Transports", ~p"/missions/#{@current_mission.mission_id}/comms/transports"},
+          {@transport.display_name, nil}
+        ]}
       >
         <:title_suffix>v{@transport.version}</:title_suffix>
       </.page_header>
@@ -60,18 +64,18 @@ defmodule CadenceWeb.CommsTransportShowLive do
   defp capability_card(assigns) do
     ~H"""
     <.card>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Byte-Moving Capability</p>
-          <h2 class="font-mono text-lg font-semibold text-primary">
-            {@summary.endpoint}
-          </h2>
-          <p class="mt-1 text-sm text-base-content/70">
-            Durable transport setup. Runtime Links and Contacts are realized later under execution context.
-          </p>
-        </div>
-        <span class="badge badge-outline">{human_atom(@transport.transport_kind)}</span>
-      </div>
+      <.section_header
+        eyebrow="Byte-Moving Capability"
+        title={@summary.endpoint}
+        title_mono
+        description="Durable transport setup. Runtime Links and Contacts are realized later under execution context."
+      >
+        <:actions>
+          <span class="bg-base-300 px-2 py-1 font-mono text-[0.65rem] uppercase tracking-wide text-base-content/70">
+            {human_atom(@transport.transport_kind)}
+          </span>
+        </:actions>
+      </.section_header>
 
       <div class="mt-6 space-y-1">
         <.detail_row label="Direction Capability" value={human_text(@summary.direction_capability)} />

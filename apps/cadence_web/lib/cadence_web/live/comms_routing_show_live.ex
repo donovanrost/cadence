@@ -45,13 +45,18 @@ defmodule CadenceWeb.CommsRoutingShowLive do
       <.page_header
         title={@routing_rule.display_name}
         subtitle={@routing_rule.routing_rule_id}
-        back_label="Routing"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Routing", ~p"/missions/#{@current_mission.mission_id}/comms/routing"},
+          {@routing_rule.display_name, nil}
+        ]}
       >
         <:actions>
-          <span class="badge badge-outline">
-            {if @routing_rule.enabled?, do: "Enabled", else: "Disabled"}
-          </span>
+          <.status_badge
+            status={if @routing_rule.enabled?, do: :ready, else: :info}
+            label={if @routing_rule.enabled?, do: "Enabled", else: "Disabled"}
+          />
         </:actions>
       </.page_header>
 
@@ -113,8 +118,8 @@ defmodule CadenceWeb.CommsRoutingShowLive do
     ~H"""
     <.card title="Events">
       <div id="routing-rule-events" class="space-y-2">
-        <div :for={event <- @events} class="rounded border border-base-300 bg-base-100/40 p-3">
-          <p class="font-mono text-xs text-primary/80">{human_atom(event.event_type)}</p>
+        <div :for={event <- @events} class="rounded-[2px] border border-base-300 bg-base-100/40 p-3">
+          <p class="font-mono text-xs text-base-content/70">{human_atom(event.event_type)}</p>
           <p class="mt-1 text-xs text-base-content/60">
             {Calendar.strftime(event.occurred_at, "%Y-%m-%d %H:%M:%S UTC")}
           </p>

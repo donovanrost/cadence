@@ -1,0 +1,135 @@
+<!-- @dsCard group="Foundations" name="Color palette" subtitle="Primitive ramps — hue-named, contrast-verified" width="1000" height="1820" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Color palette</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.2rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(82% 0.02 250 / 0.85);
+    border: 1px solid oklch(78% 0.12 175 / 0.35); background: oklch(78% 0.12 175 / 0.06); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.4rem; }
+  .status b.cur { color: var(--st-green); } .status b.prop { color: var(--st-yellow); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 1.8rem 0 .8rem; }
+  .section-label .ok { color: var(--st-green); font-size: .62rem; margin-left: .4rem; }
+  .row { display: grid; grid-template-columns: 4.5rem 1fr; gap: .8rem; align-items: center; margin-bottom: .35rem; max-width: 50rem; }
+  .name { font-family: ui-monospace, monospace; font-size: .74rem; color: oklch(82% 0.02 250 / 0.82); }
+  .strip { display: flex; border-radius: 2px; overflow: hidden; border: 1px solid oklch(80% 0.12 210 / 0.12); }
+  .chip { flex: 1; height: 2.5rem; display: flex; align-items: flex-end; justify-content: center; padding-bottom: .18rem; font-family: ui-monospace, monospace; font-size: .55rem; }
+  .chip.anc { font-weight: 700; box-shadow: inset 0 -3px 0 oklch(85% 0.02 250 / 0.9); }
+  .note { font-size: .82rem; color: oklch(82% 0.02 250 / 0.78); line-height: 1.5; max-width: 78ch; margin: .5rem 0 0; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.ok { border-color: var(--st-green); }
+  .legend { font-family: ui-monospace, monospace; font-size: .68rem; color: oklch(82% 0.02 250 / 0.6); margin: .2rem 0 0; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Color palette</h1>
+  <p class="lede">The raw, <strong>hue-named primitive</strong> tier — the swatch reference behind the
+    <strong>Color scale model</strong>. Components never touch these; they reference semantic roles
+    (<code>--color-action</code>, <code>--status-critical-fill</code>) that point at these steps.</p>
+  <div class="status">&#10003; Contrast-verified: every <code style="color:inherit">400/text</code> step clears AA on base &amp; raised (≥6.4:1); every <code style="color:inherit">fill</code>+on pair clears AA (≥4.9:1). <b class="cur">Underlined</b> = today's app.css value.</div>
+
+  <p class="section-label">Brand hues</p>
+  <div class="row"><span class="name">cyan · 210</span><div class="strip">
+    <div class="chip" style="background:oklch(90% 0.07 210);color:#111">300</div>
+    <div class="chip" style="background:oklch(84% 0.10 210);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(80% 0.12 210);color:#111">500</div>
+    <div class="chip" style="background:oklch(70% 0.14 210);color:#111">600 fill</div>
+    <div class="chip" style="background:oklch(60% 0.13 210);color:#fff">700</div>
+    <div class="chip" style="background:oklch(18% 0.04 210);color:oklch(84% 0.10 210)">on·dk</div>
+  </div></div>
+  <div class="row"><span class="name">purple · 285</span><div class="strip">
+    <div class="chip" style="background:oklch(85% 0.09 285);color:#111">300</div>
+    <div class="chip" style="background:oklch(78% 0.12 285);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(72% 0.15 285);color:#111">500</div>
+    <div class="chip" style="background:oklch(62% 0.16 285);color:#111">600 fill</div>
+    <div class="chip" style="background:oklch(52% 0.15 285);color:#fff">700</div>
+    <div class="chip" style="background:oklch(18% 0.04 285);color:oklch(85% 0.09 285)">on·dk</div>
+  </div></div>
+  <div class="row"><span class="name">pink · 340</span><div class="strip">
+    <div class="chip" style="background:oklch(80% 0.13 340);color:#111">300</div>
+    <div class="chip" style="background:oklch(72% 0.20 340);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(60% 0.25 340);color:#fff">500</div>
+    <div class="chip" style="background:oklch(52% 0.24 340);color:#fff">600 fill</div>
+    <div class="chip" style="background:oklch(44% 0.21 340);color:#fff">700</div>
+    <div class="chip" style="background:oklch(98% 0.01 340);color:oklch(44% 0.21 340)">on·wt</div>
+  </div></div>
+  <p class="legend">500 = today's --brand-primary / -secondary / -accent. cyan &amp; purple fills take dark text; pink takes white.</p>
+
+  <p class="section-label">Status hues</p>
+  <div class="row"><span class="name">red · 25</span><div class="strip">
+    <div class="chip" style="background:oklch(78% 0.15 25);color:#111">300</div>
+    <div class="chip" style="background:oklch(70% 0.20 25);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(62% 0.25 25);color:#fff">500</div>
+    <div class="chip" style="background:oklch(55% 0.24 25);color:#fff">600 fill</div>
+    <div class="chip" style="background:oklch(46% 0.20 25);color:#fff">700</div>
+    <div class="chip" style="background:oklch(98% 0.02 25);color:oklch(46% 0.20 25)">on·wt</div>
+  </div></div>
+  <div class="row"><span class="name">yellow · 55</span><div class="strip">
+    <div class="chip" style="background:oklch(88% 0.12 55);color:#111">300</div>
+    <div class="chip" style="background:oklch(82% 0.16 55);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(72% 0.18 55);color:#111">500</div>
+    <div class="chip" style="background:oklch(78% 0.18 55);color:#111">fill</div>
+    <div class="chip" style="background:oklch(52% 0.13 55);color:#fff">700</div>
+    <div class="chip" style="background:oklch(20% 0.05 55);color:oklch(82% 0.16 55)">on·dk</div>
+  </div></div>
+  <div class="row"><span class="name">green · 175</span><div class="strip">
+    <div class="chip" style="background:oklch(88% 0.10 175);color:#111">300</div>
+    <div class="chip" style="background:oklch(82% 0.13 175);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(76% 0.14 175);color:#111">500</div>
+    <div class="chip" style="background:oklch(70% 0.16 175);color:#111">600 fill</div>
+    <div class="chip" style="background:oklch(58% 0.14 175);color:#fff">700</div>
+    <div class="chip" style="background:oklch(18% 0.04 175);color:oklch(82% 0.13 175)">on·dk</div>
+  </div></div>
+  <div class="row"><span class="name">blue · 250</span><div class="strip">
+    <div class="chip" style="background:oklch(82% 0.11 250);color:#111">300</div>
+    <div class="chip" style="background:oklch(74% 0.14 250);color:#111">400 txt</div>
+    <div class="chip anc" style="background:oklch(70% 0.14 250);color:#111">500</div>
+    <div class="chip" style="background:oklch(70% 0.18 250);color:#111">600 fill</div>
+    <div class="chip" style="background:oklch(58% 0.15 250);color:#fff">700</div>
+    <div class="chip" style="background:oklch(18% 0.04 250);color:oklch(82% 0.11 250)">on·dk</div>
+  </div></div>
+  <p class="note ok">&#10003; <strong>Green is officially hue 175</strong> — unifying the old badge <code>155</code> /
+    token <code>185</code> split into one. Yellow stays bright when filled (its fill is <em>lighter</em>, with dark
+    text) — hue-honest rather than mechanically darkened. red &amp; pink fills take white text; all others take dark.</p>
+
+  <p class="section-label">Surfaces<span class="ok">✅ already a ramp</span></p>
+  <div class="row"><span class="name">ink · 265</span><div class="strip">
+    <div class="chip" style="background:oklch(8% 0.02 265);color:#ccc">overlay 8</div>
+    <div class="chip" style="background:oklch(10% 0.015 265);color:#ccc">inset 10 · input</div>
+    <div class="chip" style="background:oklch(12% 0.02 265);color:#ccc">base 12</div>
+    <div class="chip" style="background:oklch(17% 0.02 260);color:#ddd">raised 17</div>
+    <div class="chip" style="background:oklch(23% 0.025 258);color:#ddd">elev 23</div>
+  </div></div>
+  <p class="legend">Inputs are recessed wells — <code>--surface-input</code> aliases the sunken <code>inset</code> level.
+    The old absolute <code>hover 27</code> is retired; hover is a translucent <code>--state-hover</code> film instead.</p>
+
+  <p class="section-label">Neutrals<span class="ok">✅ already a ramp</span></p>
+  <div class="row"><span class="name">slate · 265</span><div class="strip">
+    <div class="chip" style="background:oklch(15% 0.01 265);color:#ccc">15</div>
+    <div class="chip" style="background:oklch(20% 0.01 265);color:#ccc">20</div>
+    <div class="chip" style="background:oklch(25% 0.02 265);color:#ddd">25</div>
+    <div class="chip" style="background:oklch(35% 0.03 265);color:#eee">border 35</div>
+    <div class="chip" style="background:oklch(50% 0.02 265);color:#111">text 50</div>
+    <div class="chip" style="background:oklch(70% 0.02 265);color:#111">70</div>
+  </div></div>
+
+  <p class="section-label">Text on dark<span class="ok">✅ tiers</span></p>
+  <div class="row"><span class="name">fg · 250</span><div class="strip">
+    <div class="chip" style="background:oklch(85% 0.02 250);color:#111">bright 85</div>
+    <div class="chip" style="background:oklch(65% 0.02 250);color:#111">subtle 65</div>
+    <div class="chip anc" style="background:oklch(60% 0.02 250);color:#111">muted 60</div>
+  </div></div>
+  <p class="legend">muted = 60% (raised from 55% by the contrast fix). /50–/40 are decoration only.</p>
+
+  <p class="note">For the tier rules, oklch derivation, the job matrix, and how semantics map onto these steps —
+    see <strong>Color scale model</strong>.</p>
+</body>
+</html>

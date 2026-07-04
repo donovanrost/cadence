@@ -10,6 +10,8 @@ defmodule Cadence.Replay do
   alias Cadence.ApplicationDispatch.{DispatchDecision, WorkItem}
   alias Cadence.Governance
   alias Cadence.Jobs
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Persistence.Schemas.{
     ReplayDispatchDecisionRow,
@@ -244,6 +246,7 @@ defmodule Cadence.Replay do
       run.replay_run_id,
       replay_result.runtime_records.timer_events
     )
+    |> add_replay_managed_operational_events(run.replay_run_id, replay_result.runtime_records)
     |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
@@ -363,6 +366,42 @@ defmodule Cadence.Replay do
         {:replay_managed_timer_event, timer_event.timer_event_id},
         ReplayManagedTimerEventRow.changeset(replay_run_id, timer_event)
       )
+    end)
+  end
+
+  defp add_replay_managed_operational_events(%Multi{} = multi, replay_run_id, runtime_records) do
+    Multi.run(multi, :replay_managed_operational_events, fn repo, _changes ->
+      runtime_records
+      |> replay_managed_operational_events(replay_run_id)
+      |> persist_operational_events(repo)
+    end)
+  end
+
+  defp replay_managed_operational_events(runtime_records, replay_run_id) do
+    capability_events =
+      runtime_records.capability_records
+      |> Enum.map(&OperationalEvent.from_managed_capability_record(&1, replay_run_id))
+
+    action_events =
+      runtime_records.action_requests
+      |> Enum.map(&OperationalEvent.from_managed_action_request(&1, replay_run_id))
+
+    timer_events =
+      runtime_records.timer_events
+      |> Enum.map(&OperationalEvent.from_managed_timer_event(&1, replay_run_id))
+
+    capability_events ++ action_events ++ timer_events
+  end
+
+  defp persist_operational_events(events, repo) when is_list(events) do
+    Enum.reduce_while(events, {:ok, []}, fn %OperationalEvent{} = event, {:ok, acc} ->
+      case OperationalEvents.persist_event(repo, event) do
+        {:ok, %OperationalEvent{} = persisted_event} ->
+          {:cont, {:ok, [persisted_event | acc]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
     end)
   end
 

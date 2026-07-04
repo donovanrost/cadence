@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_operational_eb_n0_metric_value_tile",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Operational Eb/N0 Metric Value Tile",
+  "description": "Operational RF Eb/N0 metric value tile source override fixture",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time",
+      "range": {
+        "kind": "relative",
+        "duration_ms": 300000
+      },
+      "refresh_ms": 1000
+    },
+    "scope": {
+      "primary": {
+        "kind": "link",
+        "mode": "one",
+        "ids": ["link-golden-alpha"]
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    },
+    "overlays": {
+      "limits": false,
+      "quality": false,
+      "events": false
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_link_eb_n0",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 2
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.value_tile",
+          "widget_type_version": 1,
+          "title": "RF Eb/N0",
+          "binding": {
+            "source": "operational_observables",
+            "observables": ["link.eb_n0_db"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "latest",
+            "overlays": []
+          },
+          "options": {
+            "precision": 2,
+            "show_unit": true
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "operational", "value-tile", "link-rf"]
+  }
+}

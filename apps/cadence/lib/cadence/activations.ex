@@ -11,7 +11,10 @@ defmodule Cadence.Activations do
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.Governance
   alias Cadence.Missions
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Persistence.Schemas.{ActiveBindingSetRow, BindingSetActivationRow}
+  alias Cadence.Projections.MissionEvents
   alias Cadence.Repo
 
   @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
@@ -39,6 +42,9 @@ defmodule Cadence.Activations do
       |> Multi.insert(:activation_row, BindingSetActivationRow.changeset(activation))
       |> Multi.run(:active_basis_row, fn repo, _changes ->
         upsert_active_basis_row(repo, activation)
+      end)
+      |> Multi.run(:mission_event_projection, fn repo, _changes ->
+        persist_activation_mission_event(repo, activation)
       end)
       |> Repo.transaction()
       |> case do
@@ -76,6 +82,9 @@ defmodule Cadence.Activations do
       |> Multi.insert(:activation_row, BindingSetActivationRow.changeset(activation))
       |> Multi.run(:active_basis_row, fn repo, _changes ->
         upsert_active_basis_row(repo, activation)
+      end)
+      |> Multi.run(:mission_event_projection, fn repo, _changes ->
+        persist_activation_mission_event(repo, activation)
       end)
       |> Repo.transaction()
       |> case do
@@ -198,6 +207,16 @@ defmodule Cadence.Activations do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp persist_activation_mission_event(repo, %BindingSetActivation{} = activation) do
+    with {:ok, %OperationalEvent{} = event} <-
+           OperationalEvents.persist_event(
+             repo,
+             OperationalEvent.from_binding_set_activation(activation)
+           ) do
+      MissionEvents.persist_entries(repo, MissionEvents.project(event))
     end
   end
 end

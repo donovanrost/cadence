@@ -3,6 +3,7 @@ defmodule CadenceWeb.Layouts do
 
   use CadenceWeb, :html
 
+  import CadenceWeb.Components.OpsShell
   import CadenceWeb.Components.Sidebar
 
   embed_templates "layouts/*"

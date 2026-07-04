@@ -93,7 +93,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
         ]}
       >
         <:title_suffix>
-          <span :if={@current_spacecraft.scid} class="mc-value-small text-primary/80">
+          <span :if={@current_spacecraft.scid} class="mc-value-small text-base-content">
             SCID {@current_spacecraft.scid}
           </span>
           <span :if={is_nil(@current_spacecraft.scid)} class="hud-label text-warning/70">
@@ -208,7 +208,7 @@ defmodule CadenceWeb.SpacecraftShowLive do
 
   defp workflow_card(assigns) do
     ~H"""
-    <.card id={@id} accent={workflow_accent(@status)}>
+    <.card id={@id}>
       <div class="flex items-start justify-between gap-3">
         <p class="hud-label">{@title}</p>
         <.status_badge status={@status} />
@@ -225,11 +225,6 @@ defmodule CadenceWeb.SpacecraftShowLive do
     </.card>
     """
   end
-
-  defp workflow_accent(:ready), do: :success
-  defp workflow_accent(:attention), do: :warning
-  defp workflow_accent(:blocked), do: :error
-  defp workflow_accent(_), do: nil
 
   defp identity_status(%{scid: nil}, _runtime_identity), do: :blocked
   defp identity_status(_spacecraft, nil), do: :attention

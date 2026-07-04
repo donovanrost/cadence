@@ -1,0 +1,143 @@
+<!-- @dsCard group="Foundations" name="Elevation tokens (spec)" subtitle="Levels · state-layers · top-highlight — implementable · part of Layering" width="1040" height="1660" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Elevation tokens (spec)</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.win { border-color: oklch(78% 0.12 175 / 0.5); }
+  .note.dec { border-color: oklch(72% 0.15 50 / 0.6); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; color: oklch(85% 0.02 250 / 0.85); max-width: 60rem; }
+  pre .c { color: oklch(60% 0.02 250); } pre .k { color: oklch(80% 0.12 210); } pre .v { color: oklch(76% 0.15 285); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 60rem; }
+  th { text-align: left; font-size: .64rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.lv { font-family: ui-monospace, monospace; color: oklch(85% 0.02 250 / 0.9); white-space: nowrap; }
+  td.y { color: var(--st-green); } td.dash { color: oklch(60% 0.02 250); }
+
+  /* mini elevation demo */
+  .demo { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: .5rem; }
+  .tile { width: 9rem; height: 4.4rem; border-radius: 2px; padding: .5rem .6rem; font-family: ui-monospace, monospace; font-size: .64rem; color: oklch(82% 0.02 250 / 0.7);
+    border: 1px solid oklch(80% 0.12 210 / 0.15); display: flex; align-items: flex-end; }
+  .t-raised { background: oklch(17% 0.02 260); box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.06); }
+  .t-float { background: oklch(23% 0.025 258); box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.10); }
+  .t-hover { background: oklch(17% 0.02 260); box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.06), inset 0 0 0 999px oklch(100% 0 0 / 0.05); }
+  .t-sunken { background: oklch(10% 0.015 265); box-shadow: inset 0 2px 4px oklch(0% 0 0 / 0.35); }
+
+  .usage { margin-top: 2.4rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.4rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: var(--st-green); } .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations &middot; part of Layering (🎯)</p>
+  <h1>Elevation tokens <span style="font-size:.9rem;color:oklch(82% .02 250 / .5)">(spec)</span></h1>
+  <div class="status">&#10003; Implemented — these depth tokens are live in <code style="color:inherit">tokens.css</code> (elevation levels, state films, highlights, sunken shadow, blur reserve). Broad component consumption is Phase 5.</div>
+  <p class="lede">The visual half of layering. It does three things: <strong>un-fuses</strong> the 7-surface ladder into
+    elevation / role / state, adds the <strong>missing depth cue</strong> (the lit top edge), and reserves blur to
+    things that actually float. The point: make elevation something a reader can <em>measure</em> off the screen.</p>
+
+  <div class="demo">
+    <div class="tile t-sunken">sunken</div>
+    <div class="tile t-raised">raised + highlight</div>
+    <div class="tile t-float">floating + highlight</div>
+    <div class="tile t-hover">raised + hover film</div>
+  </div>
+  <p class="note">Look at the top edges: the lighter the hairline, the higher it reads. The last tile is "raised"
+    with a hover <em>film</em> over it — note it stays below "floating," because the film is relative.</p>
+
+  <p class="section-label">1 — Elevation levels (aliases over surfaces)</p>
+<pre><span class="c">/* :root — named LEVELS, pointing at the existing surface scale (Outfit-style).
+   Components reference the level, not the raw surface. */</span>
+<span class="k">--elevation-sunken</span>:   <span class="v">var(--surface-inset)</span>;     <span class="c">/* 10% — wells */</span>
+<span class="k">--elevation-base</span>:     <span class="v">var(--surface-base)</span>;       <span class="c">/* 12% — the page */</span>
+<span class="k">--elevation-raised</span>:   <span class="v">var(--surface-raised)</span>;     <span class="c">/* 17% — cards, panels */</span>
+<span class="k">--elevation-floating</span>: <span class="v">var(--surface-elevated)</span>;   <span class="c">/* 23% — popovers, menus */</span>
+<span class="k">--elevation-modal</span>:    <span class="v">var(--surface-elevated)</span>;   <span class="c">/* 23% — dialogs (+ scrim + blur) */</span></pre>
+  <p class="note">Four perceptible levels (floating &amp; modal share a surface, differ by blur/scrim). This consolidates
+    the imperceptible <code>12 / 15 / 17</code> micro-steps into rungs that actually read.</p>
+
+  <p class="section-label">2 — Separate role &amp; state (the structural fix)</p>
+<pre><span class="c">/* ROLE: input is not a rung — it references a level. */</span>
+<span class="k">--surface-input</span>: <span class="v">var(--elevation-sunken)</span>;   <span class="c">/* commit: a recessed well */</span>
+
+<span class="c">/* STATE: hover/pressed are translucent FILMS, not absolute surfaces.
+   They lighten whatever they're on, so they can never out-elevate a higher layer. */</span>
+<span class="k">--state-hover</span>:    <span class="v">oklch(100% 0 0 / 0.05)</span>;
+<span class="k">--state-pressed</span>:  <span class="v">oklch(100% 0 0 / 0.09)</span>;
+<span class="k">--state-selected</span>: <span class="v">oklch(from var(--color-action) l c h / 0.12)</span>;</pre>
+  <p class="note win">&#10003; <strong>Decision A — DECIDED: input is a recessed well.</strong>
+    <code>--surface-input: var(--elevation-sunken)</code> — every field sits <em>darker</em> than its container
+    (consistent on base and on cards), the "type into a slot" metaphor. Resolves today's contradiction (token 15% but
+    rendered 18%, reading <em>raised</em>). The recessed direction is locked; the exact depth stays tunable.</p>
+  <p class="note win">&#10003; <strong>Decision B — DECIDED: hover is a state-layer film.</strong>
+    <code>--state-hover / -pressed / -selected</code> as translucent overlays replace the absolute
+    <code>--surface-hover (27%)</code> — which today is <em>lighter than a floating dropdown (23%)</em>, so a hovered row
+    out-elevates an open menu. A film is relative by construction (a <code>::after</code> overlay or <code>color-mix</code>),
+    so it can't. Applies to every hover state — tables, menus, nav, tiles — a real migration when reconciled.</p>
+
+  <p class="section-label">3 — Depth cues (the missing half + blur discipline)</p>
+<pre><span class="c">/* TOP-EDGE HIGHLIGHT — the "lit from above" cue, generalized from btn-primary.
+   Stronger as elevation rises. THIS is what Cadence is missing on surfaces. */</span>
+<span class="k">--highlight-raised</span>:   <span class="v">inset 0 1px 0 oklch(100% 0 0 / 0.06)</span>;
+<span class="k">--highlight-floating</span>: <span class="v">inset 0 1px 0 oklch(100% 0 0 / 0.10)</span>;
+
+<span class="c">/* SUNKEN — inverts the highlight into a dark inset: the "pressed-in" cue for wells. */</span>
+<span class="k">--shadow-sunken</span>:      <span class="v">inset 0 2px 4px oklch(0% 0 0 / 0.35)</span>;
+
+<span class="c">/* BLUR — floating &amp; modal ONLY. Remove it from in-flow .hud-panel. */</span>
+<span class="k">--blur-floating</span>: <span class="v">blur(8px)</span>;
+<span class="k">--blur-modal</span>:    <span class="v">blur(12px)</span>;</pre>
+
+  <p class="section-label">The cue matrix — applied monotonically</p>
+  <table>
+    <thead><tr><th>Level</th><th>Tint</th><th>Top edge</th><th>Backdrop blur</th></tr></thead>
+    <tbody>
+      <tr><td class="lv">sunken</td><td class="dash">darker</td><td class="dash">inset shadow (recess)</td><td class="dash">—</td></tr>
+      <tr><td class="lv">base</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+      <tr><td class="lv">raised</td><td class="y">✓</td><td class="y">highlight-raised</td><td class="dash">—</td></tr>
+      <tr><td class="lv">floating</td><td class="y">✓✓</td><td class="y">highlight-floating</td><td class="y">blur 8</td></tr>
+      <tr><td class="lv">modal</td><td class="y">✓✓</td><td class="y">highlight-floating</td><td class="y">blur 12 + scrim</td></tr>
+    </tbody>
+  </table>
+  <p class="note">No drop-shadow anywhere (it barely reads on near-black). Sunken inverts the highlight into an inset
+    dark shadow — the "pressed-in" cue. Every other level adds <em>light</em>, increasing with height.</p>
+
+  <p class="section-label">What it fixes</p>
+  <p class="note win">&#10003; Hover no longer out-elevates overlays (state-film is relative). &#10003; Elevation now
+    <em>reads</em> (the top-highlight gives the lit-edge cue tint alone can't). &#10003; Blur stops leaking onto in-flow
+    panels. &#10003; Inputs become consistent. &#10003; The ladder is un-fused — roles &amp; states reference levels.</p>
+
+  <p class="section-label">Rules</p>
+  <div class="usage">
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Components reference a <strong>level</strong> (<code>--elevation-raised</code>), never a raw <code>--surface-*</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Raised &amp; up get the matching <code>--highlight-*</code>; only floating &amp; modal get blur.</li>
+      <li class="do"><span class="mark">&#10003;</span> Hover / pressed / selected are <strong>films</strong> (<code>--state-*</code>) layered over the element's own surface.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't swap an element's surface on hover — that's the absolute-hover bug; use the film.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't add a new elevation rung unless it represents a distinct <em>behavior</em> — shade alone isn't a level.</li>
+    </ul>
+  </div>
+  <p class="note" style="border-color:oklch(80% 0.12 210 / 0.4)">Fits the frozen-CSS rule: new <code>:root</code> tokens
+    + value-tuning existing declarations (add the highlight, move blur, point input/hover at the new tokens) — no new selectors.</p>
+</body>
+</html>

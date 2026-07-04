@@ -56,7 +56,7 @@ defmodule CadenceWeb.CoreComponents do
       <ul
         id={"#{@id}-menu"}
         role="menu"
-        class="dropdown-content menu bg-base-200 z-[100] w-52 p-2 shadow-lg border border-primary/20"
+        class="dropdown-content menu bg-base-200 z-[var(--z-popover)] w-52 p-2 shadow-lg border border-primary/20"
       >
         <li :for={action <- @action} role="none">
           {render_slot(action)}
@@ -156,6 +156,18 @@ defmodule CadenceWeb.CoreComponents do
   attr :action_navigate, :string, default: nil
   attr :action_patch, :string, default: nil
 
+  attr :compact, :boolean,
+    default: false,
+    doc: "muted one-line message for inside a card/sub-panel"
+
+  attr :class, :string, default: nil
+
+  def empty_state(%{compact: true} = assigns) do
+    ~H"""
+    <p class={["text-sm text-base-content/60", @class]}>{@title}</p>
+    """
+  end
+
   def empty_state(assigns) do
     ~H"""
     <div class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center">
@@ -173,6 +185,38 @@ defmodule CadenceWeb.CoreComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders an inline callout — a contextual in-page message that belongs where
+  it appears (a failed import's reason, a warning about dropped selections).
+  Not a toast: transient action feedback goes through flash.
+
+  ## Examples
+
+      <.callout variant={:error}>Import failed: unsupported schema version.</.callout>
+      <.callout variant={:warning} id="dropped-apids">3 APIDs are not in this revision.</.callout>
+  """
+  attr :variant, :atom, values: [:info, :warning, :error, :success], default: :info
+  attr :id, :string, default: nil
+  attr :class, :string, default: nil
+  slot :inner_block, required: true
+
+  def callout(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      role="alert"
+      class={["border px-4 py-3 text-sm text-base-content", callout_class(@variant), @class]}
+    >
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
+  defp callout_class(:info), do: "border-info/40 bg-info/10"
+  defp callout_class(:warning), do: "border-warning/40 bg-warning/10"
+  defp callout_class(:error), do: "border-error/40 bg-error/10"
+  defp callout_class(:success), do: "border-success/40 bg-success/10"
 
   @doc """
   Renders a panel/section header bar with an uppercase label and optional right-side controls.

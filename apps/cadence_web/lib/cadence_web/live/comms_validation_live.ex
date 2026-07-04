@@ -24,8 +24,11 @@ defmodule CadenceWeb.CommsValidationLive do
       <.page_header
         title="Validation"
         subtitle="Actionable checks for saved Spacecraft, Transport, Routing, and advanced runtime compatibility setup."
-        back_label="Comms"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Validation", nil}
+        ]}
       >
         <:title_suffix>{length(@findings)} findings</:title_suffix>
         <:actions>

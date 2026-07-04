@@ -38,7 +38,11 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
     mission_id: mission_id
   } do
     source_endpoint = persist_source_endpoint(mission_id)
-    binding_set = packet_counter_binding_set(mission_id, source_endpoint.source_endpoint_id, 1)
+
+    binding_set =
+      packet_counter_binding_set(mission_id, source_endpoint.source_endpoint_id, 1,
+        flush_interval_ms: 250
+      )
 
     assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
 
@@ -88,7 +92,8 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
                    managed_application.state.flush_count == 1 and
                    managed_application.state.last_flushed_count == 1 and
                    not managed_application.state.timer_armed?
-               end
+               end,
+               50
              )
 
     [managed_application] = snapshot_after_flush.managed_applications
@@ -190,7 +195,7 @@ defmodule Cadence.Runtime.ManagedApplicationRuntimeTest do
     assert Enum.map(second_result.outputs, & &1.point_name) == ["HK.counter"]
   end
 
-  defp packet_counter_binding_set(mission_id, source_endpoint_ref, version, opts \\ []) do
+  defp packet_counter_binding_set(mission_id, source_endpoint_ref, version, opts) do
     BindingSet.new(%{
       mission_id: mission_id,
       binding_set_id: "managed-runtime-basis",

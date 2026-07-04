@@ -54,7 +54,6 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
         :if={is_nil(@type_binding)}
         id="spacecraft-applications-no-profile"
         title="Spacecraft Profile"
-        accent={:warning}
       >
         <h2 class="mt-2 text-base font-semibold">No profile selected</h2>
         <p class="mt-1 text-sm text-base-content/70">
@@ -76,7 +75,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
             <p class="hud-label">Pinned Profile</p>
             <h2 class="mt-2 text-base font-semibold">
               {@type_binding.pinned.display_name}
-              <span class="mc-value-small text-primary/70">v{@type_binding.pinned.version}</span>
+              <span class="mc-value-small text-base-content/70">v{@type_binding.pinned.version}</span>
             </h2>
           </div>
           <.status_badge
@@ -108,7 +107,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
   defp application_card(assigns) do
     ~H"""
-    <.card id={@app.dom_id} accent={application_accent(@app.status)}>
+    <.card id={@app.dom_id}>
       <div class="flex items-start justify-between gap-4">
         <div>
           <p class="hud-label">Application</p>
@@ -242,12 +241,6 @@ defmodule CadenceWeb.SpacecraftApplicationsLive do
 
     TelemetryDecom.status(config, active)
   end
-
-  defp application_accent(:applied), do: :success
-  defp application_accent(:configured), do: :warning
-  defp application_accent(:outdated), do: :warning
-  defp application_accent(:disabled), do: :error
-  defp application_accent(_status), do: nil
 
   defp panel_status(:applied), do: :ready
   defp panel_status(:configured), do: :attention

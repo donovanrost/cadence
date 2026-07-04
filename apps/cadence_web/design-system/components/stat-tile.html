@@ -1,0 +1,63 @@
+<!-- @dsCard group="Components" name="Stat tile" subtitle="<.stat_tile> — metric · filter link" width="960" height="520" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Stat tile</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+  /* Faithful tile: border base-300, bg base-200, px-3 py-2 — no corner brackets (corners are a nav/hero card signal) */
+  .tile { position: relative; background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258);
+    padding: .5rem .75rem; }
+  .tile.active { border-color: oklch(80% 0.12 210 / 0.6); }
+  .label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); margin: 0; }
+  .tile.active .label { color: oklch(80% 0.12 210); }
+  .value { font-family: ui-monospace, monospace; font-size: 1.25rem; color: oklch(85% 0.02 250); margin: .25rem 0 0; }
+  .caption { font-size: .72rem; color: oklch(60% 0.02 250); margin: 1.4rem 0 0; }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 78ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Stat tile</h1>
+  <p class="lede">A compact metric — uppercase label over a monospace value. Lay several in a
+    <code>grid gap-3 md:grid-cols-4</code>. With <code>patch</code> the tile becomes a filter link;
+    pair with <code>active</code> to mark the applied filter (cyan border + cyan label).</p>
+
+  <div class="grid">
+    <div class="tile active"><p class="label">All</p><p class="value">48</p></div>
+    <div class="tile"><p class="label">Nominal</p><p class="value">41</p></div>
+    <div class="tile"><p class="label">Degraded</p><p class="value">5</p></div>
+    <div class="tile"><p class="label">Offline</p><p class="value">2</p></div>
+  </div>
+  <p class="caption">First tile shown in the <code style="font-family:monospace">active</code> filter state.</p>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Lay several in a <code>grid gap-3 md:grid-cols-4</code> container.</li>
+      <li class="do"><span class="mark">&#10003;</span> With <code>patch</code> the tile becomes a filter link; pair with <code>active</code> to mark the applied filter.</li>
+      <li class="do"><span class="mark">&#10003;</span> Values are monospace — they're data. Keep labels short and uppercase.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't use a stat tile to navigate to a detail page; that's a card or a Name-cell link.</li>
+    </ul>
+  </div>
+</body>
+</html>

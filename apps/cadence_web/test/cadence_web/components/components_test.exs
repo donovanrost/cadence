@@ -67,7 +67,9 @@ defmodule CadenceWeb.ComponentsTest do
       html =
         render_component(&Card.card/1, id: "my-card", inner_block: text_slot("Body"))
 
-      assert html =~ "card bg-base-200 border border-base-300 hud-corners"
+      assert html =~ "card bg-base-200 border border-base-300"
+      # corners are a navigation/hero signal, not default chrome
+      refute html =~ "hud-corners"
       assert html =~ "p-6"
       assert html =~ ~s(id="my-card")
       assert html =~ "Body"
@@ -102,11 +104,19 @@ defmodule CadenceWeb.ComponentsTest do
       assert html =~ "New"
     end
 
-    test "accent renders status left border" do
+    test "hover_glow marks a navigation card with glow and corner brackets" do
       html =
-        render_component(&Card.card/1, accent: :warning, inner_block: text_slot("Body"))
+        render_component(&Card.card/1, hover_glow: true, inner_block: text_slot("Body"))
 
-      assert html =~ "border-l-2 border-l-warning/60"
+      assert html =~ "hover-glow-cyan"
+      assert html =~ "hud-corners"
+    end
+
+    test "corners opts a hero panel into the brackets without glow" do
+      html = render_component(&Card.card/1, corners: true, inner_block: text_slot("Body"))
+
+      assert html =~ "hud-corners"
+      refute html =~ "hover-glow-cyan"
     end
 
     test "stat_tile renders label over mono value" do
@@ -274,15 +284,14 @@ defmodule CadenceWeb.ComponentsTest do
         render_component(&PageHeader.page_header/1,
           title: "Transports",
           subtitle: "Byte movers",
-          back_label: "Comms",
-          back_navigate: "/comms"
+          eyebrow: "Comms"
         )
 
       assert html =~ "border-b border-primary/20 pb-4"
       assert html =~ "Transports"
       assert html =~ "Byte movers"
       assert html =~ "Comms"
-      assert html =~ ~s(href="/comms")
+      refute html =~ ~s(href="/comms")
     end
 
     test "renders breadcrumbs and actions" do

@@ -26,8 +26,11 @@ defmodule CadenceWeb.SpacecraftTypeListLive do
       <.page_header
         title="Spacecraft Profiles"
         subtitle="Reusable byte-interpretation contracts for spacecraft that share bus protocols, frame parameters, and platform applications."
-        back_label={@current_mission.display_name}
-        back_navigate={~p"/missions/#{@current_mission.mission_id}"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {"Spacecraft Profiles", nil}
+        ]}
       >
         <:title_suffix>{@spacecraft_profile_count} defined</:title_suffix>
         <:actions>

@@ -1,0 +1,100 @@
+<!-- @dsCard group="Components" name="Card" subtitle="<.card> — chrome · header · nav corners" width="960" height="640" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Card</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .deck { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; align-items: start; }
+
+  /* Faithful card chrome: base-200 bg, base-300 border, 2px. Corners are a
+     navigation/hero signal (.nav), not default chrome. */
+  .card { position: relative; background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258);
+    border-radius: 2px; }
+  .card.nav::before, .card.nav::after { content:''; position:absolute; width:12px; height:12px;
+    border-color: oklch(from var(--glow-cyan) l c h / 0.6); border-style: solid; pointer-events:none; }
+  .card.nav::before { top:0; left:0; border-width: 2px 0 0 2px; }
+  .card.nav::after { top:0; right:0; border-width: 2px 2px 0 0; }
+  .body { padding: 1.5rem; }
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); margin: 0 0 .75rem; }
+  .data { font-family: ui-monospace, monospace; font-size: .85rem; line-height: 1.7; color: oklch(80% 0.02 250); }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+    border-bottom: 1px solid oklch(23% 0.025 258); padding: .75rem 1rem; }
+  .header h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+  .header p { font-size: .75rem; color: oklch(70% 0.02 250); margin: .25rem 0 0; }
+  .mini-btn { height: 1.6rem; padding: 0 .7rem; border-radius: 2px; background: oklch(80% 0.12 210);
+    color: oklch(15% 0.02 210); border: 1px solid oklch(80% 0.12 210 / 0.5); font-size: .6875rem;
+    font-weight: 500; letter-spacing: .05em; text-transform: uppercase; }
+  .caption { font-size: .72rem; color: oklch(60% 0.02 250); margin: .75rem 0 0; }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 80ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Card</h1>
+  <p class="lede">Chrome is <code>card bg-base-200 border-base-300</code>. Two heading styles:
+    an inline uppercase <code>title</code>, or a full-bleed <code>heading</code> bar with subtitle and actions.
+    The cyan <code>hud-corners</code> brackets mark <strong>navigation and hero cards only</strong> —
+    <code>hover_glow</code> applies them; <code>corners</code> opts a hero panel in. Status on a card is
+    carried by the <code>&lt;.status_badge&gt;</code> inside it; there is no status border.</p>
+
+  <div class="deck">
+    <!-- title style -->
+    <section class="card">
+      <div class="body">
+        <p class="hud-label">Orbit parameters</p>
+        <div class="data">ALT&nbsp;&nbsp;545.2 km<br>INC&nbsp;&nbsp;97.4°<br>ECC&nbsp;&nbsp;0.0011</div>
+      </div>
+    </section>
+
+    <!-- heading style with actions -->
+    <section class="card">
+      <div class="header">
+        <div><h2>Transports</h2><p>3 active links</p></div>
+        <button class="mini-btn">New</button>
+      </div>
+      <div class="body" style="padding:1rem 1.5rem 1.5rem">
+        <div class="data">S-band&nbsp;&nbsp;· up<br>X-band&nbsp;&nbsp;· up<br>UHF&nbsp;&nbsp;&nbsp;&nbsp;· standby</div>
+      </div>
+    </section>
+
+    <!-- navigation card: corners + glow -->
+    <section class="card nav">
+      <div class="body">
+        <p class="hud-label">Pass window</p>
+        <div class="data">AOS 14:22:08Z<br>LOS 14:33:51Z</div>
+        <p class="caption">hover_glow — navigation card: corner brackets + cyan glow on hover</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Chrome is <code>card bg-base-200 border-base-300</code> — use <code>&lt;.card&gt;</code>, never raw <code>class="card &hellip;"</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Use <code>hover_glow</code> only on cards that are themselves navigation targets — it brings the <code>hud-corners</code> brackets with it. <code>corners</code> alone marks a non-navigating hero panel.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't put a status color on the card frame — the <code>&lt;.status_badge&gt;</code> inside owns status (the old <code>accent</code> attr double-encoded it and was retired).</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't exceed 50 lines in a render function or 400 in a file — extract a private component first.</li>
+      <li class="dont"><span class="mark">&#10007;</span> A one-off layout needing more than a couple <code>class</code> escapes may stay raw — leave a one-line comment saying why.</li>
+    </ul>
+  </div>
+</body>
+</html>

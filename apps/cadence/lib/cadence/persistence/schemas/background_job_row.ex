@@ -100,6 +100,8 @@ defmodule Cadence.Persistence.Schemas.BackgroundJobRow do
   defp job_type("telemetry_latest_limit_state_rebuild"), do: :telemetry_latest_limit_state_rebuild
   defp job_type("mission_event_rebuild"), do: :mission_event_rebuild
   defp job_type("catalog_import_run"), do: :catalog_import_run
+  defp job_type("telemetry_historical_data_workflow"), do: :telemetry_historical_data_workflow
+  defp job_type("managed_questdb_provisioning"), do: :managed_questdb_provisioning
 
   defp status("queued"), do: :queued
   defp status("running"), do: :running

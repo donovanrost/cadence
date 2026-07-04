@@ -57,8 +57,12 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
       <.page_header
         title={@heading}
         subtitle="Configure a reusable transport adapter. Spacecraft-specific byte interpretation lives on the spacecraft's type."
-        back_label={@back_label}
-        back_navigate={@return_to}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Providers", @return_to},
+          {@heading, nil}
+        ]}
       />
 
       <.form
@@ -80,33 +84,9 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
           <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(preview_configuration(@form), pretty: true)}</pre>
         </details>
 
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button type="submit" size={:md}>
-            {@submit_label}
-          </.button>
-          <.button variant={:ghost} size={:md} navigate={@return_to}>
-            Cancel
-          </.button>
-        </div>
+        <.form_actions submit={@submit_label} cancel_navigate={@return_to} />
       </.form>
     </div>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-  slot :inner_block, required: true
-
-  defp form_section(assigns) do
-    ~H"""
-    <section class="space-y-4">
-      <div class="flex items-center gap-3">
-        <span class="hud-label text-primary/70">{@number}</span>
-        <h2 class="hud-label">{@title}</h2>
-        <div class="flex-1 h-px bg-base-300/60"></div>
-      </div>
-      {render_slot(@inner_block)}
-    </section>
     """
   end
 
@@ -435,7 +415,6 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
           :return_to,
           ~p"/missions/#{mission.mission_id}/comms/providers/#{provider_profile_id}"
         )
-        |> assign(:back_label, display_name(provider_profile, :provider_profile_id))
         |> assign(:heading, "New Provider Version")
         |> assign(:submit_label, "Create New Version")
         |> assign(:form, form_from_provider_profile(provider_profile))
@@ -455,7 +434,6 @@ defmodule CadenceWeb.CommsProviderProfileNewLive do
     |> assign(:nav_item, :comms_providers)
     |> assign(:provider_profile, nil)
     |> assign(:return_to, ~p"/missions/#{mission.mission_id}/comms/providers")
-    |> assign(:back_label, "Providers")
     |> assign(:heading, "New Provider")
     |> assign(:submit_label, "Create Provider")
     |> assign(:form, empty_form())

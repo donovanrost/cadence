@@ -1,0 +1,109 @@
+defmodule CadenceWeb.OpsDashboardShowLive.EngineResolutionTest do
+  use ExUnit.Case, async: true
+
+  alias Cadence.Dashboards.{Document, PlacementFrames}
+  alias CadenceWeb.OpsDashboardShowLive.DataViewComparison
+  alias CadenceWeb.OpsDashboardShowLive.EngineResolution
+  alias CadenceWeb.OpsDashboardShowLive.RuntimeDataRequest
+
+  test "request builds the dashboard runtime data request boundary" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        current_scope: %{organization_id: "org-1"},
+        current_mission: %{mission_id: "mission-1"},
+        dashboard_document: %Document{dashboard_id: "dashboard-1"},
+        dashboard_document_mode: :published,
+        dashboard_scope_context: %{"primary" => %{"kind" => "mission", "ids" => ["mission-1"]}},
+        dashboard_time_context: %{"mode" => "live"},
+        dashboard_data_context: %{"realm" => "flight"},
+        dashboard_limit_context: %{"semantics_mode" => "observed"}
+      }
+    }
+
+    assert %RuntimeDataRequest{
+             organization_id: "org-1",
+             mission_id: "mission-1",
+             dashboard_id: "dashboard-1",
+             document_mode: :published,
+             resolve_mode: :live_tick,
+             scope_context: %{"primary" => %{"kind" => "mission", "ids" => ["mission-1"]}},
+             time_context: %{"mode" => "live"},
+             data_context: %{"realm" => "flight"},
+             limit_context: %{"semantics_mode" => "observed"}
+           } = EngineResolution.request(socket, :live_tick)
+  end
+
+  test "comparison_request builds a secondary request for a different data view" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        current_scope: %{organization_id: "org-1"},
+        current_mission: %{mission_id: "mission-1"},
+        dashboard_document: %Document{dashboard_id: "dashboard-1"},
+        dashboard_document_mode: :published,
+        dashboard_scope_context: %{"primary" => %{"kind" => "mission", "ids" => ["mission-1"]}},
+        dashboard_time_context: %{"mode" => "archive"},
+        dashboard_data_context: %{"realm" => "flight", "view" => "all_revisions"},
+        dashboard_data_view: "all_revisions",
+        dashboard_compare_data_view: "canonical",
+        dashboard_limit_context: %{"semantics_mode" => "observed"}
+      }
+    }
+
+    assert %RuntimeDataRequest{
+             data_context: %{"realm" => "flight", "view" => "canonical"},
+             resolve_mode: :context_change
+           } = EngineResolution.comparison_request(socket, :context_change)
+  end
+
+  test "apply_result attaches comparison results from runtime bundles" do
+    primary_result = %{
+      resolve_mode: :context_change,
+      frames_by_placement: %{"primary-placement" => %PlacementFrames{}}
+    }
+
+    comparison_result = %{
+      resolve_mode: :context_change,
+      frames_by_placement: %{"comparison-placement" => %PlacementFrames{}}
+    }
+
+    socket =
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          dashboard_render_items: [],
+          widget_data: %{}
+        }
+      }
+      |> EngineResolution.apply_result(DataViewComparison.new(primary_result, comparison_result))
+
+    assert socket.assigns.dashboard_engine_result == primary_result
+
+    assert socket.assigns.dashboard_engine_frames_by_placement ==
+             primary_result.frames_by_placement
+
+    assert socket.assigns.dashboard_compare_engine_result == comparison_result
+
+    assert socket.assigns.dashboard_compare_engine_frames_by_placement ==
+             comparison_result.frames_by_placement
+  end
+
+  test "refresh_ms uses positive dashboard document refresh defaults" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        dashboard_document: %Document{defaults: %{"time" => %{"refresh_ms" => 2_500}}}
+      }
+    }
+
+    assert EngineResolution.refresh_ms(socket, 1_000) == 2_500
+  end
+
+  test "refresh_ms falls back when dashboard document refresh defaults are invalid" do
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{
+        dashboard_document: %Document{defaults: %{"time" => %{"refresh_ms" => 0}}}
+      }
+    }
+
+    assert EngineResolution.refresh_ms(socket, 1_000) == 1_000
+  end
+end

@@ -1,0 +1,213 @@
+/* ============================================================================
+   Cadence design tokens — the single source of truth.
+   Three tiers (see the "Token architecture" design-system card):
+     PRIMITIVES  named by hue/value, role-neutral
+     SEMANTICS   named by job, point at primitives — components consume THESE
+     SYSTEMS     z-index, motion, elevation, state, effect knobs
+   Imported by app.css. Seeded additively: the new tiers below are defined but
+   not yet widely consumed — migration is phased (Phases 3–5).
+   ============================================================================ */
+
+:root {
+  /* ---- existing brand + glow (kept; --glow-* are skin names, migrate to
+          --color-action over time) ---- */
+  --brand-primary: oklch(80% 0.12 210);
+  --brand-secondary: oklch(72% 0.15 285);
+  --brand-accent: oklch(60% 0.25 340);
+
+  --glow-cyan: var(--brand-primary);
+  --glow-purple: var(--brand-secondary);
+  --glow-pink: var(--brand-accent);
+
+  --icon-muted: oklch(from var(--color-action) 68% var(--chrome-chroma) h);
+
+  /* ---- surfaces (already a mature ramp) ---- */
+  --surface-overlay: oklch(8% 0.02 265);
+  --surface-inset: oklch(10% 0.015 265);
+  --surface-base: oklch(12% 0.02 265);
+  --surface-input: var(--elevation-sunken); /* a recessed well — fields sit darker than their container */
+  --surface-raised: oklch(17% 0.02 260);
+  --surface-elevated: oklch(23% 0.025 258);
+  /* (absolute --surface-hover retired — see --state-hover film below) */
+
+  /* ---- status base (semantic; green unified to hue 175) ---- */
+  --status-critical: oklch(62% 0.25 25);
+  --status-warning: oklch(70% 0.20 50);
+  --status-success: oklch(78% 0.12 175); /* green-175 unify (was 78% 0.10 185) */
+  --status-info: oklch(70% 0.14 250);
+
+  /* ---- text tiers (muted = 60% per contrast fix) ---- */
+  --text-muted: oklch(60% 0.02 250);
+  --text-subtle: oklch(65% 0.02 250);
+  --text-bright: oklch(85% 0.02 250);
+
+  /* ---- neutral ramp ---- */
+  --neutral-darker: oklch(15% 0.01 265);
+  --neutral-dark: oklch(20% 0.01 265);
+  --neutral-mid: oklch(25% 0.02 265);
+  --neutral-border: oklch(35% 0.03 265);
+  --neutral-text: oklch(50% 0.02 265);
+  --neutral-text-light: oklch(70% 0.02 265);
+
+  /* ---- spacing / radius / transition (legacy; --duration/--ease supersede) ---- */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --pulse-duration: 2s;
+
+  color-scheme: dark;
+
+  /* ==========================================================================
+     PRIMITIVES — color ramps (hue-named, contrast-verified). ~5 steps + on.
+     Components must NOT reference these directly — use semantics below.
+     ========================================================================== */
+  --cyan-300: oklch(90% 0.07 210);
+  --cyan-400: oklch(84% 0.10 210);
+  --cyan-500: oklch(80% 0.12 210);
+  --cyan-600: oklch(70% 0.14 210);
+  --cyan-700: oklch(60% 0.13 210);
+  --cyan-on: oklch(18% 0.04 210);
+
+  --purple-300: oklch(85% 0.09 285);
+  --purple-400: oklch(78% 0.12 285);
+  --purple-500: oklch(72% 0.15 285);
+  --purple-600: oklch(62% 0.16 285);
+  --purple-700: oklch(52% 0.15 285);
+  --purple-on: oklch(18% 0.04 285);
+
+  --pink-300: oklch(80% 0.13 340);
+  --pink-400: oklch(72% 0.20 340);
+  --pink-500: oklch(60% 0.25 340);
+  --pink-600: oklch(52% 0.24 340);
+  --pink-700: oklch(44% 0.21 340);
+  --pink-on: oklch(98% 0.01 340);
+
+  --red-300: oklch(78% 0.15 25);
+  --red-400: oklch(70% 0.20 25);
+  --red-500: oklch(62% 0.25 25);
+  --red-600: oklch(55% 0.24 25);
+  --red-700: oklch(46% 0.20 25);
+  --red-on: oklch(98% 0.02 25);
+
+  --yellow-300: oklch(88% 0.12 55);
+  --yellow-400: oklch(82% 0.16 55);
+  --yellow-500: oklch(72% 0.18 55);
+  --yellow-fill: oklch(78% 0.18 55); /* yellow is hue-honest: fill is lighter, dark text */
+  --yellow-700: oklch(52% 0.13 55);
+  --yellow-on: oklch(20% 0.05 55);
+
+  --green-300: oklch(88% 0.10 175);
+  --green-400: oklch(82% 0.13 175);
+  --green-500: oklch(76% 0.14 175);
+  --green-600: oklch(70% 0.16 175);
+  --green-700: oklch(58% 0.14 175);
+  --green-on: oklch(18% 0.04 175);
+
+  --blue-300: oklch(82% 0.11 250);
+  --blue-400: oklch(74% 0.14 250);
+  --blue-500: oklch(70% 0.14 250);
+  --blue-600: oklch(70% 0.18 250); /* info fill, dark text */
+  --blue-700: oklch(58% 0.15 250);
+  --blue-on: oklch(18% 0.04 250);
+
+  /* ==========================================================================
+     SEMANTICS — named by job, point at primitives. Components consume THESE.
+     ========================================================================== */
+  /* interactive / action */
+  --color-action: var(--cyan-500);
+  --color-action-strong: var(--cyan-600);
+  --color-action-muted: var(--cyan-400);
+  --on-action: var(--cyan-on);
+  --color-action-secondary: var(--purple-500);
+  --color-action-accent: var(--pink-500);
+
+  /* Cyan reallocation: saturation IS the interactive signal. --color-action stays
+     fully saturated (links/buttons/focus/active nav/live); structural chrome keeps
+     the cyan HUE but demotes chroma to this value (≤ 0.03) so it reads as neutral.
+     Chrome text derives as oklch(from var(--color-action) L var(--chrome-chroma) h). */
+  --chrome-chroma: 0.02;
+
+  /* borders (cyan-derived) */
+  --border-subtle: oklch(from var(--color-action) l c h / 0.15);
+  --border-default: oklch(from var(--color-action) l c h / 0.25);
+  --border-strong: oklch(from var(--color-action) l c h / 0.40);
+  --border-focus: oklch(from var(--color-action) l c h / 0.60);
+
+  /* status — text (on dark) / fill (badge bg, contrast-verified) / on-fill */
+  --status-critical-text: var(--red-400);
+  --status-critical-fill: var(--red-600);
+  --on-status-critical: var(--red-on);
+  --status-warning-text: var(--yellow-400);
+  --status-warning-fill: var(--yellow-fill);
+  --on-status-warning: var(--yellow-on);
+  --status-success-text: var(--green-400);
+  --status-success-fill: var(--green-600);
+  --on-status-success: var(--green-on);
+  --status-info-text: var(--blue-400);
+  --status-info-fill: var(--blue-600);
+  --on-status-info: var(--blue-on);
+
+  /* ==========================================================================
+     SYSTEMS
+     ========================================================================== */
+  /* stacking — sparse named z-tiers (toast/tooltip above modal) */
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-chrome: 200;
+  --z-popover: 300;
+  --z-scrim: 400;
+  --z-modal: 410;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* motion — duration split from easing */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);      /* entering */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);       /* leaving */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* moving in-view */
+  --ease-linear: linear;                        /* loops */
+
+  /* elevation — levels alias surfaces; roles/states reference levels */
+  --elevation-sunken: var(--surface-inset);
+  --elevation-base: var(--surface-base);
+  --elevation-raised: var(--surface-raised);
+  --elevation-floating: var(--surface-elevated);
+  --elevation-modal: var(--surface-elevated);
+
+  /* state layers — translucent films (relative; replaced the absolute --surface-hover) */
+  --state-hover: oklch(100% 0 0 / 0.05);
+  --state-pressed: oklch(100% 0 0 / 0.09);
+  --state-selected: oklch(from var(--color-action) l c h / 0.12);
+
+  /* top-edge highlight (lit edge) + blur reserved to floating/modal */
+  --highlight-raised: inset 0 1px 0 oklch(100% 0 0 / 0.06);
+  --highlight-floating: inset 0 1px 0 oklch(100% 0 0 / 0.10);
+  /* sunken inverts the highlight into a dark inset — the "pressed-in" cue for wells */
+  --shadow-sunken: inset 0 2px 4px oklch(0% 0 0 / 0.35);
+  --blur-floating: blur(8px);
+  --blur-modal: blur(12px);
+
+  /* effect knobs — defaults preserve the current look; a skin can dial these.
+     (Reduced-motion already handled by the @media block in app.css.) */
+  --fx-glow-strength: 1;
+  --label-case: uppercase;
+  --label-tracking: 0.12em;
+  --pulse-nominal: hud-pulse 2s ease-in-out infinite;
+  --pulse-warning: hud-pulse-warning 1s ease-in-out infinite;
+  --pulse-critical: hud-pulse-critical 0.5s ease-in-out infinite;
+  --fx-scanline-opacity: 0.03;
+  --fx-corner-size: 12px;
+}

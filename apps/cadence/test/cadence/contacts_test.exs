@@ -11,7 +11,7 @@ defmodule Cadence.ContactsTest do
     TransportProfile
   }
 
-  alias Cadence.Runtime
+  alias Cadence.OperationalEvents
 
   setup do
     organization_id =
@@ -20,14 +20,6 @@ defmodule Cadence.ContactsTest do
     mission_id = "mission-contacts-" <> Integer.to_string(System.unique_integer([:positive]))
 
     persist_mission_scope(organization_id, mission_id)
-
-    on_exit(fn ->
-      Cadence.stop_realized_contact(organization_id, mission_id, "scheduled-contact-alpha_run")
-      Cadence.stop_realized_contact(organization_id, mission_id, "manual-realized-contact")
-      Cadence.stop_realized_contact(organization_id, mission_id, "linked-contact-alpha_run")
-      Cadence.stop_realized_contact(organization_id, mission_id, "cancel-during-run_run")
-      Runtime.stop_mission(mission_id)
-    end)
 
     %{organization_id: organization_id, mission_id: mission_id}
   end
@@ -54,6 +46,23 @@ defmodule Cadence.ContactsTest do
              Cadence.persist_scheduled_contact(organization_id, scheduled_contact)
 
     assert persisted_scheduled_contact.lifecycle_state == :scheduled
+
+    assert {:ok, scheduled_event} =
+             OperationalEvents.fetch_event(
+               "operational_event:scheduled_contact_interval:#{scheduled_contact.scheduled_contact_id}"
+             )
+
+    assert scheduled_event.category == :contact
+    assert scheduled_event.kind == :scheduled_contact_interval
+    assert scheduled_event.causality.source_record_kind == :scheduled_contact
+    assert scheduled_event.causality.source_record_id == scheduled_contact.scheduled_contact_id
+    assert contact_event_value(scheduled_event, :status) == "scheduled"
+    assert same_datetime?(contact_event_value(scheduled_event, :starts_at), starts_at)
+
+    assert same_datetime?(
+             contact_event_value(scheduled_event, :ends_at),
+             scheduled_contact.ends_at
+           )
 
     assert {:ok, fetched_scheduled_contact} =
              Cadence.fetch_scheduled_contact(
@@ -93,6 +102,16 @@ defmodule Cadence.ContactsTest do
     assert realized_scheduled_contact.lifecycle_state == :realized
     assert realized_scheduled_contact.realized_contact_id == realized_contact.realized_contact_id
 
+    assert {:ok, realized_scheduled_event} =
+             OperationalEvents.fetch_event(
+               "operational_event:scheduled_contact_interval:#{scheduled_contact.scheduled_contact_id}"
+             )
+
+    assert contact_event_value(realized_scheduled_event, :status) == "realized"
+
+    assert contact_event_value(realized_scheduled_event, :realized_contact_id) ==
+             realized_contact.realized_contact_id
+
     assert {:ok, fetched_realized_contact} =
              Cadence.fetch_realized_contact(
                organization_id,
@@ -102,6 +121,20 @@ defmodule Cadence.ContactsTest do
 
     assert fetched_realized_contact.lifecycle_state == :active
     assert fetched_realized_contact.scheduled_contact_id == scheduled_contact.scheduled_contact_id
+
+    assert {:ok, realized_event} =
+             OperationalEvents.fetch_event(
+               "operational_event:realized_contact_interval:#{realized_contact.realized_contact_id}"
+             )
+
+    assert realized_event.category == :contact
+    assert realized_event.kind == :realized_contact_interval
+    assert realized_event.causality.source_record_kind == :realized_contact
+    assert realized_event.causality.source_record_id == realized_contact.realized_contact_id
+    assert contact_event_value(realized_event, :status) == "active"
+
+    assert contact_event_value(realized_event, :scheduled_contact_id) ==
+             scheduled_contact.scheduled_contact_id
 
     assert [listed_realized_contact] = Cadence.list_realized_contacts(organization_id, mission_id)
     assert listed_realized_contact.realized_contact_id == realized_contact.realized_contact_id
@@ -477,6 +510,30 @@ defmodule Cadence.ContactsTest do
     assert contact_action.scheduled_contact_id == scheduled_contact.scheduled_contact_id
     assert is_nil(contact_action.realized_contact_id)
 
+    assert [operational_event] =
+             OperationalEvents.list_events(organization_id, mission_id,
+               source_record_kind: :contact_action,
+               source_record_id: contact_action.contact_action_id
+             )
+
+    assert operational_event.event_id ==
+             "operational_event:contact_action:#{contact_action.contact_action_id}"
+
+    assert operational_event.category == :contact
+    assert operational_event.kind == :scheduled_contact_canceled
+
+    assert operational_event.subject == %{
+             kind: :contact,
+             id: scheduled_contact.scheduled_contact_id
+           }
+
+    assert operational_event.causality.source_record_kind == :contact_action
+    assert operational_event.causality.source_record_id == contact_action.contact_action_id
+    assert contact_event_value(operational_event, :reason) == "weather"
+
+    assert contact_event_value(operational_event, :scheduled_contact_id) ==
+             scheduled_contact.scheduled_contact_id
+
     assert {:error, :scheduled_contact_canceled} =
              Cadence.realize_scheduled_contact(
                organization_id,
@@ -510,7 +567,8 @@ defmodule Cadence.ContactsTest do
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
-               []
+               clock_mode: :replay,
+               initial_time: starts_at
              )
 
     assert {:ok, stopped_realized_contact} =
@@ -547,6 +605,33 @@ defmodule Cadence.ContactsTest do
     assert contact_action.reason == "operator stop"
     assert contact_action.scheduled_contact_id == scheduled_contact.scheduled_contact_id
     assert contact_action.realized_contact_id == realized_contact.realized_contact_id
+
+    assert [operational_event] =
+             OperationalEvents.list_events(organization_id, mission_id,
+               source_record_kind: :contact_action,
+               source_record_id: contact_action.contact_action_id
+             )
+
+    assert operational_event.event_id ==
+             "operational_event:contact_action:#{contact_action.contact_action_id}"
+
+    assert operational_event.category == :contact
+    assert operational_event.kind == :realized_contact_ended_early
+
+    assert operational_event.subject == %{
+             kind: :contact,
+             id: realized_contact.realized_contact_id
+           }
+
+    assert operational_event.causality.source_record_kind == :contact_action
+    assert operational_event.causality.source_record_id == contact_action.contact_action_id
+    assert contact_event_value(operational_event, :reason) == "operator stop"
+
+    assert contact_event_value(operational_event, :scheduled_contact_id) ==
+             scheduled_contact.scheduled_contact_id
+
+    assert contact_event_value(operational_event, :realized_contact_id) ==
+             realized_contact.realized_contact_id
   end
 
   test "canceling a realized scheduled contact stops the linked runtime", %{
@@ -573,7 +658,8 @@ defmodule Cadence.ContactsTest do
                organization_id,
                mission_id,
                scheduled_contact.scheduled_contact_id,
-               []
+               clock_mode: :replay,
+               initial_time: starts_at
              )
 
     assert {:ok, canceled_scheduled_contact} =
@@ -641,4 +727,21 @@ defmodule Cadence.ContactsTest do
       })
     ]
   end
+
+  defp contact_event_value(event, key) when is_atom(key) do
+    Map.get(event.current, key) || Map.get(event.current, Atom.to_string(key))
+  end
+
+  defp same_datetime?(value, %DateTime{} = expected) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> DateTime.compare(datetime, expected) == :eq
+      _other -> false
+    end
+  end
+
+  defp same_datetime?(%DateTime{} = value, %DateTime{} = expected) do
+    DateTime.compare(value, expected) == :eq
+  end
+
+  defp same_datetime?(_value, %DateTime{}), do: false
 end

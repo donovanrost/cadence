@@ -106,7 +106,7 @@ defmodule CadenceWeb.SpacecraftListComponents do
               latest_version={Map.get(@latest_versions, profile.spacecraft_type_id)}
             />
           </:col>
-          <:col :let={profile} label="Protocols" mono class="uppercase text-primary/80">
+          <:col :let={profile} label="Protocols" mono class="uppercase text-base-content/70">
             {profile.downlink_protocol} / {profile.uplink_protocol}
           </:col>
           <:col :let={profile} label="Applications" class="text-sm text-base-content/70">
@@ -216,7 +216,7 @@ defmodule CadenceWeb.SpacecraftListComponents do
           </:col>
           <:col :let={spacecraft} label="SCID" sort="scid" mono>
             <span class={
-              if(spacecraft.scid, do: "text-primary/80", else: "text-base-content/50 italic")
+              if(spacecraft.scid, do: "text-base-content", else: "text-base-content/50 italic")
             }>
               {spacecraft.scid || "Not set"}
             </span>

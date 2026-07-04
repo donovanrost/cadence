@@ -7,8 +7,9 @@ defmodule Cadence.Reads.MissionHealthTest do
   alias Cadence.Telemetry.PacketDefinition
 
   setup do
-    organization_id = "org-mission-health"
-    mission_id = "mission-alpha"
+    suffix = System.unique_integer([:positive])
+    organization_id = "org-mission-health-#{suffix}"
+    mission_id = "mission-health-#{suffix}"
 
     persist_mission_scope(organization_id, mission_id)
 
@@ -20,30 +21,30 @@ defmodule Cadence.Reads.MissionHealthTest do
     mission_id: mission_id
   } do
     binding_set = persist_binding_set_fixture(organization_id, mission_id)
-    persist_limit_definitions_fixture()
+    persist_limit_definitions_fixture(mission_id)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
-               raw_evidence_fixture(1, 25, 50, 1_700_001_000),
+               raw_evidence_fixture(mission_id, 1, 25, 50, 1_700_001_000),
                binding_set.binding_set_id,
                binding_set.version
              )
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
-               raw_evidence_fixture(2, 15, 250, 1_700_001_010, "sc-001"),
+               raw_evidence_fixture(mission_id, 2, 15, 250, 1_700_001_010, "sc-001"),
                binding_set.binding_set_id,
                binding_set.version
              )
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
-               raw_evidence_fixture(3, 5, 120, 1_700_001_020, "sc-002"),
+               raw_evidence_fixture(mission_id, 3, 5, 120, 1_700_001_020, "sc-002"),
                binding_set.binding_set_id,
                binding_set.version
              )
 
-    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits("mission-alpha")
+    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(mission_id)
     assert limit_run.status == :completed
 
     summary = Cadence.mission_health_summary(organization_id, mission_id, [])
@@ -62,7 +63,7 @@ defmodule Cadence.Reads.MissionHealthTest do
     assert summary.point_buckets.blue == []
 
     assert Enum.map(summary.scope_summaries, &scope_overview/1) == [
-             {"mission:mission-alpha", :mission, nil, :red, 2, 1},
+             {"mission:#{mission_id}", :mission, nil, :red, 2, 1},
              {"spacecraft:sc-001", :spacecraft, "sc-001", :red, 2, 2},
              {"spacecraft:sc-002", :spacecraft, "sc-002", :yellow, 2, 1}
            ]
@@ -83,23 +84,23 @@ defmodule Cadence.Reads.MissionHealthTest do
     mission_id: mission_id
   } do
     binding_set = persist_binding_set_fixture(organization_id, mission_id)
-    persist_limit_definitions_fixture()
+    persist_limit_definitions_fixture(mission_id)
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
-               raw_evidence_fixture(1, 25, 50, 1_700_001_000),
+               raw_evidence_fixture(mission_id, 1, 25, 50, 1_700_001_000),
                binding_set.binding_set_id,
                binding_set.version
              )
 
     assert {:ok, _result} =
              Cadence.process_and_persist_telemetry_ingress(
-               raw_evidence_fixture(2, 15, 250, 1_700_001_010, "sc-001"),
+               raw_evidence_fixture(mission_id, 2, 15, 250, 1_700_001_010, "sc-001"),
                binding_set.binding_set_id,
                binding_set.version
              )
 
-    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits("mission-alpha")
+    assert {:ok, limit_run} = Cadence.evaluate_telemetry_limits(mission_id)
     assert limit_run.status == :completed
 
     summary =
@@ -168,10 +169,10 @@ defmodule Cadence.Reads.MissionHealthTest do
     persisted_binding_set
   end
 
-  defp persist_limit_definitions_fixture do
+  defp persist_limit_definitions_fixture(mission_id) do
     counter_limit_definition =
       Definition.new(%{
-        mission_id: "mission-alpha",
+        mission_id: mission_id,
         limit_definition_id: "hk-counter-limits",
         point_id: "HK.counter",
         thresholds: %{"yellow_high" => 10, "red_high" => 20}
@@ -179,7 +180,7 @@ defmodule Cadence.Reads.MissionHealthTest do
 
     voltage_limit_definition =
       Definition.new(%{
-        mission_id: "mission-alpha",
+        mission_id: mission_id,
         limit_definition_id: "hk-voltage-limits",
         point_id: "HK.voltage",
         thresholds: %{"yellow_high" => 100, "red_high" => 200}
@@ -194,11 +195,25 @@ defmodule Cadence.Reads.MissionHealthTest do
     :ok
   end
 
-  defp raw_evidence_fixture(sequence_count, counter_value, voltage_value, receipt_unix) do
-    raw_evidence_fixture(sequence_count, counter_value, voltage_value, receipt_unix, nil)
+  defp raw_evidence_fixture(
+         mission_id,
+         sequence_count,
+         counter_value,
+         voltage_value,
+         receipt_unix
+       ) do
+    raw_evidence_fixture(
+      mission_id,
+      sequence_count,
+      counter_value,
+      voltage_value,
+      receipt_unix,
+      nil
+    )
   end
 
   defp raw_evidence_fixture(
+         mission_id,
          sequence_count,
          counter_value,
          voltage_value,
@@ -206,7 +221,7 @@ defmodule Cadence.Reads.MissionHealthTest do
          spacecraft_id
        ) do
     RawEvidence.new(%{
-      mission_id: "mission-alpha",
+      mission_id: mission_id,
       spacecraft_id: spacecraft_id,
       receipt_time: DateTime.from_unix!(receipt_unix, :second),
       raw: build_space_packet(42, sequence_count, <<counter_value::16, voltage_value::16>>)

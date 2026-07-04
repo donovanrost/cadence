@@ -24,8 +24,11 @@ defmodule CadenceWeb.Components.FormInputs do
   attr :required, :boolean, default: false
   attr :errors, :list, default: []
   attr :compact, :boolean, default: false, doc: "drops the wrapper margin for toolbar use"
+  attr :description, :string, default: nil, doc: "helper text under a checkbox label"
   attr :class, :string, default: nil
-  attr :rest, :global, include: ~w(autocomplete autofocus disabled maxlength minlength pattern)
+
+  attr :rest, :global,
+    include: ~w(autocomplete autofocus disabled max maxlength min minlength pattern step)
 
   def input(%{field: %FormField{} = field} = assigns) do
     errors = if Phoenix.Component.used_input?(field), do: field.errors, else: []
@@ -46,6 +49,28 @@ defmodule CadenceWeb.Components.FormInputs do
       end)
 
     ~H"""
+    <%= if @type == "checkbox" do %>
+      <div class={["fieldset", !@compact && "mb-3"]}>
+        <label class="flex cursor-pointer items-start gap-3">
+          <input type="hidden" name={@name} value="false" />
+          <input
+            type="checkbox"
+            id={@id}
+            name={@name}
+            value="true"
+            checked={to_string(@value) == "true"}
+            class={["checkbox checkbox-sm mt-0.5", @class]}
+            {@rest}
+          />
+          <span>
+            <span :if={@label} class="block text-sm font-medium">{@label}</span>
+            <span :if={@description} class="mt-0.5 block text-xs text-base-content/70">
+              {@description}
+            </span>
+          </span>
+        </label>
+      </div>
+    <% else %>
     <div class={["fieldset", !@compact && "mb-3"]}>
       <label>
         <span :if={@label} class="hud-label block mb-1.5">{@label}</span>
@@ -59,30 +84,68 @@ defmodule CadenceWeb.Components.FormInputs do
           >
             <option :if={@placeholder} value="">{@placeholder}</option>
             <option
-              :for={{label, option_value} <- @options}
-              value={option_value}
-              selected={to_string(@value) == to_string(option_value)}
+              :for={option <- @options}
+              value={option_value(option)}
+              selected={to_string(@value) == to_string(option_value(option))}
+              disabled={option_disabled?(option)}
+              title={option_title(option)}
             >
-              {label}
+              {option_label(option)}
             </option>
           </select>
         <% else %>
-          <input
-            id={@id}
-            name={@name}
-            type={@type}
-            value={@value}
-            placeholder={@placeholder}
-            required={@required}
-            class={["w-full input", @errors != [] && "input-error", @class]}
-            {@rest}
-          />
+          <%= if @type == "textarea" do %>
+            <textarea
+              id={@id}
+              name={@name}
+              placeholder={@placeholder}
+              required={@required}
+              class={["w-full textarea", @errors != [] && "textarea-error", @class]}
+              {@rest}
+            >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
+          <% else %>
+            <input
+              id={@id}
+              name={@name}
+              type={@type}
+              value={@value}
+              placeholder={@placeholder}
+              required={@required}
+              class={["w-full input", @errors != [] && "input-error", @class]}
+              {@rest}
+            />
+          <% end %>
         <% end %>
       </label>
       <p :for={{msg, _opts} <- @errors} class="mt-1.5 text-sm text-error">
         {msg}
       </p>
     </div>
+    <% end %>
     """
   end
+
+  defp option_label({label, _value}), do: label
+  defp option_label({label, _value, _attrs}), do: label
+  defp option_label(%{label: label}), do: label
+
+  defp option_value({_label, value}), do: value
+  defp option_value({_label, value, _attrs}), do: value
+  defp option_value(%{value: value}), do: value
+
+  defp option_disabled?({_label, _value}), do: false
+
+  defp option_disabled?({_label, _value, attrs}) when is_list(attrs) do
+    Keyword.get(attrs, :disabled, false)
+  end
+
+  defp option_disabled?(%{} = option), do: Map.get(option, :disabled, false)
+
+  defp option_title({_label, _value}), do: nil
+
+  defp option_title({_label, _value, attrs}) when is_list(attrs) do
+    Keyword.get(attrs, :title)
+  end
+
+  defp option_title(%{} = option), do: Map.get(option, :title)
 end

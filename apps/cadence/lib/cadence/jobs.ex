@@ -8,6 +8,7 @@ defmodule Cadence.Jobs do
   alias Ecto.Changeset
 
   alias Cadence.Catalog
+  alias Cadence.Dashboards.ManagedQuestDBProvisioningJobs
   alias Cadence.DerivedTelemetry
   alias Cadence.Jobs.Dispatcher
   alias Cadence.Jobs.Job
@@ -19,6 +20,7 @@ defmodule Cadence.Jobs do
   alias Cadence.Projections.TelemetryLatestValues
   alias Cadence.Replay
   alias Cadence.Repo
+  alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
 
   @spec enqueue(Job.job_type(), binary(), binary(), map()) :: {:ok, Job.t()} | {:error, term()}
   def enqueue(job_type, mission_id, run_id, payload)
@@ -66,6 +68,55 @@ defmodule Cadence.Jobs do
         {:ok, BackgroundJobRow.to_domain(background_job_row)}
     end
   end
+
+  @spec retry_failed_job(binary()) :: {:ok, Job.t()} | {:error, term()}
+  def retry_failed_job(job_id) when is_binary(job_id) do
+    with {:ok, %Job{status: :failed} = job} <- fetch_job(job_id),
+         {:ok, %Job{} = retried_job} <-
+           update_job(%Job{
+             job
+             | status: :queued,
+               failure_reason: nil,
+               started_at: nil,
+               completed_at: nil
+           }) do
+      Dispatcher.notify_available()
+      {:ok, retried_job}
+    else
+      {:ok, %Job{} = job} ->
+        {:error, {:job_not_failed, job.status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @spec requeue_running_job(binary(), term()) :: {:ok, Job.t()} | {:error, term()}
+  def requeue_running_job(job_id, reason \\ :requeued_by_operator) when is_binary(job_id) do
+    with {:ok, %Job{status: :running} = job} <- fetch_job(job_id),
+         {:ok, %Job{} = requeued_job} <-
+           update_job(%Job{
+             job
+             | status: :queued,
+               failure_reason: requeue_reason(reason),
+               started_at: nil,
+               completed_at: nil
+           }) do
+      Dispatcher.notify_available()
+      {:ok, requeued_job}
+    else
+      {:ok, %Job{} = job} ->
+        {:error, {:job_not_running, job.status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp requeue_reason(reason) when is_atom(reason), do: %{"reason" => Atom.to_string(reason)}
+  defp requeue_reason(reason) when is_binary(reason), do: %{"reason" => reason}
+  defp requeue_reason(reason) when is_map(reason), do: reason
+  defp requeue_reason(reason), do: %{"reason" => inspect(reason)}
 
   @spec claim_jobs(pos_integer()) :: [Job.t()]
   def claim_jobs(limit) when is_integer(limit) and limit > 0 do
@@ -217,6 +268,14 @@ defmodule Cadence.Jobs do
 
   defp dispatch(%Job{job_type: :catalog_import_run, run_id: import_run_id}) do
     Catalog.execute_enqueued_run(import_run_id)
+  end
+
+  defp dispatch(%Job{job_type: :telemetry_historical_data_workflow, run_id: workflow_run_id}) do
+    TelemetryDataManagement.execute_enqueued_historical_data_workflow(workflow_run_id)
+  end
+
+  defp dispatch(%Job{job_type: :managed_questdb_provisioning, run_id: provisioning_run_id}) do
+    ManagedQuestDBProvisioningJobs.execute_enqueued_run(provisioning_run_id)
   end
 
   defp safe_dispatch(%Job{} = job) do

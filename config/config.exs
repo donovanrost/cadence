@@ -23,9 +23,52 @@ config :cadence,
     flush_count: 250
   ],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
+  telemetry_storage: [
+    writer: Cadence.Telemetry.Storage.Writers.QuestDB,
+    realm: :flight,
+    data_source_id: "managed_questdb_primary",
+    binding_id: "default_flight_telemetry"
+  ],
   telemetry_history_store: [
-    module: Cadence.Telemetry.HistoryStore.ETS,
-    max_samples_per_point: 5_000
+    module: Cadence.Telemetry.HistoryStore.QuestDB,
+    realm: :flight,
+    data_source_id: "managed_questdb_primary"
+  ],
+  dashboard_data_sources: [
+    persisted?: true,
+    bootstrap_defaults?: true
+  ],
+  dashboard_source_circuit_breaker: [
+    enabled?: true,
+    failure_threshold: 3,
+    backoff_ms: 30_000
+  ],
+  dashboard_source_execution: [
+    max_concurrency: 4,
+    timeout_ms: 5_000
+  ],
+  dashboard_source_health_events: [
+    enabled?: true,
+    freshness: [
+      default_max_age_ms: 300_000,
+      managed_tsdb: [questdb: 60_000],
+      byo_tsdb: [questdb: 300_000],
+      projection: [postgres_projection: 300_000]
+    ]
+  ],
+  dashboard_source_readiness_policy: [
+    policy_id: :default,
+    block_source_health: [:unavailable],
+    block_freshness: [:fresh]
+  ],
+  dashboard_source_probe_scheduler: [
+    enabled?: true,
+    interval_ms: 60_000,
+    max_concurrency: 4,
+    probe_timeout_ms: 5_000
+  ],
+  dashboard_source_watermark_events: [
+    enabled?: true
   ],
   contact_scheduler: [enabled: true, safety_poll_interval_ms: 60_000],
   contact_scheduler_global_safety: [enabled: false, safety_poll_interval_ms: 300_000],
@@ -50,6 +93,8 @@ config :cadence_web, CadenceWeb.Endpoint,
   live_view: [signing_salt: "cadence-live-view"]
 
 config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
+
+config :cadence_web, dashboard_live_refresh_ms: 1_000
 
 config :tailwind,
   version: "4.1.12",

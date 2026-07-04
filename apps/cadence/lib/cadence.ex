@@ -29,6 +29,8 @@ defmodule Cadence do
   alias Cadence.Catalog.Telemetry.Compiler.Result, as: TelemetryCompilerResult
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
   alias Cadence.Commanding
+  alias Cadence.Dashboards
+  alias Cadence.Dashboards.DataSources, as: DashboardDataSources
 
   alias Cadence.Commanding.{
     CommandApproval,
@@ -40,7 +42,8 @@ defmodule Cadence do
     StagedCommandItem
   }
 
-  alias Cadence.Comms.{RoutingRule, RoutingRuleEvent, Transport}
+  alias Cadence.Comms.{GroundStation, RoutingRule, RoutingRuleEvent, Transport}
+  alias Cadence.Comms.GroundStationStore
   alias Cadence.Comms.RoutingRuleStore
   alias Cadence.Comms.TransportStore
   alias Cadence.Contacts, as: ContactsService
@@ -66,6 +69,9 @@ defmodule Cadence do
   alias Cadence.Missions.Mission
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
+  alias Cadence.Ops.PointCatalog, as: OpsPointCatalog
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.Persistence
@@ -94,9 +100,18 @@ defmodule Cadence do
   alias Cadence.Replay
   alias Cadence.Replay.Diff, as: ReplayDiff
   alias Cadence.Replay.Scope
+  alias Cadence.Telemetry.DataManagement, as: TelemetryDataManagement
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler, as: TelemetryProfiler
   alias Cadence.Telemetry.RuntimeHealth
+  alias Cadence.Telemetry.Storage, as: TelemetryStorage
+
+  @type ingress_latency_metric :: %{
+          value_ms: number(),
+          end_to_end_us: non_neg_integer(),
+          observed_at: DateTime.t(),
+          error?: boolean()
+        }
 
   @type processing_result :: %{
           raw_evidence: RawEvidence.t(),
@@ -105,7 +120,8 @@ defmodule Cadence do
           protocol_anomalies: [ProtocolAnomaly.t()],
           dispatch_decisions: [DispatchDecision.t()],
           outputs: [term()],
-          runtime_records: map()
+          runtime_records: map(),
+          ingress_latency_metric: ingress_latency_metric() | nil
         }
 
   @spec bootstrap_organization(Organization.t(), ServiceIdentity.t(), Mission.t() | nil) ::
@@ -428,6 +444,70 @@ defmodule Cadence do
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(transport_id) and
              is_map(metadata_patch) do
     TransportStore.archive_transport(organization_id, mission_id, transport_id, metadata_patch)
+  end
+
+  @spec persist_ground_station(binary(), GroundStation.t()) ::
+          {:ok, GroundStation.t()} | {:error, term()}
+  def persist_ground_station(organization_id, %GroundStation{} = ground_station)
+      when is_binary(organization_id) do
+    GroundStationStore.persist_ground_station(organization_id, ground_station)
+  end
+
+  @spec fetch_ground_station(binary(), binary(), binary()) ::
+          {:ok, GroundStation.t()} | {:error, term()}
+  def fetch_ground_station(organization_id, mission_id, ground_station_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(ground_station_id) do
+    GroundStationStore.fetch_ground_station(organization_id, mission_id, ground_station_id)
+  end
+
+  @spec list_ground_stations(binary(), binary()) :: [GroundStation.t()]
+  def list_ground_stations(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    GroundStationStore.list_ground_stations(organization_id, mission_id)
+  end
+
+  @spec update_ground_station(binary(), binary(), binary(), map()) ::
+          {:ok, GroundStation.t()} | {:error, term()}
+  def update_ground_station(organization_id, mission_id, ground_station_id, attrs)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(ground_station_id) and is_map(attrs) do
+    GroundStationStore.update_ground_station(
+      organization_id,
+      mission_id,
+      ground_station_id,
+      attrs
+    )
+  end
+
+  @spec archive_ground_station(binary(), binary(), binary(), map()) ::
+          {:ok, GroundStation.t()} | {:error, term()}
+  def archive_ground_station(
+        organization_id,
+        mission_id,
+        ground_station_id,
+        metadata_patch \\ %{}
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(ground_station_id) and is_map(metadata_patch) do
+    GroundStationStore.archive_ground_station(
+      organization_id,
+      mission_id,
+      ground_station_id,
+      metadata_patch
+    )
+  end
+
+  @spec list_ops_telemetry_points(binary(), binary()) :: [OpsPointCatalog.point_info()]
+  def list_ops_telemetry_points(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    OpsPointCatalog.list_points(organization_id, mission_id)
+  end
+
+  @spec list_dashboard_data_realms(binary(), binary()) :: [binary()]
+  def list_dashboard_data_realms(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    DashboardDataSources.list_data_realms(organization_id, mission_id)
   end
 
   @spec create_routing_rule(binary(), RoutingRule.t(), keyword()) ::
@@ -1076,6 +1156,13 @@ defmodule Cadence do
 
     case runtime_result do
       {:ok, processing_result} ->
+        processing_result =
+          put_ingress_latency_metric(
+            processing_result,
+            elapsed_us(ingress_started_at),
+            false
+          )
+
         finalize_persisted_ingress(
           resolved_raw_evidence,
           processing_result,
@@ -1129,6 +1216,23 @@ defmodule Cadence do
 
   defp normalize_persistence_result({:ok, persisted_result}), do: {:ok, persisted_result}
   defp normalize_persistence_result({:error, reason}), do: {:error, reason}
+
+  defp put_ingress_latency_metric(processing_result, end_to_end_us, error?)
+       when is_map(processing_result) and is_integer(end_to_end_us) and end_to_end_us >= 0 do
+    raw_evidence = Map.get(processing_result, :raw_evidence)
+
+    Map.put(processing_result, :ingress_latency_metric, %{
+      value_ms: end_to_end_us / 1000.0,
+      end_to_end_us: end_to_end_us,
+      observed_at: ingress_latency_observed_at(raw_evidence),
+      error?: error?
+    })
+  end
+
+  defp ingress_latency_observed_at(%RawEvidence{receipt_time: %DateTime{} = receipt_time}),
+    do: receipt_time
+
+  defp ingress_latency_observed_at(_raw_evidence), do: DateTime.utc_now()
 
   @spec activate_binding_set(binary(), binary(), binary(), pos_integer(), keyword()) ::
           {:ok, Cadence.Activations.BindingSetActivation.t()} | {:error, term()}
@@ -1603,6 +1707,163 @@ defmodule Cadence do
   def list_mission_events(organization_id, mission_id, opts)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     MissionEventReads.list_for_mission(organization_id, mission_id, opts)
+  end
+
+  @spec fetch_operational_event(binary()) :: {:ok, OperationalEvent.t()} | {:error, :not_found}
+  def fetch_operational_event(event_id) when is_binary(event_id) do
+    OperationalEvents.fetch_event(event_id)
+  end
+
+  @spec list_operational_events(binary(), keyword()) :: [OperationalEvent.t()]
+  def list_operational_events(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.list_events(mission_id, opts)
+  end
+
+  @spec list_operational_events(binary(), binary(), keyword()) :: [OperationalEvent.t()]
+  def list_operational_events(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.list_events(organization_id, mission_id, opts)
+  end
+
+  @spec operational_binding_set_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_binding_set_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.binding_set_intervals(mission_id, opts)
+  end
+
+  @spec operational_binding_set_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_binding_set_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.binding_set_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_application_binding_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_application_binding_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.application_binding_intervals(mission_id, opts)
+  end
+
+  @spec operational_application_binding_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_application_binding_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.application_binding_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_catalog_revision_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_catalog_revision_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.catalog_revision_intervals(mission_id, opts)
+  end
+
+  @spec operational_catalog_revision_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_catalog_revision_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.catalog_revision_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_source_binding_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_source_binding_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.source_binding_intervals(mission_id, opts)
+  end
+
+  @spec operational_source_binding_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_source_binding_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.source_binding_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_transport_execution_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_transport_execution_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.transport_execution_intervals(mission_id, opts)
+  end
+
+  @spec operational_transport_execution_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_transport_execution_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.transport_execution_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_observable_state_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_observable_state_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.operational_observable_state_intervals(mission_id, opts)
+  end
+
+  @spec operational_observable_state_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_observable_state_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.operational_observable_state_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_connection_state_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_connection_state_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.connection_state_intervals(mission_id, opts)
+  end
+
+  @spec operational_connection_state_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_connection_state_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.connection_state_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_link_rf_state_intervals(binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_link_rf_state_intervals(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.link_rf_state_intervals(mission_id, opts)
+  end
+
+  @spec operational_link_rf_state_intervals(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.EffectiveInterval.t()
+        ]
+  def operational_link_rf_state_intervals(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.link_rf_state_intervals(organization_id, mission_id, opts)
+  end
+
+  @spec operational_observable_metric_samples(binary(), keyword()) :: [map()]
+  def operational_observable_metric_samples(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.operational_observable_metric_samples(mission_id, opts)
+  end
+
+  @spec operational_observable_metric_samples(binary(), binary(), keyword()) :: [map()]
+  def operational_observable_metric_samples(organization_id, mission_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    OperationalEvents.operational_observable_metric_samples(organization_id, mission_id, opts)
   end
 
   @spec rebuild_mission_events(binary()) :: {:ok, non_neg_integer()} | {:error, term()}
@@ -2086,6 +2347,344 @@ defmodule Cadence do
     Governance.list_limit_definitions(mission_id)
   end
 
+  @spec backfill_telemetry_samples([Cadence.Telemetry.Sample.t()], map(), keyword()) ::
+          :ok | {:error, term()}
+  def backfill_telemetry_samples(samples, attrs, opts \\ [])
+      when is_list(samples) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.backfill_samples(samples, attrs, opts)
+  end
+
+  @spec import_telemetry_samples([Cadence.Telemetry.Sample.t()], map(), keyword()) ::
+          :ok | {:error, term()}
+  def import_telemetry_samples(samples, attrs, opts \\ [])
+      when is_list(samples) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.import_samples(samples, attrs, opts)
+  end
+
+  @spec list_telemetry_backfill_lifecycle_events(binary(), keyword()) :: [
+          Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()
+        ]
+  def list_telemetry_backfill_lifecycle_events(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    TelemetryStorage.list_backfill_lifecycle_events(mission_id, opts)
+  end
+
+  @spec fetch_telemetry_backfill_lifecycle_event(binary(), keyword()) ::
+          Cadence.Telemetry.Storage.BackfillLifecycleEvent.t() | nil
+  def fetch_telemetry_backfill_lifecycle_event(backfill_lifecycle_event_id, opts \\ [])
+      when is_binary(backfill_lifecycle_event_id) and is_list(opts) do
+    TelemetryStorage.fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts)
+  end
+
+  @spec record_telemetry_historical_data_workflow_event(
+          atom() | binary(),
+          atom() | binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_event(workflow, stage, attrs, opts \\ [])
+      when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
+             is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_event(workflow, stage, attrs, opts)
+  end
+
+  @spec record_telemetry_historical_data_workflow_request(
+          atom() | binary(),
+          map(),
+          [binary() | nil],
+          keyword()
+        ) ::
+          {:ok, [Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()]} | {:error, term()}
+  def record_telemetry_historical_data_workflow_request(workflow, attrs, point_ids, opts \\ [])
+      when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_list(point_ids) and
+             is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_request(
+      workflow,
+      attrs,
+      point_ids,
+      opts
+    )
+  end
+
+  @spec record_telemetry_historical_data_workflow_correction_request(
+          atom() | binary(),
+          map(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_correction_request(
+        workflow,
+        attrs,
+        correction,
+        opts \\ []
+      )
+      when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_map(correction) and
+             is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_correction_request(
+      workflow,
+      attrs,
+      correction,
+      opts
+    )
+  end
+
+  @spec record_telemetry_historical_data_workflow_correction_transition(
+          atom() | binary(),
+          atom() | binary(),
+          binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_correction_transition(
+        workflow,
+        stage,
+        correction_event_id,
+        attrs,
+        opts \\ []
+      )
+      when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
+             is_binary(correction_event_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_correction_transition(
+      workflow,
+      stage,
+      correction_event_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec record_telemetry_historical_data_workflow_stage_transition(
+          atom() | binary(),
+          atom() | binary(),
+          binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_stage_transition(
+        workflow,
+        stage,
+        source_event_id,
+        attrs,
+        opts \\ []
+      )
+      when (is_atom(workflow) or is_binary(workflow)) and (is_atom(stage) or is_binary(stage)) and
+             is_binary(source_event_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_stage_transition(
+      workflow,
+      stage,
+      source_event_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec telemetry_historical_data_workflow_action_policy(map()) :: %{
+          retry_job: TelemetryDataManagement.historical_data_workflow_action_decision(),
+          retry_group_failed_jobs:
+            TelemetryDataManagement.historical_data_workflow_action_decision(),
+          correction_request: TelemetryDataManagement.historical_data_workflow_action_decision()
+        }
+  def telemetry_historical_data_workflow_action_policy(context) when is_map(context) do
+    TelemetryDataManagement.historical_data_workflow_action_policy(context)
+  end
+
+  @spec telemetry_historical_data_workflow_stage_action_policy(map(), atom() | binary()) ::
+          TelemetryDataManagement.historical_data_workflow_action_decision()
+  def telemetry_historical_data_workflow_stage_action_policy(context, stage)
+      when is_map(context) and (is_atom(stage) or is_binary(stage)) do
+    TelemetryDataManagement.historical_data_workflow_stage_action_policy(context, stage)
+  end
+
+  @spec telemetry_historical_data_workflow_group_stage_action_policy(map(), atom() | binary()) ::
+          TelemetryDataManagement.historical_data_workflow_action_decision()
+  def telemetry_historical_data_workflow_group_stage_action_policy(context, stage)
+      when is_map(context) and (is_atom(stage) or is_binary(stage)) do
+    TelemetryDataManagement.historical_data_workflow_group_stage_action_policy(context, stage)
+  end
+
+  @spec telemetry_historical_data_workflow_explanation_summary(map()) ::
+          TelemetryDataManagement.historical_data_workflow_explanation_summary()
+  def telemetry_historical_data_workflow_explanation_summary(context) when is_map(context) do
+    TelemetryDataManagement.historical_data_workflow_explanation_summary(context)
+  end
+
+  @spec record_telemetry_historical_data_workflow_group_transition(
+          atom() | binary(),
+          atom() | binary(),
+          binary() | [Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()],
+          map(),
+          keyword()
+        ) ::
+          {:ok, [Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()], [term()]}
+          | {:error, term()}
+  def record_telemetry_historical_data_workflow_group_transition(
+        workflow,
+        stage,
+        group_events,
+        attrs,
+        opts \\ []
+      )
+      when is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_group_transition(
+      workflow,
+      stage,
+      group_events,
+      attrs,
+      opts
+    )
+  end
+
+  @spec record_telemetry_historical_data_workflow_stale_replacement_inspection(
+          binary(),
+          binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_stale_replacement_inspection(
+        job_id,
+        event_id,
+        attrs,
+        opts \\ []
+      )
+      when is_binary(job_id) and is_binary(event_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_stale_replacement_inspection(
+      job_id,
+      event_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec record_telemetry_historical_data_workflow_missing_replacement_inspection(
+          binary(),
+          binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_historical_data_workflow_missing_replacement_inspection(
+        request_group_id,
+        replacement_run_id,
+        attrs,
+        opts \\ []
+      )
+      when is_binary(request_group_id) and is_binary(replacement_run_id) and is_map(attrs) and
+             is_list(opts) do
+    TelemetryDataManagement.record_historical_data_workflow_missing_replacement_inspection(
+      request_group_id,
+      replacement_run_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec requeue_telemetry_historical_data_workflow_stale_replacement_job(
+          binary(),
+          binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Jobs.Job.t(), Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()}
+          | {:error, term()}
+  def requeue_telemetry_historical_data_workflow_stale_replacement_job(
+        job_id,
+        event_id,
+        attrs,
+        opts \\ []
+      )
+      when is_binary(job_id) and is_binary(event_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.requeue_historical_data_workflow_stale_replacement_job(
+      job_id,
+      event_id,
+      attrs,
+      opts
+    )
+  end
+
+  @spec start_telemetry_historical_data_workflow_job(atom() | binary(), map(), keyword()) ::
+          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
+  def start_telemetry_historical_data_workflow_job(workflow, attrs, opts \\ [])
+      when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.start_historical_data_workflow_job(workflow, attrs, opts)
+  end
+
+  @spec apply_telemetry_observation_identity_decision(
+          binary(),
+          atom() | binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.Storage.ObservationIdentityState.t()} | {:error, term()}
+  def apply_telemetry_observation_identity_decision(
+        observation_identity_id,
+        decision,
+        attrs,
+        opts \\ []
+      )
+      when is_binary(observation_identity_id) and (is_atom(decision) or is_binary(decision)) and
+             is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.apply_observation_identity_decision(
+      observation_identity_id,
+      decision,
+      attrs,
+      opts
+    )
+  end
+
+  @spec apply_telemetry_observation_identity_decisions(
+          [map()],
+          atom() | binary(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Telemetry.DataManagement.observation_identity_decision_batch_summary()}
+          | {:error, term()}
+  def apply_telemetry_observation_identity_decisions(items, decision, attrs, opts \\ [])
+      when is_list(items) and (is_atom(decision) or is_binary(decision)) and is_map(attrs) and
+             is_list(opts) do
+    TelemetryDataManagement.apply_observation_identity_decisions(items, decision, attrs, opts)
+  end
+
+  @spec list_telemetry_observation_identity_decision_events(binary(), keyword()) :: [
+          Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent.t()
+        ]
+  def list_telemetry_observation_identity_decision_events(observation_identity_id, opts \\ [])
+      when is_binary(observation_identity_id) and is_list(opts) do
+    TelemetryStorage.list_observation_identity_decision_events(observation_identity_id, opts)
+  end
+
+  @spec record_telemetry_late_data_policy_decision(atom() | binary(), map(), keyword()) ::
+          {:ok, Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()} | {:error, term()}
+  def record_telemetry_late_data_policy_decision(decision, attrs, opts \\ [])
+      when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.record_late_data_policy_decision(decision, attrs, opts)
+  end
+
+  @spec execute_telemetry_late_data_policy(atom() | binary(), map(), keyword()) ::
+          {:ok, TelemetryDataManagement.late_data_policy_execution_result()} | {:error, term()}
+  def execute_telemetry_late_data_policy(decision, attrs, opts \\ [])
+      when (is_atom(decision) or is_binary(decision)) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.execute_late_data_policy(decision, attrs, opts)
+  end
+
+  @spec telemetry_late_data_policy_execution_mode(map()) ::
+          TelemetryDataManagement.late_data_policy_execution_mode()
+  def telemetry_late_data_policy_execution_mode(attrs) when is_map(attrs) do
+    TelemetryDataManagement.late_data_policy_execution_mode(attrs)
+  end
+
+  @spec telemetry_late_data_policy_write_opts(atom() | binary(), keyword()) ::
+          {:ok, keyword()} | {:error, term()}
+  def telemetry_late_data_policy_write_opts(decision, opts \\ [])
+      when (is_atom(decision) or is_binary(decision)) and is_list(opts) do
+    TelemetryDataManagement.late_data_policy_write_opts(decision, opts)
+  end
+
   @spec telemetry_history(binary(), binary(), keyword()) :: [Cadence.Telemetry.Sample.t()]
   def telemetry_history(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
@@ -2098,6 +2697,65 @@ defmodule Cadence do
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
              is_list(opts) do
     TelemetryReads.sample_history(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec telemetry_history_result(binary(), binary(), keyword()) ::
+          {:ok, %{samples: [Cadence.Telemetry.Sample.t()], diagnostics: map()}} | {:error, term()}
+  def telemetry_history_result(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    TelemetryReads.sample_history_result(mission_id, point_id, opts)
+  end
+
+  @spec telemetry_history_result(binary(), binary(), binary(), keyword()) ::
+          {:ok, %{samples: [Cadence.Telemetry.Sample.t()], diagnostics: map()}} | {:error, term()}
+  def telemetry_history_result(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    TelemetryReads.sample_history_result(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec decimated_telemetry_history(binary(), binary(), keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def decimated_telemetry_history(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    TelemetryReads.decimated_sample_history(mission_id, point_id, opts)
+  end
+
+  @spec decimated_telemetry_history(binary(), binary(), binary(), keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def decimated_telemetry_history(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    TelemetryReads.decimated_sample_history(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec decimated_telemetry_history_result(binary(), binary(), keyword()) ::
+          {:ok, %{buckets: [map()], diagnostics: map()}} | {:error, term()}
+  def decimated_telemetry_history_result(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    TelemetryReads.decimated_sample_history_result(mission_id, point_id, opts)
+  end
+
+  @spec decimated_telemetry_history_result(binary(), binary(), binary(), keyword()) ::
+          {:ok, %{buckets: [map()], diagnostics: map()}} | {:error, term()}
+  def decimated_telemetry_history_result(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    TelemetryReads.decimated_sample_history_result(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec telemetry_watermark(binary(), binary(), keyword()) :: {:ok, map()} | {:error, term()}
+  def telemetry_watermark(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    TelemetryReads.sample_watermark(mission_id, point_id, opts)
+  end
+
+  @spec telemetry_watermark(binary(), binary(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def telemetry_watermark(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    TelemetryReads.sample_watermark(organization_id, mission_id, point_id, opts)
   end
 
   @spec derived_telemetry_history(binary(), binary(), keyword()) ::
@@ -2217,6 +2875,66 @@ defmodule Cadence do
     RuntimeHealth.snapshot()
   end
 
+  @spec dashboard_runtime_invalidation_decisions(keyword()) :: [
+          Cadence.Dashboards.RuntimeInvalidation.DecisionProjection.decision_row()
+        ]
+  def dashboard_runtime_invalidation_decisions(opts \\ []) when is_list(opts) do
+    case durable_dashboard_runtime_invalidation_decisions(opts) do
+      [] ->
+        RuntimeHealth.snapshot()
+        |> Dashboards.dashboard_runtime_invalidation_decisions(opts)
+
+      decisions ->
+        decisions
+    end
+  end
+
+  @spec durable_dashboard_runtime_invalidation_decisions(keyword()) :: [
+          Cadence.Dashboards.RuntimeInvalidation.DecisionProjection.decision_row()
+        ]
+  def durable_dashboard_runtime_invalidation_decisions(opts \\ []) when is_list(opts) do
+    Dashboards.durable_dashboard_runtime_invalidation_decisions(opts)
+  rescue
+    _error -> []
+  catch
+    :exit, _reason -> []
+  end
+
+  @spec record_dashboard_runtime_invalidation_decision(
+          Cadence.Dashboards.RuntimeInvalidation.Event.t(),
+          map(),
+          keyword()
+        ) ::
+          {:ok, Cadence.Dashboards.RuntimeInvalidation.DecisionEvent.t()} | {:error, term()}
+  def record_dashboard_runtime_invalidation_decision(event, decision, opts \\ [])
+      when is_map(decision) and is_list(opts) do
+    Dashboards.record_dashboard_runtime_invalidation_decision(event, decision, opts)
+  end
+
+  @spec dashboard_source_capability_posture_events(
+          Cadence.Dashboards.DashboardResolveResult.t(),
+          keyword() | map()
+        ) :: [Cadence.OperationalEvents.Event.t()]
+  def dashboard_source_capability_posture_events(result, opts \\ []) do
+    Dashboards.dashboard_source_capability_posture_events(result, opts)
+  end
+
+  @spec record_dashboard_source_capability_postures(
+          Cadence.Dashboards.DashboardResolveResult.t(),
+          keyword() | map()
+        ) :: {:ok, [Cadence.OperationalEvents.Event.t()]} | {:error, term()}
+  def record_dashboard_source_capability_postures(result, opts \\ []) do
+    Dashboards.record_dashboard_source_capability_postures(result, opts)
+  end
+
+  @spec list_dashboard_source_capability_posture_events(binary(), binary(), keyword()) :: [
+          Cadence.OperationalEvents.Event.t()
+        ]
+  def list_dashboard_source_capability_posture_events(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    Dashboards.list_dashboard_source_capability_posture_events(organization_id, mission_id, opts)
+  end
+
   @spec reset_runtime_health() :: :ok
   def reset_runtime_health do
     RuntimeHealth.reset()
@@ -2235,6 +2953,36 @@ defmodule Cadence do
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
              is_list(opts) do
     LimitReads.event_history(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec telemetry_limit_definition_intervals(binary(), binary(), keyword()) ::
+          [Cadence.Limits.DefinitionInterval.t()]
+  def telemetry_limit_definition_intervals(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    LimitReads.definition_intervals(mission_id, point_id, opts)
+  end
+
+  @spec telemetry_limit_definition_intervals(binary(), binary(), binary(), keyword()) ::
+          [Cadence.Limits.DefinitionInterval.t()]
+  def telemetry_limit_definition_intervals(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    LimitReads.definition_intervals(organization_id, mission_id, point_id, opts)
+  end
+
+  @spec telemetry_limit_watermark(binary(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def telemetry_limit_watermark(mission_id, point_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    LimitReads.watermark_result(mission_id, point_id, opts)
+  end
+
+  @spec telemetry_limit_watermark(binary(), binary(), binary(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def telemetry_limit_watermark(organization_id, mission_id, point_id, opts)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(point_id) and
+             is_list(opts) do
+    LimitReads.watermark_result(organization_id, mission_id, point_id, opts)
   end
 
   @spec replay_telemetry_evidence(binary(), binary() | [binary()], binary(), pos_integer()) ::
@@ -2350,6 +3098,12 @@ defmodule Cadence do
     ReplayReads.fetch_run(replay_run_id)
   end
 
+  @spec list_replay_runs(binary(), binary(), keyword()) :: [Cadence.Replay.Run.t()]
+  def list_replay_runs(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    ReplayReads.list_runs(organization_id, mission_id, opts)
+  end
+
   @spec replay_telemetry_samples(binary(), keyword()) :: [Cadence.Telemetry.Sample.t()]
   def replay_telemetry_samples(replay_run_id, opts \\ [])
       when is_binary(replay_run_id) and is_list(opts) do
@@ -2385,6 +3139,52 @@ defmodule Cadence do
   @spec fetch_replay_job(binary()) :: {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
   def fetch_replay_job(replay_run_id) when is_binary(replay_run_id) do
     Jobs.fetch_job_for_run(:replay_telemetry_scope, replay_run_id)
+  end
+
+  @spec fetch_telemetry_historical_data_workflow_job(binary()) ::
+          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
+  def fetch_telemetry_historical_data_workflow_job(workflow_run_id)
+      when is_binary(workflow_run_id) do
+    Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, workflow_run_id)
+  end
+
+  @spec retry_telemetry_historical_data_workflow_job(binary()) ::
+          {:ok, Cadence.Jobs.Job.t()} | {:error, term()}
+  def retry_telemetry_historical_data_workflow_job(job_id) when is_binary(job_id) do
+    with {:ok, %{job_type: :telemetry_historical_data_workflow}} <- Jobs.fetch_job(job_id),
+         {:ok, retried_job} <- Jobs.retry_failed_job(job_id) do
+      {:ok, retried_job}
+    else
+      {:ok, %{job_type: job_type}} ->
+        {:error, {:unexpected_job_type, job_type}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @spec retry_telemetry_historical_data_workflow_job(binary(), binary(), map(), keyword()) ::
+          {:ok, Cadence.Jobs.Job.t(), Cadence.Telemetry.Storage.BackfillLifecycleEvent.t()}
+          | {:error, term()}
+  def retry_telemetry_historical_data_workflow_job(job_id, event_id, attrs, opts \\ [])
+      when is_binary(job_id) and is_binary(event_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.retry_historical_data_workflow_job(job_id, event_id, attrs, opts)
+  end
+
+  @spec retry_telemetry_historical_data_workflow_group_failed_jobs(binary(), map(), keyword()) ::
+          {:ok, Cadence.Telemetry.DataManagement.historical_data_workflow_group_retry_summary()}
+          | {:error, term()}
+  def retry_telemetry_historical_data_workflow_group_failed_jobs(
+        request_group_id,
+        attrs,
+        opts \\ []
+      )
+      when is_binary(request_group_id) and is_map(attrs) and is_list(opts) do
+    TelemetryDataManagement.retry_historical_data_workflow_group_failed_jobs(
+      request_group_id,
+      attrs,
+      opts
+    )
   end
 
   @spec evaluate_derived_telemetry(binary(), keyword()) ::

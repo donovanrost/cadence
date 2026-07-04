@@ -21,6 +21,33 @@ if bootstrap_admin_enabled? do
       |> String.to_integer()
 end
 
+case System.get_env("CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES") do
+  nil ->
+    :ok
+
+  encoded_profiles ->
+    case Jason.decode(encoded_profiles) do
+      {:ok, profiles} when is_map(profiles) ->
+        current_config = Application.get_env(:cadence, :dashboard_source_credentials, [])
+
+        config :cadence,
+               :dashboard_source_credentials,
+               Keyword.merge(current_config,
+                 material_resolver:
+                   {Cadence.Dashboards.SourceCredentials.SecretMaterialResolver, :resolve},
+                 secret_backend:
+                   {Cadence.Dashboards.SourceCredentials.EnvSecretBackend, :fetch_material},
+                 env_material_profiles: profiles
+               )
+
+      {:ok, _other} ->
+        raise "CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES must decode to a JSON object"
+
+      {:error, reason} ->
+        raise "CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES is invalid JSON: #{inspect(reason)}"
+    end
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

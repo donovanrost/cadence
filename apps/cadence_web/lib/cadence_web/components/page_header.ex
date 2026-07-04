@@ -3,11 +3,10 @@ defmodule CadenceWeb.Components.PageHeader do
   The canonical page header: title block over the standard
   `border-b border-primary/20 pb-4` rule.
 
-  Navigation context goes above the title — either a `back_label`/
-  `back_navigate` pair (the "← Section" link family) or a `breadcrumbs`
-  list (delegated to `CadenceWeb.UI.breadcrumbs/1`), or a plain `eyebrow`
-  label. Right-side buttons and status pills go in the `:actions` slot;
-  inline counts next to the title go in `:title_suffix`.
+  Navigation context goes above the title — a `breadcrumbs` trail (delegated to
+  `CadenceWeb.UI.breadcrumbs/1`) for hierarchy, or a plain `eyebrow` label.
+  Right-side buttons and status pills go in the `:actions` slot; inline counts
+  next to the title go in `:title_suffix`.
   """
 
   use Phoenix.Component
@@ -17,8 +16,6 @@ defmodule CadenceWeb.Components.PageHeader do
   attr :title, :string, required: true
   attr :subtitle, :string, default: nil
   attr :eyebrow, :string, default: nil
-  attr :back_label, :string, default: nil
-  attr :back_navigate, :string, default: nil
   attr :breadcrumbs, :list, default: nil
   attr :class, :string, default: nil
   slot :title_suffix
@@ -30,13 +27,6 @@ defmodule CadenceWeb.Components.PageHeader do
       <div class={@actions != [] && "flex items-end justify-between gap-4"}>
         <div>
           <.breadcrumbs :if={@breadcrumbs} items={@breadcrumbs} />
-          <.link
-            :if={@back_navigate}
-            navigate={@back_navigate}
-            class="hud-label hover:text-primary"
-          >
-            &larr; {@back_label}
-          </.link>
           <p :if={@eyebrow} class="hud-label">{@eyebrow}</p>
           <h1 class="mt-2 text-2xl font-bold text-base-content tracking-tight">
             {@title}

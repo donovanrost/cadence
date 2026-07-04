@@ -55,18 +55,15 @@ defmodule CadenceWeb.SpacecraftCommandingLive do
       </section>
 
       <.card>
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="hud-label mb-2">Readiness Impact</p>
-            <h2 class="text-lg font-semibold">Command interpretation is not part of readiness yet</h2>
-            <p class="mt-1 text-sm text-base-content/70">
-              This page keeps the spacecraft-owned command surface visible while command
-              setup matures. Current readiness still focuses on identity, telemetry
-              interpretation, and link assignment.
-            </p>
-          </div>
-          <.status_badge status={:info} label="Placeholder" />
-        </div>
+        <.section_header
+          eyebrow="Readiness Impact"
+          title="Command interpretation is not part of readiness yet"
+          description="This page keeps the spacecraft-owned command surface visible while command setup matures. Current readiness still focuses on identity, telemetry interpretation, and link assignment."
+        >
+          <:actions>
+            <.status_badge status={:info} label="Placeholder" />
+          </:actions>
+        </.section_header>
       </.card>
     </div>
     """

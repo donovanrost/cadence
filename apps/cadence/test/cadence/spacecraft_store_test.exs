@@ -1,5 +1,5 @@
 defmodule Cadence.SpacecraftStoreTest do
-  use Cadence.DataCase, async: true
+  use Cadence.DataCase, async: false
 
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -172,33 +172,63 @@ defmodule Cadence.SpacecraftStoreTest do
   end
 
   describe "list_spacecraft_page/3" do
-    setup do
-      persist_mission_scope("org-fleet", "mission-fleet")
+    setup context do
+      {organization_id, mission_id} = fleet_scope(context)
 
-      fleet_spacecraft!("alpha", display_name: "Alpha-1", scid: 101, type: {"type-a", 2})
-      fleet_spacecraft!("bravo", display_name: "Bravo-2", scid: 202, type: {"type-a", 1})
-      fleet_spacecraft!("charlie", display_name: "Charlie 100%", scid: nil, type: {"type-b", 1})
-      fleet_spacecraft!("delta", display_name: "Delta-4", scid: 404, type: nil)
+      persist_mission_scope(organization_id, mission_id)
 
-      :ok
+      fleet_spacecraft!(organization_id, mission_id, "alpha",
+        display_name: "Alpha-1",
+        scid: 101,
+        type: {"type-a", 2}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "bravo",
+        display_name: "Bravo-2",
+        scid: 202,
+        type: {"type-a", 1}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "charlie",
+        display_name: "Charlie 100%",
+        scid: nil,
+        type: {"type-b", 1}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "delta",
+        display_name: "Delta-4",
+        scid: 404,
+        type: nil
+      )
+
+      %{fleet_organization_id: organization_id, fleet_mission_id: mission_id}
     end
 
-    test "search matches display name and scid as text" do
-      assert names(search: "alpha") == ["Alpha-1"]
-      assert names(search: "20") == ["Bravo-2"]
+    test "search matches display name and scid as text", context do
+      assert names(context, search: "alpha") == ["Alpha-1"]
+      assert names(context, search: "20") == ["Bravo-2"]
     end
 
-    test "search escapes ILIKE metacharacters" do
-      assert names(search: "100%") == ["Charlie 100%"]
-      assert names(search: "%") == ["Charlie 100%"]
+    test "search escapes ILIKE metacharacters", context do
+      assert names(context, search: "100%") == ["Charlie 100%"]
+      assert names(context, search: "%") == ["Charlie 100%"]
     end
 
-    test "sorts by scid descending with stable tiebreak" do
-      assert names(sort: {:scid, :desc}) == ["Delta-4", "Bravo-2", "Alpha-1", "Charlie 100%"]
+    test "sorts by scid descending with stable tiebreak", context do
+      assert names(context, sort: {:scid, :desc}) == [
+               "Delta-4",
+               "Bravo-2",
+               "Alpha-1",
+               "Charlie 100%"
+             ]
     end
 
-    test "paginates and reports the filtered total" do
-      page = Cadence.list_spacecraft_page("org-fleet", "mission-fleet", page: 2, page_size: 3)
+    test "paginates and reports the filtered total", context do
+      page =
+        Cadence.list_spacecraft_page(context.fleet_organization_id, context.fleet_mission_id,
+          page: 2,
+          page_size: 3
+        )
 
       assert page.total_count == 4
       assert page.page == 2
@@ -206,28 +236,49 @@ defmodule Cadence.SpacecraftStoreTest do
       assert [%Spacecraft{display_name: "Delta-4"}] = page.items
     end
 
-    test "filters missing profile and missing scid" do
-      assert names(filter: :missing_profile) == ["Delta-4"]
-      assert names(filter: :missing_scid) == ["Charlie 100%"]
+    test "filters missing profile and missing scid", context do
+      assert names(context, filter: :missing_profile) == ["Delta-4"]
+      assert names(context, filter: :missing_scid) == ["Charlie 100%"]
     end
 
-    test "filters by profile and by stale versions" do
-      assert names(filter: {:profile, "type-a"}) == ["Alpha-1", "Bravo-2"]
-      assert names(filter: {:stale_versions, %{"type-a" => 2}}) == ["Bravo-2"]
-      assert names(filter: {:stale_versions, %{}}) == []
+    test "filters by profile and by stale versions", context do
+      assert names(context, filter: {:profile, "type-a"}) == ["Alpha-1", "Bravo-2"]
+      assert names(context, filter: {:stale_versions, %{"type-a" => 2}}) == ["Bravo-2"]
+      assert names(context, filter: {:stale_versions, %{}}) == []
     end
   end
 
   describe "fleet_summary/2" do
-    test "computes totals and per-profile-version counts" do
-      persist_mission_scope("org-fleet", "mission-fleet")
+    test "computes totals and per-profile-version counts", context do
+      {organization_id, mission_id} = fleet_scope(context)
 
-      fleet_spacecraft!("alpha", display_name: "Alpha-1", scid: 101, type: {"type-a", 2})
-      fleet_spacecraft!("bravo", display_name: "Bravo-2", scid: 202, type: {"type-a", 1})
-      fleet_spacecraft!("charlie", display_name: "Charlie-3", scid: nil, type: {"type-a", 2})
-      fleet_spacecraft!("delta", display_name: "Delta-4", scid: 404, type: nil)
+      persist_mission_scope(organization_id, mission_id)
 
-      summary = Cadence.spacecraft_fleet_summary("org-fleet", "mission-fleet")
+      fleet_spacecraft!(organization_id, mission_id, "alpha",
+        display_name: "Alpha-1",
+        scid: 101,
+        type: {"type-a", 2}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "bravo",
+        display_name: "Bravo-2",
+        scid: 202,
+        type: {"type-a", 1}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "charlie",
+        display_name: "Charlie-3",
+        scid: nil,
+        type: {"type-a", 2}
+      )
+
+      fleet_spacecraft!(organization_id, mission_id, "delta",
+        display_name: "Delta-4",
+        scid: 404,
+        type: nil
+      )
+
+      summary = Cadence.spacecraft_fleet_summary(organization_id, mission_id)
 
       assert summary.total == 4
       assert summary.missing_scid == 1
@@ -239,10 +290,12 @@ defmodule Cadence.SpacecraftStoreTest do
              ]
     end
 
-    test "returns zeroed summary for an empty mission" do
-      persist_mission_scope("org-fleet", "mission-fleet")
+    test "returns zeroed summary for an empty mission", context do
+      {organization_id, mission_id} = fleet_scope(context)
 
-      summary = Cadence.spacecraft_fleet_summary("org-fleet", "mission-fleet")
+      persist_mission_scope(organization_id, mission_id)
+
+      summary = Cadence.spacecraft_fleet_summary(organization_id, mission_id)
 
       assert summary == %{
                total: 0,
@@ -253,7 +306,14 @@ defmodule Cadence.SpacecraftStoreTest do
     end
   end
 
-  defp fleet_spacecraft!(id, opts) do
+  defp fleet_scope(context) do
+    suffix = System.unique_integer([:positive])
+    test_name = context.test |> Atom.to_string() |> String.replace(~r/[^a-zA-Z0-9]+/, "-")
+
+    {"org-fleet-#{test_name}-#{suffix}", "mission-fleet-#{test_name}-#{suffix}"}
+  end
+
+  defp fleet_spacecraft!(organization_id, mission_id, id, opts) do
     {type_id, type_version} =
       case Keyword.get(opts, :type) do
         {type_id, version} -> {type_id, version}
@@ -262,22 +322,22 @@ defmodule Cadence.SpacecraftStoreTest do
 
     spacecraft =
       Spacecraft.new(%{
-        spacecraft_id: "spacecraft-#{id}",
-        organization_id: "org-fleet",
-        mission_id: "mission-fleet",
+        spacecraft_id: "#{mission_id}-spacecraft-#{id}",
+        organization_id: organization_id,
+        mission_id: mission_id,
         display_name: Keyword.fetch!(opts, :display_name),
         scid: Keyword.get(opts, :scid),
         spacecraft_type_id: type_id,
         spacecraft_type_version: type_version
       })
 
-    {:ok, persisted} = Cadence.persist_spacecraft("org-fleet", spacecraft)
+    {:ok, persisted} = Cadence.persist_spacecraft(organization_id, spacecraft)
     persisted
   end
 
-  defp names(opts) do
-    "org-fleet"
-    |> Cadence.list_spacecraft_page("mission-fleet", opts)
+  defp names(context, opts) do
+    context.fleet_organization_id
+    |> Cadence.list_spacecraft_page(context.fleet_mission_id, opts)
     |> Map.fetch!(:items)
     |> Enum.map(& &1.display_name)
   end

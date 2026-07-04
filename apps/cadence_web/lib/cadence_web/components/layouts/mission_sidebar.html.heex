@@ -104,6 +104,20 @@
           />
           <.nav_section
             :if={assigns[:current_mission]}
+            icon="hero-presentation-chart-line"
+            label="Ops"
+            active={section_active?(assigns[:nav_item], :ops)}
+            expanded={section_active?(assigns[:nav_item], :ops)}
+          >
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/ops/dashboards"}
+              active={assigns[:nav_item] == :ops_dashboards}
+            >
+              Dashboards
+            </:item>
+          </.nav_section>
+          <.nav_section
+            :if={assigns[:current_mission]}
             icon="hero-signal"
             label="Comms"
             active={section_active?(assigns[:nav_item], :comms)}
@@ -120,6 +134,12 @@
               active={assigns[:nav_item] == :comms_transports}
             >
               Transports
+            </:item>
+            <:item
+              navigate={~p"/missions/#{@current_mission.mission_id}/comms/ground-stations"}
+              active={assigns[:nav_item] == :comms_ground_stations}
+            >
+              Ground Stations
             </:item>
             <:item
               navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}

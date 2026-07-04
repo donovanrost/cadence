@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_stale_operational_data_table",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Stale Operational Data Table",
+  "description": "Operational data table fixture whose latest operational observable is stale",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time",
+      "range": {
+        "kind": "relative",
+        "duration_ms": 300000
+      },
+      "refresh_ms": 1000
+    },
+    "scope": {
+      "primary": {
+        "kind": "mission",
+        "mode": "one",
+        "ids": ["mission_dashboards"]
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    },
+    "health": {
+      "freshness_policy": {
+        "stale_after_ms": 1000
+      }
+    },
+    "overlays": {
+      "limits": false,
+      "quality": false,
+      "events": false
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_command_queue_data_table",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.data_table",
+          "widget_type_version": 1,
+          "title": "Command Queue Data",
+          "binding": {
+            "source": "operational_observables",
+            "observables": ["commanding.queue_depth"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "latest",
+            "overlays": []
+          },
+          "options": {}
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "warning", "operational", "data-table"]
+  }
+}

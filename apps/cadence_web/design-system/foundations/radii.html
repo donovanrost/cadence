@@ -1,0 +1,43 @@
+<!-- @dsCard group="Foundations" name="Corner radii" subtitle="The sharp 2px HUD system" width="960" height="540" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Corner radii</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 62ch; font-size: .9rem; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+  .demo { text-align: center; }
+  .box { height: 96px; background: oklch(17% 0.02 260); border: 1px solid oklch(80% 0.12 210 / 0.4);
+    display: grid; place-items: center; }
+  .name { margin-top: .7rem; font-family: ui-monospace, monospace; font-size: .78rem; }
+  .val { font-family: ui-monospace, monospace; font-size: .7rem; color: oklch(55% 0.02 250); margin-top: .15rem; }
+  .note { margin-top: 2rem; font-size: .82rem; color: oklch(70% 0.02 250); line-height: 1.55;
+    border-left: 2px solid oklch(80% 0.12 210 / 0.5); padding-left: 1rem; max-width: 64ch; }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Corner radii</h1>
+  <p class="lede">Sharp by design. Buttons, inputs, cards, badges, modals — virtually everything —
+    use <strong>2px</strong>. The larger radii exist but are rarely reached for; rounded-full is
+    reserved for status pills and dots.</p>
+
+  <div class="grid">
+    <div class="demo"><div class="box" style="border-radius:1px"></div><div class="name">--radius (progress)</div><div class="val">1px</div></div>
+    <div class="demo"><div class="box" style="border-radius:2px"></div><div class="name">--radius-sm</div><div class="val">2px · the default</div></div>
+    <div class="demo"><div class="box" style="border-radius:4px"></div><div class="name">--radius-md</div><div class="val">4px</div></div>
+    <div class="demo"><div class="box" style="border-radius:6px"></div><div class="name">--radius-lg</div><div class="val">6px</div></div>
+  </div>
+  <p class="note">daisyUI is pinned to match: <span style="font-family:monospace">--radius-selector</span>,
+    <span style="font-family:monospace">--radius-field</span>, and
+    <span style="font-family:monospace">--radius-box</span> are all <strong>2px</strong>, so daisyUI
+    primitives inherit the sharp HUD edge without per-component overrides.</p>
+</body>
+</html>

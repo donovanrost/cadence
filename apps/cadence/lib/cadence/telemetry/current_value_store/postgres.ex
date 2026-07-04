@@ -9,7 +9,10 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
 
   alias Cadence.Persistence.Schemas.TelemetryLatestValueRow
   alias Cadence.Repo
+  alias Cadence.Telemetry.LatestProjectionOrder
   alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.SelectionPolicy
+  alias Cadence.Telemetry.SourceFilters
 
   @mission_scope_key "__mission__"
 
@@ -22,8 +25,35 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   @impl true
   def record_samples(samples) when is_list(samples) do
     samples
+    |> SelectionPolicy.selected_samples([])
     |> latest_per_key()
     |> persist_latest_samples()
+  end
+
+  @impl true
+  def replace_value(mission_id, point_id, nil, opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
+
+    _ =
+      TelemetryLatestValueRow
+      |> where(
+        [row],
+        row.mission_id == ^mission_id and row.point_id == ^point_id and
+          row.spacecraft_scope_id == ^spacecraft_scope_id
+      )
+      |> maybe_filter_source(opts)
+      |> Repo.delete_all()
+
+    :ok
+  end
+
+  @impl true
+  def replace_value(mission_id, point_id, %Sample{} = sample, opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
+      upsert_latest_samples([sample])
+    end
   end
 
   @impl true
@@ -31,7 +61,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     mission_id
     |> latest_value_query(point_id, opts)
     |> Repo.one()
-    |> maybe_to_sample()
+    |> maybe_to_sample(opts)
   end
 
   @impl true
@@ -42,11 +72,13 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
       TelemetryLatestValueRow
       |> where([row], row.mission_id == ^mission_id)
       |> maybe_filter_spacecraft(spacecraft_scope_id, opts)
+      |> maybe_filter_source(opts)
       |> order_by([row], asc: row.point_name)
 
     query
     |> Repo.all()
     |> Enum.map(&TelemetryLatestValueRow.to_domain/1)
+    |> SelectionPolicy.selected_samples(opts)
   end
 
   @impl true
@@ -71,7 +103,12 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     TelemetryLatestValueRow
     |> where([row], row.mission_id == ^mission_id and row.point_id == ^point_id)
     |> maybe_filter_spacecraft(spacecraft_scope_id, opts)
-    |> order_by([row], desc: row.receipt_time, desc: row.generation_time, desc: row.sample_id)
+    |> maybe_filter_source(opts)
+    |> order_by([row],
+      desc: fragment("COALESCE(?, ?)", row.generation_time, row.receipt_time),
+      desc: row.receipt_time,
+      desc: row.sample_id
+    )
     |> limit(1)
   end
 
@@ -83,8 +120,35 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     end
   end
 
-  defp maybe_to_sample(nil), do: nil
-  defp maybe_to_sample(row), do: TelemetryLatestValueRow.to_domain(row)
+  defp maybe_filter_source(query, opts) do
+    opts
+    |> SourceFilters.normalize()
+    |> Enum.reduce(query, fn
+      {:realm, realm}, query ->
+        where(query, [row], row.realm == ^realm)
+
+      {:data_source_id, data_source_id}, query ->
+        where(query, [row], row.data_source_id == ^data_source_id)
+
+      {:binding_id, binding_id}, query ->
+        where(query, [row], row.binding_id == ^binding_id)
+
+      {:source_endpoint_ids, source_endpoint_ids}, query ->
+        where(
+          query,
+          [row],
+          fragment("?->'storage'->>'source_endpoint_id'", row.provenance) in ^source_endpoint_ids
+        )
+    end)
+  end
+
+  defp maybe_to_sample(nil, _opts), do: nil
+
+  defp maybe_to_sample(row, opts) do
+    sample = TelemetryLatestValueRow.to_domain(row)
+
+    if SelectionPolicy.selected_sample?(sample, opts), do: sample
+  end
 
   defp spacecraft_scope_id(nil), do: @mission_scope_key
   defp spacecraft_scope_id(spacecraft_id), do: spacecraft_id
@@ -119,15 +183,23 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     mission_ids = keys |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
     spacecraft_scope_ids = keys |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
     point_ids = keys |> Enum.map(&elem(&1, 2)) |> Enum.uniq()
+    realms = keys |> Enum.map(&elem(&1, 3)) |> Enum.uniq()
+    data_source_ids = keys |> Enum.map(&elem(&1, 4)) |> Enum.uniq()
+    binding_ids = keys |> Enum.map(&elem(&1, 5)) |> Enum.uniq()
     key_set = MapSet.new(keys)
 
     TelemetryLatestValueRow
     |> where([row], row.mission_id in ^mission_ids)
     |> where([row], row.spacecraft_scope_id in ^spacecraft_scope_ids)
     |> where([row], row.point_id in ^point_ids)
+    |> where([row], row.realm in ^realms)
+    |> where([row], row.data_source_id in ^data_source_ids)
+    |> where([row], row.binding_id in ^binding_ids)
     |> Repo.all()
     |> Enum.reduce(%{}, fn %TelemetryLatestValueRow{} = row, acc ->
-      row_key = {row.mission_id, row.spacecraft_scope_id, row.point_id}
+      row_key =
+        {row.mission_id, row.spacecraft_scope_id, row.point_id, row.realm, row.data_source_id,
+         row.binding_id}
 
       if MapSet.member?(key_set, row_key) do
         Map.put(acc, row_key, row)
@@ -144,11 +216,31 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
     rows = Enum.map(samples, &TelemetryLatestValueRow.insert_attrs(&1, now))
 
     case Repo.insert_all(TelemetryLatestValueRow, rows,
-           conflict_target: [:mission_id, :spacecraft_scope_id, :point_id],
+           conflict_target: [
+             :mission_id,
+             :spacecraft_scope_id,
+             :point_id,
+             :realm,
+             :data_source_id,
+             :binding_id
+           ],
            on_conflict: {:replace, replace_fields()}
          ) do
       {count, _rows} when count == length(rows) -> :ok
       {count, _rows} -> {:error, {:insert_all_count_mismatch, :telemetry_latest_values, count}}
+    end
+  end
+
+  defp validate_replacement_scope(mission_id, point_id, %Sample{} = sample) do
+    cond do
+      sample.mission_id != mission_id ->
+        {:error, {:mission_mismatch, mission_id, sample.mission_id}}
+
+      sample.point_id != point_id ->
+        {:error, {:point_mismatch, point_id, sample.point_id}}
+
+      true ->
+        :ok
     end
   end
 
@@ -172,7 +264,16 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   end
 
   defp key(%Sample{} = sample) do
-    {sample.mission_id, spacecraft_scope_id(sample.spacecraft_id), sample.point_id}
+    {realm, data_source_id, binding_id} = SourceFilters.sample_key(sample)
+
+    {
+      sample.mission_id,
+      spacecraft_scope_id(sample.spacecraft_id),
+      sample.point_id,
+      realm,
+      data_source_id,
+      binding_id
+    }
   end
 
   defp latest_sample(%Sample{} = sample, %Sample{} = existing_sample) do
@@ -180,39 +281,10 @@ defmodule Cadence.Telemetry.CurrentValueStore.Postgres do
   end
 
   defp sample_newer?(%Sample{} = sample, %TelemetryLatestValueRow{} = latest_value_row) do
-    compare_sort_keys(sample_sort_key(sample), row_sort_key(latest_value_row)) == :gt
+    LatestProjectionOrder.newer?(sample, latest_value_row, :sample_id)
   end
 
   defp sample_newer?(%Sample{} = sample, %Sample{} = existing_sample) do
-    compare_sort_keys(sample_sort_key(sample), sample_sort_key(existing_sample)) == :gt
-  end
-
-  defp sample_sort_key(%Sample{} = sample) do
-    {sample.generation_time || sample.receipt_time, sample.receipt_time, sample.sample_id}
-  end
-
-  defp row_sort_key(%TelemetryLatestValueRow{} = row) do
-    {row.generation_time || row.receipt_time, row.receipt_time, row.sample_id}
-  end
-
-  defp compare_sort_keys({time_a, receipt_a, sample_id_a}, {time_b, receipt_b, sample_id_b}) do
-    case DateTime.compare(time_a, time_b) do
-      :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(sample_id_a, sample_id_b)
-          other -> other
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp compare_ids(id_a, id_b) when is_binary(id_a) and is_binary(id_b) do
-    cond do
-      id_a > id_b -> :gt
-      id_a < id_b -> :lt
-      true -> :eq
-    end
+    LatestProjectionOrder.newer?(sample, existing_sample, :sample_id)
   end
 end

@@ -263,7 +263,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     ~H"""
     <.card id="catalog-revision-history" title="Revision history">
       <%= if @revisions == [] do %>
-        <p class="text-sm text-base-content/60">No revisions yet.</p>
+        <.empty_state compact title="No revisions yet." />
       <% else %>
         <.table id="catalog-revisions-table" rows={@revisions} row_accent={false}>
           <:col :let={revision} label="Revision">
@@ -302,7 +302,7 @@ defmodule CadenceWeb.CatalogDatabaseShowLive do
     ~H"""
     <.card id="catalog-import-attempts" title="Import attempts">
       <%= if @runs == [] do %>
-        <p class="text-sm text-base-content/60">No import attempts yet.</p>
+        <.empty_state compact title="No import attempts yet." />
       <% else %>
         <.table id="catalog-import-runs-table" rows={@runs} row_accent={false}>
           <:col :let={run} label="Status"><.import_run_status_badge status={run.status} /></:col>

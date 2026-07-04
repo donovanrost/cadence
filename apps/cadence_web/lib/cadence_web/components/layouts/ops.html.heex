@@ -1,0 +1,23 @@
+<div class="h-screen flex flex-col overflow-hidden bg-base-100">
+  <.ops_status_bar
+    mission={@current_mission}
+    fleet_health={assigns[:fleet_health]}
+    current_scope={@current_scope}
+    unread_count={assigns[:unread_notifications_count] || 0}
+    notifications={assigns[:recent_notifications] || []}
+    memberships={assigns[:user_menu_memberships] || []}
+    platform_admin?={assigns[:user_menu_platform_admin?] || false}
+  />
+  <div class="flex flex-1 min-h-0">
+    <.ops_nav_rail
+      mission={@current_mission}
+      dashboards={assigns[:ops_dashboards] || []}
+      active_dashboard_id={assigns[:active_dashboard_id]}
+      active_item={assigns[:ops_nav_item] || :dashboards}
+    />
+    <main class="flex-1 min-w-0 flex flex-col overflow-hidden">
+      {@inner_content}
+    </main>
+  </div>
+</div>
+<.flash_stack flash={@flash} />

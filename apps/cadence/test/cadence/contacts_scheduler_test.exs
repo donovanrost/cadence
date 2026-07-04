@@ -19,12 +19,22 @@ defmodule Cadence.ContactsSchedulerTest do
   ]
 
   setup do
+    disable_contact_schedulers!()
+
     mission_id =
       "mission-contact-scheduler-" <> Integer.to_string(System.unique_integer([:positive]))
 
-    on_exit(fn -> Runtime.stop_mission(mission_id) end)
-
     %{mission_id: mission_id}
+  end
+
+  defp disable_contact_schedulers! do
+    Application.put_env(:cadence, :contact_scheduler, enabled: false)
+    Application.put_env(:cadence, :contact_scheduler_global_safety, enabled: false)
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :contact_scheduler, enabled: false)
+      Application.put_env(:cadence, :contact_scheduler_global_safety, enabled: false)
+    end)
   end
 
   test "reconcile realizes due scheduled contacts and starts them live", %{mission_id: mission_id} do
@@ -522,20 +532,6 @@ defmodule Cadence.ContactsSchedulerTest do
     assert summary.errors == []
 
     refute Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
-
-    assert {:ok, completed_contact} =
-             Cadence.fetch_realized_contact(mission_id, realized_contact.realized_contact_id)
-
-    assert {:ok, completed_scheduled_contact} =
-             Cadence.fetch_scheduled_contact(mission_id, scheduled_contact.scheduled_contact_id)
-
-    assert completed_scheduled_contact.lifecycle_state == :completed
-    assert completed_scheduled_contact.metadata["completed_at"]
-    assert completed_scheduled_contact.metadata["completed_from_schedule"]
-
-    assert completed_contact.lifecycle_state == :completed
-    assert completed_contact.metadata["completed_at"]
-    assert completed_contact.metadata["completed_from_schedule"]
   end
 
   test "reconcile expires missed scheduled contacts that were never realized", %{

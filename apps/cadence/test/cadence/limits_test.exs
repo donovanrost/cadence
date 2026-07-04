@@ -2,6 +2,18 @@ defmodule Cadence.LimitsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+
+  alias Cadence.Dashboards.{
+    DataBinding,
+    DataSource,
+    Frame,
+    PlannedSourceRequest,
+    RuntimeCache,
+    RuntimeCacheKey,
+    SourceResult,
+    SourceWatermark
+  }
+
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
@@ -79,6 +91,22 @@ defmodule Cadence.LimitsTest do
 
     assert Enum.map(event_history, & &1.limit_state) == [:yellow_high, :green]
 
+    bounded_event_history =
+      Cadence.telemetry_limit_event_history("mission-alpha", "DERIVED.counter_double",
+        from_receipt_time: DateTime.from_unix!(1_700_000_200),
+        to_receipt_time: DateTime.from_unix!(1_700_000_205)
+      )
+
+    assert Enum.map(bounded_event_history, & &1.limit_state) == [:green]
+
+    as_of_state =
+      Cadence.latest_telemetry_limit_state("mission-alpha", "DERIVED.counter_double",
+        to_receipt_time: DateTime.from_unix!(1_700_000_205)
+      )
+
+    assert as_of_state.limit_state == :green
+    assert as_of_state.normalized_state == :green
+
     latest_state =
       Cadence.latest_telemetry_limit_state("mission-alpha", "DERIVED.counter_double")
 
@@ -86,6 +114,81 @@ defmodule Cadence.LimitsTest do
     assert latest_state.normalized_state == :yellow
     assert latest_state.violation
     assert latest_state.evaluated_value == 60
+
+    assert {:ok, watermark} =
+             Cadence.telemetry_limit_watermark("mission-alpha", "DERIVED.counter_double")
+
+    assert watermark.confidence == :best_effort
+
+    assert DateTime.compare(watermark.latest_receipt_time, DateTime.from_unix!(1_700_000_210)) ==
+             :eq
+
+    assert DateTime.compare(watermark.complete_through, DateTime.from_unix!(1_700_000_210)) ==
+             :eq
+
+    assert DateTime.compare(watermark.retention_starts_at, DateTime.from_unix!(1_700_000_200)) ==
+             :eq
+
+    assert watermark.sample_count == 3
+    assert watermark.projection_sources == %{event_count: 2, latest_state_count: 1}
+  end
+
+  test "persisting a limit definition invalidates matching dashboard runtime caches" do
+    cache = start_supervised!({RuntimeCache, name: nil})
+
+    previous_invalidation_config =
+      Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
+
+    Application.put_env(:cadence, :dashboard_runtime_invalidation,
+      enabled?: true,
+      runtime_cache: cache
+    )
+
+    on_exit(fn ->
+      Application.put_env(:cadence, :dashboard_runtime_invalidation, previous_invalidation_config)
+    end)
+
+    persist_mission_scope("org-limit-cache", "mission-limit-cache")
+
+    limits_key = dashboard_source_result_key(:limits, "HK.counter")
+    limits_frame_key = dashboard_frame_key(:limits, "HK.counter")
+    other_limits_key = dashboard_source_result_key(:limits, "HK.temperature")
+    other_limits_frame_key = dashboard_frame_key(:limits, "HK.temperature")
+    telemetry_key = dashboard_source_result_key(:telemetry, "HK.counter")
+    telemetry_frame_key = dashboard_frame_key(:telemetry, "HK.counter")
+
+    limits_result = dashboard_source_result()
+    limits_frames = dashboard_frames(:limits, "frame-limits-counter")
+    other_limits_result = dashboard_source_result()
+    other_limits_frames = dashboard_frames(:limits, "frame-limits-temperature")
+    telemetry_result = dashboard_source_result()
+    telemetry_frames = dashboard_frames(:telemetry, "frame-telemetry-counter")
+
+    assert :ok = RuntimeCache.put_source_result(limits_key, limits_result, cache)
+    assert :ok = RuntimeCache.put_frame(limits_frame_key, limits_frames, cache)
+    assert :ok = RuntimeCache.put_source_result(other_limits_key, other_limits_result, cache)
+    assert :ok = RuntimeCache.put_frame(other_limits_frame_key, other_limits_frames, cache)
+    assert :ok = RuntimeCache.put_source_result(telemetry_key, telemetry_result, cache)
+    assert :ok = RuntimeCache.put_frame(telemetry_frame_key, telemetry_frames, cache)
+
+    limit_definition_id = "counter-limits-#{System.unique_integer([:positive])}"
+
+    limit_definition =
+      LimitDefinition.new(%{
+        mission_id: "mission-limit-cache",
+        limit_definition_id: limit_definition_id,
+        point_id: "HK.counter",
+        thresholds: %{"yellow_high" => 10, "red_high" => 20}
+      })
+
+    assert {:ok, ^limit_definition} = Cadence.persist_limit_definition(limit_definition)
+
+    assert RuntimeCache.get_source_result(limits_key, cache) == :miss
+    assert RuntimeCache.get_frame(limits_frame_key, cache) == :miss
+    assert {:ok, ^other_limits_result} = RuntimeCache.get_source_result(other_limits_key, cache)
+    assert {:ok, ^other_limits_frames} = RuntimeCache.get_frame(other_limits_frame_key, cache)
+    assert {:ok, ^telemetry_result} = RuntimeCache.get_source_result(telemetry_key, cache)
+    assert {:ok, ^telemetry_frames} = RuntimeCache.get_frame(telemetry_frame_key, cache)
   end
 
   defp persist_binding_set_fixture do
@@ -139,4 +242,92 @@ defmodule Cadence.LimitsTest do
       packet_data::binary
     >>
   end
+
+  defp dashboard_source_result_key(logical_source, observable) do
+    request = dashboard_source_request(logical_source, observable)
+
+    RuntimeCacheKey.source_result(request,
+      source_binding: dashboard_source_binding(logical_source),
+      data_source: dashboard_data_source(logical_source),
+      watermark: dashboard_watermark(logical_source)
+    )
+  end
+
+  defp dashboard_frame_key(logical_source, observable) do
+    logical_source
+    |> dashboard_source_result_key(observable)
+    |> RuntimeCacheKey.frame(
+      placement_id: "placement_#{logical_source}_#{observable}",
+      placement_size: %{width_px: 320, height_px: 120},
+      display: %{density: :normal},
+      frame_shape: :scalar
+    )
+  end
+
+  defp dashboard_source_request(logical_source, observable) do
+    %PlannedSourceRequest{
+      request_id: "source_req_#{logical_source}_#{observable}",
+      organization_id: "org-limit-cache",
+      mission_id: "mission-limit-cache",
+      logical_source: logical_source,
+      observables: [observable],
+      sampling: %{mode: :latest}
+    }
+  end
+
+  defp dashboard_source_binding(logical_source) do
+    %DataBinding{
+      binding_id: dashboard_binding_id(logical_source),
+      organization_id: "org-limit-cache",
+      mission_id: "mission-limit-cache",
+      realm: :flight,
+      logical_source: logical_source,
+      data_source_id: dashboard_data_source_id(logical_source),
+      dataset: dashboard_dataset(logical_source)
+    }
+  end
+
+  defp dashboard_data_source(logical_source) do
+    %DataSource{
+      data_source_id: dashboard_data_source_id(logical_source),
+      adapter: dashboard_source_adapter(logical_source),
+      capabilities: %{latest?: true, latest_state?: true, event_history?: true, watermarks?: true}
+    }
+  end
+
+  defp dashboard_watermark(logical_source) do
+    %SourceWatermark{
+      logical_source: logical_source,
+      request_id: "source_req_#{logical_source}",
+      source_binding_id: dashboard_binding_id(logical_source),
+      data_source_id: dashboard_data_source_id(logical_source),
+      realm: :flight,
+      dataset: dashboard_dataset(logical_source),
+      complete_through: ~U[2026-06-17 12:00:00Z],
+      latest_receipt_time: ~U[2026-06-17 12:00:00Z],
+      retention_starts_at: ~U[2026-06-17 11:00:00Z],
+      confidence: :best_effort,
+      freshness_state: :fresh
+    }
+  end
+
+  defp dashboard_source_result do
+    %SourceResult{request_id: "source_req_limits", watermarks: []}
+  end
+
+  defp dashboard_frames(logical_source, frame_id) do
+    [%Frame{frame_id: frame_id, source: logical_source, shape: :scalar, fields: []}]
+  end
+
+  defp dashboard_binding_id(:limits), do: "default_flight_limits"
+  defp dashboard_binding_id(:telemetry), do: "default_flight_telemetry"
+
+  defp dashboard_data_source_id(:limits), do: "managed_limits_projection"
+  defp dashboard_data_source_id(:telemetry), do: "managed_questdb_primary"
+
+  defp dashboard_dataset(:limits), do: "telemetry_latest_limit_states"
+  defp dashboard_dataset(:telemetry), do: "flight"
+
+  defp dashboard_source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
+  defp dashboard_source_adapter(:telemetry), do: Cadence.Dashboards.Sources.Telemetry
 end

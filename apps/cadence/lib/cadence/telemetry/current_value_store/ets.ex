@@ -7,6 +7,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
   @behaviour Cadence.Telemetry.CurrentValueStore
 
+  alias Cadence.Telemetry.{LatestProjectionOrder, SelectionPolicy, SourceFilters}
   alias Cadence.Telemetry.Sample
 
   @mission_scope_key "__mission__"
@@ -46,6 +47,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     table = ensure_table!()
 
     samples
+    |> SelectionPolicy.selected_samples([])
     |> latest_per_key()
     |> Enum.each(fn {key, sample} ->
       maybe_store_sample(table, key, sample)
@@ -55,14 +57,39 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   @impl true
+  def replace_value(mission_id, point_id, nil, opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    table = ensure_table!()
+    spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
+
+    table
+    |> keys_for_point(mission_id, spacecraft_scope_id, point_id, opts)
+    |> Enum.each(&:ets.delete(table, &1))
+
+    :ok
+  end
+
+  @impl true
+  def replace_value(mission_id, point_id, %Sample{} = sample, opts)
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
+      table = ensure_table!()
+      true = :ets.insert(table, {key(sample), sample})
+      :ok
+    end
+  end
+
+  @impl true
   def latest_value(mission_id, point_id, opts) do
     table = ensure_table!()
-    key = {mission_id, spacecraft_scope_id(Keyword.get(opts, :spacecraft_id)), point_id}
+    spacecraft_scope_id = spacecraft_scope_id(Keyword.get(opts, :spacecraft_id))
 
-    case :ets.lookup(table, key) do
-      [{^key, %Sample{} = sample}] -> sample
-      [] -> nil
-    end
+    table
+    |> samples_for_point(mission_id, spacecraft_scope_id, point_id, opts)
+    |> Enum.reduce(nil, fn
+      %Sample{} = sample, nil -> sample
+      %Sample{} = sample, %Sample{} = latest_sample -> latest_sample(sample, latest_sample)
+    end)
   end
 
   @impl true
@@ -72,9 +99,13 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
     :ets.foldl(
       fn
-        {{^mission_id, stored_scope_id, _point_id}, %Sample{} = sample}, acc ->
-          if is_nil(spacecraft_filter) or
-               stored_scope_id == spacecraft_scope_id(spacecraft_filter) do
+        {{^mission_id, stored_scope_id, _point_id, _realm, _data_source_id, _binding_id},
+         %Sample{} = sample},
+        acc ->
+          if (is_nil(spacecraft_filter) or
+                stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
+               SourceFilters.sample_matches?(sample, opts) and
+               SelectionPolicy.selected_sample?(sample, opts) do
             [sample | acc]
           else
             acc
@@ -99,7 +130,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   @impl true
   def reset(mission_id) when is_binary(mission_id) do
     table = ensure_table!()
-    true = :ets.match_delete(table, {{mission_id, :_, :_}, :_})
+    true = :ets.match_delete(table, {{mission_id, :_, :_, :_, :_, :_}, :_})
     :ok
   end
 
@@ -139,38 +170,62 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
   end
 
   defp key(%Sample{} = sample) do
-    {sample.mission_id, spacecraft_scope_id(sample.spacecraft_id), sample.point_id}
+    {realm, data_source_id, binding_id} = SourceFilters.sample_key(sample)
+
+    {
+      sample.mission_id,
+      spacecraft_scope_id(sample.spacecraft_id),
+      sample.point_id,
+      realm,
+      data_source_id,
+      binding_id
+    }
+  end
+
+  defp keys_for_point(table, mission_id, spacecraft_scope_id, point_id, opts) do
+    table
+    |> samples_for_point(mission_id, spacecraft_scope_id, point_id, opts)
+    |> Enum.map(&key/1)
+  end
+
+  defp samples_for_point(table, mission_id, spacecraft_scope_id, point_id, opts) do
+    :ets.foldl(
+      fn
+        {{^mission_id, ^spacecraft_scope_id, ^point_id, _realm, _data_source_id, _binding_id},
+         %Sample{} = sample},
+        acc ->
+          if SourceFilters.sample_matches?(sample, opts) and
+               SelectionPolicy.selected_sample?(sample, opts) do
+            [sample | acc]
+          else
+            acc
+          end
+
+        _entry, acc ->
+          acc
+      end,
+      [],
+      table
+    )
   end
 
   defp spacecraft_scope_id(nil), do: @mission_scope_key
   defp spacecraft_scope_id(spacecraft_id), do: spacecraft_id
 
-  defp sample_newer?(%Sample{} = sample, %Sample{} = existing_sample) do
-    compare_sort_keys(sample_sort_key(sample), sample_sort_key(existing_sample)) == :gt
-  end
-
-  defp sample_sort_key(%Sample{} = sample) do
-    {sample.generation_time || sample.receipt_time, sample.receipt_time, sample.sample_id}
-  end
-
-  defp compare_sort_keys({time_a, receipt_a, sample_id_a}, {time_b, receipt_b, sample_id_b}) do
-    case DateTime.compare(time_a, time_b) do
-      :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(sample_id_a, sample_id_b)
-          other -> other
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp compare_ids(id_a, id_b) when is_binary(id_a) and is_binary(id_b) do
+  defp validate_replacement_scope(mission_id, point_id, %Sample{} = sample) do
     cond do
-      id_a > id_b -> :gt
-      id_a < id_b -> :lt
-      true -> :eq
+      sample.mission_id != mission_id ->
+        {:error, {:mission_mismatch, mission_id, sample.mission_id}}
+
+      sample.point_id != point_id ->
+        {:error, {:point_mismatch, point_id, sample.point_id}}
+
+      true ->
+        :ok
     end
+  end
+
+  defp sample_newer?(%Sample{} = sample, %Sample{} = existing_sample) do
+    LatestProjectionOrder.newer?(sample, existing_sample, :sample_id)
   end
 end

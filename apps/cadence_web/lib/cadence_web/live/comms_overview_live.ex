@@ -48,7 +48,7 @@ defmodule CadenceWeb.CommsOverviewLive do
         <div>
           <p class="hud-label mb-2">Transport</p>
           <div class="flex items-baseline gap-4">
-            <span class="mc-value-large text-primary">{@transport_count}</span>
+            <span class="mc-value-large text-base-content">{@transport_count}</span>
             <span class="text-sm text-base-content/60">
               transport<%= if @transport_count == 1, do: "", else: "s" %> configured
             </span>
@@ -120,19 +120,18 @@ defmodule CadenceWeb.CommsOverviewLive do
   defp setup_checks_card(assigns) do
     ~H"""
     <.card id="comms-validation-page">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="hud-label mb-2">Setup Checks</p>
-          <h2 class="text-lg font-semibold">What's missing or broken</h2>
-          <p class="mt-1 text-sm text-base-content/70">
-            Checks on saved configuration for spacecraft on this mission.
-          </p>
-        </div>
-        <.status_badge
-          status={if @findings == [], do: :ready, else: :attention}
-          label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
-        />
-      </div>
+      <.section_header
+        eyebrow="Setup Checks"
+        title="What's missing or broken"
+        description="Checks on saved configuration for spacecraft on this mission."
+      >
+        <:actions>
+          <.status_badge
+            status={if @findings == [], do: :ready, else: :attention}
+            label={if @findings == [], do: "No Findings", else: "#{length(@findings)} Findings"}
+          />
+        </:actions>
+      </.section_header>
 
       <%= if @findings == [] do %>
         <div class="mt-6">

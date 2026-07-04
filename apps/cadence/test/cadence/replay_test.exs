@@ -9,7 +9,7 @@ defmodule Cadence.ReplayTest do
   }
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Replay.Scope
+  alias Cadence.Replay.{Run, Scope}
 
   alias Cadence.Persistence.Schemas.{
     ManagedActionRequestRow,
@@ -84,6 +84,34 @@ defmodule Cadence.ReplayTest do
     assert diff_report.mismatches == []
     assert diff_report.missing_live == []
     assert diff_report.extra_live == []
+  end
+
+  test "lists replay runs for an organization and mission newest first" do
+    persist_mission_scope("org-replay-list", "mission-replay-list")
+    persist_mission_scope("org-replay-list", "mission-replay-other")
+
+    older_run =
+      replay_run("mission-replay-list", "replay-run-older", ~U[2026-06-17 11:00:00Z])
+
+    newer_run =
+      replay_run("mission-replay-list", "replay-run-newer", ~U[2026-06-17 12:00:00Z])
+
+    other_mission_run =
+      replay_run("mission-replay-other", "replay-run-other", ~U[2026-06-17 13:00:00Z])
+
+    Repo.insert!(ReplayRunRow.changeset(older_run))
+    Repo.insert!(ReplayRunRow.changeset(newer_run))
+    Repo.insert!(ReplayRunRow.changeset(other_mission_run))
+
+    assert ["replay-run-newer", "replay-run-older"] =
+             "org-replay-list"
+             |> Cadence.list_replay_runs("mission-replay-list")
+             |> Enum.map(& &1.replay_run_id)
+
+    assert ["replay-run-older"] =
+             "org-replay-list"
+             |> Cadence.list_replay_runs("mission-replay-list", order: :asc, limit: 1)
+             |> Enum.map(& &1.replay_run_id)
   end
 
   test "replays an async scoped run over a filtered evidence window" do
@@ -207,7 +235,7 @@ defmodule Cadence.ReplayTest do
            ]
   end
 
-  test "replays managed capability runtime records into replay-only tables" do
+  test "replays managed capability runtime records into replay tables and operational events" do
     mission_id = "mission-managed-replay"
     source_endpoint = persist_source_endpoint(mission_id)
 
@@ -302,6 +330,57 @@ defmodule Cadence.ReplayTest do
 
     assert DateTime.compare(timer_handled_record.recorded_at, fired_timer_event.occurred_at) ==
              :eq
+
+    replay_runtime_events =
+      Cadence.list_operational_events(mission_id,
+        category: :runtime,
+        replay_run_id: replay_run.replay_run_id,
+        limit: 20,
+        order: :asc
+      )
+
+    assert length(replay_runtime_events) == 6
+
+    assert Enum.all?(
+             replay_runtime_events,
+             &(&1.actor == %{kind: :replay, id: replay_run.replay_run_id})
+           )
+
+    assert Enum.all?(
+             replay_runtime_events,
+             &(map_value(&1.causality, :replay_run_id) == replay_run.replay_run_id)
+           )
+
+    assert Enum.all?(
+             replay_runtime_events,
+             &(map_value(&1.scope, :replay_run_id) == replay_run.replay_run_id)
+           )
+
+    assert Enum.frequencies_by(replay_runtime_events, & &1.kind) == %{
+             managed_action_requested: 1,
+             managed_capability_initialized: 1,
+             managed_capability_record_handled: 1,
+             managed_capability_timer_handled: 1,
+             managed_timer_fired: 1,
+             managed_timer_scheduled: 1
+           }
+
+    assert Enum.frequencies_by(
+             replay_runtime_events,
+             &map_value(&1.causality, :source_record_kind)
+           ) == %{
+             managed_action_request: 1,
+             managed_capability_record: 3,
+             managed_timer_event: 2
+           }
+
+    assert Enum.map(replay_runtime_events, & &1.subject.kind) |> Enum.uniq() == [
+             :capability_instance
+           ]
+  end
+
+  defp map_value(map, key) when is_map(map) and is_atom(key) do
+    Map.get(map, key) || Map.get(map, Atom.to_string(key))
   end
 
   defp persist_binding_set_fixture do
@@ -331,6 +410,21 @@ defmodule Cadence.ReplayTest do
 
     assert {:ok, ^binding_set} = Cadence.persist_binding_set(binding_set)
     binding_set
+  end
+
+  defp replay_run(mission_id, replay_run_id, started_at) do
+    Run.new(%{
+      replay_run_id: replay_run_id,
+      mission_id: mission_id,
+      binding_set_id: mission_id <> "-binding-set",
+      binding_set_version: 1,
+      status: :completed,
+      replayed_evidence_count: 1,
+      replayed_packet_count: 1,
+      replayed_sample_count: 1,
+      started_at: started_at,
+      completed_at: DateTime.add(started_at, 60, :second)
+    })
   end
 
   defp persist_packet_counter_binding_set(mission_id, source_endpoint_ref) do

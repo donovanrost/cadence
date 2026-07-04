@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "dashboard_source_unavailable_value_tile",
+  "organization_id": "org_dashboards",
+  "mission_id": "mission_dashboards",
+  "name": "Source Unavailable Value Tile",
+  "description": "Golden fixture for telemetry source execution failure",
+  "defaults": {
+    "time": {
+      "mode": "live",
+      "axis": "generation_time",
+      "range": {
+        "kind": "relative",
+        "duration_ms": 1800000
+      },
+      "refresh_ms": 1000
+    },
+    "scope": {
+      "primary": {
+        "kind": "spacecraft",
+        "mode": "context",
+        "ids": []
+      }
+    },
+    "data": {
+      "realm": "flight",
+      "source_mode": "primary",
+      "allowed_realms": ["flight"]
+    },
+    "limits": {
+      "semantics_mode": "observed"
+    },
+    "overlays": {
+      "limits": false,
+      "quality": false,
+      "events": false
+    }
+  },
+  "grid": {
+    "columns": 12,
+    "row_height_px": 64,
+    "gap_px": 8
+  },
+  "placements": [
+    {
+      "placement_id": "placement_battery_voltage_unavailable",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 2
+      },
+      "content": {
+        "kind": "embedded",
+        "widget_def": {
+          "widget_type_id": "cadence.value_tile",
+          "widget_type_version": 1,
+          "title": "Battery Voltage",
+          "binding": {
+            "observables": ["tlm.hk.battery_voltage"],
+            "scope_mode": "context",
+            "data_mode": "context",
+            "value_type": "engineering",
+            "sampling": "latest",
+            "overlays": []
+          },
+          "options": {
+            "precision": 2,
+            "show_unit": true
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "labels": ["golden", "source-failure", "telemetry"]
+  }
+}

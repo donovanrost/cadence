@@ -7,19 +7,14 @@ defmodule CadenceWeb.Catalog.Components do
 
   def import_run_status_badge(assigns) do
     ~H"""
-    <span class={[
-      "badge badge-sm",
-      status_badge_class(@status)
-    ]}>
-      {status_label(@status)}
-    </span>
+    <.status_badge status={badge_status(@status)} label={status_label(@status)} />
     """
   end
 
-  defp status_badge_class(:running), do: "badge-info"
-  defp status_badge_class(:completed), do: "badge-success"
-  defp status_badge_class(:failed), do: "badge-error"
-  defp status_badge_class(_), do: "badge-ghost"
+  defp badge_status(:running), do: :info
+  defp badge_status(:completed), do: :ready
+  defp badge_status(:failed), do: :blocked
+  defp badge_status(_), do: :info
 
   defp status_label(:running), do: "Running"
   defp status_label(:completed), do: "Completed"
@@ -171,9 +166,9 @@ defmodule CadenceWeb.Catalog.Components do
 
   def upload_error_alert(assigns) do
     ~H"""
-    <div class="alert alert-error text-sm">
+    <.callout variant={:error}>
       {upload_error_message(@error)}
-    </div>
+    </.callout>
     """
   end
 
@@ -190,11 +185,9 @@ defmodule CadenceWeb.Catalog.Components do
           <span class="font-medium">{descriptor.display_name}</span>
         </div>
       <% {:error, :no_matching_importer} -> %>
-        <div class="alert alert-error text-sm">
-          <p>
-            No importer supports this file. Accepted formats: YAML (<code>.yaml</code>, <code>.yml</code>).
-          </p>
-        </div>
+        <.callout variant={:error}>
+          No importer supports this file. Accepted formats: YAML (<code>.yaml</code>, <code>.yml</code>).
+        </.callout>
       <% _ -> %>
         <div class="text-xs text-base-content/60">
           Select a file to see the detected importer.
@@ -233,13 +226,12 @@ defmodule CadenceWeb.Catalog.Components do
         <span class={[@icon, "h-4 w-4"]}></span>
         <p class="hud-label">{@title}</p>
       </div>
-      <dl class="grid grid-cols-2 gap-2 text-sm">
-        <div :for={{label, count} <- @counts} class="contents">
-          <dt class="text-base-content/60">{label}</dt>
-          <dd class="font-mono text-base-content text-right">{count}</dd>
-        </div>
-      </dl>
-      <div :if={@navigate} class="card-actions justify-end mt-3">
+      <div class="divide-y divide-base-300">
+        <.detail_row :for={{label, count} <- @counts} label={label} mono>
+          {count}
+        </.detail_row>
+      </div>
+      <div :if={@navigate} class="flex justify-end mt-3">
         <.button variant={:ghost} size={:xs} navigate={@navigate}>
           View details <span class="hero-arrow-right h-3 w-3 ml-1"></span>
         </.button>

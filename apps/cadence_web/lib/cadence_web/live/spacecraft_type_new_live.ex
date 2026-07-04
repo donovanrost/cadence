@@ -65,8 +65,12 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
       <.page_header
         title="New Spacecraft Profile"
         subtitle="Captures the byte-interpretation contract shared across spacecraft of the same kind — downlink and uplink protocols, frame parameters, and which platform applications run."
-        back_label="Spacecraft Profiles"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Spacecraft", ~p"/missions/#{@current_mission.mission_id}/spacecraft"},
+          {"Spacecraft Profiles", ~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"},
+          {"New Spacecraft Profile", nil}
+        ]}
       />
 
       <.form
@@ -76,13 +80,11 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
         phx-submit="save"
         class="space-y-8"
       >
-        <section class="space-y-4">
-          <.section_heading number="01" title="Identity" />
+        <.form_section number="01" title="Identity">
           <.input field={@form[:display_name]} type="text" label="Display Name" required />
-        </section>
+        </.form_section>
 
-        <section class="space-y-4">
-          <.section_heading number="02" title="Data Link Protocols" />
+        <.form_section number="02" title="Data Link Protocols">
           <.input
             field={@form[:downlink_protocol]}
             type="select"
@@ -97,38 +99,17 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
             options={uplink_protocol_options()}
             required
           />
-        </section>
+        </.form_section>
 
         <.frame_parameters_section form={@form} />
 
         <.applications_section form={@form} applications={@applications} />
 
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button type="submit" size={:md}>
-            Create Profile
-          </.button>
-          <.button
-            variant={:ghost}
-            size={:md}
-            navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
-          >
-            Cancel
-          </.button>
-        </div>
+        <.form_actions
+          submit="Create Profile"
+          cancel_navigate={~p"/missions/#{@current_mission.mission_id}/spacecraft/profiles"}
+        />
       </.form>
-    </div>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-
-  defp section_heading(assigns) do
-    ~H"""
-    <div class="flex items-center gap-3">
-      <span class="hud-label text-primary/70">{@number}</span>
-      <h2 class="hud-label">{@title}</h2>
-      <div class="flex-1 h-px bg-base-300/60"></div>
     </div>
     """
   end
@@ -137,8 +118,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
   defp frame_parameters_section(assigns) do
     ~H"""
-    <section class="space-y-4">
-      <.section_heading number="03" title="Downlink Frame Parameters" />
+    <.form_section number="03" title="Downlink Frame Parameters">
       <p class="text-sm text-base-content/70">
         How the spacecraft frames the bytes it transmits. Fields adapt to the selected downlink protocol.
       </p>
@@ -178,7 +158,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
         label="Operational Control Field"
         options={[{"Not present", "0"}, {"Present (4 bytes)", "4"}]}
       />
-    </section>
+    </.form_section>
     """
   end
 
@@ -187,8 +167,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
 
   defp applications_section(assigns) do
     ~H"""
-    <section class="space-y-4">
-      <.section_heading number="04" title="Applications" />
+    <.form_section number="04" title="Applications">
       <p class="text-sm text-base-content/70">
         Which platform applications run for spacecraft using this profile. Per-application configuration is set on each spacecraft.
       </p>
@@ -226,7 +205,7 @@ defmodule CadenceWeb.SpacecraftTypeNewLive do
           </div>
         </label>
       </div>
-    </section>
+    </.form_section>
     """
   end
 

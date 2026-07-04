@@ -11,8 +11,9 @@ defmodule Cadence.Limits do
 
   alias Cadence.Governance
   alias Cadence.Jobs
-  alias Cadence.Limits.{Definition, Evaluator, Event, Run}
+  alias Cadence.Limits.{Definition, DefinitionLifecycle, Evaluator, Event, Run}
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
+  alias Cadence.Telemetry.LatestProjectionOrder
 
   alias Cadence.Persistence.Schemas.{
     DerivedTelemetrySampleRow,
@@ -93,7 +94,7 @@ defmodule Cadence.Limits do
 
   defp execute_run(%Run{} = run, opts) do
     spacecraft_id = Keyword.get(opts, :spacecraft_id)
-    definitions = Governance.list_limit_definitions(run.mission_id)
+    definitions = active_limit_definitions(run.mission_id)
 
     with {:ok, source_samples} <- fetch_source_samples(run.mission_id, spacecraft_id),
          {:ok, limit_events} <- evaluate_samples(source_samples, definitions) do
@@ -171,7 +172,7 @@ defmodule Cadence.Limits do
     merged_samples =
       (telemetry_samples ++ derived_samples)
       |> Enum.sort(fn left, right ->
-        compare_sort_keys(source_sample_sort_key(left), source_sample_sort_key(right)) != :gt
+        compare_source_sample_order(left, right) != :gt
       end)
 
     {:ok, merged_samples}
@@ -302,18 +303,25 @@ defmodule Cadence.Limits do
   end
 
   defp latest_state_newer?(%Event{} = event, %TelemetryLatestLimitStateRow{} = latest_state_row) do
-    compare_sort_keys(
-      {event.generation_time || event.receipt_time, event.receipt_time, event.limit_event_id},
-      {latest_state_row.generation_time || latest_state_row.receipt_time,
-       latest_state_row.receipt_time, latest_state_row.limit_event_id}
-    ) == :gt
+    LatestProjectionOrder.newer?(event, latest_state_row, :limit_event_id)
   end
 
-  defp compare_sort_keys({time_a, receipt_a, id_a}, {time_b, receipt_b, id_b}) do
-    case DateTime.compare(time_a, time_b) do
+  defp compare_source_sample_order(left, right) do
+    compare_source_sample_keys(source_sample_order_key(left), source_sample_order_key(right))
+  end
+
+  defp source_sample_order_key(sample) do
+    {sample.receipt_time, sample.generation_time || sample.receipt_time, sample.sample_id}
+  end
+
+  defp compare_source_sample_keys(
+         {receipt_a, generation_a, id_a},
+         {receipt_b, generation_b, id_b}
+       ) do
+    case DateTime.compare(receipt_a, receipt_b) do
       :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(id_a, id_b)
+        case DateTime.compare(generation_a, generation_b) do
+          :eq -> compare_source_sample_ids(id_a, id_b)
           other -> other
         end
 
@@ -322,9 +330,9 @@ defmodule Cadence.Limits do
     end
   end
 
-  defp compare_ids(id_a, id_b) when id_a > id_b, do: :gt
-  defp compare_ids(id_a, id_b) when id_a < id_b, do: :lt
-  defp compare_ids(_id_a, _id_b), do: :eq
+  defp compare_source_sample_ids(left, right) when left > right, do: :gt
+  defp compare_source_sample_ids(left, right) when left < right, do: :lt
+  defp compare_source_sample_ids(_left, _right), do: :eq
 
   defp build_limit_event_id(definition, source_sample, :canonical_event) do
     "limit_event:" <>
@@ -352,7 +360,27 @@ defmodule Cadence.Limits do
       "limit_definition_id" => definition.limit_definition_id,
       "limit_definition_version" => definition.version
     })
+    |> maybe_put_lifecycle_metadata(definition)
     |> maybe_put_evaluation_mode(mode)
+  end
+
+  defp maybe_put_lifecycle_metadata(provenance, %Definition{metadata: metadata})
+       when is_map(metadata) do
+    provenance
+    |> maybe_put_metadata(metadata, "definition_activation_key")
+    |> maybe_put_metadata(metadata, "limit_definition_lifecycle_event_id")
+    |> maybe_put_metadata(metadata, "limit_activation_event_id")
+    |> maybe_put_metadata(metadata, "limit_activation_event_type")
+    |> maybe_put_metadata(metadata, "active_from")
+  end
+
+  defp maybe_put_lifecycle_metadata(provenance, %Definition{}), do: provenance
+
+  defp maybe_put_metadata(provenance, metadata, key) do
+    case Map.get(metadata, key) do
+      nil -> provenance
+      value -> Map.put(provenance, key, value)
+    end
   end
 
   defp maybe_put_evaluation_mode(provenance, :latest_value_projection) do
@@ -361,9 +389,11 @@ defmodule Cadence.Limits do
 
   defp maybe_put_evaluation_mode(provenance, _mode), do: provenance
 
-  defp source_sample_sort_key(source_sample) do
-    {source_sample.receipt_time, source_sample.generation_time || source_sample.receipt_time,
-     source_sample.sample_id}
+  defp active_limit_definitions(mission_id) do
+    case DefinitionLifecycle.list_active_definitions(mission_id) do
+      [] -> Governance.list_limit_definitions(mission_id)
+      definitions -> definitions
+    end
   end
 
   defp insert_run(%Run{} = run) do

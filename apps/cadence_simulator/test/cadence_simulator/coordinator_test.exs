@@ -169,7 +169,7 @@ defmodule CadenceSimulator.CoordinatorTest do
              )
 
     on_exit(fn ->
-      if Process.alive?(simulator), do: Coordinator.stop(simulator)
+      stop_coordinator(simulator)
     end)
 
     assert_eventually(fn ->
@@ -178,7 +178,10 @@ defmodule CadenceSimulator.CoordinatorTest do
 
     assert %TelemetrySampleRow{} =
              TelemetrySampleRow
-             |> where([row], row.mission_id == ^mission_id and row.point_name == "TMHK.uptime_seconds")
+             |> where(
+               [row],
+               row.mission_id == ^mission_id and row.point_name == "TMHK.uptime_seconds"
+             )
              |> first()
              |> Repo.one()
   end
@@ -194,5 +197,14 @@ defmodule CadenceSimulator.CoordinatorTest do
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
     end
+  end
+
+  defp stop_coordinator(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: Coordinator.stop(pid)
+  catch
+    :exit, reason when reason in [:noproc, :normal, :shutdown] -> :ok
+    :exit, {:noproc, _} -> :ok
+    :exit, {:shutdown, _} -> :ok
+    :exit, reason -> exit(reason)
   end
 end

@@ -80,8 +80,12 @@ defmodule CadenceWeb.CommsRoutingNewLive do
       <.page_header
         title="New Routing Rule"
         subtitle="Declare durable spacecraft use of a transport for a purpose and direction. Contacts and runtime Links are handled later."
-        back_label="Routing"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Routing", ~p"/missions/#{@current_mission.mission_id}/comms/routing"},
+          {"New Routing Rule", nil}
+        ]}
       />
 
       <.routing_rule_form
@@ -141,18 +145,10 @@ defmodule CadenceWeb.CommsRoutingNewLive do
         <.input field={@form[:role]} type="select" label="Role" options={role_options()} required />
       </.form_section>
 
-      <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-        <.button type="submit" size={:md}>
-          Create Routing Rule
-        </.button>
-        <.button
-          variant={:ghost}
-          size={:md}
-          navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
-        >
-          Cancel
-        </.button>
-      </div>
+      <.form_actions
+        submit="Create Routing Rule"
+        cancel_navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing"}
+      />
     </.form>
     """
   end
@@ -160,19 +156,6 @@ defmodule CadenceWeb.CommsRoutingNewLive do
   attr :number, :string, required: true
   attr :title, :string, required: true
   slot :inner_block, required: true
-
-  defp form_section(assigns) do
-    ~H"""
-    <section class="space-y-4">
-      <div class="flex items-center gap-3">
-        <span class="hud-label text-primary/70">{@number}</span>
-        <h2 class="hud-label">{@title}</h2>
-        <div class="flex-1 h-px bg-base-300/60"></div>
-      </div>
-      {render_slot(@inner_block)}
-    </section>
-    """
-  end
 
   defp empty_form_params(params) do
     %{

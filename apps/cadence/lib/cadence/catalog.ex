@@ -12,9 +12,12 @@ defmodule Cadence.Catalog do
   alias Cadence.Catalog.Command.Snapshot, as: CommandCatalogSnapshot
   alias Cadence.Catalog.Telemetry.{RuntimeArtifacts, RuntimeDiff}
   alias Cadence.Catalog.Telemetry.Snapshot, as: TelemetryCatalogSnapshot
+  alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Governance
   alias Cadence.Jobs
   alias Cadence.Missions
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
 
   alias Cadence.Persistence.Schemas.{
     CatalogArtifactRow,
@@ -363,9 +366,13 @@ defmodule Cadence.Catalog do
     |> maybe_filter_artifact_id(artifact_id)
     |> maybe_filter_import_run_id(import_run_id)
     |> order_by([row], desc: row.inserted_at, desc: row.snapshot_id)
+    |> maybe_limit(Keyword.get(opts, :limit))
     |> Repo.all()
     |> Enum.map(&CatalogTelemetrySnapshotRow.to_domain/1)
   end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, max) when is_integer(max) and max > 0, do: limit(query, ^max)
 
   @spec fetch_command_snapshot(binary(), binary(), binary()) ::
           {:ok, CommandCatalogSnapshot.t()} | {:error, term()}
@@ -651,12 +658,34 @@ defmodule Cadence.Catalog do
              }
            }),
          {:ok, %CatalogRevisionRow{} = row} <-
-           Repo.insert(CatalogRevisionRow.changeset(revision)) do
-      {:ok, CatalogRevisionRow.to_domain(row)}
+           Repo.insert(CatalogRevisionRow.changeset(revision)),
+         revision = CatalogRevisionRow.to_domain(row),
+         {:ok, %OperationalEvent{}} <-
+           revision
+           |> OperationalEvent.from_catalog_revision(row.inserted_at)
+           |> then(&OperationalEvents.persist_event(Repo, &1)) do
+      maybe_invalidate_dashboard_catalog_revision(revision)
+      {:ok, revision}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp maybe_invalidate_dashboard_catalog_revision(%Revision{} = revision) do
+    config = Application.get_env(:cadence, :dashboard_runtime_invalidation, [])
+
+    if Keyword.get(config, :enabled?, true) do
+      RuntimeInvalidation.catalog_revision_changed(
+        %{
+          organization_id: revision.organization_id,
+          mission_id: revision.mission_id
+        },
+        runtime_cache: Keyword.get(config, :runtime_cache, Cadence.Dashboards.RuntimeCache)
+      )
+    end
+
+    :ok
   end
 
   defp snapshot_id_for_run(row_module, import_run_id) do

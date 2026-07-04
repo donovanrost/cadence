@@ -9,10 +9,13 @@ defmodule CadenceWeb.AdminLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Accounts.{Password, User}
+  alias Cadence.Dashboards.RuntimeInvalidation
+  alias Cadence.Dashboards.RuntimeInvalidation.Event
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
   alias Cadence.Persistence.Schemas.{UserLocalCredentialRow, UserRow}
   alias Cadence.Repo
+  alias CadenceWeb.TestFixtures
 
   @bootstrap_admin_email "bootstrap-admin@example.com"
   @bootstrap_admin_password "bootstrap-password-123"
@@ -29,6 +32,7 @@ defmodule CadenceWeb.AdminLiveTest do
       session_ttl_seconds: 3600
     )
 
+    reset_bootstrap_state!()
     assert {:ok, _user} = Cadence.ensure_bootstrap_admin()
     flush_mailbox()
 
@@ -43,6 +47,7 @@ defmodule CadenceWeb.AdminLiveTest do
   describe "authorization" do
     test "unauthenticated access redirects to /sign-in" do
       assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), ~p"/admin")
+      assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), ~p"/admin/runtime")
     end
 
     test "non-admin user is redirected to /" do
@@ -58,6 +63,7 @@ defmodule CadenceWeb.AdminLiveTest do
       conn = build_conn() |> init_test_session(%{user_session_token: session.session_token})
 
       assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin")
+      assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/runtime")
     end
 
     test "platform admin can access the dashboard" do
@@ -71,6 +77,7 @@ defmodule CadenceWeb.AdminLiveTest do
       {:ok, _view, html} = live(admin_conn(), ~p"/admin")
       assert html =~ "Organizations"
       assert html =~ "Users"
+      assert html =~ "Runtime"
     end
 
     test "organization list shows empty state when no orgs exist" do
@@ -150,11 +157,400 @@ defmodule CadenceWeb.AdminLiveTest do
     end
   end
 
+  describe "runtime diagnostics" do
+    test "admin can inspect dashboard runtime invalidation decisions" do
+      reset_runtime_health!()
+
+      invalidation =
+        Event.new(
+          :source_watermark_changed,
+          [:source_result, :frame],
+          %{
+            organization_id: "org-admin-runtime",
+            mission_id: "mission-admin-runtime",
+            logical_source: :telemetry,
+            observable: "HK.counter"
+          },
+          %{},
+          %{source_results: 1, frames: 1, total: 2},
+          occurred_at: ~U[2026-06-24 12:00:00Z]
+        )
+
+      RuntimeInvalidation.emit_decision(
+        invalidation,
+        %{
+          dashboard_id: "dashboard-admin-runtime",
+          organization_id: "org-admin-runtime",
+          mission_id: "mission-admin-runtime",
+          matches?: false,
+          dashboard_matches?: true,
+          context_matches?: false,
+          context_reason: :replay_run_mismatch,
+          refresh_allowed?: false,
+          refresh_reason: :stale_for_context,
+          decision_status: :filtered
+        },
+        invalidation_event_id: Event.id(invalidation)
+      )
+
+      Cadence.runtime_health_snapshot()
+
+      {:ok, view, _html} = live(admin_conn(), ~p"/admin/runtime")
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-page[data-runtime-decision-count="1"][data-runtime-decision-status-summary="filtered:1"][data-runtime-decision-refresh-summary="stale_for_context:1"])
+             )
+
+      assert has_element?(view, "#runtime-decision-count", "1")
+      assert has_element?(view, "#runtime-refresh-suppressed", "1")
+      assert has_element?(view, "#runtime-filtered", "1")
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="dashboard"]),
+               "dashboard-admin-runtime"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="context"]),
+               "replay_run_mismatch"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="refresh"]),
+               "stale_for_context"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="source"]),
+               "runtime_health"
+             )
+    end
+
+    test "admin can filter durable runtime invalidation decisions by impact metadata" do
+      reset_runtime_health!()
+
+      org = TestFixtures.persist_org!(display_name: "Runtime Diagnostics Org")
+      mission = TestFixtures.persist_mission!(org, display_name: "Runtime Diagnostics Mission")
+
+      dashboard =
+        TestFixtures.persist_dashboard_document!(mission,
+          dashboard_id: "dashboard-admin-runtime-durable",
+          name: "Runtime Diagnostics Dashboard"
+        )
+
+      matching_invalidation =
+        Event.new(
+          :source_watermark_changed,
+          [:source_result, :frame],
+          %{
+            organization_id: org.organization_id,
+            mission_id: mission.mission_id,
+            logical_source: :telemetry,
+            observable: "HK.counter",
+            replay_run_id: "replay-admin-run-1"
+          },
+          %{},
+          %{source_results: 2, frames: 1, total: 3},
+          occurred_at: ~U[2026-06-24 12:10:00Z]
+        )
+
+      assert {:ok, matching_decision_event} =
+               Cadence.record_dashboard_runtime_invalidation_decision(
+                 matching_invalidation,
+                 %{
+                   dashboard_id: dashboard.dashboard_id,
+                   organization_id: org.organization_id,
+                   mission_id: mission.mission_id,
+                   matches?: false,
+                   dashboard_matches?: true,
+                   context_matches?: false,
+                   context_reason: :replay_run_mismatch,
+                   refresh_allowed?: false,
+                   refresh_reason: :stale_for_context,
+                   affected_placement_count: 1,
+                   affected_placement_ids: ["placement-admin-counter"],
+                   affected_widget_type_ids: ["cadence.value_tile"],
+                   affected_impact_reasons: [:primary_source],
+                   decision_status: :filtered
+                 },
+                 invalidation_event_id: Event.id(matching_invalidation),
+                 decision_observed_at: ~U[2026-06-24 12:10:05Z]
+               )
+
+      other_invalidation =
+        Event.new(
+          :source_watermark_changed,
+          [:source_result],
+          %{
+            organization_id: org.organization_id,
+            mission_id: mission.mission_id,
+            logical_source: :telemetry,
+            observable: "HK.voltage",
+            replay_run_id: "replay-admin-run-2"
+          },
+          %{},
+          %{source_results: 1, total: 1},
+          occurred_at: ~U[2026-06-24 12:11:00Z]
+        )
+
+      assert {:ok, _event} =
+               Cadence.record_dashboard_runtime_invalidation_decision(
+                 other_invalidation,
+                 %{
+                   dashboard_id: dashboard.dashboard_id,
+                   organization_id: org.organization_id,
+                   mission_id: mission.mission_id,
+                   matches?: true,
+                   dashboard_matches?: true,
+                   context_matches?: true,
+                   context_reason: :active_context,
+                   refresh_allowed?: true,
+                   refresh_reason: :source_changed,
+                   affected_placement_count: 1,
+                   affected_placement_ids: ["placement-admin-voltage"],
+                   affected_widget_type_ids: ["cadence.trend_chart"],
+                   affected_impact_reasons: [:secondary_source],
+                   decision_status: :refresh_allowed
+                 },
+                 invalidation_event_id: Event.id(other_invalidation),
+                 decision_observed_at: ~U[2026-06-24 12:11:05Z]
+               )
+
+      {:ok, view, _html} =
+        live(
+          admin_conn(),
+          ~p"/admin/runtime?#{%{dashboard_id: dashboard.dashboard_id, boundary: "source_watermark_changed", context_reason: "replay_run_mismatch", replay_run_id: "replay-admin-run-1", affected_placement_id: "placement-admin-counter", decision: matching_decision_event.dashboard_runtime_invalidation_decision_event_id}}"
+        )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-page[data-runtime-decision-count="1"][data-runtime-decision-source-summary="durable_projection:1"][data-runtime-decision-filter-dashboard="#{dashboard.dashboard_id}"][data-runtime-decision-filter-replay-run="replay-admin-run-1"][data-runtime-decision-filter-affected-placement="placement-admin-counter"][data-runtime-selected-decision-state="visible"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="source"]),
+               "durable_projection"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-placements"]),
+               "placement-admin-counter"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-impact"]),
+               "primary_source"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="replay-run"]),
+               "replay-admin-run-1"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail-evidence[data-runtime-decision-detail-key="#{matching_decision_event.dashboard_runtime_invalidation_decision_event_id}"][data-runtime-decision-detail-source="durable_projection"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Decision-ID"]),
+               matching_decision_event.dashboard_runtime_invalidation_decision_event_id
+             )
+
+      assert has_element?(
+               view,
+               "#admin-runtime-decision-detail-filters",
+               "HK.counter"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Replay-Run"]),
+               "replay-admin-run-1"
+             )
+
+      assert has_element?(
+               view,
+               "#admin-runtime-decision-detail-measurements",
+               "source_results"
+             )
+
+      assert has_element?(
+               view,
+               "#admin-runtime-decision-detail-decision",
+               "dashboard_matches?"
+             )
+
+      refute has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="affected-placements"]),
+               "placement-admin-voltage"
+             )
+
+      refute has_element?(
+               view,
+               ~s(#admin-runtime-decisions-table [data-runtime-decision-field="replay-run"]),
+               "replay-admin-run-2"
+             )
+    end
+
+    test "admin deep links render selected decision detail outside filtered results" do
+      reset_runtime_health!()
+
+      org = TestFixtures.persist_org!(display_name: "Runtime Deep Link Org")
+      mission = TestFixtures.persist_mission!(org, display_name: "Runtime Deep Link Mission")
+
+      dashboard =
+        TestFixtures.persist_dashboard_document!(mission,
+          dashboard_id: "dashboard-admin-runtime-deep-link",
+          name: "Runtime Deep Link Dashboard"
+        )
+
+      invalidation =
+        Event.new(
+          :historical_data_changed,
+          [:source_result, :frame],
+          %{
+            organization_id: org.organization_id,
+            mission_id: mission.mission_id,
+            logical_source: :telemetry,
+            observable: "HK.counter",
+            replay_run_id: "replay-admin-deep-link"
+          },
+          %{},
+          %{source_results: 1, frames: 1, total: 2},
+          occurred_at: ~U[2026-06-24 12:20:00Z]
+        )
+
+      assert {:ok, decision_event} =
+               Cadence.record_dashboard_runtime_invalidation_decision(
+                 invalidation,
+                 %{
+                   dashboard_id: dashboard.dashboard_id,
+                   organization_id: org.organization_id,
+                   mission_id: mission.mission_id,
+                   matches?: false,
+                   dashboard_matches?: true,
+                   context_matches?: false,
+                   context_reason: :replay_run_mismatch,
+                   refresh_allowed?: false,
+                   refresh_reason: :stale_for_context,
+                   affected_placement_count: 1,
+                   affected_placement_ids: ["placement-admin-deep-link"],
+                   affected_widget_type_ids: ["cadence.value_tile"],
+                   affected_impact_reasons: [:primary_source],
+                   decision_status: :filtered
+                 },
+                 invalidation_event_id: Event.id(invalidation),
+                 decision_observed_at: ~U[2026-06-24 12:20:05Z]
+               )
+
+      {:ok, view, _html} =
+        live(
+          admin_conn(),
+          ~p"/admin/runtime?#{%{dashboard_id: "dashboard-filter-miss", decision: decision_event.dashboard_runtime_invalidation_decision_event_id}}"
+        )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-page[data-runtime-decision-count="0"][data-runtime-decision-filter-dashboard="dashboard-filter-miss"][data-runtime-selected-decision-state="outside_results"])
+             )
+
+      assert has_element?(view, "#admin-runtime-decisions-empty")
+      refute has_element?(view, "#admin-runtime-decision-detail-missing")
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail-outside-results[data-runtime-selected-decision-key="#{decision_event.dashboard_runtime_invalidation_decision_event_id}"]),
+               "outside the current filtered result set"
+             )
+
+      assert has_element?(
+               view,
+               "#admin-runtime-show-selected-context",
+               "Show in table context"
+             )
+
+      context_link =
+        view
+        |> element("#admin-runtime-decision-detail-outside-results")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#admin-runtime-decision-detail-outside-results")
+        |> LazyHTML.attribute("data-runtime-selected-decision-context-link")
+        |> List.first()
+
+      assert URI.parse(context_link).path == "/admin/runtime"
+
+      assert URI.decode_query(URI.parse(context_link).query) == %{
+               "affected_placement_id" => "placement-admin-deep-link",
+               "boundary" => "historical_data_changed",
+               "context_reason" => "replay_run_mismatch",
+               "dashboard_id" => dashboard.dashboard_id,
+               "decision" => decision_event.dashboard_runtime_invalidation_decision_event_id,
+               "mission_id" => mission.mission_id,
+               "replay_run_id" => "replay-admin-deep-link"
+             }
+
+      assert [^context_link] =
+               view
+               |> element("#admin-runtime-decision-detail-outside-results")
+               |> render()
+               |> LazyHTML.from_fragment()
+               |> LazyHTML.query("#admin-runtime-show-selected-context")
+               |> LazyHTML.attribute("href")
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail-evidence[data-runtime-decision-detail-key="#{decision_event.dashboard_runtime_invalidation_decision_event_id}"][data-runtime-decision-detail-source="durable_projection"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Decision-ID"]),
+               decision_event.dashboard_runtime_invalidation_decision_event_id
+             )
+
+      assert has_element?(
+               view,
+               ~s(#admin-runtime-decision-detail [data-runtime-decision-detail-field="Replay-Run"]),
+               "replay-admin-deep-link"
+             )
+    end
+
+    test "admin runtime diagnostics show an empty decision state" do
+      reset_runtime_health!()
+
+      {:ok, view, _html} = live(admin_conn(), ~p"/admin/runtime")
+
+      assert has_element?(view, "#admin-runtime-page[data-runtime-decision-count=\"0\"]")
+      assert has_element?(view, "#admin-runtime-decisions-empty")
+    end
+  end
+
   ## Helpers
 
   defp admin_conn do
     token = bootstrap_admin_session_token()
     build_conn() |> init_test_session(%{user_session_token: token})
+  end
+
+  defp reset_runtime_health! do
+    Cadence.reset_runtime_health()
+
+    on_exit(fn ->
+      Cadence.reset_runtime_health()
+    end)
   end
 
   defp bootstrap_admin_session_token do

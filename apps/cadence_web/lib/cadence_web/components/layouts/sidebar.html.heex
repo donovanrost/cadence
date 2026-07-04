@@ -81,6 +81,12 @@
                 label="Organizations"
                 active={assigns[:nav_item] == :admin_organizations}
               />
+              <.nav_item
+                navigate={~p"/admin/runtime"}
+                icon="hero-signal"
+                label="Runtime"
+                active={assigns[:nav_item] == :admin_runtime}
+              />
             </ul>
 
           <% :organization -> %>

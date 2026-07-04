@@ -19,6 +19,7 @@ defmodule Cadence.Governance do
   alias Cadence.Capabilities.{Registry, ValidationContext}
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Limits.Definition, as: LimitDefinition
+  alias Cadence.Limits.DefinitionLifecycle
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
 
@@ -249,8 +250,12 @@ defmodule Cadence.Governance do
              on_conflict: :nothing,
              conflict_target: [:mission_id, :limit_definition_id, :version]
            ) do
-        {:ok, _row} -> {:ok, definition}
-        {:error, %Changeset{} = changeset} -> {:error, changeset}
+        {:ok, %GovernedLimitDefinitionRow{} = row} ->
+          _ = DefinitionLifecycle.record_definition_activation(definition, row)
+          {:ok, definition}
+
+        {:error, %Changeset{} = changeset} ->
+          {:error, changeset}
       end
     end
   end

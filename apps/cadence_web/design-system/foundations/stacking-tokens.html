@@ -1,0 +1,109 @@
+<!-- @dsCard group="Foundations" name="Stacking tokens (spec)" subtitle="The z-tier scale + scrim — implementable · step behind Layering" width="1040" height="1520" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Stacking tokens (spec)</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.win { border-color: oklch(78% 0.12 175 / 0.5); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; color: oklch(85% 0.02 250 / 0.85); max-width: 60rem; }
+  pre .c { color: oklch(60% 0.02 250); } pre .k { color: oklch(80% 0.12 210); } pre .v { color: oklch(76% 0.15 285); } pre .h { color: var(--st-yellow); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 64rem; }
+  th { text-align: left; font-size: .64rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.cur { font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(82% 0.02 250 / 0.65); }
+  td.tok { font-family: ui-monospace, monospace; color: var(--glow-cyan); white-space: nowrap; }
+
+  .usage { margin-top: 2.4rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.4rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: var(--st-green); } .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations &middot; part of Layering (🎯)</p>
+  <h1>Stacking tokens <span style="font-size:.9rem;color:oklch(82% .02 250 / .5)">(spec)</span></h1>
+  <div class="status">&#10003; Implemented — the z-scale is live in <code style="color:inherit">tokens.css</code> and every template literal is migrated. &#9678; The scrim tokens (--scrim-bg, --scrim-blur) wait for the first modal that needs them.</div>
+  <p class="lede">Replaces the ad-hoc z-soup (<code>z-[5]</code>&times;12, <code>z-[100]</code>, <code>z-50</code>) with a
+    <strong>named, sparse scale</strong>. Verified: Cadence overlays are div-based (no native <code>&lt;dialog&gt;</code>),
+    so z-index fully governs — the enum is sufficient, no top-layer special-casing.</p>
+
+  <p class="section-label">The scale</p>
+<pre><span class="c">/* :root — named z-tiers, spaced 100 apart so you can insert without renumbering */</span>
+<span class="k">--z-base</span>:     <span class="v">0</span>;     <span class="c">/* normal flow */</span>
+<span class="k">--z-sticky</span>:   <span class="v">100</span>;   <span class="c">/* pinned headers / toolbars */</span>
+<span class="k">--z-chrome</span>:   <span class="v">200</span>;   <span class="c">/* persistent frame: sidebar, ops status bar */</span>
+<span class="k">--z-popover</span>:  <span class="v">300</span>;   <span class="c">/* dropdowns, menus, action-menu, widget popovers */</span>
+<span class="k">--z-scrim</span>:    <span class="v">400</span>;   <span class="c">/* modal backdrop */</span>
+<span class="k">--z-modal</span>:    <span class="v">410</span>;   <span class="c">/* dialog content — just above its scrim */</span>
+<span class="k">--z-toast</span>:    <span class="v">500</span>;   <span class="c">/* flash / notifications */</span>
+<span class="k">--z-tooltip</span>:  <span class="v">600</span>;   <span class="c">/* always on top */</span></pre>
+  <p class="note">Order is deliberate: <strong>toast &amp; tooltip sit above modal</strong> — transient info must stay
+    visible over a dialog. <code>scrim</code> + <code>modal</code> are a paired couplet (backdrop just below content).</p>
+
+  <p class="section-label">Migration map — grounded in the grep</p>
+  <table>
+    <thead><tr><th>Today</th><th>Where</th><th>&rarr; token</th></tr></thead>
+    <tbody>
+      <tr><td class="cur">z-[5] &times;12</td><td>dashboard widget popovers (<code>widget_*</code>, <code>source_*</code>, <code>comparison_*</code>)</td><td class="tok">--z-popover</td></tr>
+      <tr><td class="cur">z-[100]</td><td>flash stack (<code>ui.ex</code>)</td><td class="tok">--z-toast</td></tr>
+      <tr><td class="cur">z-[100]</td><td>notification / user menus (<code>ui.ex</code>)</td><td class="tok">--z-popover</td></tr>
+      <tr><td class="cur">z-index: 100</td><td>sidebar nav-tooltip (<code>sidebar.css</code>)</td><td class="tok">--z-tooltip</td></tr>
+      <tr><td class="cur">z-index: 50</td><td>sidebar toggle (<code>sidebar.css</code>)</td><td class="tok">--z-chrome</td></tr>
+      <tr><td class="cur">z-10</td><td><code>core_components.ex</code> (verify)</td><td class="tok">--z-sticky</td></tr>
+      <tr><td class="cur">z-[1/2/3]</td><td>sibling order inside one component</td><td class="tok">keep local</td></tr>
+    </tbody>
+  </table>
+  <p class="note">~14 files to touch (the dozen widget components + <code>ui.ex</code> + <code>sidebar.css</code>) — a real
+    migration, not a one-liner. The tiny local <code>z-[1/2/3]</code> stay as-is: the enum governs <em>cross-component</em>
+    layers; in-component sibling ordering is fine to keep local.</p>
+
+  <p class="section-label">What it fixes</p>
+  <p class="note win">&#10003; <strong>Popovers were below chrome.</strong> Today widget popovers (<code>z-[5]</code>) sit
+    <em>under</em> the sidebar / status bar (<code>z-50</code>/<code>100</code>) — a popover can be clipped by the
+    chrome. The enum makes <code>popover (300) &gt; chrome (200)</code>, so overlays always clear the frame.</p>
+  <p class="note win">&#10003; <strong>Flash and menus shared <code>z-[100]</code></strong> with no defined order. Now
+    <code>toast (500) &gt; popover (300)</code> — a notification never hides behind an open menu.</p>
+
+  <p class="section-label">The scrim — a real layer</p>
+<pre><span class="k">--scrim-bg</span>:   <span class="v">oklch(0% 0 0 / 0.55)</span>;   <span class="c">/* dim the world behind a modal */</span>
+<span class="k">--scrim-blur</span>: <span class="v">blur(2px)</span>;            <span class="c">/* optional: frost the content too */</span>
+
+<span class="c">/* a full-viewport overlay at --z-scrim: dims + blurs + blocks pointer events;
+   modal content sits at --z-modal, just above. This is the literal
+   enforcement of "you may not touch what's behind." */</span></pre>
+  <p class="note">Today daisyUI's <code>modal-backdrop</code> only dims. Formalizing the scrim (dim + blur, reusable for
+    any modal / sheet) makes the "permission" half of layering first-class.</p>
+
+  <p class="section-label">Rules</p>
+  <div class="usage">
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Every out-of-flow overlay reads a <code>--z-*</code> token — never a literal <code>z-[n]</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Toast &amp; tooltip stay above modal; chrome stays below popover. The order encodes the rules.</li>
+      <li class="do"><span class="mark">&#10003;</span> Need a new layer? Add a named token in a 100-gap — don't squeeze a magic number between tiers.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't promote persistent chrome above transient popovers — <code>chrome &lt; popover</code> is intentional.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't use the enum for sibling ordering inside one component — that stays local.</li>
+    </ul>
+  </div>
+  <p class="note" style="border-color:oklch(80% 0.12 210 / 0.4)">Fits the frozen-CSS rule: adds <code>:root</code>
+    tokens and swaps existing <code>z-[n]</code> for <code>var(--z-*)</code> (value-tuning) — no new selectors.</p>
+</body>
+</html>

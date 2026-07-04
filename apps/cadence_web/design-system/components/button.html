@@ -1,0 +1,105 @@
+<!-- @dsCard group="Components" name="Button" subtitle="<.button> — 4 variants × 3 sizes" width="960" height="640" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Button</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --glow-purple: oklch(72% 0.15 285); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+  .row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.4rem; }
+  .col-label { width: 7rem; font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(60% 0.02 250); }
+
+  /* Faithful .btn — 2px radius, uppercase, tracked, .75rem, weight 500 */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    height: 2rem; padding: 0 1rem; border-radius: 2px; border: 1px solid transparent; cursor: pointer;
+    font-weight: 500; letter-spacing: .05em; text-transform: uppercase; font-size: .75rem;
+    background: oklch(23% 0.025 258); color: oklch(85% 0.02 250); }
+  /* daisyUI heights with --size-field: 0.21875rem — :md emits no size class */
+  .btn-xs { height: 1.3125rem; padding: 0 .6rem; font-size: .6875rem; }
+  .btn-sm { height: 1.75rem; padding: 0 .85rem; }
+  .btn-md { height: 2.1875rem; padding: 0 1.1rem; }
+  .btn-primary { background: oklch(80% 0.12 210); color: oklch(15% 0.02 210);
+    border-color: oklch(from var(--glow-cyan) l c h / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(from var(--glow-cyan) l c h / 0.2); }
+  .btn-secondary { background: oklch(72% 0.15 285); color: oklch(15% 0.02 285);
+    border-color: oklch(from var(--glow-purple) l c h / 0.5); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: transparent; }
+  .btn-danger { background: transparent; color: oklch(68% 0.20 10); border-color: oklch(68% 0.20 10); }
+  /* states */
+  .state-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+  .state-name { width: 7rem; font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(60% 0.02 250); }
+  .btn-hover { box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 15px oklch(80% 0.12 210 / 0.4); }
+  .btn-focus { box-shadow: 0 0 0 1px oklch(80% 0.12 210 / 0.5), 0 0 10px oklch(80% 0.12 210 / 0.2); outline: none; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .spinner { width: .8rem; height: .8rem; border: 2px solid oklch(15% 0.02 210 / 0.35);
+    border-top-color: oklch(15% 0.02 210); border-radius: 9999px; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .note { font-size: .78rem; color: oklch(70% 0.02 250); margin: .4rem 0 0; line-height: 1.55; max-width: 64ch; }
+  .note code { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 78ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Button</h1>
+  <p class="lede">The canonical <code>&lt;.button&gt;</code>. Sharp, uppercase, tracked. Buttons
+    <strong>never glow</strong> — primary carries a faint cyan rim instead. <code>:sm</code> is the
+    default; <code>:md</code> is for form submits and page CTAs, <code>:xs</code> for inline table controls.</p>
+
+  <p class="section-label">Variants</p>
+  <div class="row"><span class="col-label">:primary</span><button class="btn btn-sm btn-primary">Deploy</button></div>
+  <div class="row"><span class="col-label">:secondary</span><button class="btn btn-sm btn-secondary">Simulate</button></div>
+  <div class="row"><span class="col-label">:ghost</span><button class="btn btn-sm btn-ghost">Cancel</button></div>
+  <div class="row"><span class="col-label">:danger</span><button class="btn btn-sm btn-danger">Abort pass</button></div>
+  <p class="note">Variant names are the component's API; the emitted daisyUI classes differ — <code>:danger</code>
+    renders <code>btn-error btn-outline</code>. Passing <code>navigate</code> / <code>patch</code> / <code>href</code>
+    renders a <code>&lt;.link&gt;</code> styled as the same button ("New Transport" is a link, not a
+    <code>&lt;button&gt;</code>). <code>rest</code> passes through: <code>disabled</code>, <code>form</code>,
+    <code>data-confirm</code>.</p>
+
+  <p class="section-label">Sizes</p>
+  <div class="row">
+    <span class="col-label">xs / sm / md</span>
+    <button class="btn btn-xs btn-primary">Edit</button>
+    <button class="btn btn-sm btn-primary">Deploy</button>
+    <button class="btn btn-md btn-primary">Create spacecraft</button>
+  </div>
+
+  <p class="section-label">States</p>
+  <div class="state-row"><span class="state-name">default</span><button class="btn btn-sm btn-primary">Deploy</button></div>
+  <div class="state-row"><span class="state-name">hover</span><button class="btn btn-sm btn-primary btn-hover">Deploy</button></div>
+  <div class="state-row"><span class="state-name">focus</span><button class="btn btn-sm btn-primary btn-focus">Deploy</button></div>
+  <div class="state-row"><span class="state-name">disabled</span><button class="btn btn-sm btn-primary" disabled>Deploy</button></div>
+  <div class="state-row"><span class="state-name">loading</span><button class="btn btn-sm btn-primary" disabled><span class="spinner"></span> Deploying&hellip;</button></div>
+  <p class="note">Hover and focus are interaction states, shown here as static specimens. <strong>Loading is not a button variant</strong> — it's LiveView-driven via the <code>phx-submit-loading</code> / <code>phx-click-loading</code> classes (pair with <code>phx-disable-with</code> to swap the label). Disabled passes straight through to the underlying element.</p>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Default to <code>:sm</code>. Reserve <code>:md</code> for form submits and page CTAs, <code>:xs</code> for inline table controls.</li>
+      <li class="do"><span class="mark">&#10003;</span> Use <code>:danger</code> (outline) for destructive actions — aborting a pass, deleting a record.</li>
+      <li class="do"><span class="mark">&#10003;</span> One primary action per view; demote the rest to <code>:ghost</code> or <code>:secondary</code>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Never hand-write <code>class="btn &hellip;"</code> — always reach for <code>&lt;.button&gt;</code>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Buttons never glow; glow is reserved for navigation and live / alert signals.</li>
+    </ul>
+  </div>
+</body>
+</html>

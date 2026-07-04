@@ -20,13 +20,17 @@ defmodule CadenceWeb.Components.Badges do
   """
   attr :status, :atom, required: true
   attr :label, :string, default: nil
+  attr :rest, :global
 
   def status_badge(assigns) do
     ~H"""
-    <span class={[
-      "inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
-      status_class(@status)
-    ]}>
+    <span
+      class={[
+        "inline-flex rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide",
+        status_class(@status)
+      ]}
+      {@rest}
+    >
       {@label || status_label(@status)}
     </span>
     """
@@ -64,7 +68,7 @@ defmodule CadenceWeb.Components.Badges do
 
     ~H"""
     <span class={[
-      "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+      "inline-flex items-center gap-1 px-2 py-0.5 rounded-[2px] text-xs font-medium",
       severity_badge_class(@severity),
       @class
     ]}>

@@ -190,7 +190,11 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
 
   def dropped_unknowns_banner(assigns) do
     ~H"""
-    <div class="alert alert-warning text-sm" id="telemetry-decom-dropped-unknowns">
+    <.callout
+      variant={:warning}
+      id="telemetry-decom-dropped-unknowns"
+      class="flex items-center justify-between gap-4"
+    >
       <span>
         {length(@dropped)} previously selected {if length(@dropped) == 1, do: "APID is", else: "APIDs are"}
         not in this revision:
@@ -204,7 +208,7 @@ defmodule CadenceWeb.SpacecraftTelemetryDecomLive.Components do
       >
         Drop them
       </.button>
-    </div>
+    </.callout>
     """
   end
 

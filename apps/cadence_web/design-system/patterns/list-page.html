@@ -1,0 +1,181 @@
+<!-- @dsCard group="Patterns" name="List page" subtitle="page_header + toolbar + table + pagination + empty state" width="1120" height="1180" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — List page pattern</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --icon-muted: oklch(from var(--glow-cyan) 68% 0.02 h); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1.page { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2.2rem; max-width: 70ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.4rem 0 1.1rem; }
+
+  /* ---- the specimen "page" ---- */
+  .specimen { display: grid; gap: 1.5rem; /* space-y-6 */ }
+
+  /* page_header: border-b primary/20, pb-4 */
+  .ph { border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding-bottom: 1rem;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.02 h); }
+  .crumbs { display: flex; gap: .5rem; margin-bottom: .25rem; }
+  .crumbs .sep { color: oklch(85% 0.02 250 / 0.4); }
+  .crumbs .cur { color: oklch(from var(--glow-cyan) l c h / 0.9); }
+  .ph h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.01em; margin: .5rem 0 0; }
+  .suffix { margin-left: .75rem; font-family: ui-monospace, monospace; font-size: 1rem; color: oklch(85% 0.02 250 / 0.6); font-weight: 400; }
+  .subtitle { margin: .25rem 0 0; font-size: .875rem; color: oklch(85% 0.02 250 / 0.7); max-width: 52ch; }
+
+  /* button */
+  .btn { display: inline-flex; align-items: center; gap: .4rem; height: 2rem; padding: 0 .85rem; border-radius: 2px;
+    border: 1px solid transparent; cursor: pointer; font-weight: 500; letter-spacing: .05em; text-transform: uppercase;
+    font-size: .75rem; }
+  .btn-primary { background: oklch(80% 0.12 210); color: oklch(15% 0.02 210); border-color: oklch(80% 0.12 210 / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(80% 0.12 210 / 0.2); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: transparent; height: 1.5rem;
+    padding: 0 .6rem; font-size: .6875rem; }
+  .btn-ghost[disabled] { color: oklch(50% 0.02 250); cursor: not-allowed; }
+  .plus { font-weight: 700; }
+
+  /* card padding:none + hud-corners */
+  .card { position: relative; background: oklch(17% 0.02 260); border: 1px solid oklch(23% 0.025 258); border-radius: 2px; }
+  .card::before, .card::after { content:''; position:absolute; width:12px; height:12px;
+    border-color: oklch(from var(--glow-cyan) l c h / 0.6); border-style: solid; pointer-events:none; }
+  .card::before { top:0; left:0; border-width: 2px 0 0 2px; }
+  .card::after { top:0; right:0; border-width: 2px 2px 0 0; }
+
+  /* toolbar: border-b base-300, px-4 py-2, justify-between */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem;
+    border-bottom: 1px solid oklch(23% 0.025 258); padding: .5rem 1rem; }
+  .field { background: oklch(18% 0.02 260); border: 1px solid oklch(80% 0.12 210 / 0.25); border-radius: 2px;
+    font-family: ui-monospace, monospace; font-size: .8rem; color: oklch(90% 0.02 250); padding: .3rem .6rem;
+    display: inline-flex; align-items: center; }
+  .field.search { width: 16rem; max-width: 100%; color: oklch(55% 0.02 250); }
+  .field.select { gap: .6rem; }
+  .field .chev { color: oklch(80% 0.12 210); }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .8125rem; }
+  th { text-align: left; font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--icon-muted); border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.2); padding: .55rem .85rem; }
+  td { border-bottom: 1px solid oklch(from var(--glow-cyan) l c h / 0.1); padding: .55rem .85rem; color: oklch(82% 0.02 250); }
+  tbody tr { border-left: 2px solid transparent; transition: border-color .15s ease, background .15s ease; }
+  tbody tr:hover { border-left-color: oklch(80% 0.12 210 / 0.6); background: oklch(80% 0.12 210 / 0.03); }
+  .name a { color: oklch(80% 0.12 210); }
+  .kind { text-transform: uppercase; color: oklch(80% 0.12 210 / 0.8); }
+  .cap { text-transform: uppercase; color: oklch(82% 0.02 250 / 0.7); }
+  .dim { color: oklch(82% 0.02 250 / 0.7); }
+
+  /* pagination: border-t base-300, px-4 py-2, justify-between */
+  .pager { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid oklch(23% 0.025 258);
+    padding: .5rem 1rem; }
+  .range { font-family: ui-monospace, monospace; font-size: .75rem; color: oklch(85% 0.02 250 / 0.7); }
+  .pager .btns { display: flex; gap: .25rem; }
+
+  /* empty state */
+  .empty { border: 1px dashed oklch(23% 0.025 258 / 0.6); background: oklch(12% 0.02 265 / 0.3); border-radius: 2px;
+    padding: 2rem; text-align: center; }
+  .empty .desc { margin: .5rem auto 0; max-width: 28rem; font-size: .875rem; color: oklch(85% 0.02 250 / 0.7); }
+  .empty .act { margin-top: 1.25rem; }
+
+  /* anatomy + usage */
+  .anatomy { display: grid; gap: .55rem; max-width: 80ch; margin-top: .4rem; }
+  .anatomy li { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; font-size: .85rem; line-height: 1.45;
+    color: oklch(78% 0.02 250); list-style: none; }
+  .anatomy .k { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+  .anatomy { padding: 0; margin: 0; }
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code, .anatomy code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Patterns</p>
+  <h1 class="page">List page</h1>
+  <p class="lede">The most-repeated screen in Cadence. A <code>space-y-6</code> stack of a
+    <code>&lt;.page_header&gt;</code> over a flush <code>&lt;.card padding={:none}&gt;</code> that wraps
+    <code>&lt;.toolbar&gt;</code> → <code>&lt;.table&gt;</code> → <code>&lt;.pagination&gt;</code>. The
+    components own markup and events; the LiveView owns state, URL, and data. When the list is empty,
+    the card is replaced wholesale by <code>&lt;.empty_state&gt;</code>.</p>
+
+  <p class="section-label">Populated</p>
+  <div class="specimen">
+    <!-- page_header -->
+    <header class="ph">
+      <div>
+        <span class="hud-label crumbs">Mission <span class="sep">/</span> Comms <span class="sep">/</span> <span class="cur">Transports</span></span>
+        <h2>Transports <span class="suffix">12 configured</span></h2>
+        <p class="subtitle">Durable byte-moving capabilities Cadence can use for inbound, outbound,
+          or bidirectional spacecraft traffic.</p>
+      </div>
+      <button class="btn btn-primary"><span class="plus">+</span> New Transport</button>
+    </header>
+
+    <!-- card padding:none -->
+    <section class="card">
+      <!-- toolbar -->
+      <div class="toolbar">
+        <span class="field search">Search transports</span>
+      </div>
+      <!-- table -->
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Kind</th><th>Capability</th><th>Endpoint</th><th>Version</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="name"><a>AWS Ground Station</a></td><td class="kind">cloud_ground_station</td><td class="cap">bidirectional</td><td class="dim">us-west-2.ags</td><td class="dim">v4</td></tr>
+          <tr><td class="name"><a>Svalbard SG-3</a></td><td class="kind">ground_station</td><td class="cap">inbound</td><td class="dim">svl-sg3:5012</td><td class="dim">v2</td></tr>
+          <tr><td class="name"><a>TDRS Relay</a></td><td class="kind">relay</td><td class="cap">outbound</td><td class="dim">tdrs-east:443</td><td class="dim">v5</td></tr>
+          <tr><td class="name"><a>Mock Loopback</a></td><td class="kind">loopback</td><td class="cap">bidirectional</td><td class="dim">localhost:7000</td><td class="dim">v1</td></tr>
+        </tbody>
+      </table>
+      <!-- pagination -->
+      <div class="pager">
+        <span class="range">1&ndash;4 of 12</span>
+        <div class="btns">
+          <button class="btn btn-ghost" disabled>Prev</button>
+          <button class="btn btn-ghost">Next</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="section-label">Empty state</p>
+  <div class="empty">
+    <p class="hud-label">No transports</p>
+    <p class="desc">Create a transport to describe an external capability for moving bytes.</p>
+    <div class="act"><button class="btn btn-primary"><span class="plus">+</span> Create the first transport</button></div>
+  </div>
+
+  <p class="section-label">Anatomy</p>
+  <ul class="anatomy">
+    <li><span class="k">&lt;.page_header&gt;</span><span>Breadcrumbs (never a back link), title, <code>:title_suffix</code> count, subtitle, and a primary action in <code>:actions</code>. Sits above the <code>border-b border-primary/20</code> rule.</span></li>
+    <li><span class="k">&lt;.card padding={:none}&gt;</span><span>Flush frame so the bands sit edge-to-edge — toolbar's <code>border-b</code> and pagination's <code>border-t</code> draw the dividers.</span></li>
+    <li><span class="k">&lt;.toolbar&gt;</span><span>Debounced search on the left; <code>:filters</code> and <code>:actions</code> slots when a list needs them (the shipped pages are search-only). A summary band of <code>&lt;.stat_tile&gt;</code> filters above the card is a documented variant (spacecraft roster).</span></li>
+    <li><span class="k">&lt;.table&gt;</span><span>Name cell links to the show page; sortable headers; mono columns for identifiers and versions.</span></li>
+    <li><span class="k">&lt;.pagination&gt;</span><span>Range label + Prev/Next. Renders nothing when everything fits one page.</span></li>
+    <li><span class="k">&lt;.empty_state&gt;</span><span>Replaces the whole card when there are zero rows — never an empty table with headers.</span></li>
+  </ul>
+
+  <div class="usage">
+    <p class="hud-label" style="margin:0 0 1rem">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Keep all list state in the URL (<code>?q=&amp;filter=&amp;sort=&amp;dir=&amp;page=</code>) via <code>push_patch</code> — shareable and back-button-safe.</li>
+      <li class="do"><span class="mark">&#10003;</span> Components emit events (<code>"search"</code>, <code>"sort"</code>, <code>"paginate"</code>); the LiveView owns the fetch. Parse with <code>CadenceWeb.ListParams</code>.</li>
+      <li class="do"><span class="mark">&#10003;</span> Show <code>&lt;.empty_state&gt;</code> for a truly empty list; show an inline "no matches" line when a <em>search</em> filters everything out.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't pad the card — it must be <code>padding={:none}</code> so the bands sit flush against the toolbar/pagination borders.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't reach for the toolbar/pagination on organizationally-bounded lists (missions, profiles) that can't exceed a screenful — adopt them opportunistically.</li>
+    </ul>
+  </div>
+</body>
+</html>

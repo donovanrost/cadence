@@ -258,22 +258,17 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
   defp telemetry_runtime_summary_card(assigns) do
     ~H"""
     <.card title="Built-in telemetry runtime">
-      <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-        <div>
-          <dt class="text-base-content/60">Catalog packets</dt>
-          <dd class="text-lg font-semibold">{@summary["packet_count"]}</dd>
-        </div>
-        <div>
-          <dt class="text-base-content/60">Compiled for built-in telemetry</dt>
-          <dd class="text-lg font-semibold">{@summary["built_in_telemetry_packet_count"]}</dd>
-        </div>
-        <div>
-          <dt class="text-base-content/60">Available for custom applications</dt>
-          <dd class="text-lg font-semibold">
-            {@summary["custom_application_candidate_packet_count"]}
-          </dd>
-        </div>
-      </dl>
+      <div class="divide-y divide-base-300">
+        <.detail_row label="Catalog packets" mono>
+          {@summary["packet_count"]}
+        </.detail_row>
+        <.detail_row label="Compiled for built-in telemetry" mono>
+          {@summary["built_in_telemetry_packet_count"]}
+        </.detail_row>
+        <.detail_row label="Available for custom applications" mono>
+          {@summary["custom_application_candidate_packet_count"]}
+        </.detail_row>
+      </div>
 
       <div
         :if={@summary["custom_application_candidate_packets"] != []}
@@ -300,9 +295,9 @@ defmodule CadenceWeb.CatalogImportRunShowLive do
 
   defp failure_block(assigns) do
     ~H"""
-    <div class="alert alert-error">
+    <.callout variant={:error}>
       <p class="font-mono text-sm">{format_failure_reason(@failure_reason)}</p>
-    </div>
+    </.callout>
     """
   end
 

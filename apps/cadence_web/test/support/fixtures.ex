@@ -4,6 +4,7 @@ defmodule CadenceWeb.TestFixtures do
   import ExUnit.Assertions
 
   alias Cadence.Accounts.{OrganizationMembership, Password, User}
+  alias Cadence.Dashboards.{Document, Placement, PlacementEditor}
   alias Cadence.Ids
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
@@ -129,6 +130,26 @@ defmodule CadenceWeb.TestFixtures do
       })
 
     assert {:ok, persisted} = Cadence.persist_spacecraft(mission.organization_id, spacecraft)
+    persisted
+  end
+
+  @spec persist_dashboard_document!(Mission.t(), keyword()) :: Document.t()
+  def persist_dashboard_document!(%Mission{} = mission, opts \\ []) do
+    document = %Document{
+      dashboard_id: Keyword.get(opts, :dashboard_id, Ids.new("dashboard")),
+      organization_id: mission.organization_id,
+      mission_id: mission.mission_id,
+      name: Keyword.get(opts, :name, "Dashboard-#{System.unique_integer([:positive])}"),
+      description: Keyword.get(opts, :description),
+      placements:
+        opts
+        |> Keyword.get(:placements, widget_specs_to_placements(Keyword.get(opts, :widgets, [])))
+        |> Enum.map(&normalize_dashboard_placement!/1)
+    }
+
+    assert {:ok, persisted} =
+             Cadence.Dashboards.persist_document(mission.organization_id, document)
+
     persisted
   end
 
@@ -275,5 +296,63 @@ defmodule CadenceWeb.TestFixtures do
             bit_size: 8
     commands: []
     """
+  end
+
+  defp widget_specs_to_placements(widget_specs) do
+    Enum.map(widget_specs, &widget_spec_to_placement!/1)
+  end
+
+  defp widget_spec_to_placement!(%{} = widget_spec) do
+    binding = Map.get(widget_spec, :binding, Map.get(widget_spec, "binding", %{}))
+    type = widget_spec |> widget_attr(:type) |> to_string()
+    mode = binding |> widget_attr(:mode) |> default_widget_mode(type)
+    selected_points = selected_widget_points(binding)
+
+    params = %{
+      "type" => type,
+      "title" => widget_attr(widget_spec, :title),
+      "mode" => to_string(mode),
+      "spacecraft_id" => widget_attr(binding, :spacecraft_id) || "",
+      "binding_source" => widget_attr(binding, :source) || "telemetry",
+      "precision" => option_value(widget_spec, :precision, "2"),
+      "window_seconds" => option_value(widget_spec, :window_seconds, "300")
+    }
+
+    assert {:ok, placement} =
+             PlacementEditor.build_placement(params, selected_points, :add_widget)
+
+    case widget_attr(widget_spec, :layout) do
+      layout when is_map(layout) -> %Placement{placement | layout: layout}
+      _missing -> placement
+    end
+  end
+
+  defp normalize_dashboard_placement!(%Placement{} = placement), do: placement
+
+  defp normalize_dashboard_placement!(%{} = widget_spec),
+    do: widget_spec_to_placement!(widget_spec)
+
+  defp widget_attr(attrs, key) when is_map(attrs),
+    do: Map.get(attrs, key, Map.get(attrs, to_string(key)))
+
+  defp default_widget_mode(nil, "constellation_health"), do: :constellation
+  defp default_widget_mode(nil, _type), do: :context
+  defp default_widget_mode(mode, _type), do: mode
+
+  defp selected_widget_points(binding) do
+    widget_attr(binding, :point_ids) ||
+      widget_attr(binding, :observables) ||
+      widget_attr(binding, :point_id)
+  end
+
+  defp option_value(widget_spec, key, default) do
+    options = widget_attr(widget_spec, :options) || %{}
+
+    options
+    |> widget_attr(key)
+    |> case do
+      nil -> default
+      value -> to_string(value)
+    end
   end
 end

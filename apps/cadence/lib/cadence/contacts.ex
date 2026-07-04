@@ -22,7 +22,10 @@ defmodule Cadence.Contacts do
     TransportProfile
   }
 
+  alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Missions
+  alias Cadence.OperationalEvents
+  alias Cadence.OperationalEvents.Event, as: OperationalEvent
   alias Cadence.Projections.MissionEvents, as: MissionEventProjection
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -840,19 +843,29 @@ defmodule Cadence.Contacts do
   def persist_scheduled_contact(%ScheduledContact{} = scheduled_contact) do
     with {:ok, prepared_scheduled_contact} <- prepare_scheduled_contact(scheduled_contact),
          :ok <- validate_scheduled_contact(prepared_scheduled_contact) do
-      case Repo.insert(ScheduledContactRow.changeset(prepared_scheduled_contact),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :scheduled_contact_id]
-           ) do
-        {:ok, %ScheduledContactRow{} = row} ->
+      Multi.new()
+      |> Multi.insert(
+        :scheduled_contact,
+        ScheduledContactRow.changeset(prepared_scheduled_contact),
+        on_conflict: :nothing,
+        conflict_target: [:mission_id, :scheduled_contact_id]
+      )
+      |> Multi.run(:operational_event, fn repo, %{scheduled_contact: row} ->
+        row
+        |> ScheduledContactRow.to_domain()
+        |> persist_contact_operational_event(repo)
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{scheduled_contact: %ScheduledContactRow{} = row}} ->
           row
           |> ScheduledContactRow.to_domain()
           |> notify_contact_changed()
 
-        {:error, %Changeset{} = changeset} ->
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
           {:error, changeset}
 
-        {:error, reason} ->
+        {:error, _operation, reason, _changes_so_far} ->
           {:error, reason}
       end
     end
@@ -951,19 +964,27 @@ defmodule Cadence.Contacts do
           {:ok, RealizedContact.t()} | {:error, term()}
   def persist_realized_contact(%RealizedContact{} = realized_contact) do
     with :ok <- validate_realized_contact(realized_contact) do
-      case Repo.insert(RealizedContactRow.changeset(realized_contact),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :realized_contact_id]
-           ) do
-        {:ok, %RealizedContactRow{} = row} ->
+      Multi.new()
+      |> Multi.insert(:realized_contact, RealizedContactRow.changeset(realized_contact),
+        on_conflict: :nothing,
+        conflict_target: [:mission_id, :realized_contact_id]
+      )
+      |> Multi.run(:operational_event, fn repo, %{realized_contact: row} ->
+        row
+        |> RealizedContactRow.to_domain()
+        |> persist_contact_operational_event(repo)
+      end)
+      |> Repo.transaction()
+      |> case do
+        {:ok, %{realized_contact: %RealizedContactRow{} = row}} ->
           row
           |> RealizedContactRow.to_domain()
           |> notify_contact_changed()
 
-        {:error, %Changeset{} = changeset} ->
+        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
           {:error, changeset}
 
-        {:error, reason} ->
+        {:error, _operation, reason, _changes_so_far} ->
           {:error, reason}
       end
     end
@@ -1045,6 +1066,9 @@ defmodule Cadence.Contacts do
   end
 
   defp do_reconcile(mission_id, %DateTime{} = reference_time) do
+    restart_candidates =
+      list_active_realized_contacts_to_restart(reference_time, mission_id)
+
     {expired_scheduled_contact_ids, expiration_errors} =
       list_expired_scheduled_contacts(reference_time, mission_id)
       |> collect_reconcile_results(&expire_scheduled_contact_for_reconcile(&1, reference_time))
@@ -1062,7 +1086,7 @@ defmodule Cadence.Contacts do
       |> collect_reconcile_results(&complete_realized_contact_for_reconcile(&1, reference_time))
 
     {restarted_realized_contact_ids, restart_errors} =
-      list_active_realized_contacts(mission_id)
+      restart_candidates
       |> collect_reconcile_results(&restart_realized_contact_for_reconcile(&1, reference_time))
 
     {:ok,
@@ -1706,6 +1730,16 @@ defmodule Cadence.Contacts do
           |> repo.update()
       end
     end)
+    |> Multi.run(:realized_contact_operational_event, fn repo, %{realized_contact: row} ->
+      row
+      |> RealizedContactRow.to_domain()
+      |> persist_contact_operational_event(repo)
+    end)
+    |> Multi.run(:scheduled_contact_operational_event, fn repo, %{scheduled_contact: row} ->
+      row
+      |> ScheduledContactRow.to_domain()
+      |> persist_contact_operational_event(repo)
+    end)
     |> Repo.transaction()
     |> case do
       {:ok, %{realized_contact: %RealizedContactRow{} = row}} ->
@@ -1744,23 +1778,30 @@ defmodule Cadence.Contacts do
        when is_map(metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized_contact(realized_contact),
+         {:ok, %RealizedContact{} = stopped_realized_contact} <-
+           mark_realized_contact_stopped(persisted_realized_contact, metadata_patch),
          :ok <-
-           Runtime.stop_realized_contact(
-             persisted_realized_contact.mission_id,
-             persisted_realized_contact.realized_contact_id
+           Runtime.stop_realized_contact_sync(
+             stopped_realized_contact.mission_id,
+             stopped_realized_contact.realized_contact_id
            ) do
-      case persisted_realized_contact.lifecycle_state do
-        state when state in [:stopped, :completed] ->
-          {:ok, persisted_realized_contact}
-
-        _other_state ->
-          update_realized_contact_lifecycle(
-            persisted_realized_contact,
-            :stopped,
-            metadata_patch
-          )
-      end
+      {:ok, stopped_realized_contact}
     end
+  end
+
+  defp mark_realized_contact_stopped(
+         %RealizedContact{lifecycle_state: state} = realized_contact,
+         _metadata_patch
+       )
+       when state in [:stopped, :completed],
+       do: {:ok, realized_contact}
+
+  defp mark_realized_contact_stopped(%RealizedContact{} = realized_contact, metadata_patch) do
+    update_realized_contact_lifecycle(
+      realized_contact,
+      :stopped,
+      metadata_patch
+    )
   end
 
   defp complete_realized_contact(
@@ -1770,16 +1811,16 @@ defmodule Cadence.Contacts do
        when is_map(metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized_contact(realized_contact),
-         :ok <-
-           Runtime.stop_realized_contact(
-             persisted_realized_contact.mission_id,
-             persisted_realized_contact.realized_contact_id
-           ),
          {:ok, %RealizedContact{} = completed_realized_contact} <-
            update_realized_contact_lifecycle(
              persisted_realized_contact,
              :completed,
              metadata_patch
+           ),
+         :ok <-
+           Runtime.stop_realized_contact_sync(
+             completed_realized_contact.mission_id,
+             completed_realized_contact.realized_contact_id
            ) do
       {:ok, completed_realized_contact}
     end
@@ -1807,6 +1848,12 @@ defmodule Cadence.Contacts do
     )
     |> Multi.run(:mission_events, fn repo, _changes ->
       MissionEventProjection.persist_entries(repo, projected_events)
+    end)
+    |> Multi.run(:contact_action_operational_event, fn repo, %{contact_action: row} ->
+      row
+      |> ContactActionRow.to_domain()
+      |> OperationalEvent.from_contact_action()
+      |> then(&OperationalEvents.persist_event(repo, &1))
     end)
     |> Repo.transaction()
     |> case do
@@ -1910,15 +1957,26 @@ defmodule Cadence.Contacts do
         {:error, :scheduled_contact_not_found}
 
       %ScheduledContactRow{} = row ->
-        row
-        |> ScheduledContactRow.lifecycle_changeset(lifecycle_state, metadata_patch)
-        |> Repo.update()
+        Multi.new()
+        |> Multi.update(
+          :scheduled_contact,
+          ScheduledContactRow.lifecycle_changeset(row, lifecycle_state, metadata_patch)
+        )
+        |> Multi.run(:operational_event, fn repo, %{scheduled_contact: updated_row} ->
+          updated_row
+          |> ScheduledContactRow.to_domain()
+          |> persist_contact_operational_event(repo)
+        end)
+        |> Repo.transaction()
         |> case do
-          {:ok, %ScheduledContactRow{} = updated_row} ->
+          {:ok, %{scheduled_contact: %ScheduledContactRow{} = updated_row}} ->
             {:ok, ScheduledContactRow.to_domain(updated_row)}
 
-          {:error, %Changeset{} = changeset} ->
+          {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
             {:error, changeset}
+
+          {:error, _operation, reason, _changes_so_far} ->
+            {:error, reason}
         end
     end
   end
@@ -1937,15 +1995,26 @@ defmodule Cadence.Contacts do
         {:error, :realized_contact_not_found}
 
       %RealizedContactRow{} = row ->
-        row
-        |> RealizedContactRow.lifecycle_changeset(lifecycle_state, metadata_patch)
-        |> Repo.update()
+        Multi.new()
+        |> Multi.update(
+          :realized_contact,
+          RealizedContactRow.lifecycle_changeset(row, lifecycle_state, metadata_patch)
+        )
+        |> Multi.run(:operational_event, fn repo, %{realized_contact: updated_row} ->
+          updated_row
+          |> RealizedContactRow.to_domain()
+          |> persist_contact_operational_event(repo)
+        end)
+        |> Repo.transaction()
         |> case do
-          {:ok, %RealizedContactRow{} = updated_row} ->
+          {:ok, %{realized_contact: %RealizedContactRow{} = updated_row}} ->
             {:ok, RealizedContactRow.to_domain(updated_row)}
 
-          {:error, %Changeset{} = changeset} ->
+          {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
             {:error, changeset}
+
+          {:error, _operation, reason, _changes_so_far} ->
+            {:error, reason}
         end
     end
   end
@@ -2689,11 +2758,29 @@ defmodule Cadence.Contacts do
     |> Enum.map(&ScheduledContactRow.to_domain/1)
   end
 
-  defp list_active_realized_contacts(mission_id) do
+  defp list_active_realized_contacts_to_restart(%DateTime{} = reference_time, mission_id) do
     RealizedContactRow
-    |> where([row], row.lifecycle_state == "active")
-    |> maybe_filter_realized_contacts_by_mission(mission_id)
-    |> order_by([row], asc: row.realized_at, asc: row.realized_contact_id)
+    |> join(
+      :left,
+      [realized_contact_row],
+      scheduled_contact_row in ScheduledContactRow,
+      on:
+        realized_contact_row.mission_id == scheduled_contact_row.mission_id and
+          realized_contact_row.scheduled_contact_id == scheduled_contact_row.scheduled_contact_id
+    )
+    |> where(
+      [realized_contact_row, scheduled_contact_row],
+      realized_contact_row.lifecycle_state == "active" and
+        (is_nil(scheduled_contact_row.scheduled_contact_id) or
+           is_nil(scheduled_contact_row.ends_at) or
+           scheduled_contact_row.ends_at > ^reference_time)
+    )
+    |> maybe_filter_joined_realized_contacts_by_mission(mission_id)
+    |> order_by([realized_contact_row, _scheduled_contact_row],
+      asc: realized_contact_row.realized_at,
+      asc: realized_contact_row.realized_contact_id
+    )
+    |> select([realized_contact_row, _scheduled_contact_row], realized_contact_row)
     |> Repo.all()
     |> Enum.map(&RealizedContactRow.to_domain/1)
   end
@@ -2728,12 +2815,6 @@ defmodule Cadence.Contacts do
   defp maybe_filter_scheduled_contacts_by_mission(query, nil), do: query
 
   defp maybe_filter_scheduled_contacts_by_mission(query, mission_id) when is_binary(mission_id) do
-    where(query, [row], row.mission_id == ^mission_id)
-  end
-
-  defp maybe_filter_realized_contacts_by_mission(query, nil), do: query
-
-  defp maybe_filter_realized_contacts_by_mission(query, mission_id) when is_binary(mission_id) do
     where(query, [row], row.mission_id == ^mission_id)
   end
 
@@ -2813,14 +2894,28 @@ defmodule Cadence.Contacts do
 
   defp datetime_sort_key(%DateTime{} = datetime), do: DateTime.to_unix(datetime, :microsecond)
 
+  defp persist_contact_operational_event(%ScheduledContact{} = scheduled_contact, repo) do
+    scheduled_contact
+    |> OperationalEvent.from_scheduled_contact_interval()
+    |> then(&OperationalEvents.persist_event(repo, &1))
+  end
+
+  defp persist_contact_operational_event(%RealizedContact{} = realized_contact, repo) do
+    realized_contact
+    |> OperationalEvent.from_realized_contact_interval()
+    |> then(&OperationalEvents.persist_event(repo, &1))
+  end
+
   defp notify_contact_changed(%ScheduledContact{} = scheduled_contact) do
     Scheduler.notify_contact_changed(scheduled_contact)
+    invalidate_dashboard_events(scheduled_contact)
     {:ok, scheduled_contact}
   end
 
   defp notify_contact_changed(%RealizedContact{} = realized_contact) do
     Scheduler.notify_contact_changed(realized_contact)
     Cadence.Commanding.notify_release_target_available(realized_contact)
+    invalidate_dashboard_events(realized_contact)
     {:ok, realized_contact}
   end
 
@@ -2831,6 +2926,18 @@ defmodule Cadence.Contacts do
       {:ok, contact}
     end
   end
+
+  defp invalidate_dashboard_events(%{organization_id: organization_id, mission_id: mission_id})
+       when is_binary(organization_id) and is_binary(mission_id) do
+    RuntimeInvalidation.events_changed(%{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+
+    :ok
+  end
+
+  defp invalidate_dashboard_events(_contact), do: :ok
 
   defp realized_scheduled_contact_projection(
          %ScheduledContact{} = scheduled_contact,

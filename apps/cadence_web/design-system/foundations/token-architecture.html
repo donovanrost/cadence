@@ -1,0 +1,116 @@
+<!-- @dsCard group="Foundations" name="Token architecture" subtitle="The skin / outfit / body split" width="1000" height="1280" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Token architecture</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.5rem; max-width: 70ch; font-size: .9rem; line-height: 1.5; }
+  .lede code, .litmus code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .rule { display: inline-flex; gap: .5rem; align-items: center; font-size: .8rem; color: oklch(82% 0.05 340);
+    border: 1px solid oklch(60% 0.25 340 / 0.3); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 2rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+
+  /* tier stack */
+  .tiers { display: grid; gap: .5rem; max-width: 56rem; }
+  .tier { border: 1px solid oklch(23% 0.025 258); border-radius: 2px; background: oklch(17% 0.02 260); padding: 1.1rem 1.25rem; }
+  .tier .name { font-family: ui-monospace, monospace; font-size: .95rem; font-weight: 700; letter-spacing: .08em; }
+  .tier .what { font-size: .82rem; color: oklch(82% 0.02 250 / 0.75); margin: .3rem 0 .75rem; line-height: 1.45; }
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip { font-family: ui-monospace, monospace; font-size: .72rem; padding: .2rem .5rem; border-radius: 2px;
+    border: 1px solid oklch(80% 0.12 210 / 0.2); color: oklch(85% 0.02 250 / 0.85); background: oklch(12% 0.02 265 / 0.5); }
+  .tier.body { border-left: 2px solid oklch(78% 0.12 175 / 0.7); }
+  .tier.body .name { color: oklch(78% 0.12 175); }
+  .tier.outfit { border-left: 2px solid oklch(80% 0.12 210 / 0.7); }
+  .tier.outfit .name { color: oklch(80% 0.12 210); }
+  .tier.skin { border-left: 2px solid oklch(72% 0.15 285 / 0.7); }
+  .tier.skin .name { color: oklch(76% 0.15 285); }
+  .arrow { text-align: center; font-family: ui-monospace, monospace; font-size: .72rem; color: oklch(60% 0.02 250);
+    padding: .15rem 0; letter-spacing: .05em; }
+  .arrow b { color: oklch(80% 0.12 210); }
+  .step2 { font-size: .62rem; color: oklch(80% 0.15 50 / 0.9); border: 1px solid oklch(72% 0.15 50 / 0.4);
+    border-radius: 2px; padding: 0 .3rem; margin-left: .35rem; vertical-align: middle; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* litmus */
+  .litmus { display: grid; gap: .7rem; max-width: 72ch; }
+  .litmus li { list-style: none; display: grid; grid-template-columns: 5.5rem 1fr; gap: 1rem; align-items: baseline;
+    font-size: .86rem; line-height: 1.45; color: oklch(80% 0.02 250); }
+  .litmus { padding: 0; margin: 0; }
+  .litmus .tag { font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 700; padding: .15rem .45rem;
+    border-radius: 2px; text-align: center; }
+  .tag.body { color: oklch(78% 0.12 175); background: oklch(78% 0.12 175 / 0.15); }
+  .tag.outfit { color: oklch(80% 0.12 210); background: oklch(80% 0.12 210 / 0.15); }
+  .tag.skin { color: oklch(76% 0.15 285); background: oklch(72% 0.15 285 / 0.15); }
+
+  /* usage */
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Token architecture</h1>
+  <p class="lede">Cadence's look is split into three layers so the sci-fi aesthetic becomes a
+    <strong>skin you can take off</strong> — not a fact welded into every selector. This is what makes
+    re-theming, a high-legibility "ops mode", and <code>prefers-reduced-motion</code> possible without
+    touching component code.</p>
+  <div class="rule">&#9651;&nbsp; The one rule: dependencies only point <b style="color:oklch(80% 0.12 210)">down</b>. Body → Outfit → Skin. Components never reach past Outfit.</div>
+
+  <p class="section-label">The three layers</p>
+  <div class="tiers">
+    <div class="tier body">
+      <div class="name">BODY &middot; structure</div>
+      <p class="what">Anatomy, layout, spacing rhythm, hierarchy, interaction &amp; a11y contracts. Not tokens — it
+        lives in the component &amp; pattern cards. Survives any reskin.</p>
+      <div class="chips"><span class="chip">card: title · body · accent</span><span class="chip">form: narrow · single-column</span><span class="chip">table: name-cell links</span><span class="chip">focus &amp; disabled contracts</span></div>
+    </div>
+    <div class="arrow">&#9595; &nbsp;references&nbsp; &#9595;</div>
+    <div class="tier outfit">
+      <div class="name">OUTFIT &middot; semantic roles</div>
+      <p class="what">Roles named by <em>meaning</em>, pointing at the skin. The swappable layer — a theme repoints
+        these; component code never changes.</p>
+      <div class="chips"><span class="chip">--color-action</span><span class="chip">--surface-raised</span><span class="chip">--status-critical</span><span class="chip">--text-muted</span><span class="chip">--border-subtle</span><span class="chip">--label-case</span></div>
+    </div>
+    <div class="arrow">&#9595; &nbsp;references&nbsp; &#9595;</div>
+    <div class="tier skin">
+      <div class="name">SKIN &middot; primitives + effects</div>
+      <p class="what">Raw sensory values and decorative flourishes. No inherent meaning. This is what you swap to
+        re-theme or dial down for legibility.</p>
+      <div class="chips"><span class="chip">oklch(80% .12 210)</span><span class="chip">--fx-glow <span class="step2">step 2</span></span><span class="chip">--fx-corner-size: 12px <span class="step2">step 2</span></span><span class="chip">--pulse-critical: 0.5s <span class="step2">step 2</span></span><span class="chip">uppercase</span></div>
+    </div>
+  </div>
+
+  <p class="section-label">Which layer? — the litmus test</p>
+  <ul class="litmus">
+    <li><span class="tag body">BODY</span><span>Would it still be true if Cadence were reskinned to look like a plain gray enterprise app? <em>Yes</em> &rarr; body.</span></li>
+    <li><span class="tag outfit">OUTFIT</span><span>Would a daylight / legibility / white-label theme repoint it while the <em>role</em> persists? <em>Yes</em> &rarr; semantic token.</span></li>
+    <li><span class="tag skin">SKIN</span><span>Is it a raw value or a flourish with no meaning of its own (a specific oklch, the glow, the strobe, the <code>uppercase</code> itself)? &rarr; skin.</span></li>
+  </ul>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Components consume <strong>Outfit</strong> roles (<code>var(--color-action)</code>, <code>--surface-raised</code>) — never Skin primitives or raw oklch.</li>
+      <li class="do"><span class="mark">&#10003;</span> A new theme is a new <strong>Skin</strong> under the same <strong>Outfit</strong>; the <strong>Body</strong> never moves.</li>
+      <li class="do"><span class="mark">&#10003;</span> Keep structure in the component / pattern cards, not in tokens.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't reference <code>--glow-*</code> / <code>--brand-*</code> / raw oklch in component code — that re-fuses skin to structure.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't mint a role for a one-off; the Outfit layer is a small shared vocabulary, not a per-use dumping ground.</li>
+    </ul>
+  </div>
+</body>
+</html>

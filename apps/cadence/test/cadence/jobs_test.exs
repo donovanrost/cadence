@@ -37,12 +37,93 @@ defmodule Cadence.JobsTest do
     assert requeued_job.failure_reason == %{"reason" => "requeued_after_restart"}
   end
 
+  test "requeues a specific running job with a reason" do
+    assert {:ok, job} =
+             Cadence.Jobs.enqueue(
+               :replay_telemetry_scope,
+               "mission-alpha",
+               "replay-run-specific-requeue",
+               %{"replay_run_id" => "replay-run-specific-requeue"}
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == job.job_id
+    assert claimed_job.status == :running
+    assert claimed_job.attempt_count == 1
+
+    assert {:ok, requeued_job} =
+             Cadence.Jobs.requeue_running_job(job.job_id, :dashboard_stale_replacement_requeued)
+
+    assert requeued_job.status == :queued
+    assert requeued_job.attempt_count == 1
+    assert requeued_job.started_at == nil
+    assert requeued_job.completed_at == nil
+    assert requeued_job.failure_reason == %{"reason" => "dashboard_stale_replacement_requeued"}
+  end
+
+  test "retries failed jobs without resetting attempt count" do
+    assert {:ok, job} =
+             Cadence.Jobs.enqueue(
+               :catalog_import_run,
+               "mission-background-jobs",
+               "missing-catalog-import-retry",
+               %{}
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == job.job_id
+
+    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert failed_job.status == :failed
+    assert failed_job.attempt_count == 1
+    assert failed_job.failure_reason
+    assert failed_job.started_at
+    assert failed_job.completed_at
+
+    assert {:ok, retried_job} = Cadence.Jobs.retry_failed_job(job.job_id)
+    assert retried_job.status == :queued
+    assert retried_job.attempt_count == 1
+    assert retried_job.failure_reason == nil
+    assert retried_job.started_at == nil
+    assert retried_job.completed_at == nil
+  end
+
+  test "does not retry active or completed jobs" do
+    assert {:ok, queued_job} =
+             Cadence.Jobs.enqueue(
+               :catalog_import_run,
+               "mission-background-jobs",
+               "missing-catalog-import-not-failed",
+               %{}
+             )
+
+    assert {:error, {:job_not_failed, :queued}} =
+             Cadence.Jobs.retry_failed_job(queued_job.job_id)
+  end
+
+  test "does not requeue non-running jobs" do
+    assert {:ok, queued_job} =
+             Cadence.Jobs.enqueue(
+               :catalog_import_run,
+               "mission-background-jobs",
+               "missing-catalog-import-not-running",
+               %{}
+             )
+
+    assert {:error, {:job_not_running, :queued}} =
+             Cadence.Jobs.requeue_running_job(queued_job.job_id)
+  end
+
   test "enqueue notification wakes dispatcher without waiting for safety scan" do
     attach_dispatcher_telemetry(self())
 
     start_supervised!(
       {Cadence.Jobs.Supervisor, safety_poll_interval_ms: :timer.hours(1), max_concurrency: 1}
     )
+
+    assert_dispatcher_event(:jobs_claimed, fn measurements, metadata ->
+      measurements.count == 0 and metadata.reason == :boot
+    end)
 
     assert {:ok, job} =
              Cadence.Jobs.enqueue(
@@ -73,6 +154,10 @@ defmodule Cadence.JobsTest do
     attach_dispatcher_telemetry(self())
 
     start_supervised!({Cadence.Jobs.Supervisor, safety_poll_interval_ms: 20, max_concurrency: 1})
+
+    assert_dispatcher_event(:jobs_claimed, fn measurements, metadata ->
+      measurements.count == 0 and metadata.reason == :boot
+    end)
 
     job =
       insert_background_job!(
@@ -139,20 +224,25 @@ defmodule Cadence.JobsTest do
   end
 
   defp assert_dispatcher_event(event_name, predicate) do
+    assert_dispatcher_event(event_name, predicate, System.monotonic_time(:millisecond) + 2_000)
+  end
+
+  defp assert_dispatcher_event(event_name, predicate, deadline_ms) do
     event = @dispatcher_event_prefix ++ [event_name]
+    timeout_ms = max(deadline_ms - System.monotonic_time(:millisecond), 0)
 
     receive do
       {:jobs_dispatcher_telemetry, ^event, measurements, metadata} ->
         if predicate.(measurements, metadata) do
           {measurements, metadata}
         else
-          assert_dispatcher_event(event_name, predicate)
+          assert_dispatcher_event(event_name, predicate, deadline_ms)
         end
 
       {:jobs_dispatcher_telemetry, _other_event, _measurements, _metadata} ->
-        assert_dispatcher_event(event_name, predicate)
+        assert_dispatcher_event(event_name, predicate, deadline_ms)
     after
-      1_000 -> flunk("expected jobs dispatcher telemetry event #{inspect(event)}")
+      timeout_ms -> flunk("expected jobs dispatcher telemetry event #{inspect(event)}")
     end
   end
 end

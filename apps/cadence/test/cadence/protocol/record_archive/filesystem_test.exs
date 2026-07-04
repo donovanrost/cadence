@@ -1,6 +1,8 @@
 defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Persistence.Schemas.ProtocolArchiveRecordEntryRow
   alias Cadence.Protocol.{PacketRecord, RecordArchive, TransferFrameRecord}
@@ -216,7 +218,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
                organization_id: "org-idempotent"
              )
 
-    assert 2 == Repo.aggregate(ProtocolArchiveRecordEntryRow, :count, :entry_id)
+    assert 2 == archive_entry_count(entries)
   end
 
   test "stats and flush tolerate legacy writer state without buffer sizes", %{
@@ -280,10 +282,18 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     assert stats_before_flush.queue_depth == 2
 
     assert :ok = RecordArchive.flush(mission_id)
-    assert 2 == Repo.aggregate(ProtocolArchiveRecordEntryRow, :count, :entry_id)
+    assert 2 == archive_entry_count(entries)
 
     stats_after_flush = RecordArchive.stats(mission_id)
     assert stats_after_flush.queue_depth == 0
     assert stats_after_flush.flush_count == 1
+  end
+
+  defp archive_entry_count(entries) when is_list(entries) do
+    record_ids = Enum.map(entries, &Map.fetch!(&1, "record_id"))
+
+    ProtocolArchiveRecordEntryRow
+    |> where([row], row.record_id in ^record_ids)
+    |> Repo.aggregate(:count, :entry_id)
   end
 end

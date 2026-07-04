@@ -19,6 +19,7 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
 
   alias Cadence.Projections.DerivedTelemetryLatestValues.Run
   alias Cadence.Repo
+  alias Cadence.Telemetry.LatestProjectionOrder
 
   @spec rebuild(binary(), keyword()) :: {:ok, non_neg_integer()} | {:error, term()}
   def rebuild(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
@@ -191,30 +192,8 @@ defmodule Cadence.Projections.DerivedTelemetryLatestValues do
          %DerivedTelemetrySampleRow{} = sample_row,
          %DerivedTelemetrySampleRow{} = existing_row
        ) do
-    compare_sort_keys(sample_row_sort_key(sample_row), sample_row_sort_key(existing_row)) == :gt
+    LatestProjectionOrder.newer?(sample_row, existing_row, :derived_sample_id)
   end
-
-  defp sample_row_sort_key(%DerivedTelemetrySampleRow{} = sample_row) do
-    {sample_row.generation_time || sample_row.receipt_time, sample_row.receipt_time,
-     sample_row.derived_sample_id}
-  end
-
-  defp compare_sort_keys({time_a, receipt_a, sample_id_a}, {time_b, receipt_b, sample_id_b}) do
-    case DateTime.compare(time_a, time_b) do
-      :eq ->
-        case DateTime.compare(receipt_a, receipt_b) do
-          :eq -> compare_ids(sample_id_a, sample_id_b)
-          other -> other
-        end
-
-      other ->
-        other
-    end
-  end
-
-  defp compare_ids(id_a, id_b) when id_a > id_b, do: :gt
-  defp compare_ids(id_a, id_b) when id_a < id_b, do: :lt
-  defp compare_ids(_id_a, _id_b), do: :eq
 
   defp opts_from_run(%Run{metadata: metadata}) when is_map(metadata) do
     case Map.get(metadata, "spacecraft_id", Map.get(metadata, :spacecraft_id)) do

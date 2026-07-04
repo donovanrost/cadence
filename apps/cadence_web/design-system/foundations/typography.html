@@ -1,0 +1,53 @@
+<!-- @dsCard group="Foundations" name="Typography" subtitle="Type scale · hud-label · monospace data" width="960" height="720" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Typography</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 60ch; font-size: .9rem; line-height: 1.5; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 1.5rem;
+    padding: 1rem 0; border-bottom: 1px solid oklch(80% 0.12 210 / 0.1); }
+  .spec { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .7rem;
+    color: oklch(55% 0.02 250); text-align: right; white-space: nowrap; }
+  .mono { font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', monospace; font-variant-numeric: tabular-nums; }
+  /* Real Cadence type utilities */
+  .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(from var(--glow-cyan) 65% 0.10 h); }
+  .mc-value-large { font-size: 2rem; font-weight: 700; }
+  .mc-value-medium { font-size: 1.25rem; font-weight: 600; }
+  .card-title { font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--glow-cyan); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Typography</h1>
+  <p class="lede">Sans for prose and headings; monospace with tabular numerals for all data values.
+    Labels are uppercase and tracked — the <span class="mono">hud-label</span> is the workhorse for
+    section and field captions.</p>
+
+  <div class="row"><div style="font-size:1.5rem;font-weight:600;letter-spacing:-.01em">Page title</div>
+    <div class="spec">1.5rem / 600 / sans</div></div>
+  <div class="row"><div style="font-size:1rem;font-weight:600">Section heading</div>
+    <div class="spec">1rem / 600 / sans</div></div>
+  <div class="row"><div style="font-size:.9rem;color:oklch(70% 0.02 250);line-height:1.5">Body &amp; descriptions — base-content at /70 minimum for informational text.</div>
+    <div class="spec">.9rem / 400 / sans</div></div>
+  <div class="row"><div class="hud-label">Hud-label · section caption</div>
+    <div class="spec">.7rem / 600 / .12em / cyan</div></div>
+  <div class="row"><div class="card-title">Card title</div>
+    <div class="spec">.75rem / 600 / .1em / cyan</div></div>
+  <div class="row"><div class="mono mc-value-large">128.4</div>
+    <div class="spec">mc-value-large · 2rem / 700 / mono</div></div>
+  <div class="row"><div class="mono mc-value-medium">42 ms</div>
+    <div class="spec">mc-value-medium · 1.25rem / 600 / mono</div></div>
+  <div class="row"><div class="mono" style="font-size:.875rem">SAT-04 · 2026-06-26T14:22Z</div>
+    <div class="spec">data value · .875rem / mono / tabular</div></div>
+</body>
+</html>

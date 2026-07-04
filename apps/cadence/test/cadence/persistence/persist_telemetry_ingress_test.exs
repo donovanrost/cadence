@@ -6,6 +6,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   alias Cadence.CCSDS.SDLP.TM.Segmentation
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive.FileSystem, as: IngressArchiveFileSystem
+  alias Cadence.OperationalEvents
   alias Cadence.Persistence.Schemas.BindingSetRow
   alias Cadence.Protocol.RecordArchive.FileSystem, as: ProtocolRecordArchiveFileSystem
 
@@ -338,7 +339,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     previous_current_value_store =
       Application.get_env(:cadence, :telemetry_current_value_store, [])
 
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    previous_telemetry_storage = Application.get_env(:cadence, :telemetry_storage, [])
 
     ingress_base_path =
       Path.join(
@@ -370,8 +371,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       module: Cadence.TestSupport.LazyCurrentValueStore
     )
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: Cadence.Telemetry.HistoryStore.Noop
+    Application.put_env(:cadence, :telemetry_storage,
+      writer: Cadence.Telemetry.Storage.Writers.Noop,
+      organization_id: "org-test"
     )
 
     start_supervised!(
@@ -387,7 +389,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
       Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
       Application.put_env(:cadence, :telemetry_current_value_store, previous_current_value_store)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
+      Application.put_env(:cadence, :telemetry_storage, previous_telemetry_storage)
       File.rm_rf!(ingress_base_path)
       File.rm_rf!(protocol_base_path)
     end)
@@ -472,6 +474,56 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
 
     assert Repo.aggregate(RawEvidenceRow, :count, :evidence_id) == 0
 
+    latency_events =
+      OperationalEvents.list_events("mission-alpha",
+        source_record_kind: :operational_observable_snapshot,
+        kind: :operational_observable_metric_sampled,
+        order: :asc
+      )
+
+    assert length(latency_events) == 2
+
+    assert Enum.all?(
+             latency_events,
+             &(Map.get(&1.payload, "observable_id") == "ingress.processing_latency_ms")
+           )
+
+    assert Enum.all?(latency_events, &(Map.get(&1.payload, "scope_kind") == "source_endpoint"))
+
+    assert Enum.all?(
+             latency_events,
+             &(Map.get(&1.payload, "source_endpoint_id") == "endpoint-archived-gap")
+           )
+
+    assert Enum.all?(
+             latency_events,
+             &(Map.get(&1.payload, "spacecraft_id") == "sc-archived-gap")
+           )
+
+    assert Enum.all?(latency_events, &(Map.get(&1.payload, "unit") == "ms"))
+    assert Enum.all?(latency_events, &is_number(Map.get(&1.payload, "value")))
+    assert Enum.all?(latency_events, &(Map.get(&1.payload, "value") > 0))
+
+    assert Enum.map(latency_events, &Map.get(&1.metadata, "evidence_id")) == [
+             raw_evidence_one.evidence_id,
+             raw_evidence_two.evidence_id
+           ]
+
+    assert Enum.all?(latency_events, &(Map.get(&1.metadata, "end_to_end_us") > 0))
+
+    latency_samples =
+      Cadence.operational_observable_metric_samples("mission-alpha",
+        observable_id: "ingress.processing_latency_ms",
+        source_endpoint_id: "endpoint-archived-gap",
+        order: :asc
+      )
+
+    assert length(latency_samples) == 2
+    assert Enum.all?(latency_samples, &(&1.source_endpoint_id == "endpoint-archived-gap"))
+    assert Enum.all?(latency_samples, &(&1.spacecraft_id == "sc-archived-gap"))
+    assert Enum.all?(latency_samples, &(&1.unit == "ms"))
+    assert Enum.all?(latency_samples, &(&1.value > 0))
+
     [anomaly_row] = Repo.all(ProtocolAnomalyRow)
     assert anomaly_row.anomaly_kind == "frame_sequence_discontinuity"
     assert anomaly_row.evidence_id == raw_evidence_two.evidence_id
@@ -480,7 +532,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
   test "batched persistence retries tolerate already-inserted protocol anomalies" do
     previous_ingress_archive = Application.get_env(:cadence, :ingress_archive, [])
     previous_protocol_archive = Application.get_env(:cadence, :protocol_record_archive, [])
-    previous_history_store = Application.get_env(:cadence, :telemetry_history_store, [])
+    previous_telemetry_storage = Application.get_env(:cadence, :telemetry_storage, [])
 
     ingress_base_path =
       Path.join(
@@ -508,8 +560,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
       flush_count: 10
     )
 
-    Application.put_env(:cadence, :telemetry_history_store,
-      module: Cadence.Telemetry.HistoryStore.Noop
+    Application.put_env(:cadence, :telemetry_storage,
+      writer: Cadence.Telemetry.Storage.Writers.Noop,
+      organization_id: "org-test"
     )
 
     start_supervised!(
@@ -524,7 +577,7 @@ defmodule Cadence.Persistence.PersistTelemetryIngressTest do
     on_exit(fn ->
       Application.put_env(:cadence, :ingress_archive, previous_ingress_archive)
       Application.put_env(:cadence, :protocol_record_archive, previous_protocol_archive)
-      Application.put_env(:cadence, :telemetry_history_store, previous_history_store)
+      Application.put_env(:cadence, :telemetry_storage, previous_telemetry_storage)
       File.rm_rf!(ingress_base_path)
       File.rm_rf!(protocol_base_path)
     end)

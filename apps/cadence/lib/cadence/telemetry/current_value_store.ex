@@ -8,6 +8,8 @@ defmodule Cadence.Telemetry.CurrentValueStore do
   @callback child_spec(keyword()) :: Supervisor.child_spec() | nil
   @callback hot_path_safe?() :: boolean()
   @callback record_samples([Sample.t()]) :: :ok | {:error, term()}
+  @callback replace_value(binary(), binary(), Sample.t() | nil, keyword()) ::
+              :ok | {:error, term()}
   @callback latest_value(binary(), binary(), keyword()) :: Sample.t() | nil
   @callback latest_values_for_mission(binary(), keyword()) :: [Sample.t()]
   @callback reset() :: :ok
@@ -25,6 +27,12 @@ defmodule Cadence.Telemetry.CurrentValueStore do
   @spec record_samples([Sample.t()]) :: :ok | {:error, term()}
   def record_samples(samples) when is_list(samples) do
     backend_module().record_samples(samples)
+  end
+
+  @spec replace_value(binary(), binary(), Sample.t() | nil, keyword()) :: :ok | {:error, term()}
+  def replace_value(mission_id, point_id, sample_or_nil, opts \\ [])
+      when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do
+    backend_module().replace_value(mission_id, point_id, sample_or_nil, opts)
   end
 
   @spec hot_path_safe?() :: boolean()

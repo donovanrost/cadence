@@ -58,6 +58,7 @@ defmodule CadenceWeb.UserSessionController do
     conn
     |> renew_browser_session()
     |> put_session(:user_session_token, issued_session.session_token)
+    |> maybe_put_browser_test_sandbox_owner_key()
     |> maybe_put_current_organization(issued_session.current_organization_id)
     |> put_flash(:info, "Signed in.")
     |> redirect(to: redirect_target(conn, issued_session))
@@ -83,6 +84,13 @@ defmodule CadenceWeb.UserSessionController do
 
   defp maybe_put_current_organization(conn, _other) do
     delete_session(conn, :current_organization_id)
+  end
+
+  defp maybe_put_browser_test_sandbox_owner_key(conn) do
+    case Application.get_env(:cadence_web, :browser_test_sandbox_owner) do
+      %{key: key} when is_binary(key) -> put_session(conn, :browser_test_sandbox_owner_key, key)
+      _owner -> conn
+    end
   end
 
   defp revoke_session_token(conn) do

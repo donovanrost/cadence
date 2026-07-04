@@ -1,0 +1,29 @@
+name: cadence
+
+services:
+  questdb:
+    image: questdb/questdb:9.4.3
+    ports:
+      # REST API and Web Console
+      - "9000:9000"
+      # InfluxDB Line Protocol ingestion
+      - "9009:9009"
+      # Postgres wire protocol
+      - "8812:8812"
+      # Minimal health server
+      - "9003:9003"
+    volumes:
+      - ./var/questdb:/var/lib/questdb
+  questdb_customer:
+    image: questdb/questdb:9.4.3
+    ports:
+      # REST API and Web Console
+      - "9100:9000"
+      # InfluxDB Line Protocol ingestion
+      - "9109:9009"
+      # Postgres wire protocol
+      - "9812:8812"
+      # Minimal health server
+      - "9103:9003"
+    volumes:
+      - ./var/questdb_customer:/var/lib/questdb

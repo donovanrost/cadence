@@ -23,8 +23,8 @@
   prefersdark: true;
   color-scheme: "dark";
   --color-base-100: oklch(12% 0.02 265);
-  --color-base-200: oklch(15% 0.02 260);
-  --color-base-300: oklch(18% 0.02 258);
+  --color-base-200: oklch(17% 0.02 260);
+  --color-base-300: oklch(23% 0.025 258);
   --color-base-content: oklch(85% 0.02 250);
   --color-primary: oklch(80% 0.12 210);
   --color-primary-content: oklch(15% 0.02 210);
@@ -36,8 +36,8 @@
   --color-neutral-content: oklch(85% 0.02 250);
   --color-info: oklch(70% 0.14 250);
   --color-info-content: oklch(15% 0.02 250);
-  --color-success: oklch(78% 0.10 185);
-  --color-success-content: oklch(15% 0.02 185);
+  --color-success: oklch(78% 0.12 175);
+  --color-success-content: oklch(15% 0.04 175);
   --color-warning: oklch(72% 0.15 50);
   --color-warning-content: oklch(15% 0.02 50);
   --color-error: oklch(68% 0.20 10);
@@ -64,69 +64,17 @@
    that aren't in daisyUI's standard vocabulary. These bridge the gap until
    the primitives are migrated to use daisyUI's class vocabulary directly. */
 @theme {
-  --color-muted: oklch(55% 0.02 250);
+  --color-muted: oklch(60% 0.02 250);
   --color-line: oklch(80% 0.12 210 / 0.18);
   --color-line-strong: oklch(80% 0.12 210 / 0.32);
-  --color-panel: oklch(15% 0.02 260 / 0.88);
-  --color-panel-strong: oklch(15% 0.02 260 / 0.96);
+  --color-panel: oklch(17% 0.02 260 / 0.88);
+  --color-panel-strong: oklch(17% 0.02 260 / 0.96);
 }
 
-/* Cadence design tokens (CSS custom properties for HUD utilities).
-   These feed the HUD system utilities below; they are NOT Tailwind theme
-   tokens and don't generate utility classes. */
-:root {
-  --brand-primary: oklch(80% 0.12 210);
-  --brand-secondary: oklch(72% 0.15 285);
-  --brand-accent: oklch(60% 0.25 340);
-
-  --glow-cyan: var(--brand-primary);
-  --glow-purple: var(--brand-secondary);
-  --glow-pink: var(--brand-accent);
-
-  --icon-muted: oklch(from var(--glow-cyan) 68% 0.06 h);
-
-  --surface-overlay: oklch(8% 0.02 265);
-  --surface-inset: oklch(10% 0.015 265);
-  --surface-base: oklch(12% 0.02 265);
-  --surface-input: oklch(14% 0.015 265);
-  --surface-raised: oklch(15% 0.02 260);
-  --surface-elevated: oklch(18% 0.02 258);
-  --surface-hover: oklch(22% 0.02 265);
-
-  --status-critical: oklch(62% 0.25 25);
-  --status-warning: oklch(70% 0.20 50);
-  --status-success: oklch(78% 0.10 185);
-  --status-info: oklch(70% 0.14 250);
-
-  --text-muted: oklch(55% 0.02 250);
-  --text-subtle: oklch(65% 0.02 250);
-  --text-bright: oklch(85% 0.02 250);
-
-  --neutral-darker: oklch(15% 0.01 265);
-  --neutral-dark: oklch(20% 0.01 265);
-  --neutral-mid: oklch(25% 0.02 265);
-  --neutral-border: oklch(35% 0.03 265);
-  --neutral-text: oklch(50% 0.02 265);
-  --neutral-text-light: oklch(70% 0.02 265);
-
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 0.75rem;
-  --space-lg: 1rem;
-  --space-xl: 1.5rem;
-
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.2s ease;
-  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  --pulse-duration: 2s;
-
-  color-scheme: dark;
-}
+/* Cadence design tokens — the single source of truth (primitives → semantics →
+   systems). Extracted into its own file so the app and the design-system
+   reference share one origin. */
+@import "./tokens.css";
 
 /* Page-level base */
 html, body {
@@ -134,9 +82,14 @@ html, body {
   min-height: 100vh;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* In @layer base so daisyUI's component styles (e.g. .btn-primary text color
+   on link-mode <.button>s) can override it — unlayered, this reset beat every
+   layered rule and washed out filled link-buttons to base-content. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 /* HUD Design System — core utilities */
@@ -148,3 +101,62 @@ a {
 /* Collapsible Sidebar */
 @import "./components/sidebar.css";
 
+/* uPlot vendor stylesheet (unmodified) — canvas chart scaffolding for the
+   TelemetryChart hook. Vendor file, not an authored selector. */
+@import "../vendor/uplot/uPlot.min.css";
+
+/* GridStack vendor stylesheet (unmodified) — dashboard grid positioning for
+   the DashboardGrid hook. Vendor file, not an authored selector. */
+@import "../vendor/gridstack/gridstack.min.css";
+
+.dashboard-review-placement-focus > .grid-stack-item-content {
+  border-color: oklch(from var(--status-warning) l c h / 0.85);
+  box-shadow: 0 0 0 1px oklch(from var(--status-warning) l c h / 0.42),
+              0 0 18px oklch(from var(--status-warning) l c h / 0.18);
+}
+
+.dashboard-review-placement-selected > .grid-stack-item-content {
+  border-color: var(--status-warning);
+  box-shadow: 0 0 0 2px oklch(from var(--status-warning) l c h / 0.65),
+              0 0 24px oklch(from var(--status-warning) l c h / 0.28);
+}
+
+/* Reduced motion — honor the OS setting. Decorative loops (status pulses)
+   stop; functional transitions go instant (state still changes, it just
+   doesn't tween). 0.01ms, not 0, so JS transitionend/animationend listeners
+   still fire. See the "Reduced motion" design-system card. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The critical strobe carried salience, not just meaning — without motion a
+     static red dot is easy to miss during an anomaly. Substitute a static
+     ring so "critical" stays prominent. */
+  .hud-status-critical .hud-status-dot {
+    box-shadow:
+      0 0 0 3px oklch(68% 0.20 10 / 0.45),
+      0 0 6px oklch(68% 0.20 10 / 0.8);
+  }
+}
+
+/* Legibility skin — opt-in second axis (composes with data-theme). Dials the
+   flourishes down via the effect knobs: no uppercase labels, no status pulses,
+   no glow, no scanlines, and a stronger rest border. All knobs are now wired:
+   --label-case, --pulse-*, --fx-glow-strength (multiplies every decorative glow
+   halo) and --fx-scanline-opacity (scanline intensity). See "Effect tokens". */
+[data-skin="legible"] {
+  --label-case: none;
+  --label-tracking: 0.02em;
+  --pulse-nominal: none;
+  --pulse-warning: none;
+  --pulse-critical: none;
+  --fx-glow-strength: 0;
+  --fx-scanline-opacity: 0;
+  --border-subtle: oklch(from var(--color-action) l c h / 0.30);
+}

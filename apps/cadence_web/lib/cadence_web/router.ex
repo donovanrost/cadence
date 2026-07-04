@@ -197,6 +197,22 @@ defmodule CadenceWeb.Router do
            CommsTransportShowLive,
            :show
 
+      live "/missions/:mission_id/comms/ground-stations",
+           CommsGroundStationListLive,
+           :index
+
+      live "/missions/:mission_id/comms/ground-stations/new",
+           CommsGroundStationFormLive,
+           :new
+
+      live "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
+           CommsGroundStationFormLive,
+           :edit
+
+      live "/missions/:mission_id/comms/ground-stations/:ground_station_id",
+           CommsGroundStationShowLive,
+           :show
+
       live "/missions/:mission_id/comms/routing",
            CommsRoutingListLive,
            :index
@@ -228,6 +244,35 @@ defmodule CadenceWeb.Router do
       live "/missions/:mission_id/comms/providers/:provider_profile_id/new-version",
            CommsProviderProfileNewLive,
            :version
+    end
+
+    live_session :ops,
+      on_mount: [
+        {CadenceWeb.OrganizationAuth, :require_organization_scope},
+        {CadenceWeb.MissionAuth, :load_mission},
+        {CadenceWeb.UserAuth, :attach_user_menu},
+        {CadenceWeb.OpsShellHook, :default}
+      ],
+      layout: {CadenceWeb.Layouts, :ops} do
+      live "/missions/:mission_id/ops/dashboards",
+           OpsDashboardListLive,
+           :index
+
+      live "/missions/:mission_id/ops/dashboards/new",
+           OpsDashboardNewLive,
+           :new
+
+      live "/missions/:mission_id/ops/data-sources",
+           OpsDataSourcesLive,
+           :index
+
+      live "/missions/:mission_id/ops/telemetry/explore",
+           OpsTelemetryExploreLive,
+           :show
+
+      live "/missions/:mission_id/ops/dashboards/:dashboard_id",
+           OpsDashboardShowLive,
+           :show
     end
 
     # Legacy comms URL aliases -- 301 redirect to canonical paths so old
@@ -321,6 +366,7 @@ defmodule CadenceWeb.Router do
       ],
       layout: {CadenceWeb.Layouts, :sidebar} do
       live "/admin", AdminHomeLive, :index
+      live "/admin/runtime", AdminRuntimeLive, :index
       live "/admin/organizations", AdminOrganizationListLive, :index
       live "/admin/organizations/new", AdminOrganizationNewLive, :new
       live "/admin/organizations/:org_id", AdminOrganizationShowLive, :show

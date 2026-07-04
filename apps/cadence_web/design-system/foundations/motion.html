@@ -1,0 +1,134 @@
+<!-- @dsCard group="Foundations" name="Motion" subtitle="Duration · easing · liveness · reduced-motion" width="1040" height="1640" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Motion</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); --st-red: oklch(62% 0.25 25); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.12 210);
+    border: 1px solid oklch(80% 0.12 210 / 0.35); background: oklch(80% 0.12 210 / 0.07); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .tag { font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .35rem; border-radius: 2px; vertical-align: middle; margin-left: .4rem; }
+  .tag.cur { color: var(--st-green); background: oklch(78% 0.12 175 / 0.15); }
+  .tag.prop { color: var(--st-yellow); background: oklch(72% 0.15 50 / 0.15); }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.warn { border-color: oklch(72% 0.20 10 / 0.6); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; color: oklch(85% 0.02 250 / 0.85); max-width: 62rem; }
+  pre .c { color: oklch(60% 0.02 250); } pre .k { color: oklch(80% 0.12 210); } pre .v { color: oklch(76% 0.15 285); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 62rem; }
+  th { text-align: left; font-size: .64rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.k { font-family: ui-monospace, monospace; color: var(--glow-cyan); white-space: nowrap; }
+
+  .pulse-demo { display: flex; gap: 2rem; flex-wrap: wrap; align-items: center; margin: .4rem 0 .6rem; font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(82% 0.02 250 / 0.8); }
+  .pd { display: inline-flex; align-items: center; gap: .5rem; }
+  .dot { width: 9px; height: 9px; border-radius: 1px; }
+  .nominal { background: var(--st-green); box-shadow: 0 0 6px oklch(from var(--st-green) l c h / 0.8); animation: hp 2s ease-in-out infinite; }
+  .warning { background: var(--st-yellow); box-shadow: 0 0 6px oklch(from var(--st-yellow) l c h / 0.8); animation: hpw 1s ease-in-out infinite; }
+  .critical { background: var(--st-red); box-shadow: 0 0 6px oklch(from var(--st-red) l c h / 0.8); animation: hpc 0.5s ease-in-out infinite; }
+  @keyframes hp { 0%,100%{opacity:1} 50%{opacity:.6} }
+  @keyframes hpw { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes hpc { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+  @media (prefers-reduced-motion: reduce) { .nominal,.warning,.critical { animation: none; } }
+
+  .usage { margin-top: 2.4rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.4rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: var(--st-green); } .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations</p>
+  <h1>Motion</h1>
+  <div class="status">&#10003; Durations, pulses, the easing system, and reduced-motion are all <span class="tag cur">current</span> — <code style="color:inherit">--duration-*</code>/<code style="color:inherit">--ease-*</code> live in tokens.css; the @media block lives in app.css.</div>
+  <p class="lede">Motion has exactly four jobs: <strong>orient</strong> (where did this come from / go), <strong>feedback</strong>
+    (you did a thing), <strong>continuity</strong> (this is the same object moving), and <strong>liveness</strong> (it's
+    alive and updating). Anything else is decoration — and in a console read under stress, decoration competes with the
+    data. The rule that follows: <strong>motion must point at what changed, never make the screen a disco.</strong></p>
+
+  <p class="section-label">Duration <span class="tag cur">current</span></p>
+<pre><span class="c">/* short by design — ops users act fast; over ~400ms reads as sluggish */</span>
+<span class="k">--duration-fast</span>:   <span class="v">150ms</span>;  <span class="c">/* instant feedback: hover, color, border */</span>
+<span class="k">--duration-normal</span>: <span class="v">200ms</span>;  <span class="c">/* state change: reveal, expand, toggle */</span>
+<span class="k">--duration-slow</span>:   <span class="v">300ms</span>;  <span class="c">/* spatial: drawer, sheet, larger moves */</span></pre>
+  <p class="note">These are your existing <code>--transition-fast / normal / smooth</code> (0.15 / 0.2 / 0.3) — just
+    documented with a <em>purpose per tier</em>. One refinement: today duration and easing are <strong>fused</strong> in
+    <code>--transition-*</code>; separating them (<code>--duration-*</code> + <code>--ease-*</code>) lets you compose
+    “200ms + ease-out” freely.</p>
+
+  <p class="section-label">Easing</p>
+<pre><span class="k">--ease-out</span>:      <span class="v">cubic-bezier(0.0, 0, 0.2, 1)</span>;   <span class="c">/* ENTERING — decelerate */</span>
+<span class="k">--ease-in</span>:       <span class="v">cubic-bezier(0.4, 0, 1, 1)</span>;     <span class="c">/* LEAVING — accelerate */</span>
+<span class="k">--ease-standard</span>: <span class="v">cubic-bezier(0.4, 0, 0.2, 1)</span>;   <span class="c">/* MOVING in-view (your --transition-smooth) */</span>
+<span class="k">--ease-linear</span>:   <span class="v">linear</span>;                         <span class="c">/* continuous loops: spin, pulse, progress */</span></pre>
+  <table>
+    <thead><tr><th>Curve</th><th>Use for</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ease-out</td><td>things appearing (menus, popovers, reveals)</td><td>fast start feels responsive; gentle landing</td></tr>
+      <tr><td class="k">ease-in</td><td>things leaving (dismiss, collapse)</td><td>accelerates away; you don't watch it go</td></tr>
+      <tr><td class="k">ease-standard</td><td>things moving within view (drawer, reorder)</td><td>symmetric, calm</td></tr>
+      <tr><td class="k">ease-linear</td><td>looping liveness (pulse, spinner)</td><td>no accel — a loop must read as constant</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Today Cadence has one curve (the standard) and otherwise default <code>ease</code>. The gap is
+    <strong>enter vs exit</strong>: appearing should decelerate, leaving should accelerate. That single distinction is
+    what makes motion feel intentional rather than generic.</p>
+
+  <p class="section-label">Liveness — the status pulses <span class="tag cur">current</span></p>
+  <div class="pulse-demo">
+    <span class="pd"><span class="dot nominal"></span> nominal · 2s breathe</span>
+    <span class="pd"><span class="dot warning"></span> warning · 1s blink</span>
+    <span class="pd"><span class="dot critical"></span> critical · 0.5s strobe</span>
+  </div>
+  <p class="note">Looping motion = <strong>liveness only</strong>, and urgency is encoded by <em>speed</em>: calm breathe →
+    fast strobe. It's the most attention-grabbing (and expensive) motion you have — reserve it for status. The full
+    animation shorthands live as the <code>--pulse-*</code> knobs in <strong>Effect tokens</strong>; this is their
+    motion meaning.</p>
+  <p class="note warn">⚠ The critical 0.5s strobe (opacity + scale) is a genuine photosensitivity / fatigue risk in a
+    24/7 room — which is exactly why the next section is non-negotiable.</p>
+
+  <p class="section-label">Reduced motion</p>
+<pre><span class="c">/* refined: kill decorative LOOPS, make functional transitions instant.
+   Pairs with the --pulse-* knobs in Effect tokens. */</span>
+@media (prefers-reduced-motion: reduce) {
+  :root { <span class="k">--pulse-nominal</span>: <span class="v">none</span>; <span class="k">--pulse-warning</span>: <span class="v">none</span>; <span class="k">--pulse-critical</span>: <span class="v">none</span>; }
+  *, ::before, ::after {
+    <span class="k">animation-duration</span>: <span class="v">0.01ms</span> !important;
+    <span class="k">animation-iteration-count</span>: <span class="v">1</span> !important;
+    <span class="k">transition-duration</span>: <span class="v">0.01ms</span> !important;
+  }
+}</pre>
+  <p class="note"><strong>Shipped in <code>app.css</code></strong> — decorative loops stop, functional transitions go
+    near-instant (0.01ms so JS <code>transitionend</code> still fires), and the critical dot swaps its strobe for a
+    static ring. The rule that makes it safe: <strong>removing motion must never remove meaning.</strong> When the pulse
+    stops, the status dot keeps its color and shape, so urgency still reads. (Try it: this card's dots above freeze if
+    your OS has reduce-motion on.)</p>
+
+  <p class="section-label">Rules</p>
+  <div class="usage">
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Every animation earns one of the four jobs (orient / feedback / continuity / liveness). No job → cut it.</li>
+      <li class="do"><span class="mark">&#10003;</span> Keep it short — 150–300ms. Let easing carry direction: <code>ease-out</code> in, <code>ease-in</code> out.</li>
+      <li class="do"><span class="mark">&#10003;</span> Looping motion is liveness only; dial urgency by speed; honor <code>prefers-reduced-motion</code> always.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't animate many things at once — under stress, motion should isolate <em>what changed</em>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't let motion remove meaning when it stops, and don't use it as decoration — the data is the figure.</li>
+    </ul>
+  </div>
+  <p class="note" style="border-color:oklch(80% 0.12 210 / 0.4)">Fits the frozen-CSS rule: new <code>:root</code> tokens
+    (durations split, easing curves) + a reduced-motion media block reassigning tokens — no new component selectors.</p>
+</body>
+</html>

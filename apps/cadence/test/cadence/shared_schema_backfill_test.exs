@@ -1,5 +1,5 @@
 defmodule Cadence.SharedSchemaBackfillTest do
-  use Cadence.DataCase, async: true
+  use Cadence.DataCase, async: false
 
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization

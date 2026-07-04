@@ -24,8 +24,11 @@ defmodule CadenceWeb.CommsProviderProfileListLive do
       <.page_header
         title="Providers"
         subtitle="Transport adapters Cadence uses to send and receive bytes — sockets, GSaaS providers, simulator streams."
-        back_label="Comms"
-        back_navigate={~p"/missions/#{@current_mission.mission_id}/comms"}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Providers", nil}
+        ]}
       >
         <:title_suffix>{length(@provider_profiles)} configured</:title_suffix>
         <:actions>

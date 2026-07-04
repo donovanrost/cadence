@@ -70,7 +70,7 @@ defmodule CadenceWeb.SpacecraftRoutingLive do
             :for={{id, rule} <- @streams.routing_rules}
             id={id}
             navigate={~p"/missions/#{@current_mission.mission_id}/comms/routing/#{rule.routing_rule_id}"}
-            class="card bg-base-200 border border-base-300 hover:border-primary/50 hover-glow-cyan transition-glow"
+            class="card bg-base-200 border border-base-300 hud-corners hover:border-primary/50 hover-glow-cyan transition-glow"
           >
             <div class="card-body p-5">
               <p class="hud-label">{rule.purpose_label}</p>

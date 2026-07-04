@@ -1,5 +1,5 @@
 defmodule Cadence.Comms.TransportStoreTest do
-  use Cadence.DataCase, async: true
+  use Cadence.DataCase, async: false
 
   alias Cadence.Comms.Transport
   alias Cadence.Comms.TransportKinds.TCPSocket

@@ -105,12 +105,13 @@ defmodule CadenceWeb.NotificationsLive do
 
   defp notification_card(assigns) do
     ~H"""
-    <%!-- Bespoke card: read/unread state drives the left accent, beyond <.card> accents. --%>
-    <div class={[
-      "card bg-base-200 border-l-2 transition-all",
-      if(is_nil(@notification.read_at), do: "border-l-primary", else: "border-l-base-300")
-    ]}>
-      <div class="card-body p-4 flex flex-row items-start gap-4">
+    <%!-- Read/unread state drives the left accent via the class escape hatch. --%>
+    <.card
+      padding={:none}
+      class={"border-l-2 transition-all " <>
+        if(is_nil(@notification.read_at), do: "border-l-primary", else: "border-l-base-300")}
+    >
+      <div class="flex flex-row items-start gap-4 p-4">
         <div class="flex-1 min-w-0">
           <p class={[
             "text-sm",
@@ -129,7 +130,7 @@ defmodule CadenceWeb.NotificationsLive do
           <.notification_actions notification={@notification} />
         </div>
       </div>
-    </div>
+    </.card>
     """
   end
 
@@ -147,10 +148,7 @@ defmodule CadenceWeb.NotificationsLive do
         >
           Accept
         </.button>
-        <span
-          :if={@notification.read_at}
-          class="text-xs text-base-content/60 uppercase tracking-wide"
-        >
+        <span :if={@notification.read_at} class="hud-label">
           Accepted
         </span>
       <% _ -> %>

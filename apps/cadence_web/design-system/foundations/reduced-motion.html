@@ -1,0 +1,130 @@
+<!-- @dsCard group="Foundations" name="Reduced motion" subtitle="Implemented — OS reduce-motion honored · the audit + critical substitute" width="1040" height="1560" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Reduced motion (spec)</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); --st-green: oklch(78% 0.12 175); --st-yellow: oklch(70% 0.20 50); --st-red: oklch(62% 0.25 25); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 1.4rem; max-width: 78ch; font-size: .9rem; line-height: 1.5; }
+  .lede strong { color: oklch(85% 0.05 340); }
+  code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .status { display: inline-flex; gap: .5rem; align-items: center; font-size: .78rem; color: oklch(80% 0.15 50);
+    border: 1px solid oklch(72% 0.15 50 / 0.4); background: oklch(72% 0.15 50 / 0.08); border-radius: 2px; padding: .4rem .7rem; margin-bottom: 1.6rem; }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(65% 0.10 210); margin: 2.2rem 0 1rem; }
+  .note { font-size: .83rem; color: oklch(82% 0.02 250 / 0.8); line-height: 1.5; max-width: 80ch; margin: .2rem 0 1rem; border-left: 2px solid oklch(80% 0.12 210 / 0.4); padding-left: .9rem; }
+  .note.dec { border-color: oklch(72% 0.15 50 / 0.6); } .note.win { border-color: oklch(78% 0.12 175 / 0.5); }
+
+  pre { background: oklch(8% 0.02 265); border: 1px solid oklch(80% 0.12 210 / 0.15); border-radius: 2px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.6; color: oklch(85% 0.02 250 / 0.85); max-width: 62rem; }
+  pre .c { color: oklch(60% 0.02 250); } pre .k { color: oklch(80% 0.12 210); } pre .v { color: oklch(76% 0.15 285); }
+
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; max-width: 62rem; }
+  th { text-align: left; font-size: .64rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: oklch(from var(--glow-cyan) 68% 0.06 h); border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding: .5rem .55rem; }
+  td { border-bottom: 1px solid oklch(80% 0.12 210 / 0.08); padding: .5rem .55rem; color: oklch(82% 0.02 250 / 0.85); vertical-align: top; }
+  td.t { font-family: ui-monospace, monospace; font-size: .76rem; color: oklch(82% 0.02 250 / 0.7); }
+  td.kill { color: oklch(72% 0.20 10); font-weight: 600; } td.inst { color: var(--st-yellow); } td.sub { color: var(--glow-cyan); }
+
+  .demo { display: flex; gap: 2.5rem; align-items: center; flex-wrap: wrap; margin: .4rem 0 .4rem; font-family: ui-monospace, monospace; font-size: .74rem; color: oklch(82% 0.02 250 / 0.75); }
+  .d { display: inline-flex; align-items: center; gap: .55rem; }
+  .dot { width: 10px; height: 10px; border-radius: 1px; background: var(--st-red); box-shadow: 0 0 6px oklch(from var(--st-red) l c h / 0.8); }
+  .live { animation: strobe 0.5s ease-in-out infinite; }
+  .fallback { box-shadow: 0 0 0 3px oklch(from var(--st-red) l c h / 0.45), 0 0 6px oklch(from var(--st-red) l c h / 0.8); }
+  @keyframes strobe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+  @media (prefers-reduced-motion: reduce) {
+    .live { animation: none; box-shadow: 0 0 0 3px oklch(from var(--st-red) l c h / 0.45), 0 0 6px oklch(from var(--st-red) l c h / 0.8); }
+    .rm-on { display: inline; } .rm-off { display: none; }
+  }
+  .rm-on { display: none; } .rm-off { display: inline; }
+
+  .usage { margin-top: 2.4rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.4rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 82ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: var(--st-green); } .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Foundations &middot; part of Motion (🎯)</p>
+  <h1>Reduced motion <span style="font-size:.9rem;color:oklch(82% .02 250 / .5)">(spec)</span></h1>
+  <div class="status" style="color:oklch(78% 0.12 175);border-color:oklch(78% 0.12 175 / 0.4);background:oklch(78% 0.12 175 / 0.08)">&#10003; Implemented (2026-06-27) — now a single block in <code style="color:inherit">app.css</code>. (There was zero handling before this; only vendor <code style="color:inherit">daisyui.js</code> had any.)</div>
+  <p class="lede">The single most important accessibility fix outstanding. The standard: <strong>remove non-essential
+    motion when the OS asks — but never remove meaning.</strong> The audit below shows the gap is small; one block
+    covers ~all of it, and there's exactly one design decision worth making deliberately.</p>
+
+  <p class="section-label">The audit — everything that moves</p>
+  <table>
+    <thead><tr><th>What moves</th><th>Count</th><th>Class</th><th>Reduced-motion treatment</th></tr></thead>
+    <tbody>
+      <tr><td class="t">hud-pulse / -warning / -critical, mc-pulse ×2</td><td>5</td><td>decorative loop (status liveness)</td><td class="kill">STOP</td></tr>
+      <tr><td class="t">animate-pulse</td><td>1</td><td>decorative loop</td><td class="kill">STOP</td></tr>
+      <tr><td class="t">transition-colors / all / glow / box-shadow</td><td>~70</td><td>functional feedback (hover, focus)</td><td class="inst">INSTANT</td></tr>
+      <tr><td class="t">sidebar width + opacity</td><td>~7</td><td>functional spatial (collapse/expand)</td><td class="inst">INSTANT (snap)</td></tr>
+      <tr><td class="t">critical status (the 0.5s strobe)</td><td>—</td><td>motion <em>was</em> the salience</td><td class="sub">SUBSTITUTE static cue</td></tr>
+    </tbody>
+  </table>
+  <p class="note">"Instant" means the transition still <em>happens</em> (state still changes) — it just doesn't tween.
+    Nothing is lost except the in-between frames.</p>
+
+  <p class="section-label">The applied block — now in app.css</p>
+<pre><span class="c">/* app.css — one media block handles the whole audit */</span>
+@media (prefers-reduced-motion: reduce) {
+  <span class="c">/* 1. kill the named decorative loops (pairs with Effect tokens) */</span>
+  :root { <span class="k">--pulse-nominal</span>: <span class="v">none</span>; <span class="k">--pulse-warning</span>: <span class="v">none</span>; <span class="k">--pulse-critical</span>: <span class="v">none</span>; }
+
+  <span class="c">/* 2. global safety net — instant transitions & animations everywhere */</span>
+  *, ::before, ::after {
+    <span class="k">animation-duration</span>: <span class="v">0.01ms</span> !important;
+    <span class="k">animation-iteration-count</span>: <span class="v">1</span> !important;
+    <span class="k">transition-duration</span>: <span class="v">0.01ms</span> !important;
+    <span class="k">scroll-behavior</span>: <span class="v">auto</span> !important;
+  }
+}</pre>
+  <p class="note">Why <code>0.01ms</code> and not <code>0</code>: some JS waits on <code>transitionend</code> /
+    <code>animationend</code> events — a near-zero duration still fires them, a zero duration may not. This is the
+    well-worn accessible pattern.</p>
+
+  <p class="section-label">The one decision — critical loses its salience</p>
+  <p class="note dec">&#9651; Stopping the strobe removes critical's <em>salience</em> (urgency draw), not its <em>meaning</em>
+    (color + shape still say "critical"). For nominal &amp; warning that's fine. For <strong>critical</strong>, motion
+    <em>was</em> the salience — a static red dot is easy to miss in an anomaly. So reduced-motion should
+    <strong>substitute a static high-salience cue</strong>, not just delete the animation:</p>
+  <div class="demo">
+    <span class="d"><span class="dot live"></span> critical &middot; <span class="rm-off">strobing (motion on)</span><span class="rm-on">static ring (your OS has reduce-motion on)</span></span>
+  </div>
+<pre>@media (prefers-reduced-motion: reduce) {
+  .hud-status-critical .hud-status-dot {
+    <span class="k">animation</span>: <span class="v">none</span>;
+    <span class="c">/* salience was the strobe → give it a static ring instead */</span>
+    <span class="k">box-shadow</span>: <span class="v">0 0 0 3px oklch(from var(--status-critical) l c h / 0.45),
+                0 0 6px oklch(from var(--status-critical) l c h / 0.8)</span>;
+  }
+}</pre>
+  <p class="note">Decision made: nominal/warning just stop; <strong>critical gets the static ring</strong> (applied). The
+    demo dot above is live proof — it strobes normally, and freezes into the ring if your OS reduce-motion setting is on.</p>
+
+  <p class="section-label">How to verify</p>
+  <p class="note">OS: macOS <em>Accessibility → Display → Reduce motion</em>; Windows <em>Accessibility → Visual effects
+    → Animation</em>; iOS/Android equivalents. Browser: devtools "Emulate <code>prefers-reduced-motion: reduce</code>."
+    Then confirm the pulses freeze, transitions snap, and the critical ring appears.</p>
+
+  <p class="section-label">Rules</p>
+  <div class="usage">
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> Decorative loops <strong>off</strong>; functional transitions <strong>instant</strong> (they still change state, just don't tween).</li>
+      <li class="do"><span class="mark">&#10003;</span> Use <code>0.01ms</code>, not <code>0</code>, so JS <code>*end</code> events still fire.</li>
+      <li class="do"><span class="mark">&#10003;</span> Where motion <em>was</em> the salience (critical), substitute a static cue — don't just delete it.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't gate essential meaning behind motion in the first place — color + shape must already carry it.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't override scroll/focus behaviour users rely on for orientation beyond what's needed.</li>
+    </ul>
+  </div>
+  <p class="note win">&#10003; Shipped as <strong>one media block in <code>app.css</code></strong> + the critical
+    substitute. No component changes, no new selectors. Verify by toggling your OS reduce-motion setting.</p>
+</body>
+</html>

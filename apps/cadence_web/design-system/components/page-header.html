@@ -1,0 +1,133 @@
+<!-- @dsCard group="Components" name="Page header" subtitle="<.page_header> — breadcrumbs · title · actions" width="960" height="880" -->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Cadence — Page header</title>
+<style>
+  :root { --glow-cyan: oklch(80% 0.12 210); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2.5rem; background: oklch(12% 0.02 265); color: oklch(85% 0.02 250);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .eyebrow { font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 .5rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .lede { color: oklch(70% 0.02 250); margin: 0 0 2rem; max-width: 64ch; font-size: .9rem; line-height: 1.5; }
+  .lede code { font-family: ui-monospace, monospace; font-size: .82em; color: oklch(80% 0.10 210); }
+  .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 2.2rem 0 1.1rem; }
+
+  /* Faithful <.page_header>: header is border-b border-primary/20 pb-4 */
+  .ph { border-bottom: 1px solid oklch(80% 0.12 210 / 0.2); padding-bottom: 1rem; }
+  /* with :actions the inner wrapper becomes flex items-end justify-between gap-4 */
+  .ph-split { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+  /* <.breadcrumbs> — flex gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-base-content/60 */
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .7rem;
+    font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: oklch(85% 0.02 250 / 0.6); }
+  .crumbs a { color: inherit; text-decoration: none; }
+  .crumbs .sep { color: oklch(85% 0.02 250 / 0.2); }              /* text-base-content/20, aria-hidden */
+  .crumbs .current { color: oklch(80% 0.12 210 / 0.9); }          /* last item: text-primary/90 */
+  .crumbs .hovered { color: oklch(80% 0.12 210); }                /* link hover:text-primary */
+  /* eyebrow attr renders as .hud-label — chrome text desaturated via --chrome-chroma: 0.02 */
+  .ph .hud-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.02 210); margin: 0; }
+  /* h1: mt-2 text-2xl font-bold text-base-content tracking-tight */
+  .ph-title { margin: .5rem 0 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.025em;
+    color: oklch(85% 0.02 250); }
+  /* :title_suffix span: ml-3 font-mono text-base text-base-content/60 */
+  .ph-suffix { margin-left: .75rem; font-family: ui-monospace, monospace; font-size: 1rem;
+    font-weight: 400; color: oklch(85% 0.02 250 / 0.6); }
+  .ph-suffix.scid { color: oklch(80% 0.12 210 / 0.8); }           /* SCID chip: mono text-primary/80 */
+  /* subtitle: mt-1 max-w-3xl text-sm text-base-content/70 */
+  .ph-sub { margin: .25rem 0 0; max-width: 48rem; font-size: .875rem; line-height: 1.45;
+    color: oklch(85% 0.02 250 / 0.7); }
+  /* :actions wrapper: flex items-center gap-2 */
+  .ph-actions { display: flex; align-items: center; gap: .5rem; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; flex: none;
+    height: 2rem; padding: 0 .85rem; border-radius: 2px; cursor: pointer;
+    font-weight: 500; letter-spacing: .05em; text-transform: uppercase; font-size: .75rem;
+    background: oklch(80% 0.12 210); color: oklch(15% 0.02 210);
+    border: 1px solid oklch(from var(--glow-cyan) l c h / 0.5);
+    box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.1), 0 0 10px oklch(from var(--glow-cyan) l c h / 0.2); }
+  .btn-ghost { background: transparent; color: oklch(85% 0.02 250); border-color: transparent; box-shadow: none; }
+  .note { font-size: .78rem; color: oklch(70% 0.02 250); margin: .6rem 0 0; line-height: 1.55; max-width: 72ch; }
+  .note code { font-family: ui-monospace, monospace; color: oklch(80% 0.10 210); }
+
+  .usage { margin-top: 2.6rem; border-top: 1px solid oklch(80% 0.12 210 / 0.15); padding-top: 1.5rem; }
+  .usage-label { font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: oklch(65% 0.10 210); margin: 0 0 1rem; }
+  .rules { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; max-width: 80ch; }
+  .rules li { display: flex; gap: .65rem; font-size: .85rem; line-height: 1.45; color: oklch(78% 0.02 250); }
+  .rules .mark { flex: none; font-weight: 700; width: .9rem; text-align: center; }
+  .rules .do .mark { color: oklch(78% 0.12 175); }
+  .rules .dont .mark { color: oklch(72% 0.20 10); }
+  .rules code { font-family: ui-monospace, monospace; font-size: .85em; color: oklch(80% 0.10 210); }
+</style>
+</head>
+<body>
+  <p class="eyebrow">Components</p>
+  <h1>Page header</h1>
+  <p class="lede">The canonical page header: title block over the standard
+    <code>border-b border-primary/20 pb-4</code> rule, one per page. Navigation context goes above the
+    title — a <code>breadcrumbs</code> trail (list of <code>{label, path}</code>, last item current) or a
+    plain <code>eyebrow</code> label. Inline counts sit in <code>:title_suffix</code>; buttons and status
+    pills in <code>:actions</code>.</p>
+
+  <p class="section-label">List page — breadcrumbs · title_suffix · subtitle · :actions</p>
+  <header class="ph">
+    <div class="ph-split">
+      <div>
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="#">Artemis</a><span class="sep" aria-hidden="true">/</span>
+          <a href="#" class="hovered">Comms</a><span class="sep" aria-hidden="true">/</span>
+          <span class="current">Transports</span>
+        </nav>
+        <h1 class="ph-title">Transports<span class="ph-suffix">12 configured</span></h1>
+        <p class="ph-sub">Durable byte-moving capabilities Cadence can use for inbound, outbound, or
+          bidirectional spacecraft traffic.</p>
+      </div>
+      <div class="ph-actions">
+        <button class="btn btn-ghost">Validate</button>
+        <button class="btn">New transport</button>
+      </div>
+    </div>
+  </header>
+  <p class="note">The middle crumb is shown in its <code>hover:text-primary</code> state. With
+    <code>:actions</code> the inner wrapper becomes <code>flex items-end justify-between gap-4</code>;
+    the actions column is <code>flex items-center gap-2</code>.</p>
+
+  <p class="section-label">Show page — record title, mono suffix, no subtitle</p>
+  <header class="ph">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="#">Artemis</a><span class="sep" aria-hidden="true">/</span>
+      <a href="#">Spacecraft</a><span class="sep" aria-hidden="true">/</span>
+      <span class="current">VIPER-7</span>
+    </nav>
+    <h1 class="ph-title">VIPER-7<span class="ph-suffix scid">SCID 0x2A</span></h1>
+  </header>
+  <p class="note"><code>:title_suffix</code> emits <code>ml-3 font-mono text-base
+    text-base-content/60</code> — slot content may re-tint it (here <code>text-primary/80</code> for the
+    spacecraft ID, as on SpacecraftShowLive).</p>
+
+  <p class="section-label">Eyebrow variant — no hierarchy to walk</p>
+  <header class="ph">
+    <p class="hud-label">Platform admin</p>
+    <h1 class="ph-title">Organizations<span class="ph-suffix">4 active</span></h1>
+    <p class="ph-sub">Tenants provisioned on this Cadence deployment.</p>
+  </header>
+  <p class="note"><code>eyebrow</code> renders as a <code>hud-label</code> above the title. Use it only
+    when the page has no parent trail; breadcrumbs and eyebrow occupy the same slot in the layout.</p>
+
+  <div class="usage">
+    <p class="usage-label">Usage</p>
+    <ul class="rules">
+      <li class="do"><span class="mark">&#10003;</span> One <code>&lt;.page_header&gt;</code> per page, at the top. Sections further down use <code>&lt;.section_header&gt;</code> (the in-card variant), never a second page header.</li>
+      <li class="do"><span class="mark">&#10003;</span> Pick one navigation context: <code>breadcrumbs</code> for hierarchy (Mission / Comms / Transports), <code>eyebrow</code> for a flat label — not both.</li>
+      <li class="do"><span class="mark">&#10003;</span> <code>:title_suffix</code> is for inline counts and IDs next to the title; <code>subtitle</code> is a sentence of description below it. They are not interchangeable.</li>
+      <li class="do"><span class="mark">&#10003;</span> Put page-level buttons and status pills in <code>:actions</code> — a <code>&lt;.button&gt;</code>, never raw <code>class="btn &hellip;"</code>.</li>
+      <li class="dont"><span class="mark">&#10007;</span> No back-links ("&larr; Back to Comms") above the title — real pages use breadcrumbs; the last crumb is the current page and gets <code>nil</code> for its path.</li>
+      <li class="dont"><span class="mark">&#10007;</span> Don't put <code>text-base-content/NN</code> next to <code>hud-label</code> — the label's own color wins the cascade and the utility is inert.</li>
+    </ul>
+  </div>
+</body>
+</html>

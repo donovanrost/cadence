@@ -17,6 +17,7 @@ defmodule Cadence.Reads.MissionEvents do
     MissionEventRow
     |> where([row], row.mission_id == ^mission_id)
     |> maybe_apply_cursor(cursor)
+    |> maybe_filter_time_range(opts)
     |> maybe_filter_atoms(:category, Keyword.get(opts, :category))
     |> maybe_filter_atoms(:kind, Keyword.get(opts, :kind))
     |> maybe_filter_atoms(:severity, Keyword.get(opts, :severity))
@@ -26,7 +27,7 @@ defmodule Cadence.Reads.MissionEvents do
     |> maybe_filter_equals(:realized_contact_id, Keyword.get(opts, :realized_contact_id))
     |> maybe_filter_equals(:path_id, Keyword.get(opts, :path_id))
     |> maybe_filter_equals(:capability_instance_id, Keyword.get(opts, :capability_instance_id))
-    |> order_by([row], desc: row.occurred_at, desc: row.mission_event_id)
+    |> order_by_direction(Keyword.get(opts, :order, :desc))
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&MissionEventRow.to_domain/1)
@@ -44,6 +45,7 @@ defmodule Cadence.Reads.MissionEvents do
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
     |> maybe_apply_cursor(cursor)
+    |> maybe_filter_time_range(opts)
     |> maybe_filter_atoms(:category, Keyword.get(opts, :category))
     |> maybe_filter_atoms(:kind, Keyword.get(opts, :kind))
     |> maybe_filter_atoms(:severity, Keyword.get(opts, :severity))
@@ -53,7 +55,7 @@ defmodule Cadence.Reads.MissionEvents do
     |> maybe_filter_equals(:realized_contact_id, Keyword.get(opts, :realized_contact_id))
     |> maybe_filter_equals(:path_id, Keyword.get(opts, :path_id))
     |> maybe_filter_equals(:capability_instance_id, Keyword.get(opts, :capability_instance_id))
-    |> order_by([row], desc: row.occurred_at, desc: row.mission_event_id)
+    |> order_by_direction(Keyword.get(opts, :order, :desc))
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&MissionEventRow.to_domain/1)
@@ -78,6 +80,24 @@ defmodule Cadence.Reads.MissionEvents do
 
   defp maybe_apply_cursor(query, _cursor), do: query
 
+  defp maybe_filter_time_range(query, opts) do
+    query
+    |> maybe_filter_from_occurred_at(Keyword.get(opts, :from_occurred_at))
+    |> maybe_filter_to_occurred_at(Keyword.get(opts, :to_occurred_at))
+  end
+
+  defp maybe_filter_from_occurred_at(query, %DateTime{} = from) do
+    where(query, [row], row.occurred_at >= ^from)
+  end
+
+  defp maybe_filter_from_occurred_at(query, _from), do: query
+
+  defp maybe_filter_to_occurred_at(query, %DateTime{} = to) do
+    where(query, [row], row.occurred_at < ^to)
+  end
+
+  defp maybe_filter_to_occurred_at(query, _to), do: query
+
   defp maybe_filter_atoms(query, _field, nil), do: query
 
   defp maybe_filter_atoms(query, field, values) do
@@ -93,6 +113,16 @@ defmodule Cadence.Reads.MissionEvents do
 
   defp maybe_filter_equals(query, field, value) when is_binary(value) do
     where(query, [row], field(row, ^field) == ^value)
+  end
+
+  defp order_by_direction(query, :asc) do
+    order_by(query, [row], asc: row.occurred_at, asc: row.mission_event_id)
+  end
+
+  defp order_by_direction(query, "asc"), do: order_by_direction(query, :asc)
+
+  defp order_by_direction(query, _order) do
+    order_by(query, [row], desc: row.occurred_at, desc: row.mission_event_id)
   end
 
   defp normalize_filter_value(value) when is_atom(value), do: Atom.to_string(value)

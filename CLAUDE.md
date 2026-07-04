@@ -16,7 +16,7 @@ Cadence's architecture is heavily inspired by Cosmos OpenC3, but adapted for Eli
 
 7. **Use the component layer, not raw daisyUI markup.** `<.button>` (never `class="btn ..."`), `<.card>`/`<.stat_tile>` (never `class="card bg-base-200 ..."`), `<.table>` for data tables, `<.page_header>` for page titles, `<.empty_state>` for empty lists, `<.status_badge>`/`<.severity_badge>` for pills. All live in `lib/cadence_web/components/` and are imported everywhere via `html_helpers`. A one-off layout that would need more than a couple of `class` escape hatches may stay raw — leave a one-line comment saying why.
 
-8. **Glow is reserved for navigation cards and live/alert signals.** Buttons never glow (`<.button>` enforces this). Use `<.card hover_glow>` only on cards that are themselves navigation targets.
+8. **Glow and `hud-corners` are reserved for navigation cards, heroes, and live/alert signals.** Buttons never glow (`<.button>` enforces this). Use `<.card hover_glow>` only on cards that are themselves navigation targets (it brings the corner brackets with it); `corners` opts a non-navigating hero panel in. Content cards get neutral chrome — no brackets, no colored border. Status on a card lives solely in its `<.status_badge>` (the old `accent` attr was retired for double-encoding it). Inline contextual messages use `<.callout>`, never raw daisyUI `alert`.
 
 3. **No render function over 50 lines.** Extract a private component function or a separate component module. Large render functions are where duplication hides.
 

@@ -179,6 +179,55 @@ These configure:
 - `Cadence.Repo`
 - `CadenceWeb.Endpoint`
 
+Optional production settings:
+
+- `CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES`
+
+`CADENCE_DASHBOARD_SOURCE_CREDENTIAL_ENV_PROFILES` enables the default BYO
+dashboard source secret-backend path. Runtime config wires
+`Cadence.Dashboards.SourceCredentials.SecretMaterialResolver` to
+`Cadence.Dashboards.SourceCredentials.EnvSecretBackend`; the older
+`EnvMaterialResolver` remains a compatibility entry point. The value is a JSON
+object keyed by non-secret credential material profile name. Each profile maps
+material fields to environment variable names, not to secret values:
+
+```json
+{
+  "customer-rehearsal": {
+    "http_endpoint_env": "CUSTOMER_REHEARSAL_QUESTDB_HTTP_ENDPOINT",
+    "bearer_token_env": "CUSTOMER_REHEARSAL_QUESTDB_BEARER",
+    "headers_env": {
+      "x-cadence-tenant": "CUSTOMER_REHEARSAL_QUESTDB_TENANT"
+    }
+  }
+}
+```
+
+Credential metadata may then store
+`{"material_env_profile": "customer-rehearsal"}`. Cadence reads the referenced
+environment variables only while resolving ephemeral adapter material and keeps
+the values out of persisted source, event, health, dashboard, and UI payloads.
+Mission-scoped material-resolution attempts are still audited as canonical
+security events; those events record only authorizer/resolver identity, actor,
+credential reference, result, material field names, and redacted failure or
+denial classes. The
+generic resolver also validates backend material before adapter handoff,
+including endpoint userinfo rejection and ambiguous bearer/basic auth rejection.
+
+Deployments can also configure a `:material_authorizer` under
+`:dashboard_source_credentials`, or pass `:credential_material_authorizer` per
+call. The authorizer sees the resolved non-secret credential descriptor and
+scope context, and can deny material access before the secret backend is called.
+Denials are audited as redacted security events. The default path is currently
+permissive and marked `todo(authz)` until the broader RBAC model exists.
+
+For early BYO setup flows, credential metadata may also store non-secret
+environment variable names directly, for example
+`{"material_env_profile": "customer-rehearsal", "http_endpoint_env": "CUSTOMER_REHEARSAL_QUESTDB_HTTP_ENDPOINT"}`.
+The UI stores only those env names and endpoint/profile references; the endpoint,
+token, password, and header values still come from process environment at probe
+or adapter execution time.
+
 ## 4. Dev profile structure
 
 Profile-driven local tooling is loaded through:

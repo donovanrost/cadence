@@ -50,17 +50,20 @@ defmodule CadenceWeb.AdminOrganizationNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="space-y-6">
+    <div class="space-y-6 max-w-xl">
       <.page_header
         title="Create Organization"
-        back_label="Organizations"
-        back_navigate={~p"/admin/organizations"}
+        breadcrumbs={[
+          {"Platform Admin", ~p"/admin"},
+          {"Organizations", ~p"/admin/organizations"},
+          {"Create Organization", nil}
+        ]}
       />
 
       <.form for={@form} id="org-form" phx-change="validate" phx-submit="save" class="space-y-4">
         <.input field={@form[:display_name]} type="text" label="Display Name" required />
         <.input field={@form[:slug]} type="text" label="Slug" required />
-        <.button type="submit" size={:md}>Create Organization</.button>
+        <.form_actions submit="Create organization" cancel_navigate={~p"/admin/organizations"} />
       </.form>
     </div>
     """

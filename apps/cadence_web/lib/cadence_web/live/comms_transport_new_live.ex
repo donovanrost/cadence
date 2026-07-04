@@ -62,8 +62,12 @@ defmodule CadenceWeb.CommsTransportNewLive do
       <.page_header
         title="New Transport"
         subtitle="Describe a durable capability for moving bytes. This setup does not mean a connection is currently open."
-        back_label="Transports"
-        back_navigate={@return_to}
+        breadcrumbs={[
+          {@current_mission.display_name, ~p"/missions/#{@current_mission.mission_id}"},
+          {"Comms", ~p"/missions/#{@current_mission.mission_id}/comms"},
+          {"Transports", @return_to},
+          {"New Transport", nil}
+        ]}
       />
 
       <.form
@@ -85,33 +89,9 @@ defmodule CadenceWeb.CommsTransportNewLive do
           <pre class="mt-3 overflow-x-auto font-mono text-xs text-base-content/70">{Jason.encode!(preview_configuration(@form), pretty: true)}</pre>
         </details>
 
-        <div class="flex items-center gap-3 border-t border-base-300/60 pt-5">
-          <.button type="submit" size={:md}>
-            Create Transport
-          </.button>
-          <.button variant={:ghost} size={:md} navigate={@return_to}>
-            Cancel
-          </.button>
-        </div>
+        <.form_actions submit="Create Transport" cancel_navigate={@return_to} />
       </.form>
     </div>
-    """
-  end
-
-  attr :number, :string, required: true
-  attr :title, :string, required: true
-  slot :inner_block, required: true
-
-  defp form_section(assigns) do
-    ~H"""
-    <section class="space-y-4">
-      <div class="flex items-center gap-3">
-        <span class="hud-label text-primary/70">{@number}</span>
-        <h2 class="hud-label">{@title}</h2>
-        <div class="flex-1 h-px bg-base-300/60"></div>
-      </div>
-      {render_slot(@inner_block)}
-    </section>
     """
   end
 

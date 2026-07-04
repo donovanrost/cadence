@@ -179,6 +179,18 @@ defmodule Cadence.Runtime do
     end
   end
 
+  @spec stop_realized_contact_sync(binary(), binary()) :: :ok | {:error, term()}
+  def stop_realized_contact_sync(mission_id, realized_contact_id)
+      when is_binary(mission_id) and is_binary(realized_contact_id) do
+    case realized_contact_runtime(mission_id, realized_contact_id) do
+      {:ok, realized_contact_runtime} ->
+        stop_realized_contact_runtime(mission_id, realized_contact_id, realized_contact_runtime)
+
+      {:error, :realized_contact_runtime_not_running} ->
+        :ok
+    end
+  end
+
   @spec realized_contact_snapshot(binary(), binary()) :: {:ok, map()} | {:error, term()}
   def realized_contact_snapshot(mission_id, realized_contact_id)
       when is_binary(mission_id) and is_binary(realized_contact_id) do
@@ -282,6 +294,57 @@ defmodule Cadence.Runtime do
          ) do
       [{realized_contact_runtime, _value}] -> {:ok, realized_contact_runtime}
       [] -> {:error, :realized_contact_runtime_not_running}
+    end
+  end
+
+  defp stop_realized_contact_runtime(mission_id, realized_contact_id, realized_contact_runtime) do
+    monitor_ref = Process.monitor(realized_contact_runtime)
+
+    result =
+      DynamicSupervisor.terminate_child(
+        MissionRuntime.realized_contact_supervisor_name(mission_id),
+        realized_contact_runtime
+      )
+
+    case result do
+      :ok ->
+        with :ok <- await_realized_contact_runtime_down(monitor_ref) do
+          await_realized_contact_runtime_unregistered(mission_id, realized_contact_id, 500)
+        end
+
+      {:error, _reason} = error ->
+        Process.demonitor(monitor_ref, [:flush])
+        error
+    end
+  end
+
+  defp await_realized_contact_runtime_down(monitor_ref) do
+    receive do
+      {:DOWN, ^monitor_ref, :process, _pid, _reason} -> :ok
+    after
+      5_000 ->
+        Process.demonitor(monitor_ref, [:flush])
+        {:error, :realized_contact_stop_timeout}
+    end
+  end
+
+  defp await_realized_contact_runtime_unregistered(_mission_id, _realized_contact_id, 0) do
+    {:error, :realized_contact_stop_timeout}
+  end
+
+  defp await_realized_contact_runtime_unregistered(mission_id, realized_contact_id, attempts_left) do
+    case realized_contact_runtime(mission_id, realized_contact_id) do
+      {:error, :realized_contact_runtime_not_running} ->
+        :ok
+
+      {:ok, _pid} ->
+        Process.sleep(10)
+
+        await_realized_contact_runtime_unregistered(
+          mission_id,
+          realized_contact_id,
+          attempts_left - 1
+        )
     end
   end
 
