@@ -162,6 +162,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
         data-historical-workflow-group-job-progress={
           Map.get(@workflow_context, :request_group_job_progress)
         }
+        data-historical-workflow-group-job-progress-queued={
+          job_progress_count(@workflow_context, "queued")
+        }
+        data-historical-workflow-group-job-progress-running={
+          job_progress_count(@workflow_context, "running")
+        }
+        data-historical-workflow-group-job-progress-completed={
+          job_progress_count(@workflow_context, "completed")
+        }
+        data-historical-workflow-group-job-progress-failed={
+          job_progress_count(@workflow_context, "failed")
+        }
+        data-historical-workflow-group-job-progress-missing={
+          job_progress_count(@workflow_context, "missing")
+        }
         data-historical-workflow-group-job-items={
           Map.get(@workflow_context, :request_group_job_items)
         }
@@ -785,6 +800,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                   phx-click="inspect_stale_historical_workflow_replacement_job"
                   phx-value-job-id={entry.job_id}
                   phx-value-event-id={entry.event_id}
+                  phx-value-replacement-run-id={entry.replacement_run}
                   data-workflow-action-id="inspect_stale_replacement_job"
                   data-workflow-action-scope="replacement_job"
                   data-workflow-action-replacement-run={entry.replacement_run}
@@ -802,6 +818,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                   phx-click="requeue_stale_historical_workflow_replacement_job"
                   phx-value-job-id={entry.job_id}
                   phx-value-event-id={entry.event_id}
+                  phx-value-replacement-run-id={entry.replacement_run}
                   data-workflow-action-id="requeue_stale_replacement_job"
                   data-workflow-action-scope="replacement_job"
                   data-workflow-action-replacement-run={entry.replacement_run}
@@ -828,6 +845,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
                   data-workflow-action-next-action={entry.next_action}
                 >
                   <.icon name="hero-magnifying-glass" class="size-3" /> Inspect missing job
+                </button>
+                <button
+                  :if={
+                    entry.job_action == "inspect_failed_replacement_job" and
+                      @replacement_recovery.retry_action.present and present_text?(entry.job_id) and
+                      present_text?(entry.event_id)
+                  }
+                  id={"dashboard-historical-workflow-failed-replacement-retry-#{entry.replacement_run}"}
+                  type="button"
+                  class="btn btn-xs btn-error btn-outline mt-1"
+                  phx-click="retry_historical_workflow_job"
+                  phx-value-job-id={entry.job_id}
+                  phx-value-event-id={entry.event_id}
+                  phx-value-replacement-run-id={entry.replacement_run}
+                  data-workflow-action-id="retry_failed_replacement_job"
+                  data-workflow-action-scope="replacement_job"
+                  data-workflow-action-replacement-run={entry.replacement_run}
+                  data-workflow-action-job-id={entry.job_id}
+                  data-workflow-action-event-id={entry.event_id}
+                  data-workflow-action-reason={@replacement_recovery.retry_action.reason}
+                  data-workflow-action-preview={@replacement_recovery.retry_action.preview}
+                >
+                  <.icon name="hero-arrow-path" class="size-3" /> Retry failed job
                 </button>
               </div>
             </div>
@@ -1238,6 +1278,37 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
       </section>
     </div>
     """
+  end
+
+  defp job_progress_count(workflow_context, status) do
+    workflow_context
+    |> Map.get(:request_group_job_progress)
+    |> job_progress_counts()
+    |> Map.get(status, 0)
+    |> Integer.to_string()
+  end
+
+  defp job_progress_counts(value) when is_binary(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.reduce(%{}, fn status_count, counts ->
+      case status_count |> String.trim() |> String.split(" ", trim: true) do
+        [status, count] ->
+          Map.put(counts, status, parsed_count(count))
+
+        _other ->
+          counts
+      end
+    end)
+  end
+
+  defp job_progress_counts(_value), do: %{}
+
+  defp parsed_count(value) do
+    case Integer.parse(to_string(value)) do
+      {count, ""} -> count
+      _other -> 0
+    end
   end
 
   defp present_text?(value) when is_binary(value), do: String.trim(value) != ""

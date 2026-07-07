@@ -41,6 +41,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentation do
     :target_observation_identity_id
   ]
 
+  @stable_attr_fields [
+    {"decision", "decision"},
+    {"decision_reason", "decision-reason"},
+    {"execution_mode", "execution-mode"},
+    {"dashboard_time_mode", "dashboard-time-mode"},
+    {"dashboard_replay_run_id", "dashboard-replay-run-id"},
+    {"dashboard_limit_mode", "dashboard-limit-mode"},
+    {"request_group_id", "request-group-id"},
+    {"source_request_event_id", "source-request-event-id"},
+    {"workflow_id", "workflow-id"},
+    {"requested", "requested"},
+    {"applied", "applied"},
+    {"failed", "failed"},
+    {"result_event_id", "result-event-id"},
+    {"result_event_ids", "result-event-ids"},
+    {"target_event_id", "target-event-id"},
+    {"target_run_id", "target-run-id"},
+    {"target_observation_identity_id", "target-observation-identity-id"}
+  ]
+
   @type t :: %__MODULE__{
           action: String.t(),
           status: String.t(),
@@ -95,6 +115,20 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentation do
     end
   end
 
+  @spec stable_attrs(t() | nil, String.t(), keyword()) :: map()
+  def stable_attrs(presentation, prefix, opts \\ [])
+
+  def stable_attrs(nil, _prefix, _opts), do: %{}
+
+  def stable_attrs(%__MODULE__{} = presentation, prefix, opts) when is_binary(prefix) do
+    aliases = Keyword.get(opts, :aliases, %{})
+    action_suffix = Keyword.get(opts, :action_suffix)
+
+    presentation
+    |> base_attrs(prefix, action_suffix)
+    |> add_metadata_attrs(presentation.metadata, prefix, aliases)
+  end
+
   defp metadata(outcome) do
     @metadata_fields
     |> Enum.reduce(%{}, fn field, acc ->
@@ -109,6 +143,29 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentation do
   defp value(outcome, key) when is_map(outcome) do
     Map.get(outcome, key, Map.get(outcome, Atom.to_string(key)))
   end
+
+  defp base_attrs(%__MODULE__{} = presentation, prefix, action_suffix) do
+    %{}
+    |> put_attr(base_action_attr_name(prefix, action_suffix), presentation.action)
+    |> put_attr("#{prefix}-status", presentation.status)
+    |> put_attr("#{prefix}-kind", presentation.kind)
+    |> put_attr("#{prefix}-reason", presentation.reason)
+    |> put_attr("#{prefix}-metadata", presentation.metadata_json)
+  end
+
+  defp base_action_attr_name(prefix, nil), do: prefix
+  defp base_action_attr_name(prefix, suffix) when is_binary(suffix), do: "#{prefix}-#{suffix}"
+
+  defp add_metadata_attrs(attrs, metadata, prefix, aliases) do
+    Enum.reduce(@stable_attr_fields, attrs, fn {field, default_suffix}, acc ->
+      suffix = Map.get(aliases, field, default_suffix)
+      put_attr(acc, "#{prefix}-#{suffix}", Map.get(metadata, field))
+    end)
+  end
+
+  defp put_attr(attrs, _name, nil), do: attrs
+  defp put_attr(attrs, _name, ""), do: attrs
+  defp put_attr(attrs, name, value), do: Map.put(attrs, name, value)
 
   defp text_value(nil), do: nil
   defp text_value(value) when is_atom(value), do: Atom.to_string(value)

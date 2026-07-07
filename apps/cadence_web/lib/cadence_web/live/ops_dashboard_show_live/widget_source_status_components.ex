@@ -74,6 +74,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       data-widget-query-scope-ids={source_status_list_text(@source_status, :scope_ids)}
       data-widget-query-contact-ids={source_status_list_text(@source_status, :contact_ids)}
       data-widget-query-source-endpoint-ids={source_status_list_text(@source_status, :source_endpoint_ids)}
+      data-widget-query-source-health-states={source_status_list_text(@source_status, :source_health_states)}
+      data-widget-query-source-health-reasons={source_status_list_text(@source_status, :source_health_reasons)}
+      data-widget-query-source-health-event-ids={source_status_list_text(@source_status, :source_health_event_ids)}
       data-widget-query-empty-reason={source_status_empty_reason_text(@source_status)}
       data-widget-query-warning-codes={warning_codes(@warnings)}
     >
@@ -157,6 +160,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
         data-widget-source-badge-source-endpoint-id={
           source_status_list_text(@source_status, :source_endpoint_ids)
         }
+        data-widget-source-badge-health-state={
+          source_status_list_text(@source_status, :source_health_states)
+        }
+        data-widget-source-badge-health-reason={
+          source_status_list_text(@source_status, :source_health_reasons)
+        }
+        data-widget-source-badge-health-event-id={
+          source_status_list_text(@source_status, :source_health_event_ids)
+        }
         data-widget-source-badge-empty-reason={source_status_empty_reason_text(@source_status)}
       >
         <.icon name="hero-signal" class="h-3 w-3" />
@@ -198,6 +210,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       data-widget-source-badge-contact-id={source_status_list_text(@source_status, :contact_ids)}
       data-widget-source-badge-source-endpoint-id={
         source_status_list_text(@source_status, :source_endpoint_ids)
+      }
+      data-widget-source-badge-health-state={
+        source_status_list_text(@source_status, :source_health_states)
+      }
+      data-widget-source-badge-health-reason={
+        source_status_list_text(@source_status, :source_health_reasons)
+      }
+      data-widget-source-badge-health-event-id={
+        source_status_list_text(@source_status, :source_health_event_ids)
       }
       data-widget-source-badge-empty-reason={source_status_empty_reason_text(@source_status)}
     >
@@ -271,6 +292,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       "scope-ids" => source_status_list_text(source_status, :scope_ids),
       "contact-id" => source_status_first_value(source_status, :contact_ids),
       "source-endpoint-id" => source_status_first_value(source_status, :source_endpoint_ids),
+      "source-health-state" => source_status_first_value(source_status, :source_health_states),
+      "source-health-reason" => source_status_first_value(source_status, :source_health_reasons),
+      "source-health-event-id" =>
+        source_status_first_value(source_status, :source_health_event_ids),
       "source-empty-reason" => source_status_empty_reason_text(source_status),
       "widget-warning-codes" => warning_codes(warnings)
     })
@@ -337,6 +362,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
         "source_endpoints",
         "Source endpoints",
         source_status_list_text(source_status, :source_endpoint_ids)
+      ),
+      query_diagnostic_row(
+        "source_health",
+        "Source health",
+        source_status_list_text(source_status, :source_health_states)
+      ),
+      query_diagnostic_row(
+        "source_health_reasons",
+        "Health reasons",
+        source_status_list_text(source_status, :source_health_reasons)
+      ),
+      query_diagnostic_row(
+        "source_health_events",
+        "Health events",
+        source_status_list_text(source_status, :source_health_event_ids)
       ),
       query_diagnostic_row(
         "empty_reason",
@@ -430,7 +470,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
         :realms,
         :scope_ids,
         :contact_ids,
-        :source_endpoint_ids
+        :source_endpoint_ids,
+        :source_health_event_ids,
+        :source_health_reasons
       ],
       &(source_status_list_text(source_status, &1) != "")
     )
@@ -543,6 +585,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetSourceStatusComponents do
       source_status_title_part(
         "source endpoint",
         source_status_list_text(source_status, :source_endpoint_ids)
+      ),
+      source_status_title_part(
+        "health",
+        source_status_list_text(source_status, :source_health_states)
+      ),
+      source_status_title_part(
+        "health reason",
+        source_status_list_text(source_status, :source_health_reasons)
+      ),
+      source_status_title_part(
+        "health event",
+        source_status_list_text(source_status, :source_health_event_ids)
       ),
       source_status_title_part("reason", source_status_empty_reason_text(source_status))
     ]

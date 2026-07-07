@@ -759,6 +759,24 @@ defmodule Cadence.Dashboards.DocumentStore do
     |> Enum.map(&DashboardLifecycleEventRow.to_domain/1)
   end
 
+  @spec fetch_lifecycle_event(binary(), binary(), binary()) ::
+          {:ok, LifecycleEvent.t()} | {:error, :not_found}
+  def fetch_lifecycle_event(organization_id, mission_id, dashboard_lifecycle_event_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(dashboard_lifecycle_event_id) do
+    DashboardLifecycleEventRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.dashboard_lifecycle_event_id == ^dashboard_lifecycle_event_id
+    )
+    |> Repo.one()
+    |> case do
+      %DashboardLifecycleEventRow{} = row -> {:ok, DashboardLifecycleEventRow.to_domain(row)}
+      nil -> {:error, :not_found}
+    end
+  end
+
   @spec list_open_comparison_review_requests(binary(), binary(), binary()) :: [LifecycleEvent.t()]
   def list_open_comparison_review_requests(organization_id, mission_id, dashboard_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(dashboard_id) do
@@ -1191,6 +1209,8 @@ defmodule Cadence.Dashboards.DocumentStore do
 
   defp comparison_review_resolution_source_payload(%LifecycleEvent{payload: payload})
        when is_map(payload) do
+    bulk_decision_summary = comparison_review_bulk_decision_source_summary(payload)
+
     %{
       "workflow_intent" => payload_value(payload, "workflow_intent"),
       "open_findings" => payload_value(payload, "open_findings"),
@@ -1200,11 +1220,101 @@ defmodule Cadence.Dashboards.DocumentStore do
           payload: payload
         })
     }
+    |> Map.merge(bulk_decision_summary)
     |> Enum.reject(fn {_key, value} -> value in [nil, [], ""] end)
     |> Map.new()
   end
 
   defp comparison_review_resolution_source_payload(%LifecycleEvent{}), do: %{}
+
+  defp comparison_review_bulk_decision_source_summary(payload) when is_map(payload) do
+    findings =
+      payload
+      |> payload_value("open_findings")
+      |> payload_value("findings")
+      |> case do
+        findings when is_list(findings) -> findings
+        _findings -> []
+      end
+
+    actionable_items =
+      findings
+      |> Enum.map(&comparison_review_bulk_decision_actionable_item/1)
+      |> Enum.reject(&is_nil/1)
+
+    skipped_items =
+      findings
+      |> Enum.map(&comparison_review_bulk_decision_skipped_item/1)
+      |> Enum.reject(&is_nil/1)
+
+    %{
+      "source_bulk_decision_actionable_count" => length(actionable_items),
+      "source_bulk_decision_actionable_placement_ids" =>
+        comparison_review_bulk_decision_placement_ids(actionable_items),
+      "source_bulk_decision_skipped_count" => length(skipped_items),
+      "source_bulk_decision_skipped_placement_ids" =>
+        comparison_review_bulk_decision_placement_ids(skipped_items),
+      "source_bulk_decision_skipped_reasons" =>
+        skipped_items
+        |> Enum.map(&Map.get(&1, "reason"))
+        |> Enum.filter(&present_text?/1)
+        |> Enum.uniq()
+    }
+  end
+
+  defp comparison_review_bulk_decision_actionable_item(finding) when is_map(finding) do
+    observation_identity_id = comparison_review_observation_identity_id(finding)
+
+    cond do
+      not present_text?(observation_identity_id) ->
+        nil
+
+      payload_value(finding, "decision_status") == "applied" ->
+        nil
+
+      true ->
+        %{
+          "placement_id" => payload_value(finding, "placement_id"),
+          "observation_identity_id" => observation_identity_id
+        }
+    end
+  end
+
+  defp comparison_review_bulk_decision_actionable_item(_finding), do: nil
+
+  defp comparison_review_bulk_decision_skipped_item(finding) when is_map(finding) do
+    cond do
+      not present_text?(comparison_review_observation_identity_id(finding)) ->
+        %{
+          "placement_id" => payload_value(finding, "placement_id"),
+          "reason" => "missing_observation_identity"
+        }
+
+      payload_value(finding, "decision_status") == "applied" ->
+        %{
+          "placement_id" => payload_value(finding, "placement_id"),
+          "reason" => "already_applied"
+        }
+
+      true ->
+        nil
+    end
+  end
+
+  defp comparison_review_bulk_decision_skipped_item(_finding), do: nil
+
+  defp comparison_review_observation_identity_id(finding) when is_map(finding) do
+    payload_value(finding, "observation_identity_id") ||
+      payload_value(finding, "primary_observation_identity_id") ||
+      payload_value(finding, "compare_observation_identity_id")
+  end
+
+  defp comparison_review_bulk_decision_placement_ids(items) do
+    items
+    |> Enum.map(&Map.get(&1, "placement_id"))
+    |> Enum.filter(&present_text?/1)
+    |> Enum.uniq()
+  end
 
   defp health_snapshot_payload(%OpsDashboardRow{} = row, snapshot, opts) do
     %{
@@ -1388,6 +1498,8 @@ defmodule Cadence.Dashboards.DocumentStore do
   end
 
   defp payload_value(_payload, _key), do: nil
+
+  defp present_text?(value), do: is_binary(value) and value != ""
 
   defp placement_ids(value) when is_binary(value) do
     value

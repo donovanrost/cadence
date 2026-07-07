@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModelTest do
   alias CadenceWeb.OpsDashboardShowLive.RenderGridModel
 
   test "content_attrs exposes the scroll container contract" do
-    assert RenderGridModel.content_attrs() == %{class: "flex-1 min-h-0 overflow-y-auto"}
+    assert RenderGridModel.content_attrs() == %{class: "flex-1 min-w-0 min-h-0 overflow-y-auto"}
   end
 
   test "grid_props exposes gridstack attrs from dashboard and edit state" do

@@ -24,17 +24,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.PanelEvents do
       :dashboard_activity_filter,
       ActivityViewModel.normalize_filter(Keyword.get(opts, :activity_filter))
     )
-    |> assign(:dashboard_activity_event_id, nil)
+    |> assign(:dashboard_activity_event_id, Keyword.get(opts, :activity_event_id))
     |> assign(:dashboard_review_placement_id, nil)
     |> assign_publish_validation(opts)
   end
 
   def open_activity_filter(socket, filter, opts \\ []) do
     activity_filter = ActivityViewModel.normalize_filter(filter)
+    activity_event_id = socket.assigns[:dashboard_activity_event_id]
 
     socket
-    |> open_versions(Keyword.put(opts, :activity_filter, activity_filter))
-    |> Navigation.patch(ActivityNavigation.query(activity_filter), opts)
+    |> open_versions(
+      opts
+      |> Keyword.put(:activity_filter, activity_filter)
+      |> Keyword.put(:activity_event_id, activity_event_id)
+    )
+    |> Navigation.patch(ActivityNavigation.query(activity_filter, activity_event_id), opts)
   end
 
   def open_review_activity(socket, opts \\ []) do

@@ -1,7 +1,7 @@
 defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Dashboards.{DataSources, ManagedQuestDBProvisioningJobs}
+  alias Cadence.Dashboards.{DataSources, ManagedQuestDBProvisioningJobs, TSDBDeploymentStatus}
 
   @organization_id "org-managed-questdb-provisioning-jobs"
   @mission_id "mission-managed-questdb-provisioning-jobs"
@@ -47,6 +47,14 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
     refute Map.has_key?(job.payload, "exec_fun")
     refute Map.has_key?(job.payload, "migrator")
     refute inspect(job) =~ "quest-password"
+
+    assert %{
+             status: :queued,
+             mode: :managed_questdb,
+             backend: :questdb,
+             physical_boundary: :mission,
+             remediation: "wait_for_provisioning_worker"
+           } = TSDBDeploymentStatus.from_job(job)
   end
 
   test "runs a queued provisioning job through the managed provisioner" do
@@ -70,6 +78,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
     assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
     assert claimed_job.job_id == job.job_id
     assert claimed_job.status == :running
+    assert TSDBDeploymentStatus.from_job(claimed_job).status == :provisioning
 
     assert {:ok, completed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
     assert completed_job.status == :completed
@@ -100,6 +109,11 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
 
     assert failed_job.job_id == job.job_id
     assert failed_job.status == :failed
+    assert TSDBDeploymentStatus.from_job(failed_job).status == :failed
+
+    assert TSDBDeploymentStatus.from_job(failed_job).remediation ==
+             "inspect_provisioning_job_and_retry"
+
     assert failed_job.attempt_count == 1
 
     assert failed_job.failure_reason["tuple"] == [
@@ -109,6 +123,68 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
 
     refute inspect(failed_job) =~ "quest-password"
     assert {:error, :data_source_not_found} = DataSources.fetch_data_source(@data_source_id)
+  end
+
+  test "lists managed QuestDB provisioning runs for a mission" do
+    persist_mission_scope(@organization_id, "other-managed-questdb-provisioning-jobs")
+
+    Application.put_env(:cadence, :dashboard_managed_questdb_provisioning,
+      provisioner: fn attrs, _opts ->
+        assert attrs["data_source_id"] == "failed-managed-questdb-source"
+        {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
+      end
+    )
+
+    assert {:ok, failed_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{
+                 data_source_id: "failed-managed-questdb-source",
+                 provisioning_run_id: "failed-managed-questdb-run"
+               })
+             )
+
+    assert [claimed_failed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_failed_job.job_id == failed_job.job_id
+    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_failed_job.job_id)
+
+    assert {:ok, queued_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{
+                 data_source_id: "queued-managed-questdb-source",
+                 provisioning_run_id: "queued-managed-questdb-run"
+               })
+             )
+
+    assert {:ok, _other_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{
+                 data_source_id: "other-managed-questdb-source",
+                 mission_id: "other-managed-questdb-provisioning-jobs",
+                 provisioning_run_id: "other-managed-questdb-run"
+               })
+             )
+
+    runs = Cadence.Dashboards.list_managed_questdb_provisioning_runs(@mission_id, limit: 10)
+    failed_run = Enum.find(runs, &(&1.run_id == "failed-managed-questdb-run"))
+    queued_run = Enum.find(runs, &(&1.run_id == "queued-managed-questdb-run"))
+
+    assert failed_run.job_id == failed_job.job_id
+    assert failed_run.run_id == "failed-managed-questdb-run"
+    assert failed_run.data_source_id == "failed-managed-questdb-source"
+    assert failed_run.status == :failed
+    assert failed_run.status_text == "failed"
+    assert failed_run.backend_text == "questdb"
+    assert failed_run.physical_boundary_text == "mission"
+    assert failed_run.failure_summary == "questdb_unavailable"
+    assert failed_run.remediation == "inspect_provisioning_job_and_retry"
+
+    assert queued_run.job_id == queued_job.job_id
+    assert queued_run.run_id == "queued-managed-questdb-run"
+    assert queued_run.data_source_id == "queued-managed-questdb-source"
+    assert queued_run.status == :queued
+    assert queued_run.failure_summary == "none"
+
+    refute Enum.any?([failed_run, queued_run], &(&1.run_id == "other-managed-questdb-run"))
   end
 
   test "retry preserves the redacted durable request for a later provisioning attempt" do
@@ -136,6 +212,78 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningJobsTest do
     assert retried_job.status == :queued
     assert retried_job.payload == job.payload
     refute inspect(retried_job) =~ "quest-password"
+  end
+
+  test "retries failed managed QuestDB provisioning runs through the dashboard boundary" do
+    Application.put_env(:cadence, :dashboard_managed_questdb_provisioning,
+      provisioner: fn attrs, _opts ->
+        assert attrs["data_source_id"] == @data_source_id
+        {:error, :questdb_unavailable}
+      end
+    )
+
+    assert {:ok, job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{password: "quest-password"}),
+               run_id: @run_id
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert {:ok, failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+    assert failed_job.status == :failed
+
+    assert {:ok, retried_run} =
+             Cadence.Dashboards.retry_managed_questdb_provisioning_run(job.job_id)
+
+    assert retried_run.job_id == job.job_id
+    assert retried_run.run_id == @run_id
+    assert retried_run.status == :queued
+    assert retried_run.status_text == "queued"
+    assert retried_run.failure_summary == "none"
+    assert retried_run.remediation == "wait_for_provisioning_worker"
+    refute inspect(retried_run.job) =~ "quest-password"
+  end
+
+  test "does not retry non-managed QuestDB jobs through the dashboard boundary" do
+    assert {:ok, job} =
+             Cadence.Jobs.enqueue(:catalog_import_run, @mission_id, "catalog-import-run", %{})
+
+    assert {:error, {:unsupported_managed_questdb_provisioning_job, :catalog_import_run}} =
+             Cadence.Dashboards.retry_managed_questdb_provisioning_run(job.job_id)
+  end
+
+  test "requeues running managed QuestDB provisioning runs through the dashboard boundary" do
+    assert {:ok, job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{password: "quest-password"}),
+               run_id: @run_id
+             )
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == job.job_id
+    assert claimed_job.status == :running
+
+    assert {:ok, requeued_run} =
+             Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job.job_id)
+
+    assert requeued_run.job_id == job.job_id
+    assert requeued_run.run_id == @run_id
+    assert requeued_run.status == :queued
+    assert requeued_run.status_text == "queued"
+    assert requeued_run.failure_summary == "managed_questdb_provisioning_requeued"
+    assert requeued_run.remediation == "wait_for_provisioning_worker"
+    refute inspect(requeued_run.job) =~ "quest-password"
+  end
+
+  test "does not requeue non-running managed QuestDB provisioning runs" do
+    assert {:ok, job} =
+             ManagedQuestDBProvisioningJobs.enqueue(
+               attrs(%{password: "quest-password"}),
+               run_id: @run_id
+             )
+
+    assert {:error, {:job_not_running, :queued}} =
+             Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job.job_id)
   end
 
   test "requires mission scope before a provisioning request can be queued" do

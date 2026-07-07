@@ -42,6 +42,13 @@ function interactionMode() {
   return argValue("--interaction-mode") || "full"
 }
 
+function scenarioTimeoutMs() {
+  const raw = argValue("--scenario-timeout-ms") || process.env.DASHBOARD_VIEWPORT_SMOKE_TIMEOUT_MS || "540000"
+  const parsed = Number(raw)
+  assert.equal(Number.isFinite(parsed) && parsed > 0, true, "--scenario-timeout-ms must be positive")
+  return parsed
+}
+
 function commaList(raw) {
   if (!raw) return []
 
@@ -100,6 +107,10 @@ function expectedLateDataPolicyExecutionMode() {
 
 function skipLateDataPolicySubmit() {
   return process.argv.includes("--skip-late-data-policy-submit")
+}
+
+function skipOperationalDataTableInteractions() {
+  return process.argv.includes("--skip-operational-data-table-interactions")
 }
 
 function expectedSourceEndpointId() {
@@ -539,18 +550,101 @@ async function launchChrome() {
     async close() {
       if (chrome.exitCode === null) {
         chrome.kill("SIGTERM")
-        await new Promise((resolveClose) => {
-          const timer = setTimeout(resolveClose, 1_000)
+        const exited = await new Promise((resolveClose) => {
+          const timer = setTimeout(() => resolveClose(false), 1_000)
           chrome.once("exit", () => {
             clearTimeout(timer)
-            resolveClose()
+            resolveClose(true)
           })
         })
+
+        if (!exited && chrome.exitCode === null) {
+          chrome.kill("SIGKILL")
+          await new Promise((resolveClose) => {
+            const timer = setTimeout(resolveClose, 1_000)
+            chrome.once("exit", () => {
+              clearTimeout(timer)
+              resolveClose()
+            })
+          })
+        }
       }
 
       await removeUserDataDir(userDataDir)
     },
   }
+}
+
+function installShutdownGuards(runtime) {
+  let closed = false
+  let closing = false
+
+  const closeRuntime = async () => {
+    if (closed || closing) return
+    closing = true
+
+    try {
+      await runtime.close()
+    } finally {
+      closed = true
+      closing = false
+    }
+  }
+
+  const exitAfterClose = (exitCode) => {
+    closeRuntime()
+      .catch((error) => {
+        console.error(error)
+      })
+      .finally(() => {
+        process.exit(exitCode)
+      })
+  }
+
+  const onSignal = () => exitAfterClose(130)
+  const onParentLost = () => exitAfterClose(1)
+  const onPipeError = (error) => {
+    if (error?.code === "EPIPE") {
+      exitAfterClose(1)
+    }
+  }
+
+  process.once("SIGINT", onSignal)
+  process.once("SIGTERM", onSignal)
+  process.once("SIGHUP", onSignal)
+  process.stdout.on("error", onPipeError)
+  process.stderr.on("error", onPipeError)
+
+  const orphanTimer = setInterval(() => {
+    if (process.ppid === 1) {
+      onParentLost()
+    }
+  }, 1_000)
+  orphanTimer.unref()
+
+  return {
+    async close() {
+      clearInterval(orphanTimer)
+      process.removeListener("SIGINT", onSignal)
+      process.removeListener("SIGTERM", onSignal)
+      process.removeListener("SIGHUP", onSignal)
+      process.stdout.removeListener("error", onPipeError)
+      process.stderr.removeListener("error", onPipeError)
+      await closeRuntime()
+    },
+  }
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer
+
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
 async function removeUserDataDir(userDataDir) {
@@ -1578,11 +1672,163 @@ async function inspectRenderedSourceDependencyCause(client, options = {}) {
   return { dependency: snapshot, evidence }
 }
 
+async function inspectOpsContextRail(client, options = {}) {
+  const { expectInitiallyCollapsed = false, restoreExpanded = false } = options
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#ops-context-rail[data-ops-context-rail]") &&
+        document.querySelector("#ops-context-rail-toggle") &&
+        document.querySelector("[data-ops-context-section]")
+      )
+    `,
+    5_000,
+    "dashboard ops context rail"
+  )
+
+  const snapshotResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const rail = document.querySelector("#ops-context-rail")
+        const sectionKeys = Array.from(document.querySelectorAll("[data-ops-context-section]"))
+          .map((section) => section.dataset.opsContextSection)
+        const collapsedKeys = Array.from(document.querySelectorAll("[data-ops-context-collapsed-section]"))
+          .map((section) => section.dataset.opsContextCollapsedSection)
+
+        return {
+          present: Boolean(rail),
+          expanded: rail?.hasAttribute("data-expanded") || false,
+          width: rail ? Math.round(rail.getBoundingClientRect().width) : 0,
+          storageKey: rail?.dataset.storageKey || "",
+          defaultExpanded: rail?.hasAttribute("data-default-expanded") || false,
+          sectionKeys,
+          collapsedKeys,
+          healthStatus: document
+            .querySelector("[data-ops-context-section='dashboard_health']")
+            ?.dataset.opsContextSectionStatus || "",
+          sourceStatus: document
+            .querySelector("[data-ops-context-section='source_status']")
+            ?.dataset.opsContextSectionStatus || "",
+          sourceSelectionCount: document
+            .querySelector("[data-ops-context-section='source_selection']")
+            ?.dataset.opsContextSectionCount || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const snapshot = snapshotResult.result.value
+  assert.equal(snapshot.present, true, "ops context rail should render")
+  assert.equal(snapshot.storageKey, "cadence-ops-context-rail", "ops context rail should use the shared storage key")
+  assert.equal(snapshot.defaultExpanded, true, "ops context rail should default expanded")
+  assert.equal(
+    snapshot.expanded,
+    !expectInitiallyCollapsed,
+    "ops context rail should hydrate the expected expanded state"
+  )
+  assert.equal(
+    snapshot.sectionKeys.includes("dashboard_health"),
+    true,
+    "ops context rail should expose dashboard health section metadata"
+  )
+  assert.equal(
+    snapshot.sectionKeys.includes("source_status"),
+    true,
+    "ops context rail should expose source status section metadata"
+  )
+  assert.equal(
+    snapshot.sectionKeys.includes("source_selection"),
+    true,
+    "ops context rail should expose source selection section metadata"
+  )
+  assert.equal(snapshot.collapsedKeys.length >= snapshot.sectionKeys.length, true, "collapsed rail badges should mirror sections")
+  assert.notEqual(snapshot.healthStatus, "", "dashboard health section should expose a status")
+  assert.notEqual(snapshot.sourceStatus, "", "source status section should expose a status")
+  assert.notEqual(snapshot.sourceSelectionCount, "", "source selection section should expose a count")
+
+  if (!expectInitiallyCollapsed) {
+    await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          document.querySelector("#ops-context-rail-toggle")?.click()
+        })()
+      `,
+      returnByValue: true,
+    })
+
+    await waitForExpression(
+      client,
+      `
+        Boolean(
+          !document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded") &&
+          JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}").state === "collapsed"
+        )
+      `,
+      3_000,
+      "ops context rail collapse persistence"
+    )
+  }
+
+  const collapsedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const rail = document.querySelector("#ops-context-rail")
+        const stored = JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}")
+
+        return {
+          expanded: rail?.hasAttribute("data-expanded") || false,
+          width: rail ? Math.round(rail.getBoundingClientRect().width) : 0,
+          storedState: stored.state || "",
+          storedWidth: Number.isFinite(stored.width) ? stored.width : null
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const collapsed = collapsedResult.result.value
+
+  if (expectInitiallyCollapsed) {
+    assert.equal(collapsed.expanded, false, "ops context rail should remain collapsed after reload")
+    assert.equal(collapsed.storedState, "collapsed", "ops context rail should preserve collapsed state in localStorage")
+  }
+
+  if (restoreExpanded) {
+    await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          document.querySelector("#ops-context-rail-toggle")?.click()
+        })()
+      `,
+      returnByValue: true,
+    })
+
+    await waitForExpression(
+      client,
+      `
+        Boolean(
+          document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded") &&
+          JSON.parse(localStorage.getItem("cadence-ops-context-rail") || "{}").state === "expanded"
+        )
+      `,
+      3_000,
+      "ops context rail re-expand persistence"
+    )
+  }
+
+  return { snapshot, collapsed }
+}
+
 async function runLiveDashboardInteractions(client, url, profile) {
   if (!profile.requireLiveInteractions) return null
 
   await loadViewport(client, url, LIVE_INTERACTION_VIEWPORT)
   await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+
+  const contextRail = await inspectOpsContextRail(client)
 
   const menuResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -1702,7 +1948,9 @@ async function runLiveDashboardInteractions(client, url, profile) {
           w: node.w,
           h: node.h
         }
-        const after = { ...before, y: before.y + 1 }
+        // Edit mode runs float(false): a vertical move into empty space
+        // compacts straight back, so mutate height — resizes stick.
+        const after = { ...before, h: before.h + 1 }
 
         grid.update(item, { x: after.x, y: after.y, w: after.w, h: after.h })
 
@@ -1735,9 +1983,9 @@ async function runLiveDashboardInteractions(client, url, profile) {
     "mutated DOM placement should match target placement"
   )
   assert.equal(
-    layoutMutationResult.result.value.dom.y,
-    layoutMutationResult.result.value.after.y,
-    "GridStack update should move target placement in the DOM"
+    layoutMutationResult.result.value.dom.h,
+    layoutMutationResult.result.value.after.h,
+    "GridStack update should resize target placement in the DOM"
   )
 
   await new Promise((resolve) => setTimeout(resolve, 700))
@@ -1798,6 +2046,11 @@ async function runLiveDashboardInteractions(client, url, profile) {
   assert.equal(reloadResult.result.value.liveSocketConnected, true, "LiveSocket should reconnect after reload")
   assert.equal(reloadResult.result.value.chartRendered, true, "chart hook should render after reload")
 
+  const contextRailAfterReload = await inspectOpsContextRail(client, {
+    expectInitiallyCollapsed: true,
+    restoreExpanded: true,
+  })
+
   const limitAnalysisEvidence = await inspectRenderedLimitAnalysisEvidence(client, {
     inspectFrameEvidence: true,
   })
@@ -1823,9 +2076,9 @@ async function runLiveDashboardInteractions(client, url, profile) {
 
   assert.equal(persistedLayoutResult.result.value.present, true, "mutated placement should render after reload")
   assert.equal(
-    persistedLayoutResult.result.value.y,
-    layoutMutationResult.result.value.after.y,
-    "dashboard reload should preserve mutated placement row"
+    persistedLayoutResult.result.value.h,
+    layoutMutationResult.result.value.after.h,
+    "dashboard reload should preserve mutated placement size"
   )
 
   const workflowSurfaces = await runLiveWorkflowSurfaceInteractions(client)
@@ -1844,6 +2097,10 @@ async function runLiveDashboardInteractions(client, url, profile) {
       persisted: persistedLayoutResult.result.value,
     },
     reload: reloadResult.result.value,
+    contextRail: {
+      initial: contextRail,
+      afterReload: contextRailAfterReload,
+    },
     limitAnalysisEvidence,
     workflowSurfaces,
     comparisonReview,
@@ -5904,8 +6161,9 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
   assert.match(initial.stateText, /observed/i, "row should render observed state")
   assert.notEqual(initial.timeText, "", "row should render the aggregate observation time")
 
+  const interactionsSkipped = skipOperationalDataTableInteractions()
   let dataLink = null
-  if (resourceScopeKind !== "mission") {
+  if (!interactionsSkipped && resourceScopeKind !== "mission") {
     await clickAndWaitForSelector(
       client,
       rowLinkSelector,
@@ -5988,133 +6246,136 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
     )
   }
 
-  await clickAndWaitForSelector(
-    client,
-    evidenceSelector,
-    "#dashboard-evidence-inspector[data-evidence-kind='frame'][data-evidence-status='resolved']",
-    "operational data-table command queue frame evidence"
-  )
+  let evidence = null
+  if (!interactionsSkipped) {
+    await clickAndWaitForSelector(
+      client,
+      evidenceSelector,
+      "#dashboard-evidence-inspector[data-evidence-kind='frame'][data-evidence-status='resolved']",
+      "operational data-table command queue frame evidence"
+    )
 
-  const evidenceResult = await client.send("Runtime.evaluate", {
-    expression: `
-      (() => {
-        const resourceId = ${JSON.stringify(resourceId)}
-        const inspector = document.querySelector("#dashboard-evidence-inspector")
-        const copy = document.querySelector("#dashboard-evidence-copy-link")
-        const url = new URL(window.location.href)
-        const detailText = (label) => (
-          Array.from(inspector?.querySelectorAll("[data-evidence-detail]") || [])
-            .find((field) => field.dataset.evidenceDetail === label)
-            ?.textContent?.replace(/\\s+/g, " ").trim() || ""
-        )
+    const evidenceResult = await client.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          const resourceId = ${JSON.stringify(resourceId)}
+          const inspector = document.querySelector("#dashboard-evidence-inspector")
+          const copy = document.querySelector("#dashboard-evidence-copy-link")
+          const url = new URL(window.location.href)
+          const detailText = (label) => (
+            Array.from(inspector?.querySelectorAll("[data-evidence-detail]") || [])
+              .find((field) => field.dataset.evidenceDetail === label)
+              ?.textContent?.replace(/\\s+/g, " ").trim() || ""
+          )
 
-        return {
-          present: Boolean(inspector),
-          kind: inspector?.dataset.evidenceKind || "",
-          status: inspector?.dataset.evidenceStatus || "",
-          subject: inspector?.dataset.evidenceSubject || "",
-          selectedEvidenceKind: url.searchParams.get("selected_evidence_kind") || "",
-          selectedLogicalSource: url.searchParams.get("selected_logical_source") || "",
-          selectedDataSource: url.searchParams.get("selected_data_source") || "",
-          selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
-          selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
-          selectedScopeId: url.searchParams.get("selected_scope_id") || "",
-          selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
-          scopeKind: url.searchParams.get("scope_kind") || "",
-          scopeId: url.searchParams.get("scope_id") || "",
-          frame: detailText("Frame"),
-          logicalSource: detailText("Logical source"),
-          dataSource: detailText("Data source"),
-          sourceBinding: detailText("Source binding"),
-          copyText: copy?.dataset.clipboardText || "",
-          copyHook: copy?.getAttribute("phx-hook") || "",
-          detailHasResource: Boolean(document.body.textContent.includes(resourceId))
-        }
-      })()
-    `,
-    returnByValue: true,
-  })
+          return {
+            present: Boolean(inspector),
+            kind: inspector?.dataset.evidenceKind || "",
+            status: inspector?.dataset.evidenceStatus || "",
+            subject: inspector?.dataset.evidenceSubject || "",
+            selectedEvidenceKind: url.searchParams.get("selected_evidence_kind") || "",
+            selectedLogicalSource: url.searchParams.get("selected_logical_source") || "",
+            selectedDataSource: url.searchParams.get("selected_data_source") || "",
+            selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
+            selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
+            selectedScopeId: url.searchParams.get("selected_scope_id") || "",
+            selectedScopeIds: url.searchParams.get("selected_scope_ids") || "",
+            scopeKind: url.searchParams.get("scope_kind") || "",
+            scopeId: url.searchParams.get("scope_id") || "",
+            frame: detailText("Frame"),
+            logicalSource: detailText("Logical source"),
+            dataSource: detailText("Data source"),
+            sourceBinding: detailText("Source binding"),
+            copyText: copy?.dataset.clipboardText || "",
+            copyHook: copy?.getAttribute("phx-hook") || "",
+            detailHasResource: Boolean(document.body.textContent.includes(resourceId))
+          }
+        })()
+      `,
+      returnByValue: true,
+    })
 
-  const evidence = evidenceResult.result.value
-  assert.equal(evidence.present, true, "frame evidence inspector should render")
-  assert.equal(evidence.kind, "frame", "evidence inspector should preserve frame kind")
-  assert.equal(evidence.status, "resolved", "frame evidence should resolve")
-  assert.match(evidence.subject, /command_queue_depth/, "frame evidence should identify the command queue frame")
-  assert.equal(evidence.selectedEvidenceKind, "frame", "route should select frame evidence")
-  assert.equal(evidence.selectedLogicalSource, "operational_observables", "route should preserve logical source")
-  assert.equal(evidence.selectedDataSource, "managed_operational_observables", "route should preserve data source")
-  assert.equal(
-    evidence.selectedSourceBinding,
-    "default_flight_operational_observables",
-    "route should preserve source binding"
-  )
-  assert.equal(evidence.scopeKind, resourceScopeKind, "route should preserve command queue scope kind")
-  assert.equal(evidence.scopeId, resourceId, "route should preserve command queue scope id")
-  assert.equal(
-    evidence.selectedScopeKind,
-    resourceScopeKind,
-    "selected evidence params should preserve query scope kind"
-  )
-  assert.equal(evidence.selectedScopeId, resourceId, "selected evidence params should preserve query scope id")
-  assert.equal(evidence.selectedScopeIds, "", "single-scope evidence should not add selected scope ids")
-  assert.match(evidence.frame, /command_queue_depth/, "frame evidence should identify command queue frame")
-  assert.match(
-    evidence.logicalSource,
-    /operational_observables/,
-    "frame evidence should show logical source"
-  )
-  assert.match(
-    evidence.dataSource,
-    /managed_operational_observables/,
-    "frame evidence should show data source"
-  )
-  assert.match(
-    evidence.sourceBinding,
-    /default_flight_operational_observables/,
-    "frame evidence should show source binding"
-  )
-  assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
-  assert.match(
-    evidence.copyText,
-    /selected_evidence_kind=frame/,
-    "copy payload should preserve frame evidence selection"
-  )
-  assert.match(
-    evidence.copyText,
-    /selected_logical_source=operational_observables/,
-    "copy payload should preserve logical source"
-  )
-  assert.match(
-    evidence.copyText,
-    /selected_data_source=managed_operational_observables/,
-    "copy payload should preserve data source"
-  )
-  assert.match(
-    evidence.copyText,
-    /selected_source_binding=default_flight_operational_observables/,
-    "copy payload should preserve source binding"
-  )
-  assert.match(
-    evidence.copyText,
-    new RegExp(`scope_kind=${resourceScopeKind}`),
-    "copy payload should preserve command queue scope kind"
-  )
-  assert.match(
-    evidence.copyText,
-    new RegExp(`scope_id=${resourceId}`),
-    "copy payload should preserve command queue scope id"
-  )
-  assert.match(
-    evidence.copyText,
-    new RegExp(`selected_scope_kind=${resourceScopeKind}`),
-    "copy payload should preserve selected evidence scope kind"
-  )
-  assert.match(
-    evidence.copyText,
-    new RegExp(`selected_scope_id=${resourceId}`),
-    "copy payload should preserve selected evidence scope id"
-  )
-  assert.equal(evidence.detailHasResource, true, "frame evidence should include scoped resource context")
+    evidence = evidenceResult.result.value
+    assert.equal(evidence.present, true, "frame evidence inspector should render")
+    assert.equal(evidence.kind, "frame", "evidence inspector should preserve frame kind")
+    assert.equal(evidence.status, "resolved", "frame evidence should resolve")
+    assert.match(evidence.subject, /command_queue_depth/, "frame evidence should identify the command queue frame")
+    assert.equal(evidence.selectedEvidenceKind, "frame", "route should select frame evidence")
+    assert.equal(evidence.selectedLogicalSource, "operational_observables", "route should preserve logical source")
+    assert.equal(evidence.selectedDataSource, "managed_operational_observables", "route should preserve data source")
+    assert.equal(
+      evidence.selectedSourceBinding,
+      "default_flight_operational_observables",
+      "route should preserve source binding"
+    )
+    assert.equal(evidence.scopeKind, resourceScopeKind, "route should preserve command queue scope kind")
+    assert.equal(evidence.scopeId, resourceId, "route should preserve command queue scope id")
+    assert.equal(
+      evidence.selectedScopeKind,
+      resourceScopeKind,
+      "selected evidence params should preserve query scope kind"
+    )
+    assert.equal(evidence.selectedScopeId, resourceId, "selected evidence params should preserve query scope id")
+    assert.equal(evidence.selectedScopeIds, "", "single-scope evidence should not add selected scope ids")
+    assert.match(evidence.frame, /command_queue_depth/, "frame evidence should identify command queue frame")
+    assert.match(
+      evidence.logicalSource,
+      /operational_observables/,
+      "frame evidence should show logical source"
+    )
+    assert.match(
+      evidence.dataSource,
+      /managed_operational_observables/,
+      "frame evidence should show data source"
+    )
+    assert.match(
+      evidence.sourceBinding,
+      /default_flight_operational_observables/,
+      "frame evidence should show source binding"
+    )
+    assert.equal(evidence.copyHook, "ClipboardButton", "evidence copy action should use ClipboardButton")
+    assert.match(
+      evidence.copyText,
+      /selected_evidence_kind=frame/,
+      "copy payload should preserve frame evidence selection"
+    )
+    assert.match(
+      evidence.copyText,
+      /selected_logical_source=operational_observables/,
+      "copy payload should preserve logical source"
+    )
+    assert.match(
+      evidence.copyText,
+      /selected_data_source=managed_operational_observables/,
+      "copy payload should preserve data source"
+    )
+    assert.match(
+      evidence.copyText,
+      /selected_source_binding=default_flight_operational_observables/,
+      "copy payload should preserve source binding"
+    )
+    assert.match(
+      evidence.copyText,
+      new RegExp(`scope_kind=${resourceScopeKind}`),
+      "copy payload should preserve command queue scope kind"
+    )
+    assert.match(
+      evidence.copyText,
+      new RegExp(`scope_id=${resourceId}`),
+      "copy payload should preserve command queue scope id"
+    )
+    assert.match(
+      evidence.copyText,
+      new RegExp(`selected_scope_kind=${resourceScopeKind}`),
+      "copy payload should preserve selected evidence scope kind"
+    )
+    assert.match(
+      evidence.copyText,
+      new RegExp(`selected_scope_id=${resourceId}`),
+      "copy payload should preserve selected evidence scope id"
+    )
+    assert.equal(evidence.detailHasResource, true, "frame evidence should include scoped resource context")
+  }
 
   return {
     missionId,
@@ -6122,6 +6383,7 @@ async function runOperationalDataTableCommandQueueInspection(client, profile) {
     initial,
     dataLink,
     evidence,
+    interactionsSkipped,
   }
 }
 
@@ -12210,10 +12472,16 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           widget?.dataset.widgetSourceBindingIds === ${JSON.stringify(expectedSourceBindingId)} &&
           widget?.dataset.widgetSourceScopeKinds === "spacecraft" &&
           widget?.dataset.widgetSourceScopeIds === ${JSON.stringify(spacecraftId)} &&
+          widget?.dataset.widgetSourceHealthStates === "degraded" &&
+          widget?.dataset.widgetSourceHealthReasons === "source_probe_failed" &&
+          widget?.dataset.widgetSourceHealthEventIds === ${JSON.stringify(expectedSourceHealthEventId)} &&
           badge?.dataset.widgetSourceBadge === "degraded" &&
           badge?.dataset.widgetSourceBadgeSeverity === "warning" &&
           badge?.dataset.widgetSourceBadgeDataSource === ${JSON.stringify(expectedDataSourceId)} &&
           badge?.dataset.widgetSourceBadgeBinding === ${JSON.stringify(expectedSourceBindingId)} &&
+          badge?.dataset.widgetSourceBadgeHealthState === "degraded" &&
+          badge?.dataset.widgetSourceBadgeHealthReason === "source_probe_failed" &&
+          badge?.dataset.widgetSourceBadgeHealthEventId === ${JSON.stringify(expectedSourceHealthEventId)} &&
           chart?.dataset.dataSourceId === ${JSON.stringify(expectedDataSourceId)} &&
           chart?.dataset.sourceBindingId === ${JSON.stringify(expectedSourceBindingId)} &&
           returnedSeries &&
@@ -12233,6 +12501,7 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
         const widget = document.querySelector(${JSON.stringify(widgetSelector)})
         const chart = widget?.querySelector("[phx-hook='TelemetryChart']")
         const badge = widget?.querySelector("button[data-widget-source-badge='degraded']")
+        const queryDiagnostics = widget?.querySelector("[data-widget-query-diagnostics]")
         const queryEvidence = widget?.querySelector("[data-widget-query-evidence-open]")
         let backfill = {}
         try {
@@ -12259,6 +12528,9 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           sourceBindingIds: widget?.dataset.widgetSourceBindingIds || "",
           sourceScopeKinds: widget?.dataset.widgetSourceScopeKinds || "",
           sourceScopeIds: widget?.dataset.widgetSourceScopeIds || "",
+          sourceHealthStates: widget?.dataset.widgetSourceHealthStates || "",
+          sourceHealthReasons: widget?.dataset.widgetSourceHealthReasons || "",
+          sourceHealthEventIds: widget?.dataset.widgetSourceHealthEventIds || "",
           chartPresent: Boolean(chart),
           uplotCount: widget?.querySelectorAll("[phx-hook='TelemetryChart'] .uplot").length || 0,
           chartDataSourceId: chart?.dataset.dataSourceId || "",
@@ -12272,8 +12544,17 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           sourceBadgeBinding: badge?.dataset.widgetSourceBadgeBinding || "",
           sourceBadgeScopeKind: badge?.dataset.widgetSourceBadgeScopeKind || "",
           sourceBadgeScopeId: badge?.dataset.widgetSourceBadgeScopeId || "",
+          sourceBadgeHealthState: badge?.dataset.widgetSourceBadgeHealthState || "",
+          sourceBadgeHealthReason: badge?.dataset.widgetSourceBadgeHealthReason || "",
+          sourceBadgeHealthEventId: badge?.dataset.widgetSourceBadgeHealthEventId || "",
+          queryDiagnosticsHealthStates: queryDiagnostics?.dataset.widgetQuerySourceHealthStates || "",
+          queryDiagnosticsHealthReasons: queryDiagnostics?.dataset.widgetQuerySourceHealthReasons || "",
+          queryDiagnosticsHealthEventIds: queryDiagnostics?.dataset.widgetQuerySourceHealthEventIds || "",
           queryEvidencePresent: Boolean(queryEvidence),
           queryEvidenceState: queryEvidence?.getAttribute("phx-value-source-evidence-state") || "",
+          queryEvidenceHealthState: queryEvidence?.getAttribute("phx-value-source-health-state") || "",
+          queryEvidenceHealthReason: queryEvidence?.getAttribute("phx-value-source-health-reason") || "",
+          queryEvidenceHealthEventId: queryEvidence?.getAttribute("phx-value-source-health-event-id") || "",
           series: series.map((item) => ({
             id: item.id || "",
             observableId: item.observable_id || "",
@@ -12305,6 +12586,17 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(initial.sourceBindingIds, expectedSourceBindingId, "source status should preserve source binding")
   assert.equal(initial.sourceScopeKinds, "spacecraft", "source status should preserve scope kind")
   assert.equal(initial.sourceScopeIds, spacecraftId, "source status should preserve scope id")
+  assert.equal(initial.sourceHealthStates, "degraded", "source status should preserve source-health state")
+  assert.equal(
+    initial.sourceHealthReasons,
+    "source_probe_failed",
+    "source status should preserve source-health reason"
+  )
+  assert.equal(
+    initial.sourceHealthEventIds,
+    expectedSourceHealthEventId,
+    "source status should preserve source-health event id"
+  )
   assert.equal(initial.chartPresent, true, "source-degraded time-series should render a chart")
   assert.equal(initial.uplotCount, 1, "source-degraded time-series should mount uPlot")
   assert.equal(initial.chartDataSourceId, expectedDataSourceId, "chart should preserve data source")
@@ -12318,8 +12610,45 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(initial.sourceBadgeBinding, expectedSourceBindingId, "source badge should preserve source binding")
   assert.equal(initial.sourceBadgeScopeKind, "spacecraft", "source badge should preserve scope kind")
   assert.equal(initial.sourceBadgeScopeId, spacecraftId, "source badge should preserve scope id")
+  assert.equal(initial.sourceBadgeHealthState, "degraded", "source badge should preserve source-health state")
+  assert.equal(
+    initial.sourceBadgeHealthReason,
+    "source_probe_failed",
+    "source badge should preserve source-health reason"
+  )
+  assert.equal(
+    initial.sourceBadgeHealthEventId,
+    expectedSourceHealthEventId,
+    "source badge should preserve source-health event id"
+  )
+  assert.equal(
+    initial.queryDiagnosticsHealthStates,
+    "degraded",
+    "query diagnostics should preserve source-health state"
+  )
+  assert.equal(
+    initial.queryDiagnosticsHealthReasons,
+    "source_probe_failed",
+    "query diagnostics should preserve source-health reason"
+  )
+  assert.equal(
+    initial.queryDiagnosticsHealthEventIds,
+    expectedSourceHealthEventId,
+    "query diagnostics should preserve source-health event id"
+  )
   assert.equal(initial.queryEvidencePresent, true, "source-degraded time-series should keep query source evidence")
   assert.equal(initial.queryEvidenceState, "degraded", "query evidence should preserve degraded source state")
+  assert.equal(initial.queryEvidenceHealthState, "degraded", "query evidence should preserve source-health state")
+  assert.equal(
+    initial.queryEvidenceHealthReason,
+    "source_probe_failed",
+    "query evidence should preserve source-health reason"
+  )
+  assert.equal(
+    initial.queryEvidenceHealthEventId,
+    expectedSourceHealthEventId,
+    "query evidence should preserve source-health event id"
+  )
   assert.equal(initial.returnedPointCount > 0, true, "degraded source should retain chart points")
   assert.deepEqual(
     initial.series.map((series) => series.observableId),
@@ -12442,6 +12771,9 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
           selectedLogicalSource: url.searchParams.get("selected_logical_source") || "",
           selectedDataSource: url.searchParams.get("selected_data_source") || "",
           selectedSourceBinding: url.searchParams.get("selected_source_binding") || "",
+          selectedSourceHealthState: url.searchParams.get("selected_source_health_state") || "",
+          selectedSourceHealthReason: url.searchParams.get("selected_source_health_reason") || "",
+          selectedSourceHealthEventId: url.searchParams.get("selected_source_health_event_id") || "",
           selectedScopeKind: url.searchParams.get("selected_scope_kind") || "",
           selectedScopeId: url.searchParams.get("selected_scope_id") || "",
           selectedObservable: url.searchParams.get("selected_observable") || "",
@@ -12464,12 +12796,33 @@ async function runSourceDegradedTelemetryTimeSeriesInspection(client, profile) {
   assert.equal(evidence.selectedLogicalSource, "telemetry", "source evidence route should preserve logical source")
   assert.equal(evidence.selectedDataSource, expectedDataSourceId, "source evidence route should preserve data source")
   assert.equal(evidence.selectedSourceBinding, expectedSourceBindingId, "source evidence route should preserve binding")
+  assert.equal(evidence.selectedSourceHealthState, "degraded", "source evidence route should preserve source-health state")
+  assert.equal(
+    evidence.selectedSourceHealthReason,
+    "source_probe_failed",
+    "source evidence route should preserve source-health reason"
+  )
+  assert.equal(
+    evidence.selectedSourceHealthEventId,
+    expectedSourceHealthEventId,
+    "source evidence route should preserve source-health event id"
+  )
   assert.equal(evidence.selectedScopeKind, "spacecraft", "source evidence route should preserve scope kind")
   assert.equal(evidence.selectedScopeId, spacecraftId, "source evidence route should preserve scope id")
   assert.equal(evidence.selectedObservable, "", "source evidence route should not invent selected observable")
   assert.equal(evidence.copyHook, "ClipboardButton", "source evidence copy should use ClipboardButton")
   assert.match(evidence.copyText, /selected_evidence_kind=source/, "copy should preserve source evidence kind")
   assert.match(evidence.copyText, /selected_source_evidence_state=degraded/, "copy should preserve degraded source state")
+  assert.match(evidence.copyText, /selected_source_health_state=degraded/, "copy should preserve source-health state")
+  assert.match(
+    evidence.copyText,
+    /selected_source_health_reason=source_probe_failed/,
+    "copy should preserve source-health reason"
+  )
+  assert.ok(
+    evidence.copyText.includes(`selected_source_health_event_id=${expectedSourceHealthEventId}`),
+    "copy should preserve source-health event id"
+  )
   assert.match(evidence.text, /degraded/i, "source evidence should render degraded health details")
 
   return {initial, evidence, expectedObservable, expectedSourceHealthEventId}
@@ -24285,6 +24638,20 @@ async function runReplayContactIntervalInspection(client, profile) {
 }
 
 async function clickAndWaitForSelector(client, clickSelector, waitSelector, label, timeoutMs = 10_000) {
+  // Toggle-safe semantics for <details> menus: patches no longer reset
+  // client-only open state, so a menu opened by an earlier step stays open —
+  // clicking its summary again would toggle it closed and the wait would
+  // never succeed. Skip the click only when the awaited open-state already
+  // holds; non-toggle waits keep click-then-wait semantics.
+  if (waitSelector.includes("details[open]")) {
+    const alreadyOpen = await client.send("Runtime.evaluate", {
+      expression: `Boolean(document.querySelector(${JSON.stringify(waitSelector)}))`,
+      returnByValue: true,
+    })
+
+    if (alreadyOpen.result.value === true) return
+  }
+
   const clickResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -24568,6 +24935,8 @@ async function inspectLatestActionHandoffs(client) {
           handoffs: Array.from(document.querySelectorAll("[data-workflow-latest-action-handoff]")).map((handoff) => ({
             eventId: handoff.dataset.workflowLatestActionHandoff || "",
             role: handoff.dataset.workflowLatestActionHandoffRole || "",
+            label: handoff.dataset.workflowLatestActionHandoffLabel || "",
+            text: handoff.textContent?.trim() || "",
             href: handoff.dataset.workflowLatestActionHandoffHref || handoff.getAttribute("href") || ""
           }))
         }
@@ -24592,6 +24961,8 @@ function assertLatestActionHandoff(snapshot, expectedEventId, label) {
 
   const primary = snapshot.handoffs.find((handoff) => handoff.eventId === expectedEventId)
   assert.ok(primary, `${label} should render a link for the expected event`)
+  assert.notEqual(primary.label, "", `${label} handoff link should expose stable label metadata`)
+  assert.equal(primary.label, primary.text, `${label} handoff label metadata should match visible text`)
   assert.notEqual(primary.href, "", `${label} handoff link should carry an href`)
 
   const href = new URL(primary.href, dashboardUrl())
@@ -24715,7 +25086,8 @@ async function inspectGroupRecoveryExecutionPlan(client) {
               jobStarted: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobStarted || "",
               jobCompleted: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobCompleted || "",
               jobAgeState: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobAgeState || "",
-              jobAction: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobAction || ""
+              jobAction: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobAction || "",
+              jobItem: item.dataset.historicalWorkflowGroupRecoveryRemainingWorkJobItem || ""
             })),
           retryButtonPresent: Boolean(retry),
           retryButtonEligibleCount: retry?.dataset.workflowActionEligibleCount || "",
@@ -24937,6 +25309,164 @@ function assertGroupExecutionAuditStep(snapshot, stepKey, expectedCount, label) 
   return step
 }
 
+async function inspectSelectedActivityRecovery(client) {
+  const selectedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const rows = Array.from(document.querySelectorAll("#dashboard-activity-list > li"))
+        const candidate = rows.find((row) => row.dataset.lifecycleEventType !== "health_snapshot_captured")
+        const eventId = candidate?.id?.replace("dashboard-activity-", "") || ""
+        candidate?.querySelector("[data-dashboard-activity-select]")?.click()
+
+        return {
+          rowCount: rows.length,
+          eventId,
+          eventType: candidate?.dataset.lifecycleEventType || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const selected = selectedResult.result.value
+  assert.equal(selected.rowCount > 0, true, "activity recovery proof needs rendered activity rows")
+  assert.notEqual(selected.eventId, "", "activity recovery proof should find a selectable event")
+  assert.notEqual(
+    selected.eventType,
+    "health_snapshot_captured",
+    "activity recovery proof should select an event hidden by health filter"
+  )
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(selected.eventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventFound === "true" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "true"
+    `,
+    5_000,
+    "selected activity visible before filter"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        document.querySelector("#dashboard-activity-filter-health-snapshots")?.click()
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityFilter === "health_snapshots" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(selected.eventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventFound === "true" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "false" &&
+      document.querySelector("#dashboard-selected-activity-recovery")?.dataset.dashboardSelectedActivityRecovery === "hidden"
+    `,
+    5_000,
+    "selected activity hidden recovery"
+  )
+
+  const hiddenResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const section = document.querySelector("#dashboard-activity-section")
+        const summary = document.querySelector("#dashboard-selected-activity-event")
+        const recovery = document.querySelector("#dashboard-selected-activity-recovery")
+        const link = document.querySelector("#dashboard-selected-activity-recovery-link")
+        const href = new URL(link?.getAttribute("href") || "", window.location.href)
+
+        return {
+          mode: section?.dataset.dashboardActivityMode || "",
+          filter: section?.dataset.dashboardActivityFilter || "",
+          selectedEvent: summary?.dataset.dashboardSelectedActivityEvent || "",
+          selectedFound: summary?.dataset.dashboardSelectedActivityEventFound || "",
+          selectedVisible: summary?.dataset.dashboardSelectedActivityEventVisible || "",
+          recovery: recovery?.dataset.dashboardSelectedActivityRecovery || "",
+          recoveryHref: recovery?.dataset.dashboardSelectedActivityRecoveryHref || "",
+          linkHref: link?.getAttribute("href") || "",
+          linkText: link?.textContent?.trim() || "",
+          hrefPath: href.pathname,
+          hrefPanel: href.searchParams.get("panel") || "",
+          hrefActivityFilter: href.searchParams.get("activity_filter") || "",
+          hrefActivityEvent: href.searchParams.get("activity_event") || "",
+          hrefScopeKind: href.searchParams.get("scope_kind") || "",
+          hrefScopeId: href.searchParams.get("scope_id") || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const hidden = hiddenResult.result.value
+  assert.equal(hidden.mode, "health_snapshots", "activity filter should switch to health snapshots")
+  assert.equal(hidden.filter, "health_snapshots", "activity filter metadata should preserve health filter")
+  assert.equal(hidden.selectedEvent, selected.eventId, "hidden activity summary should preserve selected event id")
+  assert.equal(hidden.selectedFound, "true", "hidden activity summary should preserve found state")
+  assert.equal(hidden.selectedVisible, "false", "hidden activity summary should mark selected event hidden")
+  assert.equal(hidden.recovery, "hidden", "hidden activity summary should expose recovery state")
+  assert.equal(hidden.linkText.includes("Show all activity"), true, "hidden activity recovery should offer show-all")
+  assert.notEqual(hidden.recoveryHref, "", "hidden activity recovery should expose href metadata")
+  assert.equal(hidden.hrefPanel, "versions", "hidden activity recovery should preserve versions panel")
+  assert.equal(hidden.hrefActivityFilter, "", "hidden activity recovery should clear the activity filter")
+  assert.equal(hidden.hrefActivityEvent, selected.eventId, "hidden activity recovery should preserve selected event")
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        document.querySelector("#dashboard-selected-activity-recovery-link")?.click()
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityFilter === "" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(selected.eventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "true" &&
+      !document.querySelector("#dashboard-selected-activity-recovery")
+    `,
+    5_000,
+    "selected activity recovery link"
+  )
+
+  const recoveredResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const section = document.querySelector("#dashboard-activity-section")
+        const summary = document.querySelector("#dashboard-selected-activity-event")
+        const url = new URL(window.location.href)
+
+        return {
+          mode: section?.dataset.dashboardActivityMode || "",
+          filter: section?.dataset.dashboardActivityFilter || "",
+          selectedEvent: summary?.dataset.dashboardSelectedActivityEvent || "",
+          selectedVisible: summary?.dataset.dashboardSelectedActivityEventVisible || "",
+          urlPanel: url.searchParams.get("panel") || "",
+          urlActivityFilter: url.searchParams.get("activity_filter") || "",
+          urlActivityEvent: url.searchParams.get("activity_event") || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const recovered = recoveredResult.result.value
+  assert.equal(recovered.filter, "", "activity recovery should return to all activity")
+  assert.equal(recovered.selectedEvent, selected.eventId, "activity recovery should preserve selected event")
+  assert.equal(recovered.selectedVisible, "true", "activity recovery should make selected event visible")
+  assert.equal(recovered.urlPanel, "versions", "activity recovery should keep versions panel in the URL")
+  assert.equal(recovered.urlActivityFilter, "", "activity recovery should clear activity filter from URL")
+  assert.equal(recovered.urlActivityEvent, selected.eventId, "activity recovery URL should preserve selected event")
+
+  return { selected, hidden, recovered }
+}
+
 async function runLiveWorkflowSurfaceInteractions(client) {
   const sourceSelectionResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -25064,6 +25594,30 @@ async function runLiveWorkflowSurfaceInteractions(client) {
     5_000,
     "runtime compare limit mode"
   )
+
+  const closePanelResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const close = document.querySelector("#dashboard-panel button[aria-label='Close panel']")
+        if (!close) return { closed: false, panelPresent: Boolean(document.querySelector("#dashboard-panel")) }
+        close.click()
+        return { closed: true, panelPresent: true }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  if (closePanelResult.result.value.panelPresent) {
+    await waitForExpression(
+      client,
+      `
+        !document.querySelector("#dashboard-panel") &&
+        !(new URL(window.location.href)).searchParams.has("panel")
+      `,
+      5_000,
+      "dashboard panel close before historical workflow request"
+    )
+  }
 
   await clickAndWaitForSelector(
     client,
@@ -26275,12 +26829,17 @@ async function runCorrectionWorkflowInspection(client, profile) {
     "",
     "failed-item handoff row should expose structured active failure events"
   )
+  assert.match(
+    failedItemHandoffs.events,
+    /label=HK%20counter/,
+    "failed-item event compact payload should keep label URL-encoded at the durable boundary"
+  )
 
   const correctionFailedItemHandoff = failedItemHandoffs.handoffs.find(
     (handoff) => handoff.recovery === "correct_workflow_request" && handoff.retryable === "false"
   )
   assert.ok(correctionFailedItemHandoff, "correction workflow should link the non-retryable failed item")
-  assert.equal(correctionFailedItemHandoff.label, "HK.counter", "failed-item handoff should carry item label")
+  assert.equal(correctionFailedItemHandoff.label, "HK counter", "failed-item handoff should carry decoded item label")
   assert.equal(
     correctionFailedItemHandoff.runId,
     "browser-smoke-workflow-run-nonretryable",
@@ -26374,6 +26933,10 @@ async function runCorrectionWorkflowInspection(client, profile) {
           originalRunId: document.querySelector("#dashboard-historical-workflow-correction-original-run-id")?.value || "",
           originalEventId: document.querySelector("#dashboard-historical-workflow-correction-original-event-id")?.value || "",
           originalJobId: document.querySelector("#dashboard-historical-workflow-correction-original-job-id")?.value || "",
+          correctionObservableId:
+            form?.querySelector('[name="historical_workflow_correction[observable_id]"]')?.value || "",
+          correctionPointId:
+            form?.querySelector('[name="historical_workflow_correction[point_id]"]')?.value || "",
           requestMode: document.querySelector("#dashboard-historical-workflow-correction-request-mode")?.value || "",
           requestGroupId: document.querySelector("#dashboard-historical-workflow-correction-request-group-id")?.value || "",
           requestItemIndex: document.querySelector("#dashboard-historical-workflow-correction-request-item-index")?.value || "",
@@ -26406,6 +26969,16 @@ async function runCorrectionWorkflowInspection(client, profile) {
     correctionEligibilityResult.result.value.workflowRun,
     "",
     "non-retryable failed workflow run should render"
+  )
+  assert.equal(
+    correctionEligibilityResult.result.value.correctionObservableId,
+    "HK counter",
+    "failed-item handoff should preserve decoded observable in the correction form"
+  )
+  assert.equal(
+    correctionEligibilityResult.result.value.correctionPointId,
+    "HK counter",
+    "failed-item handoff should preserve decoded point in the correction form"
   )
   assert.equal(
     correctionEligibilityResult.result.value.jobStatusPresent,
@@ -26572,8 +27145,8 @@ async function runCorrectionWorkflowInspection(client, profile) {
         setField("realm", "backfill")
         setField("data_source_id", "managed_questdb_backfill")
         setField("source_binding_id", "backfill_telemetry")
-        setField("observable_id", "HK.counter")
-        setField("point_id", "HK.counter")
+        setField("observable_id", "HK counter")
+        setField("point_id", "HK counter")
         setField("source_from", "2023-11-14T22:12:00Z")
         setField("source_to", "2023-11-14T22:15:00Z")
         setField("reason", "browser_smoke_historical_correction")
@@ -26707,12 +27280,12 @@ async function runCorrectionWorkflowInspection(client, profile) {
   )
   assert.equal(
     correctionResult.result.value.groupCorrectionTasks,
-    "HK.counter browser-smoke-workflow-run-nonretryable replacement browser-smoke-workflow-run-corrected stage requested next approve",
+    "HK counter browser-smoke-workflow-run-nonretryable replacement browser-smoke-workflow-run-corrected stage requested next approve",
     "recovery handoff should expose corrected replacement task"
   )
   assert.equal(
     correctionResult.result.value.groupCorrectedItems,
-    `HK.counter browser-smoke-workflow-run-nonretryable corrected browser-smoke-workflow-run-corrected requested ${correctionEligibilityResult.result.value.originalJobId}`,
+    `HK counter browser-smoke-workflow-run-nonretryable corrected browser-smoke-workflow-run-corrected requested ${correctionEligibilityResult.result.value.originalJobId}`,
     "recovery handoff should expose corrected replacement item"
   )
   assert.equal(
@@ -27476,6 +28049,59 @@ async function runGroupJobRecoveryWorkflowInspection(client, profile) {
   )
   assert.notEqual(executionAudit.summary, "", "real job execution audit should expose summary")
 
+  const groupJobProgressResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const progress = document.querySelector("#dashboard-historical-workflow-group-job-progress")
+
+        return {
+          present: Boolean(progress),
+          raw: progress?.dataset.historicalWorkflowGroupJobProgress || "",
+          queued: progress?.dataset.historicalWorkflowGroupJobProgressQueued || "",
+          running: progress?.dataset.historicalWorkflowGroupJobProgressRunning || "",
+          completed: progress?.dataset.historicalWorkflowGroupJobProgressCompleted || "",
+          failed: progress?.dataset.historicalWorkflowGroupJobProgressFailed || "",
+          missing: progress?.dataset.historicalWorkflowGroupJobProgressMissing || "",
+          items: progress?.dataset.historicalWorkflowGroupJobItems || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(groupJobProgressResult.result.value.present, true, "real job recovery should expose job progress")
+  assert.match(
+    groupJobProgressResult.result.value.raw,
+    /completed 1/,
+    "real job progress should keep raw completed count"
+  )
+  assert.match(
+    groupJobProgressResult.result.value.raw,
+    /failed 2/,
+    "real job progress should keep raw failed count"
+  )
+  assert.equal(
+    groupJobProgressResult.result.value.completed,
+    "1",
+    "real job progress should expose parsed completed count"
+  )
+  assert.equal(
+    groupJobProgressResult.result.value.failed,
+    "2",
+    "real job progress should expose parsed failed count"
+  )
+  assert.equal(
+    groupJobProgressResult.result.value.missing,
+    "0",
+    "real job progress should expose parsed missing count"
+  )
+  assert.equal(
+    groupJobProgressResult.result.value.items.includes(realJobRetryableFailedRunId) &&
+      groupJobProgressResult.result.value.items.includes(realJobFailedRunId),
+    true,
+    "real job progress should preserve grouped job item details"
+  )
+
   const jobProgress = executionAudit.steps.find((entry) => entry.key === "job_progress")
   assert.ok(jobProgress, "real job execution audit should include job progress")
   assert.equal(
@@ -27877,6 +28503,11 @@ async function runGroupJobRecoveryWorkflowInspection(client, profile) {
     realJobCorrectedRunId,
     "real worker correction plan should expose corrected run as remaining work"
   )
+  assert.match(
+    correctionExecutionPlan.remainingWorkItems[0]?.jobItem || "",
+    new RegExp(`${realJobCorrectedRunId}.*missing event=`),
+    "real worker correction plan should preserve replacement job item evidence"
+  )
   assert.equal(
     correctionExecutionPlan.advanceStage,
     "approved",
@@ -27946,6 +28577,12 @@ async function runGroupJobRecoveryWorkflowInspection(client, profile) {
   assertGroupExecutionAuditStep(finalExecutionAudit, "corrected", "1", "real grouped job correction")
   assertGroupExecutionAuditStep(finalExecutionAudit, "recovered", "2", "real grouped job correction")
 
+  const reviewOriginDataLink = await openComparisonReviewOriginRelatedLink(
+    client,
+    realJobReviewRequestId,
+    "real grouped job correction"
+  )
+
   return {
     failedItemHandoffs,
     executionPlan,
@@ -27954,9 +28591,150 @@ async function runGroupJobRecoveryWorkflowInspection(client, profile) {
     replacementApprove: replacementApproveResult,
     replacementStart: replacementStartResult,
     replacementComplete: replacementCompleteResult,
+    reviewOriginDataLink,
     finalExecutionPlan,
     finalExecutionAudit,
   }
+}
+
+async function openComparisonReviewOriginRelatedLink(client, expectedRequestId, contextLabel) {
+  await waitForExpression(
+    client,
+    `
+      (() => {
+        const inspector = document.querySelector("#dashboard-data-link-inspector")
+        const link = Array.from(inspector?.querySelectorAll("[data-data-link-related-id]") || [])
+          .find((candidate) => (
+            candidate.dataset.dataLinkRelatedId === ${JSON.stringify(expectedRequestId)} &&
+            (candidate.dataset.dataLinkRelatedTarget || "").toLowerCase() === "dashboard lifecycle event" &&
+            candidate.dataset.dataLinkRelatedKind === "comparison_review_origin"
+          ))
+
+        return Boolean(
+          inspector?.dataset.dataLinkTarget === "telemetry_backfill_lifecycle_event" &&
+          inspector?.dataset.dataLinkStatus === "resolved" &&
+          link
+        )
+      })()
+    `,
+    5_000,
+    `${contextLabel} comparison review origin related link`
+  )
+
+  const relatedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const inspector = document.querySelector("#dashboard-data-link-inspector")
+        const link = Array.from(inspector?.querySelectorAll("[data-data-link-related-id]") || [])
+          .find((candidate) => (
+            candidate.dataset.dataLinkRelatedId === ${JSON.stringify(expectedRequestId)} &&
+            (candidate.dataset.dataLinkRelatedTarget || "").toLowerCase() === "dashboard lifecycle event"
+          ))
+
+        return {
+          sourceTarget: inspector?.dataset.dataLinkTarget || "",
+          sourceStatus: inspector?.dataset.dataLinkStatus || "",
+          present: Boolean(link),
+          target: link?.dataset.dataLinkRelatedTarget || "",
+          targetId: link?.dataset.dataLinkRelatedId || "",
+          kind: link?.dataset.dataLinkRelatedKind || "",
+          text: link?.textContent?.replace(/\\s+/g, " ").trim() || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const related = relatedResult.result.value
+  assert.equal(related.sourceTarget, "telemetry_backfill_lifecycle_event", `${contextLabel} source inspector should be backfill lifecycle`)
+  assert.equal(related.sourceStatus, "resolved", `${contextLabel} source inspector should be resolved`)
+  assert.equal(related.present, true, `${contextLabel} should render comparison review origin related link`)
+  assert.equal(related.target, "dashboard lifecycle event", `${contextLabel} origin related link should target dashboard lifecycle event`)
+  assert.equal(related.targetId, expectedRequestId, `${contextLabel} origin related link should preserve request id`)
+  assert.equal(related.kind, "comparison_review_origin", `${contextLabel} origin related link should preserve relationship kind`)
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const link = Array.from(document.querySelectorAll("[data-data-link-related-id]"))
+          .find((candidate) => (
+            candidate.dataset.dataLinkRelatedId === ${JSON.stringify(expectedRequestId)} &&
+            (candidate.dataset.dataLinkRelatedTarget || "").toLowerCase() === "dashboard lifecycle event"
+          ))
+        if (!link) return false
+        link.click()
+        return true
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      (() => {
+        const inspector = document.querySelector("#dashboard-data-link-inspector")
+        return (
+          inspector?.dataset.dataLinkTarget === "dashboard_lifecycle_event" &&
+          inspector?.dataset.dataLinkTargetId === ${JSON.stringify(expectedRequestId)} &&
+          inspector?.dataset.dataLinkStatus === "resolved"
+        )
+      })()
+    `,
+    5_000,
+    `${contextLabel} comparison review origin lifecycle inspector`
+  )
+
+  const openedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const inspector = document.querySelector("#dashboard-data-link-inspector")
+        const copy = document.querySelector("#dashboard-data-link-copy-link")
+        const fieldText = (fieldLabel) => {
+          const field = Array.from(document.querySelectorAll("[data-data-link-field]"))
+            .find((node) => node.dataset.dataLinkField === fieldLabel)
+          return field?.textContent?.trim() || ""
+        }
+        const url = new URL(window.location.href)
+
+        return {
+          present: Boolean(inspector),
+          target: inspector?.dataset.dataLinkTarget || "",
+          targetId: inspector?.dataset.dataLinkTargetId || "",
+          status: inspector?.dataset.dataLinkStatus || "",
+          selectedTarget: url.searchParams.get("selected_target") || "",
+          selectedId: url.searchParams.get("selected_id") || "",
+          lifecycleEvent: fieldText("Dashboard lifecycle event"),
+          dashboard: fieldText("Dashboard"),
+          eventType: fieldText("Event type"),
+          payloadSchema: fieldText("Payload schema"),
+          reviewKind: fieldText("Comparison review kind"),
+          openCount: fieldText("Comparison review open count"),
+          placements: fieldText("Comparison review placements"),
+          copyText: copy?.dataset.clipboardText || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const opened = openedResult.result.value
+  assert.equal(opened.present, true, `${contextLabel} lifecycle inspector should render`)
+  assert.equal(opened.target, "dashboard_lifecycle_event", `${contextLabel} lifecycle inspector target should be dashboard_lifecycle_event`)
+  assert.equal(opened.targetId, expectedRequestId, `${contextLabel} lifecycle inspector should preserve request id`)
+  assert.equal(opened.status, "resolved", `${contextLabel} lifecycle inspector should resolve`)
+  assert.equal(opened.selectedTarget, "dashboard_lifecycle_event", `${contextLabel} route should select dashboard lifecycle event`)
+  assert.equal(opened.selectedId, expectedRequestId, `${contextLabel} route should preserve lifecycle event id`)
+  assert.equal(opened.lifecycleEvent, expectedRequestId, `${contextLabel} lifecycle row should preserve request id`)
+  assert.equal(opened.eventType, "comparison_review_requested", `${contextLabel} lifecycle event type should render`)
+  assert.equal(opened.payloadSchema, "dashboard_comparison_review_request.v1", `${contextLabel} lifecycle payload schema should render`)
+  assert.equal(opened.reviewKind, "comparison_open_findings_review", `${contextLabel} lifecycle review kind should render`)
+  assert.equal(opened.openCount, "1", `${contextLabel} lifecycle open count should render`)
+  assert.notEqual(opened.placements, "", `${contextLabel} lifecycle placements should render`)
+  assert.match(opened.copyText, /selected_target=dashboard_lifecycle_event/, `${contextLabel} copy payload should preserve lifecycle target`)
+  assert.match(opened.copyText, new RegExp(`selected_id=${expectedRequestId}`), `${contextLabel} copy payload should preserve lifecycle id`)
+
+  return {related, opened}
 }
 
 async function runGroupRetrySkippedWorkflowInspection(client, profile) {
@@ -28241,6 +29019,216 @@ async function runGroupReplacementRetryWorkflowInspection(client, profile) {
     postRetryPlan.remainingWorkItems[0]?.jobAgeState,
     "active",
     "replacement retry should classify the requeued replacement job as active"
+  )
+
+  return {
+    initialPlan,
+    retryButton: retryButtonResult.result.value,
+    retry: retryResult.result.value,
+    postRetryPlan,
+  }
+}
+
+async function runRowReplacementRetryWorkflowInspection(client, profile) {
+  const expectedRunId = "browser-smoke-workflow-row-replacement-retry-corrected"
+  const retrySelector = `#dashboard-historical-workflow-failed-replacement-retry-${expectedRunId}`
+
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-historical-workflow-group-recovery") &&
+        document.querySelector("${retrySelector}")
+      )
+    `,
+    5_000,
+    "row-scoped replacement retry button"
+  )
+
+  const initialPlan = await inspectGroupRecoveryExecutionPlan(client)
+  assert.equal(initialPlan.present, true, "row replacement retry should expose grouped recovery plan")
+  assert.equal(
+    initialPlan.remainingWorkPendingRuns,
+    expectedRunId,
+    "row replacement retry should expose the failed corrected run as pending work"
+  )
+  assert.equal(
+    initialPlan.remainingWorkItems[0]?.replacementRun,
+    expectedRunId,
+    "row replacement retry remaining-work item should name the corrected run"
+  )
+  assert.equal(
+    initialPlan.remainingWorkItems[0]?.jobStatus,
+    "failed",
+    "row replacement retry remaining-work item should expose failed job status"
+  )
+  assert.equal(
+    initialPlan.remainingWorkItems[0]?.jobAction,
+    "inspect_failed_replacement_job",
+    "row replacement retry remaining-work item should expose failed replacement action"
+  )
+
+  const retryButtonResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const retry = document.querySelector("${retrySelector}")
+        if (!retry || retry.disabled) return { clicked: false }
+
+        const snapshot = {
+          clicked: true,
+          actionId: retry.dataset.workflowActionId || "",
+          scope: retry.dataset.workflowActionScope || "",
+          replacementRun: retry.dataset.workflowActionReplacementRun || "",
+          jobId: retry.dataset.workflowActionJobId || "",
+          eventId: retry.dataset.workflowActionEventId || "",
+          reason: retry.dataset.workflowActionReason || "",
+          phxJobId: retry.getAttribute("phx-value-job-id") || "",
+          phxEventId: retry.getAttribute("phx-value-event-id") || "",
+          phxReplacementRunId: retry.getAttribute("phx-value-replacement-run-id") || ""
+        }
+
+        retry.click()
+        return snapshot
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(retryButtonResult.result.value.clicked, true, "row replacement retry button should be clickable")
+  assert.equal(
+    retryButtonResult.result.value.actionId,
+    "retry_failed_replacement_job",
+    "row replacement retry button should identify the action"
+  )
+  assert.equal(
+    retryButtonResult.result.value.scope,
+    "replacement_job",
+    "row replacement retry should be scoped to one replacement job"
+  )
+  assert.equal(
+    retryButtonResult.result.value.replacementRun,
+    expectedRunId,
+    "row replacement retry data attrs should carry corrected run"
+  )
+  assert.equal(
+    retryButtonResult.result.value.phxReplacementRunId,
+    expectedRunId,
+    "row replacement retry event payload should carry corrected run"
+  )
+  assert.notEqual(retryButtonResult.result.value.jobId, "", "row replacement retry should carry job id")
+  assert.notEqual(retryButtonResult.result.value.eventId, "", "row replacement retry should carry event id")
+  assert.equal(
+    retryButtonResult.result.value.phxJobId,
+    retryButtonResult.result.value.jobId,
+    "row replacement retry phx payload should carry job id"
+  )
+  assert.equal(
+    retryButtonResult.result.value.phxEventId,
+    retryButtonResult.result.value.eventId,
+    "row replacement retry phx payload should carry event id"
+  )
+  assert.equal(
+    retryButtonResult.result.value.reason,
+    "retryable_group_failures",
+    "row replacement retry should explain why retry is available"
+  )
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-data-link-inspector") &&
+        document.querySelector("#dashboard-historical-workflow-latest-action")?.dataset.workflowLatestAction === "retry_job" &&
+        document.querySelector("#dashboard-historical-workflow-latest-action")?.dataset.workflowLatestActionStatus === "ok" &&
+        document.querySelector("#dashboard-historical-workflow-latest-action")?.dataset.workflowLatestActionReason === "retry_job_recorded" &&
+        document.querySelector("#dashboard-historical-workflow-latest-action")?.dataset.workflowLatestActionTargetRunId === "${expectedRunId}"
+      )
+    `,
+    5_000,
+    "row replacement retry latest action"
+  )
+
+  const retryResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const latest = document.querySelector("#dashboard-historical-workflow-latest-action")
+        const fieldText = (fieldLabel) => {
+          const field = Array.from(document.querySelectorAll("[data-data-link-field]"))
+            .find((node) => node.dataset.dataLinkField === fieldLabel)
+          return field?.textContent?.trim() || ""
+        }
+
+        return {
+          eventId: fieldText("Backfill lifecycle event"),
+          eventType: fieldText("Event type"),
+          workflowStage: fieldText("Workflow stage"),
+          workflowRun: fieldText("Workflow run"),
+          latestAction: latest?.dataset.workflowLatestAction || "",
+          latestReason: latest?.dataset.workflowLatestActionReason || "",
+          latestJobId: latest?.dataset.workflowLatestActionJobId || "",
+          latestResultEventIds: latest?.dataset.workflowLatestActionResultEventIds || "",
+          latestTargetEventId: latest?.dataset.workflowLatestActionTargetEventId || "",
+          latestTargetRunId: latest?.dataset.workflowLatestActionTargetRunId || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(retryResult.result.value.eventType, "backfill_retried", "row replacement retry should select retry event")
+  assert.equal(retryResult.result.value.workflowStage, "retried", "row replacement retry should render retried stage")
+  assert.equal(retryResult.result.value.workflowRun, expectedRunId, "row replacement retry should target corrected run")
+  assert.equal(retryResult.result.value.latestAction, "retry_job", "row replacement retry latest action should be single-job retry")
+  assert.equal(
+    retryResult.result.value.latestReason,
+    "retry_job_recorded",
+    "row replacement retry should record success reason"
+  )
+  assert.equal(
+    retryResult.result.value.latestJobId,
+    retryButtonResult.result.value.jobId,
+    "row replacement retry latest action should carry job id"
+  )
+  assert.equal(
+    retryResult.result.value.latestResultEventIds,
+    retryResult.result.value.eventId,
+    "row replacement retry latest action should identify the retry event"
+  )
+  assert.equal(
+    retryResult.result.value.latestTargetEventId,
+    retryResult.result.value.eventId,
+    "row replacement retry target event should be the retry event"
+  )
+  assert.equal(
+    retryResult.result.value.latestTargetRunId,
+    expectedRunId,
+    "row replacement retry latest action should preserve clicked replacement run"
+  )
+
+  const postRetryPlan = await inspectGroupRecoveryExecutionPlan(client)
+  const postRetryButtonResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => Boolean(document.querySelector("${retrySelector}")))()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(
+    postRetryButtonResult.result.value,
+    false,
+    "row replacement retry command should disappear after retry succeeds"
+  )
+  assert.equal(
+    postRetryPlan.remainingWorkItems[0]?.jobStatus,
+    "queued",
+    "row replacement retry should requeue the corrected replacement job"
+  )
+  assert.equal(
+    postRetryPlan.remainingWorkItems[0]?.jobAction,
+    "wait_for_replacement_job_start",
+    "row replacement retry should guide operators to wait for queued replacement job start"
   )
 
   return {
@@ -28654,6 +29642,193 @@ async function runGroupReplacementMixedWorkflowInspection(client, profile) {
   return {plan, controls: controls.result.value}
 }
 
+async function inspectComparisonPresetPersistence(client, requestForm) {
+  const presetName = `Browser comparison preset ${Date.now()}`
+
+  const saveResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const form = document.querySelector("#dashboard-comparison-preset-form")
+        const name = document.querySelector("#dashboard-comparison-preset-name")
+        if (!form || !name) return { submitted: false, reason: "missing preset form" }
+
+        name.value = ${JSON.stringify(presetName)}
+        name.dispatchEvent(new Event("input", { bubbles: true }))
+        name.dispatchEvent(new Event("change", { bubbles: true }))
+        form.requestSubmit()
+
+        return {
+          submitted: true,
+          presetJsonPresent: Boolean(document.querySelector("#dashboard-comparison-rollup")?.dataset.dashboardComparisonPreset),
+          presetPath: document.querySelector("#dashboard-comparison-rollup")?.dataset.dashboardComparisonPresetPath || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(saveResult.result.value.submitted, true, "comparison preset save form should submit")
+  assert.equal(saveResult.result.value.presetJsonPresent, true, "comparison preset save should have active preset payload")
+  assert.notEqual(saveResult.result.value.presetPath, "", "comparison preset save should expose a preset path")
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-comparison-saved-presets")?.dataset.dashboardComparisonSavedPresets === "1" &&
+        Array.from(document.querySelectorAll("[data-dashboard-comparison-saved-preset]"))
+          .some((preset) => preset.dataset.dashboardComparisonSavedPresetName === ${JSON.stringify(presetName)})
+      )
+    `,
+    5_000,
+    "saved comparison preset"
+  )
+
+  const savedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const preset = Array.from(document.querySelectorAll("[data-dashboard-comparison-saved-preset]"))
+          .find((node) => node.dataset.dashboardComparisonSavedPresetName === ${JSON.stringify(presetName)})
+        const apply = preset?.querySelector("[data-dashboard-comparison-saved-preset-apply]")
+        const remove = preset?.querySelector("[data-dashboard-comparison-saved-preset-delete]")
+
+        return {
+          present: Boolean(preset),
+          id: preset?.dataset.dashboardComparisonSavedPreset || "",
+          name: preset?.dataset.dashboardComparisonSavedPresetName || "",
+          primaryView: preset?.dataset.dashboardComparisonSavedPresetPrimaryView || "",
+          compareView: preset?.dataset.dashboardComparisonSavedPresetCompareView || "",
+          affected: preset?.dataset.dashboardComparisonSavedPresetAffected || "",
+          applyId: apply?.dataset.dashboardComparisonSavedPresetApply || "",
+          deleteId: remove?.dataset.dashboardComparisonSavedPresetDelete || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const saved = savedResult.result.value
+  assert.equal(saved.present, true, "saved comparison preset should render")
+  assert.notEqual(saved.id, "", "saved comparison preset should expose id")
+  assert.equal(saved.name, presetName, "saved comparison preset should expose name")
+  assert.equal(saved.primaryView, "all_revisions", "saved comparison preset should preserve primary data view")
+  assert.equal(saved.compareView, "canonical", "saved comparison preset should preserve compare data view")
+  assert.equal(
+    saved.affected,
+    requestForm.openCount,
+    "saved comparison preset should preserve affected finding count"
+  )
+  assert.equal(saved.applyId, saved.id, "saved comparison preset apply action should target preset id")
+  assert.equal(saved.deleteId, saved.id, "saved comparison preset delete action should target preset id")
+
+  await openComparisonSavedPresets(client, "comparison preset delete")
+
+  const deleteClickResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const remove = document.querySelector(
+          ${JSON.stringify(`[data-dashboard-comparison-saved-preset-delete="${saved.id}"]`)}
+        )
+        remove?.click()
+        return {
+          clicked: Boolean(remove),
+          presetId: remove?.dataset.dashboardComparisonSavedPresetDelete || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  assert.equal(deleteClickResult.result.value.clicked, true, "comparison preset delete should click")
+  assert.equal(
+    deleteClickResult.result.value.presetId,
+    saved.id,
+    "comparison preset delete click should target saved preset"
+  )
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector(${JSON.stringify(`[data-dashboard-comparison-saved-preset="${saved.id}"]`)}) &&
+        !document.querySelector("#dashboard-comparison-saved-presets")
+      )
+    `,
+    5_000,
+    "deleted comparison preset"
+  )
+
+  const deletedResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => ({
+        savedPresetPresent: Boolean(
+          document.querySelector(${JSON.stringify(`[data-dashboard-comparison-saved-preset="${saved.id}"]`)})
+        ),
+        savedPresetsPresent: Boolean(document.querySelector("#dashboard-comparison-saved-presets")),
+        rollupPresent: Boolean(document.querySelector("#dashboard-comparison-rollup")),
+        reviewFormPresent: Boolean(document.querySelector("#dashboard-comparison-open-findings-review-form"))
+      }))()
+    `,
+    returnByValue: true,
+  })
+
+  const deleted = deletedResult.result.value
+  assert.equal(deleted.savedPresetPresent, false, "comparison preset delete should remove preset row")
+  assert.equal(deleted.savedPresetsPresent, false, "comparison preset delete should remove empty saved list")
+  assert.equal(deleted.rollupPresent, true, "comparison preset delete should keep comparison rollup visible")
+  assert.equal(deleted.reviewFormPresent, true, "comparison preset delete should keep review workflow available")
+
+  return {
+    saved,
+    deleted,
+  }
+}
+
+async function openComparisonSavedPresets(client, label) {
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const rail = document.querySelector("#ops-context-rail")
+        if (rail && !rail.hasAttribute("data-expanded")) {
+          document.querySelector("#ops-context-rail-toggle")?.click()
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        !document.querySelector("#ops-context-rail") ||
+        document.querySelector("#ops-context-rail")?.hasAttribute("data-expanded")
+      )
+    `,
+    3_000,
+    `${label} context rail expansion`
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const details = document.querySelector("#dashboard-comparison-saved-presets")
+        if (details) details.open = true
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(document.querySelector("#dashboard-comparison-saved-presets[open]"))
+    `,
+    3_000,
+    `${label} saved preset menu`
+  )
+}
+
 async function runComparisonReviewInteraction(client, profile) {
   const comparisonUrlResult = await client.send("Runtime.evaluate", {
     expression: `
@@ -28730,6 +29905,11 @@ async function runComparisonReviewInteraction(client, profile) {
     "open findings payload should include findings"
   )
 
+  const comparisonPreset = await inspectComparisonPresetPersistence(
+    client,
+    requestFormResult.result.value
+  )
+
   await client.send("Runtime.evaluate", {
     expression: `
       (() => {
@@ -28789,59 +29969,65 @@ async function runComparisonReviewInteraction(client, profile) {
     "review request should use the rollup open placement"
   )
 
-  const reviewUrlResult = await client.send("Runtime.evaluate", {
+  const selectedActivityRecovery = await inspectSelectedActivityRecovery(client)
+
+  const openReviewQueueClickResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-        const url = new URL(window.location.href)
-        url.searchParams.set("panel", "versions")
-        url.searchParams.set("activity_filter", "open_comparison_reviews")
-        url.searchParams.delete("activity_event")
-        return url.toString()
+        const filter = document.querySelector("#dashboard-activity-filter-open-reviews")
+        filter?.click()
+        return {
+          clicked: Boolean(filter),
+          filter: filter?.dataset.dashboardActivityFilterOption || ""
+        }
       })()
     `,
     returnByValue: true,
   })
 
-  const reviewUrl = reviewUrlResult.result.value
-  await loadViewport(client, reviewUrl, LIVE_INTERACTION_VIEWPORT)
-  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+  assert.equal(openReviewQueueClickResult.result.value.clicked, true, "open review queue filter should click")
+  assert.equal(
+    openReviewQueueClickResult.result.value.filter,
+    "open_comparison_reviews",
+    "open review queue filter should target open reviews"
+  )
 
-	  await waitForExpression(
-	    client,
-	    `
-	      Boolean(
-	        document.querySelector("#dashboard-versions-panel") &&
-	        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
-	        Number(document.querySelector("#dashboard-activity-section")?.dataset.dashboardComparisonReviewOpenCount || 0) >= 1 &&
-	        document.querySelector("[data-dashboard-comparison-review-resolve-form]")
-	      )
-	    `,
-	    5_000,
-	    "open comparison review queue"
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-versions-panel") &&
+        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
+        Number(document.querySelector("#dashboard-activity-section")?.dataset.dashboardComparisonReviewOpenCount || 0) >= 1 &&
+        document.querySelector("[data-dashboard-comparison-review-resolve-form]")
+      )
+    `,
+    5_000,
+    "open comparison review queue"
   )
 
   const openQueueResult = await client.send("Runtime.evaluate", {
     expression: `
       (() => {
-	        const activity = document.querySelector("#dashboard-activity-section")
-	        const request = document.querySelector("[data-dashboard-comparison-review-request]")
-	        const form = document.querySelector("[data-dashboard-comparison-review-resolve-form]")
+        const activity = document.querySelector("#dashboard-activity-section")
+        const request = document.querySelector("[data-dashboard-comparison-review-request]")
+        const form = document.querySelector("[data-dashboard-comparison-review-resolve-form]")
 
-	        return {
-	          url: window.location.href,
-	          versionsPanelPresent: Boolean(document.querySelector("#dashboard-versions-panel")),
-	          dataLinkPanelPresent: Boolean(document.querySelector("#dashboard-data-link-inspector")),
+        return {
+          url: window.location.href,
+          versionsPanelPresent: Boolean(document.querySelector("#dashboard-versions-panel")),
+          dataLinkPanelPresent: Boolean(document.querySelector("#dashboard-data-link-inspector")),
           mode: activity?.dataset.dashboardActivityMode || "",
           filter: activity?.dataset.dashboardActivityFilter || "",
           openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
           openRequests: activity?.dataset.dashboardComparisonReviewOpenRequests || "",
-	          openPlacements: activity?.dataset.dashboardComparisonReviewOpenPlacements || "",
-	          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
-	          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
-	          resolveFormRequestId: form?.dataset.dashboardComparisonReviewResolveForm || ""
-	        }
-	      })()
-	    `,
+          openPlacements: activity?.dataset.dashboardComparisonReviewOpenPlacements || "",
+          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
+          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
+          resolveFormRequestId: form?.dataset.dashboardComparisonReviewResolveForm || ""
+        }
+      })()
+    `,
     returnByValue: true,
   })
 
@@ -28856,14 +30042,14 @@ async function runComparisonReviewInteraction(client, profile) {
   assert.notEqual(openQueueResult.result.value.openRequests, "", "review queue should expose request ids")
   assert.notEqual(openQueueResult.result.value.openPlacements, "", "review queue should expose placement ids")
   assert.equal(openQueueResult.result.value.requestStatus, "open", "review request should initially be open")
-	  assert.equal(
-	    openQueueResult.result.value.resolveFormRequestId,
-	    openQueueResult.result.value.requestId,
-	    "resolve form should target the open review request"
-	  )
+  assert.equal(
+    openQueueResult.result.value.resolveFormRequestId,
+    openQueueResult.result.value.requestId,
+    "resolve form should target the open review request"
+  )
 
-	  await client.send("Runtime.evaluate", {
-	    expression: `
+  await client.send("Runtime.evaluate", {
+    expression: `
       (() => {
         const form = document.querySelector("[data-dashboard-comparison-review-resolve-form]")
         const reason = form?.querySelector("[name='review[resolution_reason]']")
@@ -28947,8 +30133,10 @@ async function runComparisonReviewInteraction(client, profile) {
   )
   assert.equal(resolvedResult.result.value.resolutionReasonPresent, true, "resolution reason should render")
 
-	  return {
-	    openQueue: openQueueResult.result.value,
+  return {
+    comparisonPreset,
+    selectedActivityRecovery,
+    openQueue: openQueueResult.result.value,
 	    resolved: resolvedResult.result.value,
 	  }
 	}
@@ -30035,217 +31223,673 @@ async function runTelemetryRevisionRangeAbsenceInspection(client, profile) {
   }
 }
 
-	async function runComparisonReviewBulkDecisionInspection(client, profile) {
-	  const expectedStatus = argValue("--expected-bulk-decision-status") || "ok"
-	  const expectedStatusLabel = argValue("--expected-bulk-decision-status-label") || "Applied"
-	  const expectedApplied = argValue("--expected-bulk-decision-applied")
-	  const expectedFailed = argValue("--expected-bulk-decision-failed") || "0"
-	  const expectedReason =
-	    argValue("--expected-bulk-decision-reason") ||
-	    (expectedStatus === "degraded"
-	      ? "comparison_review_bulk_decision_partially_applied"
-	      : "comparison_review_bulk_decision_applied")
-	  const expectedMessage =
-	    argValue("--expected-bulk-decision-message") || "Comparison review decisions applied"
+async function runComparisonReviewBulkDecisionInspection(client, profile) {
+  const expectedStatus = argValue("--expected-bulk-decision-status") || "ok"
+  const expectedStatusLabel = argValue("--expected-bulk-decision-status-label") || "Applied"
+  const expectedFormCount = argValue("--expected-bulk-decision-form-count")
+  const expectedFormPlacements = argValue("--expected-bulk-decision-form-placements")
+  const expectedSkippedCount = argValue("--expected-bulk-decision-skipped-count")
+  const expectedSkippedPlacements = argValue("--expected-bulk-decision-skipped-placements")
+  const expectedSkippedReasons = argValue("--expected-bulk-decision-skipped-reasons")
+  const expectedApplied = argValue("--expected-bulk-decision-applied")
+  const expectedFailed = argValue("--expected-bulk-decision-failed") || "0"
+  const expectedReason =
+    argValue("--expected-bulk-decision-reason") ||
+    (expectedStatus === "degraded"
+      ? "comparison_review_bulk_decision_partially_applied"
+      : "comparison_review_bulk_decision_applied")
+  const expectedMessage =
+    argValue("--expected-bulk-decision-message") || "Comparison review decisions applied"
 
-	  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
-	  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
 
-	  await waitForExpression(
-	    client,
-	    `
-	      Boolean(
-	        document.querySelector("#dashboard-versions-panel") &&
-	        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
-	        document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]") &&
-	        document.querySelector("[data-dashboard-comparison-review-resolve-form]")
-	      )
-	    `,
-	    5_000,
-	    "comparison review bulk decision form"
-	  )
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-versions-panel") &&
+        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
+        document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]") &&
+        document.querySelector("[data-dashboard-comparison-review-resolve-form]")
+      )
+    `,
+    5_000,
+    "comparison review bulk decision form"
+  )
 
-	  const openQueueResult = await client.send("Runtime.evaluate", {
-	    expression: `
-	      (() => {
-	        const activity = document.querySelector("#dashboard-activity-section")
-	        const request = document.querySelector("[data-dashboard-comparison-review-request]")
-	        const bulkForm = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
-	        const bulkButton = document.querySelector("[data-dashboard-comparison-review-bulk-decision]")
+  const openQueueResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const activity = document.querySelector("#dashboard-activity-section")
+        const request = document.querySelector("[data-dashboard-comparison-review-request]")
+        const bulkForm = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
+        const bulkButton = document.querySelector("[data-dashboard-comparison-review-bulk-decision]")
+        const skipped = document.querySelector("[data-dashboard-comparison-review-bulk-decision-skipped]")
 
-	        return {
-	          url: window.location.href,
-	          mode: activity?.dataset.dashboardActivityMode || "",
-	          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
-	          openPlacements: activity?.dataset.dashboardComparisonReviewOpenPlacements || "",
-	          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
-	          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
-	          bulkDecisionFormRequestId: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionForm || "",
-	          bulkDecisionCount: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionCount || "",
-	          bulkDecisionPlacements: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionPlacements || "",
-	          bulkDecisionKind: bulkButton?.dataset.dashboardComparisonReviewBulkDecisionKind || ""
-	        }
-	      })()
-	    `,
-	    returnByValue: true,
-	  })
+        return {
+          url: window.location.href,
+          mode: activity?.dataset.dashboardActivityMode || "",
+          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
+          openPlacements: activity?.dataset.dashboardComparisonReviewOpenPlacements || "",
+          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
+          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
+          bulkDecisionFormRequestId: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionForm || "",
+          bulkDecisionCount: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionCount || "",
+          bulkDecisionPlacements: bulkForm?.dataset.dashboardComparisonReviewBulkDecisionPlacements || "",
+          bulkDecisionKind: bulkButton?.dataset.dashboardComparisonReviewBulkDecisionKind || "",
+          skippedCount: request?.dataset.dashboardComparisonReviewBulkDecisionSkippedCount || "",
+          skippedPlacements: request?.dataset.dashboardComparisonReviewBulkDecisionSkippedPlacements || "",
+          skippedReasons: request?.dataset.dashboardComparisonReviewBulkDecisionSkippedReasons || "",
+          skippedText: skipped?.textContent?.trim() || "",
+          findings: Array.from(document.querySelectorAll("[data-dashboard-comparison-review-finding]"))
+            .map((finding) => ({
+              placementId: finding.dataset.dashboardComparisonReviewFinding || "",
+              bulkDecision: finding.dataset.dashboardComparisonReviewFindingBulkDecision || "",
+              bulkDecisionReason: finding.dataset.dashboardComparisonReviewFindingBulkDecisionReason || "",
+              bulkDecisionLabel: finding.dataset.dashboardComparisonReviewFindingBulkDecisionLabel || ""
+            }))
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
 
-	  assert.equal(
-	    openQueueResult.result.value.mode,
-	    "open_comparison_reviews",
-	    "bulk decision scenario should render the open-review queue"
-	  )
-	  assert.equal(openQueueResult.result.value.requestStatus, "open", "seeded review request should be open")
-	  assert.equal(
-	    openQueueResult.result.value.bulkDecisionFormRequestId,
-	    openQueueResult.result.value.requestId,
-	    "bulk decision form should target the seeded review request"
-	  )
-	  assert.equal(
-	    Number(openQueueResult.result.value.bulkDecisionCount) >= 1,
-	    true,
-	    "bulk decision form should expose actionable comparison findings"
-	  )
-	  assert.equal(
-	    openQueueResult.result.value.bulkDecisionPlacements,
-	    openQueueResult.result.value.openPlacements,
-	    "bulk decision form should target the open review placements"
-	  )
-	  assert.equal(
-	    openQueueResult.result.value.bulkDecisionKind,
-	    "mark_conflict",
-	    "bulk decision form should submit mark_conflict"
-	  )
+  assert.equal(
+    openQueueResult.result.value.mode,
+    "open_comparison_reviews",
+    "bulk decision scenario should render the open-review queue"
+  )
+  assert.equal(openQueueResult.result.value.requestStatus, "open", "seeded review request should be open")
+  assert.equal(
+    openQueueResult.result.value.bulkDecisionFormRequestId,
+    openQueueResult.result.value.requestId,
+    "bulk decision form should target the seeded review request"
+  )
+  assert.equal(
+    openQueueResult.result.value.bulkDecisionCount,
+    expectedFormCount || openQueueResult.result.value.bulkDecisionCount,
+    "bulk decision form should expose the expected actionable comparison finding count"
+  )
+  assert.equal(
+    Number(openQueueResult.result.value.bulkDecisionCount) >= 1,
+    true,
+    "bulk decision form should expose actionable comparison findings"
+  )
+  assert.equal(
+    openQueueResult.result.value.bulkDecisionPlacements,
+    expectedFormPlacements ?? openQueueResult.result.value.openPlacements,
+    "bulk decision form should target the expected actionable review placements"
+  )
+  assert.equal(
+    openQueueResult.result.value.bulkDecisionKind,
+    "mark_conflict",
+    "bulk decision form should submit mark_conflict"
+  )
+  if (expectedSkippedCount !== undefined) {
+    assert.equal(
+      openQueueResult.result.value.skippedCount,
+      expectedSkippedCount,
+      "bulk decision request should expose expected skipped finding count"
+    )
+  }
+  if (expectedSkippedPlacements !== undefined) {
+    assert.equal(
+      openQueueResult.result.value.skippedPlacements,
+      expectedSkippedPlacements,
+      "bulk decision request should expose expected skipped placements"
+    )
+  }
+  if (expectedSkippedReasons !== undefined) {
+    assert.equal(
+      openQueueResult.result.value.skippedReasons,
+      expectedSkippedReasons,
+      "bulk decision request should expose expected skipped reasons"
+    )
+  }
+  if (expectedSkippedCount && expectedSkippedCount !== "0") {
+    assert.ok(
+      openQueueResult.result.value.skippedText.includes("skipped for bulk action"),
+      "bulk decision request should render visible skipped finding copy"
+    )
+  }
 
-	  await client.send("Runtime.evaluate", {
-	    expression: `
-	      (() => {
-	        const form = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
-	        if (!form) return false
-	        form.requestSubmit()
-	        return true
-	      })()
-	    `,
-	    returnByValue: true,
-	  })
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const form = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
+        if (!form) return false
+        form.requestSubmit()
+        return true
+      })()
+    `,
+    returnByValue: true,
+  })
 
-		  await waitForExpression(
-		    client,
-		    `
-		      Boolean(
-		        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
-		        document.querySelector("[data-dashboard-comparison-review-resolve-form]") &&
-		        document.querySelector("#dashboard-comparison-review-action-outcome")?.dataset.dashboardComparisonReviewAction === "comparison_review_bulk_decision" &&
-		        document.querySelector("#dashboard-comparison-review-action-outcome")?.dataset.dashboardComparisonReviewActionStatus === ${JSON.stringify(expectedStatus)} &&
-		        document.body.textContent.includes(${JSON.stringify(expectedMessage)})
-		      )
-		    `,
-	    5_000,
-	    "comparison review bulk decision"
-	  )
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
+        document.querySelector("[data-dashboard-comparison-review-resolve-form]") &&
+        document.querySelector("#dashboard-comparison-review-action-outcome")?.dataset.dashboardComparisonReviewAction === "comparison_review_bulk_decision" &&
+        document.querySelector("#dashboard-comparison-review-action-outcome")?.dataset.dashboardComparisonReviewActionStatus === ${JSON.stringify(expectedStatus)} &&
+        document.body.textContent.includes(${JSON.stringify(expectedMessage)})
+      )
+    `,
+    5_000,
+    "comparison review bulk decision"
+  )
 
-		  const bulkDecisionResult = await client.send("Runtime.evaluate", {
-		    expression: `
-		      (() => {
-		        const activity = document.querySelector("#dashboard-activity-section")
-		        const request = document.querySelector("[data-dashboard-comparison-review-request]")
-		        const outcome = document.querySelector("#dashboard-comparison-review-action-outcome")
-		        const actionMetadata = outcome?.dataset.dashboardComparisonReviewActionMetadata
-		          ? JSON.parse(outcome.dataset.dashboardComparisonReviewActionMetadata)
-		          : {}
+  const bulkDecisionResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const activity = document.querySelector("#dashboard-activity-section")
+        const request = document.querySelector("[data-dashboard-comparison-review-request]")
+        const outcome = document.querySelector("#dashboard-comparison-review-action-outcome")
+        const actionMetadata = outcome?.dataset.dashboardComparisonReviewActionMetadata
+          ? JSON.parse(outcome.dataset.dashboardComparisonReviewActionMetadata)
+          : {}
 
-		        return {
-		          url: window.location.href,
-		          mode: activity?.dataset.dashboardActivityMode || "",
-		          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
-		          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
-		          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
-		          flashPresent: document.body.textContent.includes("Comparison review decisions applied"),
-		          actionOutcome: {
-		            action: outcome?.dataset.dashboardComparisonReviewAction || "",
-		            status: outcome?.dataset.dashboardComparisonReviewActionStatus || "",
-		            kind: outcome?.dataset.dashboardComparisonReviewActionKind || "",
-		            reason: outcome?.dataset.dashboardComparisonReviewActionReason || "",
-		            statusLabel: outcome?.querySelector(".badge")?.textContent?.trim() || "",
-		            text: outcome?.textContent || "",
-		            metadata: actionMetadata
-		          }
-		        }
-		      })()
-		    `,
-	    returnByValue: true,
-	  })
+        return {
+          url: window.location.href,
+          mode: activity?.dataset.dashboardActivityMode || "",
+          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
+          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
+          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
+          flashPresent: document.body.textContent.includes("Comparison review decisions applied"),
+          actionOutcome: {
+            action: outcome?.dataset.dashboardComparisonReviewAction || "",
+            status: outcome?.dataset.dashboardComparisonReviewActionStatus || "",
+            kind: outcome?.dataset.dashboardComparisonReviewActionKind || "",
+            reason: outcome?.dataset.dashboardComparisonReviewActionReason || "",
+            statusLabel: outcome?.querySelector(".badge")?.textContent?.trim() || "",
+            text: outcome?.textContent || "",
+            metadata: actionMetadata
+          }
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
 
-	  assert.equal(
-	    bulkDecisionResult.result.value.mode,
-	    "open_comparison_reviews",
-	    "bulk decision should keep the operator in the open-review queue"
-	  )
-	  assert.equal(
-	    bulkDecisionResult.result.value.requestId,
-	    openQueueResult.result.value.requestId,
-	    "bulk decision should keep focus on the same review request"
-	  )
-	  assert.equal(
-	    bulkDecisionResult.result.value.requestStatus,
-	    "open",
-	    "bulk decision should not resolve the review request"
-	  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.flashPresent,
-		    true,
-		    "bulk decision should render a success flash"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.action,
-		    "comparison_review_bulk_decision",
-		    "bulk decision should expose a structured action outcome"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.status,
-		    expectedStatus,
-		    "bulk decision should expose expected action status"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.statusLabel,
-		    expectedStatusLabel,
-		    "bulk decision should render the expected visible action status"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.reason,
-		    expectedReason,
-		    "bulk decision should expose the expected action reason"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.metadata.requested,
-		    openQueueResult.result.value.bulkDecisionCount,
-		    "bulk decision outcome should preserve requested count"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.metadata.applied,
-		    expectedApplied || openQueueResult.result.value.bulkDecisionCount,
-		    "bulk decision outcome should preserve applied count"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.metadata.failed,
-		    expectedFailed,
-		    "bulk decision outcome should preserve failed count"
-		  )
-		  assert.equal(
-		    bulkDecisionResult.result.value.actionOutcome.metadata.source_request_event_id,
-		    openQueueResult.result.value.requestId,
-		    "bulk decision outcome should preserve source request id"
-		  )
-		  assert.ok(
-		    bulkDecisionResult.result.value.actionOutcome.text.includes("Comparison Review Action"),
-		    "bulk decision outcome should render visible action details"
-		  )
+  assert.equal(
+    bulkDecisionResult.result.value.mode,
+    "open_comparison_reviews",
+    "bulk decision should keep the operator in the open-review queue"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.requestId,
+    openQueueResult.result.value.requestId,
+    "bulk decision should keep focus on the same review request"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.requestStatus,
+    "open",
+    "bulk decision should not resolve the review request"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.flashPresent,
+    true,
+    "bulk decision should render a success flash"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.action,
+    "comparison_review_bulk_decision",
+    "bulk decision should expose a structured action outcome"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.status,
+    expectedStatus,
+    "bulk decision should expose expected action status"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.statusLabel,
+    expectedStatusLabel,
+    "bulk decision should render the expected visible action status"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.reason,
+    expectedReason,
+    "bulk decision should expose the expected action reason"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.requested,
+    openQueueResult.result.value.bulkDecisionCount,
+    "bulk decision outcome should preserve requested count"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.applied,
+    expectedApplied || openQueueResult.result.value.bulkDecisionCount,
+    "bulk decision outcome should preserve applied count"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.failed,
+    expectedFailed,
+    "bulk decision outcome should preserve failed count"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.decision,
+    "mark_conflict",
+    "bulk decision outcome should preserve applied decision"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.decision_reason,
+    "dashboard_comparison_review_mark_conflict",
+    "bulk decision outcome should preserve decision reason"
+  )
+  assert.equal(
+    bulkDecisionResult.result.value.actionOutcome.metadata.source_request_event_id,
+    openQueueResult.result.value.requestId,
+    "bulk decision outcome should preserve source request id"
+  )
+  assert.ok(
+    bulkDecisionResult.result.value.actionOutcome.text.includes("Comparison Review Action"),
+    "bulk decision outcome should render visible action details"
+  )
 
-		  return {
-	    openQueue: openQueueResult.result.value,
-	    bulkDecision: bulkDecisionResult.result.value,
-	  }
-	}
+  return {
+    openQueue: openQueueResult.result.value,
+    bulkDecision: bulkDecisionResult.result.value,
+  }
+}
+
+async function runComparisonReviewBulkDecisionUnavailableInspection(client, profile) {
+  const expectedReason = argValue("--expected-bulk-decision-unavailable-reason") || "missing_source_context"
+  const expectedCount = argValue("--expected-bulk-decision-unavailable-count") || "1"
+  const expectedText =
+    argValue("--expected-bulk-decision-unavailable-text") || "telemetry source context is missing"
+  const expectedPlacements = argValue("--expected-bulk-decision-unavailable-placements")
+
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-versions-panel") &&
+        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "open_comparison_reviews" &&
+        document.querySelector("[data-dashboard-comparison-review-bulk-decision-unavailable]") &&
+        document.querySelector("[data-dashboard-comparison-review-resolve-form]")
+      )
+    `,
+    5_000,
+    "comparison review bulk decision unavailable state"
+  )
+
+  const unavailableResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const activity = document.querySelector("#dashboard-activity-section")
+        const request = document.querySelector("[data-dashboard-comparison-review-request]")
+        const unavailable = document.querySelector("[data-dashboard-comparison-review-bulk-decision-unavailable]")
+        const form = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
+        const outcome = document.querySelector("#dashboard-comparison-review-action-outcome")
+
+        return {
+          url: window.location.href,
+          mode: activity?.dataset.dashboardActivityMode || "",
+          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
+          openPlacements: activity?.dataset.dashboardComparisonReviewOpenPlacements || "",
+          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
+          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
+          unavailableRequestId: unavailable?.dataset.dashboardComparisonReviewBulkDecisionUnavailable || "",
+          unavailableReason: unavailable?.dataset.dashboardComparisonReviewBulkDecisionUnavailableReason || "",
+          unavailableCount: unavailable?.dataset.dashboardComparisonReviewBulkDecisionUnavailableCount || "",
+          unavailablePlacements: unavailable?.dataset.dashboardComparisonReviewBulkDecisionUnavailablePlacements || "",
+          unavailableText: unavailable?.textContent?.trim() || "",
+          formPresent: Boolean(form),
+          actionOutcomePresent: Boolean(outcome),
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const unavailable = unavailableResult.result.value
+  assert.equal(unavailable.mode, "open_comparison_reviews", "unavailable scenario should render open-review queue")
+  assert.equal(unavailable.requestStatus, "open", "unavailable scenario should keep review request open")
+  assert.equal(
+    unavailable.unavailableRequestId,
+    unavailable.requestId,
+    "unavailable metadata should target the seeded review request"
+  )
+  assert.equal(
+    unavailable.unavailableReason,
+    expectedReason,
+    "unavailable bulk decision should explain the expected reason"
+  )
+  assert.equal(
+    unavailable.unavailableCount,
+    expectedCount,
+    "unavailable metadata should preserve expected actionable count"
+  )
+  assert.equal(
+    unavailable.unavailablePlacements,
+    expectedPlacements ?? unavailable.openPlacements,
+    "unavailable metadata should preserve affected placements"
+  )
+  assert.ok(
+    unavailable.unavailableText.includes(expectedText),
+    "unavailable marker should render operator-facing copy"
+  )
+  assert.equal(unavailable.formPresent, false, "unavailable bulk decision should not render mutation form")
+  assert.equal(
+    unavailable.actionOutcomePresent,
+    false,
+    "unavailable bulk decision should not render action outcome before mutation"
+  )
+
+  return {unavailable}
+}
+
+async function runComparisonReviewResolvedAuditInspection(client, profile) {
+  const expectedSourceOpenCount = argValue("--expected-review-resolution-source-open-count") || "2"
+  const expectedSourceOpenPlacements = argValue("--expected-review-resolution-source-open-placements")
+  const expectedActionableCount = argValue("--expected-review-resolution-source-actionable-count") || "1"
+  const expectedActionablePlacements = argValue("--expected-review-resolution-source-actionable-placements")
+  const expectedSkippedCount = argValue("--expected-review-resolution-source-skipped-count") || "1"
+  const expectedSkippedPlacements = argValue("--expected-review-resolution-source-skipped-placements")
+  const expectedSkippedReasons =
+    argValue("--expected-review-resolution-source-skipped-reasons") || "missing_observation_identity"
+
+  await loadViewport(client, dashboardUrl(), LIVE_INTERACTION_VIEWPORT)
+  await waitForProfileReady(client, profile, LIVE_INTERACTION_VIEWPORT)
+
+  await waitForExpression(
+    client,
+    `
+      Boolean(
+        document.querySelector("#dashboard-versions-panel") &&
+        document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityMode === "comparison_reviews" &&
+        document.querySelector("[data-dashboard-comparison-review-status='resolved']") &&
+        document.querySelector("[data-dashboard-comparison-review-resolution]") &&
+        document.querySelector("[data-dashboard-comparison-review-resolution-source-actionable-count]")
+      )
+    `,
+    5_000,
+    "resolved comparison review audit context"
+  )
+
+  const auditResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const activity = document.querySelector("#dashboard-activity-section")
+        const request = document.querySelector("[data-dashboard-comparison-review-request]")
+        const resolution = document.querySelector("[data-dashboard-comparison-review-resolution]")
+        const resolveForm = document.querySelector("[data-dashboard-comparison-review-resolve-form]")
+        const bulkForm = document.querySelector("[data-dashboard-comparison-review-bulk-decision-form]")
+
+        return {
+          url: window.location.href,
+          mode: activity?.dataset.dashboardActivityMode || "",
+          filter: activity?.dataset.dashboardActivityFilter || "",
+          openCount: activity?.dataset.dashboardComparisonReviewOpenCount || "",
+          requestId: request?.dataset.dashboardComparisonReviewRequest || "",
+          requestStatus: request?.dataset.dashboardComparisonReviewStatus || "",
+          requestResolutionEvent: request?.dataset.dashboardComparisonReviewResolutionEvent || "",
+          resolutionEventId: resolution?.dataset.dashboardComparisonReviewResolution || "",
+          resolutionSource: resolution?.dataset.dashboardComparisonReviewResolutionSource || "",
+          disposition: resolution?.dataset.dashboardComparisonReviewResolutionDisposition || "",
+          sourceOpenCount: resolution?.dataset.dashboardComparisonReviewResolutionSourceOpenCount || "",
+          sourceOpenPlacements: resolution?.dataset.dashboardComparisonReviewResolutionSourceOpenPlacements || "",
+          sourceActionableCount:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceActionableCount || "",
+          sourceActionablePlacements:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceActionablePlacements || "",
+          sourceSkippedCount:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedCount || "",
+          sourceSkippedPlacements:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedPlacements || "",
+          sourceSkippedReasons:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedReasons || "",
+          visibleBulkSummary: Array.from(
+            resolution?.querySelectorAll("[data-activity-field='Resolution bulk decision source']") || []
+          ).some((node) => node.textContent.includes("actionable") && node.textContent.includes("skipped")),
+          resolveFormPresent: Boolean(resolveForm),
+          bulkFormPresent: Boolean(bulkForm)
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const audit = auditResult.result.value
+  assert.equal(audit.mode, "comparison_reviews", "resolved audit should render review activity")
+  assert.equal(audit.filter, "comparison_reviews", "resolved audit route should use review filter")
+  assert.equal(audit.openCount, "0", "resolved audit should have no open review queue entries")
+  assert.equal(audit.requestStatus, "resolved", "source request should render resolved")
+  assert.notEqual(audit.requestResolutionEvent, "", "source request should reference resolution event")
+  assert.equal(
+    audit.requestResolutionEvent,
+    audit.resolutionEventId,
+    "resolved request and resolution row should agree on event id"
+  )
+  assert.equal(audit.resolutionSource, audit.requestId, "resolution should reference source request")
+  assert.equal(audit.disposition, "review_completed", "resolution should record completed disposition")
+  assert.equal(
+    audit.sourceOpenCount,
+    expectedSourceOpenCount,
+    "resolution should preserve source open count"
+  )
+  if (expectedSourceOpenPlacements !== undefined) {
+    assert.equal(
+      audit.sourceOpenPlacements,
+      expectedSourceOpenPlacements,
+      "resolution should preserve source open placements"
+    )
+  }
+  assert.equal(
+    audit.sourceActionableCount,
+    expectedActionableCount,
+    "resolution should preserve source actionable count"
+  )
+  if (expectedActionablePlacements !== undefined) {
+    assert.equal(
+      audit.sourceActionablePlacements,
+      expectedActionablePlacements,
+      "resolution should preserve source actionable placements"
+    )
+  }
+  assert.equal(
+    audit.sourceSkippedCount,
+    expectedSkippedCount,
+    "resolution should preserve source skipped count"
+  )
+  if (expectedSkippedPlacements !== undefined) {
+    assert.equal(
+      audit.sourceSkippedPlacements,
+      expectedSkippedPlacements,
+      "resolution should preserve source skipped placements"
+    )
+  }
+  assert.equal(
+    audit.sourceSkippedReasons,
+    expectedSkippedReasons,
+    "resolution should preserve source skipped reasons"
+  )
+  assert.equal(audit.visibleBulkSummary, true, "resolution should render visible bulk audit summary")
+  assert.equal(audit.resolveFormPresent, false, "resolved request should not render resolve form")
+  assert.equal(audit.bulkFormPresent, false, "resolved request should not render bulk decision form")
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(audit.resolutionEventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventFound === "true" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "true"
+    `,
+    5_000,
+    "resolved comparison review selected activity"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        document.querySelector("#dashboard-activity-filter-open-reviews")?.click()
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityFilter === "open_comparison_reviews" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(audit.resolutionEventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventFound === "true" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "false" &&
+      document.querySelector("#dashboard-selected-activity-recovery")?.dataset.dashboardSelectedActivityRecovery === "hidden" &&
+      !document.querySelector("[data-dashboard-comparison-review-resolution]")
+    `,
+    5_000,
+    "resolved comparison review hidden by open-review filter"
+  )
+
+  const hiddenResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const section = document.querySelector("#dashboard-activity-section")
+        const summary = document.querySelector("#dashboard-selected-activity-event")
+        const recovery = document.querySelector("#dashboard-selected-activity-recovery")
+        const link = document.querySelector("#dashboard-selected-activity-recovery-link")
+        const href = new URL(link?.getAttribute("href") || "", window.location.href)
+
+        return {
+          mode: section?.dataset.dashboardActivityMode || "",
+          filter: section?.dataset.dashboardActivityFilter || "",
+          selectedEvent: summary?.dataset.dashboardSelectedActivityEvent || "",
+          selectedFound: summary?.dataset.dashboardSelectedActivityEventFound || "",
+          selectedVisible: summary?.dataset.dashboardSelectedActivityEventVisible || "",
+          recovery: recovery?.dataset.dashboardSelectedActivityRecovery || "",
+          recoveryHref: recovery?.dataset.dashboardSelectedActivityRecoveryHref || "",
+          linkText: link?.textContent?.trim() || "",
+          hrefPanel: href.searchParams.get("panel") || "",
+          hrefActivityFilter: href.searchParams.get("activity_filter") || "",
+          hrefActivityEvent: href.searchParams.get("activity_event") || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const hidden = hiddenResult.result.value
+  assert.equal(hidden.mode, "open_comparison_reviews", "resolved review should be hidden by open-review mode")
+  assert.equal(hidden.filter, "open_comparison_reviews", "hidden resolved review should preserve open-review filter")
+  assert.equal(hidden.selectedEvent, audit.resolutionEventId, "hidden resolved review should preserve selected event")
+  assert.equal(hidden.selectedFound, "true", "hidden resolved review should remain findable in history")
+  assert.equal(hidden.selectedVisible, "false", "hidden resolved review should mark selected event hidden")
+  assert.equal(hidden.recovery, "hidden", "hidden resolved review should expose recovery state")
+  assert.notEqual(hidden.recoveryHref, "", "hidden resolved review should expose recovery href")
+  assert.equal(hidden.linkText.includes("Show all activity"), true, "hidden resolved review should offer show-all")
+  assert.equal(hidden.hrefPanel, "versions", "hidden resolved review recovery should preserve versions panel")
+  assert.equal(hidden.hrefActivityFilter, "", "hidden resolved review recovery should clear filter")
+  assert.equal(
+    hidden.hrefActivityEvent,
+    audit.resolutionEventId,
+    "hidden resolved review recovery should preserve selected resolution event"
+  )
+
+  await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        document.querySelector("#dashboard-selected-activity-recovery-link")?.click()
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  await waitForExpression(
+    client,
+    `
+      document.querySelector("#dashboard-activity-section")?.dataset.dashboardActivityFilter === "" &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEvent === ${JSON.stringify(audit.resolutionEventId)} &&
+      document.querySelector("#dashboard-selected-activity-event")?.dataset.dashboardSelectedActivityEventVisible === "true" &&
+      !document.querySelector("#dashboard-selected-activity-recovery") &&
+      document.querySelector("[data-dashboard-comparison-review-resolution]")?.dataset.dashboardComparisonReviewResolution === ${JSON.stringify(audit.resolutionEventId)}
+    `,
+    5_000,
+    "resolved comparison review recovered activity"
+  )
+
+  const recoveredResult = await client.send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const section = document.querySelector("#dashboard-activity-section")
+        const summary = document.querySelector("#dashboard-selected-activity-event")
+        const resolution = document.querySelector("[data-dashboard-comparison-review-resolution]")
+        const url = new URL(window.location.href)
+
+        return {
+          mode: section?.dataset.dashboardActivityMode || "",
+          filter: section?.dataset.dashboardActivityFilter || "",
+          selectedEvent: summary?.dataset.dashboardSelectedActivityEvent || "",
+          selectedVisible: summary?.dataset.dashboardSelectedActivityEventVisible || "",
+          urlPanel: url.searchParams.get("panel") || "",
+          urlActivityFilter: url.searchParams.get("activity_filter") || "",
+          urlActivityEvent: url.searchParams.get("activity_event") || "",
+          resolutionEventId: resolution?.dataset.dashboardComparisonReviewResolution || "",
+          sourceActionableCount:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceActionableCount || "",
+          sourceActionablePlacements:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceActionablePlacements || "",
+          sourceSkippedCount:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedCount || "",
+          sourceSkippedPlacements:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedPlacements || "",
+          sourceSkippedReasons:
+            resolution?.dataset.dashboardComparisonReviewResolutionSourceSkippedReasons || ""
+        }
+      })()
+    `,
+    returnByValue: true,
+  })
+
+  const recovered = recoveredResult.result.value
+  assert.equal(recovered.filter, "", "resolved review recovery should return to all activity")
+  assert.equal(recovered.selectedEvent, audit.resolutionEventId, "resolved review recovery should preserve selection")
+  assert.equal(recovered.selectedVisible, "true", "resolved review recovery should make selection visible")
+  assert.equal(recovered.urlPanel, "versions", "resolved review recovery should preserve versions panel")
+  assert.equal(recovered.urlActivityFilter, "", "resolved review recovery should clear activity filter from URL")
+  assert.equal(
+    recovered.urlActivityEvent,
+    audit.resolutionEventId,
+    "resolved review recovery URL should preserve selected event"
+  )
+  assert.equal(recovered.resolutionEventId, audit.resolutionEventId, "resolved review row should recover")
+  assert.equal(
+    recovered.sourceActionableCount,
+    expectedActionableCount,
+    "recovered resolution should preserve source actionable count"
+  )
+  if (expectedActionablePlacements !== undefined) {
+    assert.equal(
+      recovered.sourceActionablePlacements,
+      expectedActionablePlacements,
+      "recovered resolution should preserve source actionable placements"
+    )
+  }
+  assert.equal(
+    recovered.sourceSkippedCount,
+    expectedSkippedCount,
+    "recovered resolution should preserve source skipped count"
+  )
+  if (expectedSkippedPlacements !== undefined) {
+    assert.equal(
+      recovered.sourceSkippedPlacements,
+      expectedSkippedPlacements,
+      "recovered resolution should preserve source skipped placements"
+    )
+  }
+  assert.equal(
+    recovered.sourceSkippedReasons,
+    expectedSkippedReasons,
+    "recovered resolution should preserve source skipped reasons"
+  )
+
+  return {audit, hidden, recovered}
+}
 
 const INTERACTION_SCENARIOS = {
   "completed-workflow": {
@@ -30275,6 +31919,10 @@ const INTERACTION_SCENARIOS = {
   "group-replacement-retry-workflow": {
     resultKey: "groupReplacementRetryWorkflow",
     run: runGroupReplacementRetryWorkflowInspection,
+  },
+  "row-replacement-retry-workflow": {
+    resultKey: "rowReplacementRetryWorkflow",
+    run: runRowReplacementRetryWorkflowInspection,
   },
   "group-replacement-stale-workflow": {
     resultKey: "groupReplacementStaleWorkflow",
@@ -30548,6 +32196,14 @@ const INTERACTION_SCENARIOS = {
     resultKey: "comparisonReviewBulkDecision",
     run: runComparisonReviewBulkDecisionInspection,
   },
+  "comparison-review-bulk-decision-unavailable": {
+    resultKey: "comparisonReviewBulkDecisionUnavailable",
+    run: runComparisonReviewBulkDecisionUnavailableInspection,
+  },
+  "comparison-review-resolved-audit": {
+    resultKey: "comparisonReviewResolvedAudit",
+    run: runComparisonReviewResolvedAuditInspection,
+  },
   "revision-decision-limit-mode": {
     resultKey: "revisionDecisionLimitMode",
     run: runRevisionDecisionLimitModeInspection,
@@ -30618,7 +32274,9 @@ const url = dashboardUrl()
 const profile = viewportProfile(profileName())
 const credentials = loginCredentials()
 const mode = interactionMode()
+const timeoutMs = scenarioTimeoutMs()
 const runtime = await launchChrome()
+const shutdown = installShutdownGuards(runtime)
 const pageWsUrl = await createPage(httpBaseFromWebSocket(runtime.devtoolsUrl), credentials ? "about:blank" : url)
 const client = new CdpClient(pageWsUrl)
 
@@ -30633,10 +32291,14 @@ try {
     await submitSignIn(client, credentials)
   }
 
-  const scenarioResult = await runBrowserScenario(client, url, profile, mode)
+  const scenarioResult = await withTimeout(
+    runBrowserScenario(client, url, profile, mode),
+    timeoutMs,
+    `dashboard viewport smoke ${mode}`
+  )
   console.log(JSON.stringify(scenarioResult, null, 2))
   console.log("dashboard_viewport_smoke passed")
 } finally {
   client.close()
-  await runtime.close()
+  await shutdown.close()
 }

@@ -364,6 +364,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceQuery do
       row_group: :detail
     },
     %{
+      query_key: "selected_source_health_state",
+      event_key: "source-health-state",
+      label: "Source health",
+      row_group: :detail
+    },
+    %{
       query_key: "selected_source_health_reason",
       event_key: "source-health-reason",
       label: "Source health reason",
@@ -446,6 +452,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceQuery do
     "scope-ids",
     "contact-id",
     "source-endpoint-id",
+    "source-health-state",
     "source-health-event-id",
     "source-health-reason",
     "source-health-probe-kind",
@@ -511,6 +518,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceQuery do
     "contact-id",
     "source-endpoint-id",
     "source-empty-reason",
+    "source-health-state",
     "source-health-event-id",
     "source-health-reason",
     "source-health-probe-kind",

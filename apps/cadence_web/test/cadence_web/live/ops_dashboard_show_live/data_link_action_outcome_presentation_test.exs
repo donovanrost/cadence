@@ -183,6 +183,87 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentationTest 
            }
   end
 
+  test "builds stable attributes from normalized outcome fields" do
+    presentation =
+      DataLinkActionOutcomePresentation.for_action(
+        LateDataPolicyActionOutcome.new(
+          status: :ok,
+          kind: :info,
+          reason: "late_data_policy_applied",
+          decision: "accept",
+          execution_mode: "sample_execution",
+          dashboard_time_mode: "replay_run",
+          dashboard_replay_run_id: "replay-1",
+          dashboard_limit_mode: "compare",
+          result_event_id: "late-event-1",
+          target_event_id: "late-event-1",
+          target_run_id: "run-1"
+        ),
+        :late_data_policy
+      )
+
+    assert DataLinkActionOutcomePresentation.stable_attrs(
+             presentation,
+             "data-data-link-action-outcome",
+             action_suffix: "action"
+           ) == %{
+             "data-data-link-action-outcome-action" => "late_data_policy",
+             "data-data-link-action-outcome-dashboard-limit-mode" => "compare",
+             "data-data-link-action-outcome-dashboard-replay-run-id" => "replay-1",
+             "data-data-link-action-outcome-dashboard-time-mode" => "replay_run",
+             "data-data-link-action-outcome-decision" => "accept",
+             "data-data-link-action-outcome-execution-mode" => "sample_execution",
+             "data-data-link-action-outcome-kind" => "info",
+             "data-data-link-action-outcome-metadata" => presentation.metadata_json,
+             "data-data-link-action-outcome-reason" => "late_data_policy_applied",
+             "data-data-link-action-outcome-result-event-id" => "late-event-1",
+             "data-data-link-action-outcome-status" => "ok",
+             "data-data-link-action-outcome-target-event-id" => "late-event-1",
+             "data-data-link-action-outcome-target-run-id" => "run-1"
+           }
+  end
+
+  test "builds stable attributes with component-specific metadata aliases" do
+    presentation =
+      DataLinkActionOutcomePresentation.for_action(
+        ComparisonReviewActionOutcome.new(
+          status: :ok,
+          kind: :info,
+          reason: "comparison_review_bulk_decision_applied",
+          source_request_event_id: "request-1",
+          workflow_id: "request-1",
+          requested: 2,
+          applied: 2,
+          failed: 0,
+          result_event_ids: "decision-1,decision-2",
+          target_event_id: "request-1"
+        ),
+        :comparison_review_bulk_decision
+      )
+
+    attrs =
+      DataLinkActionOutcomePresentation.stable_attrs(
+        presentation,
+        "data-dashboard-comparison-review-action",
+        aliases: %{"source_request_event_id" => "source-request-id"}
+      )
+
+    assert attrs["data-dashboard-comparison-review-action"] ==
+             "comparison_review_bulk_decision"
+
+    assert attrs["data-dashboard-comparison-review-action-source-request-id"] == "request-1"
+    assert attrs["data-dashboard-comparison-review-action-workflow-id"] == "request-1"
+    assert attrs["data-dashboard-comparison-review-action-requested"] == "2"
+    assert attrs["data-dashboard-comparison-review-action-applied"] == "2"
+    assert attrs["data-dashboard-comparison-review-action-failed"] == "0"
+
+    assert attrs["data-dashboard-comparison-review-action-result-event-ids"] ==
+             "decision-1,decision-2"
+
+    assert attrs["data-dashboard-comparison-review-action-target-event-id"] == "request-1"
+    refute Map.has_key?(attrs, "data-dashboard-comparison-review-action-source-request-event-id")
+  end
+
   test "filters by expected action" do
     refute DataLinkActionOutcomePresentation.for_action(
              RevisionDecisionActionOutcome.new(decision: "mark_conflict"),

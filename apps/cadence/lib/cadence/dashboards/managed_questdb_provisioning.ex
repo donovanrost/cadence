@@ -46,7 +46,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioning do
          data_source: data_source,
          connection_config: redacted_connection_config(migration_config(attrs, opts)),
          isolation_profile: DataSource.isolation_profile(data_source),
-         provisioning: provisioning_metadata(data_source, [])
+         provisioning: provisioning_metadata(data_source, [], :planned)
        }}
     end
   end
@@ -67,7 +67,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioning do
          data_source: persisted_data_source,
          applied_migrations: applied_migrations,
          isolation_profile: DataSource.isolation_profile(persisted_data_source),
-         provisioning: provisioning_metadata(persisted_data_source, applied_migrations)
+         provisioning: provisioning_metadata(persisted_data_source, applied_migrations, :ready)
        }}
     end
   end
@@ -146,15 +146,17 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioning do
           Map.put(
             data_source.metadata,
             :provisioning,
-            provisioning_metadata(data_source, applied_migrations)
+            provisioning_metadata(data_source, applied_migrations, :ready)
           )
     }
   end
 
-  defp provisioning_metadata(%DataSource{} = data_source, applied_migrations) do
+  defp provisioning_metadata(%DataSource{} = data_source, applied_migrations, deployment_status) do
     %{
       provisioner: :managed_questdb,
       storage: :questdb,
+      deployment_backend: :questdb,
+      deployment_status: deployment_status,
       isolation_level: data_source.isolation_level,
       physical_boundary: DataSource.isolation_profile(data_source).physical_boundary,
       applied_migration_versions: Enum.map(applied_migrations, & &1.version),
@@ -167,7 +169,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioning do
   defp provisioning_event_payload(%DataSource{} = data_source, applied_migrations) do
     %{
       kind: :managed_questdb_provisioned,
-      provisioning: provisioning_metadata(data_source, applied_migrations),
+      provisioning: provisioning_metadata(data_source, applied_migrations, :ready),
       physical_isolation: DataSource.isolation_profile(data_source)
     }
   end

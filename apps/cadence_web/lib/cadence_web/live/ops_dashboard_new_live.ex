@@ -58,8 +58,9 @@ defmodule CadenceWeb.OpsDashboardNewLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="ops-dashboard-new-page" class="flex-1 overflow-y-auto">
-      <div class="mx-auto max-w-md px-6 pt-24">
+    <div id="ops-dashboard-new-page" class="flex flex-1 min-h-0">
+      <div class="flex-1 min-w-0 overflow-y-auto">
+        <div class="mx-auto max-w-md px-6 pt-24">
         <h1 class="hud-label">New Dashboard</h1>
         <p class="mt-1 text-sm text-base-content/70">
           A mission-shared telemetry screen. After creating it, add widgets bound to dictionary
@@ -82,7 +83,9 @@ defmodule CadenceWeb.OpsDashboardNewLive do
 
           <.form_actions submit="Create Dashboard" cancel_navigate={@return_to} />
         </.form>
+        </div>
       </div>
+      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
     """
   end

@@ -1075,7 +1075,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="request_recorded"][data-workflow-latest-action-count="1"][data-workflow-latest-action-result-event-ids="#{requested.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{requested.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-direct"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="request_recorded"][data-workflow-latest-action-count="1"][data-workflow-latest-action-result-event-ids="#{requested.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{requested.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-direct"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="live"][data-workflow-latest-action-dashboard-data-view="canonical"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Historical data workflow request recorded."
              )
 
@@ -1248,6 +1248,12 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="request_group_recorded"][data-workflow-latest-action-request-group-id="dashboard-import-run-bulk"][data-workflow-latest-action-count="2"][data-workflow-latest-action-result-event-ids*="#{Enum.at(requested_events, 0).backfill_lifecycle_event_id}"][data-workflow-latest-action-result-event-ids*="#{Enum.at(requested_events, 1).backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-import-run-bulk-001"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
+               "Historical data workflow request group recorded for 2 points."
+             )
+
+      assert has_element?(
+               view,
                ~s(#dashboard-historical-workflow-group-summary[data-historical-workflow-group-state="requested"][data-historical-workflow-group-size="2"][data-historical-workflow-group-requested="2"][data-historical-workflow-group-approved="0"][data-historical-workflow-group-approve-eligible="2"])
              )
 
@@ -1267,6 +1273,12 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
           "source_binding_id" => "import_telemetry",
           "stage" => "approved",
           "reason" => "operator_approved_bulk_import_from_dashboard",
+          "dashboard_id" => dashboard.dashboard_id,
+          "dashboard_version" => "1",
+          "dashboard_time_mode" => "archive",
+          "dashboard_replay_run_id" => "",
+          "dashboard_data_view" => "as_recorded",
+          "dashboard_limit_mode" => "observed",
           "confirmed" => "confirmed"
         }
       })
@@ -1313,7 +1325,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="group_approved_recorded"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-count="2"][data-workflow-latest-action-result-event-ids*="#{Enum.at(approved_events, 0).backfill_lifecycle_event_id}"][data-workflow-latest-action-result-event-ids*="#{Enum.at(approved_events, 1).backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-import-run-bulk-001"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="group_approved_recorded"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-request-group-id="dashboard-import-run-bulk"][data-workflow-latest-action-count="2"][data-workflow-latest-action-result-event-ids*="#{Enum.at(approved_events, 0).backfill_lifecycle_event_id}"][data-workflow-latest-action-result-event-ids*="#{Enum.at(approved_events, 1).backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-import-run-bulk-001"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Historical data workflow group approved recorded for 2 items."
              )
 
@@ -1328,6 +1340,12 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
           "source_binding_id" => "import_telemetry",
           "stage" => "started",
           "reason" => "operator_started_bulk_import_from_dashboard",
+          "dashboard_id" => dashboard.dashboard_id,
+          "dashboard_version" => "1",
+          "dashboard_time_mode" => "archive",
+          "dashboard_replay_run_id" => "",
+          "dashboard_data_view" => "as_recorded",
+          "dashboard_limit_mode" => "observed",
           "confirmed" => "confirmed"
         }
       })
@@ -1372,7 +1390,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="group_started"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-count="2"][data-workflow-latest-action-queued-jobs="2"][data-workflow-latest-action-failed-jobs="0"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="group_started"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-request-group-id="dashboard-import-run-bulk"][data-workflow-latest-action-count="2"][data-workflow-latest-action-queued-jobs="2"][data-workflow-latest-action-failed-jobs="0"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Historical data workflow group started for 2 items; 2 jobs queued."
              )
 
@@ -1536,7 +1554,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_job"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="retry_job_recorded"][data-workflow-latest-action-job-id="#{job.job_id}"][data-workflow-latest-action-result-event-ids="#{retried_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{retried_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-import-run-retry"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_job"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="retry_job_recorded"][data-workflow-latest-action-job-id="#{job.job_id}"][data-workflow-latest-action-result-event-ids="#{retried_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{retried_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-import-run-retry"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                retried_event.backfill_lifecycle_event_id
              )
 
@@ -1673,7 +1691,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_group_failed_jobs"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-retried="2"][data-workflow-latest-action-retry-nonretryable="0"][data-workflow-latest-action-retry-skipped="0"][data-workflow-latest-action-retry-errors="0"])
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_group_failed_jobs"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-request-group-id="dashboard-import-run-group-retry"][data-workflow-latest-action-retried="2"][data-workflow-latest-action-retry-nonretryable="0"][data-workflow-latest-action-retry-skipped="0"][data-workflow-latest-action-retry-errors="0"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"])
              )
 
       assert {:ok, retried_first_job} = Cadence.fetch_background_job(first_job.job_id)
@@ -2294,6 +2312,12 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       refute duplicate_submit_html =~ "no_eligible_request_group_items"
 
+      assert has_element?(
+               view,
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="no_op"][data-workflow-latest-action-reason="no_eligible_group_items"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-request-group-id="dashboard-workflow-run-bulk"]),
+               "No approve items are eligible in request group dashboard-workflow-run-bulk"
+             )
+
       duplicate_approved_events =
         mission.mission_id
         |> Storage.list_backfill_lifecycle_events(
@@ -2365,20 +2389,36 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
                &(&1.reason == "operator_started_bulk_backfill_from_dashboard")
              )
 
-      view
-      |> element("#dashboard-historical-workflow-group-form")
-      |> render_submit(%{
-        "historical_workflow_group" => %{
-          "workflow" => "backfill",
-          "request_group_id" => "dashboard-workflow-run-bulk",
-          "realm" => "backfill",
-          "data_source_id" => "managed_questdb_backfill",
-          "source_binding_id" => "backfill_telemetry",
-          "stage" => "approved",
-          "reason" => "operator_regressed_started_bulk_backfill_from_dashboard",
-          "confirmed" => "confirmed"
-        }
-      })
+      regressive_submit_html =
+        view
+        |> element("#dashboard-historical-workflow-group-form")
+        |> render_submit(%{
+          "historical_workflow_group" => %{
+            "workflow" => "backfill",
+            "request_group_id" => "dashboard-workflow-run-bulk",
+            "realm" => "backfill",
+            "data_source_id" => "managed_questdb_backfill",
+            "source_binding_id" => "backfill_telemetry",
+            "stage" => "approved",
+            "reason" => "operator_regressed_started_bulk_backfill_from_dashboard",
+            "confirmed" => "confirmed"
+          }
+        })
+
+      assert regressive_submit_html =~
+               "No approve items are eligible in request group dashboard-workflow-run-bulk"
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-action="group_stage_transition"][data-data-link-action-outcome-status="no_op"][data-data-link-action-outcome-kind="info"][data-data-link-action-outcome-reason="no_eligible_group_items"]),
+               "No approve items are eligible in request group dashboard-workflow-run-bulk"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="no_op"][data-workflow-latest-action-reason="no_eligible_group_items"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-request-group-id="dashboard-workflow-run-bulk"]),
+               "No approve items are eligible in request group dashboard-workflow-run-bulk"
+             )
 
       regressive_approved_events =
         mission.mission_id
@@ -2416,7 +2456,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 3"]),
+               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 3"][data-historical-workflow-group-job-progress-queued="3"][data-historical-workflow-group-job-progress-running="0"][data-historical-workflow-group-job-progress-completed="0"][data-historical-workflow-group-job-progress-failed="0"][data-historical-workflow-group-job-progress-missing="0"]),
                "dashboard-workflow-run-bulk-001"
              )
 
@@ -2586,7 +2626,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                failed_view,
-               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 1, failed 2"]),
+               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 1, failed 2"][data-historical-workflow-group-job-progress-queued="1"][data-historical-workflow-group-job-progress-running="0"][data-historical-workflow-group-job-progress-completed="0"][data-historical-workflow-group-job-progress-failed="2"][data-historical-workflow-group-job-progress-missing="0"]),
                "dashboard-workflow-run-bulk-002"
              )
 
@@ -2668,7 +2708,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                failed_view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_group_failed_jobs"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-retried="1"][data-workflow-latest-action-retry-nonretryable="1"][data-workflow-latest-action-retry-skipped="0"][data-workflow-latest-action-retry-errors="0"])
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="retry_group_failed_jobs"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-request-group-id="dashboard-workflow-run-bulk"][data-workflow-latest-action-retried="1"][data-workflow-latest-action-retry-nonretryable="1"][data-workflow-latest-action-retry-skipped="0"][data-workflow-latest-action-retry-errors="0"])
              )
 
       assert has_element?(
@@ -2738,7 +2778,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                failed_view,
-               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 2, failed 1"]),
+               ~s(#dashboard-historical-workflow-group-job-progress[data-historical-workflow-group-job-progress="queued 2, failed 1"][data-historical-workflow-group-job-progress-queued="2"][data-historical-workflow-group-job-progress-running="0"][data-historical-workflow-group-job-progress-completed="0"][data-historical-workflow-group-job-progress-failed="1"][data-historical-workflow-group-job-progress-missing="0"]),
                "dashboard-workflow-run-bulk-002"
              )
 
@@ -2814,40 +2854,67 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
                ~s(#dashboard-historical-workflow-correction-form[data-workflow-action-eligible="true"][data-workflow-action-reason="correction_request_required"])
              )
 
-      assert {:ok, corrected_group_event} =
-               Cadence.record_telemetry_historical_data_workflow_event(
-                 "backfill",
-                 "requested",
-                 %{
-                   backfill_run_id: "dashboard-workflow-run-bulk-003-corrected",
-                   organization_id: org.organization_id,
-                   mission_id: mission.mission_id,
-                   realm: :backfill,
-                   data_source_id: "managed_questdb_backfill",
-                   binding_id: "backfill_telemetry",
-                   observable_id: "HK.current",
-                   point_id: "HK.current",
-                   source_from: ~U[2026-06-22 10:00:00Z],
-                   source_to: ~U[2026-06-22 11:00:00Z],
-                   authority: :advisory,
-                   reason: "operator_corrected_bulk_item",
-                   actor_id: "operator",
-                   actor_kind: "operator",
-                   payload: %{
-                     "recovery_action" => "correct_workflow_request",
-                     "corrects_run_id" => "dashboard-workflow-run-bulk-003",
-                     "corrects_event_id" => nonretryable_failed_event.backfill_lifecycle_event_id,
-                     "corrects_job_id" => current_job.job_id,
-                     "request_source" => "dashboard_direct_request",
-                     "request_mode" => "bulk_points",
-                     "request_group_id" => "dashboard-workflow-run-bulk",
-                     "request_item_index" => 3,
-                     "request_item_count" => 3,
-                     "request_item_run_id" => "dashboard-workflow-run-bulk-003-corrected"
-                   }
-                 },
-                 dashboard_runtime_invalidation?: false
+      failed_view
+      |> element("#dashboard-historical-workflow-correction-form")
+      |> render_submit(%{
+        "historical_workflow_correction" => %{
+          "workflow" => "backfill",
+          "run_id" => "dashboard-workflow-run-bulk-003-corrected",
+          "original_run_id" => "dashboard-workflow-run-bulk-003",
+          "original_event_id" => nonretryable_failed_event.backfill_lifecycle_event_id,
+          "original_job_id" => current_job.job_id,
+          "realm" => "backfill",
+          "data_source_id" => "managed_questdb_backfill",
+          "source_binding_id" => "backfill_telemetry",
+          "observable_id" => "HK.current",
+          "point_id" => "HK.current",
+          "source_from" => "2026-06-22T10:00:00Z",
+          "source_to" => "2026-06-22T11:00:00Z",
+          "reason" => "operator_corrected_bulk_item",
+          "request_mode" => "bulk_points",
+          "request_group_id" => "dashboard-workflow-run-bulk",
+          "request_item_index" => "3",
+          "request_item_count" => "3",
+          "request_item_run_id" => "dashboard-workflow-run-bulk-003-corrected",
+          "dashboard_id" => dashboard.dashboard_id,
+          "dashboard_version" => "1",
+          "dashboard_time_mode" => "archive",
+          "dashboard_replay_run_id" => "",
+          "dashboard_data_view" => "as_recorded",
+          "dashboard_limit_mode" => "observed",
+          "confirmed" => "confirmed"
+        }
+      })
+
+      assert_patch(failed_view)
+
+      assert [corrected_group_event] =
+               Storage.list_backfill_lifecycle_events(
+                 mission.mission_id,
+                 organization_id: org.organization_id,
+                 backfill_run_id: "dashboard-workflow-run-bulk-003-corrected"
                )
+
+      assert corrected_group_event.payload["request_group_id"] == "dashboard-workflow-run-bulk"
+      assert corrected_group_event.payload["request_item_index"] == 3
+      assert corrected_group_event.payload["request_item_count"] == 3
+
+      assert corrected_group_event.payload["request_item_run_id"] ==
+               "dashboard-workflow-run-bulk-003-corrected"
+
+      assert corrected_group_event.payload["dashboard_context"] == %{
+               "dashboard_id" => dashboard.dashboard_id,
+               "dashboard_version" => "1",
+               "dashboard_time_mode" => "archive",
+               "dashboard_data_view" => "as_recorded",
+               "dashboard_limit_mode" => "observed"
+             }
+
+      assert has_element?(
+               failed_view,
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="correction_request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="correction_request_recorded"][data-workflow-latest-action-request-group-id="dashboard-workflow-run-bulk"][data-workflow-latest-action-result-event-ids="#{corrected_group_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{corrected_group_event.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-bulk-003-corrected"]),
+               "Corrected historical data workflow request recorded."
+             )
 
       corrected_group_path =
         show_path(mission, dashboard) <>
@@ -2901,6 +2968,22 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
       assert has_element?(
                corrected_group_view,
                ~s(#dashboard-historical-workflow-group-recovery-closure-readiness[data-historical-workflow-group-recovery-closure-status="inspect_job_state"][data-historical-workflow-group-recovery-closure-action="inspect_missing_replacement_jobs"][data-historical-workflow-group-recovery-closure-unresolved="0"][data-historical-workflow-group-recovery-closure-pending-replacements="1"][data-historical-workflow-group-recovery-closure-blocked-jobs="1"][data-historical-workflow-group-recovery-closure-failed-jobs="0"][data-historical-workflow-group-recovery-closure-missing-jobs="1"][data-historical-workflow-group-recovery-closure-missing-runs="dashboard-workflow-run-bulk-003-corrected"][data-historical-workflow-group-recovery-closure-stale-jobs="0"])
+             )
+
+      {:ok, missing_inspection_view, _html} = live(conn, corrected_group_path)
+      render_dashboard_async(missing_inspection_view)
+
+      missing_inspection_view
+      |> element(
+        "#dashboard-historical-workflow-missing-replacement-inspect-dashboard-workflow-run-bulk-003-corrected"
+      )
+      |> render_click()
+
+      assert_patch(missing_inspection_view)
+
+      assert has_element?(
+               missing_inspection_view,
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="missing_replacement_job_inspection"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="missing_replacement_job_inspection_recorded"][data-workflow-latest-action-request-group-id="dashboard-workflow-run-bulk"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-bulk-003-corrected"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="archive"][data-workflow-latest-action-dashboard-data-view="as_recorded"][data-workflow-latest-action-dashboard-limit-mode="observed"])
              )
 
       assert has_element?(
@@ -3821,12 +3904,12 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-action-outcome[data-workflow-action="stage_transition"][data-workflow-action-status="ok"][data-workflow-action-reason="stage_recorded"][data-workflow-action-stage="approved"][data-workflow-action-target-event-id="#{approved.backfill_lifecycle_event_id}"][data-workflow-action-target-run-id="dashboard-workflow-run-1"])
+               ~s(#dashboard-historical-workflow-action-outcome[data-workflow-action="stage_transition"][data-workflow-action-status="ok"][data-workflow-action-reason="stage_recorded"][data-workflow-action-stage="approved"][data-workflow-action-target-event-id="#{approved.backfill_lifecycle_event_id}"][data-workflow-action-target-run-id="dashboard-workflow-run-1"][data-workflow-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-action-dashboard-version="1"][data-workflow-action-dashboard-time-mode="replay_run"][data-workflow-action-dashboard-replay-run-id="replay-stage-1"][data-workflow-action-dashboard-data-view="all_revisions"][data-workflow-action-dashboard-limit-mode="observed"])
              )
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="stage_recorded"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-target-event-id="#{approved.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-1"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="stage_recorded"][data-workflow-latest-action-stage="approved"][data-workflow-latest-action-target-event-id="#{approved.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-1"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="replay_run"][data-workflow-latest-action-dashboard-replay-run-id="replay-stage-1"][data-workflow-latest-action-dashboard-data-view="all_revisions"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Historical data workflow approved recorded."
              )
 
@@ -3895,7 +3978,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="stage_recorded_job_queued"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-job-id="#{job.job_id}"][data-workflow-latest-action-target-event-id="#{started.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-1"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="stage_recorded_job_queued"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-job-id="#{job.job_id}"][data-workflow-latest-action-target-event-id="#{started.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-1"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="replay_run"][data-workflow-latest-action-dashboard-replay-run-id="replay-stage-1"][data-workflow-latest-action-dashboard-data-view="all_revisions"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Historical data workflow started recorded and job #{job.job_id} queued."
              )
 
@@ -4253,8 +4336,13 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="correction_request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="correction_request_recorded"][data-workflow-latest-action-result-event-ids="#{corrected.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{corrected.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-corrected"]),
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="correction_request"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-reason="correction_request_recorded"][data-workflow-latest-action-result-event-ids="#{corrected.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-event-id="#{corrected.backfill_lifecycle_event_id}"][data-workflow-latest-action-target-run-id="dashboard-workflow-run-corrected"][data-workflow-latest-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-latest-action-dashboard-version="1"][data-workflow-latest-action-dashboard-time-mode="replay_run"][data-workflow-latest-action-dashboard-replay-run-id="replay-correction-1"][data-workflow-latest-action-dashboard-data-view="all_revisions"][data-workflow-latest-action-dashboard-limit-mode="observed"]),
                "Corrected historical data workflow request recorded."
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-historical-workflow-action-outcome[data-workflow-action="correction_request"][data-workflow-action-status="ok"][data-workflow-action-reason="correction_request_recorded"][data-workflow-action-result-event-ids="#{corrected.backfill_lifecycle_event_id}"][data-workflow-action-target-event-id="#{corrected.backfill_lifecycle_event_id}"][data-workflow-action-target-run-id="dashboard-workflow-run-corrected"][data-workflow-action-dashboard-id="#{dashboard.dashboard_id}"][data-workflow-action-dashboard-version="1"][data-workflow-action-dashboard-time-mode="replay_run"][data-workflow-action-dashboard-replay-run-id="replay-correction-1"][data-workflow-action-dashboard-data-view="all_revisions"][data-workflow-action-dashboard-limit-mode="observed"])
              )
 
       assert has_element?(
@@ -4500,7 +4588,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-action="late_data_policy"][data-data-link-action-outcome-status="ok"][data-data-link-action-outcome-reason="late_data_policy_applied"]),
+               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-action="late_data_policy"][data-data-link-action-outcome-status="ok"][data-data-link-action-outcome-reason="late_data_policy_applied"][data-data-link-action-outcome-decision="accept"][data-data-link-action-outcome-execution-mode="sample_execution"][data-data-link-action-outcome-dashboard-time-mode="live"][data-data-link-action-outcome-dashboard-limit-mode="observed"][data-data-link-action-outcome-result-event-id="#{policy_event.backfill_lifecycle_event_id}"][data-data-link-action-outcome-target-event-id="#{policy_event.backfill_lifecycle_event_id}"][data-data-link-action-outcome-target-run-id="dashboard-late-policy-run"]),
                "Late-data policy applied."
              )
 
@@ -4537,8 +4625,39 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Late data execution mode"]),
+               "sample_execution"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Late data source event type"]),
+               "backfill_completed"
+             )
+
+      assert has_element?(
+               view,
                ~s(#dashboard-data-link-inspector [data-data-link-field="Late data selected samples"]),
                "1"
+             )
+
+      source_event_selector =
+        ~s(#dashboard-data-link-inspector [data-data-link-related-target="telemetry backfill lifecycle event"][data-data-link-related-id="#{source_event.backfill_lifecycle_event_id}"][data-data-link-related-kind="source_event"])
+
+      assert has_element?(view, source_event_selector)
+
+      view
+      |> element(source_event_selector)
+      |> render_click()
+
+      source_event_path = assert_patch(view)
+      assert source_event_path =~ "selected_target=telemetry_backfill_lifecycle_event"
+      assert source_event_path =~ "selected_id=#{source_event.backfill_lifecycle_event_id}"
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Backfill lifecycle event"]),
+               source_event.backfill_lifecycle_event_id
              )
     end
 
@@ -4658,7 +4777,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-action="revision_decision"][data-data-link-action-outcome-status="ok"][data-data-link-action-outcome-reason="revision_decision_applied"]),
+               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-action="revision_decision"][data-data-link-action-outcome-status="ok"][data-data-link-action-outcome-reason="revision_decision_applied"][data-data-link-action-outcome-decision="mark_conflict"][data-data-link-action-outcome-dashboard-limit-mode="compare"]),
                "Telemetry revision decision applied."
              )
 
@@ -4676,6 +4795,11 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
           decision_events,
           &(&1.decision_event_id == metadata["result_event_id"])
         )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-action-outcome[data-data-link-action-outcome-result-event-id="#{applied_event.decision_event_id}"][data-data-link-action-outcome-target-event-id="#{applied_event.decision_event_id}"][data-data-link-action-outcome-target-observation-identity-id="#{initial_state.observation_identity_id}"])
+             )
 
       assert applied_event.decision == :mark_conflict
       assert applied_event.decision_reason == "operator_marked_conflict_from_dashboard"
@@ -4850,6 +4974,191 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
              )
     end
 
+    test "opens dashboard lifecycle events directly from data-link routes" do
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+
+      assert {:ok, request_event} =
+               Cadence.Dashboards.record_dashboard_comparison_review_request(
+                 org.organization_id,
+                 mission.mission_id,
+                 dashboard.dashboard_id,
+                 %{
+                   "schema" => "dashboard_comparison_review_request.v1",
+                   "request_kind" => "comparison_open_findings_review",
+                   "open_count" => 1,
+                   "open_placement_ids" => ["placement-counter"]
+                 },
+                 actor_id: user.user_id
+               )
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=data_link&selected_target=dashboard_lifecycle_event&selected_id=#{request_event.dashboard_lifecycle_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector[data-data-link-target="dashboard_lifecycle_event"][data-data-link-target-id="#{request_event.dashboard_lifecycle_event_id}"][data-data-link-status="resolved"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#ops-dashboard-show-page[data-dashboard-selection-state="query_only"][data-dashboard-selection-target="dashboard_lifecycle_event"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Dashboard lifecycle event"]),
+               request_event.dashboard_lifecycle_event_id
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Event type"]),
+               "comparison_review_requested"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Comparison review kind"]),
+               "comparison_open_findings_review"
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(request_event.dashboard_lifecycle_event_id)}"])
+             )
+    end
+
+    test "keeps missing dashboard lifecycle data-link routes inspectable" do
+      {conn, _org, mission} = signed_in_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+      missing_event_id = "missing-dashboard-lifecycle-event"
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=data_link&selected_target=dashboard_lifecycle_event&selected_id=#{missing_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-inspector[data-data-link-target="dashboard_lifecycle_event"][data-data-link-target-id="#{missing_event_id}"][data-data-link-status="missing"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#ops-dashboard-show-page[data-dashboard-selection-state="missing_target"][data-dashboard-selection-target="dashboard_lifecycle_event"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{missing_event_id}"])
+             )
+    end
+
+    test "resolves mixed comparison reviews with bulk decision audit context" do
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+
+      source_context = %{
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "source_binding_id" => "default_flight_telemetry"
+      }
+
+      assert {:ok, request_event} =
+               Cadence.Dashboards.record_dashboard_comparison_review_request(
+                 org.organization_id,
+                 mission.mission_id,
+                 dashboard.dashboard_id,
+                 %{
+                   "schema" => "dashboard_comparison_review_request.v1",
+                   "request_kind" => "comparison_open_findings_review",
+                   "open_count" => 2,
+                   "open_placement_ids" => ["placement-counter", "placement-untracked"],
+                   "workflow_intent" => %{
+                     "kind" => "bulk_correction_authority_review",
+                     "action" => "request_comparison_review",
+                     "selection_count" => 2
+                   },
+                   "open_findings" => %{
+                     "schema" => "dashboard_comparison_open_findings.v1",
+                     "runtime_query" => source_context,
+                     "findings" => [
+                       %{
+                         "placement_id" => "placement-counter",
+                         "title" => "Counter",
+                         "state" => "increased",
+                         "decision_status" => "unhandled",
+                         "observation_identity_id" => "identity-counter",
+                         "primary_data_link" => %{"context" => %{"data" => source_context}}
+                       },
+                       %{
+                         "placement_id" => "placement-untracked",
+                         "title" => "Untracked finding",
+                         "state" => "missing",
+                         "decision_status" => "unhandled",
+                         "primary_data_link" => %{"context" => %{"data" => source_context}}
+                       }
+                     ]
+                   }
+                 },
+                 actor_id: user.user_id
+               )
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      view
+      |> form(
+        "#dashboard-comparison-review-resolve-form-#{request_event.dashboard_lifecycle_event_id}",
+        %{
+          "review" => %{"resolution_reason" => "Mixed request reviewed"}
+        }
+      )
+      |> render_submit()
+
+      assert_patch(view)
+
+      [_request_event, resolution_event] =
+        Cadence.Dashboards.list_lifecycle_events(
+          org.organization_id,
+          mission.mission_id,
+          dashboard.dashboard_id
+        )
+
+      assert resolution_event.payload["source_bulk_decision_actionable_count"] == 1
+
+      assert resolution_event.payload["source_bulk_decision_actionable_placement_ids"] == [
+               "placement-counter"
+             ]
+
+      assert resolution_event.payload["source_bulk_decision_skipped_count"] == 1
+
+      assert resolution_event.payload["source_bulk_decision_skipped_placement_ids"] == [
+               "placement-untracked"
+             ]
+
+      assert resolution_event.payload["source_bulk_decision_skipped_reasons"] == [
+               "missing_observation_identity"
+             ]
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-resolution="#{resolution_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-resolution-source-actionable-count="1"][data-dashboard-comparison-review-resolution-source-actionable-placements="placement-counter"][data-dashboard-comparison-review-resolution-source-skipped-count="1"][data-dashboard-comparison-review-resolution-source-skipped-placements="placement-untracked"][data-dashboard-comparison-review-resolution-source-skipped-reasons="missing_observation_identity"]),
+               "1 actionable / 1 skipped"
+             )
+    end
+
     test "applies bulk revision decisions from an open comparison review" do
       {conn, user, org, mission} = signed_in_user_org_and_mission()
       %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
@@ -4936,7 +5245,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="ok"])
+               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="ok"][data-dashboard-comparison-review-action-source-request-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-workflow-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-requested="2"][data-dashboard-comparison-review-action-applied="2"][data-dashboard-comparison-review-action-failed="0"])
              )
 
       action_html = render(view)
@@ -5012,6 +5321,53 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
         assert event.evidence_ref["correction_workflow"]["item_count"] == 2
       end
 
+      decision_event_path =
+        show_path(mission, dashboard) <>
+          "?panel=data_link&selected_target=telemetry_revision_decision_event&selected_id=#{event_a.decision_event_id}"
+
+      {:ok, decision_view, _html} = live(conn, decision_event_path)
+      render_dashboard_async(decision_view)
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector[data-data-link-target="telemetry_revision_decision_event"][data-data-link-target-id="#{event_a.decision_event_id}"][data-data-link-status="resolved"])
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Bulk workflow"]),
+               request_event.dashboard_lifecycle_event_id
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Bulk workflow item"]),
+               "1"
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Bulk workflow item count"]),
+               "2"
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Bulk workflow observation identity"]),
+               state_a.observation_identity_id
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-field="Bulk workflow selection"]),
+               "open_comparison_findings"
+             )
+
+      assert has_element?(
+               decision_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-related-target="dashboard lifecycle event"][data-data-link-related-id="#{request_event.dashboard_lifecycle_event_id}"][data-data-link-related-kind="comparison_review_origin"])
+             )
+
       assert {:ok, updated_a} =
                Storage.fetch_observation_identity_state(state_a.observation_identity_id)
 
@@ -5020,6 +5376,152 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert updated_a.validity_state == :conflict
       assert updated_b.validity_state == :conflict
+    end
+
+    test "applies bulk comparison review decisions only to actionable findings" do
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+
+      {_sample, state} =
+        persist_revision_sample_identity!(org, mission, "sample-review-bulk-mixed-actionable",
+          point_id: "HK.counter"
+        )
+
+      source_context = %{
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "source_binding_id" => "default_flight_telemetry"
+      }
+
+      assert {:ok, request_event} =
+               Cadence.Dashboards.record_dashboard_comparison_review_request(
+                 org.organization_id,
+                 mission.mission_id,
+                 dashboard.dashboard_id,
+                 %{
+                   "schema" => "dashboard_comparison_review_request.v1",
+                   "request_kind" => "comparison_open_findings_review",
+                   "open_count" => 2,
+                   "open_placement_ids" => ["placement-counter", "placement-untracked"],
+                   "open_findings" => %{
+                     "schema" => "dashboard_comparison_open_findings.v1",
+                     "runtime_query" => source_context,
+                     "findings" => [
+                       %{
+                         "placement_id" => "placement-counter",
+                         "title" => "Counter",
+                         "state" => "increased",
+                         "decision_status" => "unhandled",
+                         "observation_identity_id" => state.observation_identity_id,
+                         "primary_sample_id" => state.canonical_sample_id,
+                         "primary_observation_identity_id" => state.observation_identity_id,
+                         "primary_observation_id" => state.canonical_observation_id,
+                         "primary_revision" => state.canonical_revision,
+                         "primary_data_link" => %{"context" => %{"data" => source_context}}
+                       },
+                       %{
+                         "placement_id" => "placement-untracked",
+                         "title" => "Untracked finding",
+                         "state" => "missing",
+                         "decision_status" => "unhandled",
+                         "primary_data_view" => "all_revisions",
+                         "compare_data_view" => "canonical",
+                         "primary_data_link" => %{"context" => %{"data" => source_context}}
+                       }
+                     ]
+                   }
+                 },
+                 actor_id: user.user_id
+               )
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-activity-section[data-dashboard-comparison-review-open-count="1"][data-dashboard-comparison-review-open-placements="placement-counter,placement-untracked"])
+             )
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}[data-dashboard-comparison-review-bulk-decision-count="1"][data-dashboard-comparison-review-bulk-decision-placements="placement-counter"])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-request="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-skipped-count="1"][data-dashboard-comparison-review-bulk-decision-skipped-placements="placement-untracked"][data-dashboard-comparison-review-bulk-decision-skipped-reasons="missing_observation_identity"])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-bulk-decision-skipped="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-skipped-count="1"]),
+               "1 finding skipped for bulk action."
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-finding="placement-counter"][data-dashboard-comparison-review-finding-bulk-decision="included"][data-dashboard-comparison-review-finding-bulk-decision-label="Included in bulk action"])
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-finding="placement-untracked"][data-dashboard-comparison-review-finding-bulk-decision="skipped"][data-dashboard-comparison-review-finding-bulk-decision-reason="missing_observation_identity"][data-dashboard-comparison-review-finding-bulk-decision-label="Skipped: missing observation identity"])
+             )
+
+      view
+      |> form(
+        "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+      )
+      |> render_submit()
+
+      assert_patch(view)
+
+      assert has_element?(
+               view,
+               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="ok"][data-dashboard-comparison-review-action-source-request-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-workflow-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-requested="1"][data-dashboard-comparison-review-action-applied="1"][data-dashboard-comparison-review-action-failed="0"])
+             )
+
+      action_html = render(view)
+
+      assert action_html =~ "Comparison review decisions applied to 1 findings."
+
+      action_metadata =
+        action_html
+        |> element_attribute(
+          "#dashboard-comparison-review-action-outcome",
+          "data-dashboard-comparison-review-action-metadata"
+        )
+        |> Jason.decode!()
+
+      assert action_metadata["requested"] == "1"
+      assert action_metadata["applied"] == "1"
+      assert action_metadata["failed"] == "0"
+
+      [event] =
+        Storage.list_observation_identity_decision_events(
+          state.observation_identity_id,
+          organization_id: org.organization_id,
+          mission_id: mission.mission_id,
+          realm: :flight,
+          data_source_id: "managed_questdb_primary",
+          binding_id: "default_flight_telemetry"
+        )
+
+      assert event.decision == :mark_conflict
+      assert event.evidence_ref["placement_id"] == "placement-counter"
+
+      assert event.evidence_ref["bulk_workflow_item"] == %{
+               "kind" => "telemetry_correction_authority_workflow_item",
+               "workflow_id" => request_event.dashboard_lifecycle_event_id,
+               "item_index" => 1,
+               "item_count" => 1,
+               "observation_identity_id" => state.observation_identity_id,
+               "selection_kind" => "open_comparison_findings"
+             }
     end
 
     test "shows partial failure outcome for bulk comparison review decisions" do
@@ -5102,7 +5604,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="degraded"])
+               ~s(#dashboard-comparison-review-action-outcome[data-dashboard-comparison-review-action="comparison_review_bulk_decision"][data-dashboard-comparison-review-action-status="degraded"][data-dashboard-comparison-review-action-source-request-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-workflow-id="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-action-requested="2"][data-dashboard-comparison-review-action-applied="1"][data-dashboard-comparison-review-action-failed="1"])
              )
 
       action_html = render(view)
@@ -5165,6 +5667,141 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
                Storage.fetch_observation_identity_state(state.observation_identity_id)
 
       assert updated_state.validity_state == :conflict
+    end
+
+    test "explains unavailable bulk comparison decisions when source context is missing" do
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+
+      {_sample, state} =
+        persist_revision_sample_identity!(org, mission, "sample-review-missing-source",
+          point_id: "HK.counter"
+        )
+
+      assert {:ok, request_event} =
+               Cadence.Dashboards.record_dashboard_comparison_review_request(
+                 org.organization_id,
+                 mission.mission_id,
+                 dashboard.dashboard_id,
+                 %{
+                   "schema" => "dashboard_comparison_review_request.v1",
+                   "request_kind" => "comparison_open_findings_review",
+                   "open_count" => 1,
+                   "open_placement_ids" => ["placement-counter"],
+                   "open_findings" => %{
+                     "schema" => "dashboard_comparison_open_findings.v1",
+                     "findings" => [
+                       %{
+                         "placement_id" => "placement-counter",
+                         "title" => "Counter",
+                         "state" => "increased",
+                         "decision_status" => "unhandled",
+                         "observation_identity_id" => state.observation_identity_id,
+                         "primary_sample_id" => state.canonical_sample_id,
+                         "primary_observation_identity_id" => state.observation_identity_id,
+                         "primary_observation_id" => state.canonical_observation_id,
+                         "primary_revision" => state.canonical_revision
+                       }
+                     ]
+                   }
+                 },
+                 actor_id: user.user_id
+               )
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      refute has_element?(
+               view,
+               "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-bulk-decision-unavailable="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-unavailable-reason="missing_source_context"][data-dashboard-comparison-review-bulk-decision-unavailable-count="1"][data-dashboard-comparison-review-bulk-decision-unavailable-placements="placement-counter"]),
+               "Bulk decision unavailable: telemetry source context is missing."
+             )
+
+      assert [] =
+               Storage.list_observation_identity_decision_events(
+                 state.observation_identity_id,
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :flight,
+                 data_source_id: "managed_questdb_primary",
+                 binding_id: "default_flight_telemetry"
+               )
+    end
+
+    test "explains unavailable bulk comparison decisions when no findings are actionable" do
+      {conn, user, org, mission} = signed_in_user_org_and_mission()
+      %Document{} = dashboard = TestFixtures.persist_dashboard_document!(mission, name: "Power")
+
+      source_context = %{
+        "realm" => "flight",
+        "data_source_id" => "managed_questdb_primary",
+        "source_binding_id" => "default_flight_telemetry"
+      }
+
+      assert {:ok, request_event} =
+               Cadence.Dashboards.record_dashboard_comparison_review_request(
+                 org.organization_id,
+                 mission.mission_id,
+                 dashboard.dashboard_id,
+                 %{
+                   "schema" => "dashboard_comparison_review_request.v1",
+                   "request_kind" => "comparison_open_findings_review",
+                   "open_count" => 1,
+                   "open_placement_ids" => ["placement-counter"],
+                   "open_findings" => %{
+                     "schema" => "dashboard_comparison_open_findings.v1",
+                     "findings" => [
+                       %{
+                         "placement_id" => "placement-counter",
+                         "title" => "Counter",
+                         "state" => "increased",
+                         "decision_status" => "unhandled",
+                         "primary_data_view" => "all_revisions",
+                         "compare_data_view" => "canonical",
+                         "primary_data_link" => %{"context" => %{"data" => source_context}}
+                       }
+                     ]
+                   }
+                 },
+                 actor_id: user.user_id
+               )
+
+      path =
+        show_path(mission, dashboard) <>
+          "?panel=versions&activity_filter=open_comparison_reviews&activity_event=#{request_event.dashboard_lifecycle_event_id}"
+
+      {:ok, view, _html} = live(conn, path)
+      render_dashboard_async(view)
+
+      refute has_element?(
+               view,
+               "#dashboard-comparison-review-bulk-decision-form-#{request_event.dashboard_lifecycle_event_id}"
+             )
+
+      assert has_element?(
+               view,
+               ~s([data-dashboard-comparison-review-bulk-decision-unavailable="#{request_event.dashboard_lifecycle_event_id}"][data-dashboard-comparison-review-bulk-decision-unavailable-reason="no_actionable_findings"][data-dashboard-comparison-review-bulk-decision-unavailable-count="0"][data-dashboard-comparison-review-bulk-decision-unavailable-placements=""]),
+               "Bulk decision unavailable: no actionable findings."
+             )
+
+      assert [] =
+               Storage.list_observation_identity_decision_events(
+                 "missing-observation-identity",
+                 organization_id: org.organization_id,
+                 mission_id: mission.mission_id,
+                 realm: :flight,
+                 data_source_id: "managed_questdb_primary",
+                 binding_id: "default_flight_telemetry"
+               )
     end
 
     test "resolves comparison reviews from the versions activity queue" do
@@ -5441,6 +6078,58 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert Enum.all?(events, &(&1.payload["comparison_review_origin"] == expected_origin))
 
+      source_event = List.first(events)
+
+      nav_trail =
+        Jason.encode!([
+          %{
+            "target" => "telemetry_backfill_lifecycle_event",
+            "target_id" => source_event.backfill_lifecycle_event_id,
+            "label" => "Backfill lifecycle event",
+            "relationship_kind" => "comparison_review_origin",
+            "relationship_label" => "Comparison review request",
+            "realm" => "backfill",
+            "data_source_id" => "managed_questdb_backfill",
+            "source_binding_id" => "backfill_telemetry"
+          }
+        ])
+
+      lifecycle_route =
+        show_path(mission, dashboard) <>
+          "?" <>
+          URI.encode_query(%{
+            "panel" => "data_link",
+            "selected_target" => "dashboard_lifecycle_event",
+            "selected_id" => request_event.dashboard_lifecycle_event_id,
+            "nav_from_target" => "telemetry_backfill_lifecycle_event",
+            "nav_from_target_id" => source_event.backfill_lifecycle_event_id,
+            "nav_from_label" => "Backfill lifecycle event",
+            "nav_from_relationship_kind" => "comparison_review_origin",
+            "nav_from_relationship_label" => "Comparison review request",
+            "nav_trail" => nav_trail,
+            "realm" => "backfill",
+            "data_source_id" => "managed_questdb_backfill",
+            "source_binding_id" => "backfill_telemetry"
+          })
+
+      {:ok, lifecycle_view, _html} = live(conn, lifecycle_route)
+      render_dashboard_async(lifecycle_view)
+
+      assert has_element?(
+               lifecycle_view,
+               ~s(#dashboard-data-link-inspector[data-data-link-target="dashboard_lifecycle_event"][data-data-link-target-id="#{request_event.dashboard_lifecycle_event_id}"][data-data-link-status="resolved"])
+             )
+
+      assert has_element?(
+               lifecycle_view,
+               ~s(#dashboard-data-link-inspector [data-data-link-navigation] [data-data-link-nav-entry-id="#{source_event.backfill_lifecycle_event_id}"][phx-value-target="telemetry_backfill_lifecycle_event"][phx-value-nav-from-target-id="#{request_event.dashboard_lifecycle_event_id}"])
+             )
+
+      assert has_element?(
+               lifecycle_view,
+               ~s(#dashboard-data-link-copy-link[data-clipboard-text*="panel=data_link"][data-clipboard-text*="selected_target=dashboard_lifecycle_event"][data-clipboard-text*="selected_id=#{URI.encode_www_form(request_event.dashboard_lifecycle_event_id)}"][data-clipboard-text*="nav_from_target=telemetry_backfill_lifecycle_event"][data-clipboard-text*="nav_from_target_id=#{URI.encode_www_form(source_event.backfill_lifecycle_event_id)}"][data-clipboard-text*="nav_trail="])
+             )
+
       assert Enum.all?(
                events,
                &(&1.reason == "operator_requested_bulk_correction_authority_review")
@@ -5581,7 +6270,7 @@ defmodule CadenceWeb.OpsDashboardLiveTest do
 
       assert has_element?(
                view,
-               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-count="2"][data-workflow-latest-action-queued-jobs="2"][data-workflow-latest-action-failed-jobs="0"])
+               ~s(#dashboard-historical-workflow-latest-action[data-workflow-latest-action="group_stage_transition"][data-workflow-latest-action-status="ok"][data-workflow-latest-action-stage="started"][data-workflow-latest-action-request-group-id="dashboard-comparison-workflow-run"][data-workflow-latest-action-count="2"][data-workflow-latest-action-queued-jobs="2"][data-workflow-latest-action-failed-jobs="0"])
              )
 
       assert {:ok, job} =

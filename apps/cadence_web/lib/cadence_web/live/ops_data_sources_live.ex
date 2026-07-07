@@ -10,7 +10,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     SourceCredentials,
     SourceHealth,
     SourceReadiness,
-    SourceWatermarks
+    SourceWatermarks,
+    TSDBDeploymentStatus
   }
 
   @impl true
@@ -101,6 +102,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
            %{mission_id: mission.mission_id},
            [
              actor_id: current_user_id(scope),
+             materialize_adapter_capabilities?: true,
              payload: source_action_payload(socket)
            ] ++ source_probe_opts(source)
          ) do
@@ -112,6 +114,34 @@ defmodule CadenceWeb.OpsDataSourcesLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to probe source: #{error_text(reason)}")}
+    end
+  end
+
+  def handle_event("retry_deployment_run", %{"job-id" => job_id}, socket) do
+    case Cadence.Dashboards.retry_managed_questdb_provisioning_run(job_id) do
+      {:ok, run} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "Deployment run retried: #{run.run_id}.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Failed to retry deployment run: #{error_text(reason)}")}
+    end
+  end
+
+  def handle_event("requeue_deployment_run", %{"job-id" => job_id}, socket) do
+    case Cadence.Dashboards.requeue_managed_questdb_provisioning_run(job_id) do
+      {:ok, run} ->
+        {:noreply,
+         socket
+         |> assign_source_inventory()
+         |> put_flash(:info, "Deployment run requeued: #{run.run_id}.")}
+
+      {:error, reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Failed to requeue deployment run: #{error_text(reason)}")}
     end
   end
 
@@ -236,7 +266,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     ~H"""
     <div
       id="ops-data-sources-page"
-      class="flex-1 overflow-y-auto"
+      class="flex flex-1 min-h-0"
       data-source-focus-state={@source_focus.state}
       data-source-focus-data-source={@source_focus.data_source_id || ""}
       data-source-focus-binding={@source_focus.source_binding_id || ""}
@@ -261,7 +291,8 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       data-source-focus-evidence-mode={@source_focus.selected_source_evidence_mode || ""}
       data-source-focus-evidence-state={@source_focus.selected_source_evidence_state || ""}
     >
-      <div class="mx-auto max-w-6xl px-6 py-8">
+      <div class="flex-1 min-w-0 overflow-y-auto">
+        <div class="mx-auto max-w-6xl px-6 py-8">
         <div class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 class="text-lg font-semibold text-base-content">Data Sources</h1>
@@ -642,6 +673,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                   data-source-probe-kind={source.probe_kind_text}
                   data-source-probe-message={source.probe_message_text}
                   data-source-probe-metadata={source.probe_metadata_text}
+                  data-source-probe-diagnostic-kind={source.probe_diagnostic_kind_text}
+                  data-source-probe-diagnostic-stage={source.probe_diagnostic_stage_text}
+                  data-source-probe-remediation={source.probe_remediation_text}
                   data-source-connection-test-result={source.connection_test_result_text}
                   data-source-connection-test-kind={source.connection_test_kind_text}
                   data-source-connection-test-message={source.connection_test_message_text}
@@ -651,6 +685,13 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                   data-source-credential-material-state={source.credential_material_state_text}
                   data-source-credential-endpoint={source.credential_endpoint_text}
                   data-source-credential-secret-fields={source.credential_secret_fields_text}
+                  data-source-deployment-status={source.deployment_status_text}
+                  data-source-deployment-mode={source.deployment_mode_text}
+                  data-source-deployment-backend={source.deployment_backend_text}
+                  data-source-deployment-boundary={source.deployment_boundary_text}
+                  data-source-deployment-job-id={source.deployment_job_id_text}
+                  data-source-deployment-run-id={source.deployment_run_id_text}
+                  data-source-deployment-remediation={source.deployment_remediation_text}
                   data-source-supported-sampling={source.supported_sampling_text}
                   data-source-supported-products={source.supported_products_text}
                   data-source-supported-metric-history-products={
@@ -714,6 +755,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                     <.kv label="probe kind" value={source.probe_kind_text} />
                     <.kv label="probe message" value={source.probe_message_text} />
                     <.kv label="probe metadata" value={source.probe_metadata_text} />
+                    <.kv label="diagnostic" value={source.probe_diagnostic_kind_text} />
+                    <.kv label="diag stage" value={source.probe_diagnostic_stage_text} />
+                    <.kv label="remediation" value={source.probe_remediation_text} />
                     <.kv label="connection" value={source.connection_test_result_text} />
                     <.kv label="conn kind" value={source.connection_test_kind_text} />
                     <.kv label="conn detail" value={source.connection_test_message_text} />
@@ -726,11 +770,89 @@ defmodule CadenceWeb.OpsDataSourcesLive do
                     <.kv label="cred material" value={source.credential_material_state_text} />
                     <.kv label="cred endpoint" value={source.credential_endpoint_text} />
                     <.kv label="cred fields" value={source.credential_secret_fields_text} />
+                    <.kv label="deploy" value={source.deployment_status_text} />
+                    <.kv label="deploy mode" value={source.deployment_mode_text} />
+                    <.kv label="backend" value={source.deployment_backend_text} />
+                    <.kv label="boundary" value={source.deployment_boundary_text} />
+                    <.kv label="deploy job" value={source.deployment_job_id_text} />
+                    <.kv label="deploy run" value={source.deployment_run_id_text} />
+                    <.kv label="deploy fix" value={source.deployment_remediation_text} />
                     <.kv label="capability" value={source.capability_text} />
                     <.kv label="sampling" value={source.supported_sampling_text} />
                     <.kv label="products" value={source.supported_products_text} />
                     <.kv label="history" value={source.supported_metric_history_products_text} />
                     <.kv label="families" value={source.supported_product_families_text} />
+                  </dl>
+                </div>
+              </div>
+            </.card>
+
+            <.card heading="Deployment Runs" subtitle="Managed TSDB provisioning jobs" padding={:none}>
+              <div
+                :if={@deployment_run_rows == []}
+                class="px-4 py-5 text-sm text-base-content/70"
+              >
+                No deployment runs recorded.
+              </div>
+              <div class="divide-y divide-base-300/70">
+                <div
+                  :for={run <- @deployment_run_rows}
+                  id={"deployment-run-#{run.run_id}"}
+                  class="px-4 py-3"
+                  data-deployment-run-row={run.run_id}
+                  data-deployment-run-job-id={run.job_id}
+                  data-deployment-run-data-source-id={run.data_source_id}
+                  data-deployment-run-status={run.status_text}
+                  data-deployment-run-mode={run.mode_text}
+                  data-deployment-run-backend={run.backend_text}
+                  data-deployment-run-boundary={run.physical_boundary_text}
+                  data-deployment-run-attempt-count={run.attempt_count_text}
+                  data-deployment-run-failure-summary={run.failure_summary}
+                  data-deployment-run-remediation={run.remediation}
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="truncate font-mono text-xs font-semibold text-base-content">
+                        {run.data_source_id}
+                      </p>
+                      <p class="mt-1 truncate font-mono text-xs text-base-content/60">
+                        {run.run_id}
+                      </p>
+                    </div>
+                    <div class="flex shrink-0 flex-col items-end gap-2">
+                      <.status_pill status={run.status_text} />
+                      <.button
+                        :if={run.status_text == "failed"}
+                        id={"retry-deployment-run-#{run.run_id}"}
+                        variant={:secondary}
+                        size={:xs}
+                        phx-click="retry_deployment_run"
+                        phx-value-job-id={run.job_id}
+                      >
+                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Retry
+                      </.button>
+                      <.button
+                        :if={run.status_text == "provisioning"}
+                        id={"requeue-deployment-run-#{run.run_id}"}
+                        variant={:secondary}
+                        size={:xs}
+                        phx-click="requeue_deployment_run"
+                        phx-value-job-id={run.job_id}
+                      >
+                        <.icon name="hero-arrow-path" class="h-3.5 w-3.5" /> Requeue
+                      </.button>
+                    </div>
+                  </div>
+                  <dl class="mt-3 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
+                    <.kv label="job" value={run.job_id} />
+                    <.kv label="mode" value={run.mode_text} />
+                    <.kv label="backend" value={run.backend_text} />
+                    <.kv label="boundary" value={run.physical_boundary_text} />
+                    <.kv label="attempts" value={run.attempt_count_text} />
+                    <.kv label="started" value={run.started_at_text} />
+                    <.kv label="completed" value={run.completed_at_text} />
+                    <.kv label="failure" value={run.failure_summary} />
+                    <.kv label="fix" value={run.remediation} />
                   </dl>
                 </div>
               </div>
@@ -761,7 +883,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
             </.card>
           </aside>
         </div>
+        </div>
       </div>
+      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
     """
   end
@@ -802,6 +926,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         data-event-probe-kind={Map.get(row, :probe_kind, "")}
         data-event-probe-message={Map.get(row, :probe_message, "")}
         data-event-probe-metadata={Map.get(row, :probe_metadata, "")}
+        data-event-probe-diagnostic-kind={Map.get(row, :probe_diagnostic_kind, "")}
+        data-event-probe-diagnostic-stage={Map.get(row, :probe_diagnostic_stage, "")}
+        data-event-probe-remediation={Map.get(row, :probe_remediation, "")}
         data-event-connection-test-result={Map.get(row, :connection_test_result, "")}
         data-event-connection-test-kind={Map.get(row, :connection_test_kind, "")}
         data-event-connection-test-message={Map.get(row, :connection_test_message, "")}
@@ -844,6 +971,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     source_events =
       DataSources.list_data_source_events(scope.organization_id, mission.mission_id, limit: 12)
 
+    deployment_runs =
+      Cadence.Dashboards.list_managed_questdb_provisioning_runs(mission.mission_id)
+
     binding_events =
       data_bindings
       |> Enum.flat_map(&DataSources.list_data_binding_events(&1.binding_id, limit: 3))
@@ -872,6 +1002,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     |> assign(:source_readiness_policy, readiness_policy_row(readiness_policy))
     |> assign(:binding_groups, binding_groups)
     |> assign(:source_rows, source_rows)
+    |> assign(:deployment_run_rows, Enum.map(deployment_runs, &deployment_run_row/1))
     |> assign(:binding_event_rows, Enum.map(binding_events, &binding_event_row/1))
     |> assign(:source_event_rows, Enum.map(source_events, &source_event_row/1))
     |> assign(:source_health_event_rows, Enum.map(health_events, &source_health_event_row/1))
@@ -2319,6 +2450,7 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       watermark = source_watermark_rollup(watermark_statuses, source)
       credential_status = source_credential_rollup(source, credential, health.connection_profile)
       capabilities = effective_source_capabilities(source)
+      deployment_status = TSDBDeploymentStatus.from_data_source(source)
 
       %{
         data_source_id: source.data_source_id,
@@ -2334,6 +2466,13 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         credential_material_state_text: credential_status.material_state,
         credential_endpoint_text: credential_status.endpoint,
         credential_secret_fields_text: credential_status.secret_fields,
+        deployment_status_text: deployment_status.status_text,
+        deployment_mode_text: deployment_status.mode_text,
+        deployment_backend_text: deployment_status.backend_text,
+        deployment_boundary_text: deployment_status.physical_boundary_text,
+        deployment_job_id_text: text(deployment_status.job_id),
+        deployment_run_id_text: text(deployment_status.run_id),
+        deployment_remediation_text: deployment_status.remediation,
         capability_text: capability_text(source.capabilities),
         supported_sampling_text: source_supported_sampling_text(capabilities),
         supported_products_text: source_supported_products_text(capabilities),
@@ -2348,6 +2487,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
         probe_kind_text: health.probe_kind,
         probe_message_text: health.probe_message,
         probe_metadata_text: health.probe_metadata,
+        probe_diagnostic_kind_text: health.probe_diagnostic_kind,
+        probe_diagnostic_stage_text: health.probe_diagnostic_stage,
+        probe_remediation_text: health.probe_remediation,
         connection_test_result_text: health.connection_test_result,
         connection_test_kind_text: health.connection_test_kind,
         connection_test_message_text: health.connection_test_message,
@@ -2941,6 +3083,11 @@ defmodule CadenceWeb.OpsDataSourcesLive do
           probe_kind: probe_payload_text(health.status, :probe_kind),
           probe_message: probe_payload_text(health.status, :probe_message),
           probe_metadata: probe_metadata_summary(health.status),
+          probe_diagnostic_kind:
+            probe_metadata_payload_text(health.status, :probe_diagnostic_kind),
+          probe_diagnostic_stage:
+            probe_metadata_payload_text(health.status, :probe_diagnostic_stage),
+          probe_remediation: probe_metadata_payload_text(health.status, :probe_remediation),
           connection_test_result: probe_payload_text(health.status, :connection_test_result),
           connection_test_kind: probe_payload_text(health.status, :connection_test_kind),
           connection_test_message: probe_payload_text(health.status, :connection_test_message),
@@ -2960,6 +3107,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
           probe_kind: "none",
           probe_message: "none",
           probe_metadata: "none",
+          probe_diagnostic_kind: "none",
+          probe_diagnostic_stage: "none",
+          probe_remediation: "none",
           connection_test_result: "none",
           connection_test_kind: "none",
           connection_test_message: "none",
@@ -3025,6 +3175,23 @@ defmodule CadenceWeb.OpsDataSourcesLive do
     end
   end
 
+  defp deployment_run_row(run) do
+    %{
+      job_id: run.job_id,
+      run_id: run.run_id,
+      data_source_id: run.data_source_id,
+      status_text: run.status_text,
+      mode_text: run.mode_text,
+      backend_text: run.backend_text,
+      physical_boundary_text: run.physical_boundary_text,
+      attempt_count_text: text(run.attempt_count),
+      failure_summary: run.failure_summary,
+      started_at_text: text(run.started_at),
+      completed_at_text: text(run.completed_at),
+      remediation: run.remediation
+    }
+  end
+
   defp binding_event_row(event) do
     %{
       id: "binding-event-#{event.data_binding_event_id}",
@@ -3057,6 +3224,9 @@ defmodule CadenceWeb.OpsDataSourcesLive do
       probe_kind: probe_payload_text(event, :probe_kind),
       probe_message: probe_payload_text(event, :probe_message),
       probe_metadata: probe_metadata_summary(event),
+      probe_diagnostic_kind: probe_metadata_payload_text(event, :probe_diagnostic_kind),
+      probe_diagnostic_stage: probe_metadata_payload_text(event, :probe_diagnostic_stage),
+      probe_remediation: probe_metadata_payload_text(event, :probe_remediation),
       connection_test_result: probe_payload_text(event, :connection_test_result),
       connection_test_kind: probe_payload_text(event, :connection_test_kind),
       connection_test_message: probe_payload_text(event, :connection_test_message)
@@ -3074,6 +3244,13 @@ defmodule CadenceWeb.OpsDataSourcesLive do
   end
 
   defp probe_payload_value(_source_health, _key), do: nil
+
+  defp probe_metadata_payload_text(source_health, key) do
+    source_health
+    |> probe_payload_value(:probe_metadata)
+    |> metadata_value(key)
+    |> text()
+  end
 
   defp probe_metadata_summary(source_health) do
     case probe_payload_value(source_health, :probe_metadata) do

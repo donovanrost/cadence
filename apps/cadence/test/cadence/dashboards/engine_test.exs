@@ -2496,10 +2496,10 @@ defmodule Cadence.Dashboards.EngineTest do
         source_opts: %{
           telemetry: [
             test_pid: self(),
-            sleep_ms_by_sampling: %{latest: 75}
+            sleep_ms_by_sampling: %{latest: 500}
           ]
         },
-        source_execution_timeout_ms: 20,
+        source_execution_timeout_ms: 200,
         source_execution_max_concurrency: 2,
         source_circuit_breaker: breaker,
         source_circuit_failure_threshold: 1,
@@ -2508,12 +2508,12 @@ defmodule Cadence.Dashboards.EngineTest do
 
     assert result.plan_metadata.source_execution_policy == %{
              max_concurrency: 2,
-             timeout_ms: 20
+             timeout_ms: 200
            }
 
     source_policies = Map.values(result.plan_metadata.source_execution_policies_by_request_id)
     assert length(source_policies) == 2
-    assert Enum.all?(source_policies, &(&1.timeout_ms == 20))
+    assert Enum.all?(source_policies, &(&1.timeout_ms == 200))
     assert Enum.all?(source_policies, &(&1.circuit_failure_threshold == 1))
     assert Enum.all?(source_policies, & &1.provenance.explicit_opts?)
 
@@ -2523,7 +2523,7 @@ defmodule Cadence.Dashboards.EngineTest do
 
     assert Enum.any?(result.dashboard_warnings, fn warning ->
              warning.code == :source_unavailable and
-               warning.details.reason == "timeout after 20ms" and
+               warning.details.reason == "timeout after 200ms" and
                warning.details.data_source_id == "flight-questdb"
            end)
 
@@ -2547,7 +2547,7 @@ defmodule Cadence.Dashboards.EngineTest do
       telemetry_binding("flight-questdb")
       | metadata: %{
           dashboard_policy: %{
-            execution: %{timeout_ms: 20},
+            execution: %{timeout_ms: 200},
             circuit_breaker: %{failure_threshold: 1, backoff_ms: 15_000}
           }
         }
@@ -2560,7 +2560,7 @@ defmodule Cadence.Dashboards.EngineTest do
         source_opts: %{
           telemetry: [
             test_pid: self(),
-            sleep_ms_by_sampling: %{latest: 75}
+            sleep_ms_by_sampling: %{latest: 500}
           ]
         },
         source_execution_max_concurrency: 2,
@@ -2574,7 +2574,7 @@ defmodule Cadence.Dashboards.EngineTest do
 
     source_policies = Map.values(result.plan_metadata.source_execution_policies_by_request_id)
     assert length(source_policies) == 2
-    assert Enum.all?(source_policies, &(&1.timeout_ms == 20))
+    assert Enum.all?(source_policies, &(&1.timeout_ms == 200))
     assert Enum.all?(source_policies, &(&1.circuit_failure_threshold == 1))
     assert Enum.all?(source_policies, &(&1.circuit_backoff_ms == 15_000))
     assert Enum.all?(source_policies, & &1.provenance.binding_policy?)
@@ -2584,7 +2584,7 @@ defmodule Cadence.Dashboards.EngineTest do
 
     assert Enum.any?(result.dashboard_warnings, fn warning ->
              warning.code == :source_unavailable and
-               warning.details.reason == "timeout after 20ms" and
+               warning.details.reason == "timeout after 200ms" and
                warning.details.data_source_id == "flight-questdb"
            end)
 

@@ -52,7 +52,15 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
           workflow_selection_count_text: binary(),
           source_open_count_text: binary(),
           source_open_placement_ids: [binary()],
-          source_open_placements_attr: binary()
+          source_open_placements_attr: binary(),
+          source_bulk_decision_actionable_count_text: binary(),
+          source_bulk_decision_actionable_placement_ids: [binary()],
+          source_bulk_decision_actionable_placements_attr: binary(),
+          source_bulk_decision_skipped_count_text: binary(),
+          source_bulk_decision_skipped_placement_ids: [binary()],
+          source_bulk_decision_skipped_placements_attr: binary(),
+          source_bulk_decision_skipped_reasons: [binary()],
+          source_bulk_decision_skipped_reasons_attr: binary()
         }
 
   @spec open_summary([map()]) :: open_summary()
@@ -234,6 +242,24 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
       |> List.wrap()
       |> present_values()
 
+    source_bulk_decision_actionable_placement_ids =
+      payload
+      |> payload_value("source_bulk_decision_actionable_placement_ids")
+      |> List.wrap()
+      |> present_values()
+
+    source_bulk_decision_skipped_placement_ids =
+      payload
+      |> payload_value("source_bulk_decision_skipped_placement_ids")
+      |> List.wrap()
+      |> present_values()
+
+    source_bulk_decision_skipped_reasons =
+      payload
+      |> payload_value("source_bulk_decision_skipped_reasons")
+      |> List.wrap()
+      |> present_values()
+
     %{
       source_request_event_id: resolution_value(event, "source_request_event_id"),
       disposition: resolution_value(event, "disposition"),
@@ -248,7 +274,21 @@ defmodule Cadence.Dashboards.ComparisonReviewQueue do
         workflow_intent |> payload_value("selection_count") |> count_text(),
       source_open_count_text: payload |> payload_value("source_open_count") |> count_text(),
       source_open_placement_ids: source_open_placement_ids,
-      source_open_placements_attr: Enum.join(source_open_placement_ids, ",")
+      source_open_placements_attr: Enum.join(source_open_placement_ids, ","),
+      source_bulk_decision_actionable_count_text:
+        payload |> payload_value("source_bulk_decision_actionable_count") |> count_text(),
+      source_bulk_decision_actionable_placement_ids:
+        source_bulk_decision_actionable_placement_ids,
+      source_bulk_decision_actionable_placements_attr:
+        Enum.join(source_bulk_decision_actionable_placement_ids, ","),
+      source_bulk_decision_skipped_count_text:
+        payload |> payload_value("source_bulk_decision_skipped_count") |> count_text(),
+      source_bulk_decision_skipped_placement_ids: source_bulk_decision_skipped_placement_ids,
+      source_bulk_decision_skipped_placements_attr:
+        Enum.join(source_bulk_decision_skipped_placement_ids, ","),
+      source_bulk_decision_skipped_reasons: source_bulk_decision_skipped_reasons,
+      source_bulk_decision_skipped_reasons_attr:
+        Enum.join(source_bulk_decision_skipped_reasons, ",")
     }
   end
 

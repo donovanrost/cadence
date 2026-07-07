@@ -77,6 +77,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderWidgetModelTest do
              "data-widget-source-scope-ids" => "",
              "data-widget-source-contact-ids" => "",
              "data-widget-source-source-endpoint-ids" => "",
+             "data-widget-source-health-states" => "",
+             "data-widget-source-health-reasons" => "",
+             "data-widget-source-health-event-ids" => "",
              "data-widget-source-empty-reason" => ""
            }
 

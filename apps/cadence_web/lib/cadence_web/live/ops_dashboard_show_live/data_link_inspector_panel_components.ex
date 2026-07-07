@@ -38,6 +38,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
       |> assign(:panel_attrs, presentation.panel_attrs)
       |> assign(:data_link_actions, presentation.data_link_actions)
       |> assign(:data_link_action_outcome_presentation, presentation.action_outcome)
+      |> assign(
+        :data_link_action_outcome_attrs,
+        DataLinkActionOutcomePresentation.stable_attrs(
+          presentation.action_outcome,
+          "data-data-link-action-outcome",
+          action_suffix: "action"
+        )
+      )
 
     ~H"""
     <section
@@ -81,11 +89,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponents do
         :if={@data_link_action_outcome_presentation}
         id="dashboard-data-link-action-outcome"
         class="hidden"
-        data-data-link-action-outcome-action={@data_link_action_outcome_presentation.action}
-        data-data-link-action-outcome-status={@data_link_action_outcome_presentation.status}
-        data-data-link-action-outcome-kind={@data_link_action_outcome_presentation.kind}
-        data-data-link-action-outcome-reason={@data_link_action_outcome_presentation.reason}
-        data-data-link-action-outcome-metadata={@data_link_action_outcome_presentation.metadata_json}
+        {@data_link_action_outcome_attrs}
       >
         {@data_link_action_outcome_presentation.message}
       </div>

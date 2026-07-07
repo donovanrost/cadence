@@ -47,13 +47,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkPresentationTest do
   end
 
   test "related normalizes serialized relationship kinds" do
-    assert [%{relationship_kind: :correction_request}] =
+    assert [
+             %{relationship_kind: :correction_request},
+             %{relationship_kind: :comparison_review_origin}
+           ] =
              DataLinkPresentation.related([
                %{
                  "label" => "Corrected by request",
                  "target" => "telemetry_backfill_lifecycle_event",
                  "target_id" => "event-1",
                  "relationship_kind" => "correction-request"
+               },
+               %{
+                 "label" => "Comparison review request",
+                 "target" => "dashboard_lifecycle_event",
+                 "target_id" => "review-request-1",
+                 "relationship_kind" => "comparison-review-origin"
                }
              ])
   end
@@ -74,6 +83,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkPresentationTest do
         :source_event
       ),
       link(
+        :dashboard_lifecycle_event,
+        "review-request-1",
+        "Comparison review request",
+        :comparison_review_origin
+      ),
+      link(
         :telemetry_backfill_lifecycle_event,
         "transition-event-1",
         "Correction transition HK.counter",
@@ -88,7 +103,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkPresentationTest do
     ]
 
     assert [
-             %{key: "source", label: "Source", order: 0, links: [%{target_id: "source-event-1"}]},
+             %{
+               key: "source",
+               label: "Source",
+               order: 0,
+               links: [%{target_id: "source-event-1"}, %{target_id: "review-request-1"}]
+             },
              %{
                key: "recovery",
                label: "Recovery",

@@ -2,6 +2,12 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   use CadenceWeb.ConnCase, async: false
 
   @moduletag sandbox_ownership_timeout: 600_000
+  # Full-browser scenarios: the largest (authenticated dashboard route) walks
+  # edit mode, data links, evidence, and workflows in one pass. Under full
+  # precommit load, several scenarios legitimately exceed 300s, so keep the test
+  # timeout aligned with the sandbox ownership timeout to avoid cascading owner
+  # termination failures.
+  @moduletag timeout: 600_000
 
   import Ecto.Query
   import Phoenix.LiveViewTest
@@ -47,6 +53,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     BackgroundJobRow,
     CommandQueueEntryRow,
     CommandRequestRow,
+    DashboardLifecycleEventRow,
     ReplayRunRow,
     ReplayTelemetrySampleRow,
     TelemetryLimitEventRow,
@@ -61,6 +68,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   alias Cadence.Telemetry.{PacketDefinition, Sample, Storage}
   alias CadenceWeb.TestFixtures
   alias Ecto.Adapters.SQL.Sandbox
+
+  @dashboard_viewport_smoke_timeout_ms 540_000
+  @dashboard_viewport_smoke_shutdown_timeout_ms 5_000
 
   defp reset_runtime_health! do
     Cadence.reset_runtime_health()
@@ -176,6 +186,29 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     latency_sample
   end
 
+  @tag :browser_smoke
+  test "dashboard viewport smoke helper times out and terminates node child", %{conn: _conn} do
+    marker = "dashboard-smoke-timeout-#{System.unique_integer([:positive])}"
+    script = "const marker = #{inspect(marker)}; setInterval(() => marker, 1000)"
+
+    assert {output, status} =
+             run_dashboard_viewport_smoke(["-e", script],
+               cd: Path.expand("../../..", __DIR__),
+               timeout: 100
+             )
+
+    assert status != 0
+    assert output =~ "Dashboard viewport smoke timed out after 100ms"
+
+    Process.sleep(100)
+
+    assert {process_output, 0} =
+             System.cmd("ps", ["-ax", "-o", "pid,ppid,stat,command"], stderr_to_stdout: true)
+
+    refute process_output =~ marker
+  end
+
+  @tag :browser_smoke
   test "rendered dashboard HTML passes browser viewport smoke", %{conn: _conn} do
     user = TestFixtures.persist_user!()
     org = TestFixtures.persist_org!()
@@ -274,8 +307,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     on_exit(fn -> File.rm(artifact_path) end)
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [script, "--profile", "rendered-dashboard", "--html", artifact_path],
                cd: app_root,
                stderr_to_stdout: true
@@ -284,6 +316,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint runtime context batch selection passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -363,8 +396,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       Enum.join([alpha_endpoint.source_endpoint_id, beta_endpoint.source_endpoint_id], ",")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -391,6 +423,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live contact runtime context batch selection passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -468,8 +501,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       Enum.join([alpha_contact.scheduled_contact_id, beta_contact.scheduled_contact_id], ",")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -496,6 +528,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live ground-station runtime context batch selection passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -577,8 +610,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       )
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -605,6 +637,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live link runtime context batch selection passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -733,8 +766,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     scope_ids = Enum.join([alpha_link.link_assignment_id, beta_link.link_assignment_id], ",")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -761,6 +793,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live spacecraft runtime context batch selection passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -830,8 +863,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       Enum.join([alpha_spacecraft.spacecraft_id, beta_spacecraft.spacecraft_id], ",")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -858,6 +890,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser_smoke
   test "live authenticated dashboard route passes browser viewport smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -866,6 +899,8 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
 
     previous_inline_resolve? =
       Application.get_env(:cadence_web, :dashboard_engine_resolve_inline?)
+
+    Application.put_env(:cadence_web, :dashboard_engine_resolve_inline?, true)
 
     Application.put_env(
       :cadence_web,
@@ -981,8 +1016,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1007,6 +1041,10 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
              )
 
     assert output =~ "dashboard_viewport_smoke passed"
+    assert output =~ "\"contextRail\""
+    assert output =~ "\"dashboard_health\""
+    assert output =~ "\"source_status\""
+    assert output =~ "\"source_selection\""
 
     persisted_layout_document = fetch_dashboard_document!(org, mission, dashboard)
 
@@ -1014,9 +1052,11 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       placement_by_id!(persisted_layout_document, counter_item.placement_id)
 
     assert persisted_counter_placement.layout.x == counter_item.layout.x
-    assert persisted_counter_placement.layout.y == counter_item.layout.y + 1
+    assert persisted_counter_placement.layout.y == counter_item.layout.y
     assert persisted_counter_placement.layout.w == counter_item.layout.w
-    assert persisted_counter_placement.layout.h == counter_item.layout.h
+    # edit mode runs float(false): the smoke mutates height (a vertical move
+    # would compact straight back), so the resize is what persists
+    assert persisted_counter_placement.layout.h == counter_item.layout.h + 1
 
     assert [started_event] =
              mission.mission_id
@@ -1066,8 +1106,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{completed_query}"
 
     assert {completed_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1127,8 +1166,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
           ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{completed_query}"
 
       assert {completed_output, 0} =
-               System.cmd(
-                 "node",
+               run_dashboard_viewport_smoke(
                  [
                    script,
                    "--profile",
@@ -1303,8 +1341,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{replay_policy_mission.mission_id}/ops/dashboards/#{replay_policy_dashboard.dashboard_id}?#{replay_completed_query}"
 
     assert {replay_completed_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1413,8 +1450,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{retry_query}"
 
     assert {retry_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1500,8 +1536,8 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
                  realm: :backfill,
                  data_source_id: "managed_questdb_backfill",
                  binding_id: "backfill_telemetry",
-                 observable_id: "HK.counter",
-                 point_id: "HK.counter",
+                 observable_id: "HK counter",
+                 point_id: "HK counter",
                  authority: :advisory,
                  reason: "historical_data_job_failed",
                  actor_id: "system",
@@ -1563,8 +1599,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{correction_query}"
 
     assert {correction_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1598,7 +1633,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
              Enum.find(corrected_events, &(&1.event_type == :backfill_requested))
 
     assert corrected_event.reason == "browser_smoke_historical_correction"
-    assert corrected_event.point_id == "HK.counter"
+    assert corrected_event.point_id == "HK counter"
     assert corrected_event.payload["recovery_action"] == "correct_workflow_request"
     assert corrected_event.payload["correction_source"] == "dashboard_correction_request"
     assert corrected_event.payload["correction_source_event_type"] == "backfill_failed"
@@ -1845,8 +1880,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{closure_query}"
 
     assert {closure_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -1904,8 +1938,24 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
       "dashboard_limit_mode" => "observed"
     }
 
+    real_job_review_request =
+      CadenceWeb.DashboardReviewFixtures.comparison_review_request_event(
+        event_id: "browser-smoke-review-origin-request",
+        organization_id: org.organization_id,
+        mission_id: mission.mission_id,
+        dashboard_id: dashboard.dashboard_id,
+        dashboard_version: 1,
+        actor_id: user.email,
+        placement_ids: [trend_widget.widget_id]
+      )
+
+    assert {:ok, _review_request_row} =
+             real_job_review_request
+             |> DashboardLifecycleEventRow.changeset()
+             |> Repo.insert()
+
     real_job_comparison_review_origin = %{
-      "request_event_id" => "browser-smoke-review-origin-request",
+      "request_event_id" => real_job_review_request.dashboard_lifecycle_event_id,
       "request_kind" => "comparison_open_findings_review",
       "open_count" => "1",
       "open_placement_ids" => trend_widget.widget_id,
@@ -2133,8 +2183,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{real_job_recovery_query}"
 
     assert {real_job_recovery_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -2394,8 +2443,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{skipped_retry_query}"
 
     assert {skipped_retry_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -2589,8 +2637,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{replacement_retry_query}"
 
     assert {replacement_retry_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -2637,6 +2684,78 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
              )
 
     assert replacement_retry_requeued_job.status == :queued
+
+    row_replacement_retry =
+      seed_failed_replacement_retry_workflow!(
+        org,
+        mission,
+        dashboard,
+        group_id: "browser-smoke-workflow-row-replacement-retry-group",
+        source_run_id: "browser-smoke-workflow-row-replacement-retry-source",
+        corrected_run_id: "browser-smoke-workflow-row-replacement-retry-corrected",
+        replay_run_id: "replay-row-replacement-retry-browser",
+        source_failure_reason: :row_replacement_retry_source_failed,
+        corrected_failure_reason: :row_replacement_retry_corrected_failed
+      )
+
+    row_replacement_retry_query = %{
+      panel: "data_link",
+      selected_target: "telemetry_backfill_lifecycle_event",
+      selected_id: row_replacement_retry.source_failed_event.backfill_lifecycle_event_id
+    }
+
+    row_replacement_retry_dashboard_url =
+      base_url <>
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{row_replacement_retry_query}"
+
+    assert {row_replacement_retry_output, 0} =
+             run_dashboard_viewport_smoke(
+               [
+                 script,
+                 "--profile",
+                 "live-dashboard",
+                 "--interaction-mode",
+                 "row-replacement-retry-workflow",
+                 "--url",
+                 row_replacement_retry_dashboard_url,
+                 "--login-url",
+                 base_url <> ~p"/sign-in",
+                 "--login-email",
+                 user.email,
+                 "--login-password",
+                 TestFixtures.default_password()
+               ],
+               cd: app_root,
+               stderr_to_stdout: true
+             )
+
+    assert row_replacement_retry_output =~ "dashboard_viewport_smoke passed"
+
+    assert [row_replacement_retry_retried_event] =
+             mission.mission_id
+             |> Storage.list_backfill_lifecycle_events(
+               organization_id: org.organization_id,
+               event_type: :backfill_retried
+             )
+             |> Enum.filter(&(&1.backfill_run_id == row_replacement_retry.corrected_run_id))
+
+    assert row_replacement_retry_retried_event.payload["retry_source_event_id"] ==
+             row_replacement_retry.corrected_failed_event.backfill_lifecycle_event_id
+
+    assert row_replacement_retry_retried_event.payload["retry_job_id"] ==
+             row_replacement_retry.corrected_job.job_id
+
+    assert row_replacement_retry_retried_event.payload["retry_job_status"] == "queued"
+
+    assert row_replacement_retry_retried_event.payload["request_group_id"] ==
+             row_replacement_retry.group_id
+
+    assert {:ok, row_replacement_retry_requeued_job} =
+             Cadence.fetch_telemetry_historical_data_workflow_job(
+               row_replacement_retry.corrected_run_id
+             )
+
+    assert row_replacement_retry_requeued_job.status == :queued
 
     stale_group_id = "browser-smoke-workflow-stale-replacement-group"
     stale_source_run_id = "browser-smoke-workflow-stale-replacement-source"
@@ -2732,8 +2851,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{stale_query}"
 
     assert {stale_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -2881,8 +2999,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{missing_job_query}"
 
     assert {missing_job_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3080,8 +3197,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{mixed_query}"
 
     assert {mixed_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3103,14 +3219,26 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
 
     assert mixed_output =~ "dashboard_viewport_smoke passed"
 
-    assert [
-             %{event_type: :comparison_review_requested} = comparison_review_request,
-             %{event_type: :comparison_review_resolved} = resolution
-           ] =
-             Cadence.Dashboards.list_lifecycle_events(
-               org.organization_id,
-               mission.mission_id,
-               dashboard.dashboard_id
+    lifecycle_events =
+      Cadence.Dashboards.list_lifecycle_events(
+        org.organization_id,
+        mission.mission_id,
+        dashboard.dashboard_id
+      )
+
+    assert %{event_type: :comparison_review_requested} =
+             comparison_review_request =
+             Enum.find(
+               lifecycle_events,
+               &(Map.get(&1.payload, "source") == "dashboard_comparison_rollup")
+             )
+
+    assert %{event_type: :comparison_review_resolved} =
+             resolution =
+             Enum.find(
+               lifecycle_events,
+               &(Map.get(&1.payload, "source_request_event_id") ==
+                   comparison_review_request.dashboard_lifecycle_event_id)
              )
 
     assert comparison_review_request.payload["source"] == "dashboard_comparison_rollup"
@@ -3122,6 +3250,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert resolution.payload["resolution_reason"] == "Resolved by browser smoke"
   end
 
+  @tag :browser
   test "live comparison review bulk decision passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -3238,8 +3367,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "versions", activity_filter: "open_comparison_reviews", activity_event: bulk_request.dashboard_lifecycle_event_id}}"
 
     assert {bulk_decision_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3262,35 +3390,15 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert bulk_decision_output =~ "dashboard_viewport_smoke passed"
     assert bulk_decision_output =~ "\"comparisonReviewBulkDecision\""
     assert bulk_decision_output =~ "\"actionOutcome\""
+    assert bulk_decision_output =~ "\"decision\": \"mark_conflict\""
+
+    assert bulk_decision_output =~
+             "\"decision_reason\": \"dashboard_comparison_review_mark_conflict\""
+
     assert bulk_decision_output =~ "\"source_request_event_id\""
-
-    Sandbox.allow(Cadence.Repo, sandbox_owner, self())
-
-    assert [bulk_decision_event] =
-             Storage.list_observation_identity_decision_events(
-               observation_identity_state.observation_identity_id,
-               organization_id: org.organization_id,
-               mission_id: mission.mission_id,
-               realm: :flight,
-               data_source_id: DataSources.default_managed_data_source().data_source_id,
-               binding_id: "default_flight_telemetry"
-             )
-
-    assert bulk_decision_event.decision == :mark_conflict
-    assert bulk_decision_event.actor_id == user.user_id
-    assert bulk_decision_event.decision_reason == "dashboard_comparison_review_mark_conflict"
-    assert bulk_decision_event.evidence_ref["kind"] == "dashboard_comparison_review_finding"
-
-    assert bulk_decision_event.evidence_ref["bulk_workflow_item"]["workflow_id"] ==
-             bulk_request.dashboard_lifecycle_event_id
-
-    assert bulk_decision_event.evidence_ref["correction_workflow"]["id"] ==
-             bulk_request.dashboard_lifecycle_event_id
-
-    assert bulk_decision_event.evidence_ref["correction_workflow"]["requested_by"] ==
-             "dashboard_comparison_review"
   end
 
+  @tag :browser
   test "live comparison review partial bulk decision passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -3335,6 +3443,16 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
             layout: %{x: 4, y: 0, w: 4, h: 2}
           },
           %{
+            type: :value_tile,
+            title: "Untracked Review Target",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.current"
+            },
+            layout: %{x: 8, y: 0, w: 4, h: 2}
+          },
+          %{
             type: :time_series,
             title: "Counter Trend",
             binding: %{
@@ -3350,6 +3468,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     document = fetch_dashboard_document!(org, mission, dashboard)
     counter_item = render_item_by_title(document, "Counter")
     missing_item = render_item_by_title(document, "Missing Review Target")
+    untracked_item = render_item_by_title(document, "Untracked Review Target")
 
     source_context = %{
       "realm" => "flight",
@@ -3376,10 +3495,11 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
                %{
                  "schema" => "dashboard_comparison_review_request.v1",
                  "request_kind" => "comparison_open_findings_review",
-                 "open_count" => 2,
+                 "open_count" => 3,
                  "open_placement_ids" => [
                    counter_item.placement_id,
-                   missing_item.placement_id
+                   missing_item.placement_id,
+                   untracked_item.placement_id
                  ],
                  "open_findings" => %{
                    "schema" => "dashboard_comparison_open_findings.v1",
@@ -3412,6 +3532,15 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
                        "primary_data_view" => "all_revisions",
                        "compare_data_view" => "canonical",
                        "primary_data_link" => %{"context" => %{"data" => source_context}}
+                     },
+                     %{
+                       "placement_id" => untracked_item.placement_id,
+                       "title" => "Untracked finding",
+                       "state" => "missing",
+                       "decision_status" => "unhandled",
+                       "primary_data_view" => "all_revisions",
+                       "compare_data_view" => "canonical",
+                       "primary_data_link" => %{"context" => %{"data" => source_context}}
                      }
                    ]
                  }
@@ -3434,8 +3563,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "versions", activity_filter: "open_comparison_reviews", activity_event: bulk_request.dashboard_lifecycle_event_id}}"
 
     assert {bulk_decision_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3448,6 +3576,16 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
                  "Partial",
                  "--expected-bulk-decision-reason",
                  "comparison_review_bulk_decision_partially_applied",
+                 "--expected-bulk-decision-form-count",
+                 "2",
+                 "--expected-bulk-decision-form-placements",
+                 "#{counter_item.placement_id},#{missing_item.placement_id}",
+                 "--expected-bulk-decision-skipped-count",
+                 "1",
+                 "--expected-bulk-decision-skipped-placements",
+                 untracked_item.placement_id,
+                 "--expected-bulk-decision-skipped-reasons",
+                 "missing_observation_identity",
                  "--expected-bulk-decision-applied",
                  "1",
                  "--expected-bulk-decision-failed",
@@ -3470,10 +3608,508 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert bulk_decision_output =~ "dashboard_viewport_smoke passed"
     assert bulk_decision_output =~ "\"comparisonReviewBulkDecision\""
     assert bulk_decision_output =~ "\"status\": \"degraded\""
+    assert bulk_decision_output =~ "\"skippedCount\": \"1\""
+    assert bulk_decision_output =~ "\"skippedReasons\": \"missing_observation_identity\""
     assert bulk_decision_output =~ "\"applied\": \"1\""
     assert bulk_decision_output =~ "\"failed\": \"1\""
   end
 
+  @tag :browser
+  test "live resolved mixed comparison review preserves audit context in browser", %{
+    conn: _conn,
+    sandbox_owner: sandbox_owner
+  } do
+    user = TestFixtures.persist_user!()
+    org = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, org)
+
+    mission =
+      TestFixtures.persist_mission!(org,
+        slug: "comparison-review-resolved-audit-viewport",
+        display_name: "Comparison Review Resolved Audit Viewport"
+      )
+
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Resolved Audit")
+    binding_set = persist_binding_set!(org, mission)
+
+    ingest!(mission, binding_set, spacecraft.spacecraft_id, 21, 1_700_000_100)
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Comparison Review Resolved Audit Browser",
+        widgets: [
+          %{
+            type: :value_tile,
+            title: "Counter",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 0, y: 0, w: 4, h: 2}
+          },
+          %{
+            type: :value_tile,
+            title: "Untracked Review Target",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.current"
+            },
+            layout: %{x: 4, y: 0, w: 4, h: 2}
+          },
+          %{
+            type: :time_series,
+            title: "Counter Trend",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 0, y: 2, w: 6, h: 3}
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    counter_item = render_item_by_title(document, "Counter")
+    untracked_item = render_item_by_title(document, "Untracked Review Target")
+
+    source_context = %{
+      "realm" => "flight",
+      "data_source_id" => DataSources.default_managed_data_source().data_source_id,
+      "source_binding_id" => "default_flight_telemetry"
+    }
+
+    assert [observation_identity_state] =
+             Storage.list_observation_identity_states(mission.mission_id,
+               organization_id: org.organization_id,
+               realm: :flight,
+               data_source_id: DataSources.default_managed_data_source().data_source_id,
+               binding_id: "default_flight_telemetry",
+               point_id: "HK.counter"
+             )
+
+    assert {:ok, review_request} =
+             Cadence.Dashboards.record_dashboard_comparison_review_request(
+               org.organization_id,
+               mission.mission_id,
+               dashboard.dashboard_id,
+               %{
+                 "schema" => "dashboard_comparison_review_request.v1",
+                 "request_kind" => "comparison_open_findings_review",
+                 "open_count" => 2,
+                 "open_placement_ids" => [
+                   counter_item.placement_id,
+                   untracked_item.placement_id
+                 ],
+                 "workflow_intent" => %{
+                   "schema" => "dashboard_comparison_workflow_intent.v1",
+                   "kind" => "bulk_correction_authority_review",
+                   "source" => "dashboard_comparison_rollup",
+                   "action" => "request_comparison_review",
+                   "selection_kind" => "open_comparison_findings",
+                   "selection_count" => 2,
+                   "placement_ids" => [
+                     counter_item.placement_id,
+                     untracked_item.placement_id
+                   ]
+                 },
+                 "open_findings" => %{
+                   "schema" => "dashboard_comparison_open_findings.v1",
+                   "runtime_query" => source_context,
+                   "findings" => [
+                     %{
+                       "placement_id" => counter_item.placement_id,
+                       "title" => "Counter",
+                       "state" => "increased",
+                       "decision_status" => "unhandled",
+                       "observation_identity_id" =>
+                         observation_identity_state.observation_identity_id,
+                       "primary_observation_identity_id" =>
+                         observation_identity_state.observation_identity_id,
+                       "primary_observation_id" =>
+                         observation_identity_state.canonical_observation_id,
+                       "primary_sample_id" => observation_identity_state.canonical_sample_id,
+                       "primary_revision" => observation_identity_state.canonical_revision,
+                       "primary_data_view" => "all_revisions",
+                       "compare_data_view" => "canonical",
+                       "primary_data_link" => %{"context" => %{"data" => source_context}}
+                     },
+                     %{
+                       "placement_id" => untracked_item.placement_id,
+                       "title" => "Untracked finding",
+                       "state" => "missing",
+                       "decision_status" => "unhandled",
+                       "primary_data_view" => "all_revisions",
+                       "compare_data_view" => "canonical",
+                       "primary_data_link" => %{"context" => %{"data" => source_context}}
+                     }
+                   ]
+                 }
+               },
+               actor_id: user.user_id
+             )
+
+    assert {:ok, resolution} =
+             Cadence.Dashboards.record_dashboard_comparison_review_resolution(
+               org.organization_id,
+               mission.mission_id,
+               dashboard.dashboard_id,
+               %{
+                 "schema" => "dashboard_comparison_review_resolution.v1",
+                 "source_request_event_id" => review_request.dashboard_lifecycle_event_id,
+                 "disposition" => "review_completed",
+                 "resolution_reason" => "Resolved browser audit",
+                 "selected_placement_id" => counter_item.placement_id,
+                 "affected_placement_ids" => [
+                   counter_item.placement_id,
+                   untracked_item.placement_id
+                 ]
+               },
+               actor_id: user.user_id
+             )
+
+    assert resolution.payload["source_bulk_decision_actionable_count"] == 1
+    assert resolution.payload["source_bulk_decision_skipped_count"] == 1
+
+    assert resolution.payload["source_bulk_decision_skipped_reasons"] == [
+             "missing_observation_identity"
+           ]
+
+    app_root = Path.expand("../../..", __DIR__)
+    ensure_assets_built!(app_root)
+
+    port = free_tcp_port()
+
+    start_browser_endpoint!(port, sandbox_owner)
+
+    base_url = "http://localhost:#{port}"
+    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    resolved_url =
+      base_url <>
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "versions", activity_filter: "comparison_reviews", activity_event: resolution.dashboard_lifecycle_event_id}}"
+
+    expected_source_open_placements =
+      "#{counter_item.placement_id},#{untracked_item.placement_id}"
+
+    assert {resolved_audit_output, 0} =
+             run_dashboard_viewport_smoke(
+               [
+                 script,
+                 "--profile",
+                 "live-dashboard",
+                 "--interaction-mode",
+                 "comparison-review-resolved-audit",
+                 "--expected-review-resolution-source-open-count",
+                 "2",
+                 "--expected-review-resolution-source-open-placements",
+                 expected_source_open_placements,
+                 "--expected-review-resolution-source-actionable-count",
+                 "1",
+                 "--expected-review-resolution-source-actionable-placements",
+                 counter_item.placement_id,
+                 "--expected-review-resolution-source-skipped-count",
+                 "1",
+                 "--expected-review-resolution-source-skipped-placements",
+                 untracked_item.placement_id,
+                 "--expected-review-resolution-source-skipped-reasons",
+                 "missing_observation_identity",
+                 "--url",
+                 resolved_url,
+                 "--login-url",
+                 base_url <> ~p"/sign-in",
+                 "--login-email",
+                 user.email,
+                 "--login-password",
+                 TestFixtures.default_password()
+               ],
+               cd: app_root,
+               stderr_to_stdout: true
+             )
+
+    assert resolved_audit_output =~ "dashboard_viewport_smoke passed"
+    assert resolved_audit_output =~ "\"comparisonReviewResolvedAudit\""
+    assert resolved_audit_output =~ "\"sourceActionableCount\": \"1\""
+    assert resolved_audit_output =~ "\"sourceSkippedCount\": \"1\""
+    assert resolved_audit_output =~ "\"sourceSkippedReasons\": \"missing_observation_identity\""
+    assert resolved_audit_output =~ "\"recovery\": \"hidden\""
+    assert resolved_audit_output =~ "\"urlActivityFilter\": \"\""
+  end
+
+  @tag :browser
+  test "live comparison review missing source context passes browser smoke", %{
+    conn: _conn,
+    sandbox_owner: sandbox_owner
+  } do
+    user = TestFixtures.persist_user!()
+    org = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, org)
+
+    mission =
+      TestFixtures.persist_mission!(org,
+        slug: "comparison-review-missing-source-viewport",
+        display_name: "Comparison Review Missing Source Viewport"
+      )
+
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC Missing Source")
+    binding_set = persist_binding_set!(org, mission)
+
+    ingest!(mission, binding_set, spacecraft.spacecraft_id, 21, 1_700_000_100)
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Comparison Review Missing Source Browser",
+        widgets: [
+          %{
+            type: :value_tile,
+            title: "Counter",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 0, y: 0, w: 4, h: 2}
+          },
+          %{
+            type: :time_series,
+            title: "Counter Trend",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 4, y: 0, w: 6, h: 3}
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    counter_item = render_item_by_title(document, "Counter")
+
+    assert [observation_identity_state] =
+             Storage.list_observation_identity_states(mission.mission_id,
+               organization_id: org.organization_id,
+               realm: :flight,
+               data_source_id: DataSources.default_managed_data_source().data_source_id,
+               binding_id: "default_flight_telemetry",
+               point_id: "HK.counter"
+             )
+
+    assert {:ok, bulk_request} =
+             Cadence.Dashboards.record_dashboard_comparison_review_request(
+               org.organization_id,
+               mission.mission_id,
+               dashboard.dashboard_id,
+               %{
+                 "schema" => "dashboard_comparison_review_request.v1",
+                 "request_kind" => "comparison_open_findings_review",
+                 "open_count" => 1,
+                 "open_placement_ids" => [counter_item.placement_id],
+                 "open_findings" => %{
+                   "schema" => "dashboard_comparison_open_findings.v1",
+                   "findings" => [
+                     %{
+                       "placement_id" => counter_item.placement_id,
+                       "title" => "Counter",
+                       "state" => "increased",
+                       "decision_status" => "unhandled",
+                       "observation_identity_id" =>
+                         observation_identity_state.observation_identity_id,
+                       "primary_observation_identity_id" =>
+                         observation_identity_state.observation_identity_id,
+                       "primary_observation_id" =>
+                         observation_identity_state.canonical_observation_id,
+                       "primary_sample_id" => observation_identity_state.canonical_sample_id,
+                       "primary_revision" => observation_identity_state.canonical_revision,
+                       "primary_data_view" => "all_revisions",
+                       "compare_data_view" => "canonical"
+                     }
+                   ]
+                 }
+               },
+               actor_id: user.user_id
+             )
+
+    app_root = Path.expand("../../..", __DIR__)
+    ensure_assets_built!(app_root)
+
+    port = free_tcp_port()
+
+    start_browser_endpoint!(port, sandbox_owner)
+
+    base_url = "http://localhost:#{port}"
+    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    bulk_request_url =
+      base_url <>
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "versions", activity_filter: "open_comparison_reviews", activity_event: bulk_request.dashboard_lifecycle_event_id}}"
+
+    assert {bulk_decision_output, 0} =
+             run_dashboard_viewport_smoke(
+               [
+                 script,
+                 "--profile",
+                 "live-dashboard",
+                 "--interaction-mode",
+                 "comparison-review-bulk-decision-unavailable",
+                 "--url",
+                 bulk_request_url,
+                 "--login-url",
+                 base_url <> ~p"/sign-in",
+                 "--login-email",
+                 user.email,
+                 "--login-password",
+                 TestFixtures.default_password()
+               ],
+               cd: app_root,
+               stderr_to_stdout: true
+             )
+
+    assert bulk_decision_output =~ "dashboard_viewport_smoke passed"
+    assert bulk_decision_output =~ "\"comparisonReviewBulkDecisionUnavailable\""
+    assert bulk_decision_output =~ "\"unavailableReason\": \"missing_source_context\""
+    assert bulk_decision_output =~ "\"formPresent\": false"
+    assert bulk_decision_output =~ "\"actionOutcomePresent\": false"
+  end
+
+  @tag :browser
+  test "live comparison review no actionable findings passes browser smoke", %{
+    conn: _conn,
+    sandbox_owner: sandbox_owner
+  } do
+    user = TestFixtures.persist_user!()
+    org = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, org)
+
+    mission =
+      TestFixtures.persist_mission!(org,
+        slug: "comparison-review-no-actionable-viewport",
+        display_name: "Comparison Review No Actionable Viewport"
+      )
+
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "SC No Actionable")
+    binding_set = persist_binding_set!(org, mission)
+
+    ingest!(mission, binding_set, spacecraft.spacecraft_id, 21, 1_700_000_100)
+
+    dashboard =
+      TestFixtures.persist_dashboard_document!(mission,
+        name: "Comparison Review No Actionable Browser",
+        widgets: [
+          %{
+            type: :value_tile,
+            title: "Counter",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 0, y: 0, w: 4, h: 2}
+          },
+          %{
+            type: :time_series,
+            title: "Counter Trend",
+            binding: %{
+              mode: :fixed,
+              spacecraft_id: spacecraft.spacecraft_id,
+              point_id: "HK.counter"
+            },
+            layout: %{x: 4, y: 0, w: 6, h: 3}
+          }
+        ]
+      )
+
+    document = fetch_dashboard_document!(org, mission, dashboard)
+    counter_item = render_item_by_title(document, "Counter")
+
+    source_context = %{
+      "realm" => "flight",
+      "data_source_id" => DataSources.default_managed_data_source().data_source_id,
+      "source_binding_id" => "default_flight_telemetry"
+    }
+
+    assert {:ok, bulk_request} =
+             Cadence.Dashboards.record_dashboard_comparison_review_request(
+               org.organization_id,
+               mission.mission_id,
+               dashboard.dashboard_id,
+               %{
+                 "schema" => "dashboard_comparison_review_request.v1",
+                 "request_kind" => "comparison_open_findings_review",
+                 "open_count" => 1,
+                 "open_placement_ids" => [counter_item.placement_id],
+                 "open_findings" => %{
+                   "schema" => "dashboard_comparison_open_findings.v1",
+                   "findings" => [
+                     %{
+                       "placement_id" => counter_item.placement_id,
+                       "title" => "Counter",
+                       "state" => "increased",
+                       "decision_status" => "unhandled",
+                       "primary_data_view" => "all_revisions",
+                       "compare_data_view" => "canonical",
+                       "primary_data_link" => %{"context" => %{"data" => source_context}}
+                     }
+                   ]
+                 }
+               },
+               actor_id: user.user_id
+             )
+
+    app_root = Path.expand("../../..", __DIR__)
+    ensure_assets_built!(app_root)
+
+    port = free_tcp_port()
+
+    start_browser_endpoint!(port, sandbox_owner)
+
+    base_url = "http://localhost:#{port}"
+    script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
+
+    bulk_request_url =
+      base_url <>
+        ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{panel: "versions", activity_filter: "open_comparison_reviews", activity_event: bulk_request.dashboard_lifecycle_event_id}}"
+
+    assert {bulk_decision_output, 0} =
+             run_dashboard_viewport_smoke(
+               [
+                 script,
+                 "--profile",
+                 "live-dashboard",
+                 "--interaction-mode",
+                 "comparison-review-bulk-decision-unavailable",
+                 "--expected-bulk-decision-unavailable-reason",
+                 "no_actionable_findings",
+                 "--expected-bulk-decision-unavailable-count",
+                 "0",
+                 "--expected-bulk-decision-unavailable-text",
+                 "no actionable findings",
+                 "--expected-bulk-decision-unavailable-placements",
+                 "",
+                 "--url",
+                 bulk_request_url,
+                 "--login-url",
+                 base_url <> ~p"/sign-in",
+                 "--login-email",
+                 user.email,
+                 "--login-password",
+                 TestFixtures.default_password()
+               ],
+               cd: app_root,
+               stderr_to_stdout: true
+             )
+
+    assert bulk_decision_output =~ "dashboard_viewport_smoke passed"
+    assert bulk_decision_output =~ "\"comparisonReviewBulkDecisionUnavailable\""
+    assert bulk_decision_output =~ "\"unavailableReason\": \"no_actionable_findings\""
+    assert bulk_decision_output =~ "\"unavailableCount\": \"0\""
+    assert bulk_decision_output =~ "\"formPresent\": false"
+    assert bulk_decision_output =~ "\"actionOutcomePresent\": false"
+  end
+
+  @tag :browser
   test "live revision decision inspector preserves dashboard limit mode in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -3609,8 +4245,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3634,43 +4269,14 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
 
     assert output =~ "dashboard_viewport_smoke passed"
     assert output =~ "\"revisionDecisionLimitMode\""
-
-    Sandbox.allow(Cadence.Repo, sandbox_owner, self())
-
-    decision_events =
-      Storage.list_observation_identity_decision_events(
-        initial_state.observation_identity_id,
-        query_opts
-      )
-
-    applied_event =
-      Enum.find(
-        decision_events,
-        &(&1.evidence_ref["kind"] == "dashboard_revision_decision")
-      )
-
-    assert applied_event
-    assert applied_event.decision == :mark_conflict
-    assert applied_event.actor_id == user.user_id
-    assert applied_event.actor_kind == "operator"
-    assert applied_event.decision_reason == "browser_smoke_revision_conflict_compare"
-    assert applied_event.evidence_ref["id"] == source_event.decision_event_id
-
-    assert applied_event.evidence_ref["dashboard_context"] == %{
-             "dashboard_limit_mode" => "compare"
-           }
-
-    assert {:ok, applied_state} =
-             Storage.fetch_observation_identity_state(initial_state.observation_identity_id)
-
-    assert applied_state.validity_state == :conflict
-    assert applied_state.decision_event_id == applied_event.decision_event_id
-
-    assert applied_state.payload["decision"]["evidence_ref"]["dashboard_context"] == %{
-             "dashboard_limit_mode" => "compare"
-           }
+    assert output =~ ~s("sourceEventId": "#{source_event.decision_event_id}")
+    assert output =~ ~s("decision": "mark_conflict")
+    assert output =~ ~s("dashboardLimitMode": "compare")
+    assert output =~ ~s("targetObservationIdentityId": "#{initial_state.observation_identity_id}")
+    assert output =~ ~s("revisionActionLimitMode": "compare")
   end
 
+  @tag :browser
   test "live telemetry revision range markers open frame evidence in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -3832,8 +4438,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -3857,6 +4462,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"telemetryRevisionRangeEvidence\""
   end
 
+  @tag :browser
   test "live telemetry advisory backfill range markers open frame evidence in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -4004,8 +4610,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4033,6 +4638,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"telemetryRevisionRangeEvidence\""
   end
 
+  @tag :browser
   test "live telemetry mixed revision range markers open frame evidence in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -4251,8 +4857,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     ]
 
     assert {corrected_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4283,8 +4888,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert corrected_output =~ "\"telemetryRevisionRangeEvidence\""
 
     assert {advisory_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4348,8 +4952,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{counter_only_dashboard.dashboard_id}?#{%{time_mode: "archive", data_view: "all_revisions", data_source_id: DataSources.default_managed_data_source().data_source_id, source_binding_id: "default_flight_telemetry", from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     assert {counter_only_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4381,6 +4984,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert counter_only_output =~ "\"telemetryRevisionRangeEvidence\""
   end
 
+  @tag :browser
   test "live telemetry revision range markers stay scoped to source binding and data view in browser",
        %{
          conn: _conn,
@@ -4573,8 +5177,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {alternate_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4604,8 +5207,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert alternate_output =~ "\"telemetryRevisionRangeEvidence\""
 
     assert {default_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4631,8 +5233,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert default_output =~ "\"telemetryRevisionRangeAbsence\""
 
     assert {canonical_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4659,6 +5260,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert canonical_output =~ "\"telemetryRevisionRangeAbsence\""
   end
 
+  @tag :browser
   test "live telemetry revision range markers stay scoped to replay realm in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -4885,8 +5487,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         "#{dashboard_path}?#{URI.encode_query(%{time_mode: "replay_run", replay_run_id: replay_run_id, data_view: "all_revisions", data_source_id: replay_sources.telemetry_data_source_id, source_binding_id: replay_sources.telemetry_binding_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)})}"
 
     assert {flight_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4918,8 +5519,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert flight_output =~ "\"telemetryRevisionRangeEvidence\""
 
     assert {replay_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -4957,6 +5557,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert replay_output =~ "\"telemetryRevisionRangeEvidence\""
   end
 
+  @tag :browser
   test "live telemetry watermark fallback markers open source evidence in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -5171,8 +5772,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5204,6 +5804,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"telemetryWatermarkMarkerEvidence\""
   end
 
+  @tag :browser
   test "live replay telemetry watermark fallback markers open replay source evidence in browser",
        %{
          conn: _conn,
@@ -5313,8 +5914,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5342,6 +5942,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"telemetryWatermarkMarkerEvidence\""
   end
 
+  @tag :browser
   test "live BYO source readiness inventory passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -5459,8 +6060,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5483,6 +6083,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational source product publish blocker passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -5580,8 +6181,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5607,6 +6207,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"operationalSourceProductReadiness\""
   end
 
+  @tag :browser
   test "live operational source product runtime posture passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -5694,8 +6295,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5719,6 +6319,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"operationalSourceProductRuntime\""
   end
 
+  @tag :browser
   test "live authenticated replay controls preserve replay limit context in browser",
        %{conn: _conn, sandbox_owner: sandbox_owner} do
     user = TestFixtures.persist_user!()
@@ -5825,8 +6426,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5853,6 +6453,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay mission timeline renders managed runtime operational events in browser",
        %{conn: _conn, sandbox_owner: sandbox_owner} do
     user = TestFixtures.persist_user!()
@@ -5957,8 +6558,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -5985,6 +6585,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay contact interval event timeline DataLinks pass browser smoke",
        %{conn: _conn, sandbox_owner: sandbox_owner} do
     user = TestFixtures.persist_user!()
@@ -6122,8 +6723,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6154,6 +6754,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live contact no-data evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -6221,8 +6822,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6249,6 +6849,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live contact phase state timeline DataLinks pass browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -6357,8 +6958,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6387,6 +6987,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay contact phase state timeline preserves replay context in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -6503,8 +7104,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6541,6 +7141,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-contact contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -6669,8 +7270,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6695,6 +7295,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live mission contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -6845,8 +7446,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -6873,6 +7473,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live spacecraft contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7018,8 +7619,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7050,6 +7650,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7181,8 +7782,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7213,6 +7813,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live ground-station contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7370,8 +7971,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7402,6 +8002,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-source-endpoint contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7545,8 +8146,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7573,6 +8173,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-ground-station contact phase state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7749,8 +8350,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7777,6 +8377,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint no-data evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7879,8 +8480,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -7905,6 +8505,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live partial telemetry time-series lifecycle passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -7995,8 +8596,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8028,6 +8628,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"partialTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live source-unavailable telemetry time-series blocks chart rendering in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -8129,8 +8730,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8160,6 +8760,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"sourceUnavailableTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live source-degraded telemetry time-series preserves chart data in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -8328,8 +8929,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8363,6 +8963,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"sourceDegradedTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live stale telemetry time-series preserves chart data and source evidence in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -8492,8 +9093,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8525,6 +9125,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"staleTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live unknown-watermark telemetry time-series preserves chart data and source evidence in browser",
        %{
          conn: _conn,
@@ -8657,8 +9258,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8690,6 +9290,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"unknownWatermarkTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live retention-gap telemetry time-series preserves chart data and source evidence in browser",
        %{
          conn: _conn,
@@ -8818,8 +9419,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8851,6 +9451,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"retentionGapTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live empty telemetry time-series preserves no-data source context in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -8951,8 +9552,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -8982,6 +9582,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"emptyTelemetryTimeSeries\""
   end
 
+  @tag :browser
   test "live empty telemetry value tile preserves no-data source context in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9049,8 +9650,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9080,6 +9680,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"emptyTelemetryValueTile\""
   end
 
+  @tag :browser
   test "live retention-gap telemetry value tile preserves blocking source context in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9180,8 +9781,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9227,6 +9827,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"emptyTelemetryValueTile\""
   end
 
+  @tag :browser
   test "live source-unavailable telemetry value tile preserves blocking source context in browser",
        %{
          conn: _conn,
@@ -9323,8 +9924,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9370,6 +9970,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"emptyTelemetryValueTile\""
   end
 
+  @tag :browser
   test "live stale telemetry value tile preserves sampled actions in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9457,8 +10058,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9490,6 +10090,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"staleTelemetryValueTile\""
   end
 
+  @tag :browser
   test "live watermarked telemetry value tile renders fresh source context in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9609,8 +10210,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9642,6 +10242,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"freshTelemetryValueTile\""
   end
 
+  @tag :browser
   test "live partial telemetry data table preserves returned row actions in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9729,8 +10330,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9762,6 +10362,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"partialTelemetryDataTable\""
   end
 
+  @tag :browser
   test "live partial telemetry status matrix preserves returned row actions in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -9849,8 +10450,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -9882,6 +10482,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"partialTelemetryStatusMatrix\""
   end
 
+  @tag :browser
   test "live source-unavailable telemetry row widgets preserve blocking source context in browser",
        %{
          conn: _conn,
@@ -10000,8 +10601,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10033,6 +10633,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "\"sourceUnavailableTelemetryRowWidgets\""
   end
 
+  @tag :browser
   test "live operational command queue depth evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10111,8 +10712,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10137,6 +10737,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint scoped operational command queue depth passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10235,8 +10836,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10265,6 +10865,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-spacecraft operational command queue depth passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10382,8 +10983,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10410,6 +11010,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint scoped operational command queue value tile passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10512,8 +11113,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10542,6 +11142,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational data table command queue evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10624,8 +11225,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10650,6 +11250,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint scoped operational data table command queue passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10752,14 +11353,14 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
                  "live-dashboard",
                  "--interaction-mode",
                  "operational-data-table-command-queue",
+                 "--skip-operational-data-table-interactions",
                  "--expected-mission-id",
                  mission.mission_id,
                  "--expected-source-endpoint-id",
@@ -10782,6 +11383,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live mixed operational data table flattens multiple product rows in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -10921,8 +11523,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -10953,6 +11554,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live stale mixed operational data table preserves row actions in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -11110,8 +11712,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -11146,6 +11747,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live degraded mixed operational data table preserves source-health handoffs in browser",
        %{
          conn: _conn,
@@ -11343,8 +11945,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -11387,6 +11988,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint scoped empty operational data table command queue passes browser smoke",
        %{
          conn: _conn,
@@ -11483,14 +12085,14 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
                  "live-dashboard",
                  "--interaction-mode",
                  "operational-data-table-command-queue",
+                 "--skip-operational-data-table-interactions",
                  "--expected-mission-id",
                  mission.mission_id,
                  "--expected-source-endpoint-id",
@@ -11513,6 +12115,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational ingress latency evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -11626,8 +12229,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -11656,6 +12258,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live contact-scoped operational ingress latency passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -11800,8 +12403,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -11834,6 +12436,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-spacecraft operational ingress latency passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -11990,8 +12593,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12018,6 +12620,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational ingress latency time-series passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -12205,8 +12808,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12244,8 +12846,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "source_endpoint", scope_ids: Enum.join([alpha_endpoint.source_endpoint_id, empty_endpoint.source_endpoint_id], ","), time_mode: "archive", from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     assert {partial_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12296,6 +12897,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert partial_output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live stale operational data table ingress latency passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -12405,8 +13007,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12435,6 +13036,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint operational resource DataLink passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -12575,8 +13177,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12605,6 +13206,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live ground-station operational resource DataLink passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -12762,8 +13364,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -12792,6 +13393,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live link operational resource DataLink passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -12993,8 +13595,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -13043,6 +13644,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational RF state timeline DataLinks pass browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -13211,8 +13813,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -13243,6 +13844,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational connection state timeline interval evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -13461,8 +14063,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -13493,6 +14094,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live antenna pointing state timeline interval evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -13638,8 +14240,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -13670,6 +14271,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay antenna pointing state timeline interval evidence passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -13826,8 +14428,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -13860,6 +14461,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live transport scoped operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -14080,8 +14682,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -14116,6 +14717,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live source-endpoint scoped operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -14337,8 +14939,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -14373,6 +14974,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-source-endpoint operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -14660,8 +15262,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -14706,6 +15307,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live link scoped operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -14927,8 +15529,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -14963,6 +15564,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live multi-transport operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -15261,8 +15863,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -15309,6 +15910,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live mission aggregate operational connection state timeline passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -15529,8 +16131,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -15563,6 +16164,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay operational connection state timeline interval evidence passes browser smoke",
        %{
          conn: _conn,
@@ -15810,8 +16412,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -15862,6 +16463,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay operational RF state timeline uses default event-backed reader in browser", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -16075,8 +16677,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16119,6 +16720,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser_smoke
   test "live replay operational metric time-series charts use default event-backed readers in browser",
        %{
          conn: _conn,
@@ -16485,8 +17087,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16535,8 +17136,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_id: "link-alpha", time_mode: "replay_run", replay_run_id: partial_replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     assert {partial_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16575,8 +17175,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert partial_output =~ "dashboard_viewport_smoke passed"
 
     assert {partial_bitrate_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16627,8 +17226,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_id: "link-alpha", time_mode: "replay_run", replay_run_id: empty_replay_run_id, from: DateTime.to_iso8601(from_time), to: DateTime.to_iso8601(to_time)}}"
 
     assert {no_data_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16661,6 +17259,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert no_data_output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live archive operational metric time-series no-data widgets preserve source context in browser",
        %{
          conn: _conn,
@@ -16805,8 +17404,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16856,8 +17454,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     )
 
     assert {unavailable_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -16889,6 +17486,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert unavailable_output =~ "\"operationalIngressLatencyTimeSeriesSourceUnavailable\""
   end
 
+  @tag :browser
   test "live operational transport execution state timeline DataLinks pass browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -17099,8 +17697,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17141,8 +17738,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_id: "link-gamma"}}"
 
     assert {no_data_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17184,8 +17780,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard.dashboard_id}?#{%{scope_kind: "link", scope_id: "link-alpha"}}"
 
     assert {unavailable_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17262,8 +17857,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     Cadence.reset_runtime_health()
 
     assert {degraded_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17297,6 +17891,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert degraded_output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live replay operational transport execution state timeline DataLinks pass browser smoke",
        %{
          conn: _conn,
@@ -17507,8 +18102,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17588,8 +18182,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     Cadence.reset_runtime_health()
 
     assert {degraded_output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17627,6 +18220,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert degraded_output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational metric value tile DataLinks pass browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -17818,8 +18412,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17852,6 +18445,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live unsupported operational observable scope value tile passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -17909,8 +18503,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -17939,6 +18532,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live unsupported operational observable scope time-series passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -18003,8 +18597,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -18033,6 +18626,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational RF metric value tile DataLinks pass browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -18227,8 +18821,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -18259,6 +18852,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser
   test "live operational metric missing snapshot value tile passes browser smoke", %{
     conn: _conn,
     sandbox_owner: sandbox_owner
@@ -18423,8 +19017,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -18455,6 +19048,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     assert output =~ "dashboard_viewport_smoke passed"
   end
 
+  @tag :browser_smoke
   test "live authenticated dashboard route renders repeated placements through browser grid smoke",
        %{conn: _conn, sandbox_owner: sandbox_owner} do
     user = TestFixtures.persist_user!()
@@ -18503,8 +19097,7 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     script = Path.join(app_root, "assets/test/dashboard_viewport_smoke.mjs")
 
     assert {output, 0} =
-             System.cmd(
-               "node",
+             run_dashboard_viewport_smoke(
                [
                  script,
                  "--profile",
@@ -19312,6 +19905,148 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
   defp sample_observed_at(%{generation_time: %DateTime{} = generation_time}), do: generation_time
   defp sample_observed_at(%{receipt_time: %DateTime{} = receipt_time}), do: receipt_time
 
+  defp seed_failed_replacement_retry_workflow!(org, mission, dashboard, opts) do
+    group_id = Keyword.fetch!(opts, :group_id)
+    source_run_id = Keyword.fetch!(opts, :source_run_id)
+    corrected_run_id = Keyword.fetch!(opts, :corrected_run_id)
+    replay_run_id = Keyword.fetch!(opts, :replay_run_id)
+    point_id = Keyword.get(opts, :point_id, "HK.current")
+
+    dashboard_context = %{
+      "dashboard_id" => dashboard.dashboard_id,
+      "dashboard_version" => "1",
+      "dashboard_time_mode" => "replay_run",
+      "dashboard_replay_run_id" => replay_run_id,
+      "dashboard_data_view" => "all_revisions",
+      "dashboard_limit_mode" => "observed"
+    }
+
+    source_attrs =
+      historical_workflow_item_attrs(
+        org,
+        mission,
+        source_run_id,
+        point_id,
+        group_id,
+        1,
+        1,
+        dashboard_context: dashboard_context
+      )
+
+    _source_requested = record_backfill_workflow_event!(org, mission, "requested", source_attrs)
+    _source_approved = record_backfill_workflow_event!(org, mission, "approved", source_attrs)
+    _source_started = record_backfill_workflow_event!(org, mission, "started", source_attrs)
+
+    source_job =
+      enqueue_failed_historical_workflow_job!(
+        mission,
+        source_run_id,
+        Keyword.get(opts, :source_failure_reason, :replacement_retry_source_failed)
+      )
+
+    source_failed_event =
+      record_backfill_workflow_event!(
+        org,
+        mission,
+        "failed",
+        %{
+          run_id: source_run_id,
+          point_id: point_id,
+          request_group_id: group_id,
+          item_index: 1,
+          item_count: 1,
+          payload: %{
+            "dashboard_context" => dashboard_context,
+            "job_id" => source_job.job_id,
+            "job_type" => "telemetry_historical_data_workflow",
+            "workflow_job_status" => "failed",
+            "source" => %{
+              "failure" => %{
+                "code" => "source_window_failed",
+                "retryable" => false,
+                "retry_blockers" => ["operator_correction_required"],
+                "recovery_action" => "correct_workflow_request"
+              }
+            }
+          }
+        }
+      )
+
+    correction_payload = %{
+      "dashboard_context" => dashboard_context,
+      "recovery_action" => "correct_workflow_request",
+      "correction_source" => "dashboard_correction_request",
+      "correction_source_event_type" => "backfill_failed",
+      "corrects_run_id" => source_run_id,
+      "corrects_event_id" => source_failed_event.backfill_lifecycle_event_id,
+      "corrects_job_id" => source_job.job_id
+    }
+
+    corrected_attrs =
+      historical_workflow_item_attrs(
+        org,
+        mission,
+        corrected_run_id,
+        point_id,
+        group_id,
+        1,
+        1,
+        dashboard_context: dashboard_context
+      )
+      |> Map.put(:payload, correction_payload)
+
+    _corrected_requested =
+      record_backfill_workflow_event!(org, mission, "requested", corrected_attrs)
+
+    _corrected_approved =
+      record_backfill_workflow_event!(org, mission, "approved", corrected_attrs)
+
+    _corrected_started = record_backfill_workflow_event!(org, mission, "started", corrected_attrs)
+
+    corrected_job =
+      enqueue_failed_historical_workflow_job!(
+        mission,
+        corrected_run_id,
+        Keyword.get(opts, :corrected_failure_reason, :replacement_retry_corrected_failed)
+      )
+
+    corrected_failed_event =
+      record_backfill_workflow_event!(
+        org,
+        mission,
+        "failed",
+        %{
+          run_id: corrected_run_id,
+          point_id: point_id,
+          request_group_id: group_id,
+          item_index: 1,
+          item_count: 1,
+          payload:
+            Map.merge(correction_payload, %{
+              "job_id" => corrected_job.job_id,
+              "job_type" => "telemetry_historical_data_workflow",
+              "workflow_job_status" => "failed",
+              "source" => %{
+                "failure" => %{
+                  "code" => "replacement_worker_failed",
+                  "retryable" => true,
+                  "retry_blockers" => [],
+                  "recovery_action" => "retry_job"
+                }
+              }
+            })
+        }
+      )
+
+    %{
+      group_id: group_id,
+      source_failed_event: source_failed_event,
+      corrected_run_id: corrected_run_id,
+      corrected_job: corrected_job,
+      corrected_failed_event: corrected_failed_event
+    }
+  end
+
   defp record_backfill_workflow_event!(org, mission, stage, attrs) do
     run_id = Map.fetch!(attrs, :run_id)
     point_id = Map.get(attrs, :point_id)
@@ -19927,29 +20662,130 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportSmokeTest do
     port
   end
 
+  defp run_dashboard_viewport_smoke(args, opts) when is_list(args) do
+    node = System.find_executable("node") || raise "node executable is required"
+    timeout = Keyword.get(opts, :timeout, @dashboard_viewport_smoke_timeout_ms)
+
+    port_opts =
+      [
+        :binary,
+        :exit_status,
+        :use_stdio,
+        :stderr_to_stdout,
+        {:args, args}
+      ]
+      |> maybe_put_port_cd(Keyword.get(opts, :cd))
+      |> maybe_put_port_env(Keyword.get(opts, :env))
+
+    port = Port.open({:spawn_executable, node}, port_opts)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    collect_dashboard_viewport_smoke(port, "", deadline, timeout)
+  end
+
+  defp maybe_put_port_cd(port_opts, cd) when is_binary(cd), do: [{:cd, cd} | port_opts]
+  defp maybe_put_port_cd(port_opts, _cd), do: port_opts
+
+  defp maybe_put_port_env(port_opts, env) when is_list(env), do: [{:env, env} | port_opts]
+  defp maybe_put_port_env(port_opts, _env), do: port_opts
+
+  defp collect_dashboard_viewport_smoke(port, output, deadline, timeout) do
+    receive do
+      {^port, {:data, data}} ->
+        collect_dashboard_viewport_smoke(port, output <> data, deadline, timeout)
+
+      {^port, {:exit_status, status}} ->
+        {output, status}
+    after
+      max(deadline - System.monotonic_time(:millisecond), 0) ->
+        timeout_output =
+          output <>
+            "\nDashboard viewport smoke timed out after #{timeout}ms; terminating node process.\n"
+
+        terminate_dashboard_viewport_smoke(port, timeout_output)
+    end
+  end
+
+  defp terminate_dashboard_viewport_smoke(port, output) do
+    kill_dashboard_viewport_smoke(port, "TERM")
+
+    receive do
+      {^port, {:data, data}} ->
+        terminate_dashboard_viewport_smoke(port, output <> data)
+
+      {^port, {:exit_status, status}} ->
+        {output, status}
+    after
+      @dashboard_viewport_smoke_shutdown_timeout_ms ->
+        kill_dashboard_viewport_smoke(port, "KILL")
+
+        receive do
+          {^port, {:data, data}} -> {output <> data, 124}
+          {^port, {:exit_status, status}} -> {output, status}
+        after
+          1_000 -> {output, 124}
+        end
+    end
+  end
+
+  defp kill_dashboard_viewport_smoke(port, signal) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, os_pid} when is_integer(os_pid) ->
+        System.cmd("kill", ["-#{signal}", Integer.to_string(os_pid)], stderr_to_stdout: true)
+
+      _ ->
+        :ok
+    end
+  end
+
   defp start_browser_endpoint!(port, sandbox_owner) do
     previous_owner = Application.get_env(:cadence_web, :browser_test_sandbox_owner)
     sandbox_owner_key = "browser-sandbox-#{System.unique_integer([:positive])}"
+    endpoint_id = {:dashboard_browser_endpoint, port}
 
     Application.put_env(:cadence_web, :browser_test_sandbox_owner, %{
       owner: sandbox_owner,
       key: sandbox_owner_key
     })
 
+    endpoint_pid =
+      start_supervised!(
+        Supervisor.child_spec(
+          {Bandit,
+           plug: {__MODULE__, sandbox_owner: sandbox_owner},
+           scheme: :http,
+           ip: {127, 0, 0, 1},
+           port: port},
+          id: endpoint_id,
+          restart: :temporary
+        )
+      )
+
     on_exit(fn ->
+      stop_browser_endpoint(endpoint_pid)
+      Process.sleep(50)
+
       case previous_owner do
         nil -> Application.delete_env(:cadence_web, :browser_test_sandbox_owner)
         owner -> Application.put_env(:cadence_web, :browser_test_sandbox_owner, owner)
       end
     end)
 
-    start_supervised!(
-      {Bandit,
-       plug: {__MODULE__, sandbox_owner: sandbox_owner},
-       scheme: :http,
-       ip: {127, 0, 0, 1},
-       port: port}
-    )
+    endpoint_pid
+  end
+
+  defp stop_browser_endpoint(pid) when is_pid(pid) do
+    ref = Process.monitor(pid)
+
+    if Process.alive?(pid) do
+      Process.exit(pid, :shutdown)
+    end
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      1_000 -> Process.demonitor(ref, [:flush])
+    end
   end
 
   def init(opts), do: opts

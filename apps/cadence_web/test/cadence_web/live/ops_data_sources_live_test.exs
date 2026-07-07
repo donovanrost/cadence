@@ -14,6 +14,7 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     DataBinding,
     DataSource,
     DataSources,
+    ManagedQuestDBProvisioningJobs,
     SourceCredentials,
     SourceHealth,
     SourceWatermarks
@@ -815,7 +816,12 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
                  payload: %{
                    connection_test_result: "failed",
                    connection_test_kind: "adapter_io",
-                   connection_test_message: "Adapter connection test failed."
+                   connection_test_message: "Adapter connection test failed.",
+                   probe_metadata: %{
+                     probe_diagnostic_kind: "connection_unreachable",
+                     probe_diagnostic_stage: "connection_test",
+                     probe_remediation: "check_questdb_endpoint"
+                   }
                  }
                },
                invalidate_runtime_cache?: false
@@ -978,6 +984,12 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
 
     assert has_element?(
              view,
+             ~s(#data-source-failed-connection-telemetry[data-source-probe-diagnostic-kind="connection_unreachable"][data-source-probe-diagnostic-stage="connection_test"][data-source-probe-remediation="check_questdb_endpoint"]),
+             "check_questdb_endpoint"
+           )
+
+    assert has_element?(
+             view,
              ~s(#dashboard-data-binding-events [data-event-type="registered"]),
              "rehearsal-telemetry-binding"
            )
@@ -986,6 +998,11 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              view,
              ~s(#dashboard-source-health-events [data-event-type="degraded"]),
              "source_probe_failed"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-source-health-events [data-event-probe-diagnostic-kind="connection_unreachable"][data-event-probe-diagnostic-stage="connection_test"][data-event-probe-remediation="check_questdb_endpoint"])
            )
 
     view
@@ -1023,6 +1040,156 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              dashboard_view,
              ~s(#ops-dashboard-show-page[data-runtime-last-invalidation-boundary="data_source_binding_changed"][data-runtime-last-invalidation-refresh-reason="runtime_invalidation"])
            )
+  end
+
+  test "renders managed TSDB deployment status on source rows" do
+    {conn, _user, org, mission} = signed_in_org_and_mission()
+
+    assert {:ok, _source} =
+             DataSources.persist_data_source(%DataSource{
+               data_source_id: "managed-mission-questdb",
+               owner: :cadence,
+               kind: :managed_tsdb,
+               adapter: Cadence.Dashboards.Sources.Telemetry,
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               isolation_level: :mission_isolated,
+               capabilities: %{latest?: true, range_scan?: true, watermarks?: true},
+               metadata: %{
+                 storage: :questdb,
+                 provisioning_mode: :managed_questdb,
+                 provisioning: %{
+                   provisioner: :managed_questdb,
+                   storage: :questdb,
+                   deployment_backend: :questdb,
+                   deployment_status: :ready,
+                   physical_boundary: :mission,
+                   applied_migration_count: 2,
+                   applied_migration_versions: ["20260630010101", "20260630020202"]
+                 }
+               }
+             })
+
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+
+    assert has_element?(
+             view,
+             ~s(#data-source-managed-mission-questdb[data-source-deployment-status="ready"][data-source-deployment-mode="managed_questdb"][data-source-deployment-backend="questdb"][data-source-deployment-boundary="mission"][data-source-deployment-remediation="probe_source_health"]),
+             "deploy fix"
+           )
+  end
+
+  test "renders managed TSDB deployment runs before sources exist" do
+    {conn, _user, org, mission} = signed_in_org_and_mission()
+    previous_config = Application.get_env(:cadence, :dashboard_managed_questdb_provisioning)
+
+    on_exit(fn ->
+      if is_nil(previous_config) do
+        Application.delete_env(:cadence, :dashboard_managed_questdb_provisioning)
+      else
+        Application.put_env(:cadence, :dashboard_managed_questdb_provisioning, previous_config)
+      end
+    end)
+
+    Application.put_env(:cadence, :dashboard_managed_questdb_provisioning,
+      provisioner: fn attrs, _opts ->
+        assert attrs["data_source_id"] == "failed-managed-questdb"
+        {:error, {:questdb_unavailable, endpoint: "redacted-endpoint-ref"}}
+      end
+    )
+
+    assert {:ok, failed_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(%{
+               data_source_id: "failed-managed-questdb",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               isolation_level: :mission_isolated,
+               endpoint_ref: "endpoint://cadence/failed-managed-questdb",
+               topology_ref: "topology://cadence/failed-managed-questdb",
+               provisioning_run_id: "failed-managed-questdb-run",
+               actor_id: "operator-1"
+             })
+
+    assert [claimed_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_job.job_id == failed_job.job_id
+    assert {:ok, _failed_job} = Cadence.Jobs.run_job(claimed_job.job_id)
+
+    assert {:ok, running_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(%{
+               data_source_id: "running-managed-questdb",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               isolation_level: :mission_isolated,
+               endpoint_ref: "endpoint://cadence/running-managed-questdb",
+               topology_ref: "topology://cadence/running-managed-questdb",
+               provisioning_run_id: "running-managed-questdb-run",
+               actor_id: "operator-1"
+             })
+
+    assert [claimed_running_job] = Cadence.Jobs.claim_jobs(1)
+    assert claimed_running_job.job_id == running_job.job_id
+
+    assert {:ok, queued_job} =
+             ManagedQuestDBProvisioningJobs.enqueue(%{
+               data_source_id: "queued-managed-questdb",
+               organization_id: org.organization_id,
+               mission_id: mission.mission_id,
+               isolation_level: :mission_isolated,
+               endpoint_ref: "endpoint://cadence/queued-managed-questdb",
+               topology_ref: "topology://cadence/queued-managed-questdb",
+               provisioning_run_id: "queued-managed-questdb-run",
+               actor_id: "operator-1"
+             })
+
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+
+    assert has_element?(
+             view,
+             ~s(#deployment-run-failed-managed-questdb-run[data-deployment-run-job-id="#{failed_job.job_id}"][data-deployment-run-data-source-id="failed-managed-questdb"][data-deployment-run-status="failed"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="questdb_unavailable"][data-deployment-run-remediation="inspect_provisioning_job_and_retry"]),
+             "failed-managed-questdb"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#deployment-run-queued-managed-questdb-run[data-deployment-run-job-id="#{queued_job.job_id}"][data-deployment-run-data-source-id="queued-managed-questdb"][data-deployment-run-status="queued"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="wait_for_provisioning_worker"]),
+             "queued-managed-questdb"
+           )
+
+    assert has_element?(
+             view,
+             ~s(#deployment-run-running-managed-questdb-run[data-deployment-run-job-id="#{running_job.job_id}"][data-deployment-run-data-source-id="running-managed-questdb"][data-deployment-run-status="provisioning"][data-deployment-run-backend="questdb"][data-deployment-run-boundary="mission"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="monitor_schema_migration_job"]),
+             "running-managed-questdb"
+           )
+
+    view
+    |> element("#retry-deployment-run-failed-managed-questdb-run")
+    |> render_click()
+
+    assert has_element?(
+             view,
+             ~s(#deployment-run-failed-managed-questdb-run[data-deployment-run-job-id="#{failed_job.job_id}"][data-deployment-run-status="queued"][data-deployment-run-failure-summary="none"][data-deployment-run-remediation="wait_for_provisioning_worker"])
+           )
+
+    refute has_element?(view, "#retry-deployment-run-failed-managed-questdb-run")
+
+    assert {:ok, retried_job} = Cadence.Jobs.fetch_job(failed_job.job_id)
+    assert retried_job.status == :queued
+    assert retried_job.failure_reason == nil
+
+    view
+    |> element("#requeue-deployment-run-running-managed-questdb-run")
+    |> render_click()
+
+    assert has_element?(
+             view,
+             ~s(#deployment-run-running-managed-questdb-run[data-deployment-run-job-id="#{running_job.job_id}"][data-deployment-run-status="queued"][data-deployment-run-failure-summary="managed_questdb_provisioning_requeued"][data-deployment-run-remediation="wait_for_provisioning_worker"])
+           )
+
+    refute has_element?(view, "#requeue-deployment-run-running-managed-questdb-run")
+
+    assert {:ok, requeued_job} = Cadence.Jobs.fetch_job(running_job.job_id)
+    assert requeued_job.status == :queued
+    assert requeued_job.failure_reason == %{"reason" => "managed_questdb_provisioning_requeued"}
   end
 
   test "registers a BYO mission data source and exposes it to binding changes" do
@@ -1203,6 +1370,17 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
              ~s(#data-source-customer-telemetry-questdb[data-source-probe-metadata*="source_capability_fingerprint=source-capability:"])
            )
 
+    assert {:ok, %DataSource{} = materialized_source} =
+             DataSources.fetch_data_source("customer-telemetry-questdb")
+
+    assert materialized_source.capabilities["native_decimation?"] == true
+    assert materialized_source.capabilities["watermarks?"] == true
+    assert materialized_source.metadata["adapter_capability_discovery?"] == true
+    assert materialized_source.metadata["adapter_capability_discovery_source"] == "probe"
+
+    assert materialized_source.metadata["adapter_capability_discovery_fingerprint"] =~
+             "source-capability:"
+
     assert [health_status] =
              SourceHealth.list_source_health_statuses(org.organization_id, mission.mission_id,
                data_source_id: "customer-telemetry-questdb"
@@ -1216,9 +1394,34 @@ defmodule CadenceWeb.OpsDataSourcesLiveTest do
     assert health_status.payload["connection_test_result"] == "succeeded"
     assert health_status.payload["connection_test_kind"] == "adapter_io"
 
+    assert source_events =
+             DataSources.list_data_source_events(org.organization_id, mission.mission_id,
+               data_source_id: "customer-telemetry-questdb"
+             )
+
+    assert materialized_event =
+             Enum.find(source_events, fn event ->
+               event.event_type == :changed and
+                 event.payload["adapter_capability_discovery?"] == true
+             end)
+
+    assert materialized_event.actor_id == user.user_id
+    assert materialized_event.payload["source"] == "data_source_probe"
+
+    assert materialized_event.payload["source_health_event_id"] ==
+             health_status.source_health_event_id
+
+    assert materialized_event.current_capabilities["native_decimation?"] == true
+
+    assert has_element?(
+             view,
+             ~s(#dashboard-data-source-events [data-event-type="changed"]),
+             "customer-telemetry-questdb"
+           )
+
     assert {:ok, _updated_source} =
              DataSources.persist_data_source(%DataSource{
-               source
+               materialized_source
                | capabilities: %{range_scan?: false}
              })
 

@@ -603,6 +603,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
              |> LazyHTML.attribute("data-workflow-action-retry-scope")
 
+    assert ["info"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
+             |> LazyHTML.attribute("data-workflow-action-kind")
+
     assert ["run-nonretryable"] =
              document
              |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
@@ -622,6 +627,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              document
              |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
              |> LazyHTML.attribute("data-workflow-action-queued-jobs")
+
+    assert ["retry-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-action-outcome")
+             |> LazyHTML.attribute("data-workflow-action-result-event-ids")
 
     assert ["dispatch_failed"] =
              document
@@ -704,6 +714,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelComponentsTest d
              document
              |> LazyHTML.query("#dashboard-data-link-action-outcome")
              |> LazyHTML.attribute("data-data-link-action-outcome-action")
+
+    assert ["retry-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-ids")
+
+    assert ["backfill-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
+
+    assert ["backfill-run-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-run-id")
 
     assert ["job-1"] =
              document

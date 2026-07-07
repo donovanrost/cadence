@@ -36,6 +36,7 @@ defmodule Cadence.Dashboards.DataLink do
     :comparison_finding,
     :telemetry_revision_decision_event,
     :telemetry_backfill_lifecycle_event,
+    :dashboard_lifecycle_event,
     :contact,
     :transport,
     :link,
@@ -53,7 +54,8 @@ defmodule Cadence.Dashboards.DataLink do
     :correction_transition,
     :late_data_policy_event,
     :stage_transition_event,
-    :follow_up_event
+    :follow_up_event,
+    :comparison_review_origin
   ]
 
   @type resolvable_target ::
@@ -82,6 +84,7 @@ defmodule Cadence.Dashboards.DataLink do
           | :comparison_finding
           | :telemetry_revision_decision_event
           | :telemetry_backfill_lifecycle_event
+          | :dashboard_lifecycle_event
           | :contact
           | :transport
           | :link
@@ -113,6 +116,7 @@ defmodule Cadence.Dashboards.DataLink do
           | :late_data_policy_event
           | :stage_transition_event
           | :follow_up_event
+          | :comparison_review_origin
 
   defstruct [
     :link_id,

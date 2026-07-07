@@ -88,12 +88,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenterTest do
                reason: "stage_recorded_job_queued",
                stage: "started",
                job_id: "job-1",
+               dashboard_context: %{
+                 dashboard_id: "dashboard-1",
+                 dashboard_version: "7",
+                 dashboard_time_mode: "replay_run",
+                 dashboard_replay_run_id: "replay-1",
+                 dashboard_data_view: "all_revisions",
+                 dashboard_limit_mode: "observed"
+               },
                message: "Historical data workflow started recorded and job job-1 queued."
              } =
                HistoricalWorkflowPresenter.action_outcome(
                  :stage_transition,
                  {:ok, {:ok, %{job_id: "job-1"}}},
-                 %{stage: "started"}
+                 %{
+                   stage: "started",
+                   dashboard_id: "dashboard-1",
+                   dashboard_version: 7,
+                   dashboard_time_mode: "replay_run",
+                   dashboard_replay_run_id: "replay-1",
+                   dashboard_data_view: "all_revisions",
+                   dashboard_limit_mode: "observed"
+                 }
                )
 
       assert %HistoricalWorkflowActionOutcome{
@@ -293,6 +309,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenterTest do
 
       assert %HistoricalWorkflowActionOutcome{
                reason: "retry_group_failed_jobs_failed",
+               request_group_id: "request-group-1",
                error:
                  {:historical_workflow_group_retry_blocked, "request-group-1",
                   "no_retryable_group_failures"},

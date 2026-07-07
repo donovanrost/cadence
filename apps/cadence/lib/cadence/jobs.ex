@@ -69,6 +69,26 @@ defmodule Cadence.Jobs do
     end
   end
 
+  @spec list_jobs(Job.job_type(), binary(), keyword()) :: [Job.t()]
+  def list_jobs(job_type, mission_id, opts \\ [])
+      when is_atom(job_type) and is_binary(mission_id) and is_list(opts) do
+    limit = Keyword.get(opts, :limit, 25)
+
+    BackgroundJobRow
+    |> where(
+      [background_job_row],
+      background_job_row.job_type == ^Atom.to_string(job_type) and
+        background_job_row.mission_id == ^mission_id
+    )
+    |> order_by([background_job_row],
+      desc: background_job_row.inserted_at,
+      desc: background_job_row.job_id
+    )
+    |> maybe_limit(limit)
+    |> Repo.all()
+    |> Enum.map(&BackgroundJobRow.to_domain/1)
+  end
+
   @spec retry_failed_job(binary()) :: {:ok, Job.t()} | {:error, term()}
   def retry_failed_job(job_id) when is_binary(job_id) do
     with {:ok, %Job{status: :failed} = job} <- fetch_job(job_id),
@@ -117,6 +137,9 @@ defmodule Cadence.Jobs do
   defp requeue_reason(reason) when is_binary(reason), do: %{"reason" => reason}
   defp requeue_reason(reason) when is_map(reason), do: reason
   defp requeue_reason(reason), do: %{"reason" => inspect(reason)}
+
+  defp maybe_limit(query, limit) when is_integer(limit) and limit > 0, do: limit(query, ^limit)
+  defp maybe_limit(query, _limit), do: query
 
   @spec claim_jobs(pos_integer()) :: [Job.t()]
   def claim_jobs(limit) when is_integer(limit) and limit > 0 do

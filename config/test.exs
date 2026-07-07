@@ -15,6 +15,7 @@ config :cadence, contact_scheduler: [enabled: false]
 config :cadence, contact_scheduler_global_safety: [enabled: false]
 config :cadence, command_dispatcher: [enabled: false]
 config :cadence, command_verifier_scheduler: [enabled: false]
+config :cadence, password_hash_iterations: 1_000
 config :cadence, ingress_archive: [module: Cadence.IngressArchive.Postgres]
 config :cadence, protocol_record_archive: [module: Cadence.Protocol.RecordArchive.Postgres]
 

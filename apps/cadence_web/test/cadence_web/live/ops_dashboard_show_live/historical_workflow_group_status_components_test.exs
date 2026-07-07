@@ -52,6 +52,11 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
              |> LazyHTML.query("[data-historical-workflow-group-recovery-failed-item]")
              |> LazyHTML.attribute("data-historical-workflow-group-recovery-failed-item")
 
+    assert ["HK voltage bus", "HK.current"] =
+             document
+             |> LazyHTML.query("[data-historical-workflow-group-recovery-failed-item]")
+             |> LazyHTML.attribute("data-historical-workflow-group-recovery-failed-item-label")
+
     assert ["1"] =
              document
              |> LazyHTML.query("#dashboard-historical-workflow-group-recovery-remaining-work")
@@ -169,7 +174,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowGroupStatusComponent
         "HK.current run-003 replacement run-003-corrected stage requested next approve",
       request_group_failed_items: "job-1,job-2",
       request_group_failed_item_events:
-        "label=HK.voltage run=run-002 event=failed-event-2 recovery=retry_job retryable=true; label=HK.current run=run-003 event=failed-event-3 recovery=correct_workflow_request retryable=false"
+        "label=HK%20voltage%20bus run=run-002 event=failed-event-2 recovery=retry_job retryable=true; label=HK.current run=run-003 event=failed-event-3 recovery=correct_workflow_request retryable=false"
     }
   end
 

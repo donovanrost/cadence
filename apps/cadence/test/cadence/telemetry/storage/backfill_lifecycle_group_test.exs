@@ -143,7 +143,10 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
       event("request-1", "run-1", "requested", 1, point_id: "HK.one"),
       event("request-2", "run-2", "requested", 2, point_id: "HK.two"),
       event("request-3", "run-3", "requested", 3, point_id: "HK.three"),
-      event("request-4", "run-4", "requested", 4, point_id: "HK.four", item_count: 4),
+      event("request-4", "run-4", "requested", 4,
+        point_id: "HK four amps",
+        item_count: 4
+      ),
       event("completed-1", "run-1", "completed", 1, point_id: "HK.one"),
       event("failed-2", "run-2", "failed", 2, point_id: "HK.two"),
       event("failed-3", "run-3", "failed", 3,
@@ -151,7 +154,7 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
         retryable: false
       ),
       event("failed-4", "run-4", "failed", 4,
-        point_id: "HK.four",
+        point_id: "HK four amps",
         retryable: true,
         recovery_action: "correct_workflow_request"
       ),
@@ -186,11 +189,11 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
     assert summary.correction_superseded == 0
     assert summary.retryable_failed == 1
     assert summary.nonretryable_failed == 1
-    assert summary.failed_items == "HK.two, HK.four"
+    assert summary.failed_items == "HK.two, HK four amps"
 
     assert summary.failed_item_events ==
              "label=HK.two run=run-2 event=failed-2 recovery=unknown retryable=true; " <>
-               "label=HK.four run=run-4 event=failed-4 recovery=correct_workflow_request retryable=false"
+               "label=HK%20four%20amps run=run-4 event=failed-4 recovery=correct_workflow_request retryable=false"
   end
 
   test "counts correction supersession only after the correction completes" do

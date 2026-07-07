@@ -709,32 +709,6 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables do
         )
       end
     )
-    |> maybe_add_family_revision(
-      :transport_execution_state,
-      Enum.any?(observables, &(&1 in @transport_execution_observable_ids)),
-      fn ->
-        transport_execution_state_revision(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
-      end
-    )
-    |> maybe_add_family_revision(
-      :transport_execution_state,
-      Enum.any?(observables, &(&1 in @transport_execution_observable_ids)),
-      fn ->
-        transport_execution_state_revision(
-          request,
-          source_binding,
-          organization_id,
-          mission_id,
-          opts
-        )
-      end
-    )
   end
 
   defp operational_state_history_revision_parts(

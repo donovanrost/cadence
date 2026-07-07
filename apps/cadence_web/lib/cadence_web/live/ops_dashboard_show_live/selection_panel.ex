@@ -350,7 +350,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.SelectionPanel do
               :source_watermark_event,
               :comparison_finding,
               :telemetry_revision_decision_event,
-              :telemetry_backfill_lifecycle_event
+              :telemetry_backfill_lifecycle_event,
+              :dashboard_lifecycle_event
             ],
        do: true
 

@@ -26,6 +26,15 @@ defmodule CadenceWeb.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        "test.browser": :test,
+        "test.browser.full": :test
+      ]
+    ]
+  end
+
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
@@ -61,6 +70,12 @@ defmodule CadenceWeb.MixProject do
         "tailwind cadence_web --minify",
         "esbuild cadence_web --minify",
         "phx.digest"
+      ],
+      "test.browser": [
+        "test --include browser_smoke --only browser_smoke test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+      ],
+      "test.browser.full": [
+        "test --include browser --include browser_smoke test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
       ]
     ]
   end

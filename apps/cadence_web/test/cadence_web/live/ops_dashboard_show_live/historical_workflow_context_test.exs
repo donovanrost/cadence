@@ -35,7 +35,17 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContextTest do
           %{label: "Request item", value: "2/3"},
           %{label: "Workflow job", value: "job-1"},
           %{label: "Workflow job status", value: "failed"},
+          %{label: "Workflow job started", value: "2026-06-22T10:01:00Z"},
+          %{label: "Workflow job completed", value: "2026-06-22T10:04:00Z"},
           %{label: "Workflow retryable", value: "true"},
+          %{label: "Stale replacement job started", value: "2026-06-22T10:01:00Z"},
+          %{label: "Stale replacement job age seconds", value: "1200"},
+          %{label: "Stale replacement stale after seconds", value: "900"},
+          %{label: "Missing replacement run", value: "run-1-corrected"},
+          %{
+            label: "Missing replacement expected job type",
+            value: "telemetry_historical_data_workflow"
+          },
           %{label: "Request group progress", value: "1/3"},
           %{label: "Request group job progress", value: "queued 2, failed 1"},
           %{
@@ -91,7 +101,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContextTest do
     assert context.request_item_count == 3
     assert context.job_id == "job-1"
     assert context.job_status == "failed"
+    assert context.job_started_at == "2026-06-22T10:01:00Z"
+    assert context.job_completed_at == "2026-06-22T10:04:00Z"
     assert context.retryable == "true"
+    assert context.stale_replacement_job_started_at == "2026-06-22T10:01:00Z"
+    assert context.stale_replacement_job_age_seconds == "1200"
+    assert context.stale_replacement_stale_after_seconds == "900"
+    assert context.missing_replacement_run_id == "run-1-corrected"
+    assert context.missing_replacement_expected_job_type == "telemetry_historical_data_workflow"
     assert context.request_group_progress == "1/3"
     assert context.request_group_job_progress == "queued 2, failed 1"
 

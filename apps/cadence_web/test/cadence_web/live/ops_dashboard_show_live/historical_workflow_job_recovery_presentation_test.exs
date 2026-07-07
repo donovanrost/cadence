@@ -89,9 +89,56 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
       )
 
     assert presentation.next_action == "monitor_job"
+    assert presentation.active_job_state == "active"
 
     assert presentation.guidance ==
              "The workflow job is not terminal yet; monitor the worker outcome before recording recovery."
+  end
+
+  test "build derives stale inspection guidance for active jobs beyond stale threshold" do
+    presentation =
+      HistoricalWorkflowJobRecoveryPresentation.build(
+        %{
+          job_status: "running",
+          job_started_at: "2026-06-22T10:01:00Z",
+          stale_replacement_job_age_seconds: "1200",
+          stale_replacement_stale_after_seconds: "900"
+        },
+        %{
+          job_retry_action: %{eligible?: false},
+          correction_request_action: %{eligible?: false}
+        }
+      )
+
+    assert presentation.next_action == "inspect_stale_job"
+    assert presentation.active_job_state == "stale"
+    assert presentation.active_job_started_at == "2026-06-22T10:01:00Z"
+    assert presentation.active_job_age_seconds == "1200"
+    assert presentation.active_job_stale_after_seconds == "900"
+
+    assert presentation.guidance ==
+             "The workflow job is active but has crossed the stale threshold; inspect the job evidence before requeueing or recording recovery."
+  end
+
+  test "build derives missing-job inspection guidance when group and replacement run evidence exists" do
+    presentation =
+      HistoricalWorkflowJobRecoveryPresentation.build(
+        %{
+          job_status: "missing",
+          request_group_id: "group-1",
+          missing_replacement_run_id: "run-1-corrected"
+        },
+        %{
+          job_retry_action: %{eligible?: false},
+          correction_request_action: %{eligible?: false}
+        }
+      )
+
+    assert presentation.next_action == "inspect_missing_job"
+    assert presentation.active_job_state == "missing"
+
+    assert presentation.guidance ==
+             "The replacement workflow job is missing; inspect the expected job evidence before advancing recovery."
   end
 
   test "build derives inspection guidance for completed jobs" do
@@ -105,6 +152,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
       )
 
     assert presentation.next_action == "inspect_results"
+    assert presentation.active_job_state == "completed"
 
     assert presentation.guidance ==
              "The workflow job completed; inspect the resulting lifecycle event and data changes."

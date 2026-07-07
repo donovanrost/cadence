@@ -1,7 +1,12 @@
 defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Dashboards.{DataSource, DataSources, ManagedQuestDBProvisioning}
+  alias Cadence.Dashboards.{
+    DataSource,
+    DataSources,
+    ManagedQuestDBProvisioning,
+    TSDBDeploymentStatus
+  }
 
   @organization_id "org-managed-questdb-provisioning"
   @mission_id "mission-managed-questdb-provisioning"
@@ -32,6 +37,9 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
     assert plan.data_source.metadata.endpoint_ref == "endpoint://cadence/mission-questdb"
     assert plan.data_source.metadata.topology_ref == "topology://cadence/mission-questdb"
     assert plan.isolation_profile.physical_boundary == :mission
+    assert plan.provisioning.deployment_status == :planned
+    assert plan.provisioning.deployment_backend == :questdb
+    assert TSDBDeploymentStatus.from_data_source(plan.data_source).status == :planned
     assert plan.connection_config[:http_endpoint] == "http://mission-questdb:9000"
     assert plan.connection_config[:secret_material?]
     refute Keyword.has_key?(plan.connection_config, :password)
@@ -58,14 +66,25 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
 
     assert result.applied_migrations == [migration]
     assert result.isolation_profile.physical_boundary == :mission
+    assert result.provisioning.deployment_status == :ready
     assert result.provisioning.applied_migration_versions == ["20260630010101"]
 
     assert {:ok, persisted} = DataSources.fetch_data_source(@data_source_id)
     assert persisted.data_source_id == @data_source_id
     assert persisted.metadata["storage"] == "questdb"
     assert persisted.metadata["provisioning"]["provisioner"] == "managed_questdb"
+    assert persisted.metadata["provisioning"]["deployment_status"] == "ready"
+    assert persisted.metadata["provisioning"]["deployment_backend"] == "questdb"
     assert persisted.metadata["provisioning"]["applied_migration_count"] == 1
     refute inspect(persisted) =~ "mission-questdb:9000"
+
+    assert %{
+             status: :ready,
+             mode: :managed_questdb,
+             backend: :questdb,
+             physical_boundary: :mission,
+             remediation: "probe_source_health"
+           } = TSDBDeploymentStatus.from_data_source(persisted)
 
     assert [event] =
              DataSources.list_data_source_events(@organization_id, @mission_id,
@@ -77,6 +96,7 @@ defmodule Cadence.Dashboards.ManagedQuestDBProvisioningTest do
     assert event.occurred_at == ~U[2026-06-30 15:00:00.000000Z]
     assert event.payload["kind"] == "managed_questdb_provisioned"
     assert event.payload["physical_isolation"]["physical_boundary"] == "mission"
+    assert event.payload["provisioning"]["deployment_status"] == "ready"
     assert event.payload["provisioning"]["applied_migration_versions"] == ["20260630010101"]
     refute inspect(event.payload) =~ "mission-questdb:9000"
   end

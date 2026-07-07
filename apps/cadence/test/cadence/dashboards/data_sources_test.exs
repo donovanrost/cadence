@@ -389,6 +389,10 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert metadata["questdb_schema_probe?"] == true
     assert metadata["questdb_schema_table"] == "telemetry_observations"
     assert metadata["questdb_schema_missing_columns"] == ["observation_identity_id"]
+    assert metadata["probe_diagnostic_kind"] == "schema_mismatch"
+    assert metadata["probe_diagnostic_stage"] == "schema_validation"
+    assert metadata["probe_remediation"] == "run_questdb_schema_migration"
+    assert metadata["probe_diagnostic_detail"] =~ "observation_identity_id"
     assert metadata["adapter_error"] =~ "observation_identity_id"
     assert metadata["adapter_reported_capabilities"]["bounded_history?"] == false
     assert metadata["adapter_reported_capabilities"]["native_decimation?"] == false
@@ -429,6 +433,9 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert degraded_event.payload["connection_test_kind"] == "adapter_io"
     assert degraded_event.payload["connection_test_message"] =~ "failed"
     assert metadata["questdb_schema_probe?"] == false
+    assert metadata["probe_diagnostic_kind"] == "schema_unavailable"
+    assert metadata["probe_diagnostic_stage"] == "schema_query"
+    assert metadata["probe_remediation"] == "check_questdb_schema_access"
     assert metadata["adapter_reported_capabilities"]["range_scan?"] == false
     assert metadata["source_reported_capability_mismatch?"] == true
     assert metadata["source_reported_supports_watermarks?"] == false
@@ -472,10 +479,69 @@ defmodule Cadence.Dashboards.DataSourcesTest do
     assert metadata["adapter"] == "telemetry"
     assert metadata["storage"] == "questdb"
     assert metadata["data_source_id"] == "questdb-connection-failed"
+    assert metadata["probe_diagnostic_kind"] == "connection_unreachable"
+    assert metadata["probe_diagnostic_stage"] == "connection_test"
+    assert metadata["probe_remediation"] == "check_questdb_endpoint"
     assert metadata["adapter_error"] =~ "econnrefused"
     assert metadata["source_supports_watermarks?"] == true
     assert metadata["source_capabilities"]["data_source_capabilities"]["watermarks?"] == true
     refute Map.has_key?(metadata, "questdb_schema_probe?")
+  end
+
+  test "QuestDB telemetry probes classify authentication failures separately" do
+    data_source = %DataSource{
+      data_source_id: "questdb-auth-failed",
+      owner: :customer,
+      kind: :byo_tsdb,
+      adapter: Cadence.Dashboards.Sources.Telemetry,
+      organization_id: "org-dash-source",
+      mission_id: "mission-dash-source",
+      isolation_level: :customer_owned,
+      credentials_ref: "secret://org-dash-source/dashboard/customer-auth-failed",
+      capabilities: %{range_scan?: true, watermarks?: true},
+      metadata: %{storage: :questdb}
+    }
+
+    assert {:ok, _reference, _event} =
+             SourceCredentials.register_reference(%{
+               credentials_ref: data_source.credentials_ref,
+               organization_id: data_source.organization_id,
+               mission_id: data_source.mission_id,
+               data_source_id: data_source.data_source_id,
+               owner: :customer,
+               kind: :byo_tsdb_connection,
+               provider: "questdb"
+             })
+
+    assert {:ok, _persisted} = DataSources.persist_data_source(data_source)
+
+    assert {:ok, unavailable_event, _unavailable_status} =
+             DataSources.probe_data_source(
+               "questdb-auth-failed",
+               %{observed_at: ~U[2026-06-21 22:23:00Z]},
+               actor_id: "operator-questdb",
+               questdb_probe?: true,
+               credential_material_resolver: fn _credential, _opts ->
+                 {:ok,
+                  %{
+                    http_endpoint: "https://customer-questdb.example.test",
+                    bearer_token: "secret-token"
+                  }}
+               end,
+               questdb_exec_fun: questdb_probe_exec_fun(self(), :auth_error),
+               invalidate_runtime_cache?: false
+             )
+
+    assert_receive {:questdb_probe_sql, "SELECT 1"}
+
+    metadata = unavailable_event.payload["probe_metadata"]
+    assert unavailable_event.source_health == :unavailable
+    assert unavailable_event.reason == :source_connection_failed
+    assert metadata["probe_diagnostic_kind"] == "authentication_failed"
+    assert metadata["probe_diagnostic_stage"] == "connection_test"
+    assert metadata["probe_remediation"] == "check_credential_material"
+    assert metadata["adapter_error"] =~ "http_error"
+    refute inspect(unavailable_event) =~ "secret-token"
   end
 
   test "adapter probes can degrade data source health" do
@@ -534,6 +600,7 @@ defmodule Cadence.Dashboards.DataSourcesTest do
                %{observed_at: ~U[2026-06-21 21:20:00Z]},
                actor_id: "operator-8",
                adapter_reported_capabilities: %{range_scan?: false, watermarks?: true},
+               materialize_adapter_capabilities?: true,
                test_pid: self(),
                invalidate_runtime_cache?: false
              )
@@ -557,6 +624,43 @@ defmodule Cadence.Dashboards.DataSourcesTest do
 
     assert healthy_status.payload["probe_metadata"]["source_reported_capability_mismatch?"] ==
              true
+
+    assert {:ok, materialized_source} =
+             DataSources.fetch_data_source("adapter-reported-capability-source")
+
+    assert materialized_source.capabilities["range_scan?"] == false
+    assert materialized_source.capabilities["watermarks?"] == true
+    assert materialized_source.metadata["adapter_capability_discovery?"] == true
+    assert materialized_source.metadata["adapter_capability_discovery_source"] == "probe"
+    assert materialized_source.metadata["adapter_capability_discovery_health"] == "healthy"
+
+    assert materialized_source.metadata["adapter_capability_discovery_reason"] ==
+             "source_probe_succeeded"
+
+    assert materialized_source.metadata["adapter_capability_discovery_fingerprint"] ==
+             reported_capabilities["capability_fingerprint"]
+
+    events =
+      DataSources.list_data_source_events("org-dash-source", "mission-dash-source",
+        data_source_id: "adapter-reported-capability-source"
+      )
+
+    assert registered_event = Enum.find(events, &(&1.event_type == :registered))
+    assert changed_event = Enum.find(events, &(&1.event_type == :changed))
+
+    assert registered_event.event_type == :registered
+    assert changed_event.event_type == :changed
+    assert changed_event.actor_id == "operator-8"
+    assert changed_event.previous_capabilities["range_scan?"] == true
+    assert changed_event.previous_capabilities["watermarks?"] == false
+    assert changed_event.current_capabilities["range_scan?"] == false
+    assert changed_event.current_capabilities["watermarks?"] == true
+    assert changed_event.payload["adapter_capability_discovery?"] == true
+    assert changed_event.payload["source_health_event_id"] == healthy_event.source_health_event_id
+    assert changed_event.payload["source_health"] == "healthy"
+    assert changed_event.payload["reason"] == "source_probe_succeeded"
+    assert changed_event.payload["adapter_reported_capabilities"]["range_scan?"] == false
+    assert changed_event.payload["adapter_reported_capabilities"]["watermarks?"] == true
   end
 
   test "persists customer-owned BYO data sources with indirect credential refs" do
@@ -2972,6 +3076,9 @@ defmodule Cadence.Dashboards.DataSourcesTest do
   end
 
   defp questdb_probe_response("SELECT 1", :connection_error), do: {:error, :econnrefused}
+
+  defp questdb_probe_response("SELECT 1", :auth_error),
+    do: {:error, {:http_error, 403, %{"error" => "forbidden", "token" => "secret-token"}}}
 
   defp questdb_probe_response("SELECT 1", _mode),
     do: {:ok, %{"columns" => [%{"name" => "1"}], "dataset" => [[1]]}}

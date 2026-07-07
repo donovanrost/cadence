@@ -95,7 +95,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStatusNavigationPres
       HistoricalWorkflowStatusNavigationPresentation.group_failed_item_handoffs(
         %{
           request_group_failed_item_events:
-            "label=HK.voltage run=run-002 event=failed-event-2 recovery=retry_job retryable=true; " <>
+            "label=HK%20voltage%20bus run=run-002 event=failed-event-2 recovery=retry_job retryable=true; " <>
               "label=HK.current run=run-003 event=failed-event-3 recovery=correct_workflow_request retryable=false; " <>
               "label=missing-event run=run-004"
         },
@@ -104,7 +104,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStatusNavigationPres
 
     assert Enum.map(handoffs, &Map.drop(&1, [:href])) == [
              %{
-               label: "HK.voltage",
+               label: "HK voltage bus",
                run_id: "run-002",
                event_id: "failed-event-2",
                recovery_action: "retry_job",

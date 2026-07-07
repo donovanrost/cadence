@@ -181,6 +181,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponentsTest do
              |> LazyHTML.query("#dashboard-data-link-action-outcome")
              |> LazyHTML.attribute("data-data-link-action-outcome-action")
 
+    assert ["mark_conflict"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-decision")
+
+    assert ["compare"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-limit-mode")
+
+    assert ["decision-event-applied"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-id")
+
+    assert ["decision-event-applied"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
+
+    assert ["identity-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-observation-identity-id")
+
     assert %{
              "decision" => "mark_conflict",
              "dashboard_limit_mode" => "compare",
@@ -587,6 +612,46 @@ defmodule CadenceWeb.OpsDashboardShowLive.FormComponentsTest do
              document
              |> LazyHTML.query("#dashboard-data-link-action-outcome")
              |> LazyHTML.attribute("data-data-link-action-outcome-action")
+
+    assert ["accept"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-decision")
+
+    assert ["event_only"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-execution-mode")
+
+    assert ["replay_run"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-time-mode")
+
+    assert ["replay-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-replay-run-id")
+
+    assert ["compare"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-dashboard-limit-mode")
+
+    assert ["late-data-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-result-event-id")
+
+    assert ["late-data-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-event-id")
+
+    assert ["backfill-run-1"] =
+             document
+             |> LazyHTML.query("#dashboard-data-link-action-outcome")
+             |> LazyHTML.attribute("data-data-link-action-outcome-target-run-id")
 
     assert %{
              "decision" => "accept",

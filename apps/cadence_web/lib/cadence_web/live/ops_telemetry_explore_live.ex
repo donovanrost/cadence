@@ -123,7 +123,7 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
     ~H"""
     <div
       id="ops-telemetry-explore-page"
-      class="flex-1 overflow-y-auto"
+      class="flex flex-1 min-h-0"
       data-explore-source-state={@source_context.state}
       data-explore-data-source={@source_context.data_source_id || ""}
       data-explore-source-binding={@source_context.source_binding_id || ""}
@@ -132,7 +132,8 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
       data-explore-selected-sample-state={@selected_sample_state}
       data-explore-selected-sample-id={@explore_context.sample_id || ""}
     >
-      <div class="mx-auto max-w-7xl px-6 py-8">
+      <div class="flex-1 min-w-0 overflow-y-auto">
+        <div class="mx-auto max-w-7xl px-6 py-8">
         <div class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div class="flex flex-wrap items-center gap-2">
@@ -557,7 +558,9 @@ defmodule CadenceWeb.OpsTelemetryExploreLive do
             </div>
           </section>
         </div>
+        </div>
       </div>
+      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
     """
   end

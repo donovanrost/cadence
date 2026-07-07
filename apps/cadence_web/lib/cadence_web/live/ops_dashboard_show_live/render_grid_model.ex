@@ -4,7 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderGridModel do
   alias CadenceWeb.OpsDashboardShowLive.RenderShellAssigns
 
   def content_attrs do
-    %{class: "flex-1 min-h-0 overflow-y-auto"}
+    %{class: "flex-1 min-w-0 min-h-0 overflow-y-auto"}
   end
 
   def grid_props(assigns) when is_map(assigns) do

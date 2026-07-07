@@ -71,8 +71,9 @@ defmodule CadenceWeb.OpsDashboardListLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="ops-dashboards-page" class="flex-1 overflow-y-auto">
-      <div class="mx-auto max-w-3xl px-6 pt-16">
+    <div id="ops-dashboards-page" class="flex flex-1 min-h-0">
+      <div class="flex-1 min-w-0 overflow-y-auto">
+        <div class="mx-auto max-w-3xl px-6 pt-16">
         <h1 class="hud-label">Dashboards</h1>
         <p class="mt-1 text-sm text-base-content/70">
           Mission-shared telemetry screens. Widgets bind to dictionary points, so limit colors
@@ -169,7 +170,9 @@ defmodule CadenceWeb.OpsDashboardListLive do
             </div>
           </div>
         </div>
+        </div>
       </div>
+      <.mission_context_rail fleet_health={@fleet_health} />
     </div>
     """
   end

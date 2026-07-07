@@ -92,6 +92,191 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobStatusComponentsT
              |> LazyHTML.attribute("id")
   end
 
+  test "job_status renders stale active-job guidance metadata" do
+    html =
+      render_component(&HistoricalWorkflowJobStatusComponents.job_status/1,
+        workflow_context:
+          Map.merge(workflow_context(), %{
+            job_status: "running",
+            run_id: "run-stale-replacement",
+            job_started_at: "2026-06-22T10:01:00Z",
+            stale_replacement_job_age_seconds: "1200",
+            stale_replacement_stale_after_seconds: "900"
+          }),
+        workflow_controls: %{
+          workflow_controls()
+          | job_retryable: false,
+            job_retry_action: %{eligible?: false},
+            correction_request_action: %{eligible?: false}
+        },
+        dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["inspect_stale_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-status")
+             |> LazyHTML.attribute("data-historical-workflow-job-next-action")
+
+    assert ["stale"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+             |> LazyHTML.attribute("data-historical-workflow-job-guidance-active-state")
+
+    assert ["2026-06-22T10:01:00Z"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+             |> LazyHTML.attribute("data-historical-workflow-job-guidance-started-at")
+
+    assert ["1200"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+             |> LazyHTML.attribute("data-historical-workflow-job-guidance-age-seconds")
+
+    assert ["900"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+             |> LazyHTML.attribute("data-historical-workflow-job-guidance-stale-after-seconds")
+
+    assert document
+           |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+           |> LazyHTML.text()
+           |> String.contains?("crossed the stale threshold")
+
+    assert ["job_status"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-scope")
+
+    assert ["job-1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-job-id")
+
+    assert ["source-event-1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-event-id")
+
+    assert ["inspect_stale_historical_workflow_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-inspect")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["inspect_stale_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-inspect")
+             |> LazyHTML.attribute("data-workflow-action-id")
+
+    assert ["run-stale-replacement"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-inspect")
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
+
+    assert ["run-stale-replacement"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-inspect")
+             |> LazyHTML.attribute("data-workflow-action-replacement-run")
+
+    assert ["requeue_stale_historical_workflow_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-requeue")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["requeue_stale_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-requeue")
+             |> LazyHTML.attribute("data-workflow-action-id")
+
+    assert ["run-stale-replacement"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-requeue")
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
+
+    assert ["run-stale-replacement"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-stale-job-requeue")
+             |> LazyHTML.attribute("data-workflow-action-replacement-run")
+  end
+
+  test "job_status renders missing replacement job inspection action metadata" do
+    html =
+      render_component(&HistoricalWorkflowJobStatusComponents.job_status/1,
+        workflow_context:
+          Map.merge(workflow_context(), %{
+            job_status: "missing",
+            request_group_id: "group-1",
+            missing_replacement_run_id: "run-1-corrected",
+            missing_replacement_expected_job_type: "telemetry_historical_data_workflow"
+          }),
+        workflow_controls: %{
+          workflow_controls()
+          | job_retryable: false,
+            job_retry_action: %{eligible?: false},
+            correction_request_action: %{eligible?: false}
+        },
+        dashboard_current_path: "/missions/mission-1/ops/dashboards/dashboard-1"
+      )
+
+    document = LazyHTML.from_fragment(html)
+
+    assert ["inspect_missing_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-status")
+             |> LazyHTML.attribute("data-historical-workflow-job-next-action")
+
+    assert ["missing"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+             |> LazyHTML.attribute("data-historical-workflow-job-guidance-active-state")
+
+    assert document
+           |> LazyHTML.query("#dashboard-historical-workflow-job-guidance")
+           |> LazyHTML.text()
+           |> String.contains?("replacement workflow job is missing")
+
+    assert ["job_status"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-scope")
+
+    assert ["group-1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-request-group-id")
+
+    assert ["run-1-corrected"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-replacement-run")
+
+    assert ["telemetry_historical_data_workflow"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-actions")
+             |> LazyHTML.attribute("data-workflow-action-expected-job-type")
+
+    assert ["inspect_missing_historical_workflow_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-inspect")
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["group-1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-inspect")
+             |> LazyHTML.attribute("phx-value-request-group-id")
+
+    assert ["run-1-corrected"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-inspect")
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
+
+    assert ["inspect_missing_replacement_job"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-missing-job-inspect")
+             |> LazyHTML.attribute("data-workflow-action-id")
+  end
+
   defp workflow_context do
     %{
       event_id: "source-event-1",

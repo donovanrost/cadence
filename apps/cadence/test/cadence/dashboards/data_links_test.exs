@@ -20,6 +20,9 @@ defmodule Cadence.Dashboards.DataLinksTest do
     assert DataLink.parse_resolvable_target("source_endpoint") == :source_endpoint
     assert DataLink.parse_resolvable_target("ground-station") == :ground_station
 
+    assert DataLink.parse_resolvable_target("dashboard-lifecycle-event") ==
+             :dashboard_lifecycle_event
+
     refute DataLink.parse_resolvable_target("command")
     refute DataLink.parse_resolvable_target(:command)
     refute DataLink.parse_resolvable_target("data_source")
@@ -33,7 +36,7 @@ defmodule Cadence.Dashboards.DataLinksTest do
              target: :limit_event,
              target_id: "limit-1",
              route: nil,
-             relationship_kind: :source_event,
+             relationship_kind: :comparison_review_origin,
              context: %{"point_id" => "HK.counter"},
              presentation: :new_tab,
              source: :warning
@@ -43,7 +46,7 @@ defmodule Cadence.Dashboards.DataLinksTest do
                "label" => "Limit event",
                "target" => "limit-event",
                "target_id" => "limit-1",
-               "relationship_kind" => "source-event",
+               "relationship_kind" => "comparison-review-origin",
                "context" => %{"point_id" => "HK.counter"},
                "presentation" => "new_tab",
                "source" => "warning"

@@ -17,6 +17,7 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     DataLink,
     DataLinkInspector,
     DataSources,
+    LifecycleEvent,
     TelemetryActions
   }
 
@@ -199,6 +200,13 @@ defmodule Cadence.Dashboards.DataLinkResolver do
          mission_id
        ),
        do: resolve_telemetry_backfill_lifecycle_event(link, organization_id, mission_id)
+
+  defp resolve_scoped_link(
+         %DataLink{target: :dashboard_lifecycle_event} = link,
+         organization_id,
+         mission_id
+       ),
+       do: resolve_dashboard_lifecycle_event(link, organization_id, mission_id)
 
   defp resolve_scoped_link(%DataLink{target: :contact} = link, organization_id, mission_id),
     do: resolve_contact(link, organization_id, mission_id)
@@ -726,6 +734,29 @@ defmodule Cadence.Dashboards.DataLinkResolver do
              organization_id,
              mission_id
            )
+         )}
+    end
+  end
+
+  defp resolve_dashboard_lifecycle_event(%DataLink{} = link, organization_id, mission_id) do
+    case Cadence.Dashboards.fetch_lifecycle_event(organization_id, mission_id, link.target_id) do
+      {:ok, %LifecycleEvent{} = event} ->
+        {:ok,
+         inspector(
+           link,
+           :resolved,
+           nil,
+           dashboard_lifecycle_event_rows(event),
+           dashboard_lifecycle_event_related_links(link, event)
+         )}
+
+      {:error, :not_found} ->
+        {:error,
+         inspector(
+           link,
+           :missing,
+           "Dashboard lifecycle event was not found in this mission.",
+           []
          )}
     end
   end
@@ -1309,6 +1340,17 @@ defmodule Cadence.Dashboards.DataLinkResolver do
         "Correction requested by",
         correction_workflow_value(event.evidence_ref, :requested_by)
       ),
+      row("Bulk workflow", bulk_workflow_item_value(event.evidence_ref, :workflow_id)),
+      row("Bulk workflow item", bulk_workflow_item_value(event.evidence_ref, :item_index)),
+      row("Bulk workflow item count", bulk_workflow_item_value(event.evidence_ref, :item_count)),
+      row(
+        "Bulk workflow observation identity",
+        bulk_workflow_item_value(event.evidence_ref, :observation_identity_id)
+      ),
+      row(
+        "Bulk workflow selection",
+        bulk_workflow_item_value(event.evidence_ref, :selection_kind)
+      ),
       row("Comparison finding", comparison_finding_value(event.evidence_ref, :placement_id)),
       row("Comparison state", comparison_finding_value(event.evidence_ref, :state)),
       row("Comparison delta", comparison_finding_value(event.evidence_ref, :delta)),
@@ -1451,6 +1493,37 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     |> Kernel.++(telemetry_backfill_lifecycle_correction_rows(event))
     |> Kernel.++(telemetry_backfill_lifecycle_late_data_policy_rows(event))
     |> Kernel.++(telemetry_backfill_lifecycle_job_rows(event))
+  end
+
+  defp dashboard_lifecycle_event_rows(%LifecycleEvent{} = event) do
+    [
+      row("Dashboard lifecycle event", event.dashboard_lifecycle_event_id),
+      row("Dashboard", event.dashboard_id),
+      row("Event type", event.event_type),
+      row("Dashboard version", event.dashboard_version),
+      row("Previous lifecycle state", event.previous_lifecycle_state),
+      row("Current lifecycle state", event.current_lifecycle_state),
+      row("Previous published version", event.previous_published_version),
+      row("Current published version", event.current_published_version),
+      row("Actor", event.actor_id),
+      row("Occurred", event.occurred_at),
+      row("Payload schema", state_value(event.payload, :schema)),
+      row("Comparison review kind", comparison_review_request_kind(event.payload)),
+      row("Comparison review open count", state_value(event.payload, :open_count)),
+      row("Comparison review placements", state_value(event.payload, :open_placement_ids)),
+      row(
+        "Comparison review source request",
+        state_value(event.payload, :source_request_event_id)
+      ),
+      row(
+        "Comparison review source actionable count",
+        state_value(event.payload, :source_actionable_count)
+      ),
+      row(
+        "Comparison review source skipped count",
+        state_value(event.payload, :source_skipped_count)
+      )
+    ]
   end
 
   defp telemetry_backfill_lifecycle_group_rows(event, organization_id, mission_id) do
@@ -1948,8 +2021,16 @@ defmodule Cadence.Dashboards.DataLinkResolver do
         backfill_lifecycle_payload_value(event.payload, :policy_decision)
       ),
       row(
+        "Late data execution mode",
+        backfill_lifecycle_payload_value(event.payload, :execution_mode)
+      ),
+      row(
         "Late data source event",
         backfill_lifecycle_payload_value(event.payload, :source_event_id)
+      ),
+      row(
+        "Late data source event type",
+        backfill_lifecycle_payload_value(event.payload, :source_event_type)
       ),
       row(
         "Late data selected samples",
@@ -2019,6 +2100,12 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     |> state_value(key)
   end
 
+  defp bulk_workflow_item_value(evidence_ref, key) do
+    evidence_ref
+    |> state_value(:bulk_workflow_item)
+    |> state_value(key)
+  end
+
   defp backfill_lifecycle_request_item(payload) do
     case {
       backfill_lifecycle_payload_value(payload, :request_item_index),
@@ -2076,6 +2163,10 @@ defmodule Cadence.Dashboards.DataLinkResolver do
     payload
     |> state_value(:comparison_review_origin)
     |> state_value(key)
+  end
+
+  defp comparison_review_request_kind(payload) do
+    state_value(payload, :review_kind) || state_value(payload, :request_kind)
   end
 
   defp scheduled_contact_rows(%ScheduledContact{} = contact) do
@@ -2912,8 +3003,24 @@ defmodule Cadence.Dashboards.DataLinkResolver do
         :telemetry_sample,
         state_value(event.new_state, :canonical_sample_id),
         "New canonical sample"
-      )
+      ),
+      telemetry_revision_decision_event_correction_workflow_link(link, event)
     ]
+  end
+
+  defp telemetry_revision_decision_event_correction_workflow_link(%DataLink{} = link, event) do
+    requested_by = correction_workflow_value(event.evidence_ref, :requested_by)
+
+    if requested_by == "dashboard_comparison_review" do
+      related_link(
+        link,
+        :dashboard_lifecycle_event,
+        correction_workflow_value(event.evidence_ref, :id) ||
+          bulk_workflow_item_value(event.evidence_ref, :workflow_id),
+        "Comparison review request",
+        :comparison_review_origin
+      )
+    end
   end
 
   defp telemetry_backfill_lifecycle_event_related_links(
@@ -2931,7 +3038,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       ),
       telemetry_backfill_lifecycle_late_data_source_link(link, event),
       telemetry_backfill_lifecycle_retry_source_link(link, event),
-      telemetry_backfill_lifecycle_correction_source_link(link, event)
+      telemetry_backfill_lifecycle_correction_source_link(link, event),
+      telemetry_backfill_lifecycle_comparison_review_origin_link(link, event)
     ] ++
       telemetry_backfill_lifecycle_group_failure_links(link, event, organization_id, mission_id) ++
       telemetry_backfill_lifecycle_referencing_event_links(
@@ -2970,6 +3078,28 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       "Correction source event",
       :source_event
     )
+  end
+
+  defp telemetry_backfill_lifecycle_comparison_review_origin_link(%DataLink{} = link, event) do
+    related_link(
+      link,
+      :dashboard_lifecycle_event,
+      comparison_review_origin_value(event.payload, :request_event_id),
+      "Comparison review request",
+      :comparison_review_origin
+    )
+  end
+
+  defp dashboard_lifecycle_event_related_links(%DataLink{} = link, %LifecycleEvent{} = event) do
+    [
+      related_link(
+        link,
+        :dashboard_lifecycle_event,
+        state_value(event.payload, :source_request_event_id),
+        "Source comparison review request",
+        :source_event
+      )
+    ]
   end
 
   defp telemetry_backfill_lifecycle_referencing_event_links(

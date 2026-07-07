@@ -122,6 +122,70 @@ defmodule Cadence.Dashboards.Sources.OperationalObservablesTest do
     assert OperationalObservables.source_backing_contracts() == contracts
   end
 
+  test "mixed latest operational revision reads each source family once" do
+    revision_fun = fn family, organization_id, mission_id, opts ->
+      send(self(), {:revision_family, family, organization_id, mission_id, opts})
+      "#{family}:revision"
+    end
+
+    request =
+      source_request()
+      |> Map.put(:observables, [
+        "commanding.queue_depth",
+        "ingress.processing_latency_ms",
+        "comms.transport.downlink_bitrate"
+      ])
+      |> Map.put(:sampling, %{mode: :latest})
+
+    assert {:ok, facts} =
+             OperationalObservables.facts(request,
+               source_binding: source_binding(),
+               command_queue_revision_fun: &revision_fun.(:command_queue_depth, &1, &2, &3),
+               ingress_processing_latency_revision_fun:
+                 &revision_fun.(:ingress_processing_latency, &1, &2, &3),
+               transport_bitrate_revision_fun: &revision_fun.(:transport_bitrate, &1, &2, &3)
+             )
+
+    assert facts.data_revision =~ "operational_latest:"
+
+    assert_received {:revision_family, :command_queue_depth, "org-1", "mission-1", queue_opts}
+
+    assert_received {:revision_family, :ingress_processing_latency, "org-1", "mission-1",
+                     ingress_opts}
+
+    assert_received {:revision_family, :transport_bitrate, "org-1", "mission-1", bitrate_opts}
+    refute_received {:revision_family, :command_queue_depth, "org-1", "mission-1", _opts}
+    refute_received {:revision_family, :ingress_processing_latency, "org-1", "mission-1", _opts}
+    refute_received {:revision_family, :transport_bitrate, "org-1", "mission-1", _opts}
+
+    assert queue_opts[:dataset] == "operational_observables"
+    assert ingress_opts[:dataset] == "operational_observables"
+    assert bitrate_opts[:dataset] == "operational_observables"
+  end
+
+  test "latest facts fail closed for history-only transport execution observables" do
+    revision_fun = fn organization_id, mission_id, opts ->
+      send(self(), {:transport_execution_revision, organization_id, mission_id, opts})
+      "transport_execution_state:revision"
+    end
+
+    request =
+      source_request()
+      |> Map.put(:observables, ["comms.transport.execution_state"])
+      |> Map.put(:sampling, %{mode: :latest})
+
+    assert {:error, warning} =
+             OperationalObservables.facts(request,
+               source_binding: source_binding(),
+               transport_execution_state_revision_fun: revision_fun
+             )
+
+    assert warning.code == :unsupported_operational_observable_backing
+    assert warning.details.requested_mode == :latest
+    assert warning.details.observables == ["comms.transport.execution_state"]
+    refute_received {:transport_execution_revision, _organization_id, _mission_id, _opts}
+  end
+
   test "resolves constellation health into a matrix frame" do
     latest_states_fun = fn organization_id, mission_id, opts ->
       send(self(), {:latest_states, organization_id, mission_id, opts})

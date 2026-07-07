@@ -28,6 +28,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
       assigns
       |> assign(:dashboard_comparison_review_action, action_outcome)
       |> assign(
+        :dashboard_comparison_review_action_attrs,
+        DataLinkActionOutcomePresentation.stable_attrs(
+          action_outcome,
+          "data-dashboard-comparison-review-action",
+          aliases: %{"source_request_event_id" => "source-request-id"}
+        )
+      )
+      |> assign(
         :dashboard_comparison_review_action_rows,
         comparison_review_action_rows(action_outcome)
       )
@@ -110,13 +118,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponents do
         :if={@dashboard_comparison_review_action}
         id="dashboard-comparison-review-action-outcome"
         class="space-y-2 border border-base-300/70 bg-base-100/40 p-2"
-        data-dashboard-comparison-review-action={@dashboard_comparison_review_action.action}
-        data-dashboard-comparison-review-action-status={@dashboard_comparison_review_action.status}
-        data-dashboard-comparison-review-action-kind={@dashboard_comparison_review_action.kind}
-        data-dashboard-comparison-review-action-reason={@dashboard_comparison_review_action.reason}
-        data-dashboard-comparison-review-action-metadata={
-          @dashboard_comparison_review_action.metadata_json
-        }
+        {@dashboard_comparison_review_action_attrs}
       >
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">

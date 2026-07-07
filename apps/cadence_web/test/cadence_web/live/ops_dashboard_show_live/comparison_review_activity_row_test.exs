@@ -93,7 +93,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
              workflow_intent_action: "-",
              workflow_selection_count_text: "-",
              source_open_count_text: "-",
-             source_open_placements_attr: ""
+             source_open_placements_attr: "",
+             source_bulk_decision_actionable_count_text: "-",
+             source_bulk_decision_actionable_placements_attr: "",
+             source_bulk_decision_skipped_count_text: "-",
+             source_bulk_decision_skipped_placements_attr: "",
+             source_bulk_decision_skipped_reasons_attr: "",
+             source_bulk_decision_summary_text: "-"
            }
   end
 
@@ -107,7 +113,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
             "selection_count" => 2
           },
           "source_open_count" => 2,
-          "source_open_placement_ids" => ["placement-1", "placement-2"]
+          "source_open_placement_ids" => ["placement-1", "placement-2"],
+          "source_bulk_decision_actionable_count" => 1,
+          "source_bulk_decision_actionable_placement_ids" => ["placement-1"],
+          "source_bulk_decision_skipped_count" => 1,
+          "source_bulk_decision_skipped_placement_ids" => ["placement-2"],
+          "source_bulk_decision_skipped_reasons" => ["missing_observation_identity"]
         }
       )
 
@@ -118,6 +129,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRowTest do
     assert row.workflow_selection_count_text == "2"
     assert row.source_open_count_text == "2"
     assert row.source_open_placements_attr == "placement-1,placement-2"
+    assert row.source_bulk_decision_actionable_count_text == "1"
+    assert row.source_bulk_decision_actionable_placements_attr == "placement-1"
+    assert row.source_bulk_decision_skipped_count_text == "1"
+    assert row.source_bulk_decision_skipped_placements_attr == "placement-2"
+    assert row.source_bulk_decision_skipped_reasons_attr == "missing_observation_identity"
+    assert row.source_bulk_decision_summary_text == "1 actionable / 1 skipped"
   end
 
   test "non comparison-review events produce non-renderable rows" do

@@ -30,6 +30,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcome do
           result_event_ids: String.t() | nil,
           target_event_id: String.t() | nil,
           target_run_id: String.t() | nil,
+          dashboard_context: map(),
           error: term(),
           message: String.t() | nil
         }
@@ -64,7 +65,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcome do
     :target_event_id,
     :target_run_id,
     :error,
-    :message
+    :message,
+    dashboard_context: %{}
   ]
 
   @spec new(keyword() | map()) :: t()

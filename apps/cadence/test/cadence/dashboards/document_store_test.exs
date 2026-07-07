@@ -846,19 +846,30 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
                "dashboard-doc-comparison-review-resolution",
                %{
                  "schema" => "dashboard_comparison_review_request.v1",
-                 "open_count" => 1,
+                 "open_count" => 2,
+                 "open_placement_ids" => ["placement-1", "placement-2"],
                  "workflow_intent" => %{
                    "schema" => "dashboard_comparison_workflow_intent.v1",
                    "kind" => "bulk_correction_authority_review",
                    "source" => "dashboard_comparison_rollup",
                    "action" => "request_comparison_review",
                    "selection_kind" => "open_comparison_findings",
-                   "selection_count" => 1,
-                   "placement_ids" => ["placement-1"]
+                   "selection_count" => 2,
+                   "placement_ids" => ["placement-1", "placement-2"]
                  },
                  "open_findings" => %{
                    "schema" => "dashboard_comparison_open_findings.v1",
-                   "findings" => [%{"placement_id" => "placement-1"}]
+                   "findings" => [
+                     %{
+                       "placement_id" => "placement-1",
+                       "observation_identity_id" => "identity-1",
+                       "decision_status" => "unhandled"
+                     },
+                     %{
+                       "placement_id" => "placement-2",
+                       "decision_status" => "unhandled"
+                     }
+                   ]
                  }
                },
                actor_id: "user-requester",
@@ -910,8 +921,24 @@ defmodule Cadence.Dashboards.DocumentStoreTest do
     assert resolution_event.payload["resolution_reason"] == "Reviewed by mission analyst"
     assert resolution_event.payload["selected_placement_id"] == "placement-1"
     assert resolution_event.payload["affected_placement_ids"] == ["placement-1"]
-    assert resolution_event.payload["source_open_count"] == 1
-    assert resolution_event.payload["source_open_placement_ids"] == ["placement-1"]
+    assert resolution_event.payload["source_open_count"] == 2
+    assert resolution_event.payload["source_open_placement_ids"] == ["placement-1", "placement-2"]
+
+    assert resolution_event.payload["source_bulk_decision_actionable_count"] == 1
+
+    assert resolution_event.payload["source_bulk_decision_actionable_placement_ids"] == [
+             "placement-1"
+           ]
+
+    assert resolution_event.payload["source_bulk_decision_skipped_count"] == 1
+
+    assert resolution_event.payload["source_bulk_decision_skipped_placement_ids"] == [
+             "placement-2"
+           ]
+
+    assert resolution_event.payload["source_bulk_decision_skipped_reasons"] == [
+             "missing_observation_identity"
+           ]
 
     assert resolution_event.payload["workflow_intent"] == request_event.payload["workflow_intent"]
     assert resolution_event.payload["open_findings"] == request_event.payload["open_findings"]

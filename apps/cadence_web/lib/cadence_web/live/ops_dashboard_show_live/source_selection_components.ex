@@ -15,7 +15,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceSelectionComponents do
       data-source-selection-bindings={source_selection_bindings(@selections)}
       data-source-selection-data-sources={source_selection_data_sources(@selections)}
       data-source-selection-rejected={source_selection_rejected_count(@selections)}
-      class="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-base-300/60 bg-base-200/30 text-xs"
+      class="shrink-0 flex flex-wrap items-center gap-2 px-2 py-1 border-b border-base-300/60 bg-base-200/30 text-xs"
     >
       <span class="hud-label">Source selection</span>
       <.source_selection_badge

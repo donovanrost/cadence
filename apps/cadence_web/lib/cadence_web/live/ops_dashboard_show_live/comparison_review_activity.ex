@@ -19,6 +19,15 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
       data-dashboard-comparison-review-kind={@row.kind}
       data-dashboard-comparison-review-open-count={@row.open_count_text}
       data-dashboard-comparison-review-placements={@row.placements_attr}
+      data-dashboard-comparison-review-bulk-decision-skipped-count={
+        @row.bulk_decision_skipped_count_text
+      }
+      data-dashboard-comparison-review-bulk-decision-skipped-placements={
+        @row.bulk_decision_skipped_placement_ids_attr
+      }
+      data-dashboard-comparison-review-bulk-decision-skipped-reasons={
+        @row.bulk_decision_skipped_reasons_attr
+      }
     >
       <dl class="grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1">
         <dt class="hud-label">Request</dt>
@@ -70,40 +79,74 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
             @row.workflow_request_point_ids_attr
           }
         >
-           <.icon name="hero-document-plus" class="h-3.5 w-3.5" /> Prepare workflow
-         </button>
-         <form
-           :if={not @row.resolved? and @row.bulk_decision_available?}
-           id={"dashboard-comparison-review-bulk-decision-form-#{@row.event_id}"}
-           phx-submit="apply_comparison_review_bulk_decision"
-           class="flex items-center gap-1"
-           data-dashboard-comparison-review-bulk-decision-form={@row.event_id}
-           data-dashboard-comparison-review-bulk-decision-count={@row.bulk_decision_count_text}
-           data-dashboard-comparison-review-bulk-decision-placements={
-             @row.bulk_decision_placement_ids_attr
-           }
-         >
-           <input type="hidden" name="review[source_request_event_id]" value={@row.event_id} />
-           <input type="hidden" name="review[decision]" value="mark_conflict" />
-           <input type="hidden" name="review[confirmed]" value="confirmed" />
-           <input
-             type="hidden"
-             name="review[decision_reason]"
-             value="dashboard_comparison_review_mark_conflict"
-           />
-           <button
-             id={"dashboard-comparison-review-bulk-decision-#{@row.event_id}"}
-             type="submit"
-             class="btn btn-ghost btn-xs gap-1"
-             data-dashboard-comparison-review-bulk-decision={@row.event_id}
-             data-dashboard-comparison-review-bulk-decision-kind="mark_conflict"
-           >
-             <.icon name="hero-shield-exclamation" class="h-3.5 w-3.5" /> Mark conflicts
-           </button>
-         </form>
-         <form
-           :if={not @row.resolved?}
-           id={"dashboard-comparison-review-resolve-form-#{@row.event_id}"}
+          <.icon name="hero-document-plus" class="h-3.5 w-3.5" /> Prepare workflow
+        </button>
+        <span
+          :if={not @row.resolved? and @row.bulk_decision_skipped_label}
+          class="badge badge-neutral badge-outline badge-xs gap-1"
+          data-dashboard-comparison-review-bulk-decision-skipped={@row.event_id}
+          data-dashboard-comparison-review-bulk-decision-skipped-count={
+            @row.bulk_decision_skipped_count_text
+          }
+          data-dashboard-comparison-review-bulk-decision-skipped-placements={
+            @row.bulk_decision_skipped_placement_ids_attr
+          }
+          data-dashboard-comparison-review-bulk-decision-skipped-reasons={
+            @row.bulk_decision_skipped_reasons_attr
+          }
+        >
+          <.icon name="hero-information-circle" class="h-3.5 w-3.5" />
+          {@row.bulk_decision_skipped_label}
+        </span>
+        <span
+          :if={not @row.resolved? and @row.bulk_decision_unavailable?}
+          class="badge badge-warning badge-outline badge-xs gap-1"
+          data-dashboard-comparison-review-bulk-decision-unavailable={@row.event_id}
+          data-dashboard-comparison-review-bulk-decision-unavailable-reason={
+            @row.bulk_decision_unavailable_reason
+          }
+          data-dashboard-comparison-review-bulk-decision-unavailable-count={
+            @row.bulk_decision_count_text
+          }
+          data-dashboard-comparison-review-bulk-decision-unavailable-placements={
+            @row.bulk_decision_placement_ids_attr
+          }
+        >
+          <.icon name="hero-exclamation-triangle" class="h-3.5 w-3.5" />
+          {@row.bulk_decision_unavailable_label}
+        </span>
+        <form
+          :if={not @row.resolved? and @row.bulk_decision_available?}
+          id={"dashboard-comparison-review-bulk-decision-form-#{@row.event_id}"}
+          phx-submit="apply_comparison_review_bulk_decision"
+          class="flex items-center gap-1"
+          data-dashboard-comparison-review-bulk-decision-form={@row.event_id}
+          data-dashboard-comparison-review-bulk-decision-count={@row.bulk_decision_count_text}
+          data-dashboard-comparison-review-bulk-decision-placements={
+            @row.bulk_decision_placement_ids_attr
+          }
+        >
+          <input type="hidden" name="review[source_request_event_id]" value={@row.event_id} />
+          <input type="hidden" name="review[decision]" value="mark_conflict" />
+          <input type="hidden" name="review[confirmed]" value="confirmed" />
+          <input
+            type="hidden"
+            name="review[decision_reason]"
+            value="dashboard_comparison_review_mark_conflict"
+          />
+          <button
+            id={"dashboard-comparison-review-bulk-decision-#{@row.event_id}"}
+            type="submit"
+            class="btn btn-ghost btn-xs gap-1"
+            data-dashboard-comparison-review-bulk-decision={@row.event_id}
+            data-dashboard-comparison-review-bulk-decision-kind="mark_conflict"
+          >
+            <.icon name="hero-shield-exclamation" class="h-3.5 w-3.5" /> Mark conflicts
+          </button>
+        </form>
+        <form
+          :if={not @row.resolved?}
+          id={"dashboard-comparison-review-resolve-form-#{@row.event_id}"}
           phx-submit="resolve_comparison_review"
           class="ml-auto flex items-center gap-1"
           data-dashboard-comparison-review-resolve-form={@row.event_id}
@@ -149,13 +192,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
         <li
           :for={finding <- @row.findings}
           class="grid grid-cols-[1fr_auto] gap-2 rounded bg-base-200/60 px-2 py-1"
-           data-dashboard-comparison-review-finding={finding.placement_id}
-           data-dashboard-comparison-review-finding-state={finding.state}
-           data-dashboard-comparison-review-finding-status={finding.decision_status}
-           data-dashboard-comparison-review-finding-observation-identity={
-             finding.observation_identity_id
-           }
-         >
+          data-dashboard-comparison-review-finding={finding.placement_id}
+          data-dashboard-comparison-review-finding-state={finding.state}
+          data-dashboard-comparison-review-finding-status={finding.decision_status}
+          data-dashboard-comparison-review-finding-observation-identity={
+            finding.observation_identity_id
+          }
+          data-dashboard-comparison-review-finding-bulk-decision={
+            finding.bulk_decision_status
+          }
+          data-dashboard-comparison-review-finding-bulk-decision-reason={
+            finding.bulk_decision_reason
+          }
+          data-dashboard-comparison-review-finding-bulk-decision-label={
+            finding.bulk_decision_label
+          }
+        >
           <a
             href={finding.placement_href}
             class="link link-hover min-w-0 truncate"
@@ -166,9 +218,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
           >
             {finding.title}
           </a>
-          <span class="font-mono text-base-content/60">
-            {finding.decision_status}
-          </span>
+          <div class="flex flex-wrap items-center justify-end gap-1">
+            <span class="font-mono text-base-content/60">
+              {finding.decision_status}
+            </span>
+            <span
+              class="badge badge-outline badge-xs"
+              data-dashboard-comparison-review-finding-bulk-decision-badge={
+                finding.placement_id
+              }
+            >
+              {finding.bulk_decision_label}
+            </span>
+          </div>
         </li>
       </ul>
     </div>
@@ -197,6 +259,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
       data-dashboard-comparison-review-resolution-source-open-count={@row.source_open_count_text}
       data-dashboard-comparison-review-resolution-source-open-placements={
         @row.source_open_placements_attr
+      }
+      data-dashboard-comparison-review-resolution-source-actionable-count={
+        @row.source_bulk_decision_actionable_count_text
+      }
+      data-dashboard-comparison-review-resolution-source-actionable-placements={
+        @row.source_bulk_decision_actionable_placements_attr
+      }
+      data-dashboard-comparison-review-resolution-source-skipped-count={
+        @row.source_bulk_decision_skipped_count_text
+      }
+      data-dashboard-comparison-review-resolution-source-skipped-placements={
+        @row.source_bulk_decision_skipped_placements_attr
+      }
+      data-dashboard-comparison-review-resolution-source-skipped-reasons={
+        @row.source_bulk_decision_skipped_reasons_attr
       }
     >
       <dl class="grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1">
@@ -247,6 +324,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivity do
           class="break-all font-mono text-base-content/70"
         >
           {@row.workflow_intent_kind} / {@row.workflow_selection_count_text}
+        </dd>
+        <dt :if={@row.source_bulk_decision_summary_text != "-"} class="hud-label">
+          Bulk action
+        </dt>
+        <dd
+          :if={@row.source_bulk_decision_summary_text != "-"}
+          data-activity-field="Resolution bulk decision source"
+          class="break-all font-mono text-base-content/70"
+        >
+          {@row.source_bulk_decision_summary_text}
         </dd>
       </dl>
     </div>

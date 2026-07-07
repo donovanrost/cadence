@@ -104,7 +104,12 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
             "selection_count" => 2
           },
           "source_open_count" => 2,
-          "source_open_placement_ids" => ["placement-1", "placement-2"]
+          "source_open_placement_ids" => ["placement-1", "placement-2"],
+          "source_bulk_decision_actionable_count" => 1,
+          "source_bulk_decision_actionable_placement_ids" => ["placement-1"],
+          "source_bulk_decision_skipped_count" => 1,
+          "source_bulk_decision_skipped_placement_ids" => ["placement-2"],
+          "source_bulk_decision_skipped_reasons" => ["missing_observation_identity"]
         }
       )
 
@@ -121,7 +126,15 @@ defmodule Cadence.Dashboards.ComparisonReviewQueueTest do
              workflow_selection_count_text: "2",
              source_open_count_text: "2",
              source_open_placement_ids: ["placement-1", "placement-2"],
-             source_open_placements_attr: "placement-1,placement-2"
+             source_open_placements_attr: "placement-1,placement-2",
+             source_bulk_decision_actionable_count_text: "1",
+             source_bulk_decision_actionable_placement_ids: ["placement-1"],
+             source_bulk_decision_actionable_placements_attr: "placement-1",
+             source_bulk_decision_skipped_count_text: "1",
+             source_bulk_decision_skipped_placement_ids: ["placement-2"],
+             source_bulk_decision_skipped_placements_attr: "placement-2",
+             source_bulk_decision_skipped_reasons: ["missing_observation_identity"],
+             source_bulk_decision_skipped_reasons_attr: "missing_observation_identity"
            }
   end
 

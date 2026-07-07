@@ -17,7 +17,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.SourceHealthComponents do
       data-source-execution={source_execution_codes(@health)}
       data-source-execution-severity={source_execution_severity_codes(@health)}
       data-source-execution-action={source_execution_action_codes(@health)}
-      class="shrink-0 flex items-center gap-2 px-2 py-1 border-b border-base-300/60 bg-base-200/40 text-xs"
+      class="shrink-0 flex flex-wrap items-center gap-2 px-2 py-1 border-b border-base-300/60 bg-base-200/40 text-xs"
     >
       <span class="hud-label">Source status</span>
       <.source_health_badge :for={source <- @health} source={source} />

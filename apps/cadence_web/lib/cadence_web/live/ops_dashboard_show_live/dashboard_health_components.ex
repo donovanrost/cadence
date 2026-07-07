@@ -34,7 +34,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DashboardHealthComponents do
       data-dashboard-health-stale-placements={dashboard_health_value(@health, :stale_placements)}
       data-dashboard-health-degraded-placements={dashboard_health_value(@health, :degraded_placements)}
       class={[
-        "shrink-0 flex items-center gap-2 px-2 py-1 border-b text-xs",
+        "shrink-0 flex flex-wrap items-center gap-2 px-2 py-1 border-b text-xs",
         dashboard_health_strip_class(@health)
       ]}
     >

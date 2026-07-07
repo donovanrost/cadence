@@ -13,7 +13,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   alias Cadence.Dashboards.RuntimeCoordinator
   alias CadenceWeb.OpsDashboardShowLive.ChartAppends
   alias CadenceWeb.OpsDashboardShowLive.EngineResolution
-  alias Ecto.Adapters.SQL.Sandbox
+  alias CadenceWeb.OpsDashboardShowLive.RuntimeResolveTask
 
   @type resolve_mode :: :initial | :context_change | :live_tick | :stream_append
   @async_prefix :dashboard_engine_resolve
@@ -321,6 +321,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
   defp start_resolve(socket, resolve_mode, resolve_id, opts) do
     request = EngineResolution.request(socket, resolve_mode)
     comparison_request = EngineResolution.comparison_request(socket, resolve_mode)
+    browser_test_sandbox_owner_key = browser_test_sandbox_owner_key(socket)
 
     socket =
       socket
@@ -335,20 +336,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.Runtime do
       )
     else
       start_async(socket, async_name(resolve_id), fn ->
-        maybe_allow_browser_test_sandbox_owner()
-        {resolve_id, EngineResolution.resolve_request_bundle(request, comparison_request)}
+        RuntimeResolveTask.resolve(
+          resolve_id,
+          request,
+          comparison_request,
+          browser_test_sandbox_owner_key
+        )
       end)
     end
   end
 
-  defp maybe_allow_browser_test_sandbox_owner do
-    case Application.get_env(:cadence_web, :browser_test_sandbox_owner) do
-      %{owner: owner} when is_pid(owner) ->
-        Sandbox.allow(Cadence.Repo, owner, self())
-
-      _other ->
-        :ok
-    end
+  defp browser_test_sandbox_owner_key(socket) do
+    Map.get(socket.assigns, :dashboard_browser_test_sandbox_owner_key)
   end
 
   defp inline_resolves? do

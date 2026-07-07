@@ -174,6 +174,36 @@ defmodule CadenceWeb.OpsDashboardShowLive.ActivityTimelineShellComponentsTest do
              |> LazyHTML.query("#dashboard-comparison-review-action-outcome")
              |> LazyHTML.attribute("data-dashboard-comparison-review-action-reason")
 
+    action =
+      LazyHTML.query(document, "#dashboard-comparison-review-action-outcome")
+
+    assert ["review-request-1"] =
+             LazyHTML.attribute(
+               action,
+               "data-dashboard-comparison-review-action-source-request-id"
+             )
+
+    assert ["review-request-1"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-workflow-id")
+
+    assert ["2"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-requested")
+
+    assert ["1"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-applied")
+
+    assert ["1"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-failed")
+
+    assert ["decision-event-1"] =
+             LazyHTML.attribute(
+               action,
+               "data-dashboard-comparison-review-action-result-event-ids"
+             )
+
+    assert ["review-request-1"] =
+             LazyHTML.attribute(action, "data-dashboard-comparison-review-action-target-event-id")
+
     assert "Partial" =
              document
              |> LazyHTML.query("#dashboard-comparison-review-action-outcome .badge")

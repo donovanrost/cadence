@@ -10,7 +10,7 @@ defmodule CadenceWeb.ScopeLoader do
   @spec assign_scope_from_session(Phoenix.LiveView.Socket.t(), map()) ::
           Phoenix.LiveView.Socket.t()
   def assign_scope_from_session(socket, session) do
-    allow_browser_test_sandbox_owner(session_value(session, "browser_test_sandbox_owner_key"))
+    allow_browser_test_sandbox_owner(browser_test_sandbox_owner_key(session))
 
     case session["user_session_token"] do
       token when is_binary(token) ->
@@ -26,22 +26,66 @@ defmodule CadenceWeb.ScopeLoader do
     end
   end
 
-  @spec allow_browser_test_sandbox_owner(binary() | nil) :: :ok
+  @spec browser_test_sandbox_owner_key(map() | term()) :: binary() | nil
+  def browser_test_sandbox_owner_key(session) when is_map(session) do
+    session_value(session, "browser_test_sandbox_owner_key")
+  end
+
+  def browser_test_sandbox_owner_key(_session), do: nil
+
+  @spec allow_browser_test_sandbox_owner(binary() | nil) :: :ok | {:error, term()}
   def allow_browser_test_sandbox_owner(session_key \\ nil) do
-    case Application.get_env(:cadence_web, :browser_test_sandbox_owner) do
-      %{owner: owner, key: ^session_key} when is_pid(owner) and is_binary(session_key) ->
-        Sandbox.allow(Cadence.Repo, owner, self())
-        :ok
+    case browser_test_sandbox_owner(session_key) do
+      {:ok, owner} ->
+        allow_sandbox_owner(owner)
 
-      owner when is_pid(owner) ->
-        Sandbox.allow(Cadence.Repo, owner, self())
-        :ok
+      {:error, reason} ->
+        {:error, reason}
 
-      _owner ->
+      :none ->
         :ok
     end
+  end
+
+  @spec allow_browser_test_sandbox_owner(binary() | nil, pid()) :: :ok | {:error, term()}
+  def allow_browser_test_sandbox_owner(session_key, client_pid) when is_pid(client_pid) do
+    case browser_test_sandbox_owner(session_key) do
+      {:ok, owner} ->
+        allow_sandbox_owner(owner, client_pid)
+
+      {:error, reason} ->
+        {:error, reason}
+
+      :none ->
+        :ok
+    end
+  end
+
+  @spec browser_test_sandbox_owner(binary() | nil) :: {:ok, pid()} | :none | {:error, term()}
+  def browser_test_sandbox_owner(session_key \\ nil) do
+    case Application.get_env(:cadence_web, :browser_test_sandbox_owner) do
+      %{owner: owner, key: ^session_key} when is_pid(owner) and is_binary(session_key) ->
+        {:ok, owner}
+
+      %{owner: owner, key: _key} when is_pid(owner) and is_binary(session_key) ->
+        {:error, :browser_test_sandbox_owner_key_mismatch}
+
+      owner when is_pid(owner) ->
+        {:ok, owner}
+
+      _owner when is_binary(session_key) ->
+        {:error, :browser_test_sandbox_owner_missing}
+
+      _owner ->
+        :none
+    end
+  end
+
+  defp allow_sandbox_owner(owner, client_pid \\ self()) do
+    Sandbox.allow(Cadence.Repo, owner, client_pid)
+    :ok
   catch
-    :exit, _reason -> :ok
+    :exit, reason -> {:error, {:browser_test_sandbox_owner_unavailable, reason}}
   end
 
   defp session_value(session, key) when is_map(session) do

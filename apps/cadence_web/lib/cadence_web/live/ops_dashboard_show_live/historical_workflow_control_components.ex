@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlComponents do
 
   alias CadenceWeb.OpsDashboardShowLive.DataLinkActionOutcomePresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionExplanationComponents
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcomePresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContext
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlsPresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCorrectionFormComponents
@@ -28,6 +29,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlComponents do
       |> assign(
         :action_outcome_presentation,
         DataLinkActionOutcomePresentation.build(assigns.action_outcome)
+      )
+      |> assign(
+        :workflow_action_outcome_attrs,
+        HistoricalWorkflowActionOutcomePresentation.stable_attrs(
+          assigns.action_outcome,
+          "data-workflow-action"
+        )
       )
       |> assign(
         :workflow_form,
@@ -58,71 +66,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlComponents do
         :if={@action_outcome_presentation}
         id="dashboard-historical-workflow-action-outcome"
         class="hidden"
-        data-workflow-action={@action_outcome_presentation.action}
-        data-workflow-action-status={@action_outcome_presentation.status}
-        data-workflow-action-kind={@action_outcome_presentation.kind}
-        data-workflow-action-reason={@action_outcome_presentation.reason}
-        data-workflow-action-stage={Map.get(@action_outcome_presentation.metadata, "stage")}
-        data-workflow-action-request-group-id={
-          Map.get(@action_outcome_presentation.metadata, "request_group_id")
-        }
-        data-workflow-action-job-id={Map.get(@action_outcome_presentation.metadata, "job_id")}
-        data-workflow-action-count={Map.get(@action_outcome_presentation.metadata, "count")}
-        data-workflow-action-retried={Map.get(@action_outcome_presentation.metadata, "retried")}
-        data-workflow-action-retry-nonretryable={
-          Map.get(@action_outcome_presentation.metadata, "retry_nonretryable")
-        }
-        data-workflow-action-retry-skipped={
-          Map.get(@action_outcome_presentation.metadata, "retry_skipped")
-        }
-        data-workflow-action-retry-errors={
-          Map.get(@action_outcome_presentation.metadata, "retry_errors")
-        }
-        data-workflow-action-retry-scope={
-          Map.get(@action_outcome_presentation.metadata, "retry_scope")
-        }
-        data-workflow-action-retry-run-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_run_ids")
-        }
-        data-workflow-action-retry-nonretryable-run-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_nonretryable_run_ids")
-        }
-        data-workflow-action-retry-nonretryable-event-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_nonretryable_event_ids")
-        }
-        data-workflow-action-retry-nonretryable-items={
-          Map.get(@action_outcome_presentation.metadata, "retry_nonretryable_items")
-        }
-        data-workflow-action-retry-skipped-run-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_skipped_run_ids")
-        }
-        data-workflow-action-retry-skipped-event-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_skipped_event_ids")
-        }
-        data-workflow-action-retry-skipped-items={
-          Map.get(@action_outcome_presentation.metadata, "retry_skipped_items")
-        }
-        data-workflow-action-retry-error-run-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_error_run_ids")
-        }
-        data-workflow-action-retry-error-event-ids={
-          Map.get(@action_outcome_presentation.metadata, "retry_error_event_ids")
-        }
-        data-workflow-action-retry-error-items={
-          Map.get(@action_outcome_presentation.metadata, "retry_error_items")
-        }
-        data-workflow-action-queued-jobs={
-          Map.get(@action_outcome_presentation.metadata, "queued_jobs")
-        }
-        data-workflow-action-failed-jobs={
-          Map.get(@action_outcome_presentation.metadata, "failed_jobs")
-        }
-        data-workflow-action-target-event-id={
-          Map.get(@action_outcome_presentation.metadata, "target_event_id")
-        }
-        data-workflow-action-target-run-id={
-          Map.get(@action_outcome_presentation.metadata, "target_run_id")
-        }
+        {@workflow_action_outcome_attrs}
       >
         {@action_outcome_presentation.message}
       </div>

@@ -4459,6 +4459,16 @@ Cutover criteria:
 This testing strategy should be part of phase 1, not a final hardening step.
 The engine contract is only real once fixtures can exercise it without a
 browser.
+As the dashboard surface grows, browser-level tests should stay deliberately
+scarce and product-facing: one full-stack proof per user-visible wiring
+contract, with permutations pushed into async engine/source/presenter/component
+tests. The current monolithic `ops_dashboard_live_test.exs` is useful evidence
+but an expensive default target; future maturity slices should split new
+full-stack proofs by workflow area instead of continuing to add every dashboard
+case to that serial module. Replacement-recovery browser proofs are the first
+example of that direction: they now live in a workflow-specific LiveView test
+file so local recovery work can run that surface without traversing the full
+dashboard console suite.
 
 ## 12. Source readiness tiers (grounds the phasing)
 
@@ -5353,7 +5363,39 @@ Remaining maturity gaps:
    as structured action outcomes with action, status, reason, kind, message, and
    relevant ids/counts before becoming operator flashes, and the latest
    normalized outcome is retained in LiveView state and
-   rendered as workflow action metadata in the lifecycle inspector. The workflow
+   rendered as workflow action metadata in the lifecycle inspector. The generic
+   data-link action outcome card also promotes normalized
+   decision/runtime/request/result/target handoff fields into stable attributes,
+   so dashboard late-data policy, revision-decision, and workflow recovery
+   submissions can be asserted and inspected without treating metadata JSON as
+   the only contract. A shared action-outcome presentation helper now owns this
+   stable attribute mapping with component-specific prefixes/aliases, so new
+   action surfaces do not need to reimplement the metadata-to-DOM contract. The
+   historical workflow latest-action presenter likewise owns its stable DOM
+   attributes for action state, retry disposition, result/target handoffs, and
+   handoff counts so the component does not duplicate normalized outcome-field
+   mapping. The hidden workflow-controls action outcome uses the same
+   presenter-owned mapping, keeping submit feedback and latest-action evidence
+   aligned on retry/result/target fields. Historical workflow action outcomes
+   now also preserve the originating dashboard id/version, time mode, replay
+   run, data view, and limit mode through those stable latest-action and hidden
+   submit-feedback attributes, making the operator handoff self-contained at
+   the same runtime context boundary as the durable event payload. Rendered
+   LiveView workflow proof now verifies those attributes through actual
+   replay-backed stage-transition and correction-request submissions, plus
+   live/archive direct request and grouped request/group-stage submissions.
+   Retry and replacement-recovery latest-action outcomes now derive the same
+   dashboard runtime context from the selected lifecycle inspector, keeping
+   single-job retry and grouped retry handoffs anchored to the dashboard
+   id/version, time mode, data view, and limit mode that produced the inspected
+   failure. Correction-created replacement request events now persist submitted
+   dashboard context too. Missing replacement-job inspection has rendered proof
+   for that same context handoff from the corrected replacement event. Stale
+   replacement inspection/requeue now have rendered browser proof that recovery
+   controls submit the exact replacement run/job/event, durable
+   inspection/requeue events preserve dashboard context, requeue returns the
+   stale job to queued, and latest-action outcomes retain dashboard context plus
+   replacement run scope. The workflow
    controls presenter also composes that latest outcome into a visible
    last-action status panel with status styling and normalized reason/stage
    fields, so success, failed, blocked, and no-op submissions use the same
@@ -5566,7 +5608,10 @@ Remaining maturity gaps:
    separate authoritative lifecycle event, reuses the same replacement job id
    instead of creating a second job for the corrected run, clears running
    timestamps, and moves the job back to queued with structured requeue reason
-   metadata.
+   metadata. Stale inspection and requeue are now covered by rendered browser
+   proof: the dashboard clicks the rendered recovery controls, verifies durable
+   stale events and job state, and asserts latest-action
+   dashboard-context/replacement-run handoff attributes.
    Failed corrected
    replacements can be retried through a replacement-run-scoped group retry
    command; the product API filters the retry candidate set by those replacement
@@ -5690,9 +5735,11 @@ Remaining maturity gaps:
    recovery now exposes both the primary closure action and a stable ordered
    action queue, so a group with missing, failed, and stale replacement jobs can
    guide the next operator click without hiding the remaining blocked branches
-   from browser workflows or future orchestration. The live browser harness now
-   seeds that mixed group and verifies the queue, per-branch counts/run ids, and
-   row-level missing, failed-retry, and stale recovery controls.
+   from browser workflows or future orchestration. Rendered LiveView proof now
+   seeds real corrected replacement events plus missing, failed, and stale job
+   states in one request group, then verifies the queue, per-branch counts/run
+   ids, optional group retry metadata when retry is eligible, and row-level
+   missing, failed-job inspection, stale-inspect, and stale-requeue controls.
    Remaining work is richer recovery orchestration around multi-job
    follow-up actions once grouped workflow jobs are running and failing in
    realistic operator scenarios.
@@ -5745,8 +5792,16 @@ Next maturity slices:
    the dashboard owns presentation copy around those decisions. Lifecycle
    explanation summaries likewise use product-owned semantic reasons for
    late-data policy events, retry/correction relationships, failure, completion,
-   and default recorded states. Workflow submit flashes are derived from
-   structured action outcomes rather than ad-hoc strings in event handlers. The
+   and default recorded states. Workflow and comparison-review bulk-decision
+   submit feedback is derived from structured action outcomes rather than ad-hoc
+   strings in event handlers. Comparison-review bulk-decision action cards expose
+   source request id, workflow id, result event ids, target id, requested count,
+   applied count, and failed count as stable metadata for operator handoff and
+   tests.
+   Request-creation and group-stage action outcomes now preserve request-group
+   scope on accepted, blocked, and confirmation-required submissions, so the
+   rendered latest-action panel stays aligned with the grouped lifecycle events
+   and command boundary. The
    late-data policy command also dispatches on an explicit product execution
    mode, separating sample execution from auditable event-only recording instead
    of retrying a failed sample execution as an event-only write. Replay-context
@@ -5787,8 +5842,11 @@ Next maturity slices:
    workflow job before recording a corrected request; a handcrafted failed event
    without failed job state is treated as an ineligible command. Accepted
    correction requests record inherited correction provenance, including source
-   event type and group/item context, for inspector drilldown. Group inspectors
-   now show correction superseded separately from
+   event type and group/item context, for inspector drilldown. The dashboard
+   correction-request action outcome also preserves request-group scope on
+   accepted, blocked, and confirmation-required submissions, so grouped recovery
+   work keeps its operator feedback and handoff metadata aligned with the stored
+   correction event. Group inspectors now show correction superseded separately from
    correction requested/started/completed so operators can tell pending
    correction work from a failed item superseded by a completed correction.
    Dashboard single-stage and group-stage correction actions now use the same

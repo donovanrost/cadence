@@ -87,6 +87,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleAttrs do
       "data-widget-source-contact-ids" => code_list(Map.get(source_status, :contact_ids, [])),
       "data-widget-source-source-endpoint-ids" =>
         code_list(Map.get(source_status, :source_endpoint_ids, [])),
+      "data-widget-source-health-states" =>
+        code_list(Map.get(source_status, :source_health_states, [])),
+      "data-widget-source-health-reasons" =>
+        code_list(Map.get(source_status, :source_health_reasons, [])),
+      "data-widget-source-health-event-ids" =>
+        code_list(Map.get(source_status, :source_health_event_ids, [])),
       "data-widget-source-empty-reason" =>
         source_status |> Map.get(:empty_reason) |> empty_reason_text()
     }
@@ -113,6 +119,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.WidgetLifecycleAttrs do
       "data-widget-source-scope-ids" => "",
       "data-widget-source-contact-ids" => "",
       "data-widget-source-source-endpoint-ids" => "",
+      "data-widget-source-health-states" => "",
+      "data-widget-source-health-reasons" => "",
+      "data-widget-source-health-event-ids" => "",
       "data-widget-source-empty-reason" => ""
     }
   end

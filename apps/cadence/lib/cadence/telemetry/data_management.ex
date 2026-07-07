@@ -512,6 +512,7 @@ defmodule Cadence.Telemetry.DataManagement do
     %{}
     |> put_compact_attr("request_mode", correction_text_attr(correction, :request_mode))
     |> put_compact_attr("request_group_id", correction_text_attr(correction, :request_group_id))
+    |> put_compact_attr("dashboard_context", correction_dashboard_context(correction))
     |> put_compact_attr(
       "request_item_index",
       correction_integer_attr(correction, :request_item_index)
@@ -525,6 +526,23 @@ defmodule Cadence.Telemetry.DataManagement do
       correction_text_attr(correction, :request_item_run_id)
     )
   end
+
+  defp correction_dashboard_context(correction) do
+    %{
+      "dashboard_id" => correction_text_attr(correction, :dashboard_id),
+      "dashboard_version" => correction_text_attr(correction, :dashboard_version),
+      "dashboard_time_mode" => correction_text_attr(correction, :dashboard_time_mode),
+      "dashboard_replay_run_id" => correction_text_attr(correction, :dashboard_replay_run_id),
+      "dashboard_data_view" => correction_text_attr(correction, :dashboard_data_view),
+      "dashboard_limit_mode" => correction_text_attr(correction, :dashboard_limit_mode)
+    }
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+    |> Map.new()
+    |> empty_map_to_nil()
+  end
+
+  defp empty_map_to_nil(map) when map_size(map) == 0, do: nil
+  defp empty_map_to_nil(map), do: map
 
   defp historical_data_workflow_event_job_id(%{payload: payload}) when is_map(payload) do
     case first_nested_map_value(payload, [["job_id"], [:job_id]]) do

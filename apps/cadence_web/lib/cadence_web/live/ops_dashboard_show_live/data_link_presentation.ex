@@ -16,7 +16,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkPresentation do
     :correction_transition,
     :late_data_policy_event,
     :stage_transition_event,
-    :follow_up_event
+    :follow_up_event,
+    :comparison_review_origin
   ]
   @max_navigation_trail 3
 
@@ -164,7 +165,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.DataLinkPresentation do
   defp relationship_kind_value(_value), do: nil
 
   defp related_group(%{relationship_kind: relationship_kind})
-       when relationship_kind in [:source_event] do
+       when relationship_kind in [:source_event, :comparison_review_origin] do
     {"source", "Source", 0}
   end
 

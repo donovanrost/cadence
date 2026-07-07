@@ -31,6 +31,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
           guidance: binary(),
           policy_state: binary() | nil,
           available_when: binary() | nil,
+          active_job_state: binary(),
+          active_job_started_at: binary() | nil,
+          active_job_age_seconds: binary() | nil,
+          active_job_stale_after_seconds: binary() | nil,
           retry_button: retry_button(),
           correction_form: correction_form(),
           retry: action_attrs(),
@@ -41,6 +45,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
             guidance: "Inspect the workflow job status and policy details before taking action.",
             policy_state: nil,
             available_when: nil,
+            active_job_state: "unknown",
+            active_job_started_at: nil,
+            active_job_age_seconds: nil,
+            active_job_stale_after_seconds: nil,
             retry_button: %{
               present: false,
               id: nil,
@@ -84,6 +92,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
       guidance: guidance_text(next_action, retry, correction),
       policy_state: retry.state || correction.state,
       available_when: retry.available_when || correction.available_when,
+      active_job_state: active_job_state(workflow_context),
+      active_job_started_at: active_job_started_at(workflow_context),
+      active_job_age_seconds: active_job_age_seconds(workflow_context),
+      active_job_stale_after_seconds: active_job_stale_after_seconds(workflow_context),
       retry_button: retry_button(workflow_controls),
       correction_form: correction_form(workflow_controls),
       retry: retry,
@@ -100,6 +112,12 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
 
       action_eligible?(Map.get(workflow_controls, :correction_request_action)) ->
         "create_corrected_request"
+
+      stale_active_job?(workflow_context) ->
+        "inspect_stale_job"
+
+      missing_replacement_job?(workflow_context) ->
+        "inspect_missing_job"
 
       Map.get(workflow_context, :job_status) in ["queued", "running"] ->
         "monitor_job"
@@ -118,6 +136,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
 
   defp guidance_text("create_corrected_request", _retry, correction) do
     correction.preview || "Create a corrected request for this failed workflow job."
+  end
+
+  defp guidance_text("inspect_stale_job", _retry, _correction) do
+    "The workflow job is active but has crossed the stale threshold; inspect the job evidence before requeueing or recording recovery."
+  end
+
+  defp guidance_text("inspect_missing_job", _retry, _correction) do
+    "The replacement workflow job is missing; inspect the expected job evidence before advancing recovery."
   end
 
   defp guidance_text("monitor_job", _retry, _correction) do
@@ -183,6 +209,78 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobRecoveryPresentat
 
   defp action_value(action, key) when is_map(action), do: Map.get(action, key)
   defp action_value(_action, _key), do: nil
+
+  defp stale_active_job?(workflow_context) do
+    Map.get(workflow_context, :job_status) in ["queued", "running"] and
+      stale_age_seconds?(workflow_context)
+  end
+
+  defp missing_replacement_job?(workflow_context) do
+    Map.get(workflow_context, :job_status) == "missing" and
+      present_text?(Map.get(workflow_context, :request_group_id)) and
+      present_text?(
+        Map.get(workflow_context, :missing_replacement_run_id) ||
+          Map.get(workflow_context, :run_id)
+      )
+  end
+
+  defp stale_age_seconds?(workflow_context) do
+    with age when is_integer(age) <- integer_value(active_job_age_seconds(workflow_context)),
+         threshold when is_integer(threshold) <-
+           integer_value(active_job_stale_after_seconds(workflow_context)) do
+      age >= threshold
+    else
+      _other -> false
+    end
+  end
+
+  defp active_job_state(workflow_context) do
+    cond do
+      stale_active_job?(workflow_context) -> "stale"
+      Map.get(workflow_context, :job_status) in ["queued", "running"] -> "active"
+      Map.get(workflow_context, :job_status) == "completed" -> "completed"
+      Map.get(workflow_context, :job_status) == "failed" -> "failed"
+      Map.get(workflow_context, :job_status) == "missing" -> "missing"
+      true -> "unknown"
+    end
+  end
+
+  defp active_job_started_at(workflow_context) do
+    text_value(Map.get(workflow_context, :stale_replacement_job_started_at)) ||
+      text_value(Map.get(workflow_context, :job_started_at))
+  end
+
+  defp active_job_age_seconds(workflow_context) do
+    text_value(Map.get(workflow_context, :stale_replacement_job_age_seconds)) ||
+      text_value(Map.get(workflow_context, :job_age_seconds))
+  end
+
+  defp active_job_stale_after_seconds(workflow_context) do
+    text_value(Map.get(workflow_context, :stale_replacement_stale_after_seconds)) ||
+      text_value(Map.get(workflow_context, :job_stale_after_seconds))
+  end
+
+  defp text_value(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp text_value(value) when is_binary(value) do
+    value = String.trim(value)
+    if value == "", do: nil, else: value
+  end
+
+  defp text_value(_value), do: nil
+
+  defp present_text?(value), do: not is_nil(text_value(value))
+
+  defp integer_value(value) when is_integer(value), do: value
+
+  defp integer_value(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {number, ""} -> number
+      _other -> nil
+    end
+  end
+
+  defp integer_value(_value), do: nil
 
   defp bool_attr(true), do: "true"
   defp bool_attr(_value), do: "false"

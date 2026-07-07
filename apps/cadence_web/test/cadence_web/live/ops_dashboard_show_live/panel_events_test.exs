@@ -103,6 +103,35 @@ defmodule CadenceWeb.OpsDashboardShowLive.PanelEventsTest do
            }
   end
 
+  test "open_activity_filter preserves selected activity for hidden-selection recovery" do
+    socket =
+      socket(%{
+        panel: :versions,
+        dashboard_activity_event_id: "dashboard-lifecycle-event-published"
+      })
+      |> PanelEvents.open_activity_filter("health_snapshots",
+        assign_publish_validation: fn socket ->
+          assign(socket, :dashboard_publish_validation, %{valid?: true})
+        end,
+        patch: fn socket, query ->
+          assign(socket, :patched_query, query)
+        end
+      )
+
+    assert socket.assigns.panel == :versions
+    assert socket.assigns.dashboard_activity_filter == :health_snapshots
+    assert socket.assigns.dashboard_activity_event_id == "dashboard-lifecycle-event-published"
+    assert socket.assigns.dashboard_review_placement_id == nil
+    assert socket.assigns.dashboard_publish_validation == %{valid?: true}
+
+    assert socket.assigns.patched_query == %{
+             "panel" => "versions",
+             "activity_filter" => "health_snapshots",
+             "activity_event" => "dashboard-lifecycle-event-published",
+             "selected_placement" => nil
+           }
+  end
+
   test "open_activity_filter clears unsupported activity filters" do
     socket =
       socket(%{panel: nil, dashboard_activity_filter: :open_comparison_reviews})

@@ -205,6 +205,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlsPresentation
         result_event_ids: text_value(Map.get(outcome, :result_event_ids)),
         target_event_id: text_value(Map.get(outcome, :target_event_id)),
         target_run_id: text_value(Map.get(outcome, :target_run_id)),
+        dashboard_context: Map.get(outcome, :dashboard_context),
         message: message,
         class: action_outcome_class(status),
         badge_class: action_outcome_badge_class(status)

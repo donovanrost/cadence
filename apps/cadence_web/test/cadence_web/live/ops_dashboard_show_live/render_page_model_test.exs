@@ -156,7 +156,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.RenderPageModelTest do
     assert model.root_attrs["data-dashboard-evidence-requested-source-binding-id"] == nil
     assert model.root_attrs["data-dashboard-evidence-requested-dataset"] == nil
     assert model.root_attrs["data-dashboard-evidence-requested-validity-state"] == nil
-    assert model.content_attrs == %{class: "flex-1 min-h-0 overflow-y-auto"}
+    assert model.content_attrs == %{class: "flex-1 min-w-0 min-h-0 overflow-y-auto"}
   end
 
   test "build assembles grid and panel section props" do

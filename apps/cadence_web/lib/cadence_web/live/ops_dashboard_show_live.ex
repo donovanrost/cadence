@@ -5,6 +5,7 @@ defmodule CadenceWeb.OpsDashboardShowLive do
   import CadenceWeb.OpsDashboardShowLive.Components
 
   alias CadenceWeb.OpsDashboardShowLive.ComparisonReviewEvents
+  alias CadenceWeb.OpsDashboardShowLive.ContextRailSections
   alias CadenceWeb.OpsDashboardShowLive.FormComponents
   alias CadenceWeb.OpsDashboardShowLive.HealthSnapshotEvents
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowEvents
@@ -22,9 +23,17 @@ defmodule CadenceWeb.OpsDashboardShowLive do
   alias CadenceWeb.OpsDashboardShowLive.RuntimeShell
   alias CadenceWeb.OpsDashboardShowLive.SelectionEvents
   alias CadenceWeb.OpsDashboardShowLive.WidgetEditingEvents
+  alias CadenceWeb.ScopeLoader
 
   @impl true
-  def mount(%{"dashboard_id" => dashboard_id}, _session, socket) do
+  def mount(%{"dashboard_id" => dashboard_id}, session, socket) do
+    socket =
+      assign(
+        socket,
+        :dashboard_browser_test_sandbox_owner_key,
+        ScopeLoader.browser_test_sandbox_owner_key(session)
+      )
+
     MountFlow.mount_dashboard(
       socket,
       dashboard_id,
@@ -371,30 +380,38 @@ defmodule CadenceWeb.OpsDashboardShowLive do
   @impl true
   def handle_event(
         "retry_historical_workflow_job",
-        %{"job-id" => job_id, "event-id" => event_id},
+        %{"job-id" => job_id, "event-id" => event_id} = params,
         socket
       ) do
+    opts =
+      LiveDeps.historical_workflow_event_opts()
+      |> maybe_put_replacement_run_id(params)
+
     {:noreply,
      HistoricalWorkflowEvents.retry_job(
        socket,
        job_id,
        event_id,
-       LiveDeps.historical_workflow_event_opts()
+       opts
      )}
   end
 
   @impl true
   def handle_event(
         "inspect_stale_historical_workflow_replacement_job",
-        %{"job-id" => job_id, "event-id" => event_id},
+        %{"job-id" => job_id, "event-id" => event_id} = params,
         socket
       ) do
+    opts =
+      LiveDeps.historical_workflow_event_opts()
+      |> maybe_put_replacement_run_id(params)
+
     {:noreply,
      HistoricalWorkflowEvents.inspect_stale_replacement_job(
        socket,
        job_id,
        event_id,
-       LiveDeps.historical_workflow_event_opts()
+       opts
      )}
   end
 
@@ -416,15 +433,19 @@ defmodule CadenceWeb.OpsDashboardShowLive do
   @impl true
   def handle_event(
         "requeue_stale_historical_workflow_replacement_job",
-        %{"job-id" => job_id, "event-id" => event_id},
+        %{"job-id" => job_id, "event-id" => event_id} = params,
         socket
       ) do
+    opts =
+      LiveDeps.historical_workflow_event_opts()
+      |> maybe_put_replacement_run_id(params)
+
     {:noreply,
      HistoricalWorkflowEvents.requeue_stale_replacement_job(
        socket,
        job_id,
        event_id,
-       LiveDeps.historical_workflow_event_opts()
+       opts
      )}
   end
 
@@ -533,6 +554,20 @@ defmodule CadenceWeb.OpsDashboardShowLive do
 
   defp retry_run_ids(_value), do: []
 
+  defp maybe_put_replacement_run_id(opts, params) do
+    case text_param(Map.get(params, "replacement-run-id")) do
+      nil -> opts
+      replacement_run_id -> Keyword.put(opts, :replacement_run_id, replacement_run_id)
+    end
+  end
+
+  defp text_param(value) when is_binary(value) do
+    value = String.trim(value)
+    if value == "", do: nil, else: value
+  end
+
+  defp text_param(_value), do: nil
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -544,46 +579,43 @@ defmodule CadenceWeb.OpsDashboardShowLive do
       <.dashboard_warnings
         {render_model.dashboard_warning_props}
       />
-      <.dashboard_health_strip health={render_model.dashboard_health} />
-      <.source_health_strip {render_model.source_health_props} />
-      <.source_selection_strip {render_model.source_selection_props} />
-      <.comparison_rollup_strip
-        rollup={render_model.comparison_rollup}
-        preset={render_model.comparison_preset}
-        open_review_summary={render_model.open_review_summary}
-        saved_presets={render_model.comparison_presets}
-      />
-      <div {render_model.content_attrs}>
-        <div
-          {render_model.grid_props}
-        >
+      <div class="flex flex-1 min-h-0">
+        <div {render_model.content_attrs}>
           <div
-            :for={widget_item <- render_model.widget_items}
-            {widget_item.shell_attrs}
+            {render_model.grid_props}
           >
-            <div class={widget_item.content_class}>
-              <.widget
-                {widget_item.component_props}
-              />
+            <div
+              :for={widget_item <- render_model.widget_items}
+              {widget_item.shell_attrs}
+            >
+              <div class={widget_item.content_class}>
+                <.widget
+                  {widget_item.component_props}
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            :if={render_model.empty_state.visible?}
+            class={render_model.empty_state.wrapper_class}
+          >
+            <%!-- empty_state actions only take navigate/patch; this dashboard needs a phx-click add --%>
+            <div class={render_model.empty_state.card_class}>
+              <span class={render_model.empty_state.icon_class}></span>
+              <p class="hud-label mt-3">{render_model.empty_state.title}</p>
+              <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
+                {render_model.empty_state.message}
+              </p>
+              <div class="mt-5">
+                <.button phx-click={render_model.empty_state.action_event}>
+                  <.icon name={render_model.empty_state.action_icon} class="-ml-0.5 mr-1 h-4 w-4" />
+                  {render_model.empty_state.action_label}
+                </.button>
+              </div>
             </div>
           </div>
         </div>
-        <div :if={render_model.empty_state.visible?} class={render_model.empty_state.wrapper_class}>
-          <%!-- empty_state actions only take navigate/patch; this dashboard needs a phx-click add --%>
-          <div class={render_model.empty_state.card_class}>
-            <span class={render_model.empty_state.icon_class}></span>
-            <p class="hud-label mt-3">{render_model.empty_state.title}</p>
-            <p class="mt-2 max-w-md mx-auto text-sm text-base-content/70">
-              {render_model.empty_state.message}
-            </p>
-            <div class="mt-5">
-              <.button phx-click={render_model.empty_state.action_event}>
-                <.icon name={render_model.empty_state.action_icon} class="-ml-0.5 mr-1 h-4 w-4" />
-                {render_model.empty_state.action_label}
-              </.button>
-            </div>
-          </div>
-        </div>
+        <ContextRailSections.dashboard_context_rail render_model={render_model} />
       </div>
       <FormComponents.widget_panel
         :if={render_model.panel_open?}

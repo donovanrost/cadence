@@ -129,7 +129,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStatusNavigationPres
       |> String.split(" ", trim: true)
       |> Map.new(fn token ->
         case String.split(token, "=", parts: 2) do
-          [key, token_value] -> {key, token_value}
+          [key, token_value] -> {key, decode_token_value(token_value)}
           [key] -> {key, nil}
         end
       end)
@@ -141,6 +141,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStatusNavigationPres
       recovery_action: Map.get(tokens, "recovery"),
       retryable: Map.get(tokens, "retryable")
     }
+  end
+
+  defp decode_token_value(nil), do: nil
+
+  defp decode_token_value(value) when is_binary(value) do
+    URI.decode(value)
+  rescue
+    ArgumentError -> value
   end
 
   defp lifecycle_event_handoff_link(current_path, event_id)

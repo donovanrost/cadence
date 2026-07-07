@@ -346,6 +346,7 @@ defmodule Cadence.Dashboards.SourceCredentials do
       current: material_resolution_current(result),
       metadata: %{
         resolver: material_resolver_identity(material_resolver(opts)),
+        secret_backend: secret_backend_identity(material_secret_backend(opts)),
         authorizer: material_authorizer_identity(material_authorizer(opts)),
         audit_policy: :credential_material_resolution
       }
@@ -427,6 +428,7 @@ defmodule Cadence.Dashboards.SourceCredentials do
       mission_id: credential.mission_id || Keyword.get(opts, :mission_id),
       data_source_id: credential.data_source_id || Keyword.get(opts, :data_source_id),
       resolver: material_resolver_identity(material_resolver(opts)),
+      secret_backend: secret_backend_identity(material_secret_backend(opts)),
       authorizer: material_authorizer_identity(material_authorizer(opts))
     }
     |> Enum.reject(fn {_key, value} -> value in [nil, "", []] end)
@@ -497,6 +499,21 @@ defmodule Cadence.Dashboards.SourceCredentials do
   end
 
   defp material_resolver_identity(resolver), do: inspect(resolver)
+
+  defp material_secret_backend(opts), do: SecretMaterialResolver.secret_backend(opts)
+
+  defp secret_backend_identity(nil), do: nil
+  defp secret_backend_identity({module, function}), do: "#{inspect(module)}.#{function}/2"
+
+  defp secret_backend_identity({module, function, extra_args}) when is_list(extra_args),
+    do: "#{inspect(module)}.#{function}/#{2 + length(extra_args)}"
+
+  defp secret_backend_identity(secret_backend) when is_function(secret_backend) do
+    {:arity, arity} = Function.info(secret_backend, :arity)
+    "anonymous/#{arity}"
+  end
+
+  defp secret_backend_identity(secret_backend), do: inspect(secret_backend)
 
   defp material_authorizer_identity(nil), do: nil
   defp material_authorizer_identity({module, function}), do: "#{inspect(module)}.#{function}/2"

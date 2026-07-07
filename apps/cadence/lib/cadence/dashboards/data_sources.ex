@@ -298,7 +298,7 @@ defmodule Cadence.Dashboards.DataSources do
       data_source
       |> source_probe_attrs(mission_id, probe, attrs, opts)
       |> annotate_capability_probe_drift()
-      |> SourceHealth.record_source_health(opts)
+      |> record_probe_health_and_maybe_materialize_capabilities(data_source, opts)
     end
   end
 
@@ -690,6 +690,99 @@ defmodule Cadence.Dashboards.DataSources do
   end
 
   defp maybe_put_questdb_http_endpoint(opts, _profile), do: opts
+
+  defp record_probe_health_and_maybe_materialize_capabilities(attrs, data_source, opts) do
+    case SourceHealth.record_source_health(attrs, opts) do
+      {:ok, event_or_unchanged, _status} = result ->
+        with :ok <-
+               maybe_materialize_adapter_capabilities(
+                 data_source,
+                 attrs,
+                 source_health_event_id(event_or_unchanged),
+                 opts
+               ) do
+          result
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp source_health_event_id(%SourceHealthEvent{} = event), do: event.source_health_event_id
+  defp source_health_event_id(_event_or_unchanged), do: nil
+
+  defp maybe_materialize_adapter_capabilities(%DataSource{} = data_source, attrs, event_id, opts) do
+    if Keyword.get(opts, :materialize_adapter_capabilities?, false) do
+      materialize_adapter_capabilities(data_source, attrs, event_id, opts)
+    else
+      :ok
+    end
+  end
+
+  defp materialize_adapter_capabilities(%DataSource{} = data_source, attrs, event_id, opts) do
+    metadata = probe_metadata(attrs)
+
+    with true <- materializable_adapter_capability_probe?(attrs, metadata),
+         reported when is_map(reported) <-
+           metadata_value(metadata, :adapter_reported_capabilities) do
+      reported = normalize_capability_map(reported)
+
+      materialized =
+        %DataSource{
+          data_source
+          | capabilities: reported,
+            metadata:
+              Map.merge(data_source.metadata || %{}, %{
+                adapter_capability_discovery?: true,
+                adapter_capability_discovery_source: :probe,
+                adapter_capability_discovery_health: get_attr(attrs, :source_health),
+                adapter_capability_discovery_reason: get_attr(attrs, :reason),
+                adapter_capability_discovery_fingerprint:
+                  metadata_value(metadata, :source_reported_capability_fingerprint)
+              })
+        }
+
+      payload =
+        %{
+          source: "data_source_probe",
+          adapter_capability_discovery?: true,
+          source_health_event_id: event_id,
+          probe_kind: get_in(attrs, [:payload, :probe_kind]),
+          source_health: get_attr(attrs, :source_health),
+          reason: get_attr(attrs, :reason),
+          previous_capabilities: data_source.capabilities,
+          adapter_reported_capabilities: reported,
+          source_reported_capability_fingerprint:
+            metadata_value(metadata, :source_reported_capability_fingerprint)
+        }
+        |> Enum.reject(fn {_key, value} -> value in [nil, "", %{}, []] end)
+        |> Map.new()
+
+      case persist_data_source(materialized,
+             actor_id: Keyword.get(opts, :actor_id),
+             occurred_at: get_attr(attrs, :observed_at, DateTime.utc_now()),
+             payload: payload
+           ) do
+        {:ok, _source} -> :ok
+        {:error, reason} -> {:error, {:adapter_capability_materialization_failed, reason}}
+      end
+    else
+      _not_materializable -> :ok
+    end
+  end
+
+  defp materializable_adapter_capability_probe?(attrs, metadata) do
+    get_in(attrs, [:payload, :probe_kind]) == "adapter" and
+      get_attr(attrs, :source_health) in [:healthy, :degraded] and
+      is_map(metadata_value(metadata, :adapter_reported_capabilities))
+  end
+
+  defp normalize_capability_map(capabilities) when is_map(capabilities) do
+    capabilities
+    |> Enum.map(fn {key, value} -> {text(key), value} end)
+    |> Map.new()
+  end
 
   defp validate_probe_adapter(%DataSource{adapter: nil}),
     do: {:unavailable, :source_adapter_missing}

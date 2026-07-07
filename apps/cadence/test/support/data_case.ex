@@ -12,6 +12,7 @@ defmodule Cadence.DataCase do
 
   @repo_ready_attempts 200
   @repo_ready_sleep_ms 50
+  @repo_operation_attempts 5
 
   using do
     quote do
@@ -68,6 +69,12 @@ defmodule Cadence.DataCase do
   end
 
   def persist_mission_scope(organization_id, mission_id, opts \\ []) do
+    with_repo_operation_retry(fn ->
+      do_persist_mission_scope(organization_id, mission_id, opts)
+    end)
+  end
+
+  defp do_persist_mission_scope(organization_id, mission_id, opts) do
     ensure_cadence_started!()
 
     organization =
@@ -92,6 +99,26 @@ defmodule Cadence.DataCase do
     {:ok, persisted_mission} = Cadence.persist_mission(mission)
 
     %{organization: persisted_organization, mission: persisted_mission}
+  end
+
+  defp with_repo_operation_retry(fun, attempts \\ @repo_operation_attempts)
+
+  defp with_repo_operation_retry(fun, attempts) when attempts > 1 do
+    fun.()
+  rescue
+    DBConnection.ConnectionError ->
+      retry_repo_operation(fun, attempts)
+  catch
+    :exit, :shutdown ->
+      retry_repo_operation(fun, attempts)
+  end
+
+  defp with_repo_operation_retry(fun, _attempts), do: fun.()
+
+  defp retry_repo_operation(fun, attempts) do
+    Process.sleep(@repo_ready_sleep_ms)
+    ensure_cadence_started!()
+    with_repo_operation_retry(fun, attempts - 1)
   end
 
   defp telemetry_current_value_store_module do

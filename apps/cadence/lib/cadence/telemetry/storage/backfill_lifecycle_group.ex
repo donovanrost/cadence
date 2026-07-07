@@ -471,15 +471,17 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroup do
     |> Enum.sort_by(&event_sort_key/1)
     |> Enum.map_join("; ", fn event ->
       [
-        "label=#{failed_item_label(event)}",
-        "run=#{event.backfill_run_id}",
-        "event=#{event.backfill_lifecycle_event_id}",
-        "recovery=#{failed_item_recovery_action(event)}",
-        "retryable=#{retryable?(event)}"
+        failed_item_event_token("label", failed_item_label(event)),
+        failed_item_event_token("run", event.backfill_run_id),
+        failed_item_event_token("event", event.backfill_lifecycle_event_id),
+        failed_item_event_token("recovery", failed_item_recovery_action(event)),
+        failed_item_event_token("retryable", retryable?(event))
       ]
       |> Enum.join(" ")
     end)
   end
+
+  defp failed_item_event_token(key, value), do: "#{key}=#{URI.encode(to_string(value))}"
 
   defp failed_item_label(event),
     do: event.point_id || event.observable_id || event.backfill_run_id || "unknown"

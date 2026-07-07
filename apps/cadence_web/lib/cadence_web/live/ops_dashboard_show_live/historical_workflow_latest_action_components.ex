@@ -3,19 +3,32 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
   use CadenceWeb, :html
 
   alias CadenceWeb.OpsDashboardShowLive.DataLinkInspectorPanelPresentation
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowActionOutcomePresentation
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowStatusNavigationPresentation
 
   attr :latest_action_outcome, :map, default: nil
   attr :dashboard_current_path, :string, default: nil
 
   def latest_action(assigns) do
+    latest_action_handoffs =
+      HistoricalWorkflowStatusNavigationPresentation.latest_action_handoffs(
+        assigns.latest_action_outcome,
+        assigns.dashboard_current_path
+      )
+
     assigns =
-      assign(
-        assigns,
-        :latest_action_handoffs,
-        HistoricalWorkflowStatusNavigationPresentation.latest_action_handoffs(
+      assigns
+      |> assign(:latest_action_handoffs, latest_action_handoffs)
+      |> assign(
+        :latest_action_attrs,
+        HistoricalWorkflowActionOutcomePresentation.stable_attrs(
           assigns.latest_action_outcome,
-          assigns.dashboard_current_path
+          "data-workflow-latest-action",
+          handoff_count: length(latest_action_handoffs),
+          primary_result_event_id:
+            HistoricalWorkflowStatusNavigationPresentation.primary_handoff_event_id(
+              latest_action_handoffs
+            )
         )
       )
 
@@ -27,64 +40,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
         "rounded border p-2 text-xs",
         @latest_action_outcome.class
       ]}
-      data-workflow-latest-action={@latest_action_outcome.action}
-      data-workflow-latest-action-status={@latest_action_outcome.status}
-      data-workflow-latest-action-reason={@latest_action_outcome.reason}
-      data-workflow-latest-action-stage={@latest_action_outcome.stage}
-      data-workflow-latest-action-job-id={@latest_action_outcome.job_id}
-      data-workflow-latest-action-count={@latest_action_outcome.count}
-      data-workflow-latest-action-retried={@latest_action_outcome.retried}
-      data-workflow-latest-action-retry-nonretryable={
-        @latest_action_outcome.retry_nonretryable
-      }
-      data-workflow-latest-action-retry-skipped={@latest_action_outcome.retry_skipped}
-      data-workflow-latest-action-retry-errors={@latest_action_outcome.retry_errors}
-      data-workflow-latest-action-retry-scope={@latest_action_outcome.retry_scope}
-       data-workflow-latest-action-retry-run-ids={@latest_action_outcome.retry_run_ids}
-       data-workflow-latest-action-retry-nonretryable-run-ids={
-         retry_disposition(@latest_action_outcome, :nonretryable_run_ids)
-       }
-       data-workflow-latest-action-retry-nonretryable-event-ids={
-         retry_disposition(@latest_action_outcome, :nonretryable_event_ids)
-       }
-       data-workflow-latest-action-retry-nonretryable-items={
-         retry_disposition(@latest_action_outcome, :nonretryable_items)
-       }
-       data-workflow-latest-action-retry-skipped-run-ids={
-         retry_disposition(@latest_action_outcome, :skipped_run_ids)
-       }
-       data-workflow-latest-action-retry-skipped-event-ids={
-         retry_disposition(@latest_action_outcome, :skipped_event_ids)
-       }
-       data-workflow-latest-action-retry-skipped-items={
-         retry_disposition(@latest_action_outcome, :skipped_items)
-       }
-       data-workflow-latest-action-retry-error-run-ids={
-         @latest_action_outcome.retry_error_run_ids
-       }
-      data-workflow-latest-action-retry-error-event-ids={
-        @latest_action_outcome.retry_error_event_ids
-      }
-      data-workflow-latest-action-retry-error-items={
-        @latest_action_outcome.retry_error_items
-      }
-      data-workflow-latest-action-queued-jobs={@latest_action_outcome.queued_jobs}
-      data-workflow-latest-action-failed-jobs={@latest_action_outcome.failed_jobs}
-      data-workflow-latest-action-result-event-ids={
-        @latest_action_outcome.result_event_ids
-      }
-      data-workflow-latest-action-target-event-id={
-        @latest_action_outcome.target_event_id
-      }
-      data-workflow-latest-action-target-run-id={
-        @latest_action_outcome.target_run_id
-      }
-      data-workflow-latest-action-handoff-count={length(@latest_action_handoffs)}
-      data-workflow-latest-action-primary-result-event-id={
-        HistoricalWorkflowStatusNavigationPresentation.primary_handoff_event_id(
-          @latest_action_handoffs
-        )
-      }
+      {@latest_action_attrs}
     >
       <div class="flex items-center justify-between gap-2">
         <span class="hud-label">Last Action</span>
@@ -123,6 +79,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
           class="font-mono break-all"
         >
           {@latest_action_outcome.stage}
+        </dd>
+        <dt
+          :if={
+            DataLinkInspectorPanelPresentation.present_text?(
+              latest_action_value(@latest_action_outcome, :request_group_id)
+            )
+          }
+          class="text-base-content/60"
+        >
+          Group
+        </dt>
+        <dd
+          :if={
+            DataLinkInspectorPanelPresentation.present_text?(
+              latest_action_value(@latest_action_outcome, :request_group_id)
+            )
+          }
+          class="font-mono break-all"
+        >
+          {latest_action_value(@latest_action_outcome, :request_group_id)}
         </dd>
         <dt
           :if={DataLinkInspectorPanelPresentation.present_text?(@latest_action_outcome.job_id)}
@@ -461,6 +437,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
             class="badge badge-xs badge-outline"
             data-workflow-latest-action-handoff={handoff.event_id}
             data-workflow-latest-action-handoff-role={handoff.role}
+            data-workflow-latest-action-handoff-label={handoff.label}
             data-workflow-latest-action-handoff-href={handoff.href}
           >
             {handoff.label}
@@ -476,4 +453,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowLatestActionComponen
   end
 
   defp retry_disposition(_latest_action_outcome, _key), do: nil
+
+  defp latest_action_value(latest_action_outcome, key) when is_map(latest_action_outcome) do
+    Map.get(latest_action_outcome, key)
+  end
+
+  defp latest_action_value(_latest_action_outcome, _key), do: nil
 end

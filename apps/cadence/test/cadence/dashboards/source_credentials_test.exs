@@ -10,7 +10,12 @@ defmodule Cadence.Dashboards.SourceCredentialsTest do
     SourceCredentials
   }
 
-  alias Cadence.Dashboards.SourceCredentials.{EnvMaterialResolver, SecretMaterialResolver}
+  alias Cadence.Dashboards.SourceCredentials.{
+    EnvMaterialResolver,
+    ExternalSecretBackend,
+    SecretMaterialResolver
+  }
+
   alias Cadence.OperationalEvents
 
   @organization_id "org-source-credentials"
@@ -340,6 +345,203 @@ defmodule Cadence.Dashboards.SourceCredentialsTest do
              http_endpoint: "https://customer-questdb.example.test",
              bearer_token: "secret-bearer"
            }
+  end
+
+  test "external secret backend fetches material from a configured secret manager" do
+    assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
+    parent = self()
+
+    req_request = fn request ->
+      send(parent, {:external_secret_request, request})
+
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{
+           "material" => %{
+             "http_endpoint" => "https://customer-questdb.example.test",
+             "bearer_token" => "secret-bearer",
+             "ignored" => "unused"
+           }
+         }
+       }}
+    end
+
+    assert {:ok, %SourceCredentialMaterial{} = material} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material},
+               secret_manager_url: "https://secrets.example.test/",
+               secret_manager_token_env: "CADENCE_TEST_SECRET_MANAGER_TOKEN",
+               env_reader: fn
+                 "CADENCE_TEST_SECRET_MANAGER_TOKEN" -> "secret-manager-token"
+                 _env_var -> nil
+               end,
+               req_request: req_request
+             )
+
+    assert material.material == %{
+             http_endpoint: "https://customer-questdb.example.test",
+             bearer_token: "secret-bearer"
+           }
+
+    assert_receive {:external_secret_request, request}
+    assert request[:method] == :post
+
+    assert request[:url] ==
+             "https://secrets.example.test/v1/dashboard-source-credentials/material"
+
+    assert request[:receive_timeout] == 5_000
+    assert {"authorization", "Bearer secret-manager-token"} in request[:headers]
+    assert request[:json].credentials_ref == @credentials_ref
+    assert request[:json].organization_id == @organization_id
+    assert request[:json].mission_id == @mission_id
+    assert request[:json].data_source_id == @data_source_id
+    assert request[:json].credential_version == 1
+    assert request[:json].metadata == %{"endpoint_ref" => "endpoint://customer/rehearsal"}
+  end
+
+  test "external secret backend writes redacted success audit events" do
+    assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
+
+    req_request = fn _request ->
+      {:ok,
+       %Req.Response{
+         status: 200,
+         body: %{
+           "material" => %{
+             "http_endpoint" => "https://customer-questdb.example.test",
+             "bearer_token" => "secret-bearer"
+           }
+         }
+       }}
+    end
+
+    assert {:ok, %SourceCredentialMaterial{}} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               actor_kind: :service,
+               actor_id: "dashboard-source-probe",
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material},
+               credential_material_resolution_id: "external-secret-audit-success",
+               secret_manager_url: "https://secrets.example.test/",
+               secret_manager_token: "secret-manager-token",
+               occurred_at: ~U[2026-07-06 14:00:00Z],
+               req_request: req_request
+             )
+
+    assert [audit_event] =
+             OperationalEvents.list_events(@organization_id, @mission_id,
+               category: :security,
+               subject_kind: :source_credential,
+               subject_id: @credentials_ref
+             )
+
+    assert audit_event.event_id ==
+             "operational_event:source_credential_material_resolution:external-secret-audit-success"
+
+    assert audit_event.kind == :source_credential_material_resolved
+    assert audit_event.severity == :info
+    assert audit_event.actor == %{kind: :service, id: "dashboard-source-probe"}
+    assert audit_event.payload["resolution_result"] == "succeeded"
+    assert audit_event.payload["material_fields"] == ["bearer_token", "http_endpoint"]
+    assert audit_event.payload["secret_material_fields"] == ["bearer_token"]
+
+    assert audit_event.payload["resolver"] ==
+             "Cadence.Dashboards.SourceCredentials.SecretMaterialResolver.resolve/2"
+
+    assert audit_event.payload["secret_backend"] ==
+             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+
+    assert audit_event.metadata["secret_backend"] ==
+             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+
+    refute inspect(audit_event) =~ "secret-bearer"
+    refute inspect(audit_event) =~ "secret-manager-token"
+    refute inspect(audit_event) =~ "secrets.example.test"
+    refute inspect(audit_event) =~ "customer-questdb.example.test"
+  end
+
+  test "external secret backend fails closed without a configured endpoint" do
+    assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
+
+    assert {:error,
+            {:credential_material_resolution_failed, :external_secret_manager_not_configured}} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material}
+             )
+  end
+
+  test "external secret backend redacts HTTP error bodies from material failures and audit events" do
+    assert {:ok, _reference, _event} = SourceCredentials.register_reference(reference_attrs())
+
+    req_request = fn _request ->
+      {:ok,
+       %Req.Response{
+         status: 403,
+         body: %{"error" => "denied", "token" => "secret-token"}
+       }}
+    end
+
+    assert {:error,
+            {:credential_material_resolution_failed, {:external_secret_manager_http_error, 403}}} =
+             SourceCredentials.resolve_material(@credentials_ref,
+               organization_id: @organization_id,
+               mission_id: @mission_id,
+               data_source_id: @data_source_id,
+               actor_kind: :service,
+               actor_id: "dashboard-source-probe",
+               credential_material_resolver: {SecretMaterialResolver, :resolve},
+               credential_secret_backend: {ExternalSecretBackend, :fetch_material},
+               credential_material_resolution_id: "external-secret-audit-failure",
+               secret_manager_url: "https://secrets.example.test/material",
+               secret_manager_token: "secret-manager-token",
+               occurred_at: ~U[2026-07-06 14:01:00Z],
+               req_request: req_request
+             )
+
+    assert [audit_event] =
+             OperationalEvents.list_events(@organization_id, @mission_id,
+               category: :security,
+               subject_kind: :source_credential,
+               subject_id: @credentials_ref
+             )
+
+    assert audit_event.event_id ==
+             "operational_event:source_credential_material_resolution:external-secret-audit-failure"
+
+    assert audit_event.kind == :source_credential_material_resolution_failed
+    assert audit_event.severity == :warning
+    assert audit_event.actor == %{kind: :service, id: "dashboard-source-probe"}
+    assert audit_event.payload["resolution_result"] == "failed"
+
+    assert audit_event.payload["failure_reason"] == [
+             "external_secret_manager_http_error",
+             "resolver_error"
+           ]
+
+    assert audit_event.payload["secret_backend"] ==
+             "Cadence.Dashboards.SourceCredentials.ExternalSecretBackend.fetch_material/2"
+
+    assert audit_event.current["failure_reason"] == [
+             "external_secret_manager_http_error",
+             "resolver_error"
+           ]
+
+    refute inspect(audit_event) =~ "secret-token"
+    refute inspect(audit_event) =~ "secret-manager-token"
+    refute inspect(audit_event) =~ "denied"
+    refute inspect(audit_event) =~ "secrets.example.test"
   end
 
   test "configured secret backend activates the default material resolver" do

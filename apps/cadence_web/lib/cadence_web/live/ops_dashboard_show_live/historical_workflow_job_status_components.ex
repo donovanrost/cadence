@@ -103,6 +103,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobStatusComponents 
         data-historical-workflow-job-guidance-correction-available-when={
           @job_recovery.correction.available_when
         }
+        data-historical-workflow-job-guidance-active-state={
+          @job_recovery.active_job_state
+        }
+        data-historical-workflow-job-guidance-started-at={
+          @job_recovery.active_job_started_at
+        }
+        data-historical-workflow-job-guidance-age-seconds={
+          @job_recovery.active_job_age_seconds
+        }
+        data-historical-workflow-job-guidance-stale-after-seconds={
+          @job_recovery.active_job_stale_after_seconds
+        }
       >
         <div class="flex items-center justify-between gap-2">
           <span class="hud-label">Job Guidance</span>
@@ -252,6 +264,106 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowJobStatusComponents 
       >
         <.icon name="hero-arrow-path" class="size-3" /> Retry job
       </button>
+      <div
+        :if={
+          @job_recovery.next_action == "inspect_stale_job" and
+            DataLinkInspectorPanelPresentation.present_text?(@workflow_context.job_id) and
+            DataLinkInspectorPanelPresentation.present_text?(@workflow_context.event_id)
+        }
+        id="dashboard-historical-workflow-stale-job-actions"
+        class="mt-2 flex flex-wrap gap-2"
+        data-workflow-action-scope="job_status"
+        data-workflow-action-job-id={@workflow_context.job_id}
+        data-workflow-action-event-id={@workflow_context.event_id}
+        data-workflow-action-job-started={@job_recovery.active_job_started_at}
+        data-workflow-action-job-age-seconds={@job_recovery.active_job_age_seconds}
+        data-workflow-action-job-stale-after-seconds={@job_recovery.active_job_stale_after_seconds}
+      >
+        <button
+          id="dashboard-historical-workflow-stale-job-inspect"
+          type="button"
+          class="btn btn-xs btn-warning btn-outline"
+          phx-click="inspect_stale_historical_workflow_replacement_job"
+          phx-value-job-id={@workflow_context.job_id}
+          phx-value-event-id={@workflow_context.event_id}
+          phx-value-replacement-run-id={
+            Map.get(@workflow_context, :missing_replacement_run_id) ||
+              Map.get(@workflow_context, :run_id)
+          }
+          data-workflow-action-id="inspect_stale_replacement_job"
+          data-workflow-action-job-id={@workflow_context.job_id}
+          data-workflow-action-event-id={@workflow_context.event_id}
+          data-workflow-action-replacement-run={
+            Map.get(@workflow_context, :missing_replacement_run_id) ||
+              Map.get(@workflow_context, :run_id)
+          }
+          data-workflow-action-job-started={@job_recovery.active_job_started_at}
+        >
+          <.icon name="hero-magnifying-glass" class="size-3" /> Inspect stale job
+        </button>
+        <button
+          id="dashboard-historical-workflow-stale-job-requeue"
+          type="button"
+          class="btn btn-xs btn-warning"
+          phx-click="requeue_stale_historical_workflow_replacement_job"
+          phx-value-job-id={@workflow_context.job_id}
+          phx-value-event-id={@workflow_context.event_id}
+          phx-value-replacement-run-id={
+            Map.get(@workflow_context, :missing_replacement_run_id) ||
+              Map.get(@workflow_context, :run_id)
+          }
+          data-workflow-action-id="requeue_stale_replacement_job"
+          data-workflow-action-job-id={@workflow_context.job_id}
+          data-workflow-action-event-id={@workflow_context.event_id}
+          data-workflow-action-replacement-run={
+            Map.get(@workflow_context, :missing_replacement_run_id) ||
+              Map.get(@workflow_context, :run_id)
+          }
+          data-workflow-action-job-started={@job_recovery.active_job_started_at}
+        >
+          <.icon name="hero-arrow-path" class="size-3" /> Requeue stale job
+        </button>
+      </div>
+      <div
+        :if={
+          @job_recovery.next_action == "inspect_missing_job" and
+            DataLinkInspectorPanelPresentation.present_text?(@workflow_context.request_group_id) and
+            DataLinkInspectorPanelPresentation.present_text?(
+              Map.get(@workflow_context, :missing_replacement_run_id) || @workflow_context.run_id
+            )
+        }
+        id="dashboard-historical-workflow-missing-job-actions"
+        class="mt-2 flex flex-wrap gap-2"
+        data-workflow-action-scope="job_status"
+        data-workflow-action-request-group-id={@workflow_context.request_group_id}
+        data-workflow-action-replacement-run={
+          Map.get(@workflow_context, :missing_replacement_run_id) || @workflow_context.run_id
+        }
+        data-workflow-action-expected-job-type={
+          Map.get(@workflow_context, :missing_replacement_expected_job_type)
+        }
+      >
+        <button
+          id="dashboard-historical-workflow-missing-job-inspect"
+          type="button"
+          class="btn btn-xs btn-warning btn-outline"
+          phx-click="inspect_missing_historical_workflow_replacement_job"
+          phx-value-request-group-id={@workflow_context.request_group_id}
+          phx-value-replacement-run-id={
+            Map.get(@workflow_context, :missing_replacement_run_id) || @workflow_context.run_id
+          }
+          data-workflow-action-id="inspect_missing_replacement_job"
+          data-workflow-action-request-group-id={@workflow_context.request_group_id}
+          data-workflow-action-replacement-run={
+            Map.get(@workflow_context, :missing_replacement_run_id) || @workflow_context.run_id
+          }
+          data-workflow-action-expected-job-type={
+            Map.get(@workflow_context, :missing_replacement_expected_job_type)
+          }
+        >
+          <.icon name="hero-magnifying-glass" class="size-3" /> Inspect missing job
+        </button>
+      </div>
     </div>
     """
   end

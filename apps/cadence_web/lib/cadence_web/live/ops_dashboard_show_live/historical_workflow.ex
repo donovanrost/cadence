@@ -6,12 +6,22 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
   alias Cadence.Dashboards.{ComparisonReviewQueue, DataLink, Document}
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowCommands
+  alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowContext
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowParams
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRequestDefaults
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelection
   alias CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowSelectionResult
   alias CadenceWeb.OpsDashboardShowLive.SelectionPanel
+
+  @dashboard_context_keys [
+    :dashboard_id,
+    :dashboard_version,
+    :dashboard_time_mode,
+    :dashboard_replay_run_id,
+    :dashboard_data_view,
+    :dashboard_limit_mode
+  ]
 
   def open_request(socket) do
     socket
@@ -52,11 +62,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
         {:ok, event, job_result} ->
           socket
           |> put_action_flash(
-            HistoricalWorkflowPresenter.action_outcome(:stage_transition, {:ok, job_result}, %{
-              stage: stage,
-              target_event_id: event_id(event),
-              target_run_id: run_id(event)
-            })
+            HistoricalWorkflowPresenter.action_outcome(
+              :stage_transition,
+              {:ok, job_result},
+              %{
+                stage: stage,
+                target_event_id: event_id(event),
+                target_run_id: run_id(event)
+              }
+              |> with_dashboard_context(params)
+            )
           )
           |> put_event_selection(event, params, opts)
 
@@ -66,17 +81,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             HistoricalWorkflowPresenter.action_outcome(
               :stage_transition,
               {:error, reason},
-              %{stage: stage, target_event_id: HistoricalWorkflowParams.get(params, :event_id)}
+              %{
+                stage: stage,
+                target_event_id: HistoricalWorkflowParams.get(params, :event_id)
+              }
+              |> with_dashboard_context(params)
             )
           )
       end
     else
       put_action_flash(
         socket,
-        HistoricalWorkflowPresenter.action_outcome(:stage_transition, :unconfirmed, %{
-          stage: stage,
-          target_event_id: HistoricalWorkflowParams.get(params, :event_id)
-        })
+        HistoricalWorkflowPresenter.action_outcome(
+          :stage_transition,
+          :unconfirmed,
+          %{
+            stage: stage,
+            target_event_id: HistoricalWorkflowParams.get(params, :event_id)
+          }
+          |> with_dashboard_context(params)
+        )
       )
     end
   end
@@ -100,8 +124,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
               %{
                 stage: stage,
                 target_event_id: event_id(selection.event),
-                target_run_id: run_id(selection.event)
+                target_run_id: run_id(selection.event),
+                request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
               }
+              |> with_dashboard_context(params)
             )
           )
           |> put_link_selection(selection, opts)
@@ -115,17 +141,28 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             HistoricalWorkflowPresenter.action_outcome(
               :group_stage_transition,
               {:error, reason},
-              %{stage: stage, target_event_id: HistoricalWorkflowParams.get(params, :event_id)}
+              %{
+                stage: stage,
+                target_event_id: HistoricalWorkflowParams.get(params, :event_id),
+                request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
+              }
+              |> with_dashboard_context(params)
             )
           )
       end
     else
       put_action_flash(
         socket,
-        HistoricalWorkflowPresenter.action_outcome(:group_stage_transition, :unconfirmed, %{
-          stage: stage,
-          target_event_id: HistoricalWorkflowParams.get(params, :event_id)
-        })
+        HistoricalWorkflowPresenter.action_outcome(
+          :group_stage_transition,
+          :unconfirmed,
+          %{
+            stage: stage,
+            target_event_id: HistoricalWorkflowParams.get(params, :event_id),
+            request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
+          }
+          |> with_dashboard_context(params)
+        )
       )
     end
   end
@@ -136,30 +173,42 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
     if HistoricalWorkflowParams.confirmed?(params) do
       case record_request_command(opts).(params, scope, mission) do
-        {:ok, [event | _events] = events, params} ->
+        {:ok, [event | _events] = events, selection_params} ->
           socket
           |> put_action_flash(
-            HistoricalWorkflowPresenter.action_outcome(:request, {:ok, events}, %{
-              target_event_id: event_id(event),
-              target_run_id: run_id(event)
-            })
+            HistoricalWorkflowPresenter.action_outcome(
+              :request,
+              {:ok, events},
+              request_context(event, events, selection_params)
+              |> with_dashboard_context(params)
+            )
           )
           |> assign(
             :historical_workflow_request_form,
             to_form(request_form_params(socket), as: :historical_workflow_request)
           )
-          |> put_event_selection(event, params, opts)
+          |> put_event_selection(event, selection_params, opts)
 
         {:error, reason} ->
           put_action_flash(
             socket,
-            HistoricalWorkflowPresenter.action_outcome(:request, {:error, reason})
+            HistoricalWorkflowPresenter.action_outcome(
+              :request,
+              {:error, reason},
+              request_context(params)
+              |> with_dashboard_context(params)
+            )
           )
       end
     else
       put_action_flash(
         socket,
-        HistoricalWorkflowPresenter.action_outcome(:request, :unconfirmed)
+        HistoricalWorkflowPresenter.action_outcome(
+          :request,
+          :unconfirmed,
+          request_context(params)
+          |> with_dashboard_context(params)
+        )
       )
     end
   end
@@ -173,35 +222,54 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
         {:ok, event} ->
           socket
           |> put_action_flash(
-            HistoricalWorkflowPresenter.action_outcome(:correction_request, {:ok, event}, %{
-              target_event_id: event_id(event),
-              target_run_id: run_id(event)
-            })
+            HistoricalWorkflowPresenter.action_outcome(
+              :correction_request,
+              {:ok, event},
+              %{
+                target_event_id: event_id(event),
+                target_run_id: run_id(event),
+                request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
+              }
+              |> with_dashboard_context(params)
+            )
           )
           |> put_event_selection(event, params, opts)
 
         {:error, reason} ->
           put_action_flash(
             socket,
-            HistoricalWorkflowPresenter.action_outcome(:correction_request, {:error, reason}, %{
-              target_event_id: HistoricalWorkflowParams.get(params, :original_event_id),
-              target_run_id: HistoricalWorkflowParams.get(params, :original_run_id)
-            })
+            HistoricalWorkflowPresenter.action_outcome(
+              :correction_request,
+              {:error, reason},
+              %{
+                target_event_id: HistoricalWorkflowParams.get(params, :original_event_id),
+                target_run_id: HistoricalWorkflowParams.get(params, :original_run_id),
+                request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
+              }
+              |> with_dashboard_context(params)
+            )
           )
       end
     else
       put_action_flash(
         socket,
-        HistoricalWorkflowPresenter.action_outcome(:correction_request, :unconfirmed, %{
-          target_event_id: HistoricalWorkflowParams.get(params, :original_event_id),
-          target_run_id: HistoricalWorkflowParams.get(params, :original_run_id)
-        })
+        HistoricalWorkflowPresenter.action_outcome(
+          :correction_request,
+          :unconfirmed,
+          %{
+            target_event_id: HistoricalWorkflowParams.get(params, :original_event_id),
+            target_run_id: HistoricalWorkflowParams.get(params, :original_run_id),
+            request_group_id: HistoricalWorkflowParams.get(params, :request_group_id)
+          }
+          |> with_dashboard_context(params)
+        )
       )
     end
   end
 
   def retry_job(socket, job_id, event_id, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    dashboard_context = selected_dashboard_context(socket)
 
     case retry_job_command(opts).(job_id, event_id, scope, mission) do
       {:ok, retried_job, retry_event} ->
@@ -210,7 +278,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
           HistoricalWorkflowPresenter.action_outcome(
             :retry_job,
             {:ok, retried_job, retry_event},
-            %{target_event_id: event_id(retry_event), target_run_id: run_id(retry_event)}
+            retry_job_context(retry_event, opts)
+            |> with_dashboard_context(dashboard_context)
           )
         )
         |> put_event_selection(retry_event, %{}, opts)
@@ -218,15 +287,21 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
       {:error, reason} ->
         put_action_flash(
           socket,
-          HistoricalWorkflowPresenter.action_outcome(:retry_job, {:error, reason}, %{
-            target_event_id: event_id
-          })
+          HistoricalWorkflowPresenter.action_outcome(
+            :retry_job,
+            {:error, reason},
+            %{
+              target_event_id: event_id
+            }
+            |> with_dashboard_context(dashboard_context)
+          )
         )
     end
   end
 
   def inspect_stale_replacement_job(socket, job_id, event_id, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    dashboard_context = selected_dashboard_context(socket)
 
     case inspect_stale_replacement_job_command(opts).(job_id, event_id, scope, mission) do
       {:ok, inspection_event} ->
@@ -237,8 +312,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             {:ok, inspection_event},
             %{
               target_event_id: event_id(inspection_event),
-              target_run_id: run_id(inspection_event)
+              target_run_id: replacement_target_run_id(inspection_event, opts)
             }
+            |> with_dashboard_context(dashboard_context)
           )
         )
         |> put_event_selection(inspection_event, %{}, opts)
@@ -249,7 +325,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
           HistoricalWorkflowPresenter.action_outcome(
             :stale_replacement_job_inspection,
             {:error, reason},
-            %{target_event_id: event_id}
+            %{target_event_id: event_id, target_run_id: replacement_target_run_id(nil, opts)}
+            |> with_dashboard_context(dashboard_context)
           )
         )
     end
@@ -257,6 +334,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
   def inspect_missing_replacement_job(socket, request_group_id, replacement_run_id, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    dashboard_context = selected_dashboard_context(socket)
 
     case inspect_missing_replacement_job_command(opts).(
            request_group_id,
@@ -272,8 +350,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             {:ok, inspection_event},
             %{
               target_event_id: event_id(inspection_event),
-              target_run_id: run_id(inspection_event)
+              target_run_id: run_id(inspection_event),
+              request_group_id: request_group_id
             }
+            |> with_dashboard_context(dashboard_context)
           )
         )
         |> put_event_selection(inspection_event, %{}, opts)
@@ -284,7 +364,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
           HistoricalWorkflowPresenter.action_outcome(
             :missing_replacement_job_inspection,
             {:error, reason},
-            %{target_run_id: replacement_run_id}
+            %{target_run_id: replacement_run_id, request_group_id: request_group_id}
+            |> with_dashboard_context(dashboard_context)
           )
         )
     end
@@ -292,6 +373,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
   def requeue_stale_replacement_job(socket, job_id, event_id, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    dashboard_context = selected_dashboard_context(socket)
 
     case requeue_stale_replacement_job_command(opts).(job_id, event_id, scope, mission) do
       {:ok, requeued_job, requeue_event} ->
@@ -302,8 +384,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             {:ok, requeued_job, requeue_event},
             %{
               target_event_id: event_id(requeue_event),
-              target_run_id: run_id(requeue_event)
+              target_run_id: replacement_target_run_id(requeue_event, opts)
             }
+            |> with_dashboard_context(dashboard_context)
           )
         )
         |> put_event_selection(requeue_event, %{}, opts)
@@ -314,7 +397,8 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
           HistoricalWorkflowPresenter.action_outcome(
             :stale_replacement_job_requeue,
             {:error, reason},
-            %{target_event_id: event_id}
+            %{target_event_id: event_id, target_run_id: replacement_target_run_id(nil, opts)}
+            |> with_dashboard_context(dashboard_context)
           )
         )
     end
@@ -322,6 +406,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
   def retry_group_failed_jobs(socket, request_group_id, event_id, opts \\ []) do
     %{current_scope: scope, current_mission: mission} = socket.assigns
+    dashboard_context = selected_dashboard_context(socket)
 
     case retry_group_failed_jobs_command(opts, request_group_id, scope, mission) do
       {:ok, summary} ->
@@ -329,10 +414,16 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
 
         socket
         |> put_action_flash(
-          HistoricalWorkflowPresenter.action_outcome(:retry_group_failed_jobs, {:ok, summary}, %{
-            target_event_id: selection.link.target_id,
-            retry_run_ids: Keyword.get(opts, :retry_run_ids)
-          })
+          HistoricalWorkflowPresenter.action_outcome(
+            :retry_group_failed_jobs,
+            {:ok, summary},
+            %{
+              target_event_id: selection.link.target_id,
+              request_group_id: request_group_id,
+              retry_run_ids: Keyword.get(opts, :retry_run_ids)
+            }
+            |> with_dashboard_context(dashboard_context)
+          )
         )
         |> put_link_selection(selection, opts)
 
@@ -343,8 +434,10 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
             :retry_group_failed_jobs,
             {:error, reason},
             %{
-              target_event_id: event_id
+              target_event_id: event_id,
+              request_group_id: request_group_id
             }
+            |> with_dashboard_context(dashboard_context)
           )
         )
     end
@@ -521,6 +614,97 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
   defp run_id(%{backfill_run_id: run_id}) when is_binary(run_id), do: run_id
   defp run_id(_event), do: nil
 
+  defp request_context(event, events, params) do
+    %{
+      target_event_id: event_id(event),
+      target_run_id: run_id(event),
+      request_group_id: request_group_id(events, params)
+    }
+  end
+
+  defp request_context(params) do
+    %{request_group_id: request_group_id(params)}
+  end
+
+  defp request_group_id(events, params) when is_list(events) do
+    events
+    |> Enum.find_value(&event_request_group_id/1)
+    |> case do
+      nil -> request_group_id(params)
+      request_group_id -> request_group_id
+    end
+  end
+
+  defp request_group_id(%HistoricalWorkflowParams{} = params) do
+    params
+    |> HistoricalWorkflowParams.get(:run_id)
+    |> text_param()
+  end
+
+  defp request_group_id(params) when is_map(params) do
+    ["request_group_id", :request_group_id, "run_id", :run_id]
+    |> Enum.find_value(fn key ->
+      params
+      |> Map.get(key)
+      |> text_param()
+    end)
+  end
+
+  defp request_group_id(_params), do: nil
+
+  defp with_dashboard_context(context, %HistoricalWorkflowParams{} = params)
+       when is_map(context) do
+    Enum.reduce(@dashboard_context_keys, context, &put_context_param(&2, &1, params))
+  end
+
+  defp with_dashboard_context(context, source) when is_map(context) and is_map(source) do
+    Enum.reduce(@dashboard_context_keys, context, &put_context_value(&2, &1, source))
+  end
+
+  defp with_dashboard_context(context, _params), do: context
+
+  defp put_context_param(context, key, %HistoricalWorkflowParams{} = params) do
+    case HistoricalWorkflowParams.get(params, key) do
+      value when is_binary(value) and value != "" -> Map.put(context, key, value)
+      _value -> context
+    end
+  end
+
+  defp put_context_value(context, key, source) when is_map(source) do
+    value =
+      source
+      |> Map.get(key, Map.get(source, Atom.to_string(key)))
+      |> text_param()
+
+    case value do
+      nil -> context
+      value -> Map.put(context, key, value)
+    end
+  end
+
+  defp selected_dashboard_context(%{assigns: assigns}) do
+    assigns
+    |> Map.get(:panel)
+    |> selected_panel_inspector()
+    |> HistoricalWorkflowContext.build()
+    |> dashboard_context()
+  end
+
+  defp selected_panel_inspector({:data_link, inspector}), do: inspector
+  defp selected_panel_inspector(_panel), do: %{}
+
+  defp dashboard_context(%HistoricalWorkflowContext{} = context) do
+    Enum.reduce(@dashboard_context_keys, %{}, &put_context_value(&2, &1, context))
+  end
+
+  defp event_request_group_id(%{payload: payload}) when is_map(payload) do
+    payload
+    |> Map.get("request_group_id")
+    |> text_param()
+  end
+
+  defp event_request_group_id(_event), do: nil
+
   defp put_link_selection(
          socket,
          %HistoricalWorkflowSelectionResult{query: query, link: %DataLink{} = link},
@@ -615,6 +799,27 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflow do
     case Function.info(command, :arity) do
       {:arity, 4} -> command.(request_group_id, scope, mission, opts)
       {:arity, 3} -> command.(request_group_id, scope, mission)
+    end
+  end
+
+  defp retry_job_context(retry_event, opts) do
+    %{
+      target_event_id: event_id(retry_event),
+      target_run_id: retry_job_target_run_id(retry_event, opts)
+    }
+  end
+
+  defp retry_job_target_run_id(retry_event, opts) do
+    case text_param(Keyword.get(opts, :replacement_run_id)) do
+      nil -> run_id(retry_event)
+      replacement_run_id -> replacement_run_id
+    end
+  end
+
+  defp replacement_target_run_id(event, opts) do
+    case text_param(Keyword.get(opts, :replacement_run_id)) do
+      nil -> run_id(event)
+      replacement_run_id -> replacement_run_id
     end
   end
 

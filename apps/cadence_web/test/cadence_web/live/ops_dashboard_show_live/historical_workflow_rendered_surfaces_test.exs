@@ -196,16 +196,26 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
           |> LazyHTML.attribute("data-workflow-latest-action-handoff-role")
           |> List.first()
 
+        label =
+          node
+          |> LazyHTML.attribute("data-workflow-latest-action-handoff-label")
+          |> List.first()
+
+        text =
+          node
+          |> LazyHTML.text()
+          |> String.trim()
+
         href =
           node
           |> LazyHTML.attribute("data-workflow-latest-action-handoff-href")
           |> List.first()
 
-        {event_id, role, review_href_query(href)}
+        {event_id, role, label, text, review_href_query(href)}
       end)
 
     assert handoffs == [
-             {"source-event-1", "target",
+             {"source-event-1", "target", "Selected event", "Selected event",
               %{
                 "scope_kind" => "mission",
                 "scope_id" => "mission-1",
@@ -213,7 +223,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
                 "selected_target" => "telemetry_backfill_lifecycle_event",
                 "selected_id" => "source-event-1"
               }},
-             {"retry-event-1", "result",
+             {"retry-event-1", "result", "Result 1", "Result 1",
               %{
                 "scope_kind" => "mission",
                 "scope_id" => "mission-1",
@@ -448,6 +458,31 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
              document
              |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
              |> LazyHTML.attribute("data-historical-workflow-group-job-progress")
+
+    assert ["1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
+             |> LazyHTML.attribute("data-historical-workflow-group-job-progress-queued")
+
+    assert ["0"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
+             |> LazyHTML.attribute("data-historical-workflow-group-job-progress-running")
+
+    assert ["0"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
+             |> LazyHTML.attribute("data-historical-workflow-group-job-progress-completed")
+
+    assert ["1"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
+             |> LazyHTML.attribute("data-historical-workflow-group-job-progress-failed")
+
+    assert ["0"] =
+             document
+             |> LazyHTML.query("#dashboard-historical-workflow-group-job-progress")
+             |> LazyHTML.attribute("data-historical-workflow-group-job-progress-missing")
 
     assert [
              "group request-group-1; failed; progress 2/4; jobs queued 1, failed 1; failed 2; retryable 2; correction 0; resolved 0; failed items job-1,job-2"
@@ -1263,6 +1298,55 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
                "data-historical-workflow-group-recovery-remaining-work-job-item"
              )
 
+    assert ["retry_historical_workflow_job"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("phx-click")
+
+    assert ["job-4"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("phx-value-job-id")
+
+    assert ["event-4"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("phx-value-event-id")
+
+    assert ["run-004-corrected"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
+
+    assert ["retry_failed_replacement_job"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("data-workflow-action-id")
+
+    assert ["replacement_job"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("data-workflow-action-scope")
+
+    assert ["retryable_group_failures"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-failed-replacement-retry-run-004-corrected"
+             )
+             |> LazyHTML.attribute("data-workflow-action-reason")
+
     assert ["inspect_stale_historical_workflow_replacement_job"] =
              document
              |> LazyHTML.query(
@@ -1283,6 +1367,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
                "#dashboard-historical-workflow-stale-replacement-inspect-run-006-corrected"
              )
              |> LazyHTML.attribute("phx-value-event-id")
+
+    assert ["run-006-corrected"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-stale-replacement-inspect-run-006-corrected"
+             )
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
 
     assert ["requeue_stale_historical_workflow_replacement_job"] =
              document
@@ -1311,6 +1402,13 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowRenderedSurfacesTest
                "#dashboard-historical-workflow-stale-replacement-requeue-run-006-corrected"
              )
              |> LazyHTML.attribute("phx-value-event-id")
+
+    assert ["run-006-corrected"] =
+             document
+             |> LazyHTML.query(
+               "#dashboard-historical-workflow-stale-replacement-requeue-run-006-corrected"
+             )
+             |> LazyHTML.attribute("phx-value-replacement-run-id")
   end
 
   test "group_status renders closure readiness for pending, monitoring, and complete states" do

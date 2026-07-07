@@ -9,7 +9,14 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
       summary = ComparisonReviewFocus.request_summary(event, lifecycle_events)
       workflow_point_ids = workflow_request_point_ids(summary.findings)
       bulk_decision_items = bulk_decision_items(summary.findings)
+      bulk_decision_skipped_items = bulk_decision_skipped_items(summary.findings)
       source_context = source_context(summary.findings)
+
+      bulk_decision_available? =
+        bulk_decision_items != [] and source_context_available?(source_context)
+
+      bulk_decision_unavailable_reason =
+        bulk_decision_unavailable_reason(bulk_decision_items, source_context)
 
       %{
         render?: true,
@@ -26,10 +33,19 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
         workflow_request_available?: workflow_point_ids != [],
         workflow_request_point_ids_attr: Enum.join(workflow_point_ids, ","),
         workflow_request_point_count_text: Integer.to_string(length(workflow_point_ids)),
-        bulk_decision_available?:
-          bulk_decision_items != [] and source_context_available?(source_context),
+        bulk_decision_available?: bulk_decision_available?,
+        bulk_decision_unavailable?: not bulk_decision_available?,
+        bulk_decision_unavailable_reason: bulk_decision_unavailable_reason,
+        bulk_decision_unavailable_label:
+          bulk_decision_unavailable_label(bulk_decision_unavailable_reason),
         bulk_decision_count_text: Integer.to_string(length(bulk_decision_items)),
         bulk_decision_placement_ids_attr: bulk_decision_placement_ids_attr(bulk_decision_items),
+        bulk_decision_skipped_count_text: Integer.to_string(length(bulk_decision_skipped_items)),
+        bulk_decision_skipped_placement_ids_attr:
+          bulk_decision_placement_ids_attr(bulk_decision_skipped_items),
+        bulk_decision_skipped_reasons_attr:
+          bulk_decision_skipped_reasons_attr(bulk_decision_skipped_items),
+        bulk_decision_skipped_label: bulk_decision_skipped_label(bulk_decision_skipped_items),
         placement_links: placement_links(summary.placement_ids, selected_placement_id),
         findings: Enum.map(summary.findings, &finding_row(&1, selected_placement_id)),
         selected_placement_id: selected_placement_id
@@ -59,7 +75,18 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
         workflow_intent_action: workflow_summary.workflow_intent_action,
         workflow_selection_count_text: workflow_summary.workflow_selection_count_text,
         source_open_count_text: workflow_summary.source_open_count_text,
-        source_open_placements_attr: workflow_summary.source_open_placements_attr
+        source_open_placements_attr: workflow_summary.source_open_placements_attr,
+        source_bulk_decision_actionable_count_text:
+          workflow_summary.source_bulk_decision_actionable_count_text,
+        source_bulk_decision_actionable_placements_attr:
+          workflow_summary.source_bulk_decision_actionable_placements_attr,
+        source_bulk_decision_skipped_count_text:
+          workflow_summary.source_bulk_decision_skipped_count_text,
+        source_bulk_decision_skipped_placements_attr:
+          workflow_summary.source_bulk_decision_skipped_placements_attr,
+        source_bulk_decision_skipped_reasons_attr:
+          workflow_summary.source_bulk_decision_skipped_reasons_attr,
+        source_bulk_decision_summary_text: workflow_summary.source_bulk_decision_summary_text
       }
     else
       empty()
@@ -79,6 +106,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
 
   defp finding_row(finding, selected_placement_id) when is_map(finding) do
     summary = ComparisonReviewFocus.finding_summary(finding)
+    bulk_decision_status = finding_bulk_decision_status(finding)
 
     %{
       placement_id: summary.placement_id,
@@ -86,6 +114,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
       state: summary.state,
       decision_status: summary.decision_status,
       observation_identity_id: observation_identity_id(finding),
+      bulk_decision_status: bulk_decision_status.status,
+      bulk_decision_reason: bulk_decision_status.reason,
+      bulk_decision_label: bulk_decision_status.label,
       placement_href: summary.placement_href,
       placement_selected?: summary.placement_id == selected_placement_id,
       placement_selected_text: selected_text(summary.placement_id == selected_placement_id)
@@ -118,12 +149,66 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
 
   defp bulk_decision_item(_finding), do: nil
 
+  defp bulk_decision_skipped_items(findings) when is_list(findings) do
+    findings
+    |> Enum.map(&bulk_decision_skipped_item/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp bulk_decision_skipped_item(finding) when is_map(finding) do
+    case finding_bulk_decision_status(finding) do
+      %{status: "skipped"} = status ->
+        %{
+          placement_id: ComparisonReviewFocus.payload_value(finding, "placement_id"),
+          reason: status.reason
+        }
+
+      _status ->
+        nil
+    end
+  end
+
+  defp bulk_decision_skipped_item(_finding), do: nil
+
   defp bulk_decision_placement_ids_attr(items) do
     items
     |> Enum.map(&Map.get(&1, :placement_id))
     |> Enum.filter(&present_text?/1)
     |> Enum.uniq()
     |> Enum.join(",")
+  end
+
+  defp bulk_decision_skipped_reasons_attr(items) do
+    items
+    |> Enum.map(&Map.get(&1, :reason))
+    |> Enum.filter(&present_text?/1)
+    |> Enum.uniq()
+    |> Enum.join(",")
+  end
+
+  defp bulk_decision_skipped_label([]), do: nil
+
+  defp bulk_decision_skipped_label(items) do
+    "#{length(items)} #{pluralize("finding", length(items))} skipped for bulk action."
+  end
+
+  defp finding_bulk_decision_status(finding) when is_map(finding) do
+    observation_identity_id = observation_identity_id(finding)
+
+    cond do
+      not present_text?(observation_identity_id) ->
+        %{
+          status: "skipped",
+          reason: "missing_observation_identity",
+          label: "Skipped: missing observation identity"
+        }
+
+      ComparisonReviewFocus.payload_value(finding, "decision_status") == "applied" ->
+        %{status: "skipped", reason: "already_applied", label: "Skipped: already applied"}
+
+      true ->
+        %{status: "included", reason: nil, label: "Included in bulk action"}
+    end
   end
 
   defp observation_identity_id(finding) when is_map(finding) do
@@ -166,6 +251,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
   end
 
   defp source_context_available?(_source_context), do: false
+
+  defp bulk_decision_unavailable_reason([], _source_context), do: "no_actionable_findings"
+
+  defp bulk_decision_unavailable_reason(_items, source_context) do
+    if source_context_available?(source_context) do
+      nil
+    else
+      "missing_source_context"
+    end
+  end
+
+  defp bulk_decision_unavailable_label("missing_source_context"),
+    do: "Bulk decision unavailable: telemetry source context is missing."
+
+  defp bulk_decision_unavailable_label("no_actionable_findings"),
+    do: "Bulk decision unavailable: no actionable findings."
+
+  defp bulk_decision_unavailable_label(_reason), do: nil
 
   defp workflow_request_point_ids(findings) when is_list(findings) do
     findings
@@ -212,6 +315,34 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
       |> List.wrap()
       |> Enum.filter(&present_text?/1)
 
+    source_bulk_decision_actionable_placement_ids =
+      payload
+      |> ComparisonReviewFocus.payload_value("source_bulk_decision_actionable_placement_ids")
+      |> List.wrap()
+      |> Enum.filter(&present_text?/1)
+
+    source_bulk_decision_skipped_placement_ids =
+      payload
+      |> ComparisonReviewFocus.payload_value("source_bulk_decision_skipped_placement_ids")
+      |> List.wrap()
+      |> Enum.filter(&present_text?/1)
+
+    source_bulk_decision_skipped_reasons =
+      payload
+      |> ComparisonReviewFocus.payload_value("source_bulk_decision_skipped_reasons")
+      |> List.wrap()
+      |> Enum.filter(&present_text?/1)
+
+    actionable_count_text =
+      payload
+      |> ComparisonReviewFocus.payload_value("source_bulk_decision_actionable_count")
+      |> count_text()
+
+    skipped_count_text =
+      payload
+      |> ComparisonReviewFocus.payload_value("source_bulk_decision_skipped_count")
+      |> count_text()
+
     %{
       workflow_intent_kind: workflow_value(workflow_intent, "kind"),
       workflow_intent_action: workflow_value(workflow_intent, "action"),
@@ -219,8 +350,24 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
         workflow_intent |> ComparisonReviewFocus.payload_value("selection_count") |> count_text(),
       source_open_count_text:
         payload |> ComparisonReviewFocus.payload_value("source_open_count") |> count_text(),
-      source_open_placements_attr: Enum.join(source_open_placement_ids, ",")
+      source_open_placements_attr: Enum.join(source_open_placement_ids, ","),
+      source_bulk_decision_actionable_count_text: actionable_count_text,
+      source_bulk_decision_actionable_placements_attr:
+        Enum.join(source_bulk_decision_actionable_placement_ids, ","),
+      source_bulk_decision_skipped_count_text: skipped_count_text,
+      source_bulk_decision_skipped_placements_attr:
+        Enum.join(source_bulk_decision_skipped_placement_ids, ","),
+      source_bulk_decision_skipped_reasons_attr:
+        Enum.join(source_bulk_decision_skipped_reasons, ","),
+      source_bulk_decision_summary_text:
+        source_bulk_decision_summary_text(actionable_count_text, skipped_count_text)
     }
+  end
+
+  defp source_bulk_decision_summary_text("-", "-"), do: "-"
+
+  defp source_bulk_decision_summary_text(actionable_count_text, skipped_count_text) do
+    "#{actionable_count_text} actionable / #{skipped_count_text} skipped"
   end
 
   defp workflow_value(workflow_intent, key) do
@@ -236,6 +383,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.ComparisonReviewActivityRow do
   defp display_text(value) when is_binary(value) and value != "", do: value
   defp display_text(value) when is_integer(value), do: Integer.to_string(value)
   defp display_text(_value), do: "-"
+
+  defp pluralize(word, 1), do: word
+  defp pluralize(word, _count), do: word <> "s"
 
   defp present_text?(value), do: is_binary(value) and value != ""
 

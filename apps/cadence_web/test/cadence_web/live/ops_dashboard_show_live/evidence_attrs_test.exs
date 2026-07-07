@@ -48,6 +48,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceAttrsTest do
                scope_ids: ["spacecraft-1"],
                contact_ids: ["contact-1"],
                source_endpoint_ids: ["endpoint-1"],
+               source_health_states: [:degraded],
+               source_health_event_ids: ["source-health-event-1"],
+               source_health_reasons: [:source_schema_probe_failed],
                empty_reason: :contact_scope_no_data
              }) == %{
                "phx-value-kind" => "source",
@@ -65,6 +68,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.EvidenceAttrsTest do
                "phx-value-scope-id" => "spacecraft-1",
                "phx-value-contact-id" => "contact-1",
                "phx-value-source-endpoint-id" => "endpoint-1",
+               "phx-value-source-health-state" => "degraded",
+               "phx-value-source-health-event-id" => "source-health-event-1",
+               "phx-value-source-health-reason" => "source_schema_probe_failed",
                "phx-value-source-empty-reason" => "contact_scope_no_data"
              }
     end

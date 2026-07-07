@@ -3,7 +3,7 @@ defmodule Cadence.Accounts.Password do
 
   import Bitwise
 
-  @pbkdf2_iterations 100_000
+  @pbkdf2_iterations Application.compile_env(:cadence, :password_hash_iterations, 100_000)
   @pbkdf2_length 32
 
   @spec hash_password(binary()) :: %{

@@ -343,6 +343,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
       status: :error,
       kind: :error,
       reason: "retry_group_failed_jobs_failed",
+      request_group_id: action_request_group_id(reason, context),
       error: reason,
       message:
         workflow_failure_message(
@@ -385,6 +386,7 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
       result_event_ids: text_value(Map.get(outcome, :result_event_ids)),
       target_event_id: text_value(Map.get(outcome, :target_event_id)),
       target_run_id: text_value(Map.get(outcome, :target_run_id)),
+      dashboard_context: non_empty_map(Map.get(outcome, :dashboard_context)),
       message: Map.get(outcome, :message)
     }
     |> Enum.reject(fn {_key, value} -> blank?(value) end)
@@ -571,6 +573,9 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
 
   defp normalize_retry_run_ids(_run_ids), do: []
 
+  defp non_empty_map(value) when is_map(value) and map_size(value) > 0, do: value
+  defp non_empty_map(_value), do: nil
+
   def no_eligible_group_flash(request_group_id, stage) do
     "No #{group_stage_label(stage)} items are eligible in request group #{request_group_id}. The workflow panel was refreshed with current eligibility counts."
   end
@@ -602,9 +607,23 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
     outcome
     |> put_first_present(:target_event_id, context, [:target_event_id, :event_id])
     |> put_first_present(:target_run_id, context, [:target_run_id, :run_id])
+    |> put_first_present(:request_group_id, context, [:request_group_id])
+    |> put_dashboard_context(context)
   end
 
   defp put_action_context(outcome, _context), do: outcome
+
+  defp action_request_group_id(
+         {:historical_workflow_group_retry_blocked, request_group_id, _reason},
+         _context
+       ) do
+    request_group_id
+  end
+
+  defp action_request_group_id(_reason, context) when is_map(context),
+    do: Map.get(context, :request_group_id)
+
+  defp action_request_group_id(_reason, _context), do: nil
 
   defp put_result_events(outcome, events) when is_list(events) do
     event_ids = event_ids(events)
@@ -653,6 +672,25 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowPresenter do
       value when is_binary(value) and value != "" -> value
       value when is_integer(value) -> Integer.to_string(value)
       _value -> nil
+    end
+  end
+
+  defp put_dashboard_context(outcome, context) when is_map(context) do
+    dashboard_context =
+      %{
+        dashboard_id: present_context_value(context, :dashboard_id),
+        dashboard_version: present_context_value(context, :dashboard_version),
+        dashboard_time_mode: present_context_value(context, :dashboard_time_mode),
+        dashboard_replay_run_id: present_context_value(context, :dashboard_replay_run_id),
+        dashboard_data_view: present_context_value(context, :dashboard_data_view),
+        dashboard_limit_mode: present_context_value(context, :dashboard_limit_mode)
+      }
+      |> Enum.reject(fn {_key, value} -> blank?(value) end)
+      |> Map.new()
+
+    case dashboard_context do
+      context when map_size(context) == 0 -> outcome
+      context -> Map.put(outcome, :dashboard_context, context)
     end
   end
 

@@ -20,6 +20,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     DataLinkResolver,
     DataSource,
     DataSources,
+    LifecycleEvent,
     SourceHealth,
     SourceWatermarks
   }
@@ -31,6 +32,8 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
   alias Cadence.Runtime.TransportCapabilityRecord
 
   alias Cadence.Persistence.Schemas.{
+    DashboardLifecycleEventRow,
+    OpsDashboardRow,
     TelemetryObservationIdentityDecisionEventRow,
     TelemetrySampleRow
   }
@@ -1723,6 +1726,46 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     mission_id = "mission-resolver-revision-decision"
     persist_mission_scope(organization_id, mission_id)
 
+    Repo.insert!(%OpsDashboardRow{
+      dashboard_id: "dashboard-resolver-revision",
+      organization_id: organization_id,
+      mission_id: mission_id,
+      name: "Revision decision dashboard",
+      document: %{
+        "dashboard_id" => "dashboard-resolver-revision",
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "name" => "Revision decision dashboard",
+        "metadata" => %{"version" => 4}
+      },
+      latest_version: 4,
+      draft_version: 4,
+      lifecycle_state: "active"
+    })
+
+    comparison_review_request =
+      LifecycleEvent.new(%{
+        dashboard_lifecycle_event_id: "correction-workflow-1",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        dashboard_id: "dashboard-resolver-revision",
+        event_type: :comparison_review_requested,
+        dashboard_version: 4,
+        actor_id: "ops-1",
+        occurred_at: ~U[2026-06-22 12:09:00Z],
+        payload: %{
+          "schema" => "dashboard_comparison_review_request.v1",
+          "request_kind" => "comparison_open_findings_review",
+          "open_count" => 4,
+          "open_placement_ids" => ["placement-1", "placement-2", "placement-3", "placement-4"]
+        }
+      })
+
+    assert {:ok, _row} =
+             comparison_review_request
+             |> DashboardLifecycleEventRow.changeset()
+             |> Repo.insert()
+
     decision_event =
       ObservationIdentityDecisionEvent.new(%{
         decision_event_id: "resolver-decision-event-1",
@@ -1763,7 +1806,15 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
             "kind" => "telemetry_correction_authority_workflow",
             "id" => "correction-workflow-1",
             "authority" => "operator",
-            "requested_by" => "dashboard"
+            "requested_by" => "dashboard_comparison_review"
+          },
+          "bulk_workflow_item" => %{
+            "kind" => "telemetry_correction_authority_workflow_item",
+            "workflow_id" => "correction-workflow-1",
+            "item_index" => 2,
+            "item_count" => 4,
+            "observation_identity_id" => "resolver-identity-1",
+            "selection_kind" => "open_comparison_findings"
           }
         },
         previous_state: %{
@@ -1823,7 +1874,15 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert row_value(inspector.rows, "Source link label") == "Comparison finding"
     assert row_value(inspector.rows, "Correction workflow") == "correction-workflow-1"
     assert row_value(inspector.rows, "Correction authority") == "operator"
-    assert row_value(inspector.rows, "Correction requested by") == "dashboard"
+    assert row_value(inspector.rows, "Correction requested by") == "dashboard_comparison_review"
+    assert row_value(inspector.rows, "Bulk workflow") == "correction-workflow-1"
+    assert row_value(inspector.rows, "Bulk workflow item") == "2"
+    assert row_value(inspector.rows, "Bulk workflow item count") == "4"
+
+    assert row_value(inspector.rows, "Bulk workflow observation identity") ==
+             "resolver-identity-1"
+
+    assert row_value(inspector.rows, "Bulk workflow selection") == "open_comparison_findings"
     assert row_value(inspector.rows, "Comparison finding") == "placement-1"
     assert row_value(inspector.rows, "Comparison state") == "increased"
     assert row_value(inspector.rows, "Comparison delta") == "+2"
@@ -1848,6 +1907,28 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert related_link(inspector.related_links, :telemetry_sample, "sample-before")
     assert related_link(inspector.related_links, :telemetry_sample, "sample-after")
 
+    workflow_link =
+      related_link(inspector.related_links, :dashboard_lifecycle_event, "correction-workflow-1")
+
+    assert workflow_link
+    assert workflow_link.relationship_kind == :comparison_review_origin
+
+    assert {:ok, workflow_inspector} =
+             DataLinkResolver.resolve(workflow_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert workflow_inspector.status == :resolved
+    assert workflow_inspector.target == :dashboard_lifecycle_event
+
+    assert row_value(workflow_inspector.rows, "Dashboard lifecycle event") ==
+             "correction-workflow-1"
+
+    assert row_value(workflow_inspector.rows, "Event type") == "comparison_review_requested"
+    assert row_value(workflow_inspector.rows, "Dashboard") == "dashboard-resolver-revision"
+    assert row_value(workflow_inspector.rows, "Dashboard version") == "4"
+
     assert {:error, missing_inspector} =
              DataLinkResolver.resolve(link,
                organization_id: organization_id,
@@ -1861,6 +1942,46 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     organization_id = "org-resolver-backfill-lifecycle"
     mission_id = "mission-resolver-backfill-lifecycle"
     persist_mission_scope(organization_id, mission_id)
+
+    Repo.insert!(%OpsDashboardRow{
+      dashboard_id: "dashboard-resolver-1",
+      organization_id: organization_id,
+      mission_id: mission_id,
+      name: "Resolver dashboard",
+      document: %{
+        "dashboard_id" => "dashboard-resolver-1",
+        "organization_id" => organization_id,
+        "mission_id" => mission_id,
+        "name" => "Resolver dashboard",
+        "metadata" => %{"version" => 7}
+      },
+      latest_version: 7,
+      draft_version: 7,
+      lifecycle_state: "active"
+    })
+
+    comparison_review_request =
+      LifecycleEvent.new(%{
+        dashboard_lifecycle_event_id: "review-request-resolver",
+        organization_id: organization_id,
+        mission_id: mission_id,
+        dashboard_id: "dashboard-resolver-1",
+        event_type: :comparison_review_requested,
+        dashboard_version: 7,
+        actor_id: "ops-1",
+        occurred_at: ~U[2026-06-22 12:19:00Z],
+        payload: %{
+          "schema" => "dashboard_comparison_review_request.v1",
+          "request_kind" => "comparison_open_findings_review",
+          "open_count" => 2,
+          "open_placement_ids" => ["placement-1", "placement-2"]
+        }
+      })
+
+    assert {:ok, _row} =
+             comparison_review_request
+             |> DashboardLifecycleEventRow.changeset()
+             |> Repo.insert()
 
     assert {:ok, event} =
              Storage.record_backfill_lifecycle_event(
@@ -1901,7 +2022,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
                      "dashboard_limit_mode" => "observed"
                    },
                    "comparison_review_origin" => %{
-                     "request_event_id" => "review-request-resolver",
+                     "request_event_id" => comparison_review_request.dashboard_lifecycle_event_id,
                      "request_kind" => "comparison_open_findings_review",
                      "open_count" => "2",
                      "open_placement_ids" => "placement-1,placement-2"
@@ -1980,6 +2101,46 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert row_value(inspector.context_rows, "Source request") == "events-request-1"
     assert row_value(inspector.context_rows, "Logical source") == "events"
     assert related_link(inspector.related_links, :telemetry_point, "HK.counter")
+
+    comparison_review_link =
+      related_link(
+        inspector.related_links,
+        :dashboard_lifecycle_event,
+        comparison_review_request.dashboard_lifecycle_event_id
+      )
+
+    assert comparison_review_link
+    assert comparison_review_link.relationship_kind == :comparison_review_origin
+
+    assert {:ok, comparison_review_inspector} =
+             DataLinkResolver.resolve(comparison_review_link,
+               organization_id: organization_id,
+               mission_id: mission_id
+             )
+
+    assert comparison_review_inspector.status == :resolved
+    assert comparison_review_inspector.target == :dashboard_lifecycle_event
+
+    assert row_value(comparison_review_inspector.rows, "Dashboard lifecycle event") ==
+             comparison_review_request.dashboard_lifecycle_event_id
+
+    assert row_value(comparison_review_inspector.rows, "Dashboard") == "dashboard-resolver-1"
+
+    assert row_value(comparison_review_inspector.rows, "Event type") ==
+             "comparison_review_requested"
+
+    assert row_value(comparison_review_inspector.rows, "Dashboard version") == "7"
+
+    assert row_value(comparison_review_inspector.rows, "Payload schema") ==
+             "dashboard_comparison_review_request.v1"
+
+    assert row_value(comparison_review_inspector.rows, "Comparison review kind") ==
+             "comparison_open_findings_review"
+
+    assert row_value(comparison_review_inspector.rows, "Comparison review open count") == "2"
+
+    assert row_value(comparison_review_inspector.rows, "Comparison review placements") ==
+             "placement-1,placement-2"
 
     assert {:error, missing_inspector} =
              DataLinkResolver.resolve(link,
@@ -2354,7 +2515,9 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
                  payload: %{
                    "kind" => "late_data_policy_decision",
                    "policy_decision" => "accept",
+                   "execution_mode" => "sample_execution",
                    "source_event_id" => "resolver-late-source-event-1",
+                   "source_event_type" => "backfill_completed",
                    "selected_sample_count" => 2,
                    "write_validity_state" => "canonical",
                    "record_current_values" => true,
@@ -2381,7 +2544,9 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
              )
 
     assert row_value(inspector.rows, "Late data policy decision") == "accept"
+    assert row_value(inspector.rows, "Late data execution mode") == "sample_execution"
     assert row_value(inspector.rows, "Late data source event") == "resolver-late-source-event-1"
+    assert row_value(inspector.rows, "Late data source event type") == "backfill_completed"
     assert row_value(inspector.rows, "Late data selected samples") == "2"
     assert row_value(inspector.rows, "Late data write validity") == "canonical"
     assert row_value(inspector.rows, "Late data current projection") == "true"

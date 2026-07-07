@@ -19,6 +19,7 @@ defmodule Cadence.Dashboards do
     InvestigationPresets,
     LifecycleEvent,
     ManagedQuestDBProvisioningJobs,
+    ManagedQuestDBProvisioningRuns,
     PlannedSourceRequest,
     PublishReadiness,
     PublishReadinessPayload,
@@ -360,6 +361,18 @@ defmodule Cadence.Dashboards do
     DocumentStore.list_lifecycle_events(organization_id, mission_id, dashboard_id)
   end
 
+  @spec fetch_lifecycle_event(binary(), binary(), binary()) ::
+          {:ok, LifecycleEvent.t()} | {:error, :not_found}
+  def fetch_lifecycle_event(organization_id, mission_id, dashboard_lifecycle_event_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(dashboard_lifecycle_event_id) do
+    DocumentStore.fetch_lifecycle_event(
+      organization_id,
+      mission_id,
+      dashboard_lifecycle_event_id
+    )
+  end
+
   @spec list_open_comparison_review_requests(binary(), binary(), binary()) :: [LifecycleEvent.t()]
   def list_open_comparison_review_requests(organization_id, mission_id, dashboard_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(dashboard_id) do
@@ -528,5 +541,25 @@ defmodule Cadence.Dashboards do
   @spec execute_enqueued_managed_questdb_provisioning(binary()) :: {:ok, map()} | {:error, term()}
   def execute_enqueued_managed_questdb_provisioning(run_id) when is_binary(run_id) do
     ManagedQuestDBProvisioningJobs.execute_enqueued_run(run_id)
+  end
+
+  @spec list_managed_questdb_provisioning_runs(binary(), keyword()) :: [
+          ManagedQuestDBProvisioningRuns.t()
+        ]
+  def list_managed_questdb_provisioning_runs(mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    ManagedQuestDBProvisioningRuns.list_for_mission(mission_id, opts)
+  end
+
+  @spec retry_managed_questdb_provisioning_run(binary()) ::
+          {:ok, ManagedQuestDBProvisioningRuns.t()} | {:error, term()}
+  def retry_managed_questdb_provisioning_run(job_id) when is_binary(job_id) do
+    ManagedQuestDBProvisioningRuns.retry_failed(job_id)
+  end
+
+  @spec requeue_managed_questdb_provisioning_run(binary()) ::
+          {:ok, ManagedQuestDBProvisioningRuns.t()} | {:error, term()}
+  def requeue_managed_questdb_provisioning_run(job_id) when is_binary(job_id) do
+    ManagedQuestDBProvisioningRuns.requeue_running(job_id)
   end
 end

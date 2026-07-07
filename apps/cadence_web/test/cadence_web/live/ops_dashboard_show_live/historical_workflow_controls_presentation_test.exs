@@ -199,6 +199,95 @@ defmodule CadenceWeb.OpsDashboardShowLive.HistoricalWorkflowControlsPresentation
     assert controls.latest_action_outcome.badge_class == "badge-warning"
   end
 
+  test "latest workflow action outcome exposes stable root attributes" do
+    outcome =
+      HistoricalWorkflowActionOutcomePresentation.normalize(%{
+        action: "retry_group_failed_jobs",
+        status: "degraded",
+        kind: "error",
+        reason: "retry_group_partially_recorded",
+        stage: "started",
+        request_group_id: "group-1",
+        job_id: "job-1",
+        count: 3,
+        retried: 1,
+        retry_nonretryable: 1,
+        retry_skipped: 1,
+        retry_errors: 0,
+        retry_scope: "replacement_jobs",
+        retry_run_ids: "run-1-corrected",
+        retry_nonretryable_run_ids: "run-nonretryable",
+        retry_nonretryable_event_ids: "event-nonretryable",
+        retry_nonretryable_items:
+          "run=run-nonretryable event=event-nonretryable action=correct_workflow_request reason=correction_required",
+        retry_skipped_run_ids: "run-skipped",
+        retry_skipped_event_ids: "event-skipped",
+        retry_skipped_items:
+          "run=run-skipped event=event-skipped job=job-skipped status=running reason=job_not_failed",
+        retry_error_run_ids: "run-error",
+        retry_error_event_ids: "event-error",
+        retry_error_items: "run=run-error event=event-error job=job-error reason=queue_down",
+        queued_jobs: 2,
+        failed_jobs: 1,
+        result_event_ids: "event-1,event-2",
+        target_event_id: "event-1",
+        target_run_id: "run-1",
+        dashboard_id: "dashboard-1",
+        dashboard_version: 7,
+        dashboard_time_mode: "replay_run",
+        dashboard_replay_run_id: "replay-1",
+        dashboard_data_view: "all_revisions",
+        dashboard_limit_mode: "observed"
+      })
+
+    assert HistoricalWorkflowActionOutcomePresentation.stable_attrs(
+             outcome,
+             "data-workflow-latest-action",
+             handoff_count: 2,
+             primary_result_event_id: "event-1"
+           ) == %{
+             "data-workflow-latest-action" => "retry_group_failed_jobs",
+             "data-workflow-latest-action-count" => "3",
+             "data-workflow-latest-action-dashboard-data-view" => "all_revisions",
+             "data-workflow-latest-action-dashboard-id" => "dashboard-1",
+             "data-workflow-latest-action-dashboard-limit-mode" => "observed",
+             "data-workflow-latest-action-dashboard-replay-run-id" => "replay-1",
+             "data-workflow-latest-action-dashboard-time-mode" => "replay_run",
+             "data-workflow-latest-action-dashboard-version" => "7",
+             "data-workflow-latest-action-failed-jobs" => "1",
+             "data-workflow-latest-action-handoff-count" => 2,
+             "data-workflow-latest-action-job-id" => "job-1",
+             "data-workflow-latest-action-kind" => "error",
+             "data-workflow-latest-action-primary-result-event-id" => "event-1",
+             "data-workflow-latest-action-queued-jobs" => "2",
+             "data-workflow-latest-action-reason" => "retry_group_partially_recorded",
+             "data-workflow-latest-action-request-group-id" => "group-1",
+             "data-workflow-latest-action-result-event-ids" => "event-1,event-2",
+             "data-workflow-latest-action-retried" => "1",
+             "data-workflow-latest-action-retry-error-event-ids" => "event-error",
+             "data-workflow-latest-action-retry-error-items" =>
+               "run=run-error event=event-error job=job-error reason=queue_down",
+             "data-workflow-latest-action-retry-error-run-ids" => "run-error",
+             "data-workflow-latest-action-retry-errors" => "0",
+             "data-workflow-latest-action-retry-nonretryable" => "1",
+             "data-workflow-latest-action-retry-nonretryable-event-ids" => "event-nonretryable",
+             "data-workflow-latest-action-retry-nonretryable-items" =>
+               "run=run-nonretryable event=event-nonretryable action=correct_workflow_request reason=correction_required",
+             "data-workflow-latest-action-retry-nonretryable-run-ids" => "run-nonretryable",
+             "data-workflow-latest-action-retry-run-ids" => "run-1-corrected",
+             "data-workflow-latest-action-retry-scope" => "replacement_jobs",
+             "data-workflow-latest-action-retry-skipped" => "1",
+             "data-workflow-latest-action-retry-skipped-event-ids" => "event-skipped",
+             "data-workflow-latest-action-retry-skipped-items" =>
+               "run=run-skipped event=event-skipped job=job-skipped status=running reason=job_not_failed",
+             "data-workflow-latest-action-retry-skipped-run-ids" => "run-skipped",
+             "data-workflow-latest-action-stage" => "started",
+             "data-workflow-latest-action-status" => "degraded",
+             "data-workflow-latest-action-target-event-id" => "event-1",
+             "data-workflow-latest-action-target-run-id" => "run-1"
+           }
+  end
+
   test "build hides latest workflow action outcome for a different selected event" do
     context = %{
       event_id: "event-2",

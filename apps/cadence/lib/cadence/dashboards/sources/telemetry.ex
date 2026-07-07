@@ -219,14 +219,17 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
             :source_schema_probe_failed,
             questdb_probe_metadata(data_source, opts)
             |> Map.merge(schema_metadata)
-            |> Map.put(:adapter_error, inspect(reason)),
+            |> Map.merge(questdb_schema_diagnostic_metadata(reason, schema_metadata))
+            |> Map.put(:adapter_error, questdb_safe_error(reason)),
             probe_kind: :adapter
           )
 
         {:error, reason} ->
           SourceProbe.unavailable(
             :source_connection_failed,
-            Map.put(questdb_probe_metadata(data_source, opts), :adapter_error, inspect(reason)),
+            questdb_probe_metadata(data_source, opts)
+            |> Map.merge(questdb_connection_diagnostic_metadata(reason))
+            |> Map.put(:adapter_error, questdb_safe_error(reason)),
             probe_kind: :adapter
           )
       end
@@ -318,6 +321,108 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   end
 
   defp questdb_result_columns(_result), do: []
+
+  defp questdb_safe_error({:http_error, status, _body}),
+    do: "{:http_error, #{status}, :redacted_body}"
+
+  defp questdb_safe_error(reason) when is_map(reason), do: "adapter_error"
+  defp questdb_safe_error(reason), do: inspect(reason)
+
+  defp questdb_connection_diagnostic_metadata(reason) do
+    {kind, remediation} =
+      case questdb_reason_category(reason) do
+        :authentication_failed -> {:authentication_failed, :check_credential_material}
+        :http_error -> {:http_error, :check_questdb_http_api}
+        :timeout -> {:connection_timeout, :check_questdb_endpoint}
+        :unreachable -> {:connection_unreachable, :check_questdb_endpoint}
+        _other -> {:connection_failed, :check_questdb_endpoint}
+      end
+
+    %{
+      probe_diagnostic_kind: kind,
+      probe_diagnostic_stage: :connection_test,
+      probe_remediation: remediation
+    }
+  end
+
+  defp questdb_schema_diagnostic_metadata({:missing_columns, missing}, _schema_metadata) do
+    %{
+      probe_diagnostic_kind: :schema_mismatch,
+      probe_diagnostic_stage: :schema_validation,
+      probe_remediation: :run_questdb_schema_migration,
+      probe_diagnostic_detail: "missing_columns:#{Enum.join(missing, ",")}"
+    }
+  end
+
+  defp questdb_schema_diagnostic_metadata(reason, _schema_metadata) do
+    {kind, remediation} =
+      case questdb_reason_category(reason) do
+        :authentication_failed -> {:authentication_failed, :check_schema_probe_credentials}
+        :http_error -> {:schema_query_failed, :check_questdb_http_api}
+        :timeout -> {:schema_query_timeout, :check_questdb_schema_access}
+        :unreachable -> {:schema_unavailable, :check_questdb_schema_access}
+        _other -> {:schema_unavailable, :check_questdb_schema_access}
+      end
+
+    %{
+      probe_diagnostic_kind: kind,
+      probe_diagnostic_stage: :schema_query,
+      probe_remediation: remediation
+    }
+  end
+
+  defp questdb_reason_category({:http_error, status, _body}) when status in [401, 403],
+    do: :authentication_failed
+
+  defp questdb_reason_category({:http_error, _status, _body}), do: :http_error
+  defp questdb_reason_category(:econnrefused), do: :unreachable
+  defp questdb_reason_category(:nxdomain), do: :unreachable
+  defp questdb_reason_category(:timeout), do: :timeout
+
+  defp questdb_reason_category(%{reason: reason}) when is_atom(reason),
+    do: questdb_reason_category(reason)
+
+  defp questdb_reason_category(reason) when is_exception(reason) do
+    reason
+    |> Exception.message()
+    |> String.downcase()
+    |> questdb_reason_category_from_text()
+  end
+
+  defp questdb_reason_category(reason) when is_binary(reason) do
+    reason
+    |> String.downcase()
+    |> questdb_reason_category_from_text()
+  end
+
+  defp questdb_reason_category(reason) do
+    reason
+    |> inspect()
+    |> String.downcase()
+    |> questdb_reason_category_from_text()
+  end
+
+  defp questdb_reason_category_from_text(text) do
+    cond do
+      questdb_auth_error_text?(text) -> :authentication_failed
+      questdb_timeout_text?(text) -> :timeout
+      questdb_unreachable_text?(text) -> :unreachable
+      questdb_http_error_text?(text) -> :http_error
+      true -> :unknown
+    end
+  end
+
+  defp questdb_auth_error_text?(text) do
+    text =~ "401" or text =~ "403" or text =~ "unauthorized" or text =~ "forbidden"
+  end
+
+  defp questdb_timeout_text?(text), do: text =~ "timeout"
+
+  defp questdb_unreachable_text?(text) do
+    text =~ "econnrefused" or text =~ "nxdomain" or text =~ "closed"
+  end
+
+  defp questdb_http_error_text?(text), do: text =~ "http_error"
 
   defp questdb_probe_exec(sql, opts) do
     config = Application.get_env(:cadence, :dashboard_source_probe, [])
